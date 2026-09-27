@@ -92,7 +92,7 @@ int main (int argc, char** argv)
         CHECK (std::lround (plainOf (rig, kBands)) == 2 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (0, kBandOutput)) - 24.0) < 1e-6 &&
-                   plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, kOutput) + 7.0) < 1e-6,
+                   plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, multidyn::kOutput) + 7.0) < 1e-6,
                "preset defaults");
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
