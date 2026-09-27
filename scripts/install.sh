@@ -2,7 +2,7 @@
 # Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus)
 # for the current user.
 #
-#   curl -fsSL https://raw.githubusercontent.com/bfielstr/simplr/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.sh | sh
 #
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
@@ -10,7 +10,7 @@
 #   SIMPLR_PLUGINS="Multidyn Lowfocus"   install only some of the plug-ins
 set -eu
 
-REPO="${SIMPLR_REPO:-bfielstr/simplr}"
+REPO="${SIMPLR_REPO:-bfielstr/audio-plugins}"
 VERSION="${SIMPLR_VERSION:-latest}"
 
 os="$(uname -s)"

@@ -16,17 +16,17 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 **macOS** (universal: Apple Silicon + Intel) **and Linux** (x86_64):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/bfielstr/simplr/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.sh | sh
 ```
 
 **Windows** (x64), in PowerShell. Run it as Administrator to install into
 `C:\Program Files\Common Files\VST3`; otherwise it installs for your user only:
 
 ```powershell
-irm https://raw.githubusercontent.com/bfielstr/simplr/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.ps1 | iex
 ```
 
-The installers download the latest [release](https://github.com/bfielstr/simplr/releases), verify
+The installers download the latest [release](https://github.com/bfielstr/audio-plugins/releases), verify
 its SHA-256 checksum and copy the `.vst3` bundles into the standard VST3 folder. Options (environment
 variables): `SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.2.0`
 picks a release, `SIMPLR_DEST=...` chooses the folder.
@@ -36,7 +36,7 @@ Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*.
 ## Build from source
 
 ```sh
-git clone https://github.com/bfielstr/simplr.git && cd simplr
+git clone https://github.com/bfielstr/audio-plugins.git && cd audio-plugins
 cmake -B build -DCMAKE_BUILD_TYPE=Release   # first run downloads the VST3 SDK into external/
 cmake --build build --config Release        # also runs Steinberg's VST3 validator on each plug-in
 ctest --test-dir build -C Release           # DSP tests (+ plug-in host tests on macOS)
