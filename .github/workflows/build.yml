@@ -10,9 +10,6 @@ on:
 permissions:
   contents: write # needed to publish releases on tags
 
-env:
-  VST3SDK_TAG: v3.8.1_build_84
-
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -32,12 +29,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Fetch VST3 SDK
-        shell: bash
-        run: |
-          git clone --depth 1 --branch "$VST3SDK_TAG" --recurse-submodules --shallow-submodules \
-            https://github.com/steinbergmedia/vst3sdk.git external/vst3sdk
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
