@@ -30,13 +30,6 @@ if(APPLE AND EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1"
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-nostdinc++;-isystem;${_simplr_sdk}/usr/include/c++/v1>")
 endif()
 
-if(WIN32)
-    add_compile_definitions(_USE_MATH_DEFINES NOMINMAX WIN32_LEAN_AND_MEAN)
-endif()
-if(MSVC)
-    add_compile_options(/utf-8 /bigobj)
-endif()
-
 # ---------------------------------------------------------------------------
 # Framework-free DSP core
 add_library(simplr_core STATIC
@@ -47,6 +40,13 @@ add_library(simplr_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(simplr_core PUBLIC src/core third_party/dr_libs)
+# Propagated to everything that links the core (plug-in, tests) but not to the SDK's own targets.
+if(WIN32)
+    target_compile_definitions(simplr_core PUBLIC _USE_MATH_DEFINES NOMINMAX)
+endif()
+if(MSVC)
+    target_compile_options(simplr_core PUBLIC /utf-8 /bigobj)
+endif()
 if(MSVC)
     target_compile_options(simplr_core PRIVATE /O2 /fp:fast)
 else()
