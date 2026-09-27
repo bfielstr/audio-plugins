@@ -1,0 +1,382 @@
+#include "Params.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+
+namespace simplr {
+
+namespace {
+
+const std::vector<const char*> kSyncDivisionNames = {
+    "1/64", "1/48", "1/32", "1/24", "1/16", "1/12", "1/8", "1/6", "3/16", "1/4", "5/16",
+    "1/3", "3/8", "1/2", "3/4", "1 Bar", "1.5 Bars", "2 Bars", "3 Bars", "4 Bars", "6 Bars", "8 Bars"};
+const double kSyncDivisionBeats[] = {
+    1.0 / 16, 1.0 / 12, 1.0 / 8, 1.0 / 6, 1.0 / 4, 1.0 / 3, 1.0 / 2, 2.0 / 3, 3.0 / 4, 1.0, 5.0 / 4,
+    4.0 / 3, 3.0 / 2, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0};
+constexpr int kDefaultSyncIndex = 9; // 1/4
+
+const std::vector<const char*> kVoiceNames = {"1", "2", "3", "4", "5", "6", "7", "8",
+                                              "10", "12", "14", "16", "20", "24", "32"};
+const int kVoiceCounts[] = {1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 32};
+
+const std::vector<const char*> kDivisionNames = {"1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars"};
+const double kDivisionBeats[] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
+
+const std::vector<const char*> kRegionNames = {"2", "4", "8", "16", "32", "64"};
+const int kRegionCounts[] = {2, 4, 8, 16, 32, 64};
+
+const std::vector<const char*> kPreserveNames = {"Transients", "1 Bar", "1/2", "1/4", "1/8", "1/16", "1/32"};
+const double kPreserveBeats[] = {0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125};
+
+using P = ParamInfo;
+
+std::vector<ParamInfo> buildTable ()
+{
+    std::vector<ParamInfo> t;
+    auto add = [&] (ParamInfo p) { t.push_back (std::move (p)); };
+    auto choice = [] (ParamId id, const char* n, const char* sn, std::vector<const char*> c, int def) {
+        return P {id, n, sn, PType::Choice, 0.0, double (c.size () - 1), double (def), Curve::Linear, Disp::Choice, std::move (c)};
+    };
+    auto toggle = [] (ParamId id, const char* n, const char* sn, bool def) {
+        return P {id, n, sn, PType::Bool, 0.0, 1.0, def ? 1.0 : 0.0, Curve::Linear, Disp::OnOff, {}};
+    };
+    auto pct = [] (ParamId id, const char* n, const char* sn, double def) {
+        return P {id, n, sn, PType::Float, 0.0, 1.0, def, Curve::Linear, Disp::Percent, {}};
+    };
+    auto fl = [] (ParamId id, const char* n, const char* sn, double mn, double mx, double def, Curve c, Disp d) {
+        return P {id, n, sn, PType::Float, mn, mx, def, c, d, {}};
+    };
+    auto in = [] (ParamId id, const char* n, const char* sn, double mn, double mx, double def, Disp d) {
+        return P {id, n, sn, PType::Int, mn, mx, def, Curve::Linear, d, {}};
+    };
+
+    add (choice (kMode, "Playback Mode", "Mode", {"Classic", "One-Shot", "Slicing"}, 0));
+    add (pct (kSampleStart, "Sample Start", "S.Start", 0.0));
+    add (pct (kSampleEnd, "Sample End", "S.End", 1.0));
+    add (pct (kStart, "Start", "Start", 0.0));
+    add (pct (kLength, "Length", "Length", 1.0));
+    add (toggle (kLoopOn, "Loop On", "Loop", false));
+    add (pct (kLoopLen, "Loop Length", "Loop", 0.3));
+    add (pct (kLoopFade, "Loop Fade", "Fade", 0.0));
+    add (toggle (kSnap, "Snap", "Snap", false));
+    add (fl (kGain, "Sample Gain", "Gain", -36.0, 24.0, 0.0, Curve::Linear, Disp::DbGain));
+    add (choice (kVoices, "Voices", "Voices", kVoiceNames, 7));
+    add (toggle (kRetrig, "Retrigger", "Retrig", false));
+    add (choice (kTriggerGate, "Trigger Mode", "Trig/Gate", {"Trigger", "Gate"}, 0));
+    add (fl (kFadeIn, "Fade In", "Fade In", 0.0, 2000.0, 0.0, Curve::Power3, Disp::Ms));
+    add (fl (kFadeOut, "Fade Out", "Fade Out", 0.0, 2000.0, 0.1, Curve::Power3, Disp::Ms));
+    add (choice (kSliceBy, "Slice By", "Slice By", {"Transient", "Beat", "Region", "Manual"}, 0));
+    add (pct (kSensitivity, "Slice Sensitivity", "Sensitivity", 0.5));
+    add (choice (kDivision, "Slice Division", "Division", kDivisionNames, 0));
+    add (choice (kRegions, "Slice Regions", "Regions", kRegionNames, 2));
+    add (choice (kSlicePlayback, "Slice Playback", "Playback", {"Mono", "Poly", "Thru"}, 0));
+
+    add (toggle (kWarp, "Warp", "Warp", false));
+    add (choice (kWarpMode, "Warp Mode", "Warp Mode",
+                 {"Beats", "Tones", "Texture", "Re-Pitch", "Complex", "Complex Pro"}, 0));
+    add (in (kWarpBeats, "Warp Length", "Warp As", 1.0, 1024.0, 16.0, Disp::Beats));
+    add (choice (kBeatsPreserve, "Preserve", "Preserve", kPreserveNames, 0));
+    add (choice (kBeatsLoop, "Transient Loop Mode", "Loop Mode", {"Off", "Forward", "Back-Forth"}, 1));
+    add (fl (kBeatsEnvelope, "Transient Envelope", "Envelope", 0.0, 100.0, 100.0, Curve::Linear, Disp::Plain));
+    add (fl (kTonesGrain, "Tones Grain Size", "Grain", 1.0, 100.0, 30.0, Curve::Linear, Disp::Plain));
+    add (fl (kTextureGrain, "Texture Grain Size", "Grain", 1.0, 100.0, 65.0, Curve::Linear, Disp::Plain));
+    add (fl (kTextureFlux, "Texture Flux", "Flux", 0.0, 100.0, 25.0, Curve::Linear, Disp::Plain));
+    add (fl (kFormants, "Formants", "Formants", 0.0, 100.0, 100.0, Curve::Linear, Disp::Plain));
+    add (in (kCproEnvelope, "Spectral Envelope", "Envelope", 8.0, 256.0, 128.0, Disp::Plain));
+
+    add (toggle (kFilterOn, "Filter On", "Filter", true));
+    add (choice (kFilterType, "Filter Type", "Type", {"Lowpass", "Highpass", "Bandpass", "Notch", "Morph"}, 0));
+    add (choice (kFilterCircuit, "Filter Circuit", "Circuit", {"Clean", "OSR", "MS2", "SMP", "PRD"}, 0));
+    add (choice (kFilterSlope, "Filter Slope", "Slope", {"12 dB", "24 dB"}, 0));
+    add (fl (kFilterFreq, "Filter Frequency", "Freq", 30.0, 22000.0, 22000.0, Curve::Log, Disp::Hz));
+    add (fl (kFilterRes, "Filter Resonance", "Res", 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+    add (fl (kFilterDrive, "Filter Drive", "Drive", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+    add (pct (kFilterMorph, "Filter Morph", "Morph", 0.0));
+    add (pct (kFilterVel, "Filter Velocity", "Vel", 0.0));
+    add (pct (kFilterKey, "Filter Key Track", "Key", 0.0));
+    add (fl (kFilterEnvAmt, "Filter Envelope Amount", "Env", -72.0, 72.0, 0.0, Curve::Linear, Disp::Semis));
+
+    add (fl (kAmpA, "Amp Attack", "Attack", 0.1, 20000.0, 0.1, Curve::Log, Disp::Ms));
+    add (fl (kAmpD, "Amp Decay", "Decay", 1.0, 60000.0, 600.0, Curve::Log, Disp::Ms));
+    add (fl (kAmpS, "Amp Sustain", "Sustain", 0.0, 1.0, 1.0, Curve::Linear, Disp::Sustain));
+    add (fl (kAmpR, "Amp Release", "Release", 1.0, 60000.0, 50.0, Curve::Log, Disp::Ms));
+    add (fl (kFiltA, "Filter Env Attack", "Attack", 0.1, 20000.0, 0.1, Curve::Log, Disp::Ms));
+    add (fl (kFiltD, "Filter Env Decay", "Decay", 1.0, 60000.0, 600.0, Curve::Log, Disp::Ms));
+    add (fl (kFiltS, "Filter Env Sustain", "Sustain", 0.0, 1.0, 0.0, Curve::Linear, Disp::Sustain));
+    add (fl (kFiltR, "Filter Env Release", "Release", 1.0, 60000.0, 50.0, Curve::Log, Disp::Ms));
+    add (fl (kPitchA, "Pitch Env Attack", "Attack", 0.1, 20000.0, 0.1, Curve::Log, Disp::Ms));
+    add (fl (kPitchD, "Pitch Env Decay", "Decay", 1.0, 60000.0, 600.0, Curve::Log, Disp::Ms));
+    add (fl (kPitchS, "Pitch Env Sustain", "Sustain", 0.0, 1.0, 0.0, Curve::Linear, Disp::Sustain));
+    add (fl (kPitchR, "Pitch Env Release", "Release", 1.0, 60000.0, 50.0, Curve::Log, Disp::Ms));
+    add (fl (kPitchEnvAmt, "Pitch Envelope Amount", "Amount", -48.0, 48.0, 0.0, Curve::Linear, Disp::Semis));
+    add (choice (kAmpLoopMode, "Amp Loop Mode", "Loop", {"None", "Trigger", "Loop", "Beat", "Sync"}, 0));
+    add (fl (kAmpLoopTime, "Amp Loop Time", "Time", 0.1, 20000.0, 100.0, Curve::Log, Disp::Ms));
+    add (choice (kAmpLoopRate, "Amp Loop Rate", "Rate", kSyncDivisionNames, kDefaultSyncIndex));
+
+    add (toggle (kLfoOn, "LFO On", "LFO", false));
+    add (choice (kLfoWave, "LFO Waveform", "Wave", {"Sine", "Square", "Triangle", "Saw Down", "Saw Up", "Random"}, 0));
+    add (choice (kLfoSync, "LFO Rate Type", "Hz/Sync", {"Hz", "Sync"}, 0));
+    add (fl (kLfoRate, "LFO Rate", "Rate", 0.01, 30.0, 1.0, Curve::Log, Disp::Hz));
+    add (choice (kLfoSyncRate, "LFO Sync Rate", "Rate", kSyncDivisionNames, kDefaultSyncIndex));
+    add (fl (kLfoAttack, "LFO Attack", "Attack", 0.0, 15000.0, 0.0, Curve::Power3, Disp::Ms));
+    add (toggle (kLfoRetrig, "LFO Retrigger", "R", false));
+    add (fl (kLfoOffset, "LFO Offset", "Offset", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
+    add (pct (kLfoKey, "LFO Key", "Key", 0.0));
+    add (pct (kLfoVol, "LFO > Volume", "Volume", 0.0));
+    add (pct (kLfoPitch, "LFO > Pitch", "Pitch", 0.0));
+    add (pct (kLfoPan, "LFO > Pan", "Pan", 0.0));
+    add (pct (kLfoFilter, "LFO > Filter", "Filter", 0.0));
+
+    add (fl (kPan, "Pan", "Pan", -1.0, 1.0, 0.0, Curve::Linear, Disp::Pan));
+    add (pct (kPanRand, "Random Pan", "Rand", 0.0));
+    add (pct (kSpread, "Spread", "Spread", 0.0));
+    add (fl (kVolume, "Volume", "Volume", -70.0, 6.0, -12.0, Curve::Linear, Disp::Db));
+    add (pct (kVelVol, "Velocity > Volume", "Vel>Vol", 0.35));
+    add (in (kTranspose, "Transpose", "Transp", -48.0, 48.0, 0.0, Disp::Semis));
+    add (fl (kDetune, "Detune", "Detune", -50.0, 50.0, 0.0, Curve::Linear, Disp::Cents));
+    add (in (kPbRange, "Pitch Bend Range", "PB Range", 0.0, 48.0, 5.0, Disp::Semis));
+    add (choice (kGlideMode, "Glide Mode", "Glide", {"Off", "Glide", "Portamento"}, 0));
+    add (fl (kGlideTime, "Glide Time", "Time", 1.0, 10000.0, 50.0, Curve::Log, Disp::Ms));
+    return t;
+}
+
+const std::vector<ParamInfo>& table ()
+{
+    static const std::vector<ParamInfo> t = buildTable ();
+    return t;
+}
+
+std::string fmt (const char* f, double v)
+{
+    char buf[64];
+    std::snprintf (buf, sizeof (buf), f, v);
+    return buf;
+}
+
+std::string lower (std::string s)
+{
+    for (auto& c : s)
+        c = (char)std::tolower ((unsigned char)c);
+    return s;
+}
+
+} // namespace
+
+int ParamInfo::stepCount () const
+{
+    switch (type)
+    {
+        case PType::Bool: return 1;
+        case PType::Choice: return (int)choices.size () - 1;
+        case PType::Int: return (int)(max - min);
+        default: return 0;
+    }
+}
+
+bool isValidParam (uint32_t id) { return id < kNumParams; }
+
+const ParamInfo& paramInfo (uint32_t id)
+{
+    const auto& t = table ();
+    return t[std::min<size_t> (id, t.size () - 1)];
+}
+
+double toPlain (uint32_t id, double n)
+{
+    const auto& p = paramInfo (id);
+    n = std::clamp (n, 0.0, 1.0);
+    switch (p.type)
+    {
+        case PType::Bool: return n >= 0.5 ? 1.0 : 0.0;
+        case PType::Choice:
+        case PType::Int: return p.min + std::round (n * (p.max - p.min));
+        case PType::Float: break;
+    }
+    switch (p.curve)
+    {
+        case Curve::Log: return p.min * std::pow (p.max / p.min, n);
+        case Curve::Power3: return p.min + (p.max - p.min) * n * n * n;
+        case Curve::Linear: break;
+    }
+    return p.min + (p.max - p.min) * n;
+}
+
+double toNormalized (uint32_t id, double v)
+{
+    const auto& p = paramInfo (id);
+    v = std::clamp (v, p.min, p.max);
+    if (p.max <= p.min)
+        return 0.0;
+    if (p.type != PType::Float)
+        return (std::round (v) - p.min) / (p.max - p.min);
+    switch (p.curve)
+    {
+        case Curve::Log: return std::log (v / p.min) / std::log (p.max / p.min);
+        case Curve::Power3: return std::cbrt ((v - p.min) / (p.max - p.min));
+        case Curve::Linear: break;
+    }
+    return (v - p.min) / (p.max - p.min);
+}
+
+double defaultNormalized (uint32_t id) { return toNormalized (id, paramInfo (id).def); }
+
+std::string toText (uint32_t id, double v)
+{
+    const auto& p = paramInfo (id);
+    if (std::fabs (v) < 0.05 && p.type == PType::Float && p.disp != Disp::Percent && p.disp != Disp::Sustain)
+        v = 0.0;
+    switch (p.disp)
+    {
+        case Disp::Choice:
+        {
+            int i = std::clamp ((int)std::lround (v), 0, (int)p.choices.size () - 1);
+            return p.choices[(size_t)i];
+        }
+        case Disp::OnOff: return v >= 0.5 ? "On" : "Off";
+        case Disp::Percent: return fmt ("%.0f %%", v * 100.0);
+        case Disp::Hz:
+            if (v >= 1000.0)
+                return fmt ("%.2f kHz", v / 1000.0);
+            if (v < 1.0)
+                return fmt ("%.2f Hz", v);
+            return fmt (v < 100.0 ? "%.1f Hz" : "%.0f Hz", v);
+        case Disp::Ms:
+            if (v >= 1000.0)
+                return fmt ("%.2f s", v / 1000.0);
+            return fmt (v < 10.0 ? "%.1f ms" : "%.0f ms", v);
+        case Disp::Db:
+            if (id == kVolume && v <= p.min + 1e-6)
+                return "-inf dB";
+            return fmt ("%.1f dB", v);
+        case Disp::DbGain:
+            if (v <= p.min + 1e-6)
+                return "-inf dB";
+            return fmt ("%.1f dB", v);
+        case Disp::Sustain:
+            if (v <= 0.0001)
+                return "-inf dB";
+            return fmt ("%.1f dB", 20.0 * std::log10 (v));
+        case Disp::Semis:
+            if (p.type == PType::Int)
+                return fmt ("%.0f st", v);
+            return fmt ("%.1f st", v);
+        case Disp::Cents: return fmt ("%.0f ct", v);
+        case Disp::Pan:
+        {
+            int a = (int)std::lround (std::fabs (v) * 50.0);
+            if (a == 0)
+                return "C";
+            return std::to_string (a) + (v < 0 ? "L" : "R");
+        }
+        case Disp::Beats:
+        {
+            int beats = (int)std::lround (v);
+            if (beats % 4 == 0)
+                return std::to_string (beats / 4) + (beats == 4 ? " Bar" : " Bars");
+            return std::to_string (beats) + (beats == 1 ? " Beat" : " Beats");
+        }
+        case Disp::Degrees: return fmt ("%.0f\xC2\xB0", v);
+        case Disp::Plain:
+            if (p.type == PType::Int)
+                return fmt ("%.0f", v);
+            return fmt ("%.0f", v);
+    }
+    return fmt ("%.2f", v);
+}
+
+bool fromText (uint32_t id, const std::string& textIn, double& out)
+{
+    const auto& p = paramInfo (id);
+    std::string text = lower (textIn);
+    if (p.type == PType::Choice)
+    {
+        for (size_t i = 0; i < p.choices.size (); ++i)
+            if (lower (p.choices[i]) == text)
+            {
+                out = (double)i;
+                return true;
+            }
+    }
+    if (p.type == PType::Bool)
+    {
+        if (text == "on" || text == "1" || text == "true")
+        {
+            out = 1.0;
+            return true;
+        }
+        if (text == "off" || text == "0" || text == "false")
+        {
+            out = 0.0;
+            return true;
+        }
+        return false;
+    }
+    if (text.find ("inf") != std::string::npos)
+    {
+        out = p.min;
+        return true;
+    }
+    char* end = nullptr;
+    double v = std::strtod (text.c_str (), &end);
+    if (end == text.c_str ())
+    {
+        if (p.disp == Disp::Pan && (text == "c" || text == "center"))
+        {
+            out = 0.0;
+            return true;
+        }
+        return false;
+    }
+    std::string rest = end;
+    switch (p.disp)
+    {
+        case Disp::Percent: v /= 100.0; break;
+        case Disp::Hz:
+            if (rest.find ('k') != std::string::npos)
+                v *= 1000.0;
+            break;
+        case Disp::Ms:
+            if (rest.find ("ms") == std::string::npos && rest.find ('s') != std::string::npos)
+                v *= 1000.0;
+            break;
+        case Disp::Sustain: v = std::pow (10.0, v / 20.0); break;
+        case Disp::Pan:
+            v /= 50.0;
+            if (rest.find ('l') != std::string::npos)
+                v = -std::fabs (v);
+            break;
+        case Disp::Beats:
+            if (rest.find ("bar") != std::string::npos)
+                v *= 4.0;
+            break;
+        case Disp::Choice:
+            // allow typing a numeric label such as "16" for voice counts
+            for (size_t i = 0; i < p.choices.size (); ++i)
+                if (std::strtod (p.choices[i], nullptr) == v)
+                {
+                    out = (double)i;
+                    return true;
+                }
+            return false;
+        default: break;
+    }
+    out = std::clamp (v, p.min, p.max);
+    return true;
+}
+
+int voicesFromIndex (int i) { return kVoiceCounts[std::clamp (i, 0, 14)]; }
+double syncDivisionBeats (int i) { return kSyncDivisionBeats[std::clamp (i, 0, 21)]; }
+int regionsFromIndex (int i) { return kRegionCounts[std::clamp (i, 0, 5)]; }
+double divisionBeats (int i) { return kDivisionBeats[std::clamp (i, 0, 6)]; }
+double preserveBeats (int i) { return kPreserveBeats[std::clamp (i, 0, 6)]; }
+
+bool circuitSupported (int type, int circuit)
+{
+    if (circuit == kClean || circuit == kOSR)
+        return true;
+    return type == kLowpass || type == kHighpass;
+}
+
+} // namespace simplr

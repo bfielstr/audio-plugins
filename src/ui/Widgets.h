@@ -1,0 +1,189 @@
+// Custom-drawn controls bound directly to parameter IDs through a ParamHost.
+#pragma once
+
+#include "vstgui/lib/cview.h"
+#include "vstgui/lib/cviewcontainer.h"
+
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace simplr {
+
+struct ParamHost
+{
+    virtual ~ParamHost () = default;
+    virtual double norm (uint32_t id) = 0;
+    virtual double plainValue (uint32_t id) = 0;
+    virtual void beginEdit (uint32_t id) = 0;
+    virtual void setNorm (uint32_t id, double v) = 0; // inside a gesture
+    virtual void endEdit (uint32_t id) = 0;
+    virtual std::string valueText (uint32_t id) = 0;
+    void setOnce (uint32_t id, double v)
+    {
+        beginEdit (id);
+        setNorm (id, v);
+        endEdit (id);
+    }
+};
+
+// A view bound to one parameter.
+class ParamView : public VSTGUI::CView
+{
+public:
+    ParamView (const VSTGUI::CRect& r, ParamHost* h, uint32_t id) : CView (r), host (h), param (id) {}
+    uint32_t paramId () const { return param; }
+    void setEnabledLook (bool e)
+    {
+        if (e != enabledLook)
+        {
+            enabledLook = e;
+            invalid ();
+        }
+    }
+
+protected:
+    ParamHost* host;
+    uint32_t param;
+    bool enabledLook = true;
+};
+
+class Knob : public ParamView
+{
+public:
+    Knob (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label = nullptr, bool bipolar = false);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+    void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
+    void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseCancelEvent (VSTGUI::MouseCancelEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
+
+private:
+    std::string label;
+    bool bipolar;
+    bool dragging = false;
+    double startY = 0, startValue = 0, dragValue = 0;
+};
+
+// Horizontal bar slider (LFO amounts), label on the left, value on the right.
+class HSlider : public ParamView
+{
+public:
+    HSlider (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+    void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
+    void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+
+private:
+    std::string label;
+    bool dragging = false;
+    double startX = 0, startValue = 0;
+};
+
+// On/off button for a bool parameter.
+class Toggle : public ParamView
+{
+public:
+    Toggle (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+
+private:
+    std::string label;
+};
+
+// Segmented selector for a choice parameter; `labels` may shorten the choice names.
+class Segmented : public ParamView
+{
+public:
+    Segmented (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, std::vector<std::string> labels);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+
+private:
+    std::vector<std::string> labels;
+};
+
+// Drop-down for a choice parameter.
+class Choice : public ParamView
+{
+public:
+    Choice (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label = nullptr);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+
+private:
+    std::string label;
+};
+
+// A plain push button that runs a callback. `active` returns the lit state (optional).
+class ActionButton : public VSTGUI::CView
+{
+public:
+    ActionButton (const VSTGUI::CRect& r, std::string text, std::function<void ()> onClick,
+                  std::function<bool ()> active = {});
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+    void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void setText (const std::string& t)
+    {
+        text = t;
+        invalid ();
+    }
+
+private:
+    std::string text;
+    std::function<void ()> onClick;
+    std::function<bool ()> active;
+    bool pressed = false;
+};
+
+// Static or dynamic text.
+class Label : public VSTGUI::CView
+{
+public:
+    Label (const VSTGUI::CRect& r, std::string text, double size = 11.0, bool bold = false, int align = 0);
+    void setText (const std::string& t)
+    {
+        if (t != text)
+        {
+            text = t;
+            invalid ();
+        }
+    }
+    void setDim (bool d)
+    {
+        dim = d;
+        invalid ();
+    }
+    void draw (VSTGUI::CDrawContext* ctx) override;
+
+private:
+    std::string text;
+    double size;
+    bool bold, dim = false;
+    int align; // 0 left, 1 centre, 2 right
+};
+
+// Container with a titled, rounded panel background.
+class Panel : public VSTGUI::CViewContainer
+{
+public:
+    Panel (const VSTGUI::CRect& r, std::string title = {});
+    void drawBackgroundRect (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& update) override;
+
+private:
+    std::string title;
+};
+
+// Invisible grouping container (used to switch sets of controls).
+class Group : public VSTGUI::CViewContainer
+{
+public:
+    explicit Group (const VSTGUI::CRect& r);
+};
+
+} // namespace simplr
