@@ -1,0 +1,69 @@
+// Multiband upward/downward compressor-expander in the style of Live's Multiband Dynamics.
+//
+// Per band, the detector level x (dB) drives two gain computers:
+//   above threshold Ta, ratio Ra:  gain = (x - Ta) * (1/Ra - 1)   for x > Ta
+//        Ra > 1 = downward compression, Ra < 1 = upward expansion
+//   below threshold Tb, ratio Rb:  gain = (Tb - x) * (1 - Rb)     for x < Tb
+//        Rb > 1 = downward expansion,   Rb < 1 = upward compression
+// i.e. a ratio above 1 always "lowers the volume" of that block, as in the original's display.
+// Each computer has its own attack/release smoothing (attack = gain change growing).
+#pragma once
+
+#include "Crossover.h"
+#include "Params.h"
+
+#include <array>
+
+namespace multidyn {
+
+using ParamArray = std::array<double, kNumParams>;
+ParamArray defaultParams ();
+
+// Static gain curve (dB), shared with the editor's display.
+double aboveGainDb (double levelDb, double thresh, double ratio, bool softKnee);
+double belowGainDb (double levelDb, double thresh, double ratio, bool softKnee);
+
+struct BandMeter
+{
+    float inputDb = -100.0f;  // band level before dynamics (after band input gain)
+    float outputDb = -100.0f; // band level after dynamics and band output gain
+    float gainDb = 0.0f;      // current dynamic gain change
+};
+
+class Engine
+{
+public:
+    void prepare (double sampleRate, int maxBlock);
+    void reset ();
+    void setParam (uint32_t id, double plain) { p[id] = plain; }
+    double param (uint32_t id) const { return p[id]; }
+
+    // In-place capable. sc may be null (no side-chain connected). All buffers are n samples.
+    void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
+                  int n);
+
+    const BandMeter& meter (int band) const { return meters[band]; }
+    bool bandUsed (int band) const;
+
+private:
+    struct BandState
+    {
+        float aboveDb = 0.0f, belowDb = 0.0f; // smoothed gain changes
+        float rms = 0.0f, peak = 0.0f;
+        float inGain = 1.0f, outGain = 1.0f;  // smoothed linear gains
+        float meterIn = 0.0f, meterOut = 0.0f;
+    };
+    void updateFilters (bool force);
+
+    ParamArray p = defaultParams ();
+    double sr = 48000.0;
+    Lr4Split split1, split2, scSplit1, scSplit2;
+    Allpass2 ap, scAp;
+    float f1 = 0.0f, f2 = 0.0f;
+    BandState bands[kNumBands];
+    BandMeter meters[kNumBands];
+    float outGain = 1.0f, scGain = 1.0f;
+    float rmsCoef = 0.0f, peakCoef = 0.0f, meterFall = 0.0f, smooth = 0.0f;
+};
+
+} // namespace multidyn
