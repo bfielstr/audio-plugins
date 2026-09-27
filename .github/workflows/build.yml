@@ -1,0 +1,159 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to publish releases on tags
+
+env:
+  VST3SDK_TAG: v3.8.1_build_84
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            asset: Simplr-macOS.zip
+          - name: Linux x86_64
+            os: ubuntu-22.04 # oldest supported glibc for wider compatibility
+            asset: Simplr-Linux-x86_64.zip
+          - name: Windows x64
+            os: windows-latest
+            asset: Simplr-Windows-x64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch VST3 SDK
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$VST3SDK_TAG" --recurse-submodules --shallow-submodules \
+            https://github.com/steinbergmedia/vst3sdk.git external/vst3sdk
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
+            libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libfontconfig1-dev libcairo2-dev libfreetype6-dev libpango1.0-dev zip
+
+      - name: Configure
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmake -B build -A x64
+          else
+            cmake -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+
+      # Building also runs Steinberg's VST3 validator against the plug-in.
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cd build/VST3/Release
+          case "$RUNNER_OS" in
+            macOS)   ditto -c -k --keepParent Simplr.vst3 "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" ;;
+            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 ;;
+            Windows) pwsh -Command "Compress-Archive -Path Simplr.vst3 -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+      - name: Upload UI screenshots
+        if: runner.os == 'macOS' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: build/test-output/*.png
+          if-no-files-found: ignore
+
+  release:
+    name: Publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: Simplr-*
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum Simplr-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" --title "Simplr $GITHUB_REF_NAME" \
+            --notes "Install with one command:
+
+          **macOS / Linux**
+          \`\`\`
+          curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/scripts/install.sh | sh
+          \`\`\`
+          **Windows (PowerShell)**
+          \`\`\`
+          irm https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/scripts/install.ps1 | iex
+          \`\`\`
+          Or download the zip for your platform below and copy \`Simplr.vst3\` into your VST3 folder."
+
+  # Runs the real one-line installers against the release that was just published.
+  installers:
+    name: Installer (${{ matrix.os }})
+    needs: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install.sh
+        if: runner.os != 'Windows'
+        env:
+          SIMPLR_REPO: ${{ github.repository }}
+          SIMPLR_VERSION: ${{ github.ref_name }}
+          SIMPLR_DEST: ${{ runner.temp }}/vst3
+        run: |
+          sh scripts/install.sh
+          ls -R "$SIMPLR_DEST/Simplr.vst3" | head -20
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            test -f "$SIMPLR_DEST/Simplr.vst3/Contents/MacOS/Simplr"
+            codesign -v "$SIMPLR_DEST/Simplr.vst3"
+          else
+            test -f "$SIMPLR_DEST/Simplr.vst3/Contents/x86_64-linux/Simplr.so"
+          fi
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SIMPLR_REPO: ${{ github.repository }}
+          SIMPLR_VERSION: ${{ github.ref_name }}
+        run: |
+          ./scripts/install.ps1
+          $dest = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3\Simplr.vst3'
+          if (Test-Path "$env:CommonProgramW6432\VST3\Simplr.vst3") { $dest = "$env:CommonProgramW6432\VST3\Simplr.vst3" }
+          Get-ChildItem -Recurse $dest | Select-Object -First 20 FullName
+          if (-not (Test-Path "$dest\Contents\x86_64-win\Simplr.vst3")) { throw 'plug-in binary missing' }

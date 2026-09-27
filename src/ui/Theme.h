@@ -32,7 +32,14 @@ inline const CColor kCurve (255, 164, 40);
 
 inline VSTGUI::SharedPointer<VSTGUI::CFontDesc> font (double size, bool bold = false)
 {
-    return VSTGUI::makeOwned<VSTGUI::CFontDesc> ("Helvetica Neue", size, bold ? VSTGUI::kBoldFace : 0);
+#if defined(_WIN32)
+    const char* face = "Segoe UI";
+#elif defined(__APPLE__)
+    const char* face = "Helvetica Neue";
+#else
+    const char* face = "DejaVu Sans";
+#endif
+    return VSTGUI::makeOwned<VSTGUI::CFontDesc> (face, size, bold ? VSTGUI::kBoldFace : 0);
 }
 
 } // namespace simplr::theme

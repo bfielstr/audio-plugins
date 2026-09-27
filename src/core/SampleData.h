@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,5 +73,9 @@ bool decodeAudioFile (const std::string& path, std::vector<float>& left, std::ve
                       int& numChannels, double& sampleRate, std::string& error);
 
 bool isSupportedAudioFile (const std::string& path);
+
+// UTF-8 <-> std::filesystem::path, portable across C++20 (char8_t) and Windows wide paths.
+std::filesystem::path pathFromUtf8 (const std::string& s);
+std::string utf8FromPath (const std::filesystem::path& p);
 
 } // namespace simplr

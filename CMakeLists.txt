@@ -27,6 +27,13 @@ if(APPLE AND EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1"
     add_compile_options("$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-nostdinc++;-isystem;${_simplr_sdk}/usr/include/c++/v1>")
 endif()
 
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+if(MSVC)
+    add_compile_options(/utf-8 /bigobj)
+endif()
+
 # ---------------------------------------------------------------------------
 # Framework-free DSP core
 add_library(simplr_core STATIC
@@ -37,11 +44,18 @@ add_library(simplr_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(simplr_core PUBLIC src/core third_party/dr_libs)
-target_compile_options(simplr_core PRIVATE -O3 -fcx-limited-range)
+if(MSVC)
+    target_compile_options(simplr_core PRIVATE /O2 /fp:fast)
+else()
+    target_compile_options(simplr_core PRIVATE -O3 -fcx-limited-range)
+endif()
 set_target_properties(simplr_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(simplr_tests tests/core_tests.cpp)
 target_link_libraries(simplr_tests PRIVATE simplr_core)
+
+enable_testing()
+add_test(NAME core COMMAND simplr_tests)
 
 if(NOT SIMPLR_BUILD_PLUGIN)
     return()
@@ -96,6 +110,17 @@ target_include_directories(Simplr PRIVATE src)
 target_link_libraries(Simplr PRIVATE simplr_core sdk vstgui_support)
 smtg_target_configure_version_file(Simplr)
 
+# Ship the third-party licence notices inside the bundle (before it gets signed).
+configure_file(${vst3sdk_SOURCE_DIR}/LICENSE.txt ${PROJECT_BINARY_DIR}/licenses/VST3_SDK_LICENSE.txt COPYONLY)
+configure_file(${vst3sdk_SOURCE_DIR}/vstgui4/LICENSE ${PROJECT_BINARY_DIR}/licenses/VSTGUI_LICENSE.txt COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md ${PROJECT_BINARY_DIR}/licenses/THIRD_PARTY_NOTICES.md COPYONLY)
+smtg_target_add_plugin_resources(Simplr
+    RESOURCES
+        ${PROJECT_BINARY_DIR}/licenses/VST3_SDK_LICENSE.txt
+        ${PROJECT_BINARY_DIR}/licenses/VSTGUI_LICENSE.txt
+        ${PROJECT_BINARY_DIR}/licenses/THIRD_PARTY_NOTICES.md
+)
+
 if(SMTG_MAC)
     smtg_target_set_bundle(Simplr
         BUNDLE_IDENTIFIER com.simplr.vst3.simplr
@@ -116,4 +141,7 @@ if(APPLE)
     target_link_libraries(simplr_hosttest PRIVATE sdk_hosting simplr_core "-framework Cocoa")
     target_compile_options(simplr_hosttest PRIVATE -fobjc-arc)
     add_dependencies(simplr_hosttest Simplr)
+    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/test-output)
+    add_test(NAME host
+             COMMAND simplr_hosttest ${PROJECT_BINARY_DIR}/VST3/$<CONFIG>/Simplr.vst3 ${PROJECT_BINARY_DIR}/test-output)
 endif()

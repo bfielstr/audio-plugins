@@ -12,9 +12,9 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <string>
-#include <unistd.h>
 #include <vector>
 
 using namespace simplr;
@@ -791,12 +791,10 @@ TEST (warp_classic_loop)
 
 TEST (file_decode_and_ops)
 {
-    char dir[] = "/tmp/simplr_testXXXXXX";
-    if (!mkdtemp (dir))
-    {
-        CHECK (false, "mkdtemp");
-        return;
-    }
+    namespace fs = std::filesystem;
+    const fs::path tmp = fs::temp_directory_path () / ("simplr_test_" + std::to_string (std::rand ()));
+    fs::create_directories (tmp);
+    const std::string dir = tmp.string ();
     const std::string wav = std::string (dir) + "/ramp.wav";
     drwav_data_format fmt {};
     fmt.container = drwav_container_riff;
@@ -837,14 +835,25 @@ TEST (file_decode_and_ops)
     // AIFF via afconvert when available (macOS)
     const std::string aif = std::string (dir) + "/ramp.aif";
     const std::string cmd = "afconvert -f AIFF -d BEI16 '" + wav + "' '" + aif + "' 2>/dev/null";
+#if __APPLE__
     if (std::system (cmd.c_str ()) == 0)
+#else
+    if (false)
+#endif
     {
         auto c = SampleData::load (aif, {}, err);
         CHECK (c && c->length == 1000 && c->numChannels == 2, "aiff load: %s", err.c_str ());
     }
+    // non-ASCII file names (UTF-8 paths must also work on Windows)
+    const std::string uni = dir + "/r\xC3\xBC" "ckw\xC3\xA4" "rts \xE2\x99\xAA.wav";
+    std::error_code cec;
+    fs::copy_file (pathFromUtf8 (wav), pathFromUtf8 (uni), cec);
+    auto u = SampleData::load (uni, {}, err);
+    CHECK (!cec && u && u->length == 1000, "unicode path load: %s", err.c_str ());
     auto bad = SampleData::load (std::string (dir) + "/missing.wav", {}, err);
     CHECK (!bad && !err.empty (), "missing file should fail cleanly");
-    std::system (("rm -rf '" + std::string (dir) + "'").c_str ());
+    std::error_code ec;
+    fs::remove_all (tmp, ec);
 }
 
 TEST (snap_to_zero)

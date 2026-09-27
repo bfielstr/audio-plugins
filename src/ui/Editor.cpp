@@ -17,7 +17,10 @@
 #include <cstdio>
 #include <filesystem>
 
-#if __APPLE__
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#else
 #include <spawn.h>
 #include <sys/wait.h>
 extern char** environ;
@@ -46,12 +49,26 @@ public:
     }
 };
 
-std::string lowerExt (const std::filesystem::path& p)
+std::filesystem::path u8 (const std::string& s) { return pathFromUtf8 (s); }
+
+// Shows the file in Finder / Explorer / the desktop's file manager.
+void revealInFileBrowser (const std::string& path)
 {
-    std::string e = p.extension ().string ();
-    for (auto& c : e)
-        c = (char)std::tolower ((unsigned char)c);
-    return e;
+#if defined(_WIN32)
+    const std::wstring args = L"/select,\"" + u8 (path).wstring () + L"\"";
+    ShellExecuteW (nullptr, L"open", L"explorer.exe", args.c_str (), nullptr, SW_SHOWNORMAL);
+#else
+#if defined(__APPLE__)
+    const std::string target = path;
+    const char* argv[] = {"/usr/bin/open", "-R", target.c_str (), nullptr};
+#else
+    const std::string target = utf8FromPath (u8 (path).parent_path ());
+    const char* argv[] = {"xdg-open", target.c_str (), nullptr};
+#endif
+    pid_t pid;
+    if (posix_spawnp (&pid, argv[0], nullptr, nullptr, const_cast<char**> (argv), environ) == 0)
+        waitpid (pid, nullptr, WNOHANG);
+#endif
 }
 } // namespace
 
@@ -496,7 +513,7 @@ void Editor::loadFile (const std::string& path)
     if (!controller->loadSample (path, true))
     {
         if (nameLabel)
-            nameLabel->setText ("Could not load " + std::filesystem::path (path).filename ().string ());
+            nameLabel->setText ("Could not load " + utf8FromPath (u8 (path).filename ()));
         lastName = "?";
     }
     if (waveform)
@@ -523,7 +540,7 @@ void Editor::browseForSample ()
     {
         const std::string cur = b->samplePath ();
         if (!cur.empty ())
-            sel->setInitialDirectory (std::filesystem::path (cur).parent_path ().string ().c_str ());
+            sel->setInitialDirectory (utf8FromPath (u8 (cur).parent_path ()).c_str ());
     }
     sel->run ([this] (CNewFileSelector* s) {
         if (s->getNumSelectedFiles () > 0)
@@ -545,27 +562,26 @@ void Editor::stepSample (int dir)
     }
     namespace fs = std::filesystem;
     std::error_code ec;
-    const fs::path folder = fs::path (cur).parent_path ();
+    const fs::path folder = u8 (cur).parent_path ();
     std::vector<fs::path> files;
     for (auto& entry : fs::directory_iterator (folder, ec))
-        if (entry.is_regular_file (ec) && isSupportedAudioFile (entry.path ().string ()) &&
-            entry.path ().filename ().string ()[0] != '.')
+        if (entry.is_regular_file (ec) && isSupportedAudioFile (utf8FromPath (entry.path ())) &&
+            utf8FromPath (entry.path ().filename ())[0] != '.')
             files.push_back (entry.path ());
     if (files.empty ())
         return;
     std::sort (files.begin (), files.end (), [] (const fs::path& a, const fs::path& c) {
-        std::string x = a.filename ().string (), y = c.filename ().string ();
+        std::string x = utf8FromPath (a.filename ()), y = utf8FromPath (c.filename ());
         std::transform (x.begin (), x.end (), x.begin (), ::tolower);
         std::transform (y.begin (), y.end (), y.begin (), ::tolower);
         return x < y;
     });
     int idx = 0;
     for (size_t i = 0; i < files.size (); ++i)
-        if (files[i] == fs::path (cur))
+        if (files[i] == u8 (cur))
             idx = (int)i;
     idx = (idx + dir + (int)files.size ()) % (int)files.size ();
-    loadFile (files[(size_t)idx].string ());
-    (void)lowerExt;
+    loadFile (utf8FromPath (files[(size_t)idx]));
 }
 
 void Editor::showMenu (CPoint where)
@@ -595,16 +611,14 @@ void Editor::showMenu (CPoint where)
     };
 
     add ("Load Sample...", [this] { browseForSample (); });
-#if __APPLE__
-    add ("Show in Finder", [b] {
-             const std::string p = b->samplePath ();
-             pid_t pid;
-             const char* argv[] = {"/usr/bin/open", "-R", p.c_str (), nullptr};
-             if (posix_spawn (&pid, argv[0], nullptr, nullptr, const_cast<char**> (argv), environ) == 0)
-                 waitpid (pid, nullptr, WNOHANG);
-         },
-         hasSample);
+#if defined(_WIN32)
+    const char* revealTitle = "Show in Explorer";
+#elif defined(__APPLE__)
+    const char* revealTitle = "Show in Finder";
+#else
+    const char* revealTitle = "Show in File Manager";
 #endif
+    add (revealTitle, [b] { revealInFileBrowser (b->samplePath ()); }, hasSample);
     sep ();
     add ("Normalize Volume", [this, ops] {
              SampleOps o = ops;

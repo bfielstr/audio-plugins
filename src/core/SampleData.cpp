@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <numeric>
 
 #define DR_WAV_IMPLEMENTATION
@@ -51,6 +53,17 @@ void deinterleave (const float* src, uint64_t frames, unsigned channels, std::ve
 
 } // namespace
 
+std::filesystem::path pathFromUtf8 (const std::string& s)
+{
+    return std::filesystem::path (std::u8string (s.begin (), s.end ()));
+}
+
+std::string utf8FromPath (const std::filesystem::path& p)
+{
+    const auto u = p.u8string ();
+    return std::string (u.begin (), u.end ());
+}
+
 bool isSupportedAudioFile (const std::string& path)
 {
     auto e = extensionOf (path);
@@ -67,41 +80,63 @@ bool decodeAudioFile (const std::string& path, std::vector<float>& left, std::ve
     left.clear ();
     right.clear ();
 
-    if (ext == "flac")
+    // Read the file ourselves: std::filesystem handles UTF-8 paths on every OS (the stdio paths
+    // inside dr_libs don't on Windows), then decode from memory.
+    std::vector<char> bytes;
     {
-        drflac_uint64 f = 0;
-        pcm = drflac_open_file_and_read_pcm_frames_f32 (path.c_str (), &channels, &rate, &f, nullptr);
-        frames = f;
-        if (pcm)
+        std::ifstream in (pathFromUtf8 (path), std::ios::binary);
+        if (in)
         {
-            deinterleave (pcm, frames, channels, left, right);
-            drflac_free (pcm, nullptr);
+            in.seekg (0, std::ios::end);
+            const auto size = (std::streamoff)in.tellg ();
+            if (size > 0)
+            {
+                bytes.resize ((size_t)size);
+                in.seekg (0, std::ios::beg);
+                in.read (bytes.data (), size);
+                if (!in)
+                    bytes.clear ();
+            }
         }
     }
-    else if (ext == "mp3")
+    if (!bytes.empty ())
     {
-        drmp3_config cfg {};
-        drmp3_uint64 f = 0;
-        pcm = drmp3_open_file_and_read_pcm_frames_f32 (path.c_str (), &cfg, &f, nullptr);
-        channels = cfg.channels;
-        rate = cfg.sampleRate;
-        frames = f;
-        if (pcm)
+        if (ext == "flac")
         {
-            deinterleave (pcm, frames, channels, left, right);
-            drmp3_free (pcm, nullptr);
+            drflac_uint64 f = 0;
+            pcm = drflac_open_memory_and_read_pcm_frames_f32 (bytes.data (), bytes.size (), &channels, &rate, &f, nullptr);
+            frames = f;
+            if (pcm)
+            {
+                deinterleave (pcm, frames, channels, left, right);
+                drflac_free (pcm, nullptr);
+            }
         }
-    }
-    else
-    {
-        // dr_wav handles RIFF/RF64/W64 and AIFF/AIFC.
-        drwav_uint64 f = 0;
-        pcm = drwav_open_file_and_read_pcm_frames_f32 (path.c_str (), &channels, &rate, &f, nullptr);
-        frames = f;
-        if (pcm)
+        else if (ext == "mp3")
         {
-            deinterleave (pcm, frames, channels, left, right);
-            drwav_free (pcm, nullptr);
+            drmp3_config cfg {};
+            drmp3_uint64 f = 0;
+            pcm = drmp3_open_memory_and_read_pcm_frames_f32 (bytes.data (), bytes.size (), &cfg, &f, nullptr);
+            channels = cfg.channels;
+            rate = cfg.sampleRate;
+            frames = f;
+            if (pcm)
+            {
+                deinterleave (pcm, frames, channels, left, right);
+                drmp3_free (pcm, nullptr);
+            }
+        }
+        else
+        {
+            // dr_wav handles RIFF/RF64/W64 and AIFF/AIFC.
+            drwav_uint64 f = 0;
+            pcm = drwav_open_memory_and_read_pcm_frames_f32 (bytes.data (), bytes.size (), &channels, &rate, &f, nullptr);
+            frames = f;
+            if (pcm)
+            {
+                deinterleave (pcm, frames, channels, left, right);
+                drwav_free (pcm, nullptr);
+            }
         }
     }
 
