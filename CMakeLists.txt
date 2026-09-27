@@ -6,7 +6,7 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(Simplr
-    VERSION 0.1.0.0
+    VERSION 0.1.1.0
     DESCRIPTION "Simplr - a Simpler-style sampler instrument"
     LANGUAGES C CXX
 )
@@ -129,6 +129,11 @@ if(SMTG_MAC)
         BUNDLE_IDENTIFIER com.simplr.vst3.simplr
         COMPANY_NAME "Simplr"
     )
+    # Always seal the bundle with an ad-hoc signature (hosts on Apple Silicon need a valid
+    # signature, and the SDK only signs when a signing identity is configured).
+    add_custom_command(TARGET Simplr POST_BUILD
+        COMMAND codesign --force --sign - --timestamp=none "$<TARGET_BUNDLE_DIR:Simplr>"
+        COMMENT "Ad-hoc signing Simplr.vst3")
 endif()
 
 # Loads the built bundle through the VST3 hosting API, plays notes and checks the output.
