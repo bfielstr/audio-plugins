@@ -1,16 +1,19 @@
-# Audio plug-ins: Simplr, Multidyn, Lowfocus, Stretchr
+# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smatcheratr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Simplr**](plugins/simplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO | Ableton Live's Simpler |
+| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
-| [**Lowfocus**](plugins/lowfocus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
+| [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
+| [**Smatcheratr**](plugins/smatcheratr/README.md) | Waveshaping saturator: 8 curves from analog clip to wavefolding, Bass Shaper threshold, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 
-![Simplr](docs/simplr/ui_slicing.png)
+![Smempler](docs/smempler/ui_slicing.png)
+
+The plug-ins were called Simplr and Lowfocus until 0.5.0; projects keep loading (the plug-in IDs are unchanged).
 
 ## Install
 
@@ -30,9 +33,9 @@ irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/instal
 The installers download the latest [release](https://github.com/bfielstr/audio-plugins/releases), verify
 its SHA-256 checksum and install the `.vst3` bundles into a **`bfielstr`** folder inside the standard
 VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running an installer again replaces the
-installed versions; copies that older installers put directly in the VST3 folder are removed (only
-ours; the vendor in the bundle is checked). Options (environment variables):
-`SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.4.0` picks a
+installed versions; copies that older installers put directly in the VST3 folder, and the bundles of
+the old names Simplr and Lowfocus, are removed (only ours; the vendor in the bundle is checked). Options (environment variables):
+`SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins, `SIMPLR_VERSION=v0.5.0` picks a
 release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*; in Live: *Settings → Plug-ins →
@@ -59,10 +62,11 @@ publishes a release and then runs the installers against it.
 ## Layout
 
 ```
-plugins/simplr     sampler                 src/core (DSP) · src/plugin (VST3) · src/ui · tests
+plugins/smempler     sampler                 src/core (DSP) · src/plugin (VST3) · src/ui · tests
 plugins/multidyn   multiband dynamics      same structure
-plugins/lowfocus   low-end focus           same structure
-plugins/stretchr   pitch/time editor       same structure (reuses Simplr's warp engines)
+plugins/locus   low-end focus           same structure
+plugins/stretchr   pitch/time editor       same structure (reuses Smempler's warp engines)
+plugins/smatcheratr saturator              same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

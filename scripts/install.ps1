@@ -1,4 +1,4 @@
-# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus, Stretchr) on Windows,
+# Downloads the latest release and installs the VST3 plug-ins (Smempler, Multidyn, Locus, Stretchr) on Windows,
 # into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
 # left at the top of the VST3 folder by older installers are removed (only if they are ours).
 #
@@ -9,7 +9,7 @@
 # current user into %LOCALAPPDATA%\Programs\Common\VST3.
 #
 # Environment overrides: $env:SIMPLR_VERSION = 'v0.2.0'; $env:SIMPLR_DEST = 'D:\VST3';
-#   $env:SIMPLR_PLUGINS = 'Multidyn Lowfocus' to install only some of them
+#   $env:SIMPLR_PLUGINS = 'Multidyn Locus' to install only some of them
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest is very slow with the progress bar
@@ -42,7 +42,7 @@ function Get-Version ($bundle) {
 }
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$tmp = Join-Path ([IO.Path]::GetTempPath()) ("simplr-" + [guid]::NewGuid())
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("smempler-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     Write-Host "Downloading $asset ($version) from github.com/$repo"
@@ -70,6 +70,18 @@ try {
                else { Get-ChildItem -Path $x -Directory -Filter '*.vst3' | ForEach-Object { $_.Name -replace '\.vst3$', '' } }
     if (-not $plugins) { throw 'Unexpected archive layout (no .vst3 inside).' }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
+    # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
+    # Removed only when this release no longer ships it under that name.
+    foreach ($old in 'Simplr', 'Lowfocus') {
+        if (Test-Path (Join-Path $x "$old.vst3")) { continue }
+        foreach ($dir in $dest, $root) {
+            $oldBundle = Join-Path $dir "$old.vst3"
+            if ((Test-Path $oldBundle) -and (Test-Ours $oldBundle)) {
+                Write-Host "Removing $oldBundle (renamed in 0.5.0)"
+                Remove-Item -Recurse -Force $oldBundle
+            }
+        }
+    }
     foreach ($p in $plugins) {
         $bundle = Join-Path $x "$p.vst3"
         if (-not (Test-Path $bundle)) { Write-Warning "No $p.vst3 in this release - skipping."; continue }

@@ -2,6 +2,8 @@
 // and its mouse gestures. usage: multidyn_hosttest <Multidyn.vst3> <output dir>
 #include "Params.h"
 #include "plugin/State.h"
+#include "ui/DynDisplay.h"
+#include "ui/Editor.h"
 #include "pluginkit/testing/HostRig.h"
 
 #include "public.sdk/source/common/memorystream.h"
@@ -86,10 +88,12 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count %d", rig.controller->getParameterCount ());
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         CHECK (rig.component->getBusCount (kAudio, kInput) == 2, "main + side-chain inputs");
-        // a fresh instance is Live's OTT preset
-        CHECK (std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 && std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
-                   std::fabs (plainOf (rig, bandParam (2, kBandOutput)) - 10.3) < 1e-6 && plainOf (rig, bandParam (2, kAboveRatio)) >= kRatioInf * 0.999,
-               "OTT defaults");
+        // a fresh instance is the four-band upward-compression preset
+        CHECK (std::lround (plainOf (rig, kBands)) == 3 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
+                   std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
+                   std::fabs (plainOf (rig, bandParam (0, kBandOutput)) - 24.0) < 1e-6 &&
+                   plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, kOutput) + 7.0) < 1e-6,
+               "preset defaults");
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
         State st = baseState ();
@@ -121,7 +125,7 @@ int main (int argc, char** argv)
         rig.param (kScListen, 0.0);
         rig.param (kScOn, 0.0);
 
-        // --- CPU with all three bands ---
+        // --- CPU with all four bands ---
         rig.param (kBands, toNormalized (kBands, 3)); // four bands
         const auto t0 = std::chrono::steady_clock::now ();
         out.clear ();
@@ -169,13 +173,14 @@ int main (int argc, char** argv)
                 });
                 pump (0.03);
             }
-            CHECK (win.savePng (outDir + "/ui_multidyn_ott.png"), "OTT screenshot");
-            CHECK (allFinite (out), "OTT output finite");
+            CHECK (win.savePng (outDir + "/ui_multidyn_preset.png"), "preset screenshot");
+            CHECK (allFinite (out), "preset output finite");
         }
         rig.stop ();
 
         // --- editor: screenshot and the display's gestures ---
         State ui = baseState ();
+        set (ui, kBands, 2); // three bands: band 2 on top
         for (int b = 0; b < kNumBands; ++b)
         {
             set (ui, bandParam (b, kAboveRatio), b == kHigh ? 3.0 : 2.0);
@@ -201,12 +206,15 @@ int main (int argc, char** argv)
             pump (0.5); // let the meters settle
             CHECK (win.savePng (outDir + "/ui_multidyn.png"), "screenshot");
 
-            // display: x 8..912 = -80..0 dB, y 40..260 with a 16 px scale; three lanes, band 3 on top
-            auto xOf = [] (double db) { return 8.0 + (db + 80.0) / 80.0 * 904.0; };
-            const double pxPerDb = 904.0 / 80.0;
-            const double laneH = (220.0 - 16.0) / 3.0;
-            const double midY = 40.0 + laneH * 1.5;
-            const double highY = 40.0 + laneH * 0.5;
+            // display graph: x 242..604 = -80..0 dB, lanes from y 54 to 320; three lanes, band 3 on top
+            const double gl = Editor::kDisplayLeft + DynDisplay::kLeftCol, gw = Editor::kDisplayRight - DynDisplay::kRightCol - gl;
+            auto xOf = [=] (double db) { return gl + (db + 80.0) / 80.0 * gw; };
+            const double pxPerDb = gw / 80.0;
+            const double lanesTop = Editor::kDisplayTop + DynDisplay::kHeader;
+            const double laneH = (Editor::kDisplayBottom - lanesTop - DynDisplay::kScaleHeight) / 3.0;
+            const double midY = lanesTop + laneH * 1.5;
+            const double highY = lanesTop + laneH * 0.5;
+            const double inAbove = gl + gw - 12.0; // inside the above block
             const uint32_t midAbove = bandParam (kMid, kAboveThresh);
 
             // 1. drag the mid band's above threshold 10 dB lower
@@ -235,21 +243,21 @@ int main (int argc, char** argv)
             // 4. drag down inside the mid above block: quieter = higher ratio
             const uint32_t midRatio = bandParam (kMid, kAboveRatio);
             const double r0 = plainOf (rig, midRatio);
-            win.drag (880, midY, 880, midY + 40);
+            win.drag (inAbove, midY, inAbove, midY + 40);
             CHECK (plainOf (rig, midRatio) > r0 * 1.3, "ratio drag down: %.2f -> %.2f", r0, plainOf (rig, midRatio));
-            win.drag (880, midY, 880, midY - 160);
+            win.drag (inAbove, midY, inAbove, midY - 160);
             CHECK (plainOf (rig, midRatio) < 1.0, "drag up past 1:1 gives upward expansion: %.2f", plainOf (rig, midRatio));
 
             // 5. Alt: both blocks of the high band get quieter together (drag down): the Above ratio
             // rises (more compression), the Below ratio falls (towards downward expansion)
             const double ha = plainOf (rig, bandParam (kHigh, kAboveRatio)), hb = plainOf (rig, bandParam (kHigh, kBelowRatio));
-            win.drag (880, highY, 880, highY + 30, kAlt);
+            win.drag (inAbove, highY, inAbove, highY + 30, kAlt);
             CHECK (plainOf (rig, bandParam (kHigh, kAboveRatio)) > ha && plainOf (rig, bandParam (kHigh, kBelowRatio)) < hb,
                    "alt drag: above %.2f->%.2f below %.2f->%.2f", ha, plainOf (rig, bandParam (kHigh, kAboveRatio)), hb,
                    plainOf (rig, bandParam (kHigh, kBelowRatio)));
 
             // 6. double-click a block resets its ratio to 1:1
-            win.click (880, midY, 2);
+            win.click (inAbove, midY, 2);
             CHECK (std::fabs (plainOf (rig, midRatio) - 1.0) < 1e-6, "double-click reset -> %.3f", plainOf (rig, midRatio));
 
             // 7. band count through the UI (segments "1".."4" at x 210..330)
@@ -261,9 +269,15 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_multidyn_1band.png"), "screenshot 1 band");
             win.click (210 + 30 * 2.5, 17);
 
-            // 8. the A tab shows the above column
-            win.click (620 + 2 * 52 + 24, 17);
-            CHECK (win.savePng (outDir + "/ui_multidyn_above.png"), "screenshot A");
+            // 8. the value fields: dragging the mid band's attack field up raises it
+            const uint32_t midAttack = bandParam (kMid, kAttack);
+            const double at0 = plainOf (rig, midAttack);
+            const double fx = Editor::kDisplayRight - DynDisplay::kRightCol + 84 + 34, fy = midY - 11;
+            win.drag (fx, fy, fx, fy - 40);
+            CHECK (plainOf (rig, midAttack) > at0 * 1.2, "attack field drag: %.1f -> %.1f ms", at0, plainOf (rig, midAttack));
+            win.click (fx, fy, 2);
+            CHECK (std::fabs (plainOf (rig, midAttack) - toPlain (midAttack, defaultNormalized (midAttack))) < 1e-6,
+                   "double-click resets the field");
         }
         rig.stop ();
         return finish ("multidyn host test");

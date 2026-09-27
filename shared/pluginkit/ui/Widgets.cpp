@@ -212,6 +212,80 @@ void HSlider::onMouseUpEvent (MouseUpEvent& e)
 }
 
 //==============================================================================
+NumberBox::NumberBox (const CRect& r, ParamHost* h, uint32_t id, CColor c) : ParamView (r, h, id), color (c) {}
+
+void NumberBox::draw (CDrawContext* ctx)
+{
+    const CRect r = getViewSize ();
+    roundRect (ctx, r, 2.0, theme::kControlBg);
+    text (ctx, host->valueText (param), r, dragging ? theme::kAccent : (enabledLook ? color : theme::kTextDim), 10.0);
+}
+
+void NumberBox::onMouseDownEvent (MouseDownEvent& e)
+{
+    if (!e.buttonState.isLeft ())
+        return;
+    if (e.clickCount == 2)
+    {
+        host->setOnce (param, host->table ().defaultNormalized (param));
+        invalid ();
+        e.consumed = true;
+        return;
+    }
+    dragging = true;
+    startY = e.mousePosition.y;
+    dragValue = host->norm (param);
+    host->beginEdit (param);
+    invalid ();
+    e.consumed = true;
+}
+
+void NumberBox::onMouseMoveEvent (MouseMoveEvent& e)
+{
+    if (!dragging)
+        return;
+    const double range = isFine (e.modifiers) ? 1200.0 : 200.0;
+    dragValue = std::clamp (dragValue + (startY - e.mousePosition.y) / range, 0.0, 1.0);
+    startY = e.mousePosition.y;
+    const int steps = host->table ().info (param).stepCount ();
+    host->setNorm (param, steps > 0 ? std::round (dragValue * steps) / steps : dragValue);
+    invalid ();
+    e.consumed = true;
+}
+
+void NumberBox::onMouseUpEvent (MouseUpEvent& e)
+{
+    if (!dragging)
+        return;
+    dragging = false;
+    host->endEdit (param);
+    invalid ();
+    e.consumed = true;
+}
+
+void NumberBox::onMouseCancelEvent (MouseCancelEvent& e)
+{
+    if (dragging)
+    {
+        dragging = false;
+        host->endEdit (param);
+    }
+    e.consumed = true;
+}
+
+void NumberBox::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    const int steps = host->table ().info (param).stepCount ();
+    const double step = steps > 0 ? 1.0 / steps : (isFine (e.modifiers) ? 0.002 : 0.01);
+    const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
+    if (d == 0.0)
+        return;
+    host->setOnce (param, std::clamp (host->norm (param) + (d > 0 ? step : -step), 0.0, 1.0));
+    invalid ();
+    e.consumed = true;
+}
+
+//==============================================================================
 Toggle::Toggle (const CRect& r, ParamHost* h, uint32_t id, const char* l) : ParamView (r, h, id), label (l) {}
 
 void Toggle::draw (CDrawContext* ctx)

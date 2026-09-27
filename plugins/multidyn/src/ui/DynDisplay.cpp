@@ -60,15 +60,25 @@ CRect DynDisplay::laneRect (int band) const
 {
     const CRect r = getViewSize ();
     const int n = bands ();
-    const double laneH = (r.getHeight () - kScaleHeight) / n;
+    const double top = r.top + kHeader;
+    const double laneH = (r.getHeight () - kHeader - kScaleHeight) / n;
     const int row = n - 1 - band; // highest band on top
-    return CRect (r.left, r.top + row * laneH + 1, r.right, r.top + (row + 1) * laneH - 1);
+    return CRect (r.left, top + row * laneH + 1, r.right, top + (row + 1) * laneH - 1);
+}
+
+CRect DynDisplay::graphRect (int band) const
+{
+    CRect g = laneRect (band);
+    g.left += kLeftCol;
+    g.right -= kRightCol;
+    return g;
 }
 
 double DynDisplay::xOf (double db) const
 {
     const CRect r = getViewSize ();
-    return r.left + (std::clamp (db, kMinDb, kMaxDb) - kMinDb) / (kMaxDb - kMinDb) * r.getWidth ();
+    const double left = r.left + kLeftCol, width = r.getWidth () - kLeftCol - kRightCol;
+    return left + (std::clamp (db, kMinDb, kMaxDb) - kMinDb) / (kMaxDb - kMinDb) * width;
 }
 
 void DynDisplay::draw (CDrawContext* ctx)
@@ -76,12 +86,22 @@ void DynDisplay::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kPanel);
     ctx->drawRect (all, kDrawFilled);
+
+    // column headers and separators
+    const double gl = all.left + kLeftCol, gr = all.right - kRightCol;
+    text (ctx, "Below", CRect (all.left + 4, all.top, gl - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+    text (ctx, "Above", CRect (gr + 4, all.top, gr + 76, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+    text (ctx, "Att/Rel", CRect (gr + 84, all.top, all.right - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+    ctx->setLineWidth (1.0);
+    ctx->setFrameColor (theme::kPanelEdge);
+    ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
+
     const int n = bands ();
     for (int b = 0; b < n; ++b)
     {
-        const CRect lane = laneRect (b);
+        const CRect lane = laneRect (b), g = graphRect (b);
         ctx->setFillColor (theme::kWaveBg);
-        ctx->drawRect (lane, kDrawFilled);
+        ctx->drawRect (g, kDrawFilled);
         const bool active = host->plainValue (bandParam (b, kBandActive)) >= 0.5;
         const bool dim = !active;
         const double tb = host->plainValue (bandParam (b, kBelowThresh));
@@ -94,56 +114,44 @@ void DynDisplay::draw (CDrawContext* ctx)
         ctx->setLineWidth (1.0);
         ctx->setFrameColor (theme::kGrid);
         for (double db = -70.0; db <= -10.0; db += 10.0)
-            ctx->drawLine (CPoint (xOf (db), lane.top), CPoint (xOf (db), lane.bottom));
+            ctx->drawLine (CPoint (xOf (db), g.top), CPoint (xOf (db), g.bottom));
 
         // blocks
         ctx->setFillColor (blockColor (rb, true, dim));
-        ctx->drawRect (CRect (lane.left, lane.top, xb, lane.bottom), kDrawFilled);
+        ctx->drawRect (CRect (g.left, g.top, xb, g.bottom), kDrawFilled);
         ctx->setFillColor (blockColor (ra, false, dim));
-        ctx->drawRect (CRect (xa, lane.top, lane.right, lane.bottom), kDrawFilled);
+        ctx->drawRect (CRect (xa, g.top, g.right, g.bottom), kDrawFilled);
         ctx->setLineWidth (2.0);
         ctx->setFrameColor (dim ? theme::kTextDim : theme::kTextBright);
-        ctx->drawLine (CPoint (xb, lane.top), CPoint (xb, lane.bottom));
-        ctx->drawLine (CPoint (xa, lane.top), CPoint (xa, lane.bottom));
+        ctx->drawLine (CPoint (xb, g.top), CPoint (xb, g.bottom));
+        ctx->drawLine (CPoint (xa, g.top), CPoint (xa, g.bottom));
         ctx->setLineWidth (1.0);
 
         // meters: thick = output, thin = input
         {
-            // keep clear of the labels at the top and the ratio text at the bottom of the lane
-            const double top = lane.top + 18, bottom = lane.bottom - 18;
-            const double mh = std::max (4.0, (bottom - top) * 0.55);
+            const double top = g.top + 6, bottom = g.bottom - 16;
+            const double mh = std::max (4.0, (bottom - top) * 0.5);
             const double my = (top + bottom) / 2 - mh / 2 + 2;
             ctx->setFillColor (dim ? theme::kKnobTrack : theme::kAccent);
-            ctx->drawRect (CRect (lane.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
+            ctx->drawRect (CRect (g.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
             ctx->setFillColor (CColor (240, 240, 240, dim ? 90 : 220));
-            ctx->drawRect (CRect (lane.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
+            ctx->drawRect (CRect (g.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
         }
 
-        // labels
+        // the gain each block applies at its extreme (silence / 0 dB), and the current gain change
         const CColor tc = dim ? theme::kTextDim : theme::kText;
-        // ratio, and the gain the block applies at its extreme (silence / 0 dB), like the original
         const bool knee = host->plainValue (kSoftKnee) >= 0.5;
         const double amount = host->plainValue (kAmount);
         const double belowMax = std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
         const double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
-        text (ctx, host->valueText (bandParam (b, kBelowRatio)), CRect (lane.left + 4, lane.bottom - 16, xb - 4, lane.bottom - 2), tc, 10.0);
-        text (ctx, host->valueText (bandParam (b, kAboveRatio)), CRect (xa + 4, lane.bottom - 16, lane.right - 4, lane.bottom - 2), tc, 10.0);
-        if (std::fabs (belowMax) >= 0.05 && xb - lane.left > 120)
-            text (ctx, gainText (belowMax), CRect (lane.left + 4, lane.bottom - 16, lane.left + 60, lane.bottom - 2), tc, 10.0, kLeftText, true);
-        if (std::fabs (aboveMax) >= 0.05 && lane.right - xa > 120)
-            text (ctx, gainText (aboveMax), CRect (lane.right - 60, lane.bottom - 16, lane.right - 4, lane.bottom - 2), tc, 10.0, kRightText, true);
-        text (ctx, host->valueText (bandParam (b, kBelowThresh)), CRect (xb - 60, lane.top + 2, xb - 4, lane.top + 14), tc, 9.5, kRightText);
-        text (ctx, host->valueText (bandParam (b, kAboveThresh)), CRect (xa + 4, lane.top + 2, xa + 60, lane.top + 14), tc, 9.5, kLeftText);
-        std::string tag = "Band " + std::to_string (b + 1);
-        if (!active)
-            tag += "  (bypassed)";
-        else if (std::fabs (shownGain[b]) > 0.05f)
-        {
-            char buf[32];
-            std::snprintf (buf, sizeof (buf), "  %+.1f dB", shownGain[b]);
-            tag += buf;
-        }
-        text (ctx, tag, CRect (lane.left + 4, lane.top + 2, lane.left + 160, lane.top + 14), tc, 9.5, kLeftText, true);
+        if (std::fabs (belowMax) >= 0.05 && xb - g.left > 50)
+            text (ctx, gainText (belowMax), CRect (g.left + 4, g.bottom - 14, g.left + 60, g.bottom - 1), tc, 9.5, kLeftText, true);
+        if (std::fabs (aboveMax) >= 0.05 && g.right - xa > 50)
+            text (ctx, gainText (aboveMax), CRect (g.right - 60, g.bottom - 14, g.right - 4, g.bottom - 1), tc, 9.5, kRightText, true);
+        std::string tag = !active ? "bypassed" : (std::fabs (shownGain[b]) > 0.05f ? gainText (shownGain[b]) + " dB" : "");
+        if (!tag.empty ())
+            text (ctx, tag, CRect (g.left + 4, g.top + 1, g.left + 120, g.top + 13), tc, 9.0, kLeftText);
+        (void)lane;
     }
 
     // dB scale
@@ -152,7 +160,7 @@ void DynDisplay::draw (CDrawContext* ctx)
     {
         char buf[16];
         std::snprintf (buf, sizeof (buf), "%.0f", std::fabs (db)); // Live labels the scale 80 ... 0
-        const double cx = std::clamp (xOf (db), all.left + 12.0, all.right - 12.0);
+        const double cx = std::clamp (xOf (db), gl + 12.0, gr - 12.0);
         text (ctx, buf, CRect (cx - 20, sy + 1, cx + 20, all.bottom), theme::kTextDim, 9.5);
     }
 }
@@ -161,7 +169,7 @@ DynDisplay::Hit DynDisplay::hitTest (const CPoint& p, int& band) const
 {
     band = -1;
     for (int b = 0; b < bands (); ++b)
-        if (laneRect (b).pointInside (p))
+        if (graphRect (b).pointInside (p))
             band = b;
     if (band < 0)
         return Hit::None;
@@ -247,7 +255,7 @@ void DynDisplay::onMouseMoveEvent (MouseMoveEvent& e)
         if (edge)
         {
             // thresholds: follow the mouse horizontally in dB
-            const double dbPerPx = (kMaxDb - kMinDb) / getViewSize ().getWidth ();
+            const double dbPerPx = (kMaxDb - kMinDb) / (getViewSize ().getWidth () - kLeftCol - kRightCol);
             const double v = t.start + (e.mousePosition.x - downPoint.x) * dbPerPx * fine;
             host->setNorm (t.id, host->table ().toNormalized (t.id, v));
         }

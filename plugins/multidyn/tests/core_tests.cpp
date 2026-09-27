@@ -100,9 +100,10 @@ static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
 enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
 constexpr int kOnly = 0;                  // the band in single-band mode
 
-// The defaults are Live's OTT preset; most tests start from a neutral device instead.
+// The defaults are a four-band upward-compression preset; most tests start from a neutral device.
 static void neutralize (Engine& e)
 {
+    e.setParam (kOutput, 0.0);
     for (int b = 0; b < kMaxBands; ++b)
     {
         e.setParam (bandParam (b, kBandInput), 0.0);
@@ -393,18 +394,19 @@ TEST (upward_compression_does_not_explode_after_silence)
     CHECK (pk < -5.5, "burst after silence peaks at %.2f dB (input -6)", pk);
 }
 
-TEST (ott_defaults)
+TEST (preset_defaults)
 {
-    // A fresh engine is Live's OTT preset.
+    // A fresh engine is the four-band upward-compression preset (OTT pushed further).
     Engine e;
     e.prepare (kSr, 512);
-    CHECK (std::lround (e.param (kBands)) == 2 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
-               std::fabs (e.param (kXover2) - 2500.0) < 1e-9,
-           "3 bands at 88.3 Hz / 2.5 kHz");
+    CHECK (std::lround (e.param (kBands)) == 3 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
+               std::fabs (e.param (kXover2) - 2500.0) < 1e-9 && std::fabs (e.param (kXover3) - 8000.0) < 1e-9,
+           "4 bands at 88.3 Hz / 2.5 kHz / 8 kHz");
     CHECK (e.param (bandParam (2, kAboveRatio)) == kRatioInf && std::fabs (e.param (bandParam (1, kAboveRatio)) - 66.7) < 1e-9 &&
-               std::fabs (e.param (bandParam (0, kBelowRatio)) - 4.17) < 1e-9,
+               e.param (bandParam (0, kBelowRatio)) == kRatioInf && std::fabs (e.param (bandParam (3, kBelowRatio)) - 4.17) < 1e-9,
            "ratios");
-    CHECK (std::fabs (e.param (bandParam (1, kBandOutput)) - 5.7) < 1e-9 && std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9,
+    CHECK (std::fabs (e.param (bandParam (0, kBandOutput)) - 24.0) < 1e-9 && std::fabs (e.param (bandParam (1, kBandOutput)) - 9.1) < 1e-9 &&
+               std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9 && std::fabs (e.param (kOutput) + 7.0) < 1e-9,
            "gains and times");
     // It squashes dynamics hard: a 44 dB level difference at 1 kHz comes out within ~15 dB.
     auto level = [] (double inDb) {
@@ -414,8 +416,8 @@ TEST (ott_defaults)
         return rmsDb (out.l, 96000, 144000);
     };
     const double quiet = level (-50.0), loud = level (-6.0);
-    std::printf ("    OTT: -50 dB in -> %.1f dB rms, -6 dB in -> %.1f dB rms\n", quiet, loud);
-    CHECK (loud - quiet < 16.0, "OTT output range %.1f dB for 44 dB in", loud - quiet);
+    std::printf ("    preset: -50 dB in -> %.1f dB rms, -6 dB in -> %.1f dB rms\n", quiet, loud);
+    CHECK (loud - quiet < 16.0, "preset output range %.1f dB for 44 dB in", loud - quiet);
     CHECK (quiet > -45.0, "quiet material is lifted: %.1f", quiet);
 }
 

@@ -1,5 +1,5 @@
 # Stretchr: clip pitch/time editor with REAPER-style stretch algorithms.
-project(Stretchr VERSION 0.4.0.0)
+project(Stretchr VERSION 0.5.0.0)
 
 add_library(stretchr_core STATIC
     src/core/Params.cpp
@@ -9,9 +9,9 @@ add_library(stretchr_core STATIC
     src/core/Session.cpp
 )
 target_include_directories(stretchr_core PUBLIC src/core)
-# Reuses Simplr's warp engines, sample loading and FFT (included as "simplr/src/core/...").
+# Reuses Smempler's warp engines, sample loading and FFT (included as "smempler/src/core/...").
 find_package(Threads REQUIRED)
-target_link_libraries(stretchr_core PUBLIC pluginkit_core simplr_core Threads::Threads)
+target_link_libraries(stretchr_core PUBLIC pluginkit_core smempler_core Threads::Threads)
 pk_dsp_settings(stretchr_core)
 
 add_executable(stretchr_tests tests/core_tests.cpp)

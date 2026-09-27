@@ -12,12 +12,12 @@ namespace {
 std::vector<ParamInfo> buildTable ()
 {
     std::vector<ParamInfo> t;
-    t.push_back (real (kOutput, "Output", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+    t.push_back (real (kOutput, "Output", "Output", -24.0, 24.0, -7.0, Curve::Linear, Disp::Db));
     t.push_back (percent (kAmount, "Amount", "Amount", 1.0));
     t.push_back (real (kTime, "Time", "Time", 0.1, 10.0, 1.0, Curve::Log, Disp::Percent));
     t.push_back (toggle (kSoftKnee, "Soft Knee", "Soft Knee", true));
     t.push_back (choice (kDetector, "Peak/RMS", "Detect", {"Peak", "RMS"}, kRms));
-    t.push_back (choice (kBands, "Bands", "Bands", {"1", "2", "3", "4"}, 2));
+    t.push_back (choice (kBands, "Bands", "Bands", {"1", "2", "3", "4"}, 3));
     t.push_back (real (kXover1, "Crossover 1", "X1", 20.0, 16000.0, 88.3, Curve::Log, Disp::Hz));
     t.push_back (real (kXover2, "Crossover 2", "X2", 20.0, 16000.0, 2500.0, Curve::Log, Disp::Hz));
     t.push_back (real (kXover3, "Crossover 3", "X3", 20.0, 16000.0, 8000.0, Curve::Log, Disp::Hz));
@@ -26,16 +26,18 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (percent (kScMix, "Sidechain Dry/Wet", "SC Mix", 1.0));
     t.push_back (toggle (kScListen, "Sidechain Listen", "Listen", false));
 
-    // Defaults reproduce Live's "OTT" preset (3 bands); band 4 starts like the top band.
+    // Defaults: four bands of heavy upward compression (the "OTT" preset pushed further: the
+    // Below blocks at 1:inf lift everything to the threshold), with the attack / release times of
+    // OTT. Output -7 dB makes room for a saturator after it.
     struct BandDefaults
     {
         double input, output, below, belowRatio, above, aboveRatio, attack, release;
     };
     const BandDefaults defs[kMaxBands] = {
-        {5.2, 10.3, -40.8, 4.17, -33.8, 66.7, 47.8, 282.0}, // band 1 (low)
-        {5.2, 5.7, -41.8, 4.17, -30.2, 66.7, 22.4, 282.0},  // band 2 (mid)
-        {5.2, 10.3, -40.8, 4.17, -35.5, kRatioInf, 13.5, 132.0}, // band 3 (high)
-        {5.2, 10.3, -40.8, 4.17, -35.5, kRatioInf, 13.5, 132.0}, // band 4
+        {5.2, 24.0, -40.8, kRatioInf, -33.8, 66.7, 47.8, 282.0},       // band 1 (low)
+        {5.2, 9.1, -41.8, kRatioInf, -30.2, 66.7, 22.4, 282.0},        // band 2
+        {5.2, 11.3, -40.8, kRatioInf, -35.5, kRatioInf, 13.5, 132.0},  // band 3
+        {5.2, 11.7, -40.8, 4.17, -35.5, kRatioInf, 13.5, 132.0},       // band 4 (high)
     };
     for (int b = 0; b < kMaxBands; ++b)
     {

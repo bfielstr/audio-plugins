@@ -3,6 +3,7 @@
 
 #include "pluginkit/ParamTable.h"
 
+#include "vstgui/lib/ccolor.h"
 #include "vstgui/lib/cview.h"
 #include "vstgui/lib/cviewcontainer.h"
 
@@ -84,6 +85,25 @@ private:
     std::string label;
     bool dragging = false;
     double startX = 0, startValue = 0;
+};
+
+// A value field in the style of Live's number boxes: the value text in a box, drag up/down to
+// change it (Shift: fine), double-click to reset, mouse wheel to step.
+class NumberBox : public ParamView
+{
+public:
+    NumberBox (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, VSTGUI::CColor color = VSTGUI::CColor (240, 240, 240));
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+    void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
+    void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseCancelEvent (VSTGUI::MouseCancelEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
+
+private:
+    VSTGUI::CColor color;
+    bool dragging = false;
+    double startY = 0, dragValue = 0;
 };
 
 // On/off button for a bool parameter.

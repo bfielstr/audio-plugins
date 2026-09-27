@@ -46,7 +46,6 @@ constexpr const char* kDisplay =
     "Drag a block edge left/right to move a threshold. Drag inside a block up (louder) or down (quieter) to set its "
     "ratio. Cmd/Ctrl: all bands. Alt/Option: above and below together. Shift: fine. Double-click a block: 1:1. "
     "Thin bars show input level, thick bars output level; the number in a block is the gain it applies at its "
-    "extreme (silence for Below, 0 dB for Above).";
-constexpr const char* kTabs = "Right column shows: T = attack/release, B = below threshold/ratio, A = above threshold/ratio.";
+    "extreme (silence for Below, 0 dB for Above). The value fields beside the lanes can be dragged up/down.";
 
 } // namespace multidyn::help

@@ -6,8 +6,8 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(AudioPlugins
-    VERSION 0.4.0
-    DESCRIPTION "Simplr (sampler) and Multidyn (multiband dynamics) VST3 plug-ins"
+    VERSION 0.5.0
+    DESCRIPTION "Smempler, Multidyn, Locus, Stretchr and Smatcheratr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -39,7 +39,8 @@ if(PK_BUILD_PLUGINS)
 endif()
 
 add_subdirectory(shared)
-add_subdirectory(plugins/simplr)
+add_subdirectory(plugins/smempler)
 add_subdirectory(plugins/multidyn)
-add_subdirectory(plugins/lowfocus)
+add_subdirectory(plugins/locus)
 add_subdirectory(plugins/stretchr)
+add_subdirectory(plugins/smatcheratr)

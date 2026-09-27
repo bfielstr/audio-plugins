@@ -1,8 +1,8 @@
 #include "Render.h"
 
-#include "simplr/src/core/Fft.h"
-#include "simplr/src/core/Interp.h"
-#include "simplr/src/core/Warp.h"
+#include "smempler/src/core/Fft.h"
+#include "smempler/src/core/Interp.h"
+#include "smempler/src/core/Warp.h"
 
 #include <algorithm>
 #include <cmath>
@@ -10,7 +10,7 @@
 
 namespace stretchr {
 
-using simplr::Fft;
+using smempler::Fft;
 
 RenderSettings settingsFromParams (const double* p, double hostBpm)
 {
@@ -63,14 +63,14 @@ inline float readLinear (const float* d, int len, double pos)
 }
 
 //------------------------------------------------------------------------------
-// The streaming engines shared with Simplr, driven block by block along the time map.
+// The streaming engines shared with Smempler, driven block by block along the time map.
 template <typename Engine>
 bool runEngine (Engine& eng, const Clip& c, const RenderSettings& s, const TimeMap& map, float* L, float* R,
                 long long total, Ticker& tick)
 {
     const SampleData& a = *c.audio;
     const double sr = a.sampleRate;
-    simplr::WarpRates w;
+    smempler::WarpRates w;
     w.srcRate = 1.0;
     w.formantShift = std::pow (2.0, s.formantSemis / 12.0);
     constexpr int kBlock = 64;
@@ -103,7 +103,7 @@ bool renderTape (const Clip& c, const TimeMap& map, float* L, float* R, long lon
         const double rate = (v1 - v0) / n;
         const float cutoff = (float)std::min (1.0, 1.0 / std::max (rate, 1e-6));
         for (int j = 0; j < n; ++j)
-            simplr::readSinc (d0, d1, a.length, v0 + rate * j, cutoff, L[i + j], R[i + j]);
+            smempler::readSinc (d0, d1, a.length, v0 + rate * j, cutoff, L[i + j], R[i + j]);
         if (!tick ((double)i / (double)total))
             return false;
     }
@@ -426,7 +426,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
         return false;
     std::vector<float> L ((size_t)total, 0.0f), R ((size_t)total, 0.0f);
     Ticker tick {progress};
-    simplr::PlayRegion region;
+    smempler::PlayRegion region;
     region.start = 0.0;
     region.end = a.length;
     bool ok = true;
@@ -435,7 +435,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
         case kWindowed:
         case kBalanced:
         {
-            auto eng = std::make_unique<simplr::GrainWarp> ();
+            auto eng = std::make_unique<smempler::GrainWarp> ();
             eng->prepare (sr);
             eng->start (region, s.algorithm == kBalanced, (float)s.windowMs, 0.0f, 1u);
             ok = runEngine (*eng, clip, s, map, L.data (), R.data (), total, tick);
@@ -447,7 +447,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
             for (const auto& o : a.onsets)
                 if (o.strength >= 0.1f)
                     bounds.push_back (o.pos);
-            auto eng = std::make_unique<simplr::BeatsWarp> ();
+            auto eng = std::make_unique<smempler::BeatsWarp> ();
             eng->prepare (sr);
             eng->start (a, region, bounds, 1, 1.0f);
             ok = runEngine (*eng, clip, s, map, L.data (), R.data (), total, tick);
@@ -461,7 +461,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
         {
             const int base = sr > 50000.0 ? 2048 : 1024;
             const int frame = std::min (4096, base << std::clamp (s.transients, 0, 2));
-            auto eng = std::make_unique<simplr::PvWarp> ();
+            auto eng = std::make_unique<smempler::PvWarp> ();
             eng->prepare (sr);
             eng->start (a, region, s.preserveFormants, 1.0f, 128, frame);
             ok = runEngine (*eng, clip, s, map, L.data (), R.data (), total, tick);
@@ -480,7 +480,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
         const float cutoff = (float)std::min (1.0, outRate / sr);
         for (long long j = 0; j < total2; ++j)
         {
-            simplr::readSinc (L.data (), R.data (), (int)total, (double)j * step, cutoff, L2[(size_t)j], R2[(size_t)j]);
+            smempler::readSinc (L.data (), R.data (), (int)total, (double)j * step, cutoff, L2[(size_t)j], R2[(size_t)j]);
             if ((j & 8191) == 0 && !tick (1.0))
                 return false;
         }

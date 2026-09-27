@@ -34,15 +34,22 @@ jobs:
         env:
           SIMPLR_DEST: ${{ runner.temp }}/vst3
         run: |
-          # an old top-level copy of ours (must be removed) and another vendor's plug-in (must stay)
-          mkdir -p "$SIMPLR_DEST/Simplr.vst3/Contents/Resources" "$SIMPLR_DEST/Lowfocus.vst3/Contents/Resources"
-          echo '{ "Vendor": "Simplr", "Version": "0.1.1.0" }' > "$SIMPLR_DEST/Simplr.vst3/Contents/Resources/moduleinfo.json"
-          echo '{ "Vendor": "Someone Else" }' > "$SIMPLR_DEST/Lowfocus.vst3/Contents/Resources/moduleinfo.json"
+          # an old top-level copy of ours (must be removed), another vendor's plug-in with one of our
+          # names (must stay), and one of ours under a retired name in the vendor folder (must be
+          # removed once the release no longer ships that name)
+          mkdir -p "$SIMPLR_DEST/Multidyn.vst3/Contents/Resources" "$SIMPLR_DEST/Locus.vst3/Contents/Resources" \
+            "$SIMPLR_DEST/bfielstr/Lowfocus.vst3/Contents/Resources"
+          echo '{ "Vendor": "Simplr", "Version": "0.1.1.0" }' > "$SIMPLR_DEST/Multidyn.vst3/Contents/Resources/moduleinfo.json"
+          echo '{ "Vendor": "Someone Else" }' > "$SIMPLR_DEST/Locus.vst3/Contents/Resources/moduleinfo.json"
+          echo '{ "Vendor": "bfielstr", "Version": "0.4.0.0" }' > "$SIMPLR_DEST/bfielstr/Lowfocus.vst3/Contents/Resources/moduleinfo.json"
           sh scripts/install.sh
-          test ! -d "$SIMPLR_DEST/Simplr.vst3"
-          test -d "$SIMPLR_DEST/Lowfocus.vst3"
-          # every bundle the release contains (at least the first three plug-ins)
-          for p in Simplr Multidyn Lowfocus; do test -d "$SIMPLR_DEST/bfielstr/$p.vst3"; done
+          test ! -d "$SIMPLR_DEST/Multidyn.vst3"
+          test -d "$SIMPLR_DEST/Locus.vst3"
+          if [ -d "$SIMPLR_DEST/bfielstr/Locus.vst3" ]; then
+            test ! -d "$SIMPLR_DEST/bfielstr/Lowfocus.vst3" # renamed: the old bundle is gone
+          fi
+          # Multidyn is in every release
+          test -d "$SIMPLR_DEST/bfielstr/Multidyn.vst3"
           for b in "$SIMPLR_DEST"/bfielstr/*.vst3; do
             p="$(basename "$b" .vst3)"
             if [ "$RUNNER_OS" = "macOS" ]; then
@@ -55,23 +62,27 @@ jobs:
             echo "$p installed"
           done
           # installing again replaces in place
-          sh scripts/install.sh | grep -q "Replacing Simplr"
+          sh scripts/install.sh | grep -q "Replacing Multidyn"
           # subset install
           rm -rf "$SIMPLR_DEST"
-          SIMPLR_PLUGINS="Lowfocus" sh scripts/install.sh
-          test -d "$SIMPLR_DEST/bfielstr/Lowfocus.vst3" && test ! -d "$SIMPLR_DEST/bfielstr/Simplr.vst3"
+          SIMPLR_PLUGINS="Multidyn" sh scripts/install.sh
+          test -d "$SIMPLR_DEST/bfielstr/Multidyn.vst3" && test ! -d "$SIMPLR_DEST/bfielstr/Stretchr.vst3"
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $env:SIMPLR_DEST = Join-Path $env:RUNNER_TEMP 'vst3'
-          $old = Join-Path $env:SIMPLR_DEST 'Simplr.vst3\Contents\Resources'
+          $old = Join-Path $env:SIMPLR_DEST 'Multidyn.vst3\Contents\Resources'
           New-Item -ItemType Directory -Force -Path $old | Out-Null
           '{ "Vendor": "Simplr", "Version": "0.1.1.0" }' | Set-Content (Join-Path $old 'moduleinfo.json')
+          $retired = Join-Path $env:SIMPLR_DEST 'bfielstr\Lowfocus.vst3\Contents\Resources'
+          New-Item -ItemType Directory -Force -Path $retired | Out-Null
+          '{ "Vendor": "bfielstr", "Version": "0.4.0.0" }' | Set-Content (Join-Path $retired 'moduleinfo.json')
           ./scripts/install.ps1
-          if (Test-Path (Join-Path $env:SIMPLR_DEST 'Simplr.vst3')) { throw 'old top-level copy not removed' }
-          foreach ($p in 'Simplr', 'Multidyn', 'Lowfocus') {
-            if (-not (Test-Path (Join-Path $env:SIMPLR_DEST "bfielstr\$p.vst3"))) { throw "$p missing" }
+          if (Test-Path (Join-Path $env:SIMPLR_DEST 'Multidyn.vst3')) { throw 'old top-level copy not removed' }
+          if (-not (Test-Path (Join-Path $env:SIMPLR_DEST 'bfielstr\Multidyn.vst3'))) { throw 'Multidyn missing' }
+          if ((Test-Path (Join-Path $env:SIMPLR_DEST 'bfielstr\Locus.vst3')) -and (Test-Path (Join-Path $env:SIMPLR_DEST 'bfielstr\Lowfocus.vst3'))) {
+            throw 'retired Lowfocus bundle not removed'
           }
           Get-ChildItem (Join-Path $env:SIMPLR_DEST 'bfielstr') -Filter '*.vst3' | ForEach-Object {
             $p = $_.Name -replace '\.vst3$', ''
@@ -79,4 +90,4 @@ jobs:
             Write-Host "$p installed"
           }
           $again = ./scripts/install.ps1 6>&1 | Out-String
-          if ($again -notmatch 'Replacing Simplr') { throw 'second install did not replace' }
+          if ($again -notmatch 'Replacing Multidyn') { throw 'second install did not replace' }

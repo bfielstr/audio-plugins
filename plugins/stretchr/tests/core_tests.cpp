@@ -5,7 +5,7 @@
 #include "Session.h"
 #include "Wav.h"
 
-#include "simplr/src/core/Fft.h"
+#include "smempler/src/core/Fft.h"
 
 #include <chrono>
 #include <cmath>
@@ -165,11 +165,11 @@ static double pitchOf (const std::vector<float>& x, size_t a, size_t b, double s
 static double peakFreq (const std::vector<float>& x, size_t a, double sr = kSr)
 {
     const int N = 16384;
-    simplr::Fft fft (N);
+    smempler::Fft fft (N);
     std::vector<float> buf (N, 0.0f);
     for (int i = 0; i < N && a + (size_t)i < x.size (); ++i)
         buf[(size_t)i] = x[a + (size_t)i] * (0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N));
-    std::vector<simplr::Fft::cf> spec (N / 2 + 1);
+    std::vector<smempler::Fft::cf> spec (N / 2 + 1);
     fft.forward (buf.data (), spec.data ());
     int best = 1;
     for (int k = 1; k < N / 2; ++k)
@@ -186,11 +186,11 @@ static double peakFreq (const std::vector<float>& x, size_t a, double sr = kSr)
 static double centroid (const std::vector<float>& x, size_t a)
 {
     const int N = 8192;
-    simplr::Fft fft (N);
+    smempler::Fft fft (N);
     std::vector<float> buf (N, 0.0f);
     for (int i = 0; i < N && a + (size_t)i < x.size (); ++i)
         buf[(size_t)i] = x[a + (size_t)i] * (0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N));
-    std::vector<simplr::Fft::cf> spec (N / 2 + 1);
+    std::vector<smempler::Fft::cf> spec (N / 2 + 1);
     fft.forward (buf.data (), spec.data ());
     double num = 0, den = 0;
     for (int k = 1; k < N / 2; ++k)
@@ -606,7 +606,7 @@ TEST (wav_export_roundtrip)
     std::vector<float> l, r;
     int nch = 0;
     double sr = 0;
-    CHECK (simplr::decodeAudioFile (path, l, r, nch, sr, err), "decode: %s", err.c_str ());
+    CHECK (smempler::decodeAudioFile (path, l, r, nch, sr, err), "decode: %s", err.c_str ());
     CHECK (nch == 2 && sr == kSr && l.size () == out.l.size (), "shape %d %f %zu", nch, sr, l.size ());
     bool same = l.size () == out.l.size ();
     for (size_t i = 0; same && i < l.size (); ++i)

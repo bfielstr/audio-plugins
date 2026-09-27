@@ -1,4 +1,4 @@
-# Third-party software in Simplr
+# Third-party software in these plug-ins
 
 - **Steinberg VST 3 SDK** (MIT licence) — see `VST3_SDK_LICENSE.txt`.
   VST is a trademark of Steinberg Media Technologies GmbH, registered in Europe and other countries.

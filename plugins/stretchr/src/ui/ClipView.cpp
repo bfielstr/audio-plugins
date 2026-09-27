@@ -60,7 +60,7 @@ private:
     static bool acceptable (DragEventData d)
     {
         std::string p;
-        return firstPath (d, p) && simplr::isSupportedAudioFile (p);
+        return firstPath (d, p) && smempler::isSupportedAudioFile (p);
     }
     ClipView* view;
 };

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus, Stretchr)
+# Downloads the latest release and installs the VST3 plug-ins (Smempler, Multidyn, Locus, Stretchr)
 # for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
 # removed (only if they are ours).
@@ -9,7 +9,7 @@
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
 #   SIMPLR_DEST=/some/dir   use a different VST3 folder (plug-ins go into <dir>/bfielstr)
-#   SIMPLR_PLUGINS="Multidyn Lowfocus"   install only some of the plug-ins
+#   SIMPLR_PLUGINS="Multidyn Locus"   install only some of the plug-ins
 set -eu
 
 REPO="${SIMPLR_REPO:-bfielstr/audio-plugins}"
@@ -106,7 +106,7 @@ fi
 vendor="bfielstr"
 dest="$root/$vendor"
 
-# True if the bundle at $1 was made by us (older builds reported the vendor as "Simplr").
+# True if the bundle at $1 was made by us (older builds reported the vendor as "Smempler").
 is_ours() {
     grep -qE '"Vendor": *"(bfielstr|Simplr)"' "$1/Contents/Resources/moduleinfo.json" 2>/dev/null
 }
@@ -116,6 +116,18 @@ version_of() {
 }
 
 mkdir -p "$dest"
+# Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
+# Removed only when this release no longer ships it under that name.
+for old in Simplr Lowfocus; do
+    if [ ! -d "$tmp/x/$old.vst3" ]; then
+        for dir in "$dest" "$root"; do
+            if [ -d "$dir/$old.vst3" ] && is_ours "$dir/$old.vst3"; then
+                echo "Removing $dir/$old.vst3 (renamed in 0.5.0)"
+                rm -rf "$dir/$old.vst3"
+            fi
+        done
+    fi
+done
 for p in $plugins; do
     if [ ! -d "$tmp/x/$p.vst3" ]; then
         echo "No $p.vst3 in this release - skipping." >&2

@@ -1,6 +1,7 @@
-// The Multidyn display: one lane per band (highest band on top). Each lane shows the
+// The Multidyn display, laid out like Live's: one lane per band (highest band on top) with the
 // Below block (left of the below threshold) and the Above block (right of the above threshold),
-// the input level (thin bar) and output level (thick bar).
+// the input level (thin bar) and output level (thick bar). The value fields on either side of the
+// graph are separate views placed over the display by the editor.
 //   drag a block edge          move that threshold          (Shift: fine)
 //   drag inside a block        up = louder, down = quieter  (changes the ratio: Above up = lower
 //                              ratio / expansion, Below up = higher ratio / upward compression)
@@ -25,7 +26,9 @@ class DynDisplay : public VSTGUI::CView
 {
 public:
     static constexpr double kMinDb = -80.0, kMaxDb = 0.0;
-    static constexpr double kScaleHeight = 16.0;
+    static constexpr double kHeader = 14.0, kScaleHeight = 16.0;
+    // value columns left (Below) and right (Above, Att/Rel) of the graph
+    static constexpr double kLeftCol = 76.0, kRightCol = 156.0;
 
     DynDisplay (const VSTGUI::CRect& r, pk::ParamHost* host, Controller* controller);
 
@@ -37,7 +40,8 @@ public:
     void idle (); // animates the meters
 
     enum class Hit { None, BelowEdge, AboveEdge, BelowBlock, AboveBlock };
-    VSTGUI::CRect laneRect (int band) const;
+    VSTGUI::CRect laneRect (int band) const;  // the full-width lane
+    VSTGUI::CRect graphRect (int band) const; // the graph part of the lane
     int bands () const;
     double xOf (double db) const;
     Hit hitTest (const VSTGUI::CPoint& p, int& band) const;

@@ -2,7 +2,7 @@
 // pitch envelope. Plain data, shared read-only once published.
 #pragma once
 
-#include "simplr/src/core/SampleData.h"
+#include "smempler/src/core/SampleData.h"
 
 #include <cstdint>
 #include <memory>
@@ -11,7 +11,7 @@
 
 namespace stretchr {
 
-using simplr::SampleData;
+using smempler::SampleData;
 using SamplePtr = std::shared_ptr<const SampleData>;
 
 // Pins a point of the source (seconds) to a point of the output (seconds, before Speed).

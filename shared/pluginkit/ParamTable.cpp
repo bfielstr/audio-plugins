@@ -173,6 +173,7 @@ std::string ParamTable::toText (uint32_t id, double v) const
             if (p.type == PType::Int)
                 return fmt ("%.0f", v);
             return fmt ("%.0f", v);
+        case Disp::Number: return fmt ("%.2f", v);
     }
     return fmt ("%.2f", v);
 }
