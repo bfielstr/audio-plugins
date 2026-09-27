@@ -38,9 +38,13 @@ bool readDoubles (IBStreamer& s, std::vector<double>& v)
 bool writeState (IBStream* stream, const PluginState& st)
 {
     IBStreamer s (stream, kLittleEndian);
-    bool ok = s.writeInt32 (kMagic) && s.writeInt32 (kVersion) && s.writeInt32 ((int32)kNumParams);
+    int32 present = 0;
+    for (uint32 id = 0; id < kNumParams; ++id)
+        present += st.has[id] ? 1 : 0;
+    bool ok = s.writeInt32 (kMagic) && s.writeInt32 (kVersion) && s.writeInt32 (present);
     for (uint32 id = 0; ok && id < kNumParams; ++id)
-        ok = s.writeInt32u (id) && s.writeDouble (st.norm[id]);
+        if (st.has[id])
+            ok = s.writeInt32u (id) && s.writeDouble (st.norm[id]);
     ok = ok && s.writeInt32 ((int32)st.samplePath.size ());
     ok = ok && (st.samplePath.empty () || s.writeRaw (st.samplePath.data (), (int32)st.samplePath.size ()) ==
                                               (int32)st.samplePath.size ());
@@ -86,6 +90,12 @@ bool readState (IBStream* stream, PluginState& st)
     bool cp = true;
     if (s.readBool (cp))
         st.constantPowerFade = cp;
+    // 0.1.x stored the loop fade type outside the parameters.
+    if (!st.has[kLoopFadePower])
+    {
+        st.norm[kLoopFadePower] = st.constantPowerFade ? 1.0 : 0.0;
+        st.has[kLoopFadePower] = true;
+    }
     return true;
 }
 

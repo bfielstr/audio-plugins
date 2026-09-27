@@ -1,5 +1,6 @@
 #include "Displays.h"
 
+#include "Envelope.h"
 #include "Filter.h"
 #include "Params.h"
 #include "Theme.h"
@@ -34,11 +35,6 @@ void background (CDrawContext* ctx, const CRect& r)
     ctx->drawRect (r, kDrawStroked);
 }
 
-double expCurve (double u)
-{
-    const double k = 4.0, endY = std::exp (-k);
-    return 1.0 - (std::exp (-k * u) - endY) / (1.0 - endY); // 0 -> 1
-}
 
 } // namespace
 
@@ -193,58 +189,110 @@ void FilterDisplay::onMouseUpEvent (MouseUpEvent& e)
 //==============================================================================
 EnvelopeDisplay::EnvelopeDisplay (const CRect& r, ParamHost* h, int w) : CView (r), host (h), which (w) {}
 
-uint32_t EnvelopeDisplay::idA () const { return which == 0 ? kAmpA : (which == 1 ? kFiltA : kPitchA); }
+uint32_t EnvelopeDisplay::idA () const { return envAdsrBase (which); }
+
+EnvelopeDisplay::Geometry EnvelopeDisplay::geometry (ParamHost* host, int which, const CRect& a)
+{
+    Geometry g;
+    const uint32_t b = envAdsrBase (which);
+    const double at = host->plainValue (b), dt = host->plainValue (b + 1), sus = host->plainValue (b + 2),
+                 rt = host->plainValue (b + 3);
+    const int n = std::clamp ((int)std::lround (host->plainValue (envParam (which, kEnvPointCount))), 0, kMaxEnvPoints);
+    auto w = [] (double ms) { return std::log10 (1.0 + ms / 2.0) + 0.05; };
+
+    struct Seg
+    {
+        double ms, level;
+        int kind, index;
+        uint32_t curveId;
+    };
+    Seg segs[kMaxEnvPoints + 4];
+    int count = 0;
+    segs[count++] = {at, 1.0, kAttack, -1, envParam (which, kEnvCurveA)};
+    for (int i = 0; i < n; ++i)
+        segs[count++] = {host->plainValue (envPointParam (which, i, kPtTime)),
+                         host->plainValue (envPointParam (which, i, kPtLevel)), kBreak, i,
+                         envPointParam (which, i, kPtCurve)};
+    segs[count++] = {dt, sus, kDecay, -1, envParam (which, kEnvCurveD)};
+    segs[count++] = {-1.0, sus, kHold, -1, 0}; // sustain hold: fixed width
+    segs[count++] = {rt, 0.0, kRelease, -1, envParam (which, kEnvCurveR)};
+
+    double units = 0.0;
+    for (int i = 0; i < count; ++i)
+        units += segs[i].ms < 0.0 ? 1.2 : w (segs[i].ms);
+    const double scale = a.getWidth () / units;
+    auto y = [&] (double v) { return a.bottom - std::clamp (v, 0.0, 1.0) * a.getHeight (); };
+
+    g.pts[0] = {CPoint (a.left, y (0.0)), 0.0, kStart, -1, 0};
+    double x = a.left, level = 0.0;
+    for (int i = 0; i < count; ++i)
+    {
+        x += (segs[i].ms < 0.0 ? 1.2 : w (segs[i].ms)) * scale;
+        g.pts[i + 1] = {CPoint (x, y (segs[i].level)), segs[i].level, segs[i].kind, segs[i].index, segs[i].curveId};
+        level = segs[i].level;
+    }
+    (void)level;
+    g.count = count + 1;
+    g.area = a;
+    g.points = n;
+    return g;
+}
+
+double EnvelopeDisplay::Geometry::curveOf (ParamHost* host, int seg) const
+{
+    return pts[seg].kind == kHold ? 0.0 : host->plainValue (pts[seg].curveId);
+}
 
 void EnvelopeDisplay::drawAdsr (CDrawContext* ctx, const CRect& a, ParamHost* host, int which, CPoint* handles,
                                 bool dim)
 {
-    const uint32_t base = which == 0 ? kAmpA : (which == 1 ? kFiltA : kPitchA);
-    const double at = host->plainValue (base), dt = host->plainValue (base + 1), s = host->plainValue (base + 2),
-                 rt = host->plainValue (base + 3);
-    auto w = [] (double ms) { return std::log10 (1.0 + ms / 2.0) + 0.05; };
-    const double units = w (at) + w (dt) + 1.2 + w (rt);
-    const double scale = a.getWidth () / units;
-    const double x0 = a.left, x1 = x0 + w (at) * scale, x2 = x1 + w (dt) * scale, x3 = x2 + 1.2 * scale,
-                 x4 = x3 + w (rt) * scale;
-    auto y = [&] (double v) { return a.bottom - v * a.getHeight (); };
-
+    const Geometry g = geometry (host, which, a);
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (theme::kGrid);
     for (double v : {0.25, 0.5, 0.75})
-        ctx->drawLine (CPoint (a.left, y (v)), CPoint (a.right, y (v)));
-
+    {
+        const double yy = a.bottom - v * a.getHeight ();
+        ctx->drawLine (CPoint (a.left, yy), CPoint (a.right, yy));
+    }
     auto path = owned (ctx->createGraphicsPath ());
     if (!path)
         return;
-    path->beginSubpath (CPoint (x0, y (0)));
-    path->addLine (CPoint (x1, y (1)));
-    for (int i = 1; i <= 24; ++i)
+    path->beginSubpath (g.pts[0].p);
+    for (int s = 1; s < g.count; ++s)
     {
-        const double u = i / 24.0;
-        path->addLine (CPoint (x1 + (x2 - x1) * u, y (1.0 + (s - 1.0) * expCurve (u))));
+        const CPoint p0 = g.pts[s - 1].p, p1 = g.pts[s].p;
+        const float c = (float)g.curveOf (host, s);
+        for (int i = 1; i <= 32; ++i)
+        {
+            const float u = i / 32.0f;
+            path->addLine (CPoint (p0.x + (p1.x - p0.x) * u, p0.y + (p1.y - p0.y) * envCurve (u, c)));
+        }
     }
-    path->addLine (CPoint (x3, y (s)));
-    for (int i = 1; i <= 24; ++i)
-    {
-        const double u = i / 24.0;
-        path->addLine (CPoint (x3 + (x4 - x3) * u, y (s * (1.0 - expCurve (u)))));
-    }
-    auto fill = owned (ctx->createGraphicsPath ());
     ctx->setLineWidth (1.5);
     ctx->setFrameColor (dim ? theme::kTextDim : theme::kCurve);
     ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
-    // sustain segment marker
-    ctx->setFrameColor (CColor (255, 255, 255, 40));
-    ctx->drawLine (CPoint (x2, a.top), CPoint (x2, a.bottom));
-    ctx->drawLine (CPoint (x3, a.top), CPoint (x3, a.bottom));
 
-    const CPoint h[3] = {CPoint (x1, y (1)), CPoint (x2, y (s)), CPoint (x4, y (0))};
-    for (int i = 0; i < 3; ++i)
+    // sustain section markers
+    ctx->setFrameColor (CColor (255, 255, 255, 40));
+    for (int s = 1; s < g.count; ++s)
+        if (g.pts[s].kind == kDecay || g.pts[s].kind == kHold)
+            ctx->drawLine (CPoint (g.pts[s].p.x, a.top), CPoint (g.pts[s].p.x, a.bottom));
+
+    int h = 0;
+    for (int s = 1; s < g.count; ++s)
     {
-        if (handles)
-            handles[i] = h[i];
-        ctx->setFillColor (dim ? theme::kTextDim : theme::kTextBright);
-        ctx->drawEllipse (CRect (h[i].x - 3.5, h[i].y - 3.5, h[i].x + 3.5, h[i].y + 3.5), kDrawFilled);
+        const int kind = g.pts[s].kind;
+        if (kind == kHold)
+            continue;
+        const CPoint p = g.pts[s].p;
+        const double r = kind == kBreak ? 3.0 : 3.5;
+        ctx->setFillColor (dim ? theme::kTextDim : (kind == kBreak ? theme::kAccent : theme::kTextBright));
+        if (kind == kBreak)
+            ctx->drawRect (CRect (p.x - r, p.y - r, p.x + r, p.y + r), kDrawFilled);
+        else
+            ctx->drawEllipse (CRect (p.x - r, p.y - r, p.x + r, p.y + r), kDrawFilled);
+        if (handles && h < 3 && kind != kBreak)
+            handles[h++] = p;
     }
 }
 
@@ -252,9 +300,7 @@ void EnvelopeDisplay::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
     background (ctx, r);
-    CRect a = r;
-    a.inset (8, 8);
-    a.top += 10;
+    const CRect a = plotArea ();
     const int mode = (int)std::lround (host->plainValue (kMode));
     const bool dim = which == 0 && mode != kModeClassic;
     ctx->setClipRect (r);
@@ -267,77 +313,193 @@ void EnvelopeDisplay::draw (CDrawContext* ctx)
     if (which == 2)
         title += "  " + host->valueText (kPitchEnvAmt);
     label (ctx, title, CRect (r.left + 6, r.top + 3, r.right - 6, r.top + 16), theme::kTextDim, 10.0);
+    if (!status.empty ())
+        label (ctx, status, CRect (r.left + 6, r.top + 3, r.right - 8, r.top + 16), theme::kAccent, 10.0, kRightText);
     if (dim)
         label (ctx, "One-Shot/Slicing use Fade In/Out instead", CRect (r.left, r.bottom - 18, r.right - 8, r.bottom - 4),
                theme::kTextDim, 10.0, kRightText);
     ctx->resetClipRect ();
 }
 
+CRect EnvelopeDisplay::plotArea () const
+{
+    CRect a = getViewSize ();
+    a.inset (8, 8);
+    a.top += 10;
+    return a;
+}
+
+int EnvelopeDisplay::segmentAt (const Geometry& g, double x) const
+{
+    for (int s = 1; s < g.count; ++s)
+        if (x >= g.pts[s - 1].p.x && x <= g.pts[s].p.x)
+            return s;
+    return x < g.pts[0].p.x ? 1 : g.count - 1;
+}
+
+void EnvelopeDisplay::insertPoint (const Geometry& g, int seg, double x, double y)
+{
+    const int n = g.points;
+    const int kind = g.pts[seg].kind;
+    if (kind != kBreak && kind != kDecay)
+    {
+        flash ("Double-click between the peak and the sustain point to add a breakpoint");
+        return;
+    }
+    if (n >= kMaxEnvPoints)
+    {
+        flash ("Maximum of 6 breakpoints");
+        return;
+    }
+    const CPoint p0 = g.pts[seg - 1].p, p1 = g.pts[seg].p;
+    const double u = std::clamp ((x - p0.x) / std::max (1.0, p1.x - p0.x), 0.02, 0.98);
+    const CRect a = g.area;
+    const double level = std::clamp ((a.bottom - y) / a.getHeight (), 0.0, 1.0);
+    // index of the new breakpoint = number of breakpoints before this segment's end
+    const int k = kind == kDecay ? n : g.pts[seg].index;
+    const uint32_t segTimeId = kind == kDecay ? envAdsrBase (which) + 1 : envPointParam (which, k, kPtTime);
+    const double segMs = host->plainValue (segTimeId);
+    const double segCurve = g.curveOf (host, seg);
+    // shift breakpoints k..n-1 up by one (from the end)
+    for (int i = n - 1; i >= k; --i)
+        for (int f = 0; f < 3; ++f)
+            host->setOnce (envPointParam (which, i + 1, f), host->norm (envPointParam (which, i, f)));
+    auto setPlain = [this] (uint32_t id, double v) { host->setOnce (id, toNormalized (id, v)); };
+    setPlain (envPointParam (which, k, kPtTime), std::max (0.1, u * segMs));
+    setPlain (envPointParam (which, k, kPtLevel), level);
+    setPlain (envPointParam (which, k, kPtCurve), segCurve);
+    // the remainder of the split segment keeps its end point
+    setPlain (kind == kDecay ? segTimeId : envPointParam (which, k + 1, kPtTime), std::max (0.1, (1.0 - u) * segMs));
+    setPlain (envParam (which, kEnvPointCount), n + 1);
+}
+
+void EnvelopeDisplay::removePoint (const Geometry& g, int index)
+{
+    const int n = g.points;
+    if (index < 0 || index >= n)
+        return;
+    auto setPlain = [this] (uint32_t id, double v) { host->setOnce (id, toNormalized (id, v)); };
+    // the removed segment's time is added to the following one so later points don't move
+    const double removedMs = host->plainValue (envPointParam (which, index, kPtTime));
+    const uint32_t nextTimeId = index + 1 < n ? envPointParam (which, index + 1, kPtTime) : envAdsrBase (which) + 1;
+    setPlain (nextTimeId, std::min (20000.0, host->plainValue (nextTimeId) + removedMs));
+    for (int i = index; i + 1 < n; ++i)
+        for (int f = 0; f < 3; ++f)
+            host->setOnce (envPointParam (which, i, f), host->norm (envPointParam (which, i + 1, f)));
+    setPlain (envParam (which, kEnvPointCount), n - 1);
+}
+
+void EnvelopeDisplay::flash (const std::string& msg)
+{
+    status = msg;
+    statusTicks = 90;
+    invalid ();
+}
+
+void EnvelopeDisplay::tick ()
+{
+    if (statusTicks > 0 && --statusTicks == 0)
+    {
+        status.clear ();
+        invalid ();
+    }
+}
+
 void EnvelopeDisplay::onMouseDownEvent (MouseDownEvent& e)
 {
     if (!e.buttonState.isLeft ())
         return;
-    const CRect r = getViewSize ();
-    CRect a = r;
-    a.inset (8, 8);
-    a.top += 10;
-    // compute handle positions without drawing
-    const uint32_t base = idA ();
-    const double at = host->plainValue (base), dt = host->plainValue (base + 1), s = host->plainValue (base + 2),
-                 rt = host->plainValue (base + 3);
-    auto w = [] (double ms) { return std::log10 (1.0 + ms / 2.0) + 0.05; };
-    const double scale = a.getWidth () / (w (at) + w (dt) + 1.2 + w (rt));
-    const double x1 = a.left + w (at) * scale, x2 = x1 + w (dt) * scale, x4 = x2 + 1.2 * scale + w (rt) * scale;
-    const CPoint h[3] = {CPoint (x1, a.top), CPoint (x2, a.bottom - s * a.getHeight ()), CPoint (x4, a.bottom)};
+    const Geometry g = geometry (host, which, plotArea ());
+    const CPoint m = e.mousePosition;
+
+    // nearest handle (not the start point or the hold end)
     int best = -1;
     double bestD = 1e9;
-    for (int i = 0; i < 3; ++i)
+    for (int s = 1; s < g.count; ++s)
     {
-        const double d = std::hypot (h[i].x - e.mousePosition.x, h[i].y - e.mousePosition.y);
+        if (g.pts[s].kind == kHold)
+            continue;
+        const double d = std::hypot (g.pts[s].p.x - m.x, g.pts[s].p.y - m.y);
         if (d < bestD)
         {
             bestD = d;
-            best = i;
+            best = s;
         }
     }
-    if (bestD > 40)
+    const bool onHandle = best > 0 && bestD <= 9.0;
+
+    if (e.clickCount == 2)
+    {
+        if (onHandle && g.pts[best].kind == kBreak)
+            removePoint (g, g.pts[best].index);
+        else if (!onHandle)
+            insertPoint (g, segmentAt (g, m.x), m.x, m.y);
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
         return;
-    dragHandle = best;
-    last = e.mousePosition;
-    va = host->norm (base);
-    vd = host->norm (base + 1);
-    vs = host->norm (base + 2);
-    vr = host->norm (base + 3);
-    for (uint32_t i = 0; i < 4; ++i)
-        host->beginEdit (base + i);
+    }
+
+    last = m;
+    dragIds.clear ();
+    dragValues.clear ();
+    if (e.modifiers.has (ModifierKey::Shift) && !onHandle)
+    {
+        // bend the curve of the segment under the mouse
+        const int seg = segmentAt (g, m.x);
+        if (g.pts[seg].kind == kHold)
+            return;
+        dragMode = DragCurve;
+        curveRising = g.pts[seg].p.y < g.pts[seg - 1].p.y; // screen y grows downwards
+        dragIds = {g.pts[seg].curveId};
+    }
+    else if (onHandle)
+    {
+        dragMode = DragHandle;
+        const auto& pt = g.pts[best];
+        const uint32_t b = envAdsrBase (which);
+        switch (pt.kind)
+        {
+            case kAttack: dragIds = {b}; break;
+            case kBreak: dragIds = {envPointParam (which, pt.index, kPtTime), envPointParam (which, pt.index, kPtLevel)}; break;
+            case kDecay: dragIds = {b + 1, b + 2}; break;
+            default: dragIds = {b + 3}; break;
+        }
+    }
+    else
+        return;
+    for (auto id : dragIds)
+    {
+        dragValues.push_back (host->norm (id));
+        host->beginEdit (id);
+    }
     e.consumed = true;
 }
 
 void EnvelopeDisplay::onMouseMoveEvent (MouseMoveEvent& e)
 {
-    if (dragHandle < 0)
+    if (dragIds.empty ())
         return;
-    const uint32_t base = idA ();
-    const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
+    const double fine = e.modifiers.has (ModifierKey::Control) ? 0.2 : 1.0;
     const double dx = (e.mousePosition.x - last.x) / 250.0 * fine;
-    const double dy = -(e.mousePosition.y - last.y) / std::max (20.0, getViewSize ().getHeight () - 26.0) * fine;
+    const double dy = -(e.mousePosition.y - last.y) / std::max (20.0, plotArea ().getHeight ()) * fine;
     last = e.mousePosition;
-    switch (dragHandle)
+    if (dragMode == DragCurve)
     {
-        case 0:
-            va = std::clamp (va + dx, 0.0, 1.0);
-            host->setNorm (base, va);
-            break;
-        case 1:
-            vd = std::clamp (vd + dx, 0.0, 1.0);
-            vs = std::clamp (vs + dy, 0.0, 1.0);
-            host->setNorm (base + 1, vd);
-            host->setNorm (base + 2, vs);
-            break;
-        default:
-            vr = std::clamp (vr + dx, 0.0, 1.0);
-            host->setNorm (base + 3, vr);
-            break;
+        // Dragging up bows the segment upwards. Curve params span -1..1 (normalized 0..1).
+        const double delta = (curveRising ? -dy : dy) * 0.9;
+        dragValues[0] = std::clamp (dragValues[0] + delta, 0.0, 1.0);
+        host->setNorm (dragIds[0], dragValues[0]);
+    }
+    else
+    {
+        dragValues[0] = std::clamp (dragValues[0] + dx, 0.0, 1.0);
+        host->setNorm (dragIds[0], dragValues[0]);
+        if (dragIds.size () > 1)
+        {
+            dragValues[1] = std::clamp (dragValues[1] + dy, 0.0, 1.0);
+            host->setNorm (dragIds[1], dragValues[1]);
+        }
     }
     invalid ();
     e.consumed = true;
@@ -345,12 +507,11 @@ void EnvelopeDisplay::onMouseMoveEvent (MouseMoveEvent& e)
 
 void EnvelopeDisplay::onMouseUpEvent (MouseUpEvent& e)
 {
-    if (dragHandle < 0)
+    if (dragIds.empty ())
         return;
-    const uint32_t base = idA ();
-    for (uint32_t i = 0; i < 4; ++i)
-        host->endEdit (base + i);
-    dragHandle = -1;
+    for (auto id : dragIds)
+        host->endEdit (id);
+    dragIds.clear ();
     e.consumed = true;
 }
 

@@ -41,10 +41,11 @@ public:
     }
 
 private:
-    enum class Handle { None, FlagStart, FlagEnd, Start, LengthEnd, LoopStart, Slice, Ruler, Preview };
+    enum class Handle { None, FlagStart, FlagEnd, Start, LengthEnd, LoopStart, LoopBody, Slice, Ruler, Preview };
 
     SamplePtr sample () const;
     VSTGUI::CRect waveArea () const;
+    VSTGUI::CRect loopBar (const SampleData& s) const; // the loop brace at the bottom (Classic mode)
     VSTGUI::CRect rulerArea () const;
     double xToPos (double x) const; // -> normalized sample position
     double posToX (double pos) const;
@@ -66,6 +67,7 @@ private:
     double dragSliceOrigPos = 0.0, dragSlicePos = 0.0;
     VSTGUI::CPoint dragStartPoint, lastPoint;
     bool moved = false;
+    double loopDragDownPos = 0.0, loopDragRe = 0.0, loopDragLen = 0.0;
     int previewNote = -1;
     int hoverSlice = -1;
     float lastHeads[16] {};

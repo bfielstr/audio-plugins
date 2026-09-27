@@ -34,6 +34,8 @@ double sampleBpmFor (const SampleData& s, const ParamArray& p);
 // Classic-mode playback region (Start/Length/Loop inside the flags).
 bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r);
 SliceSettings sliceSettingsFor (const SampleData& s, const ParamArray& p);
+// Envelope settings (ADSR, curves, breakpoints) for env 0 amp, 1 filter, 2 pitch.
+EnvSettings envSettingsFor (const ParamArray& p, int env);
 
 struct BlockCtx
 {
@@ -138,7 +140,6 @@ public:
 
     void setSample (SamplePtr s);
     void setSliceEdits (SliceEditsPtr e);
-    void setConstantPowerFade (bool b) { constantPower = b; }
     const SamplePtr& sample () const { return smp; }
 
     void setParam (uint32_t id, double plain);
@@ -174,7 +175,6 @@ private:
     SliceList slices;
     SliceSettings sliceKey;
     bool slicesDirty = true;
-    bool constantPower = true;
     std::vector<Voice> voices;
     std::vector<int> beatBounds;
     double sr = 44100.0;

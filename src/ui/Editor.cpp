@@ -2,6 +2,7 @@
 
 #include "Displays.h"
 #include "Engine.h"
+#include "Help.h"
 #include "Params.h"
 #include "Theme.h"
 #include "WaveformView.h"
@@ -168,24 +169,33 @@ void Editor::buildUI (CFrame* f)
     f->addView (root);
 
     // ---- top bar ----------------------------------------------------------------
-    root->addView (new ActionButton (CRect (8, 6, 60, 28), "Load", [this] { browseForSample (); }));
-    root->addView (new ActionButton (CRect (64, 6, 86, 28), "<", [this] { stepSample (-1); }));
-    root->addView (new ActionButton (CRect (88, 6, 110, 28), ">", [this] { stepSample (1); }));
+    auto tip = [] (CView* v, const char* t) {
+        v->setTooltipText (t);
+        return v;
+    };
+    root->addView (tip (new ActionButton (CRect (8, 6, 60, 28), "Load", [this] { browseForSample (); }), help::kLoad));
+    root->addView (tip (new ActionButton (CRect (64, 6, 86, 28), "<", [this] { stepSample (-1); }), help::kPrevNext));
+    root->addView (tip (new ActionButton (CRect (88, 6, 110, 28), ">", [this] { stepSample (1); }), help::kPrevNext));
     nameLabel = new Label (CRect (118, 6, 470, 28), "No sample", 12.0, true);
     root->addView (nameLabel);
     bind (root, new Segmented (CRect (480, 6, 740, 28), this, kMode, {"Classic", "One-Shot", "Slicing"}));
     bind (root, new Toggle (CRect (750, 6, 810, 28), this, kWarp, "WARP"));
-    hostLabel = new Label (CRect (820, 6, 1042, 28), "", 10.5, false, 2);
+    hostLabel = new Label (CRect (820, 6, 1014, 28), "", 10.5, false, 2);
     root->addView (hostLabel);
-    root->addView (new ActionButton (CRect (1050, 6, 1102, 28), "Menu", [this] {
-        CPoint p (1050, 28);
-        showMenu (p);
-    }));
+    root->addView (tip (new ActionButton (CRect (1022, 6, 1044, 28), "?", [this] { setTooltipsEnabled (!controller->uiShowTips); },
+                                          [this] { return controller->uiShowTips; }),
+                        help::kHelpButton));
+    root->addView (tip (new ActionButton (CRect (1050, 6, 1102, 28), "Menu", [this] {
+                            CPoint p (1050, 28);
+                            showMenu (p);
+                        }),
+                        help::kMenu));
 
     // ---- waveform ---------------------------------------------------------------
     waveform = new WaveformView (CRect (8, 38, 1102, 300), controller, this);
     waveform->onContextMenu = [this] (CPoint p) { showMenu (p); };
     waveform->onFileDropped = [this] (const std::string& p) { loadFile (p); };
+    waveform->setTooltipText (help::kWaveform);
     root->addView (waveform);
 
     // ---- sample row -------------------------------------------------------------
@@ -276,12 +286,12 @@ void Editor::buildUI (CFrame* f)
         nb = std::clamp (std::round (nb), 1.0, 1024.0);
         controller->setPlainFromUI (kWarpBeats, nb);
     };
-    warpOnGroup->addView (new ActionButton (CRect (58, 69, 76, 89), "-", [stepBeats] { stepBeats (1.0, -1); }));
+    warpOnGroup->addView (tip (new ActionButton (CRect (58, 69, 76, 89), "-", [stepBeats] { stepBeats (1.0, -1); }), help::kWarpAs));
     warpBeatsBox = new ActionButton (CRect (78, 69, 150, 89), "4 Bars", [] {});
     warpOnGroup->addView (warpBeatsBox);
-    warpOnGroup->addView (new ActionButton (CRect (152, 69, 170, 89), "+", [stepBeats] { stepBeats (1.0, 1); }));
-    warpOnGroup->addView (new ActionButton (CRect (176, 69, 204, 89), ":2", [stepBeats] { stepBeats (0.5, 0); }));
-    warpOnGroup->addView (new ActionButton (CRect (206, 69, 234, 89), "x2", [stepBeats] { stepBeats (2.0, 0); }));
+    warpOnGroup->addView (tip (new ActionButton (CRect (152, 69, 170, 89), "+", [stepBeats] { stepBeats (1.0, 1); }), help::kWarpAs));
+    warpOnGroup->addView (tip (new ActionButton (CRect (176, 69, 204, 89), ":2", [stepBeats] { stepBeats (0.5, 0); }), help::kWarpAs));
+    warpOnGroup->addView (tip (new ActionButton (CRect (206, 69, 234, 89), "x2", [stepBeats] { stepBeats (2.0, 0); }), help::kWarpAs));
     bpmLabel = new Label (CRect (240, 70, 386, 88), "", 10.5, false, 2);
     warpOnGroup->addView (bpmLabel);
 
@@ -293,6 +303,7 @@ void Editor::buildUI (CFrame* f)
     bind (fp, new Choice (CRect (110, 24, 190, 42), this, kFilterCircuit));
     bind (fp, new Segmented (CRect (196, 24, 266, 42), this, kFilterSlope, {"12", "24"}));
     filterDisplay = new FilterDisplay (CRect (8, 48, 364, 204), this);
+    filterDisplay->setTooltipText (help::kFilterDisplay);
     fp->addView (filterDisplay);
     bind (fp, new Knob (knobRect (8, 214), this, kFilterFreq));
     bind (fp, new Knob (knobRect (66, 214), this, kFilterRes));
@@ -315,6 +326,7 @@ void Editor::buildUI (CFrame* f)
         tabButtons.push_back (b);
     }
     envDisplay = new EnvelopeDisplay (CRect (8, 48, 310, 204), this, 0);
+    envDisplay->setTooltipText (help::kEnvelope);
     ep->addView (envDisplay);
     for (int t = 0; t < 3; ++t)
     {
@@ -365,9 +377,26 @@ void Editor::buildUI (CFrame* f)
     gp->addView (new Label (CRect (4, 236, 174, 250), "Glide", 10.5, false, 1));
     bind (gp, new Segmented (CRect (4, 252, 174, 272), this, kGlideMode, {"Off", "Glide", "Porta"}));
 
+    // hover help for every parameter control
+    for (auto& [id, views] : byParam)
+        if (const char* t = help::forParam (id))
+            for (auto* v : views)
+                v->setTooltipText (t);
+    f->enableTooltips (controller->uiShowTips, 600);
+
     updateVisibility ();
     lastName.clear ();
     idle ();
+}
+
+void Editor::setTooltipsEnabled (bool on)
+{
+    controller->uiShowTips = on;
+    if (frame)
+    {
+        frame->enableTooltips (on, 600);
+        frame->invalid ();
+    }
 }
 
 // --- updates ----------------------------------------------------------------------
@@ -469,6 +498,8 @@ void Editor::idle ()
 {
     if (waveform)
         waveform->idle ();
+    if (envDisplay)
+        envDisplay->tick ();
     if (nameLabel)
     {
         std::string name = controller->sampleDisplayName ();
@@ -667,12 +698,9 @@ void Editor::showMenu (CPoint where)
          },
          hasSample && cropped);
     sep ();
-    const bool cp = b && b->constantPowerFade.load ();
-    add ("Use Constant Power Fade for Loops", [this, b, cp] {
-             b->constantPowerFade.store (!cp);
-             controller->markDirty ();
-         },
-         b != nullptr, cp);
+    const bool cp = plainValue (kLoopFadePower) >= 0.5;
+    add ("Use Constant Power Fade for Loops", [this, cp] { controller->setPlainFromUI (kLoopFadePower, cp ? 0.0 : 1.0); },
+         true, cp);
     if (mode == kModeSlicing)
         add ("Reset Slice Edits", [this, b] {
                  b->setEdits ({});

@@ -53,6 +53,7 @@ public:
     void clearSample ();
 
     double uiScale = 1.0;
+    bool uiShowTips = true;
 
     OBJ_METHODS (Controller, EditController)
     DEFINE_INTERFACES

@@ -142,7 +142,6 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         engine.setSample (localSample);
     if (bridge->fetchEdits (localEdits, editsGen))
         engine.setSliceEdits (localEdits);
-    engine.setConstantPowerFade (bridge->constantPowerFade.load (std::memory_order_relaxed));
 
     if (reloadParams.exchange (false, std::memory_order_acq_rel))
         for (uint32_t id = 0; id < kNumParams; ++id)
@@ -261,7 +260,6 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     }
     // The audio thread copies the mirror into the engine at the start of the next block.
     reloadParams.store (true, std::memory_order_release);
-    bridge->constantPowerFade.store (st.constantPowerFade);
     bridge->setEdits (st.edits);
     if (!st.samplePath.empty ())
     {
@@ -287,7 +285,7 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
     st.ops = bridge->sampleOps ();
     if (auto e = bridge->editsNow ())
         st.edits = *e;
-    st.constantPowerFade = bridge->constantPowerFade.load ();
+    st.constantPowerFade = st.norm[kLoopFadePower] >= 0.5;
     bridge->collectGarbage ();
     return writeState (stream, st) ? kResultOk : kResultFalse;
 }

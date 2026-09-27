@@ -47,6 +47,7 @@ public:
 
     // exposed for tests
     void setEnvTab (int t);
+    void setTooltipsEnabled (bool on);
     void showMenu (VSTGUI::CPoint where);
 
 private:

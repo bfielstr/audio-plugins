@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 
 namespace simplr {
 
@@ -140,6 +141,36 @@ std::vector<ParamInfo> buildTable ()
     add (in (kPbRange, "Pitch Bend Range", "PB Range", 0.0, 48.0, 5.0, Disp::Semis));
     add (choice (kGlideMode, "Glide Mode", "Glide", {"Off", "Glide", "Portamento"}, 0));
     add (fl (kGlideTime, "Glide Time", "Time", 1.0, 10000.0, 50.0, Curve::Log, Disp::Ms));
+    add (toggle (kLoopFadePower, "Loop Fade Constant Power", "Const Pwr", true));
+
+    // Envelope curves and breakpoints. Names are generated, so keep them alive in a deque.
+    static std::deque<std::string> names;
+    auto keep = [] (std::string s) { names.push_back (std::move (s)); return names.back ().c_str (); };
+    const char* envNames[] = {"Amp", "Filter", "Pitch"};
+    for (int e = 0; e < 3; ++e)
+    {
+        const std::string en = envNames[e];
+        auto curve = [&] (uint32_t id, const std::string& seg, double def) {
+            add (fl ((ParamId)id, keep (en + " Env " + seg + " Curve"), keep (seg + " Curve"), -1.0, 1.0, def,
+                     Curve::Linear, Disp::Curve));
+        };
+        curve (envParam (e, kEnvCurveA), "Attack", 0.0);
+        curve (envParam (e, kEnvCurveD), "Decay", -0.5);
+        curve (envParam (e, kEnvCurveR), "Release", -0.5);
+        add (in ((ParamId)envParam (e, kEnvPointCount), keep (en + " Env Breakpoints"), "Points", 0.0,
+                 (double)kMaxEnvPoints, 0.0, Disp::Plain));
+        for (int i = 0; i < kMaxEnvPoints; ++i)
+        {
+            const std::string pn = en + " Env Point " + std::to_string (i + 1);
+            const std::string sn = "P" + std::to_string (i + 1);
+            add (fl ((ParamId)envPointParam (e, i, kPtTime), keep (pn + " Time"), keep (sn + " Time"), 0.1, 20000.0,
+                     100.0, Curve::Log, Disp::Ms));
+            add (fl ((ParamId)envPointParam (e, i, kPtLevel), keep (pn + " Level"), keep (sn + " Level"), 0.0, 1.0,
+                     0.5, Curve::Linear, Disp::Percent));
+            add (fl ((ParamId)envPointParam (e, i, kPtCurve), keep (pn + " Curve"), keep (sn + " Curve"), -1.0, 1.0,
+                     0.0, Curve::Linear, Disp::Curve));
+        }
+    }
     return t;
 }
 
@@ -264,6 +295,10 @@ std::string toText (uint32_t id, double v)
                 return fmt ("%.0f st", v);
             return fmt ("%.1f st", v);
         case Disp::Cents: return fmt ("%.0f ct", v);
+        case Disp::Curve:
+            if (std::fabs (v) < 0.005)
+                return "Linear";
+            return fmt ("%+.0f %%", v * 100.0);
         case Disp::Pan:
         {
             int a = (int)std::lround (std::fabs (v) * 50.0);
@@ -323,7 +358,8 @@ bool fromText (uint32_t id, const std::string& textIn, double& out)
     double v = std::strtod (text.c_str (), &end);
     if (end == text.c_str ())
     {
-        if (p.disp == Disp::Pan && (text == "c" || text == "center"))
+        if ((p.disp == Disp::Pan && (text == "c" || text == "center")) ||
+            (p.disp == Disp::Curve && text.find ("lin") != std::string::npos))
         {
             out = 0.0;
             return true;
@@ -343,6 +379,12 @@ bool fromText (uint32_t id, const std::string& textIn, double& out)
                 v *= 1000.0;
             break;
         case Disp::Sustain: v = std::pow (10.0, v / 20.0); break;
+        case Disp::Curve:
+            if (text.find ("lin") != std::string::npos)
+                v = 0.0;
+            else
+                v /= 100.0;
+            break;
         case Disp::Pan:
             v /= 50.0;
             if (rest.find ('l') != std::string::npos)

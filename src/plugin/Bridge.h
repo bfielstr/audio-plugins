@@ -130,7 +130,6 @@ public:
     std::atomic<int> numPlayheads {0};
     std::atomic<double> hostBpm {120.0};
     std::atomic<bool> hostPlaying {false};
-    std::atomic<bool> constantPowerFade {true};
     std::atomic<uint32_t> changeCounter {0}; // bumps whenever sample/edits change
 
 private:

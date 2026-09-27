@@ -84,6 +84,32 @@ bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r)
     return r.end > r.start;
 }
 
+EnvSettings envSettingsFor (const ParamArray& p, int env)
+{
+    const uint32_t b = envAdsrBase (env);
+    EnvSettings s;
+    s.attackMs = (float)p[b];
+    s.decayMs = (float)p[b + 1];
+    s.sustain = (float)p[b + 2];
+    s.releaseMs = (float)p[b + 3];
+    s.curveA = (float)p[envParam (env, kEnvCurveA)];
+    s.curveD = (float)p[envParam (env, kEnvCurveD)];
+    s.curveR = (float)p[envParam (env, kEnvCurveR)];
+    s.points = std::clamp (idx (p[envParam (env, kEnvPointCount)]), 0, kMaxEnvPoints);
+    for (int i = 0; i < kMaxEnvPoints; ++i)
+    {
+        s.ptMs[i] = (float)p[envPointParam (env, i, kPtTime)];
+        s.ptLevel[i] = (float)p[envPointParam (env, i, kPtLevel)];
+        s.ptCurve[i] = (float)p[envPointParam (env, i, kPtCurve)];
+    }
+    if (env == 0)
+    {
+        s.loopMode = idx (p[kAmpLoopMode]);
+        s.loopMs = (float)p[kAmpLoopTime];
+    }
+    return s;
+}
+
 SliceSettings sliceSettingsFor (const SampleData& s, const ParamArray& p)
 {
     SliceSettings k;
@@ -316,10 +342,9 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
     const bool classic = st.mode == kModeClassic;
     const bool mono = c.sample->numChannels < 2;
     const bool filterOn = on (p[kFilterOn]);
-    EnvSettings ampS {(float)p[kAmpA], (float)p[kAmpD], (float)p[kAmpS], (float)p[kAmpR], idx (p[kAmpLoopMode]),
-                      (float)p[kAmpLoopTime]};
-    EnvSettings filtS {(float)p[kFiltA], (float)p[kFiltD], (float)p[kFiltS], (float)p[kFiltR]};
-    EnvSettings pitchS {(float)p[kPitchA], (float)p[kPitchD], (float)p[kPitchS], (float)p[kPitchR]};
+    const EnvSettings ampS = envSettingsFor (p, 0);
+    const EnvSettings filtS = envSettingsFor (p, 1);
+    const EnvSettings pitchS = envSettingsFor (p, 2);
     const float fsr = (float)sr;
     const double declickLen = 0.0015 * sr;
     const float fadeInLen = (float)(p[kFadeIn] * 0.001 * sr);
@@ -794,7 +819,7 @@ void Engine::makeCtx (const HostInfo& host, BlockCtx& c) const
     c.srcRate = smp->sampleRate / sr;
     c.srcPerOut = c.srcRate * c.host.bpm / sampleBpmFor (*smp, p);
     c.bendSemis = (float)(bend * p[kPbRange]);
-    c.constantPowerFade = constantPower;
+    c.constantPowerFade = on (p[kLoopFadePower]);
     c.ppqPerSample = c.host.bpm / 60.0 / sr;
     c.globalLfoPhase = globalLfoPhase;
 }

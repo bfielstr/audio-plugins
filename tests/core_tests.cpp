@@ -478,6 +478,72 @@ TEST (amp_envelope_loop)
     CHECK (rms (o.l, 36000, 48000) < 1e-3, "no loop: silent after decay (%f)", rms (o.l, 36000, 48000));
 }
 
+TEST (envelope_breakpoints_and_curves)
+{
+    // attack 10 ms -> peak, breakpoint 1: 100 ms down to 0.2, breakpoint 2: 100 ms up to 0.8,
+    // decay 50 ms to sustain 0.5
+    Envelope env;
+    EnvSettings s;
+    s.attackMs = 10.0f;
+    s.points = 2;
+    s.ptMs[0] = 100.0f;
+    s.ptLevel[0] = 0.2f;
+    s.ptCurve[0] = 0.0f;
+    s.ptMs[1] = 100.0f;
+    s.ptLevel[1] = 0.8f;
+    s.ptCurve[1] = 0.0f;
+    s.decayMs = 50.0f;
+    s.sustain = 0.5f;
+    const float sr = 1000.0f; // 1 sample per ms
+    env.noteOn ();
+    std::vector<float> v;
+    for (int i = 0; i < 400; ++i)
+        v.push_back (env.process (s, sr));
+    CHECK (std::fabs (v[9] - 1.0f) < 0.02f, "peak at 10 ms: %f", v[9]);
+    CHECK (std::fabs (v[60] - 0.6f) < 0.03f, "halfway down to breakpoint 1 (linear): %f", v[60]);
+    CHECK (std::fabs (v[109] - 0.2f) < 0.02f, "breakpoint 1 level: %f", v[109]);
+    CHECK (std::fabs (v[209] - 0.8f) < 0.02f, "breakpoint 2 level: %f", v[209]);
+    CHECK (std::fabs (v[300] - 0.5f) < 0.02f, "sustain: %f", v[300]);
+    CHECK (env.stage == Envelope::Sustain, "stage %d", (int)env.stage);
+
+    // curve bends: negative = fast start, positive = slow start, same end points
+    for (float c : {-1.0f, -0.5f, 0.5f, 1.0f})
+    {
+        CHECK (std::fabs (envCurve (0.0f, c)) < 1e-5f && std::fabs (envCurve (1.0f, c) - 1.0f) < 1e-5f, "ends %f", c);
+        CHECK (c < 0 ? envCurve (0.5f, c) > 0.6f : envCurve (0.5f, c) < 0.4f, "bend %f -> %f", c, envCurve (0.5f, c));
+    }
+    Envelope a, b;
+    EnvSettings lin, bent;
+    lin.attackMs = bent.attackMs = 100.0f;
+    bent.curveA = 0.8f;
+    a.noteOn ();
+    b.noteOn ();
+    float va = 0, vb = 0;
+    for (int i = 0; i < 50; ++i)
+    {
+        va = a.process (lin, sr);
+        vb = b.process (bent, sr);
+    }
+    CHECK (vb < va * 0.6f, "slow-start attack should lag linear at the midpoint: %f vs %f", vb, va);
+    // incremental evaluation matches the closed form
+    Envelope c3;
+    EnvSettings sc;
+    sc.attackMs = 0.1f;
+    sc.decayMs = 200.0f;
+    sc.sustain = 0.0f;
+    sc.curveD = -0.7f;
+    c3.noteOn ();
+    c3.process (sc, sr);
+    float worst = 0;
+    for (int i = 1; i < 200; ++i)
+    {
+        const float got = c3.process (sc, sr);
+        const float want = 1.0f - envCurve ((float)i / 200.0f, -0.7f);
+        worst = std::max (worst, std::fabs (got - want));
+    }
+    CHECK (worst < 0.01f, "incremental vs closed form error %f", worst);
+}
+
 TEST (lfo_tremolo)
 {
     auto s = sine (1000.0, 3.0);

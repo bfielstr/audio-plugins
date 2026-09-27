@@ -97,9 +97,27 @@ enum ParamId : uint32_t
     kPbRange,
     kGlideMode,
     kGlideTime,
+    // --- added in 0.2 (append only) ---
+    kLoopFadePower, // constant-power (on) or linear loop crossfade
+    kEnvExtBase,    // per-envelope curves and breakpoints, see envParam()
 
-    kNumParams
+    kNumParams = kEnvExtBase + 3 * 22
 };
+
+// Breakpoint-envelope parameters. Each envelope (0 amp, 1 filter, 2 pitch) owns a block of
+// 22 IDs: curves for attack/decay/release, the breakpoint count, then (time, level, curve)
+// for up to kMaxEnvPoints breakpoints that sit between the attack peak and the decay segment.
+constexpr int kMaxEnvPoints = 6;
+constexpr int kEnvBlock = 22;
+enum EnvField { kEnvCurveA = 0, kEnvCurveD, kEnvCurveR, kEnvPointCount, kEnvPointsStart };
+enum PointField { kPtTime = 0, kPtLevel, kPtCurve };
+constexpr uint32_t envParam (int env, int field) { return (uint32_t)(kEnvExtBase + env * kEnvBlock + field); }
+constexpr uint32_t envPointParam (int env, int point, int field)
+{
+    return envParam (env, kEnvPointsStart + point * 3 + field);
+}
+// First ADSR parameter (attack) of each envelope; D, S, R follow.
+constexpr uint32_t envAdsrBase (int env) { return env == 0 ? kAmpA : (env == 1 ? kFiltA : kPitchA); }
 
 // Hidden parameters that receive MIDI controllers through IMidiMapping.
 enum MidiParamId : uint32_t
@@ -111,7 +129,7 @@ enum MidiParamId : uint32_t
 
 enum class PType { Float, Int, Choice, Bool };
 enum class Curve { Linear, Log, Power3 };
-enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Beats, Degrees, Choice, OnOff, Sustain };
+enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Beats, Degrees, Choice, OnOff, Sustain, Curve };
 
 struct ParamInfo
 {

@@ -304,12 +304,12 @@ static bool snapshot (Rig& rig, const std::string& file, std::function<void (IPl
 }
 
 // Sends a synthetic mouse event to the window. (x, y) are editor coordinates (top-left origin).
-static void mouse (NSWindow* win, NSEventType type, double x, double y, int clicks = 1)
+static void mouse (NSWindow* win, NSEventType type, double x, double y, int clicks = 1, NSEventModifierFlags mods = 0)
 {
     const double h = [[win contentView] bounds].size.height;
     NSEvent* e = [NSEvent mouseEventWithType:type
                                     location:NSMakePoint (x, h - y)
-                               modifierFlags:0
+                               modifierFlags:mods
                                    timestamp:[[NSProcessInfo processInfo] systemUptime]
                                 windowNumber:[win windowNumber]
                                      context:nil
@@ -385,6 +385,98 @@ static void uiInteraction (Rig& rig)
     CHECK (std::fabs (rig.controller->getParamNormalized (simplr::kFilterFreq) - simplr::defaultNormalized (simplr::kFilterFreq)) < 1e-6,
            "double-click reset: %f", rig.controller->getParamNormalized (simplr::kFilterFreq));
 
+    // --- loop bar (Classic, state has loop on, flags 0.1..0.8, start 10 %, length 80 %, loop 40 %) ---
+    auto wx = [] (double pos) { return 8.0 + pos * 1094.0; };
+    const double rs = 0.1 + 0.1 * 0.7, re = rs + 0.8 * 0.7, ls = re - 0.4 * (re - rs);
+    const double barX = wx ((ls + re) / 2), barY = 285;
+    CHECK (plain (simplr::kLoopOn) >= 0.5, "loop should start on");
+    click (win, barX, barY);
+    CHECK (plain (simplr::kLoopOn) < 0.5, "clicking the loop bar should switch looping off");
+    click (win, barX, barY);
+    CHECK (plain (simplr::kLoopOn) >= 0.5, "clicking again should switch it back on");
+    const double loopFramesBefore = plain (simplr::kLoopLen) * (re - rs);
+    mouse (win, NSEventTypeLeftMouseDown, barX, barY);
+    mouse (win, NSEventTypeLeftMouseDragged, barX - 40, barY);
+    mouse (win, NSEventTypeLeftMouseDragged, barX - 84, barY);
+    mouse (win, NSEventTypeLeftMouseUp, barX - 84, barY);
+    const double newRe = rs + plain (simplr::kLength) * 0.7;
+    CHECK (std::fabs (newRe - (re - 84.0 / 1094.0)) < 0.004, "loop drag moved the end to %f (want %f)", newRe,
+           re - 84.0 / 1094.0);
+    CHECK (std::fabs (plain (simplr::kLoopLen) * (newRe - rs) - loopFramesBefore) < 0.004,
+           "loop length should be kept while moving (%f vs %f)", plain (simplr::kLoopLen) * (newRe - rs), loopFramesBefore);
+    CHECK (plain (simplr::kLoopOn) >= 0.5, "dragging must not toggle the loop");
+
+    // --- envelope display: shift-drag bends a curve, double-click adds / removes breakpoints ---
+    // amp envelope plot area in the editor: x 402..688, y 476..606
+    const double ax = 402, aw = 286, atop = 476, ah = 130;
+    auto envGeom = [&] (double& peakX, double& decayEndX, double& holdEndX, double& relEndX, std::vector<double>& ptX) {
+        auto w = [] (double ms) { return std::log10 (1.0 + ms / 2.0) + 0.05; };
+        const int n = (int)std::lround (plain (simplr::envParam (0, simplr::kEnvPointCount)));
+        double units = w (plain (simplr::kAmpA)) + w (plain (simplr::kAmpD)) + 1.2 + w (plain (simplr::kAmpR));
+        for (int i = 0; i < n; ++i)
+            units += w (plain (simplr::envPointParam (0, i, simplr::kPtTime)));
+        const double sc = aw / units;
+        double x = ax + w (plain (simplr::kAmpA)) * sc;
+        peakX = x;
+        ptX.clear ();
+        for (int i = 0; i < n; ++i)
+        {
+            x += w (plain (simplr::envPointParam (0, i, simplr::kPtTime))) * sc;
+            ptX.push_back (x);
+        }
+        decayEndX = x + w (plain (simplr::kAmpD)) * sc;
+        holdEndX = decayEndX + 1.2 * sc;
+        relEndX = holdEndX + w (plain (simplr::kAmpR)) * sc;
+    };
+    double peakX, decayX, holdX, relX;
+    std::vector<double> ptX;
+    envGeom (peakX, decayX, holdX, relX, ptX);
+    const double curveBefore = plain (simplr::envParam (0, simplr::kEnvCurveR));
+    const double rx = (holdX + relX) / 2, ry = atop + ah * 0.6;
+    mouse (win, NSEventTypeLeftMouseDown, rx, ry, 1, NSEventModifierFlagShift);
+    mouse (win, NSEventTypeLeftMouseDragged, rx, ry - 20, 1, NSEventModifierFlagShift);
+    mouse (win, NSEventTypeLeftMouseDragged, rx, ry - 40, 1, NSEventModifierFlagShift);
+    mouse (win, NSEventTypeLeftMouseUp, rx, ry - 40, 1, NSEventModifierFlagShift);
+    const double curveAfter = plain (simplr::envParam (0, simplr::kEnvCurveR));
+    CHECK (curveAfter > curveBefore + 0.3, "shift-drag up on the release should bow it up: %f -> %f", curveBefore, curveAfter);
+
+    const double addX = peakX + (decayX - peakX) * 0.45, addY = atop + ah * 0.5;
+    mouse (win, NSEventTypeLeftMouseDown, addX, addY, 2);
+    mouse (win, NSEventTypeLeftMouseUp, addX, addY, 2);
+    CHECK (std::lround (plain (simplr::envParam (0, simplr::kEnvPointCount))) == 1, "double-click should add a breakpoint (count %f)",
+           plain (simplr::envParam (0, simplr::kEnvPointCount)));
+    CHECK (std::fabs (plain (simplr::envPointParam (0, 0, simplr::kPtLevel)) - 0.5) < 0.03, "breakpoint level %f",
+           plain (simplr::envPointParam (0, 0, simplr::kPtLevel)));
+    const double total = plain (simplr::envPointParam (0, 0, simplr::kPtTime)) + plain (simplr::kAmpD);
+    CHECK (std::fabs (total - 600.0) < 6.0, "splitting keeps the decay's total time: %f ms", total);
+    envGeom (peakX, decayX, holdX, relX, ptX);
+    if (!ptX.empty ())
+    {
+        const double py = atop + ah * (1.0 - plain (simplr::envPointParam (0, 0, simplr::kPtLevel)));
+        mouse (win, NSEventTypeLeftMouseDown, ptX[0], py, 2);
+        mouse (win, NSEventTypeLeftMouseUp, ptX[0], py, 2);
+        CHECK (std::lround (plain (simplr::envParam (0, simplr::kEnvPointCount))) == 0, "double-click on it should remove it");
+        CHECK (std::fabs (plain (simplr::kAmpD) - 600.0) < 6.0, "removing merges the time back: %f", plain (simplr::kAmpD));
+    }
+
+    // --- help toggle ---
+    auto tipsOn = [&] {
+        MemoryStream ms;
+        rig.controller->getState (&ms);
+        ms.seek (0, IBStream::kIBSeekSet, nullptr);
+        double scale = 0;
+        bool tips = false;
+        int32 n = 0;
+        ms.read (&scale, sizeof (scale), &n);
+        ms.read (&tips, sizeof (tips), &n);
+        return tips;
+    };
+    CHECK (tipsOn (), "help tooltips default to on");
+    click (win, 1033, 17);
+    CHECK (!tipsOn (), "the ? button should switch help off");
+    click (win, 1033, 17);
+    CHECK (tipsOn (), "and back on");
+
     // drag the sample start flag (waveform x 8..1102) to the middle
     const double flagX = 8.0 + plain (simplr::kSampleStart) * 1094.0;
     mouse (win, NSEventTypeLeftMouseDown, flagX, 150);
@@ -437,6 +529,15 @@ int main (int argc, char** argv)
         CHECK (mm && mm->getMidiControllerAssignment (0, 3, kPitchBend, pid) == kResultTrue &&
                    pid == simplr::kMidiPitchBend,
                "pitch bend mapping");
+        int notAutomatable = 0;
+        for (int32 i = 0; i < count; ++i)
+        {
+            ParameterInfo info {};
+            rig.controller->getParameterInfo (i, info);
+            if (!(info.flags & ParameterInfo::kCanAutomate))
+                ++notAutomatable;
+        }
+        CHECK (notAutomatable == 0, "%d parameters are not automatable", notAutomatable);
         CHECK (mm && mm->getMidiControllerAssignment (0, 0, kCtrlSustainOnOff, pid) == kResultTrue &&
                    pid == simplr::kMidiSustain,
                "sustain mapping");
@@ -545,6 +646,27 @@ int main (int argc, char** argv)
         CHECK (std::fabs (back.norm[simplr::kRegions] - simplr::toNormalized (simplr::kRegions, 3)) < 1e-9,
                "automated param not saved");
 
+        // States from 0.1.x (no loop-fade parameter) migrate the old flag
+        {
+            auto old = baseState (wav);
+            old.has[simplr::kLoopFadePower] = false;
+            for (uint32_t id = simplr::kEnvExtBase; id < simplr::kNumParams; ++id)
+                old.has[id] = false;
+            old.constantPowerFade = false;
+            rig.stop ();
+            CHECK (applyState (rig, old), "old-format state");
+            MemoryStream s3;
+            rig.component->getState (&s3);
+            s3.seek (0, IBStream::kIBSeekSet, nullptr);
+            simplr::PluginState b3;
+            simplr::readState (&s3, b3);
+            CHECK (b3.norm[simplr::kLoopFadePower] == 0.0, "linear fade should migrate: %f", b3.norm[simplr::kLoopFadePower]);
+            CHECK (std::fabs (b3.norm[simplr::envParam (0, simplr::kEnvCurveD)] -
+                              simplr::defaultNormalized (simplr::envParam (0, simplr::kEnvCurveD))) < 1e-9,
+                   "missing new params should get defaults");
+            rig.start ();
+        }
+
         // Missing sample: loads without crashing, path is preserved
         auto missing = baseState ("/nonexistent/folder/gone.wav");
         rig.stop ();
@@ -609,6 +731,31 @@ int main (int argc, char** argv)
         rig.start ();
         uiInteraction (rig);
         rig.stop ();
+
+        // breakpoint envelope + loop-off screenshot
+        {
+            auto st5 = baseState (wav);
+            auto setp = [&] (uint32_t id, double v) { st5.norm[id] = simplr::toNormalized (id, v); };
+            setp (simplr::kAmpA, 30.0);
+            setp (simplr::kAmpD, 300.0);
+            setp (simplr::kAmpS, 0.45);
+            setp (simplr::kAmpR, 800.0);
+            setp (simplr::envParam (0, simplr::kEnvCurveA), 0.6);
+            setp (simplr::envParam (0, simplr::kEnvCurveR), -0.8);
+            setp (simplr::envParam (0, simplr::kEnvPointCount), 2);
+            setp (simplr::envPointParam (0, 0, simplr::kPtTime), 120.0);
+            setp (simplr::envPointParam (0, 0, simplr::kPtLevel), 0.25);
+            setp (simplr::envPointParam (0, 0, simplr::kPtCurve), -0.7);
+            setp (simplr::envPointParam (0, 1, simplr::kPtTime), 200.0);
+            setp (simplr::envPointParam (0, 1, simplr::kPtLevel), 0.8);
+            setp (simplr::envPointParam (0, 1, simplr::kPtCurve), 0.5);
+            setp (simplr::kLoopOn, 0.0);
+            setp (simplr::kLength, 0.7);
+            applyState (rig, st5);
+            rig.start ();
+            CHECK (snapshot (rig, outDir + "/ui_envelope_points.png"), "envelope snapshot");
+            rig.stop ();
+        }
 
         // editor resize constraint keeps the aspect ratio
         if (IPlugView* v = rig.controller->createView (ViewType::kEditor))

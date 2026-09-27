@@ -120,6 +120,9 @@ tresult PLUGIN_API Controller::setState (IBStream* stream)
     double v = 1.0;
     if (s.readDouble (v) && v >= 0.5 && v <= 2.0)
         uiScale = v;
+    bool tips = true;
+    if (s.readBool (tips))
+        uiShowTips = tips;
     return kResultOk;
 }
 
@@ -128,7 +131,7 @@ tresult PLUGIN_API Controller::getState (IBStream* stream)
     if (!stream)
         return kInvalidArgument;
     IBStreamer s (stream, kLittleEndian);
-    return s.writeDouble (uiScale) ? kResultOk : kResultFalse;
+    return s.writeDouble (uiScale) && s.writeBool (uiShowTips) ? kResultOk : kResultFalse;
 }
 
 IPlugView* PLUGIN_API Controller::createView (FIDString name)
