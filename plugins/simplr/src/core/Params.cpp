@@ -134,7 +134,7 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kPan, "Pan", "Pan", -1.0, 1.0, 0.0, Curve::Linear, Disp::Pan));
     add (pct (kPanRand, "Random Pan", "Rand", 0.0));
     add (pct (kSpread, "Spread", "Spread", 0.0));
-    add (fl (kVolume, "Volume", "Volume", -70.0, 6.0, -12.0, Curve::Linear, Disp::Db));
+    add (fl (kVolume, "Volume", "Volume", -70.0, 6.0, -12.0, Curve::Linear, Disp::DbGain));
     add (pct (kVelVol, "Velocity > Volume", "Vel>Vol", 0.35));
     add (in (kTranspose, "Transpose", "Transp", -48.0, 48.0, 0.0, Disp::Semis));
     add (fl (kDetune, "Detune", "Detune", -50.0, 50.0, 0.0, Curve::Linear, Disp::Cents));
@@ -144,8 +144,7 @@ std::vector<ParamInfo> buildTable ()
     add (toggle (kLoopFadePower, "Loop Fade Constant Power", "Const Pwr", true));
 
     // Envelope curves and breakpoints. Names are generated, so keep them alive in a deque.
-    static std::deque<std::string> names;
-    auto keep = [] (std::string s) { names.push_back (std::move (s)); return names.back ().c_str (); };
+    auto keep = [] (std::string s) { return pk::make::keep (std::move (s)); };
     const char* envNames[] = {"Amp", "Filter", "Pitch"};
     for (int e = 0; e < 3; ++e)
     {
@@ -174,239 +173,12 @@ std::vector<ParamInfo> buildTable ()
     return t;
 }
 
-const std::vector<ParamInfo>& table ()
-{
-    static const std::vector<ParamInfo> t = buildTable ();
-    return t;
-}
-
-std::string fmt (const char* f, double v)
-{
-    char buf[64];
-    std::snprintf (buf, sizeof (buf), f, v);
-    return buf;
-}
-
-std::string lower (std::string s)
-{
-    for (auto& c : s)
-        c = (char)std::tolower ((unsigned char)c);
-    return s;
-}
-
 } // namespace
 
-int ParamInfo::stepCount () const
+const pk::ParamTable& paramTable ()
 {
-    switch (type)
-    {
-        case PType::Bool: return 1;
-        case PType::Choice: return (int)choices.size () - 1;
-        case PType::Int: return (int)(max - min);
-        default: return 0;
-    }
-}
-
-bool isValidParam (uint32_t id) { return id < kNumParams; }
-
-const ParamInfo& paramInfo (uint32_t id)
-{
-    const auto& t = table ();
-    return t[std::min<size_t> (id, t.size () - 1)];
-}
-
-double toPlain (uint32_t id, double n)
-{
-    const auto& p = paramInfo (id);
-    n = std::clamp (n, 0.0, 1.0);
-    switch (p.type)
-    {
-        case PType::Bool: return n >= 0.5 ? 1.0 : 0.0;
-        case PType::Choice:
-        case PType::Int: return p.min + std::round (n * (p.max - p.min));
-        case PType::Float: break;
-    }
-    switch (p.curve)
-    {
-        case Curve::Log: return p.min * std::pow (p.max / p.min, n);
-        case Curve::Power3: return p.min + (p.max - p.min) * n * n * n;
-        case Curve::Linear: break;
-    }
-    return p.min + (p.max - p.min) * n;
-}
-
-double toNormalized (uint32_t id, double v)
-{
-    const auto& p = paramInfo (id);
-    v = std::clamp (v, p.min, p.max);
-    if (p.max <= p.min)
-        return 0.0;
-    if (p.type != PType::Float)
-        return (std::round (v) - p.min) / (p.max - p.min);
-    switch (p.curve)
-    {
-        case Curve::Log: return std::log (v / p.min) / std::log (p.max / p.min);
-        case Curve::Power3: return std::cbrt ((v - p.min) / (p.max - p.min));
-        case Curve::Linear: break;
-    }
-    return (v - p.min) / (p.max - p.min);
-}
-
-double defaultNormalized (uint32_t id) { return toNormalized (id, paramInfo (id).def); }
-
-std::string toText (uint32_t id, double v)
-{
-    const auto& p = paramInfo (id);
-    if (std::fabs (v) < 0.05 && p.type == PType::Float && p.disp != Disp::Percent && p.disp != Disp::Sustain)
-        v = 0.0;
-    switch (p.disp)
-    {
-        case Disp::Choice:
-        {
-            int i = std::clamp ((int)std::lround (v), 0, (int)p.choices.size () - 1);
-            return p.choices[(size_t)i];
-        }
-        case Disp::OnOff: return v >= 0.5 ? "On" : "Off";
-        case Disp::Percent: return fmt ("%.0f %%", v * 100.0);
-        case Disp::Hz:
-            if (v >= 1000.0)
-                return fmt ("%.2f kHz", v / 1000.0);
-            if (v < 1.0)
-                return fmt ("%.2f Hz", v);
-            return fmt (v < 100.0 ? "%.1f Hz" : "%.0f Hz", v);
-        case Disp::Ms:
-            if (v >= 1000.0)
-                return fmt ("%.2f s", v / 1000.0);
-            return fmt (v < 10.0 ? "%.1f ms" : "%.0f ms", v);
-        case Disp::Db:
-            if (id == kVolume && v <= p.min + 1e-6)
-                return "-inf dB";
-            return fmt ("%.1f dB", v);
-        case Disp::DbGain:
-            if (v <= p.min + 1e-6)
-                return "-inf dB";
-            return fmt ("%.1f dB", v);
-        case Disp::Sustain:
-            if (v <= 0.0001)
-                return "-inf dB";
-            return fmt ("%.1f dB", 20.0 * std::log10 (v));
-        case Disp::Semis:
-            if (p.type == PType::Int)
-                return fmt ("%.0f st", v);
-            return fmt ("%.1f st", v);
-        case Disp::Cents: return fmt ("%.0f ct", v);
-        case Disp::Curve:
-            if (std::fabs (v) < 0.005)
-                return "Linear";
-            return fmt ("%+.0f %%", v * 100.0);
-        case Disp::Pan:
-        {
-            int a = (int)std::lround (std::fabs (v) * 50.0);
-            if (a == 0)
-                return "C";
-            return std::to_string (a) + (v < 0 ? "L" : "R");
-        }
-        case Disp::Beats:
-        {
-            int beats = (int)std::lround (v);
-            if (beats % 4 == 0)
-                return std::to_string (beats / 4) + (beats == 4 ? " Bar" : " Bars");
-            return std::to_string (beats) + (beats == 1 ? " Beat" : " Beats");
-        }
-        case Disp::Degrees: return fmt ("%.0f\xC2\xB0", v);
-        case Disp::Plain:
-            if (p.type == PType::Int)
-                return fmt ("%.0f", v);
-            return fmt ("%.0f", v);
-    }
-    return fmt ("%.2f", v);
-}
-
-bool fromText (uint32_t id, const std::string& textIn, double& out)
-{
-    const auto& p = paramInfo (id);
-    std::string text = lower (textIn);
-    if (p.type == PType::Choice)
-    {
-        for (size_t i = 0; i < p.choices.size (); ++i)
-            if (lower (p.choices[i]) == text)
-            {
-                out = (double)i;
-                return true;
-            }
-    }
-    if (p.type == PType::Bool)
-    {
-        if (text == "on" || text == "1" || text == "true")
-        {
-            out = 1.0;
-            return true;
-        }
-        if (text == "off" || text == "0" || text == "false")
-        {
-            out = 0.0;
-            return true;
-        }
-        return false;
-    }
-    if (text.find ("inf") != std::string::npos)
-    {
-        out = p.min;
-        return true;
-    }
-    char* end = nullptr;
-    double v = std::strtod (text.c_str (), &end);
-    if (end == text.c_str ())
-    {
-        if ((p.disp == Disp::Pan && (text == "c" || text == "center")) ||
-            (p.disp == Disp::Curve && text.find ("lin") != std::string::npos))
-        {
-            out = 0.0;
-            return true;
-        }
-        return false;
-    }
-    std::string rest = end;
-    switch (p.disp)
-    {
-        case Disp::Percent: v /= 100.0; break;
-        case Disp::Hz:
-            if (rest.find ('k') != std::string::npos)
-                v *= 1000.0;
-            break;
-        case Disp::Ms:
-            if (rest.find ("ms") == std::string::npos && rest.find ('s') != std::string::npos)
-                v *= 1000.0;
-            break;
-        case Disp::Sustain: v = std::pow (10.0, v / 20.0); break;
-        case Disp::Curve:
-            if (text.find ("lin") != std::string::npos)
-                v = 0.0;
-            else
-                v /= 100.0;
-            break;
-        case Disp::Pan:
-            v /= 50.0;
-            if (rest.find ('l') != std::string::npos)
-                v = -std::fabs (v);
-            break;
-        case Disp::Beats:
-            if (rest.find ("bar") != std::string::npos)
-                v *= 4.0;
-            break;
-        case Disp::Choice:
-            // allow typing a numeric label such as "16" for voice counts
-            for (size_t i = 0; i < p.choices.size (); ++i)
-                if (std::strtod (p.choices[i], nullptr) == v)
-                {
-                    out = (double)i;
-                    return true;
-                }
-            return false;
-        default: break;
-    }
-    out = std::clamp (v, p.min, p.max);
-    return true;
+    static const pk::ParamTable t (buildTable ());
+    return t;
 }
 
 int voicesFromIndex (int i) { return kVoiceCounts[std::clamp (i, 0, 14)]; }

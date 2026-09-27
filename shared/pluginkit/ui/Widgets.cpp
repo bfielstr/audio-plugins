@@ -1,7 +1,5 @@
-#include "Widgets.h"
-
-#include "Params.h"
-#include "Theme.h"
+#include "pluginkit/ui/Widgets.h"
+#include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cframe.h"
@@ -12,7 +10,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace simplr {
+namespace pk {
 
 using namespace VSTGUI;
 
@@ -52,7 +50,7 @@ bool isFine (const Modifiers& m) { return m.has (ModifierKey::Shift) || m.has (M
 
 //==============================================================================
 Knob::Knob (const CRect& r, ParamHost* h, uint32_t id, const char* l, bool bi)
-: ParamView (r, h, id), label (l ? l : paramInfo (id).shortName), bipolar (bi)
+: ParamView (r, h, id), label (l ? l : host->table ().info (id).shortName), bipolar (bi)
 {
 }
 
@@ -96,7 +94,7 @@ void Knob::onMouseDownEvent (MouseDownEvent& e)
         return;
     if (e.clickCount == 2)
     {
-        host->setOnce (param, defaultNormalized (param));
+        host->setOnce (param, host->table ().defaultNormalized (param));
         invalid ();
         e.consumed = true;
         return;
@@ -116,7 +114,7 @@ void Knob::onMouseMoveEvent (MouseMoveEvent& e)
     const double delta = (startY - e.mousePosition.y) / range;
     startY = e.mousePosition.y;
     dragValue = std::clamp (dragValue + delta, 0.0, 1.0);
-    const int steps = paramInfo (param).stepCount ();
+    const int steps = host->table ().info (param).stepCount ();
     double v = dragValue;
     if (steps > 0)
         v = std::round (v * steps) / steps;
@@ -147,7 +145,7 @@ void Knob::onMouseCancelEvent (MouseCancelEvent& e)
 
 void Knob::onMouseWheelEvent (MouseWheelEvent& e)
 {
-    const int steps = paramInfo (param).stepCount ();
+    const int steps = host->table ().info (param).stepCount ();
     double step = steps > 0 ? 1.0 / steps : (isFine (e.modifiers) ? 0.002 : 0.01);
     const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
     if (d == 0.0)
@@ -182,7 +180,7 @@ void HSlider::onMouseDownEvent (MouseDownEvent& e)
         return;
     if (e.clickCount == 2)
     {
-        host->setOnce (param, defaultNormalized (param));
+        host->setOnce (param, host->table ().defaultNormalized (param));
         invalid ();
         e.consumed = true;
         return;
@@ -239,7 +237,7 @@ Segmented::Segmented (const CRect& r, ParamHost* h, uint32_t id, std::vector<std
 : ParamView (r, h, id), labels (std::move (l))
 {
     if (labels.empty ())
-        for (auto* c : paramInfo (id).choices)
+        for (auto* c : host->table ().info (id).choices)
             labels.push_back (c);
 }
 
@@ -247,7 +245,7 @@ void Segmented::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
     const int n = (int)labels.size ();
-    const int sel = (int)std::lround (host->plainValue (param) - paramInfo (param).min);
+    const int sel = (int)std::lround (host->plainValue (param) - host->table ().info (param).min);
     roundRect (ctx, r, 3.0, theme::kControlBg);
     const double w = r.getWidth () / n;
     for (int i = 0; i < n; ++i)
@@ -272,7 +270,7 @@ void Segmented::onMouseDownEvent (MouseDownEvent& e)
     const CRect r = getViewSize ();
     const int n = (int)labels.size ();
     const int i = std::clamp ((int)((e.mousePosition.x - r.left) / (r.getWidth () / n)), 0, n - 1);
-    host->setOnce (param, toNormalized (param, paramInfo (param).min + i));
+    host->setOnce (param, host->table ().toNormalized (param, host->table ().info (param).min + i));
     invalid ();
     e.consumed = true;
     e.ignoreFollowUpMoveAndUpEvents (true);
@@ -309,7 +307,7 @@ void Choice::onMouseDownEvent (MouseDownEvent& e)
     if (!frame)
         return;
     auto menu = makeOwned<COptionMenu> ();
-    const auto& info = paramInfo (param);
+    const auto& info = host->table ().info (param);
     const int sel = (int)std::lround (host->plainValue (param));
     for (size_t i = 0; i < info.choices.size (); ++i)
         menu->addEntry (info.choices[i], -1, (int)i == sel ? CMenuItem::kChecked : CMenuItem::kNoFlags);
@@ -322,7 +320,7 @@ void Choice::onMouseDownEvent (MouseDownEvent& e)
         const int32_t idx = m->getLastResult ();
         if (idx >= 0)
         {
-            h->setOnce (id, toNormalized (id, (double)idx));
+            h->setOnce (id, h->table ().toNormalized (id, (double)idx));
             self->invalid ();
         }
     });
@@ -341,7 +339,7 @@ void ActionButton::draw (CDrawContext* ctx)
     const CRect r = getViewSize ();
     const bool lit = active && active ();
     roundRect (ctx, r, 3.0, pressed ? theme::kKnobTrack : (lit ? theme::kControlOn : theme::kControlBg));
-    ::simplr::text (ctx, text, r, lit ? CColor (20, 20, 20) : theme::kText, 10.5, lit);
+    ::pk::text (ctx, text, r, lit ? CColor (20, 20, 20) : theme::kText, 10.5, lit);
 }
 
 void ActionButton::onMouseDownEvent (MouseDownEvent& e)
@@ -374,7 +372,7 @@ Label::Label (const CRect& r, std::string t, double s, bool b, int a)
 void Label::draw (CDrawContext* ctx)
 {
     const CHoriTxtAlign al = align == 0 ? kLeftText : (align == 1 ? kCenterText : kRightText);
-    ::simplr::text (ctx, text, getViewSize (), dim ? theme::kTextDim : theme::kText, size, bold, al);
+    ::pk::text (ctx, text, getViewSize (), dim ? theme::kTextDim : theme::kText, size, bold, al);
 }
 
 //==============================================================================
@@ -396,4 +394,4 @@ Group::Group (const CRect& r) : CViewContainer (r)
     setBackgroundColor (kTransparentCColor);
 }
 
-} // namespace simplr
+} // namespace pk

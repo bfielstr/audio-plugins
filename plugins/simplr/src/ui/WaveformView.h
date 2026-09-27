@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Widgets.h"
+#include "UiKit.h"
 
 #include "SampleData.h"
 #include "Slices.h"

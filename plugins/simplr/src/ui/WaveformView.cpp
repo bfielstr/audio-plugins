@@ -2,7 +2,7 @@
 
 #include "Engine.h"
 #include "Params.h"
-#include "Theme.h"
+#include "UiKit.h"
 #include "plugin/Controller.h"
 
 #include "vstgui/lib/cdrawcontext.h"

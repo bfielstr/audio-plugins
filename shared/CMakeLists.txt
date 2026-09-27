@@ -1,0 +1,21 @@
+# pluginkit: code shared by all plug-ins.
+
+# Parameter tables (no SDK dependency, used by DSP tests too).
+add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp)
+target_include_directories(pluginkit_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+pk_dsp_settings(pluginkit_core)
+
+if(PK_BUILD_PLUGINS)
+    # VST3 controller/editor bases and VSTGUI widgets.
+    add_library(pluginkit_vst STATIC
+        pluginkit/vst/ControllerBase.h
+        pluginkit/vst/ControllerBase.cpp
+        pluginkit/vst/EditorBase.h
+        pluginkit/vst/EditorBase.cpp
+        pluginkit/ui/Theme.h
+        pluginkit/ui/Widgets.h
+        pluginkit/ui/Widgets.cpp
+    )
+    target_include_directories(pluginkit_vst PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(pluginkit_vst PUBLIC pluginkit_core sdk vstgui_support)
+endif()

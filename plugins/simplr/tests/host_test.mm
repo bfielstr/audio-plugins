@@ -6,25 +6,17 @@
 
 #include "Params.h"
 #include "plugin/StateIO.h"
+#include "pluginkit/testing/HostRig.h"
 
 #include "dr_wav.h"
 
 #include "public.sdk/source/common/memorystream.h"
-#include "public.sdk/source/vst/hosting/eventlist.h"
-#include "public.sdk/source/vst/hosting/hostclasses.h"
-#include "public.sdk/source/vst/hosting/module.h"
-#include "public.sdk/source/vst/hosting/parameterchanges.h"
-#include "public.sdk/source/vst/hosting/plugprovider.h"
-#include "public.sdk/source/vst/hosting/processdata.h"
 #include "public.sdk/source/vst/utility/stringconvert.h"
-#include "pluginterfaces/gui/iplugview.h"
-#include "pluginterfaces/vst/ivstaudioprocessor.h"
-#include "pluginterfaces/vst/ivsteditcontroller.h"
 #include "pluginterfaces/vst/ivstmidicontrollers.h"
-#include "pluginterfaces/vst/ivstprocesscontext.h"
 
 #import <Cocoa/Cocoa.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -33,24 +25,8 @@
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
-
-namespace Steinberg {
-FUnknown* gStandardPluginContext = nullptr;
-}
-
-static int gFail = 0, gChecks = 0;
-#define CHECK(c, ...)                                                    \
-    do                                                                   \
-    {                                                                    \
-        ++gChecks;                                                       \
-        if (!(c))                                                        \
-        {                                                                \
-            ++gFail;                                                     \
-            std::printf ("  FAIL line %d: %s  ", __LINE__, #c);          \
-            std::printf (__VA_ARGS__);                                   \
-            std::printf ("\n");                                          \
-        }                                                                \
-    } while (0)
+using namespace pk::testing;
+#define CHECK PK_CHECK
 
 static constexpr double kSr = 48000.0;
 static constexpr int kBlock = 480;
@@ -99,152 +75,9 @@ static std::string writeTestLoop (const std::string& path)
     return path;
 }
 
-struct Rig
-{
-    VST3::Hosting::Module::Ptr module;
-    IPtr<PlugProvider> provider;
-    IPtr<IComponent> component;
-    IPtr<IEditController> controller;
-    FUnknownPtr<IAudioProcessor> processor;
-    HostProcessData data;
-    EventList events {512};
-    ParameterChanges changes {16};
-    ProcessContext ctx {};
-
-    bool load (const std::string& path)
-    {
-        std::string err;
-        module = VST3::Hosting::Module::create (path, err);
-        if (!module)
-        {
-            std::printf ("module error: %s\n", err.c_str ());
-            return false;
-        }
-        auto factory = module->getFactory ();
-        for (auto& ci : factory.classInfos ())
-            if (ci.category () == kVstAudioEffectClass)
-            {
-                provider = owned (new PlugProvider (factory, ci, true));
-                break;
-            }
-        if (!provider || !provider->initialize ())
-            return false;
-        component = provider->getComponentPtr ();
-        controller = provider->getControllerPtr ();
-        processor = FUnknownPtr<IAudioProcessor> (component);
-        return component && controller && processor;
-    }
-
-    bool start ()
-    {
-        ProcessSetup setup {kRealtime, kSample32, kBlock, kSr};
-        if (processor->setupProcessing (setup) != kResultOk)
-            return false;
-        if (component->setActive (true) != kResultOk)
-            return false;
-        processor->setProcessing (true);
-        data.prepare (*component, kBlock, kSample32);
-        data.numSamples = kBlock;
-        data.inputEvents = &events;
-        data.inputParameterChanges = &changes;
-        ctx.sampleRate = kSr;
-        ctx.tempo = 120.0;
-        ctx.state = ProcessContext::kTempoValid | ProcessContext::kProjectTimeMusicValid | ProcessContext::kPlaying;
-        data.processContext = &ctx;
-        return true;
-    }
-
-    void stop ()
-    {
-        processor->setProcessing (false);
-        component->setActive (false);
-        data.unprepare ();
-    }
-
-    void note (int pitch, float vel, int offset = 0)
-    {
-        Event e {};
-        e.sampleOffset = offset;
-        if (vel > 0.0f)
-        {
-            e.type = Event::kNoteOnEvent;
-            e.noteOn.pitch = (int16)pitch;
-            e.noteOn.velocity = vel;
-            e.noteOn.noteId = -1;
-        }
-        else
-        {
-            e.type = Event::kNoteOffEvent;
-            e.noteOff.pitch = (int16)pitch;
-            e.noteOff.noteId = -1;
-        }
-        events.addEvent (e);
-    }
-
-    void param (ParamID id, double norm)
-    {
-        int32 idx;
-        if (auto* q = changes.addParameterData (id, idx))
-            q->addPoint (0, norm, idx);
-        controller->setParamNormalized (id, norm);
-    }
-
-    // Renders `seconds` and appends the left channel to `out`.
-    void render (double seconds, std::vector<float>& out, std::vector<float>* right = nullptr)
-    {
-        const int blocks = (int)std::ceil (seconds * kSr / kBlock);
-        for (int b = 0; b < blocks; ++b)
-        {
-            processor->process (data);
-            events.clear ();
-            changes.clearQueue ();
-            ctx.projectTimeMusic += kBlock * ctx.tempo / 60.0 / kSr;
-            const float* l = data.outputs[0].channelBuffers32[0];
-            const float* r = data.outputs[0].channelBuffers32[1];
-            out.insert (out.end (), l, l + kBlock);
-            if (right)
-                right->insert (right->end (), r, r + kBlock);
-        }
-    }
-};
-
-static double rms (const std::vector<float>& x, size_t a, size_t b)
-{
-    b = std::min (b, x.size ());
-    double s = 0;
-    for (size_t i = a; i < b; ++i)
-        s += (double)x[i] * x[i];
-    return b > a ? std::sqrt (s / (b - a)) : 0.0;
-}
-
-static bool allFinite (const std::vector<float>& x)
-{
-    for (float v : x)
-        if (!std::isfinite (v))
-            return false;
-    return true;
-}
-
-static size_t soundEnd (const std::vector<float>& x, float thr)
-{
-    size_t last = 0;
-    for (size_t i = 0; i < x.size (); ++i)
-        if (std::fabs (x[i]) > thr)
-            last = i;
-    return last;
-}
-
 static bool applyState (Rig& rig, const simplr::PluginState& st)
 {
-    MemoryStream s1, s2;
-    if (!simplr::writeState (&s1, st))
-        return false;
-    s1.seek (0, IBStream::kIBSeekSet, nullptr);
-    if (rig.component->setState (&s1) != kResultOk)
-        return false;
-    simplr::writeState (&s2, st);
-    s2.seek (0, IBStream::kIBSeekSet, nullptr);
-    return rig.controller->setComponentState (&s2) == kResultOk;
+    return rig.applyState ([&] (IBStream* s) { return simplr::writeState (s, st); });
 }
 
 static simplr::PluginState baseState (const std::string& sample)
@@ -262,126 +95,43 @@ static simplr::PluginState baseState (const std::string& sample)
     return st;
 }
 
-static void pump (double seconds)
+static bool snapshot (Rig& rig, const std::string& file)
 {
-    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];
-}
-
-static bool snapshot (Rig& rig, const std::string& file, std::function<void (IPlugView*)> beforeCapture = {})
-{
-    IPlugView* view = rig.controller->createView (ViewType::kEditor);
-    if (!view)
-        return false;
-    ViewRect r;
-    view->getSize (&r);
-    NSWindow* win = [[NSWindow alloc] initWithContentRect:NSMakeRect (0, 0, r.getWidth (), r.getHeight ())
-                                                styleMask:NSWindowStyleMaskBorderless
-                                                  backing:NSBackingStoreBuffered
-                                                    defer:NO];
-    win.releasedWhenClosed = NO;
-    NSView* content = [win contentView];
-    const bool attached = view->isPlatformTypeSupported (kPlatformTypeNSView) == kResultTrue &&
-                          view->attached ((__bridge void*)content, kPlatformTypeNSView) == kResultOk;
-    bool ok = false;
-    if (attached)
-    {
-        pump (0.3);
-        if (beforeCapture)
-        {
-            beforeCapture (view);
-            pump (0.3);
-        }
-        [content display];
-        NSBitmapImageRep* rep = [content bitmapImageRepForCachingDisplayInRect:[content bounds]];
-        [content cacheDisplayInRect:[content bounds] toBitmapImageRep:rep];
-        NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-        ok = [png writeToFile:[NSString stringWithUTF8String:file.c_str ()] atomically:YES];
-        view->removed ();
-    }
-    view->release ();
-    [win close];
-    return ok && attached;
-}
-
-// Sends a synthetic mouse event to the window. (x, y) are editor coordinates (top-left origin).
-static void mouse (NSWindow* win, NSEventType type, double x, double y, int clicks = 1, NSEventModifierFlags mods = 0)
-{
-    const double h = [[win contentView] bounds].size.height;
-    NSEvent* e = [NSEvent mouseEventWithType:type
-                                    location:NSMakePoint (x, h - y)
-                               modifierFlags:mods
-                                   timestamp:[[NSProcessInfo processInfo] systemUptime]
-                                windowNumber:[win windowNumber]
-                                     context:nil
-                                 eventNumber:0
-                                  clickCount:clicks
-                                    pressure:1.0];
-    // Deliver straight to the view under the mouse (NSWindow won't dispatch to an off-screen window).
-    static NSView* captured = nil;
-    NSView* content = [win contentView];
-    NSView* target = captured;
-    if (type == NSEventTypeLeftMouseDown || !target)
-        target = [content hitTest:[[content superview] convertPoint:e.locationInWindow fromView:nil]];
-    if (type == NSEventTypeLeftMouseDown)
-    {
-        captured = target;
-        [target mouseDown:e];
-    }
-    else if (type == NSEventTypeLeftMouseDragged)
-        [target mouseDragged:e];
-    else
-    {
-        [target mouseUp:e];
-        captured = nil;
-    }
-    pump (0.02);
-}
-
-static void click (NSWindow* win, double x, double y, int clicks = 1)
-{
-    mouse (win, NSEventTypeLeftMouseDown, x, y, clicks);
-    mouse (win, NSEventTypeLeftMouseUp, x, y, clicks);
+    EditorWindow w (rig.controller);
+    return w.ok () && w.savePng (file);
 }
 
 static void uiInteraction (Rig& rig)
 {
-    IPlugView* view = rig.controller->createView (ViewType::kEditor);
-    ViewRect r;
-    view->getSize (&r);
-    NSWindow* win = [[NSWindow alloc] initWithContentRect:NSMakeRect (0, 0, r.getWidth (), r.getHeight ())
-                                                styleMask:NSWindowStyleMaskBorderless
-                                                  backing:NSBackingStoreBuffered
-                                                    defer:NO];
-    win.releasedWhenClosed = NO;
-    view->attached ((__bridge void*)[win contentView], kPlatformTypeNSView);
-    pump (0.2);
+    EditorWindow win (rig.controller);
+    CHECK (win.ok (), "editor attach");
     auto plain = [&] (uint32_t id) { return simplr::toPlain (id, rig.controller->getParamNormalized (id)); };
 
     // mode selector: click "Slicing", then "One-Shot"
-    click (win, 480 + 260 * 2.5 / 3, 17);
+    win.click (480 + 260 * 2.5 / 3, 17);
     CHECK (std::lround (plain (simplr::kMode)) == simplr::kModeSlicing, "click Slicing -> mode %f", plain (simplr::kMode));
-    click (win, 480 + 260 * 1.5 / 3, 17);
+    win.click (480 + 260 * 1.5 / 3, 17);
     CHECK (std::lround (plain (simplr::kMode)) == simplr::kModeOneShot, "click One-Shot -> mode %f", plain (simplr::kMode));
-    click (win, 480 + 260 * 0.5 / 3, 17);
+    win.click (480 + 260 * 0.5 / 3, 17);
 
     // warp toggle
     const double warpBefore = plain (simplr::kWarp);
-    click (win, 780, 17);
+    win.click (780, 17);
     CHECK (plain (simplr::kWarp) != warpBefore, "warp toggle didn't change");
-    click (win, 780, 17);
+    win.click (780, 17);
 
     // drag the filter frequency knob down by 50 px (knob at 16..72 x 624..688)
     const double before = rig.controller->getParamNormalized (simplr::kFilterFreq);
-    mouse (win, NSEventTypeLeftMouseDown, 44, 650);
+    win.mouseDown (44, 650);
     for (int i = 1; i <= 10; ++i)
-        mouse (win, NSEventTypeLeftMouseDragged, 44, 650 + i * 5);
-    mouse (win, NSEventTypeLeftMouseUp, 44, 700);
+        win.mouseDrag (44, 650 + i * 5);
+    win.mouseUp (44, 700);
     const double after = rig.controller->getParamNormalized (simplr::kFilterFreq);
     CHECK (std::fabs ((before - after) - 0.25) < 0.02, "knob drag: %f -> %f", before, after);
     // double-click resets to the default
-    click (win, 44, 650, 1);
-    mouse (win, NSEventTypeLeftMouseDown, 44, 650, 2);
-    mouse (win, NSEventTypeLeftMouseUp, 44, 650, 2);
+    win.click (44, 650, 1);
+    win.mouseDown (44, 650, 2);
+    win.mouseUp (44, 650, 2);
     CHECK (std::fabs (rig.controller->getParamNormalized (simplr::kFilterFreq) - simplr::defaultNormalized (simplr::kFilterFreq)) < 1e-6,
            "double-click reset: %f", rig.controller->getParamNormalized (simplr::kFilterFreq));
 
@@ -390,15 +140,15 @@ static void uiInteraction (Rig& rig)
     const double rs = 0.1 + 0.1 * 0.7, re = rs + 0.8 * 0.7, ls = re - 0.4 * (re - rs);
     const double barX = wx ((ls + re) / 2), barY = 285;
     CHECK (plain (simplr::kLoopOn) >= 0.5, "loop should start on");
-    click (win, barX, barY);
+    win.click (barX, barY);
     CHECK (plain (simplr::kLoopOn) < 0.5, "clicking the loop bar should switch looping off");
-    click (win, barX, barY);
+    win.click (barX, barY);
     CHECK (plain (simplr::kLoopOn) >= 0.5, "clicking again should switch it back on");
     const double loopFramesBefore = plain (simplr::kLoopLen) * (re - rs);
-    mouse (win, NSEventTypeLeftMouseDown, barX, barY);
-    mouse (win, NSEventTypeLeftMouseDragged, barX - 40, barY);
-    mouse (win, NSEventTypeLeftMouseDragged, barX - 84, barY);
-    mouse (win, NSEventTypeLeftMouseUp, barX - 84, barY);
+    win.mouseDown (barX, barY);
+    win.mouseDrag (barX - 40, barY);
+    win.mouseDrag (barX - 84, barY);
+    win.mouseUp (barX - 84, barY);
     const double newRe = rs + plain (simplr::kLength) * 0.7;
     CHECK (std::fabs (newRe - (re - 84.0 / 1094.0)) < 0.004, "loop drag moved the end to %f (want %f)", newRe,
            re - 84.0 / 1094.0);
@@ -433,16 +183,16 @@ static void uiInteraction (Rig& rig)
     envGeom (peakX, decayX, holdX, relX, ptX);
     const double curveBefore = plain (simplr::envParam (0, simplr::kEnvCurveR));
     const double rx = (holdX + relX) / 2, ry = atop + ah * 0.6;
-    mouse (win, NSEventTypeLeftMouseDown, rx, ry, 1, NSEventModifierFlagShift);
-    mouse (win, NSEventTypeLeftMouseDragged, rx, ry - 20, 1, NSEventModifierFlagShift);
-    mouse (win, NSEventTypeLeftMouseDragged, rx, ry - 40, 1, NSEventModifierFlagShift);
-    mouse (win, NSEventTypeLeftMouseUp, rx, ry - 40, 1, NSEventModifierFlagShift);
+    win.mouseDown (rx, ry, 1, kShift);
+    win.mouseDrag (rx, ry - 20, kShift);
+    win.mouseDrag (rx, ry - 40, kShift);
+    win.mouseUp (rx, ry - 40, 1, kShift);
     const double curveAfter = plain (simplr::envParam (0, simplr::kEnvCurveR));
     CHECK (curveAfter > curveBefore + 0.3, "shift-drag up on the release should bow it up: %f -> %f", curveBefore, curveAfter);
 
     const double addX = peakX + (decayX - peakX) * 0.45, addY = atop + ah * 0.5;
-    mouse (win, NSEventTypeLeftMouseDown, addX, addY, 2);
-    mouse (win, NSEventTypeLeftMouseUp, addX, addY, 2);
+    win.mouseDown (addX, addY, 2);
+    win.mouseUp (addX, addY, 2);
     CHECK (std::lround (plain (simplr::envParam (0, simplr::kEnvPointCount))) == 1, "double-click should add a breakpoint (count %f)",
            plain (simplr::envParam (0, simplr::kEnvPointCount)));
     CHECK (std::fabs (plain (simplr::envPointParam (0, 0, simplr::kPtLevel)) - 0.5) < 0.03, "breakpoint level %f",
@@ -453,8 +203,8 @@ static void uiInteraction (Rig& rig)
     if (!ptX.empty ())
     {
         const double py = atop + ah * (1.0 - plain (simplr::envPointParam (0, 0, simplr::kPtLevel)));
-        mouse (win, NSEventTypeLeftMouseDown, ptX[0], py, 2);
-        mouse (win, NSEventTypeLeftMouseUp, ptX[0], py, 2);
+        win.mouseDown (ptX[0], py, 2);
+        win.mouseUp (ptX[0], py, 2);
         CHECK (std::lround (plain (simplr::envParam (0, simplr::kEnvPointCount))) == 0, "double-click on it should remove it");
         CHECK (std::fabs (plain (simplr::kAmpD) - 600.0) < 6.0, "removing merges the time back: %f", plain (simplr::kAmpD));
     }
@@ -472,22 +222,19 @@ static void uiInteraction (Rig& rig)
         return tips;
     };
     CHECK (tipsOn (), "help tooltips default to on");
-    click (win, 1033, 17);
+    win.click (1033, 17);
     CHECK (!tipsOn (), "the ? button should switch help off");
-    click (win, 1033, 17);
+    win.click (1033, 17);
     CHECK (tipsOn (), "and back on");
 
     // drag the sample start flag (waveform x 8..1102) to the middle
     const double flagX = 8.0 + plain (simplr::kSampleStart) * 1094.0;
-    mouse (win, NSEventTypeLeftMouseDown, flagX, 150);
-    mouse (win, NSEventTypeLeftMouseDragged, 200, 150);
-    mouse (win, NSEventTypeLeftMouseDragged, 555, 150);
-    mouse (win, NSEventTypeLeftMouseUp, 555, 150);
+    win.mouseDown (flagX, 150);
+    win.mouseDrag (200, 150);
+    win.mouseDrag (555, 150);
+    win.mouseUp (555, 150);
     CHECK (std::fabs (plain (simplr::kSampleStart) - 0.5) < 0.02, "flag drag -> start %f", plain (simplr::kSampleStart));
 
-    view->removed ();
-    view->release ();
-    [win close];
 }
 
 int main (int argc, char** argv)
@@ -499,15 +246,11 @@ int main (int argc, char** argv)
             std::printf ("usage: %s <Simplr.vst3> <outdir>\n", argv[0]);
             return 2;
         }
-        setvbuf (stdout, nullptr, _IONBF, 0);
-        [NSApplication sharedApplication];
+        initHost ();
         const std::string outDir = argv[2];
         const std::string wav = writeTestLoop (outDir + "/test_loop.wav");
         CHECK (!wav.empty (), "could not write test wav");
 
-        auto* hostApp = new HostApplication ();
-        PluginContextFactory::instance ().setPluginContext (hostApp);
-        gStandardPluginContext = hostApp;
 
         Rig rig;
         CHECK (rig.load (argv[1]), "load failed");
@@ -709,7 +452,8 @@ int main (int argc, char** argv)
         rig.stop ();
         applyState (rig, st3);
         rig.start ();
-        CHECK (snapshot (rig, outDir + "/ui_slicing.png", [&] (IPlugView*) { (void)set; }), "slicing snapshot");
+        (void)set;
+        CHECK (snapshot (rig, outDir + "/ui_slicing.png"), "slicing snapshot");
 
         auto st4 = baseState (wav);
         st4.norm[simplr::kLoopOn] = 1.0;
@@ -770,7 +514,6 @@ int main (int argc, char** argv)
 
         rig.provider = nullptr;
         rig.module = nullptr;
-        std::printf ("\nhost test: %d checks, %d failures\n", gChecks, gFail);
-        return gFail ? 1 : 0;
+        return finish ("host test");
     }
 }

@@ -1,6 +1,8 @@
 // Custom-drawn controls bound directly to parameter IDs through a ParamHost.
 #pragma once
 
+#include "pluginkit/ParamTable.h"
+
 #include "vstgui/lib/cview.h"
 #include "vstgui/lib/cviewcontainer.h"
 
@@ -9,11 +11,12 @@
 #include <string>
 #include <vector>
 
-namespace simplr {
+namespace pk {
 
 struct ParamHost
 {
     virtual ~ParamHost () = default;
+    virtual const ParamTable& table () = 0;
     virtual double norm (uint32_t id) = 0;
     virtual double plainValue (uint32_t id) = 0;
     virtual void beginEdit (uint32_t id) = 0;
@@ -186,4 +189,4 @@ public:
     explicit Group (const VSTGUI::CRect& r);
 };
 
-} // namespace simplr
+} // namespace pk

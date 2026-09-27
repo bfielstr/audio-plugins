@@ -4,7 +4,7 @@
 #include "Engine.h"
 #include "Help.h"
 #include "Params.h"
-#include "Theme.h"
+#include "UiKit.h"
 #include "WaveformView.h"
 #include "plugin/Controller.h"
 
@@ -74,91 +74,13 @@ void revealInFileBrowser (const std::string& path)
 }
 } // namespace
 
-Editor::Editor (Controller* c) : VSTGUIEditor (c), controller (c)
-{
-    scale = std::clamp (c->uiScale, 0.5, 2.0);
-    ViewRect vr (0, 0, (int32)std::lround (kWidth * scale), (int32)std::lround (kHeight * scale));
-    setRect (vr);
-    setIdleRate (33);
-}
+Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
-// --- ParamHost ------------------------------------------------------------------
-double Editor::norm (uint32_t id) { return controller->getParamNormalized (id); }
-double Editor::plainValue (uint32_t id) { return toPlain (id, controller->getParamNormalized (id)); }
-void Editor::beginEdit (uint32_t id) { controller->beginGesture (id); }
-void Editor::setNorm (uint32_t id, double v) { controller->setFromUI (id, v); }
-void Editor::endEdit (uint32_t id) { controller->endGesture (id); }
-std::string Editor::valueText (uint32_t id) { return toText (id, plainValue (id)); }
-
-template <typename T>
-T* Editor::bind (CViewContainer* parent, T* view)
+void Editor::onClose ()
 {
-    parent->addView (view);
-    if constexpr (std::is_base_of_v<ParamView, T>)
-        byParam[view->paramId ()].push_back (view);
-    return view;
-}
-
-// --- window lifecycle -------------------------------------------------------------
-bool PLUGIN_API Editor::open (void* parent, const PlatformType& platformType)
-{
-    if (frame)
-        return false;
-    frame = new CFrame (CRect (0, 0, kWidth, kHeight), this);
-    buildUI (frame);
-    frame->open (parent, platformType);
-    frame->setZoom (scale);
-    return true;
-}
-
-void PLUGIN_API Editor::close ()
-{
-    byParam.clear ();
     waveform = nullptr;
     filterDisplay = nullptr;
     envDisplay = nullptr;
-    if (frame)
-    {
-        frame->forget ();
-        frame = nullptr;
-    }
-}
-
-tresult PLUGIN_API Editor::checkSizeConstraint (ViewRect* rect)
-{
-    if (!rect)
-        return kInvalidArgument;
-    const double sx = rect->getWidth () / kWidth, sy = rect->getHeight () / kHeight;
-    const double s = std::clamp (std::min (sx, sy), 0.5, 2.0);
-    rect->right = rect->left + (int32)std::lround (kWidth * s);
-    rect->bottom = rect->top + (int32)std::lround (kHeight * s);
-    return kResultTrue;
-}
-
-tresult PLUGIN_API Editor::onSize (ViewRect* newSize)
-{
-    if (!newSize)
-        return kInvalidArgument;
-    scale = std::clamp (newSize->getWidth () / kWidth, 0.5, 2.0);
-    controller->uiScale = scale;
-    if (frame)
-        frame->setZoom (scale);
-    return VSTGUIEditor::onSize (newSize);
-}
-
-void Editor::resizeTo (double s)
-{
-    s = std::clamp (s, 0.5, 2.0);
-    ViewRect vr (0, 0, (int32)std::lround (kWidth * s), (int32)std::lround (kHeight * s));
-    if (plugFrame)
-        plugFrame->resizeView (this, &vr);
-}
-
-CMessageResult Editor::notify (CBaseObject* sender, const char* message)
-{
-    if (message == CVSTGUITimer::kMsgTimer)
-        idle ();
-    return VSTGUIEditor::notify (sender, message);
 }
 
 // --- building ---------------------------------------------------------------------
@@ -182,8 +104,8 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Toggle (CRect (750, 6, 810, 28), this, kWarp, "WARP"));
     hostLabel = new Label (CRect (820, 6, 1014, 28), "", 10.5, false, 2);
     root->addView (hostLabel);
-    root->addView (tip (new ActionButton (CRect (1022, 6, 1044, 28), "?", [this] { setTooltipsEnabled (!controller->uiShowTips); },
-                                          [this] { return controller->uiShowTips; }),
+    root->addView (tip (new ActionButton (CRect (1022, 6, 1044, 28), "?", [this] { setTooltipsEnabled (!ctl->uiShowTips); },
+                                          [this] { return ctl->uiShowTips; }),
                         help::kHelpButton));
     root->addView (tip (new ActionButton (CRect (1050, 6, 1102, 28), "Menu", [this] {
                             CPoint p (1050, 28);
@@ -192,7 +114,7 @@ void Editor::buildUI (CFrame* f)
                         help::kMenu));
 
     // ---- waveform ---------------------------------------------------------------
-    waveform = new WaveformView (CRect (8, 38, 1102, 300), controller, this);
+    waveform = new WaveformView (CRect (8, 38, 1102, 300), ctl, this);
     waveform->onContextMenu = [this] (CPoint p) { showMenu (p); };
     waveform->onFileDropped = [this] (const std::string& p) { loadFile (p); };
     waveform->setTooltipText (help::kWaveform);
@@ -284,7 +206,7 @@ void Editor::buildUI (CFrame* f)
         const double b = plainValue (kWarpBeats);
         double nb = add != 0 ? b + add : b * factor;
         nb = std::clamp (std::round (nb), 1.0, 1024.0);
-        controller->setPlainFromUI (kWarpBeats, nb);
+        ctl->setPlainFromUI (kWarpBeats, nb);
     };
     warpOnGroup->addView (tip (new ActionButton (CRect (58, 69, 76, 89), "-", [stepBeats] { stepBeats (1.0, -1); }), help::kWarpAs));
     warpBeatsBox = new ActionButton (CRect (78, 69, 150, 89), "4 Bars", [] {});
@@ -378,34 +300,17 @@ void Editor::buildUI (CFrame* f)
     bind (gp, new Segmented (CRect (4, 252, 174, 272), this, kGlideMode, {"Off", "Glide", "Porta"}));
 
     // hover help for every parameter control
-    for (auto& [id, views] : byParam)
-        if (const char* t = help::forParam (id))
-            for (auto* v : views)
-                v->setTooltipText (t);
-    f->enableTooltips (controller->uiShowTips, 600);
+    applyParamTooltips (&help::forParam);
 
     updateVisibility ();
     lastName.clear ();
     idle ();
 }
 
-void Editor::setTooltipsEnabled (bool on)
-{
-    controller->uiShowTips = on;
-    if (frame)
-    {
-        frame->enableTooltips (on, 600);
-        frame->invalid ();
-    }
-}
-
 // --- updates ----------------------------------------------------------------------
 void Editor::paramChanged (uint32_t id)
 {
-    auto it = byParam.find (id);
-    if (it != byParam.end ())
-        for (auto* v : it->second)
-            v->invalid ();
+    pk::EditorBase::paramChanged (id);
     if (waveform)
         waveform->invalid ();
     if (filterDisplay)
@@ -502,8 +407,8 @@ void Editor::idle ()
         envDisplay->tick ();
     if (nameLabel)
     {
-        std::string name = controller->sampleDisplayName ();
-        auto* b = controller->getBridge ();
+        std::string name = ctl->sampleDisplayName ();
+        auto* b = ctl->getBridge ();
         if (b && b->sampleMissing ())
             name = "Missing: " + name;
         if (name.empty ())
@@ -516,7 +421,7 @@ void Editor::idle ()
                 waveform->resetZoom ();
         }
     }
-    if (auto* b = controller->getBridge ())
+    if (auto* b = ctl->getBridge ())
     {
         char buf[96];
         std::snprintf (buf, sizeof (buf), "Host %.1f BPM%s", b->hostBpm.load (), b->hostPlaying.load () ? "  \xE2\x96\xB6" : "");
@@ -542,7 +447,7 @@ void Editor::idle ()
 // --- sample actions ---------------------------------------------------------------
 void Editor::loadFile (const std::string& path)
 {
-    if (!controller->loadSample (path, true))
+    if (!ctl->loadSample (path, true))
     {
         if (nameLabel)
             nameLabel->setText ("Could not load " + utf8FromPath (u8 (path).filename ()));
@@ -568,7 +473,7 @@ void Editor::browseForSample ()
     sel->addFileExtension (CFileExtension ("AIFF", "aiff"));
     sel->addFileExtension (CFileExtension ("FLAC", "flac"));
     sel->addFileExtension (CFileExtension ("MP3", "mp3"));
-    if (auto* b = controller->getBridge ())
+    if (auto* b = ctl->getBridge ())
     {
         const std::string cur = b->samplePath ();
         if (!cur.empty ())
@@ -583,7 +488,7 @@ void Editor::browseForSample ()
 
 void Editor::stepSample (int dir)
 {
-    auto* b = controller->getBridge ();
+    auto* b = ctl->getBridge ();
     if (!b)
         return;
     const std::string cur = b->samplePath ();
@@ -620,7 +525,7 @@ void Editor::showMenu (CPoint where)
 {
     if (!frame)
         return;
-    auto* b = controller->getBridge ();
+    auto* b = ctl->getBridge ();
     const SampleOps ops = b ? b->sampleOps () : SampleOps {};
     const bool hasSample = b && b->sample ();
     const bool cropped = ops.cropStart > 0.0 || ops.cropEnd < 1.0;
@@ -655,13 +560,13 @@ void Editor::showMenu (CPoint where)
     add ("Normalize Volume", [this, ops] {
              SampleOps o = ops;
              o.normalize = !o.normalize;
-             controller->applyOps (o, false);
+             ctl->applyOps (o, false);
          },
          hasSample, ops.normalize);
     add ("Reverse", [this, ops] {
              SampleOps o = ops;
              o.reverse = !o.reverse;
-             controller->applyOps (o, false);
+             ctl->applyOps (o, false);
          },
          hasSample, ops.reverse);
     add ("Crop to Sample Start/End", [this, ops, b] {
@@ -685,30 +590,30 @@ void Editor::showMenu (CPoint where)
              const double span = ops.cropEnd - ops.cropStart;
              o.cropStart = ops.cropStart + a * span;
              o.cropEnd = ops.cropStart + e * span;
-             controller->applyOps (o, true);
+             ctl->applyOps (o, true);
          },
          hasSample);
     add ("Undo Crop", [this, ops] {
              SampleOps o = ops;
              o.cropStart = 0.0;
              o.cropEnd = 1.0;
-             controller->applyOps (o, false);
-             controller->setPlainFromUI (kSampleStart, 0.0);
-             controller->setPlainFromUI (kSampleEnd, 1.0);
+             ctl->applyOps (o, false);
+             ctl->setPlainFromUI (kSampleStart, 0.0);
+             ctl->setPlainFromUI (kSampleEnd, 1.0);
          },
          hasSample && cropped);
     sep ();
     const bool cp = plainValue (kLoopFadePower) >= 0.5;
-    add ("Use Constant Power Fade for Loops", [this, cp] { controller->setPlainFromUI (kLoopFadePower, cp ? 0.0 : 1.0); },
+    add ("Use Constant Power Fade for Loops", [this, cp] { ctl->setPlainFromUI (kLoopFadePower, cp ? 0.0 : 1.0); },
          true, cp);
     if (mode == kModeSlicing)
         add ("Reset Slice Edits", [this, b] {
                  b->setEdits ({});
-                 controller->markDirty ();
+                 ctl->markDirty ();
              },
              hasSample);
     sep ();
-    add ("Clear Sample", [this] { controller->clearSample (); }, hasSample);
+    add ("Clear Sample", [this] { ctl->clearSample (); }, hasSample);
     sep ();
     for (double s : {0.75, 1.0, 1.25, 1.5, 2.0})
     {

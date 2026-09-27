@@ -3,7 +3,7 @@
 #include "Envelope.h"
 #include "Filter.h"
 #include "Params.h"
-#include "Theme.h"
+#include "UiKit.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cgraphicspath.h"

@@ -1,20 +1,20 @@
 cmake_minimum_required(VERSION 3.25)
 
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "macOS deployment target")
-# Universal by default so the plug-in loads in both native and Rosetta hosts.
+# Universal by default so the plug-ins load in both native and Rosetta hosts.
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
-project(Simplr
-    VERSION 0.1.1.0
-    DESCRIPTION "Simplr - a Simpler-style sampler instrument"
+project(AudioPlugins
+    VERSION 0.2.0
+    DESCRIPTION "Simplr (sampler) and Multidyn (multiband dynamics) VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
     enable_language(OBJC OBJCXX)
 endif()
 
-option(SIMPLR_BUILD_PLUGIN "Build the VST3 plug-in (needs the VST3 SDK)" ON)
+option(PK_BUILD_PLUGINS "Build the VST3 plug-ins (needs the VST3 SDK); OFF builds only DSP + tests" ON)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -25,147 +25,19 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # the SDK's libc++ headers explicitly when that happens.
 if(APPLE AND EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1"
          AND NOT EXISTS "/Library/Developer/CommandLineTools/usr/include/c++/v1/algorithm")
-    execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE _simplr_sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
-    message(STATUS "Simplr: working around stale CommandLineTools libc++ headers")
-    add_compile_options("$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-nostdinc++;-isystem;${_simplr_sdk}/usr/include/c++/v1>")
+    execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE _pk_sdk OUTPUT_STRIP_TRAILING_WHITESPACE)
+    message(STATUS "pluginkit: working around stale CommandLineTools libc++ headers")
+    add_compile_options("$<$<COMPILE_LANGUAGE:CXX,OBJCXX>:-nostdinc++;-isystem;${_pk_sdk}/usr/include/c++/v1>")
 endif()
-
-# ---------------------------------------------------------------------------
-# Framework-free DSP core
-add_library(simplr_core STATIC
-    src/core/Params.cpp
-    src/core/SampleData.cpp
-    src/core/Slices.cpp
-    src/core/Warp.cpp
-    src/core/Engine.cpp
-)
-target_include_directories(simplr_core PUBLIC src/core third_party/dr_libs)
-# Propagated to everything that links the core (plug-in, tests) but not to the SDK's own targets.
-if(WIN32)
-    target_compile_definitions(simplr_core PUBLIC _USE_MATH_DEFINES NOMINMAX)
-endif()
-if(MSVC)
-    target_compile_options(simplr_core PUBLIC /utf-8 /bigobj)
-endif()
-if(MSVC)
-    target_compile_options(simplr_core PRIVATE /O2 /fp:fast)
-else()
-    target_compile_options(simplr_core PRIVATE -O3 -fcx-limited-range)
-endif()
-set_target_properties(simplr_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-add_executable(simplr_tests tests/core_tests.cpp)
-target_link_libraries(simplr_tests PRIVATE simplr_core)
 
 enable_testing()
-add_test(NAME core COMMAND simplr_tests)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(PluginKit)
 
-if(NOT SIMPLR_BUILD_PLUGIN)
-    return()
+if(PK_BUILD_PLUGINS)
+    pk_setup_vst3_sdk()
 endif()
 
-# ---------------------------------------------------------------------------
-# VST3 plug-in
-
-# The SDK isn't vendored: fetch the pinned version on first configure if it's missing.
-set(SIMPLR_VST3SDK_TAG "v3.8.1_build_84")
-if(NOT EXISTS "${vst3sdk_SOURCE_DIR}/cmake/modules/SMTG_VST3_SDK.cmake")
-    find_package(Git REQUIRED)
-    message(STATUS "Simplr: fetching VST3 SDK ${SIMPLR_VST3SDK_TAG} into ${vst3sdk_SOURCE_DIR} (one-time)")
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" clone --depth 1 --branch ${SIMPLR_VST3SDK_TAG} --recurse-submodules
-                --shallow-submodules https://github.com/steinbergmedia/vst3sdk.git "${vst3sdk_SOURCE_DIR}"
-        RESULT_VARIABLE _simplr_clone_result)
-    if(NOT _simplr_clone_result EQUAL 0 OR NOT EXISTS "${vst3sdk_SOURCE_DIR}/cmake/modules/SMTG_VST3_SDK.cmake")
-        message(FATAL_ERROR "Could not fetch the VST3 SDK. Clone it manually:\n"
-            "  git clone --depth 1 --branch ${SIMPLR_VST3SDK_TAG} --recurse-submodules --shallow-submodules "
-            "https://github.com/steinbergmedia/vst3sdk.git external/vst3sdk")
-    endif()
-endif()
-set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES ON CACHE BOOL "" FORCE) # builds the SDK validator
-set(SMTG_ENABLE_VSTGUI_SUPPORT ON CACHE BOOL "" FORCE)
-set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
-set(SMTG_BUILD_UNIVERSAL_BINARY OFF CACHE BOOL "" FORCE)
-set(SMTG_VSTGUI_ROOT "${vst3sdk_SOURCE_DIR}")
-
-# The SDK insists on detecting a full Xcode install; with only the Command Line Tools
-# `xcodebuild -version` fails, so provide a version explicitly.
-if(APPLE AND NOT DEFINED ENV{XCODE_VERSION})
-    execute_process(COMMAND xcodebuild -version OUTPUT_VARIABLE _xc ERROR_QUIET RESULT_VARIABLE _xc_res)
-    if(NOT _xc_res EQUAL 0)
-        message(STATUS "Simplr: no full Xcode found, building with the Command Line Tools")
-        set(ENV{XCODE_VERSION} "16.0")
-        set(XCODE_VERSION "16.0")
-    endif()
-endif()
-
-add_subdirectory(${vst3sdk_SOURCE_DIR} ${PROJECT_BINARY_DIR}/vst3sdk)
-smtg_enable_vst3_sdk()
-
-smtg_add_vst3plugin(Simplr
-    src/plugin/Bridge.h
-    src/plugin/Bridge.cpp
-    src/plugin/Cids.h
-    src/plugin/Processor.h
-    src/plugin/Processor.cpp
-    src/plugin/Controller.h
-    src/plugin/Controller.cpp
-    src/plugin/Entry.cpp
-    src/plugin/StateIO.h
-    src/plugin/StateIO.cpp
-    src/plugin/Version.h
-    src/ui/Theme.h
-    src/ui/Widgets.h
-    src/ui/Widgets.cpp
-    src/ui/WaveformView.h
-    src/ui/WaveformView.cpp
-    src/ui/Displays.h
-    src/ui/Displays.cpp
-    src/ui/Editor.h
-    src/ui/Editor.cpp
-)
-target_include_directories(Simplr PRIVATE src)
-target_link_libraries(Simplr PRIVATE simplr_core sdk vstgui_support)
-smtg_target_configure_version_file(Simplr)
-
-# Ship the third-party licence notices inside the bundle (before it gets signed).
-configure_file(${vst3sdk_SOURCE_DIR}/LICENSE.txt ${PROJECT_BINARY_DIR}/licenses/VST3_SDK_LICENSE.txt COPYONLY)
-configure_file(${vst3sdk_SOURCE_DIR}/vstgui4/LICENSE ${PROJECT_BINARY_DIR}/licenses/VSTGUI_LICENSE.txt COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md ${PROJECT_BINARY_DIR}/licenses/THIRD_PARTY_NOTICES.md COPYONLY)
-smtg_target_add_plugin_resources(Simplr
-    RESOURCES
-        ${PROJECT_BINARY_DIR}/licenses/VST3_SDK_LICENSE.txt
-        ${PROJECT_BINARY_DIR}/licenses/VSTGUI_LICENSE.txt
-        ${PROJECT_BINARY_DIR}/licenses/THIRD_PARTY_NOTICES.md
-)
-
-if(SMTG_MAC)
-    smtg_target_set_bundle(Simplr
-        BUNDLE_IDENTIFIER com.simplr.vst3.simplr
-        COMPANY_NAME "Simplr"
-    )
-    # Always seal the bundle with an ad-hoc signature (hosts on Apple Silicon need a valid
-    # signature, and the SDK only signs when a signing identity is configured).
-    add_custom_command(TARGET Simplr POST_BUILD
-        COMMAND codesign --force --sign - --timestamp=none "$<TARGET_BUNDLE_DIR:Simplr>"
-        COMMENT "Ad-hoc signing Simplr.vst3")
-endif()
-
-# Loads the built bundle through the VST3 hosting API, plays notes and checks the output.
-if(APPLE)
-    add_executable(simplr_hosttest
-        tests/host_test.mm
-        src/plugin/StateIO.cpp
-        ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp
-        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/plugprovider.cpp
-        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_mac.mm
-    )
-    target_include_directories(simplr_hosttest PRIVATE src)
-    target_link_libraries(simplr_hosttest PRIVATE sdk_hosting simplr_core "-framework Cocoa")
-    target_compile_options(simplr_hosttest PRIVATE -fobjc-arc)
-    add_dependencies(simplr_hosttest Simplr)
-    file(MAKE_DIRECTORY ${PROJECT_BINARY_DIR}/test-output)
-    add_test(NAME host
-             COMMAND simplr_hosttest ${PROJECT_BINARY_DIR}/VST3/$<CONFIG>/Simplr.vst3 ${PROJECT_BINARY_DIR}/test-output)
-endif()
+add_subdirectory(shared)
+add_subdirectory(plugins/simplr)
+add_subdirectory(plugins/multidyn)

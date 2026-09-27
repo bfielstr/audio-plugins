@@ -4,7 +4,7 @@
 #include "vstgui/lib/ccolor.h"
 #include "vstgui/lib/cfont.h"
 
-namespace simplr::theme {
+namespace pk::theme {
 
 using VSTGUI::CColor;
 
@@ -42,4 +42,4 @@ inline VSTGUI::SharedPointer<VSTGUI::CFontDesc> font (double size, bool bold = f
     return VSTGUI::makeOwned<VSTGUI::CFontDesc> (face, size, bold ? VSTGUI::kBoldFace : 0);
 }
 
-} // namespace simplr::theme
+} // namespace pk::theme

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "Widgets.h"
+#include "UiKit.h"
 
-#include "public.sdk/source/vst/vstguieditor.h"
+#include "pluginkit/vst/EditorBase.h"
 
 #include <map>
 #include <string>
@@ -15,7 +15,7 @@ class WaveformView;
 class FilterDisplay;
 class EnvelopeDisplay;
 
-class Editor : public Steinberg::Vst::VSTGUIEditor, public ParamHost
+class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 1110.0;
@@ -23,44 +23,24 @@ public:
 
     explicit Editor (Controller* c);
 
-    bool PLUGIN_API open (void* parent, const VSTGUI::PlatformType& platformType) override;
-    void PLUGIN_API close () override;
-    Steinberg::tresult PLUGIN_API canResize () override { return Steinberg::kResultTrue; }
-    Steinberg::tresult PLUGIN_API checkSizeConstraint (Steinberg::ViewRect* rect) override;
-    Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) override;
-    VSTGUI::CMessageResult notify (VSTGUI::CBaseObject* sender, const char* message) override;
-
-    void paramChanged (uint32_t id);
+    void buildUI (VSTGUI::CFrame* f) override;
+    void idle () override;
+    void paramChanged (uint32_t id) override;
     void bridgeChanged ();
-
-    // Builds the view hierarchy into an (unopened) frame. Used by open() and by the UI tests.
-    void buildUI (VSTGUI::CFrame* f);
-    void idle ();
-
-    // ParamHost
-    double norm (uint32_t id) override;
-    double plainValue (uint32_t id) override;
-    void beginEdit (uint32_t id) override;
-    void setNorm (uint32_t id, double v) override;
-    void endEdit (uint32_t id) override;
-    std::string valueText (uint32_t id) override;
 
     // exposed for tests
     void setEnvTab (int t);
-    void setTooltipsEnabled (bool on);
     void showMenu (VSTGUI::CPoint where);
 
 private:
-    template <typename T>
-    T* bind (VSTGUI::CViewContainer* parent, T* view);
     void updateVisibility ();
     void browseForSample ();
     void stepSample (int dir);
     void loadFile (const std::string& path);
-    void resizeTo (double scale);
 
-    Controller* controller;
-    std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
+    void onClose () override;
+
+    Controller* ctl;
     WaveformView* waveform = nullptr;
     FilterDisplay* filterDisplay = nullptr;
     EnvelopeDisplay* envDisplay = nullptr;
@@ -80,7 +60,6 @@ private:
     VSTGUI::CView *ampLoopTime = nullptr, *ampLoopRate = nullptr;
     std::vector<VSTGUI::CView*> tabButtons;
     int envTab = 0;
-    double scale = 1.0;
     std::string lastName;
 };
 

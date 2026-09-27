@@ -21,44 +21,6 @@ using namespace Steinberg::Vst;
 
 namespace {
 
-class SimplrParameter : public Parameter
-{
-public:
-    explicit SimplrParameter (uint32_t id)
-    {
-        const auto& p = paramInfo (id);
-        info.id = id;
-        StringConvert::convert (p.name, info.title);
-        StringConvert::convert (p.shortName, info.shortTitle);
-        StringConvert::convert ("", info.units);
-        info.stepCount = p.stepCount ();
-        info.defaultNormalizedValue = defaultNormalized (id);
-        info.unitId = kRootUnitId;
-        info.flags = ParameterInfo::kCanAutomate;
-        if (p.type == PType::Choice)
-            info.flags |= ParameterInfo::kIsList;
-        valueNormalized = info.defaultNormalizedValue;
-    }
-
-    void toString (ParamValue n, String128 string) const override
-    {
-        StringConvert::convert (toText (info.id, simplr::toPlain (info.id, n)), string);
-    }
-
-    bool fromString (const TChar* string, ParamValue& n) const override
-    {
-        const std::string s = StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (string)));
-        double plain;
-        if (!fromText (info.id, s, plain))
-            return false;
-        n = simplr::toNormalized (info.id, plain);
-        return true;
-    }
-
-    ParamValue toPlain (ParamValue n) const override { return simplr::toPlain (info.id, n); }
-    ParamValue toNormalized (ParamValue plain) const override { return simplr::toNormalized (info.id, plain); }
-};
-
 int guessWarpBeats (const SampleData& s)
 {
     const double secs = s.seconds ();
@@ -77,11 +39,9 @@ int guessWarpBeats (const SampleData& s)
 
 tresult PLUGIN_API Controller::initialize (FUnknown* context)
 {
-    const tresult r = EditController::initialize (context);
+    const tresult r = pk::ControllerBase::initialize (context);
     if (r != kResultOk)
         return r;
-    for (uint32_t id = 0; id < kNumParams; ++id)
-        parameters.addParameter (new SimplrParameter (id));
     const int32 hidden = ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;
     parameters.addParameter (STR16 ("Pitch Bend"), nullptr, 0, 0.5, hidden, kMidiPitchBend);
     parameters.addParameter (STR16 ("Sustain Pedal"), nullptr, 1, 0.0, hidden, kMidiSustain);
@@ -96,7 +56,7 @@ tresult PLUGIN_API Controller::terminate ()
         bridge->release ();
         bridge = nullptr;
     }
-    return EditController::terminate ();
+    return pk::ControllerBase::terminate ();
 }
 
 tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
@@ -110,28 +70,6 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
         setParamNormalized (id, st.has[id] ? st.norm[id] : defaultNormalized (id));
     pendingPath = st.samplePath;
     return kResultOk;
-}
-
-tresult PLUGIN_API Controller::setState (IBStream* stream)
-{
-    if (!stream)
-        return kInvalidArgument;
-    IBStreamer s (stream, kLittleEndian);
-    double v = 1.0;
-    if (s.readDouble (v) && v >= 0.5 && v <= 2.0)
-        uiScale = v;
-    bool tips = true;
-    if (s.readBool (tips))
-        uiShowTips = tips;
-    return kResultOk;
-}
-
-tresult PLUGIN_API Controller::getState (IBStream* stream)
-{
-    if (!stream)
-        return kInvalidArgument;
-    IBStreamer s (stream, kLittleEndian);
-    return s.writeDouble (uiScale) && s.writeBool (uiShowTips) ? kResultOk : kResultFalse;
 }
 
 IPlugView* PLUGIN_API Controller::createView (FIDString name)
@@ -155,21 +93,13 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                 if (bridge)
                     bridge->release ();
                 bridge = b;
-                if (editor)
-                    editor->bridgeChanged ();
+                if (auto* e = dynamic_cast<Editor*> (editor))
+                    e->bridgeChanged ();
             }
         }
         return kResultOk;
     }
-    return EditController::notify (message);
-}
-
-tresult PLUGIN_API Controller::setParamNormalized (ParamID tag, ParamValue value)
-{
-    const tresult r = EditController::setParamNormalized (tag, value);
-    if (editor && tag < kNumParams)
-        editor->paramChanged (tag);
-    return r;
+    return pk::ControllerBase::notify (message);
 }
 
 tresult PLUGIN_API Controller::getMidiControllerAssignment (int32 busIndex, int16, CtrlNumber ctrl, ParamID& id)
@@ -183,37 +113,6 @@ tresult PLUGIN_API Controller::getMidiControllerAssignment (int32 busIndex, int1
         case kCtrlModWheel: id = kMidiModWheel; return kResultTrue;
         default: return kResultFalse;
     }
-}
-
-void Controller::editorAttached (EditorView* e) { editor = dynamic_cast<Editor*> (e); }
-
-void Controller::editorRemoved (EditorView* e)
-{
-    if (editor == e)
-        editor = nullptr;
-}
-
-void Controller::setFromUI (uint32_t id, double normalized)
-{
-    normalized = std::clamp (normalized, 0.0, 1.0);
-    setParamNormalized (id, normalized);
-    performEdit (id, normalized);
-}
-
-void Controller::setPlainFromUI (uint32_t id, double plainValue)
-{
-    beginEdit (id);
-    setFromUI (id, simplr::toNormalized (id, plainValue));
-    endEdit (id);
-}
-
-void Controller::markDirty ()
-{
-    if (!componentHandler)
-        return;
-    FUnknownPtr<IComponentHandler2> h2 (componentHandler);
-    if (h2)
-        h2->setDirty (true);
 }
 
 std::string Controller::sampleDisplayName ()

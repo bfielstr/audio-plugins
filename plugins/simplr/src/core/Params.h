@@ -2,6 +2,8 @@
 // IDs are persisted in presets/projects: only ever append new IDs.
 #pragma once
 
+#include "pluginkit/ParamTable.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -127,32 +129,19 @@ enum MidiParamId : uint32_t
     kMidiModWheel = 1002,
 };
 
-enum class PType { Float, Int, Choice, Bool };
-enum class Curve { Linear, Log, Power3 };
-enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Beats, Degrees, Choice, OnOff, Sustain, Curve };
+using pk::Curve;
+using pk::Disp;
+using pk::ParamInfo;
+using pk::PType;
 
-struct ParamInfo
-{
-    ParamId id;
-    const char* name;
-    const char* shortName;
-    PType type;
-    double min, max, def; // plain values (choices: index)
-    Curve curve;
-    Disp disp;
-    std::vector<const char*> choices;
-
-    int stepCount () const; // 0 = continuous
-};
-
-const ParamInfo& paramInfo (uint32_t id);
-bool isValidParam (uint32_t id);
-
-double toPlain (uint32_t id, double normalized);
-double toNormalized (uint32_t id, double plain);
-double defaultNormalized (uint32_t id);
-std::string toText (uint32_t id, double plain);
-bool fromText (uint32_t id, const std::string& text, double& plainOut);
+const pk::ParamTable& paramTable ();
+inline const ParamInfo& paramInfo (uint32_t id) { return paramTable ().info (id); }
+inline bool isValidParam (uint32_t id) { return id < kNumParams; }
+inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
+inline double toNormalized (uint32_t id, double plain) { return paramTable ().toNormalized (id, plain); }
+inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+inline std::string toText (uint32_t id, double plain) { return paramTable ().toText (id, plain); }
+inline bool fromText (uint32_t id, const std::string& t, double& out) { return paramTable ().fromText (id, t, out); }
 
 // Enumerations -------------------------------------------------------------
 enum Mode { kModeClassic = 0, kModeOneShot, kModeSlicing };
