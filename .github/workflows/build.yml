@@ -19,13 +19,13 @@ jobs:
         include:
           - name: macOS
             os: macos-latest
-            asset: Simplr-macOS.zip
+            asset: Plugins-macOS.zip
           - name: Linux x86_64
             os: ubuntu-22.04 # oldest supported glibc for wider compatibility
-            asset: Simplr-Linux-x86_64.zip
+            asset: Plugins-Linux-x86_64.zip
           - name: Windows x64
             os: windows-latest
-            asset: Simplr-Windows-x64.zip
+            asset: Plugins-Windows-x64.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -59,10 +59,12 @@ jobs:
         run: |
           mkdir -p dist
           cd build/VST3/Release
+          ls -d *.vst3
+          test -d Simplr.vst3 && test -d Multidyn.vst3 && test -d Lowfocus.vst3
           case "$RUNNER_OS" in
-            macOS)   ditto -c -k --keepParent Simplr.vst3 "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" ;;
-            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 ;;
-            Windows) pwsh -Command "Compress-Archive -Path Simplr.vst3 -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
+            macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 ;;
+            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 ;;
+            Windows) pwsh -Command "Compress-Archive -Path Simplr.vst3,Multidyn.vst3,Lowfocus.vst3 -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
           esac
 
       - uses: actions/upload-artifact@v4
@@ -76,7 +78,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ui-screenshots
-          path: build/test-output/*.png
+          path: build/test-output/**/*.png
           if-no-files-found: ignore
 
   release:
@@ -88,16 +90,16 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: Simplr-*
+          pattern: Plugins-*
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum Simplr-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: cd dist && sha256sum Plugins-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" --title "Simplr $GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" --title "Plug-ins $GITHUB_REF_NAME (Simplr, Multidyn, Lowfocus)" \
             --notes "Install with one command:
 
           **macOS / Linux**
@@ -108,7 +110,7 @@ jobs:
           \`\`\`
           irm https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/scripts/install.ps1 | iex
           \`\`\`
-          Or download the zip for your platform below and copy \`Simplr.vst3\` into your VST3 folder."
+          Or download the zip for your platform below and copy the \`.vst3\` folders into your VST3 folder."
 
   # Runs the real one-line installers against the release that was just published.
   installers:
@@ -129,13 +131,15 @@ jobs:
           SIMPLR_DEST: ${{ runner.temp }}/vst3
         run: |
           sh scripts/install.sh
-          ls -R "$SIMPLR_DEST/Simplr.vst3" | head -20
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            test -f "$SIMPLR_DEST/Simplr.vst3/Contents/MacOS/Simplr"
-            codesign -v "$SIMPLR_DEST/Simplr.vst3"
-          else
-            test -f "$SIMPLR_DEST/Simplr.vst3/Contents/x86_64-linux/Simplr.so"
-          fi
+          for p in Simplr Multidyn Lowfocus; do
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              test -f "$SIMPLR_DEST/$p.vst3/Contents/MacOS/$p"
+              codesign -v "$SIMPLR_DEST/$p.vst3"
+            else
+              test -f "$SIMPLR_DEST/$p.vst3/Contents/x86_64-linux/$p.so"
+            fi
+            echo "$p installed"
+          done
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
@@ -144,7 +148,9 @@ jobs:
           SIMPLR_VERSION: ${{ github.ref_name }}
         run: |
           ./scripts/install.ps1
-          $dest = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3\Simplr.vst3'
-          if (Test-Path "$env:CommonProgramW6432\VST3\Simplr.vst3") { $dest = "$env:CommonProgramW6432\VST3\Simplr.vst3" }
-          Get-ChildItem -Recurse $dest | Select-Object -First 20 FullName
-          if (-not (Test-Path "$dest\Contents\x86_64-win\Simplr.vst3")) { throw 'plug-in binary missing' }
+          $root = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3'
+          if (Test-Path "$env:CommonProgramW6432\VST3\Simplr.vst3") { $root = "$env:CommonProgramW6432\VST3" }
+          foreach ($p in 'Simplr', 'Multidyn', 'Lowfocus') {
+            if (-not (Test-Path "$root\$p.vst3\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
+            Write-Host "$p installed"
+          }

@@ -1,11 +1,13 @@
 #!/bin/sh
-# Downloads the latest Simplr release and installs the VST3 plug-in for the current user.
+# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus)
+# for the current user.
 #
 #   curl -fsSL https://raw.githubusercontent.com/bfielstr/simplr/main/scripts/install.sh | sh
 #
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
 #   SIMPLR_DEST=/some/dir   install into a different VST3 folder
+#   SIMPLR_PLUGINS="Multidyn Lowfocus"   install only some of the plug-ins
 set -eu
 
 REPO="${SIMPLR_REPO:-bfielstr/simplr}"
@@ -15,14 +17,14 @@ os="$(uname -s)"
 arch="$(uname -m)"
 case "$os" in
     Darwin)
-        asset="Simplr-macOS.zip" # universal: Apple Silicon + Intel
+        asset="Plugins-macOS.zip" # universal: Apple Silicon + Intel
         dest="${SIMPLR_DEST:-$HOME/Library/Audio/Plug-Ins/VST3}"
         ;;
     Linux)
         case "$arch" in
-            x86_64 | amd64) asset="Simplr-Linux-x86_64.zip" ;;
+            x86_64 | amd64) asset="Plugins-Linux-x86_64.zip" ;;
             *)
-                echo "No prebuilt Simplr for Linux/$arch yet. Build from source:" >&2
+                echo "No prebuilt plug-ins for Linux/$arch yet. Build from source:" >&2
                 echo "  https://github.com/$REPO#build--install" >&2
                 exit 1
                 ;;
@@ -88,18 +90,28 @@ else
     exit 1
 fi
 
-if [ ! -d "$tmp/x/Simplr.vst3" ]; then
-    echo "Unexpected archive layout (no Simplr.vst3 inside)." >&2
+plugins="${SIMPLR_PLUGINS:-}"
+if [ -z "$plugins" ]; then
+    plugins="$(cd "$tmp/x" && ls -d *.vst3 2>/dev/null | sed 's/\.vst3$//' | tr '\n' ' ')"
+fi
+if [ -z "$plugins" ]; then
+    echo "Unexpected archive layout (no .vst3 inside)." >&2
     exit 1
 fi
 
 mkdir -p "$dest"
-rm -rf "$dest/Simplr.vst3"
-mv "$tmp/x/Simplr.vst3" "$dest/"
-if [ "$os" = "Darwin" ]; then
-    # Files fetched outside a browser aren't quarantined, but clear it in case.
-    xattr -dr com.apple.quarantine "$dest/Simplr.vst3" 2>/dev/null || true
-fi
+for p in $plugins; do
+    if [ ! -d "$tmp/x/$p.vst3" ]; then
+        echo "No $p.vst3 in this release - skipping." >&2
+        continue
+    fi
+    rm -rf "$dest/$p.vst3"
+    mv "$tmp/x/$p.vst3" "$dest/"
+    if [ "$os" = "Darwin" ]; then
+        # Files fetched outside a browser aren't quarantined, but clear it in case.
+        xattr -dr com.apple.quarantine "$dest/$p.vst3" 2>/dev/null || true
+    fi
+    echo "Installed: $dest/$p.vst3"
+done
 
-echo "Installed: $dest/Simplr.vst3"
-echo "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan, then add 'Simplr' to a track."
+echo "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan."

@@ -1,4 +1,4 @@
-# Downloads the latest Simplr release and installs the VST3 plug-in on Windows.
+# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus) on Windows.
 #
 #   irm https://raw.githubusercontent.com/bfielstr/simplr/main/scripts/install.ps1 | iex
 #
@@ -6,14 +6,15 @@
 # (C:\Program Files\Common Files\VST3), which every host scans. Otherwise it installs for the
 # current user into %LOCALAPPDATA%\Programs\Common\VST3.
 #
-# Environment overrides: $env:SIMPLR_VERSION = 'v0.1.0'; $env:SIMPLR_DEST = 'D:\VST3'
+# Environment overrides: $env:SIMPLR_VERSION = 'v0.2.0'; $env:SIMPLR_DEST = 'D:\VST3';
+#   $env:SIMPLR_PLUGINS = 'Multidyn Lowfocus' to install only some of them
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest is very slow with the progress bar
 
 $repo = if ($env:SIMPLR_REPO) { $env:SIMPLR_REPO } else { 'bfielstr/simplr' }
 $version = if ($env:SIMPLR_VERSION) { $env:SIMPLR_VERSION } else { 'latest' }
-$asset = 'Simplr-Windows-x64.zip'
+$asset = 'Plugins-Windows-x64.zip'
 $base = if ($version -eq 'latest') { "https://github.com/$repo/releases/latest/download" }
         else { "https://github.com/$repo/releases/download/$version" }
 
@@ -53,22 +54,25 @@ try {
 
     $x = Join-Path $tmp 'x'
     Expand-Archive -Path $zip -DestinationPath $x -Force
-    $bundle = Join-Path $x 'Simplr.vst3'
-    if (-not (Test-Path $bundle)) { throw 'Unexpected archive layout (no Simplr.vst3 inside).' }
-
+    $plugins = if ($env:SIMPLR_PLUGINS) { $env:SIMPLR_PLUGINS -split '\s+' | Where-Object { $_ } }
+               else { Get-ChildItem -Path $x -Directory -Filter '*.vst3' | ForEach-Object { $_.BaseName } }
+    if (-not $plugins) { throw 'Unexpected archive layout (no .vst3 inside).' }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
-    $target = Join-Path $dest 'Simplr.vst3'
-    if (Test-Path $target) { Remove-Item -Recurse -Force $target }
-    Move-Item -Path $bundle -Destination $target
-    Get-ChildItem -Recurse $target | Unblock-File
-
-    Write-Host "Installed: $target"
+    foreach ($p in $plugins) {
+        $bundle = Join-Path $x "$p.vst3"
+        if (-not (Test-Path $bundle)) { Write-Warning "No $p.vst3 in this release - skipping."; continue }
+        $target = Join-Path $dest "$p.vst3"
+        if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+        Move-Item -Path $bundle -Destination $target
+        Get-ChildItem -Recurse $target | Unblock-File
+        Write-Host "Installed: $target"
+    }
     if (-not $isAdmin -and -not $env:SIMPLR_DEST) {
         Write-Host "Installed for the current user. If REAPER doesn't find it, add this folder under"
         Write-Host "Options > Preferences > Plug-ins > VST > VST plug-in paths:  $dest"
         Write-Host "(or re-run this command from an Administrator PowerShell to install system-wide)."
     }
-    Write-Host "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan, then add 'Simplr' to a track."
+    Write-Host "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan."
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
