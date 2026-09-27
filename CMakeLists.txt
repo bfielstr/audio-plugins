@@ -8,8 +8,11 @@ set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH
 project(Simplr
     VERSION 0.1.0.0
     DESCRIPTION "Simplr - a Simpler-style sampler instrument"
-    LANGUAGES C CXX OBJC OBJCXX
+    LANGUAGES C CXX
 )
+if(APPLE)
+    enable_language(OBJC OBJCXX)
+endif()
 
 option(SIMPLR_BUILD_PLUGIN "Build the VST3 plug-in (needs the VST3 SDK)" ON)
 

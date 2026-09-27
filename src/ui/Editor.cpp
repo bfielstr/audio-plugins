@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <type_traits>
 
 #if defined(_WIN32)
 #include <windows.h>

@@ -44,7 +44,8 @@ ctest --test-dir build -C Release          # DSP tests (+ plug-in host test on m
   above and installs the result.
 - **Linux**: needs `libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev libxcb-keysyms1-dev
   libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libcairo2-dev
-  libfreetype6-dev libpango1.0-dev` (Debian/Ubuntu names).
+  libfreetype6-dev libpango1.0-dev libgtkmm-3.0-dev` (Debian/Ubuntu names; gtkmm is only for the
+  SDK's test hosts).
 - **Windows**: Visual Studio 2022 with the C++ workload; use `cmake -B build -A x64`.
 
 Every push is built and tested on all three platforms by GitHub Actions; pushing a `v*` tag

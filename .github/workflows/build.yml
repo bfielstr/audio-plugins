@@ -45,7 +45,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
             libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libfontconfig1-dev libcairo2-dev libfreetype6-dev libpango1.0-dev zip
+            libfontconfig1-dev libcairo2-dev libfreetype6-dev libpango1.0-dev libgtkmm-3.0-dev zip
 
       - name: Configure
         shell: bash
