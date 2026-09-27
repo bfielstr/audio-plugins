@@ -7,6 +7,7 @@
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
+#include "pluginkit/vst/PresetBar.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cdropsource.h"
@@ -161,7 +162,8 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 140, 28), "STRETCHR", 14.0, true));
-    status = new Label (CRect (140, 6, 830, 28), "", 10.5);
+    status = new Label (CRect (140, 6, 620, 28), "", 10.5);
+    root->addView (new pk::PresetBar (CRect (630, 6, 840, 28), ctl));
     status->setDim (true);
     root->addView (status);
     auto* helpBtn = new ActionButton (CRect (848, 6, 870, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },

@@ -41,6 +41,18 @@ release, `SIMPLR_DEST=...` chooses the VST3 folder.
 Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*; in Live: *Settings → Plug-ins →
 Rescan* (with *Use VST3 Plug-in System Folders* on).
 
+## Presets
+
+Every plug-in has a **Presets** menu in its header: the presets in your preset folder, *Save
+Preset...*, *Load Preset File...* and *Reset to Defaults*. Presets are standard `.vstpreset` files,
+so hosts can load them as well. They live in
+
+| | |
+|---|---|
+| Windows | `Documents\VST3 Presets\bfielstr\<plug-in>` |
+| macOS | `~/Library/Audio/Presets/bfielstr/<plug-in>` |
+| Linux | `~/.vst3/presets/bfielstr/<plug-in>` |
+
 ## Build from source
 
 ```sh

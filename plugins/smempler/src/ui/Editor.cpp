@@ -8,6 +8,8 @@
 #include "WaveformView.h"
 #include "plugin/Controller.h"
 
+#include "pluginkit/vst/PresetBar.h"
+
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/coptionmenu.h"
@@ -98,7 +100,8 @@ void Editor::buildUI (CFrame* f)
     root->addView (tip (new ActionButton (CRect (8, 6, 60, 28), "Load", [this] { browseForSample (); }), help::kLoad));
     root->addView (tip (new ActionButton (CRect (64, 6, 86, 28), "<", [this] { stepSample (-1); }), help::kPrevNext));
     root->addView (tip (new ActionButton (CRect (88, 6, 110, 28), ">", [this] { stepSample (1); }), help::kPrevNext));
-    nameLabel = new Label (CRect (118, 6, 470, 28), "No sample", 12.0, true);
+    nameLabel = new Label (CRect (118, 6, 340, 28), "No sample", 12.0, true);
+    root->addView (new pk::PresetBar (CRect (346, 6, 472, 28), ctl));
     root->addView (nameLabel);
     bind (root, new Segmented (CRect (480, 6, 740, 28), this, kMode, {"Classic", "One-Shot", "Slicing"}));
     bind (root, new Toggle (CRect (750, 6, 810, 28), this, kWarp, "WARP"));

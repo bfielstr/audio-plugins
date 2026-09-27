@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cids.h"
 #include "Bridge.h"
 #include "Params.h"
 
@@ -16,7 +17,7 @@ class Editor;
 class Controller : public pk::ControllerBase, public Steinberg::Vst::IMidiMapping
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) {}
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Smempler"); }
 
     static Steinberg::FUnknown* createInstance (void*)
     {

@@ -12,6 +12,12 @@ if(PK_BUILD_PLUGINS)
         pluginkit/vst/ControllerBase.cpp
         pluginkit/vst/EditorBase.h
         pluginkit/vst/EditorBase.cpp
+        pluginkit/vst/Presets.h
+        pluginkit/vst/Presets.cpp
+        pluginkit/vst/PresetBar.h
+        pluginkit/vst/PresetBar.cpp
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/vstpresetfile.cpp
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp
         pluginkit/ui/Theme.h
         pluginkit/ui/Widgets.h
         pluginkit/ui/Widgets.cpp

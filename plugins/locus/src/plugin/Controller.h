@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cids.h"
 #include "SharedSpectrum.h"
 #include "Params.h"
 
@@ -10,7 +11,7 @@ namespace locus {
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) {}
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Locus"); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;

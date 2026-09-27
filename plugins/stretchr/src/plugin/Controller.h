@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cids.h"
 #include "Params.h"
 #include "Session.h"
 
@@ -10,7 +11,7 @@ namespace stretchr {
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) {}
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Stretchr"); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;

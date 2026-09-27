@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Cids.h"
 #include "Meters.h"
 #include "Params.h"
 
@@ -10,7 +11,7 @@ namespace multidyn {
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) {}
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Multidyn"); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;

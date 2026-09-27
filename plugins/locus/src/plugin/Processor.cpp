@@ -1,5 +1,9 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/Presets.h"
+
+#include "pluginterfaces/vst/ivstmessage.h"
+
 #include "Cids.h"
 #include "State.h"
 
@@ -132,6 +136,13 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
         st.has[id] = true;
     }
     return writeState (stream, st) ? kResultOk : kResultFalse;
+}
+
+tresult PLUGIN_API Processor::notify (IMessage* message)
+{
+    if (pk::presets::handleProcessorMessage (*this, message))
+        return kResultOk;
+    return AudioEffect::notify (message);
 }
 
 } // namespace locus

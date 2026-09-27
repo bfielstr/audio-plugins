@@ -20,7 +20,7 @@ public:
     static constexpr double kHeight = 440.0;
     // layout (also used by the host test)
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
-    static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorWidth = 436.0, kColorHeight = 160.0;
+    static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 160.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

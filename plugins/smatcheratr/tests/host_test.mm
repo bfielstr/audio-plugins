@@ -124,10 +124,10 @@ int main (int argc, char** argv)
 
             // colour display: the right handle sits at Freq / Amt Hi; dragging it up raises Amt Hi
             auto xOfHz = [] (double hz) {
-                return Editor::kColorLeft + std::log (hz / 20.0) / std::log (1000.0) * Editor::kColorWidth;
+                return Editor::kColorLeft + std::log (hz / 20.0) / std::log (1000.0) * Editor::kColorViewWidth;
             };
             auto yOfDb = [] (double db) {
-                return Editor::kColorTop + Editor::kColorHeight / 2 - db / 24.0 * (Editor::kColorHeight / 2 - 12.0);
+                return Editor::kColorTop + Editor::kColorViewHeight / 2 - db / 24.0 * (Editor::kColorViewHeight / 2 - 12.0);
             };
             const double hx = xOfHz (plainOf (rig, kColorFreq)), hy = yOfDb (24.0 * plainOf (rig, kColorHi));
             win.drag (hx, hy, hx, hy - 30);

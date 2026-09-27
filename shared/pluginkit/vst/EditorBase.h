@@ -32,6 +32,13 @@ public:
     // Host or UI changed a parameter: repaints the views bound to it. Override to do more.
     virtual void paramChanged (uint32_t id);
 
+    // Repaints everything (after a preset load or a reset).
+    void refresh ()
+    {
+        if (frame)
+            frame->invalid ();
+    }
+
     void setTooltipsEnabled (bool on);
     bool tooltipsEnabled () const { return controller->uiShowTips; }
     void resizeTo (double scale);

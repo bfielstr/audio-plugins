@@ -1,11 +1,15 @@
 // VST3 edit controller base: registers a ParamTable as automatable parameters, keeps the
-// editor in sync with host changes and remembers editor-only state (size, tooltips).
+// editor in sync with host changes, remembers editor-only state (size, tooltips) and handles
+// presets (.vstpreset files in the user's preset folder).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
 
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "public.sdk/source/vst/vstparameters.h"
+
+#include <string>
+#include <vector>
 
 namespace pk {
 
@@ -34,9 +38,11 @@ public:
     Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) override;
     Steinberg::tresult PLUGIN_API setParamNormalized (Steinberg::Vst::ParamID tag,
                                                       Steinberg::Vst::ParamValue value) override;
-    // Editor-only state (interface size, tooltips).
+    // Editor-only state (interface size, tooltips, preset name).
     Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) override;
     Steinberg::tresult PLUGIN_API getState (Steinberg::IBStream* state) override;
+    // Handles the preset messages (see Presets.h); subclasses fall back to this from their own.
+    Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override;
     void editorAttached (Steinberg::Vst::EditorView* editor) override;
     void editorRemoved (Steinberg::Vst::EditorView* editor) override;
 
@@ -48,12 +54,27 @@ public:
     void setPlainFromUI (uint32_t id, double plainValue); // complete gesture
     void markDirty ();
 
+    // Presets. The processor's state travels in messages, so saving and loading work from the
+    // editor without any help from the host. Subclasses call setPresetInfo() in their constructor.
+    void setPresetInfo (const Steinberg::FUID& processorClassId, const char* pluginName);
+    std::string presetFolder () const;
+    const std::string& presetName () const { return presetTitle; }
+    bool savePreset (const std::string& path); // the processor answers synchronously in-process
+    bool loadPreset (const std::string& path);
+    void resetToDefaults (); // every parameter back to its default, as complete gestures
+
     double uiScale = 1.0;
     bool uiShowTips = true;
 
 protected:
+    void refreshEditor ();
+
     EditorBase* editor = nullptr;
     const ParamTable& tableRef;
+    Steinberg::FUID presetClassId;
+    std::string presetPlugin, presetTitle;
+    std::string pendingSavePath;
+    bool lastSaveOk = false;
 };
 
 } // namespace pk

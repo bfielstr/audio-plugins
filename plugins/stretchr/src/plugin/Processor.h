@@ -27,6 +27,7 @@ public:
     Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) override;
     Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) override;
     Steinberg::tresult PLUGIN_API getState (Steinberg::IBStream* state) override;
+    Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override;
 
 private:
     Session* session = nullptr;

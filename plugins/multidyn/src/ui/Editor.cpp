@@ -5,6 +5,7 @@
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
+#include "pluginkit/vst/PresetBar.h"
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/coptionmenu.h"
@@ -93,7 +94,8 @@ void Editor::buildUI (CFrame* f)
     root->addView (new Label (CRect (12, 6, 150, 28), "MULTIDYN", 14.0, true));
     root->addView (new Label (CRect (160, 6, 205, 28), "Bands", 10.5, false, 2));
     bind (root, new Segmented (CRect (210, 7, 330, 27), this, kBands, {"1", "2", "3", "4"}));
-    scStatus = new Label (CRect (344, 6, 700, 28), "", 10.5);
+    scStatus = new Label (CRect (344, 6, 560, 28), "", 10.5);
+    root->addView (new pk::PresetBar (CRect (570, 6, 778, 28), ctl));
     scStatus->setDim (true);
     root->addView (scStatus);
     root->addView (tip (new ActionButton (CRect (786, 6, 808, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },

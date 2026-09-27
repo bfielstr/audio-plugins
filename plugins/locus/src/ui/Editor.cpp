@@ -5,6 +5,7 @@
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
+#include "pluginkit/vst/PresetBar.h"
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/coptionmenu.h"
@@ -47,7 +48,8 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "LOCUS", 14.0, true));
-    latencyLabel = new Label (CRect (200, 6, 560, 28), "", 10.5);
+    latencyLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
+    root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     latencyLabel->setDim (true);
     root->addView (latencyLabel);
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
