@@ -104,6 +104,8 @@ constexpr int kOnly = 0;                  // the band in single-band mode
 static void neutralize (Engine& e)
 {
     e.setParam (kOutput, 0.0);
+    e.setParam (kMode, kBase);
+    e.setParam (kPreLimit, 0.0);
     for (int b = 0; b < kMaxBands; ++b)
     {
         e.setParam (bandParam (b, kBandInput), 0.0);
@@ -399,9 +401,10 @@ TEST (preset_defaults)
     // A fresh engine is the four-band upward-compression preset (OTT pushed further).
     Engine e;
     e.prepare (kSr, 512);
-    CHECK (std::lround (e.param (kBands)) == 3 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
+    CHECK (std::lround (e.param (kBands)) == 2 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
                std::fabs (e.param (kXover2) - 2500.0) < 1e-9 && std::fabs (e.param (kXover3) - 8000.0) < 1e-9,
-           "4 bands at 88.3 Hz / 2.5 kHz / 8 kHz");
+           "3 bands at 88.3 Hz / 2.5 kHz (8 kHz for a fourth)");
+    CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) < 0.5, "Character mode, pre-limit off");
     CHECK (e.param (bandParam (2, kAboveRatio)) == kRatioInf && std::fabs (e.param (bandParam (1, kAboveRatio)) - 66.7) < 1e-9 &&
                e.param (bandParam (0, kBelowRatio)) == kRatioInf && std::fabs (e.param (bandParam (3, kBelowRatio)) - 4.17) < 1e-9,
            "ratios");
@@ -419,6 +422,62 @@ TEST (preset_defaults)
     std::printf ("    preset: -50 dB in -> %.1f dB rms, -6 dB in -> %.1f dB rms\n", quiet, loud);
     CHECK (loud - quiet < 16.0, "preset output range %.1f dB for 44 dB in", loud - quiet);
     CHECK (quiet > -45.0, "quiet material is lifted: %.1f", quiet);
+}
+
+TEST (pre_limiter_rounds_transients)
+{
+    auto e = engine ();
+    const int lat = e->latency ();
+    CHECK (lat == 48, "1 ms look-ahead at 48 kHz: %d", lat);
+    // under the ceiling nothing but the delay happens
+    e->setParam (kPreLimit, 1.0);
+    e->setParam (kPreLimitCeiling, -12.0);
+    e->reset ();
+    auto in = sine (1000.0, -20.0, 0.5);
+    auto out = run (*e, in);
+    double err = 0;
+    for (size_t i = (size_t)lat + 1000; i < out.l.size (); ++i)
+        err = std::max (err, (double)std::fabs (out.l[i] - in.l[i - (size_t)lat]));
+    CHECK (err < 1e-4, "delayed only: %g", err);
+    // a 0 dB burst is held near the ceiling from its first cycle on, not squared
+    auto loud = sine (1000.0, 0.0, 0.5);
+    e->reset ();
+    out = run (*e, loud);
+    const double body = peakDb (out.l, 4800, 24000), first = peakDb (out.l, 0, (size_t)lat + 96);
+    CHECK (body < -10.5 && body > -13.5, "held at the ceiling: %f", body);
+    CHECK (first < -9.0, "the transient is rounded: %f", first);
+    e->setParam (kPreLimit, 0.0);
+    e->reset ();
+    out = run (*e, loud);
+    CHECK (std::fabs (peakDb (out.l, 4800, 24000)) < 0.1, "off: untouched %f", peakDb (out.l, 4800, 24000));
+}
+
+TEST (character_mode_is_slower_and_smoother)
+{
+    // a -6 dB tone after 0.5 s of -40 dB: Character eases into the compression (50 ms RMS window,
+    // rounded onset) and lands at the same amount of gain reduction
+    auto levelAfter = [] (int mode, double secs) {
+        auto e = engine ();
+        e->setParam (kMode, mode);
+        e->setParam (kDetector, kRms);
+        e->setParam (bandParam (kOnly, kAboveThresh), -30.0);
+        e->setParam (bandParam (kOnly, kAboveRatio), 4.0);
+        e->setParam (bandParam (kOnly, kAttack), 10.0);
+        e->setParam (bandParam (kOnly, kRelease), 100.0);
+        e->reset ();
+        Sig in = sine (1000.0, -40.0, 0.5);
+        Sig loud = sine (1000.0, -6.0, 0.5);
+        in.l.insert (in.l.end (), loud.l.begin (), loud.l.end ());
+        in.r = in.l;
+        auto out = run (*e, in);
+        const size_t start = (size_t)((0.5 + secs) * kSr) + 48;
+        return peakDb (out.l, start, start + 480);
+    };
+    const double baseEarly = levelAfter (kBase, 0.01), charEarly = levelAfter (kCharacter, 0.01);
+    CHECK (charEarly > baseEarly + 1.0, "Character eases in: %f vs Base %f", charEarly, baseEarly);
+    const double baseLate = levelAfter (kBase, 0.4), charLate = levelAfter (kCharacter, 0.4);
+    CHECK (std::fabs (charLate - baseLate) < 1.5, "same steady state: %f vs %f", charLate, baseLate);
+    CHECK (baseLate < -6.0 - 15.0, "compressing: %f", baseLate);
 }
 
 TEST (rms_ignores_short_peaks_more_than_peak)

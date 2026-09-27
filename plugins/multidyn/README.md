@@ -23,11 +23,21 @@ because the envelope works on the level, how fast the gain moves also depends on
 is past the threshold. Upward compression never lifts a signal past the Below threshold, so hits
 after silence don't jump.
 
-**Default settings** are a four-band upward-compression preset (Live's "OTT" pushed further):
-bands split at 88.3 Hz, 2.5 kHz and 8 kHz, Below -40.8 / -41.8 / -40.8 / -40.8 dB at 1 : inf (the top
-band 1 : 4.17), Above -33.8 / -30.2 / -35.5 / -35.5 dB at 1 : 66.7 / 1 : 66.7 / 1 : inf / 1 : inf,
-input +5.2 dB, output +24.0 / +9.1 / +11.3 / +11.7 dB, OTT's attack/release times, Soft Knee and RMS on,
-and Output -7 dB to leave room for a saturator after it. Use Amount to dial it back.
+**Default settings** are a heavy upward-compression preset (Live's "OTT" pushed further) in
+Character mode: 3 bands split at 88.3 Hz and 2.5 kHz (8 kHz for a fourth), Below -40.8 / -41.8 /
+-40.8 dB at 1 : inf (a fourth band at 1 : 4.17), Above -33.8 / -30.2 / -35.5 dB at 1 : 66.7 / 1 : 66.7 /
+1 : inf, input +5.2 dB, output +24.0 / +9.1 / +11.3 dB, OTT's attack/release times, Soft Knee and RMS
+on, and Output -7 dB to leave room for a saturator after it. Use Amount to dial it back.
+
+**Mode**: *Base* is the plain device. *Character* detects more slowly (a 50 ms RMS window and a
+rounded onset instead of 20 ms), has a wider knee (12 dB) and a release that slows down up to 3x the
+deeper the gain change, so it moves like a character compressor rather than grabbing peaks.
+
+**Pre-Limit**: a 1 ms look-ahead limiter on each band's input (after the band's Input gain) at the
+**Ceiling**. When you push hard into the thresholds, the transient is rounded off at the ceiling
+instead of being squared by the compressor's attack, and what follows keeps its shape. Every band
+always runs through the 1 ms look-ahead, so the latency (48 samples at 48 kHz) never changes; it is
+reported to the host.
 
 Bands are split with Linkwitz-Riley (24 dB/oct) crossovers, phase-aligned so they sum back flat
 (within 0.05 dB, for any band count) when nothing is processed.
@@ -47,7 +57,7 @@ controls on the right.
   bands, **Alt/Option** = Above and Below together, **Shift** = fine, **double-click** = 1:1. The
   number in a block is the gain it applies at its extreme (silence for Below, 0 dB for Above).
 - **Global**: Output, Amount (0% = every ratio acts as 1:1), Time (scales all attack/release
-  times), Soft Knee, Peak/RMS detection.
+  times), Mode (Base / Character), Soft Knee, Peak/RMS detection, Pre-Limit and its Ceiling.
 - **Side-chain**: route another track into inputs 3/4 in REAPER; On, Gain, Dry/Wet (detector blend)
   and Listen.
 

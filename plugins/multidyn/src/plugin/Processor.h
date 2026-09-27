@@ -29,6 +29,7 @@ public:
                                                       Steinberg::int32 numOuts) override;
     Steinberg::tresult PLUGIN_API canProcessSampleSize (Steinberg::int32 symbolicSampleSize) override;
     Steinberg::tresult PLUGIN_API setupProcessing (Steinberg::Vst::ProcessSetup& setup) override;
+    Steinberg::uint32 PLUGIN_API getLatencySamples () override { return (Steinberg::uint32)engine.latency (); }
     Steinberg::tresult PLUGIN_API setActive (Steinberg::TBool state) override;
     Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) override;
     Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) override;

@@ -25,7 +25,11 @@ enum ParamId : uint32_t
     kScListen,
     kBandBase, // kMaxBands x kBandBlock, see bandParam(); band 0 is the lowest
 
-    kNumParams = kBandBase + 4 * 10
+    kMode = kBandBase + 4 * 10, // Base / Character (appended after the bands: IDs are persisted)
+    kPreLimit,                  // look-ahead limiter on each band's driven input
+    kPreLimitCeiling,           // dB
+
+    kNumParams
 };
 
 constexpr int kMaxBands = 4;
@@ -47,6 +51,7 @@ enum BandField
 constexpr uint32_t bandParam (int band, int field) { return (uint32_t)(kBandBase + band * kBandBlock + field); }
 
 enum DetectorMode { kPeak = 0, kRms };
+enum Mode { kBase = 0, kCharacter };
 
 // Ratios are written Live-style as "1 : r": r > 1 compresses (Above: loud gets quieter, Below:
 // quiet gets louder), r < 1 expands, and the maximum is treated as infinity (limiting).

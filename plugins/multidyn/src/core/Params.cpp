@@ -17,7 +17,7 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kTime, "Time", "Time", 0.1, 10.0, 1.0, Curve::Log, Disp::Percent));
     t.push_back (toggle (kSoftKnee, "Soft Knee", "Soft Knee", true));
     t.push_back (choice (kDetector, "Peak/RMS", "Detect", {"Peak", "RMS"}, kRms));
-    t.push_back (choice (kBands, "Bands", "Bands", {"1", "2", "3", "4"}, 3));
+    t.push_back (choice (kBands, "Bands", "Bands", {"1", "2", "3", "4"}, 2));
     t.push_back (real (kXover1, "Crossover 1", "X1", 20.0, 16000.0, 88.3, Curve::Log, Disp::Hz));
     t.push_back (real (kXover2, "Crossover 2", "X2", 20.0, 16000.0, 2500.0, Curve::Log, Disp::Hz));
     t.push_back (real (kXover3, "Crossover 3", "X3", 20.0, 16000.0, 8000.0, Curve::Log, Disp::Hz));
@@ -26,7 +26,7 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (percent (kScMix, "Sidechain Dry/Wet", "SC Mix", 1.0));
     t.push_back (toggle (kScListen, "Sidechain Listen", "Listen", false));
 
-    // Defaults: four bands of heavy upward compression (the "OTT" preset pushed further: the
+    // Defaults (3 bands, Character mode): heavy upward compression (the "OTT" preset pushed further: the
     // Below blocks at 1:inf lift everything to the threshold), with the attack / release times of
     // OTT. Output -7 dB makes room for a saturator after it.
     struct BandDefaults
@@ -55,6 +55,9 @@ std::vector<ParamInfo> buildTable ()
         t.push_back (real (id (kAttack), keep (n + " Attack"), "Attack", 0.1, 1000.0, d.attack, Curve::Log, Disp::Ms));
         t.push_back (real (id (kRelease), keep (n + " Release"), "Release", 1.0, 3000.0, d.release, Curve::Log, Disp::Ms));
     }
+    t.push_back (choice (kMode, "Mode", "Mode", {"Base", "Character"}, kCharacter));
+    t.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", false));
+    t.push_back (real (kPreLimitCeiling, "Pre-Limit Ceiling", "Ceiling", -30.0, 0.0, -6.0, Curve::Linear, Disp::Db));
     return t;
 }
 

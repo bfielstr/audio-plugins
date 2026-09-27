@@ -141,14 +141,19 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kGlobalColLeft, 220), this, kAmount));
 
     // bottom row
-    bind (root, new Toggle (CRect (8, 352, 100, 372), this, kSoftKnee, "Soft Knee"));
-    bind (root, new Segmented (CRect (108, 352, 220, 372), this, kDetector, {"Peak", "RMS"}));
-    auto* sp = new Panel (CRect (240, 344, 760, 416), "SIDECHAIN");
+    bind (root, new Segmented (CRect (8, 352, 128, 372), this, kMode, {"Base", "Character"}));
+    bind (root, new Toggle (CRect (136, 352, 218, 372), this, kSoftKnee, "Soft Knee"));
+    bind (root, new Segmented (CRect (226, 352, 338, 372), this, kDetector, {"Peak", "RMS"}));
+    auto* sp = new Panel (CRect (350, 344, 640, 416), "SIDECHAIN");
     root->addView (sp);
-    bind (sp, new Toggle (CRect (14, 30, 74, 50), this, kScOn, "On"));
-    bind (sp, new Knob (knobRect (96, 6), this, kScGain, "Gain", true));
-    bind (sp, new Knob (knobRect (170, 6), this, kScMix, "Dry/Wet"));
-    bind (sp, new Toggle (CRect (246, 30, 330, 50), this, kScListen, "Listen"));
+    bind (sp, new Toggle (CRect (12, 30, 66, 50), this, kScOn, "On"));
+    bind (sp, new Knob (knobRect (78, 6), this, kScGain, "Gain", true));
+    bind (sp, new Knob (knobRect (144, 6), this, kScMix, "Dry/Wet"));
+    bind (sp, new Toggle (CRect (214, 30, 280, 50), this, kScListen, "Listen"));
+    auto* lp = new Panel (CRect (648, 344, 822, 416), "PRE-LIMIT");
+    root->addView (lp);
+    bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
+    bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();

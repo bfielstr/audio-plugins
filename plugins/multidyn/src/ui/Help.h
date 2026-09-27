@@ -12,6 +12,15 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Overall output level.";
         case kAmount: return "Scales all compression and expansion. At 0% every ratio behaves like 1:1 (no effect).";
         case kTime: return "Scales every Attack and Release time together, keeping their proportions.";
+        case kMode:
+            return "Base: the plain device. Character: slower, smoother detection (50 ms RMS window, a rounded "
+                   "onset), a wider knee and a release that slows down the deeper the gain change - a character "
+                   "compressor rather than a peak grabber.";
+        case kPreLimit:
+            return "A 1 ms look-ahead limiter on each band's driven input: a transient pushed hard into the "
+                   "thresholds is rounded off at the ceiling instead of being squared by the attack, and what "
+                   "follows it keeps its shape.";
+        case kPreLimitCeiling: return "Level the pre-limiter holds each band's input to (after the band's Input gain).";
         case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";
         case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
         case kBands: return "Number of frequency bands (1 = a single full-range processor).";

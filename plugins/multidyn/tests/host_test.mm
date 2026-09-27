@@ -89,7 +89,7 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         CHECK (rig.component->getBusCount (kAudio, kInput) == 2, "main + side-chain inputs");
         // a fresh instance is the four-band upward-compression preset
-        CHECK (std::lround (plainOf (rig, kBands)) == 3 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
+        CHECK (std::lround (plainOf (rig, kBands)) == 2 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (0, kBandOutput)) - 24.0) < 1e-6 &&
                    plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, kOutput) + 7.0) < 1e-6,
@@ -100,11 +100,13 @@ int main (int argc, char** argv)
         set (st, kBands, 0); // single band: band 0
         set (st, kSoftKnee, 0);
         set (st, kDetector, kPeak);
+        set (st, kMode, kBase);
         set (st, bandParam (0, kAboveThresh), -20.0);
         set (st, bandParam (0, kAboveRatio), 4.0);
         set (st, bandParam (0, kRelease), 500.0);
         CHECK (apply (rig, st), "setState");
         CHECK (rig.start (), "start");
+        CHECK (rig.processor->getLatencySamples () == 48, "look-ahead latency %u", rig.processor->getLatencySamples ());
         std::vector<float> out;
         rig.render (2.0, out, nullptr, tones (-6.0, -100.0));
         CHECK (allFinite (out), "finite");
@@ -181,6 +183,7 @@ int main (int argc, char** argv)
         // --- editor: screenshot and the display's gestures ---
         State ui = baseState ();
         set (ui, kBands, 2); // three bands: band 2 on top
+        set (ui, kMode, kBase);
         for (int b = 0; b < kNumBands; ++b)
         {
             set (ui, bandParam (b, kAboveRatio), b == kHigh ? 3.0 : 2.0);
