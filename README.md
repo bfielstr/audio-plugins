@@ -98,3 +98,8 @@ tests        core_tests.cpp (headless DSP tests) and host_test.mm (loads the bui
 
 The processor and controller share memory (the plug-in is registered as not distributable), which
 is how every mainstream host, REAPER included, runs VST3 instruments.
+
+## License
+
+Simplr is released under the [MIT License](LICENSE). It builds on the Steinberg VST 3 SDK (MIT),
+VSTGUI (BSD 3-clause) and dr_libs (public domain / MIT-0); see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
