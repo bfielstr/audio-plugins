@@ -168,6 +168,7 @@ std::string ParamTable::toText (uint32_t id, double v) const
             return std::to_string (beats) + (beats == 1 ? " Beat" : " Beats");
         }
         case Disp::Degrees: return fmt ("%.0f\xC2\xB0", v);
+        case Disp::Bpm: return fmt ("%.2f BPM", v);
         case Disp::Plain:
             if (p.type == PType::Int)
                 return fmt ("%.0f", v);

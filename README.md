@@ -1,6 +1,6 @@
-# Audio plug-ins: Simplr, Multidyn, Lowfocus
+# Audio plug-ins: Simplr, Multidyn, Lowfocus, Stretchr
 
-VST3 plug-ins for REAPER (and any VST3 host) on **macOS, Windows and Linux**, built on the
+VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
@@ -8,6 +8,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Simplr**](plugins/simplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Lowfocus**](plugins/lowfocus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
+| [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
 
 ![Simplr](docs/simplr/ui_slicing.png)
 
@@ -31,10 +32,11 @@ its SHA-256 checksum and install the `.vst3` bundles into a **`bfielstr`** folde
 VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running an installer again replaces the
 installed versions; copies that older installers put directly in the VST3 folder are removed (only
 ours; the vendor in the bundle is checked). Options (environment variables):
-`SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.3.0` picks a
+`SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.4.0` picks a
 release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
-Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*.
+Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*; in Live: *Settings → Plug-ins →
+Rescan* (with *Use VST3 Plug-in System Folders* on).
 
 ## Build from source
 
@@ -60,6 +62,7 @@ publishes a release and then runs the installers against it.
 plugins/simplr     sampler                 src/core (DSP) · src/plugin (VST3) · src/ui · tests
 plugins/multidyn   multiband dynamics      same structure
 plugins/lowfocus   low-end focus           same structure
+plugins/stretchr   pitch/time editor       same structure (reuses Simplr's warp engines)
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

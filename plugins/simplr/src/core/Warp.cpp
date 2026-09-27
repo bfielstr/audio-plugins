@@ -363,14 +363,14 @@ void PvWarp::prepare (double sampleRate)
     fifoR.assign (kFifo, 0.0f);
 }
 
-void PvWarp::start (const SampleData& s, const PlayRegion& r, bool fm, float f01, int order)
+void PvWarp::start (const SampleData& s, const PlayRegion& r, bool fm, float f01, int order, int frameSize)
 {
     region = r;
     formantMode = fm;
     formants = std::clamp (f01, 0.0f, 1.0f);
     envOrder = order;
-    N = s.sampleRate > 50000.0 ? 4096 : 2048;
-    fft = N == 4096 ? &fft4k : &fft2k;
+    N = frameSize == 1024 || frameSize == 2048 || frameSize == 4096 ? frameSize : (s.sampleRate > 50000.0 ? 4096 : 2048);
+    fft = N == 4096 ? &fft4k : (N == 2048 ? &fft2k : &fft1k);
     hs = N / 4;
     for (int i = 0; i < N; ++i)
         window[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N);
@@ -498,7 +498,9 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     }
 
     // formant correction (Complex Pro): keep the spectral envelope where it was before resampling
-    const bool doFormants = formantMode && formants > 0.0f && std::fabs (w.pitchRatio - 1.0) > 1e-4;
+    const bool shiftFormants = std::fabs (w.formantShift - 1.0) > 1e-4;
+    const bool doFormants =
+        (formantMode && formants > 0.0f && std::fabs (w.pitchRatio - 1.0) > 1e-4) || shiftFormants;
     if (doFormants)
     {
         std::vector<Fft::cf>& tmp = sa; // sa is no longer needed
@@ -511,10 +513,16 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
         fft->forward (cep.data (), tmp.data ());
         for (int k = 0; k < bins; ++k)
             logEnv[(size_t)k] = tmp[(size_t)k].real ();
+        // After resampling by the pitch ratio, bin k lands at k * ratio; the envelope that should end up
+        // there is the one from (k * ratio) / target, target being how far the envelope itself moves.
         const float ratio = (float)w.pitchRatio;
+        const float amount = shiftFormants ? 1.0f : formants;
+        const float target = shiftFormants ? (float)(std::pow (w.pitchRatio, formantMode ? 1.0 - formants : 1.0) *
+                                                     w.formantShift)
+                                           : 1.0f;
         for (int k = 0; k < bins; ++k)
         {
-            const float kk = k * ratio;
+            const float kk = k * ratio / target;
             float e2;
             if (kk >= bins - 1)
                 e2 = logEnv[(size_t)bins - 1];
@@ -524,7 +532,7 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
                 const float fr0 = kk - i0;
                 e2 = logEnv[(size_t)i0] + fr0 * (logEnv[(size_t)i0 + 1] - logEnv[(size_t)i0]);
             }
-            corr[(size_t)k] = std::clamp (std::exp (formants * (e2 - logEnv[(size_t)k])), 0.06f, 16.0f);
+            corr[(size_t)k] = std::clamp (std::exp (amount * (e2 - logEnv[(size_t)k])), 0.06f, 16.0f);
         }
     }
 

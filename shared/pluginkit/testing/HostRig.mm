@@ -65,7 +65,7 @@ bool Rig::start (double sr, int blockSize, bool activateAux)
     if (activateAux)
         for (int32 i = 0; i < component->getBusCount (kAudio, kInput); ++i)
             component->activateBus (kAudio, kInput, i, true);
-    ProcessSetup setup {kRealtime, kSample32, block, sampleRate};
+    ProcessSetup setup {processMode, kSample32, block, sampleRate};
     if (processor->setupProcessing (setup) != kResultOk)
         return false;
     if (component->setActive (true) != kResultOk)
@@ -130,6 +130,7 @@ void Rig::render (double seconds, std::vector<float>& outL, std::vector<float>* 
                 if (input)
                     input (bus, ch, buf, block, position);
             }
+        ctx.projectTimeSamples = position;
         processor->process (data);
         events.clear ();
         changes.clearQueue ();

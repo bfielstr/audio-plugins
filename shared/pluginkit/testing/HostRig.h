@@ -56,6 +56,7 @@ struct Rig
     Steinberg::Vst::ProcessContext ctx {};
     double sampleRate = 48000.0;
     int block = 480;
+    Steinberg::int32 processMode = Steinberg::Vst::kRealtime; // set before start()
     long long position = 0;
 
     bool load (const std::string& path);

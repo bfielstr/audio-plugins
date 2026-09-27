@@ -60,11 +60,11 @@ jobs:
           mkdir -p dist
           cd build/VST3/Release
           ls -d *.vst3
-          test -d Simplr.vst3 && test -d Multidyn.vst3 && test -d Lowfocus.vst3
+          test -d Simplr.vst3 && test -d Multidyn.vst3 && test -d Lowfocus.vst3 && test -d Stretchr.vst3
           case "$RUNNER_OS" in
-            macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 ;;
-            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 ;;
-            Windows) pwsh -Command "Compress-Archive -Path Simplr.vst3,Multidyn.vst3,Lowfocus.vst3 -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
+            macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 Stretchr.vst3 ;;
+            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Simplr.vst3 Multidyn.vst3 Lowfocus.vst3 Stretchr.vst3 ;;
+            Windows) pwsh -Command "Compress-Archive -Path Simplr.vst3,Multidyn.vst3,Lowfocus.vst3,Stretchr.vst3 -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
           esac
 
       - uses: actions/upload-artifact@v4
@@ -99,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" --title "Plug-ins $GITHUB_REF_NAME (Simplr, Multidyn, Lowfocus)" \
+            --repo "$GITHUB_REPOSITORY" --title "Plug-ins $GITHUB_REF_NAME (Simplr, Multidyn, Lowfocus, Stretchr)" \
             --notes "Install with one command:
 
           **macOS / Linux**

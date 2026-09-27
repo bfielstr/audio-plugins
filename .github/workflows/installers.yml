@@ -41,8 +41,10 @@ jobs:
           sh scripts/install.sh
           test ! -d "$SIMPLR_DEST/Simplr.vst3"
           test -d "$SIMPLR_DEST/Lowfocus.vst3"
-          for p in Simplr Multidyn Lowfocus; do
-            b="$SIMPLR_DEST/bfielstr/$p.vst3"
+          # every bundle the release contains (at least the first three plug-ins)
+          for p in Simplr Multidyn Lowfocus; do test -d "$SIMPLR_DEST/bfielstr/$p.vst3"; done
+          for b in "$SIMPLR_DEST"/bfielstr/*.vst3; do
+            p="$(basename "$b" .vst3)"
             if [ "$RUNNER_OS" = "macOS" ]; then
               test -f "$b/Contents/MacOS/$p"
               codesign -v "$b"
@@ -69,8 +71,11 @@ jobs:
           ./scripts/install.ps1
           if (Test-Path (Join-Path $env:SIMPLR_DEST 'Simplr.vst3')) { throw 'old top-level copy not removed' }
           foreach ($p in 'Simplr', 'Multidyn', 'Lowfocus') {
-            $b = Join-Path $env:SIMPLR_DEST "bfielstr\$p.vst3"
-            if (-not (Test-Path "$b\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
+            if (-not (Test-Path (Join-Path $env:SIMPLR_DEST "bfielstr\$p.vst3"))) { throw "$p missing" }
+          }
+          Get-ChildItem (Join-Path $env:SIMPLR_DEST 'bfielstr') -Filter '*.vst3' | ForEach-Object {
+            $p = $_.Name -replace '\.vst3$', ''
+            if (-not (Test-Path "$($_.FullName)\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
             Write-Host "$p installed"
           }
           $again = ./scripts/install.ps1 6>&1 | Out-String

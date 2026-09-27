@@ -41,6 +41,7 @@ struct WarpRates
     double srcPerOut = 1.0;  // timeline source frames per output sample (tempo sync)
     double pitchRatio = 1.0; // 2^(semitones/12)
     double srcRate = 1.0;    // source sample rate / host sample rate
+    double formantShift = 1.0; // PvWarp: moves the spectral envelope by this ratio (1 = off)
 };
 
 //==============================================================================
@@ -112,7 +113,9 @@ class PvWarp
 {
 public:
     void prepare (double hostSr);
-    void start (const SampleData& s, const PlayRegion& r, bool formantMode, float formants01, int envelopeOrder);
+    // frameSize: 1024, 2048 or 4096; 0 picks 2048 (4096 above 50 kHz).
+    void start (const SampleData& s, const PlayRegion& r, bool formantMode, float formants01, int envelopeOrder,
+                int frameSize = 0);
     void render (const SampleData& s, float* L, float* R, int n, const WarpRates& w);
 
     double virtualPos () const { return v; }
@@ -126,7 +129,7 @@ private:
     static constexpr int kMaxN = 4096;
     static constexpr int kFifo = 16384;
     PlayRegion region;
-    Fft fft2k {2048}, fft4k {4096};
+    Fft fft1k {1024}, fft2k {2048}, fft4k {4096};
     Fft* fft = &fft2k;
     int N = 2048, hs = 512;
     bool stereo = false, formantMode = false, firstFrame = true;
