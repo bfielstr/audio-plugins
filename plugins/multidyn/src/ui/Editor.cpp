@@ -28,8 +28,16 @@ using pk::Toggle;
 namespace {
 constexpr double kKnobW = 56, kKnobH = 64;
 CRect knobRect (double x, double y) { return CRect (x, y, x + kKnobW, y + kKnobH); }
-constexpr double kLaneTop = 42, kLaneStep = 98;
-double laneY (int band) { return kLaneTop + (kNumBands - 1 - band) * kLaneStep; } // High on top
+
+std::string shortHz (double hz)
+{
+    char buf[32];
+    if (hz >= 1000.0)
+        std::snprintf (buf, sizeof (buf), hz >= 10000.0 ? "%.0fk" : "%.1fk", hz / 1000.0);
+    else
+        std::snprintf (buf, sizeof (buf), "%.0f", hz);
+    return buf;
+}
 
 class Background : public CViewContainer
 {
@@ -47,7 +55,19 @@ public:
 
 Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
-void Editor::onClose () { display = nullptr; }
+void Editor::onClose ()
+{
+    display = nullptr;
+    for (int b = 0; b < kMaxBands; ++b)
+    {
+        bandColumns[b] = nullptr;
+        rangeLabels[b] = nullptr;
+        for (auto& g : modeGroups[b])
+            g = nullptr;
+    }
+    for (auto& k : xoverKnobs)
+        k = nullptr;
+}
 
 void Editor::buildUI (CFrame* f)
 {
@@ -59,66 +79,68 @@ void Editor::buildUI (CFrame* f)
     };
 
     // top bar
-    root->addView (new Label (CRect (12, 6, 200, 28), "MULTIDYN", 14.0, true));
-    scStatus = new Label (CRect (200, 6, 560, 28), "", 10.5);
+    root->addView (new Label (CRect (12, 6, 150, 28), "MULTIDYN", 14.0, true));
+    root->addView (new Label (CRect (160, 6, 205, 28), "Bands", 10.5, false, 2));
+    bind (root, new Segmented (CRect (210, 7, 330, 27), this, kBands, {"1", "2", "3", "4"}));
+    scStatus = new Label (CRect (344, 6, 610, 28), "", 10.5);
     scStatus->setDim (true);
     root->addView (scStatus);
-    root->addView (tip (new ActionButton (CRect (590, 6, 612, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
-                                          [this] { return tooltipsEnabled (); }),
-                        "Show or hide these help tooltips."));
-    root->addView (new ActionButton (CRect (618, 6, 670, 28), "Menu", [this] { showMenu (CPoint (618, 28)); }));
     const char* tabNames[] = {"T", "B", "A"};
     tabButtons.clear ();
     for (int i = 0; i < 3; ++i)
     {
-        auto* b = new ActionButton (CRect (716 + i * 58, 6, 770 + i * 58, 28), tabNames[i], [this, i] { setColumn (i); },
+        auto* b = new ActionButton (CRect (620 + i * 52, 6, 668 + i * 52, 28), tabNames[i], [this, i] { setColumn (i); },
                                     [this, i] { return column == i; });
         tip (b, help::kTabs);
         root->addView (b);
         tabButtons.push_back (b);
     }
+    root->addView (tip (new ActionButton (CRect (786, 6, 808, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
+                                          [this] { return tooltipsEnabled (); }),
+                        "Show or hide these help tooltips."));
+    root->addView (new ActionButton (CRect (814, 6, 912, 28), "Menu", [this] { showMenu (CPoint (814, 28)); }));
 
-    // crossover column + per-band controls
-    for (int b = 0; b < kNumBands; ++b)
-    {
-        const double y = laneY (b);
-        if (b == kHigh || b == kLow)
-        {
-            const uint32_t onId = b == kHigh ? kHighOn : kLowOn;
-            const uint32_t fId = b == kHigh ? kHighFreq : kLowFreq;
-            bind (root, new Toggle (CRect (8, y + 4, 92, y + 24), this, onId, b == kHigh ? "High" : "Low"));
-            bind (root, new Knob (knobRect (22, y + 28), this, fId, "Freq"));
-        }
-        else
-        {
-            auto* l = new Label (CRect (8, y + 40, 92, y + 56), "Mid band", 10.5, false, 1);
-            l->setDim (true);
-            root->addView (l);
-        }
-        bind (root, new Toggle (CRect (98, y + 4, 140, y + 24), this, bandParam (b, kBandActive), "On"));
-        bind (root, new Toggle (CRect (142, y + 4, 162, y + 24), this, bandParam (b, kBandSolo), "S"));
-        bind (root, new Knob (knobRect (102, y + 28), this, bandParam (b, kBandInput), "Input", true));
-        bind (root, new Knob (knobRect (646, y + 16), this, bandParam (b, kBandOutput), "Output", true));
-    }
-
-    display = new DynDisplay (CRect (168, kLaneTop, 640, kLaneTop + 3 * kLaneStep + DynDisplay::kScaleHeight - 4), this, ctl);
+    display = new DynDisplay (CRect (8, kDisplayTop, 912, kDisplayBottom), this, ctl);
     display->setTooltipText (help::kDisplay);
     root->addView (display);
 
-    // right column: T / B / A
+    // one column per band (lowest on the left), crossover knobs in between
     const int fields[3][2] = {{kAttack, kRelease}, {kBelowThresh, kBelowRatio}, {kAboveThresh, kAboveRatio}};
     const char* labels[3][2] = {{"Attack", "Release"}, {"Below", "Ratio"}, {"Above", "Ratio"}};
-    for (int m = 0; m < 3; ++m)
+    for (int b = 0; b < kMaxBands; ++b)
     {
-        columns[m] = new Group (CRect (706, 0, 900, kHeight));
-        root->addView (columns[m]);
-        for (int b = 0; b < kNumBands; ++b)
+        const double x = kColumnX + b * kColumnStep;
+        char title[16];
+        std::snprintf (title, sizeof (title), "BAND %d", b + 1);
+        auto* col = new Panel (CRect (x, kColumnTop, x + kColumnW, kColumnTop + 182), title);
+        root->addView (col);
+        bandColumns[b] = col;
+        bind (col, new Toggle (CRect (62, 3, 98, 17), this, bandParam (b, kBandActive), "On"));
+        bind (col, new Toggle (CRect (102, 3, 122, 17), this, bandParam (b, kBandSolo), "S"));
+        rangeLabels[b] = new Label (CRect (8, 20, 172, 34), "", 10.0, false, 1);
+        rangeLabels[b]->setDim (true);
+        col->addView (rangeLabels[b]);
+        bind (col, new Knob (knobRect (18, 38), this, bandParam (b, kBandInput), "Input", true));
+        bind (col, new Knob (knobRect (106, 38), this, bandParam (b, kBandOutput), "Output", true));
+        for (int m = 0; m < 3; ++m)
+        {
+            modeGroups[b][m] = new Group (CRect (0, 104, kColumnW, 176));
+            col->addView (modeGroups[b][m]);
             for (int k = 0; k < 2; ++k)
-                bind (columns[m], new Knob (knobRect (14 + k * 88, laneY (b) + 16), this, bandParam (b, fields[m][k]), labels[m][k]));
+                bind (modeGroups[b][m], new Knob (knobRect (18 + k * 88, 4), this, bandParam (b, fields[m][k]), labels[m][k]));
+        }
+        if (b < kMaxBands - 1)
+        {
+            const double gx = x + kColumnW;
+            char xl[8];
+            std::snprintf (xl, sizeof (xl), "X%d", b + 1);
+            xoverKnobs[b] = bind (root, new Knob (CRect (gx + 2, kColumnTop + 60, gx + 58, kColumnTop + 124), this,
+                                                 (uint32_t)(kXover1 + b), pk::make::keep (xl)));
+        }
     }
 
     // global section
-    auto* gp = new Panel (CRect (8, 346, 560, 476), "GLOBAL");
+    auto* gp = new Panel (CRect (8, 458, 560, 572), "GLOBAL");
     root->addView (gp);
     bind (gp, new Knob (knobRect (14, 24), this, kOutput, nullptr, true));
     bind (gp, new Knob (knobRect (80, 24), this, kAmount));
@@ -127,12 +149,12 @@ void Editor::buildUI (CFrame* f)
     gp->addView (new Label (CRect (330, 24, 450, 38), "Detector", 10.5, false, 1));
     bind (gp, new Segmented (CRect (330, 40, 450, 60), this, kDetector, {"Peak", "RMS"}));
 
-    auto* sp = new Panel (CRect (566, 346, 892, 476), "SIDECHAIN");
+    auto* sp = new Panel (CRect (566, 458, 912, 572), "SIDECHAIN");
     root->addView (sp);
     bind (sp, new Toggle (CRect (14, 40, 74, 60), this, kScOn, "On"));
-    bind (sp, new Knob (knobRect (86, 24), this, kScGain, "Gain", true));
-    bind (sp, new Knob (knobRect (150, 24), this, kScMix, "Dry/Wet"));
-    bind (sp, new Toggle (CRect (222, 40, 306, 60), this, kScListen, "Listen"));
+    bind (sp, new Knob (knobRect (96, 24), this, kScGain, "Gain", true));
+    bind (sp, new Knob (knobRect (170, 24), this, kScMix, "Dry/Wet"));
+    bind (sp, new Toggle (CRect (246, 40, 330, 60), this, kScListen, "Listen"));
 
     applyParamTooltips (&help::forParam);
     setColumn (column);
@@ -143,31 +165,36 @@ void Editor::buildUI (CFrame* f)
 void Editor::setColumn (int m)
 {
     column = std::clamp (m, 0, 2);
-    for (int i = 0; i < 3; ++i)
-        if (columns[i])
-            columns[i]->setVisible (i == column);
+    updateVisibility ();
     for (auto* b : tabButtons)
         b->invalid ();
-    if (frame)
-        frame->invalid ();
 }
 
 void Editor::updateVisibility ()
 {
-    // grey out the controls of bands that are switched off
-    const bool lowOn = plainValue (kLowOn) >= 0.5, highOn = plainValue (kHighOn) >= 0.5;
-    for (int b = 0; b < kNumBands; ++b)
+    const int n = std::clamp ((int)std::lround (plainValue (kBands)) + 1, 1, kMaxBands);
+    for (int b = 0; b < kMaxBands; ++b)
     {
-        const bool used = b == kMid || (b == kLow ? lowOn : highOn);
-        for (uint32_t id = bandParam (b, 0); id < bandParam (b, 0) + kBandBlock; ++id)
+        if (bandColumns[b])
+            bandColumns[b]->setVisible (b < n);
+        for (int m = 0; m < 3; ++m)
+            if (modeGroups[b][m])
+                modeGroups[b][m]->setVisible (m == column);
+        if (b < kMaxBands - 1 && xoverKnobs[b])
+            xoverKnobs[b]->setVisible (b < n - 1);
+        if (rangeLabels[b])
         {
-            auto it = byParam.find (id);
-            if (it != byParam.end ())
-                for (auto* v : it->second)
-                    if (auto* pv = dynamic_cast<pk::ParamView*> (v))
-                        pv->setEnabledLook (used);
+            const double lo = b == 0 ? 0.0 : plainValue ((uint32_t)(kXover1 + b - 1));
+            const double hi = b == n - 1 ? 0.0 : plainValue ((uint32_t)(kXover1 + b));
+            std::string t = b == 0 ? "below " + shortHz (hi) + " Hz" : (b == n - 1 ? "above " + shortHz (lo) + " Hz"
+                                                                                   : shortHz (lo) + " - " + shortHz (hi) + " Hz");
+            if (n == 1)
+                t = "full range";
+            rangeLabels[b]->setText (t);
         }
     }
+    if (frame)
+        frame->invalid ();
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -175,7 +202,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (display)
         display->invalid ();
-    if (id == kLowOn || id == kHighOn)
+    if (id == kBands || id == kXover1 || id == kXover2 || id == kXover3)
         updateVisibility ();
 }
 
@@ -213,7 +240,7 @@ void Editor::showMenu (CPoint where)
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
         else if (r == (int32_t)sizes.size () + 1)
-            for (int b = 0; b < kNumBands; ++b)
+            for (int b = 0; b < kMaxBands; ++b)
                 for (int f : {kAboveRatio, kBelowRatio})
                     ctl->setPlainFromUI (bandParam (b, f), 1.0);
     });

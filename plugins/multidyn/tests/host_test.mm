@@ -17,6 +17,8 @@ using namespace pk::testing;
 using namespace multidyn;
 #define CHECK PK_CHECK
 
+enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
+
 static State baseState ()
 {
     State st;
@@ -75,13 +77,12 @@ int main (int argc, char** argv)
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
         State st = baseState ();
-        set (st, kLowOn, 0);
-        set (st, kHighOn, 0);
+        set (st, kBands, 0); // single band: band 0
         set (st, kSoftKnee, 0);
         set (st, kDetector, kPeak);
-        set (st, bandParam (kMid, kAboveThresh), -20.0);
-        set (st, bandParam (kMid, kAboveRatio), 4.0);
-        set (st, bandParam (kMid, kRelease), 500.0);
+        set (st, bandParam (0, kAboveThresh), -20.0);
+        set (st, bandParam (0, kAboveRatio), 4.0);
+        set (st, bandParam (0, kRelease), 500.0);
         CHECK (apply (rig, st), "setState");
         CHECK (rig.start (), "start");
         std::vector<float> out;
@@ -91,7 +92,7 @@ int main (int argc, char** argv)
         CHECK (std::fabs (comp - (-20.0 + 14.0 / 4.0)) < 0.6, "compressed peak %.2f dB (want -16.5)", comp);
 
         // --- side-chain: quiet main keyed by a loud side-chain ---
-        rig.param (bandParam (kMid, kAboveRatio), toNormalized (bandParam (kMid, kAboveRatio), 10.0));
+        rig.param (bandParam (0, kAboveRatio), toNormalized (bandParam (0, kAboveRatio), 10.0));
         rig.param (kScOn, 1.0);
         out.clear ();
         rig.render (2.0, out, nullptr, tones (-30.0, -6.0));
@@ -105,8 +106,7 @@ int main (int argc, char** argv)
         rig.param (kScOn, 0.0);
 
         // --- CPU with all three bands ---
-        rig.param (kLowOn, 1.0);
-        rig.param (kHighOn, 1.0);
+        rig.param (kBands, toNormalized (kBands, 3)); // four bands
         const auto t0 = std::chrono::steady_clock::now ();
         out.clear ();
         rig.render (5.0, out, nullptr, tones (-12.0, -12.0));
@@ -120,9 +120,9 @@ int main (int argc, char** argv)
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
         CHECK (readState (&saved, back), "readState");
-        CHECK (std::fabs (back.norm[bandParam (kMid, kAboveRatio)] - toNormalized (bandParam (kMid, kAboveRatio), 10.0)) < 1e-9,
+        CHECK (std::fabs (back.norm[bandParam (0, kAboveRatio)] - toNormalized (bandParam (0, kAboveRatio), 10.0)) < 1e-9,
                "automated ratio saved");
-        CHECK (back.norm[kLowOn] == 1.0, "band switch saved");
+        CHECK (std::fabs (back.norm[kBands] - toNormalized (kBands, 3)) < 1e-9, "band count saved");
         rig.stop ();
 
         // --- editor: screenshot and the display's gestures ---
@@ -152,29 +152,30 @@ int main (int argc, char** argv)
             pump (0.5); // let the meters settle
             CHECK (win.savePng (outDir + "/ui_multidyn.png"), "screenshot");
 
-            // display geometry: x = 168 + (dB + 70) / 76 * 472, lanes High/Mid/Low from y = 42
-            auto xOf = [] (double db) { return 168.0 + (db + 70.0) / 76.0 * 472.0; };
-            const double midY = 42.0 + (306.0 - 16.0) / 3.0 * 1.5;
-            const double highY = 42.0 + (306.0 - 16.0) / 3.0 * 0.5;
+            // display: x 8..912, y 40..260 with a 16 px scale; three lanes, band 3 on top
+            auto xOf = [] (double db) { return 8.0 + (db + 70.0) / 76.0 * 904.0; };
+            const double laneH = (220.0 - 16.0) / 3.0;
+            const double midY = 40.0 + laneH * 1.5;
+            const double highY = 40.0 + laneH * 0.5;
             const uint32_t midAbove = bandParam (kMid, kAboveThresh);
 
             // 1. drag the mid band's above threshold 10 dB lower
             const double x0 = xOf (plainOf (rig, midAbove));
-            win.drag (x0, midY, x0 - 10.0 / 76.0 * 472.0, midY);
+            win.drag (x0, midY, x0 - 10.0 / 76.0 * 904.0, midY);
             CHECK (std::fabs (plainOf (rig, midAbove) - (-22.0)) < 0.3, "threshold drag -> %.2f (want -22)", plainOf (rig, midAbove));
 
             // 2. Shift = fine: the same drag moves it only a fifth as far
             const double before = plainOf (rig, midAbove);
             const double x1 = xOf (before);
-            win.drag (x1, midY, x1 + 10.0 / 76.0 * 472.0, midY, kShift);
+            win.drag (x1, midY, x1 + 10.0 / 76.0 * 904.0, midY, kShift);
             CHECK (std::fabs (plainOf (rig, midAbove) - before - 2.0) < 0.3, "fine drag moved %.2f dB (want 2)",
                    plainOf (rig, midAbove) - before);
 
             // 3. Cmd: move every band's below threshold together
             const double lowBelow0 = plainOf (rig, bandParam (kLow, kBelowThresh));
             const double xb = xOf (plainOf (rig, bandParam (kMid, kBelowThresh)));
-            win.drag (xb, midY, xb + 6.0 / 76.0 * 472.0, midY, kCmd);
-            for (int b = 0; b < kNumBands; ++b)
+            win.drag (xb, midY, xb + 6.0 / 76.0 * 904.0, midY, kCmd);
+            for (int b = 0; b < 3; ++b)
                 CHECK (std::fabs (plainOf (rig, bandParam (b, kBelowThresh)) - (-34.0)) < 0.4, "cmd drag band %d -> %.2f", b,
                        plainOf (rig, bandParam (b, kBelowThresh)));
             (void)lowBelow0;
@@ -182,29 +183,33 @@ int main (int argc, char** argv)
             // 4. drag down inside the mid above block: quieter = higher ratio
             const uint32_t midRatio = bandParam (kMid, kAboveRatio);
             const double r0 = plainOf (rig, midRatio);
-            win.drag (620, midY, 620, midY + 40);
+            win.drag (880, midY, 880, midY + 40);
             CHECK (plainOf (rig, midRatio) > r0 * 1.3, "ratio drag down: %.2f -> %.2f", r0, plainOf (rig, midRatio));
-            win.drag (620, midY, 620, midY - 160);
+            win.drag (880, midY, 880, midY - 160);
             CHECK (plainOf (rig, midRatio) < 1.0, "drag up past 1:1 gives upward expansion: %.2f", plainOf (rig, midRatio));
 
             // 5. Alt: above and below ratios of the high band move together
             const double ha = plainOf (rig, bandParam (kHigh, kAboveRatio)), hb = plainOf (rig, bandParam (kHigh, kBelowRatio));
-            win.drag (620, highY, 620, highY + 30, kAlt);
+            win.drag (880, highY, 880, highY + 30, kAlt);
             CHECK (plainOf (rig, bandParam (kHigh, kAboveRatio)) > ha && plainOf (rig, bandParam (kHigh, kBelowRatio)) > hb,
                    "alt drag: above %.2f->%.2f below %.2f->%.2f", ha, plainOf (rig, bandParam (kHigh, kAboveRatio)), hb,
                    plainOf (rig, bandParam (kHigh, kBelowRatio)));
 
             // 6. double-click a block resets its ratio to 1:1
-            win.click (620, midY, 2);
+            win.click (880, midY, 2);
             CHECK (std::fabs (plainOf (rig, midRatio) - 1.0) < 1e-6, "double-click reset -> %.3f", plainOf (rig, midRatio));
 
-            // 7. band switch through the UI
-            win.click (50, 42 + 14); // "High" toggle
-            CHECK (plainOf (rig, kHighOn) < 0.5, "high band off");
-            win.click (50, 42 + 14);
+            // 7. band count through the UI (segments "1".."4" at x 210..330)
+            win.click (210 + 30 * 3.5, 17);
+            CHECK (std::lround (plainOf (rig, kBands)) == 3, "4 bands selected (%f)", plainOf (rig, kBands));
+            CHECK (win.savePng (outDir + "/ui_multidyn_4bands.png"), "screenshot 4 bands");
+            win.click (210 + 30 * 0.5, 17);
+            CHECK (std::lround (plainOf (rig, kBands)) == 0, "1 band selected");
+            CHECK (win.savePng (outDir + "/ui_multidyn_1band.png"), "screenshot 1 band");
+            win.click (210 + 30 * 2.5, 17);
 
-            // 8. the A tab shows the above column (screenshot for eyeballing)
-            win.click (716 + 2 * 58 + 20, 17);
+            // 8. the A tab shows the above column
+            win.click (620 + 2 * 52 + 24, 17);
             CHECK (win.savePng (outDir + "/ui_multidyn_above.png"), "screenshot A");
         }
         rig.stop ();

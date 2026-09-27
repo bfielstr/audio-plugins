@@ -15,21 +15,21 @@ enum ParamId : uint32_t
     kTime,
     kSoftKnee,
     kDetector, // Peak / RMS
-    kLowOn,
-    kHighOn,
-    kLowFreq,
-    kHighFreq,
+    kBands,    // 1..4 (choice index 0..3)
+    kXover1,   // crossover frequencies, used in order: N bands use the first N-1
+    kXover2,
+    kXover3,
     kScOn,
     kScGain,
     kScMix,
     kScListen,
-    kBandBase, // 3 bands x kBandBlock, see bandParam()
+    kBandBase, // kMaxBands x kBandBlock, see bandParam(); band 0 is the lowest
 
-    kNumParams = kBandBase + 3 * 10
+    kNumParams = kBandBase + 4 * 10
 };
 
-enum Band { kLow = 0, kMid, kHigh };
-constexpr int kNumBands = 3;
+constexpr int kMaxBands = 4;
+constexpr int kNumBands = kMaxBands;
 constexpr int kBandBlock = 10;
 enum BandField
 {

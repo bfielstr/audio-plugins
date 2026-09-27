@@ -43,7 +43,8 @@ public:
                   int n);
 
     const BandMeter& meter (int band) const { return meters[band]; }
-    bool bandUsed (int band) const;
+    bool bandUsed (int band) const { return band < bandCount (); }
+    int bandCount () const;
 
 private:
     struct BandState
@@ -57,9 +58,12 @@ private:
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
-    Lr4Split split1, split2, scSplit1, scSplit2;
-    Allpass2 ap, scAp;
-    float f1 = 0.0f, f2 = 0.0f;
+    // Crossover tree: split[j] separates band j from everything above it. Lower bands are
+    // passed through allpasses at every higher crossover so the bands sum to an allpass.
+    Lr4Split split[kMaxBands - 1], scSplit[kMaxBands - 1];
+    Allpass2 ap[kMaxBands - 1][kMaxBands - 1], scAp[kMaxBands - 1][kMaxBands - 1];
+    float xf[kMaxBands - 1] {};
+    void splitBands (float x, int c, int n, Lr4Split* sp, Allpass2 (*aps)[kMaxBands - 1], float* out);
     BandState bands[kNumBands];
     BandMeter meters[kNumBands];
     float outGain = 1.0f, scGain = 1.0f;

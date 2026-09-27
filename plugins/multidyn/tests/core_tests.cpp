@@ -97,15 +97,14 @@ static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
     return db (std::sqrt (s / std::max<size_t> (1, b - a)));
 }
 
+enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
+constexpr int kOnly = 0;                  // the band in single-band mode
+
 static std::unique_ptr<Engine> engine (bool singleBand = true)
 {
     auto e = std::make_unique<Engine> ();
     e->prepare (kSr, 512);
-    if (singleBand)
-    {
-        e->setParam (kLowOn, 0);
-        e->setParam (kHighOn, 0);
-    }
+    e->setParam (kBands, singleBand ? 0 : 2); // choice index: 1 or 3 bands
     e->setParam (kSoftKnee, 0);
     e->setParam (kDetector, kPeak);
     e->reset ();
@@ -138,16 +137,45 @@ TEST (params_roundtrip)
 
 TEST (crossover_sums_flat)
 {
-    // With no processing the three bands must sum to an allpass: flat magnitude.
-    auto e = engine (false);
-    for (double f : {40.0, 150.0, 200.0, 400.0, 1000.0, 2500.0, 6000.0, 15000.0})
+    // With no processing the bands must sum to an allpass (flat magnitude) for every band count.
+    for (int bands = 1; bands <= 4; ++bands)
     {
-        e->reset ();
-        auto in = sine (f, -12.0, 0.5);
-        auto out = run (*e, in);
-        const double gain = rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000);
-        CHECK (std::fabs (gain) < 0.05, "%.0f Hz: %.3f dB", f, gain);
+        auto e = engine (false);
+        e->setParam (kBands, bands - 1);
+        for (double f : {40.0, 120.0, 400.0, 1200.0, 2500.0, 6000.0, 15000.0})
+        {
+            e->reset ();
+            auto in = sine (f, -12.0, 0.5);
+            auto out = run (*e, in);
+            const double gain = rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000);
+            CHECK (std::fabs (gain) < 0.05, "%d bands, %.0f Hz: %.3f dB", bands, f, gain);
+        }
+        CHECK (e->bandCount () == bands, "band count %d", e->bandCount ());
     }
+}
+
+TEST (four_bands_isolate)
+{
+    auto e = engine (false);
+    e->setParam (kBands, 3); // 4 bands: 120 / 1200 / 6000 Hz
+    auto soloGain = [&] (int band, double freq) {
+        for (int b = 0; b < kMaxBands; ++b)
+            e->setParam (bandParam (b, kBandSolo), b == band ? 1 : 0);
+        e->reset ();
+        auto in = sine (freq, -12.0, 0.4);
+        auto out = run (*e, in);
+        return rmsDb (out.l, 9600, 19200) - rmsDb (in.l, 9600, 19200);
+    };
+    const double freqs[] = {50.0, 400.0, 2800.0, 14000.0};
+    for (int b = 0; b < 4; ++b)
+        for (int k = 0; k < 4; ++k)
+        {
+            const double g = soloGain (b, freqs[k]);
+            if (b == k)
+                CHECK (g > -1.0, "band %d passes %.0f Hz: %f", b, freqs[k], g); // LR4 skirts: ~0.6 dB in a 2-octave band
+            else
+                CHECK (g < -24.0, "band %d rejects %.0f Hz: %f", b, freqs[k], g);
+        }
 }
 
 TEST (bands_isolate)
@@ -161,13 +189,13 @@ TEST (bands_isolate)
         auto out = run (*e, in);
         return rmsDb (out.l, 9600, 19200) - rmsDb (in.l, 9600, 19200);
     };
-    CHECK (soloOnly (kLow, 60.0) > -0.5, "60 Hz in the low band: %f", soloOnly (kLow, 60.0));
-    CHECK (soloOnly (kHigh, 60.0) < -60.0, "60 Hz out of the high band: %f", soloOnly (kHigh, 60.0));
-    CHECK (soloOnly (kMid, 700.0) > -0.5, "700 Hz in mid: %f", soloOnly (kMid, 700.0));
+    CHECK (soloOnly (kLow, 40.0) > -0.5, "40 Hz in the low band: %f", soloOnly (kLow, 40.0));
+    CHECK (soloOnly (kHigh, 40.0) < -60.0, "40 Hz out of the high band: %f", soloOnly (kHigh, 40.0));
+    CHECK (soloOnly (kMid, 400.0) > -0.5, "400 Hz in mid: %f", soloOnly (kMid, 400.0));
     CHECK (soloOnly (kLow, 8000.0) < -60.0, "8 kHz out of low: %f", soloOnly (kLow, 8000.0));
     CHECK (soloOnly (kHigh, 8000.0) > -0.5, "8 kHz in high: %f", soloOnly (kHigh, 8000.0));
     // crossover points are -6 dB per LR4 band
-    const double atX = soloOnly (kLow, 200.0);
+    const double atX = soloOnly (kLow, 120.0);
     CHECK (std::fabs (atX + 6.0) < 0.6, "low band at its crossover: %f", atX);
 }
 
@@ -181,23 +209,23 @@ TEST (four_kinds_of_dynamics)
         double thresh, ratio, expectDb;
     };
     const Case cases[] = {
-        {"downward compression", -6.0, bandParam (kMid, kAboveThresh), bandParam (kMid, kAboveRatio), -20.0, 4.0,
+        {"downward compression", -6.0, bandParam (kOnly, kAboveThresh), bandParam (kOnly, kAboveRatio), -20.0, 4.0,
          -20.0 + 14.0 / 4.0},
-        {"upward expansion", -26.0, bandParam (kMid, kAboveThresh), bandParam (kMid, kAboveRatio), -30.0, 0.5,
+        {"upward expansion", -26.0, bandParam (kOnly, kAboveThresh), bandParam (kOnly, kAboveRatio), -30.0, 0.5,
          -30.0 + 4.0 * 2.0},
-        {"downward expansion", -40.0, bandParam (kMid, kBelowThresh), bandParam (kMid, kBelowRatio), -30.0, 2.0,
+        {"downward expansion", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 2.0,
          -30.0 - 10.0 * 2.0},
-        {"upward compression", -40.0, bandParam (kMid, kBelowThresh), bandParam (kMid, kBelowRatio), -30.0, 0.5,
+        {"upward compression", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 0.5,
          -30.0 - 10.0 * 0.5},
     };
     for (const auto& c : cases)
     {
         auto e = engine ();
-        e->setParam (bandParam (kMid, kAboveThresh), 6.0); // park the other threshold out of the way
-        e->setParam (bandParam (kMid, kBelowThresh), -70.0);
+        e->setParam (bandParam (kOnly, kAboveThresh), 6.0); // park the other threshold out of the way
+        e->setParam (bandParam (kOnly, kBelowThresh), -70.0);
         e->setParam (c.tId, c.thresh);
         e->setParam (c.rId, c.ratio);
-        e->setParam (bandParam (kMid, kRelease), 500.0);
+        e->setParam (bandParam (kOnly, kRelease), 500.0);
         auto out = run (*e, sine (1000.0, c.inDb, 2.0));
         const double got = peakDb (out.l, (size_t)(1.5 * kSr), (size_t)(2.0 * kSr));
         CHECK (std::fabs (got - c.expectDb) < 0.6, "%s: %.2f dB (want %.2f)", c.name, got, c.expectDb);
@@ -212,10 +240,10 @@ TEST (low_frequency_gain_ripple)
     {
         auto e = engine ();
         e->setParam (kDetector, mode);
-        e->setParam (bandParam (kMid, kAboveThresh), -20.0);
-        e->setParam (bandParam (kMid, kAboveRatio), 8.0);
-        e->setParam (bandParam (kMid, kAttack), 5.0);
-        e->setParam (bandParam (kMid, kRelease), 100.0);
+        e->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+        e->setParam (bandParam (kOnly, kAboveRatio), 8.0);
+        e->setParam (bandParam (kOnly, kAttack), 5.0);
+        e->setParam (bandParam (kOnly, kRelease), 100.0);
         auto in = sine (50.0, -6.0, 2.0);
         Engine& eng = *e;
         float lo = 0, hi = -100;
@@ -227,8 +255,8 @@ TEST (low_frequency_gain_ripple)
             run (eng, c, nullptr, 48);
             if (pos > 48000)
             {
-                lo = std::min (lo, eng.meter (kMid).gainDb);
-                hi = std::max (hi, eng.meter (kMid).gainDb);
+                lo = std::min (lo, eng.meter (kOnly).gainDb);
+                hi = std::max (hi, eng.meter (kOnly).gainDb);
             }
         }
         CHECK (hi - lo < 1.5f, "mode %d: gain ripple %.2f dB at 50 Hz", mode, hi - lo);
@@ -241,9 +269,9 @@ TEST (amount_scales_and_zero_is_bypass)
     {
         auto e = engine ();
         e->setParam (kAmount, amount);
-        e->setParam (bandParam (kMid, kAboveThresh), -20.0);
-        e->setParam (bandParam (kMid, kAboveRatio), 4.0);
-        e->setParam (bandParam (kMid, kRelease), 500.0);
+        e->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+        e->setParam (bandParam (kOnly, kAboveRatio), 4.0);
+        e->setParam (bandParam (kOnly, kRelease), 500.0);
         auto out = run (*e, sine (1000.0, -6.0, 1.5));
         const double got = peakDb (out.l, (size_t)(1.0 * kSr), (size_t)(1.5 * kSr));
         const double want = -6.0 + amount * (14.0 * (0.25 - 1.0));
@@ -274,10 +302,10 @@ TEST (attack_and_release_timing)
 {
     // Level steps from -40 to -6 dB into ratio 10 above -20: the full cut is 14*(0.1-1) = -12.6 dB.
     auto e = engine ();
-    e->setParam (bandParam (kMid, kAboveThresh), -20.0);
-    e->setParam (bandParam (kMid, kAboveRatio), 10.0);
-    e->setParam (bandParam (kMid, kAttack), 50.0);
-    e->setParam (bandParam (kMid, kRelease), 200.0);
+    e->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+    e->setParam (bandParam (kOnly, kAboveRatio), 10.0);
+    e->setParam (bandParam (kOnly, kAttack), 50.0);
+    e->setParam (bandParam (kOnly, kRelease), 200.0);
     auto quiet = sine (1000.0, -40.0, 0.2);
     auto loud = sine (1000.0, -6.0, 1.0);
     Sig in = quiet;
@@ -292,7 +320,7 @@ TEST (attack_and_release_timing)
         chunk.l.assign (loud.l.begin () + blk * 480, loud.l.begin () + (blk + 1) * 480);
         chunk.r = chunk.l;
         run (eng, chunk, nullptr, 480);
-        g.push_back (eng.meter (kMid).gainDb);
+        g.push_back (eng.meter (kOnly).gainDb);
     }
     // one attack time constant (50 ms) in: ~63 % of the final reduction
     const double at50 = g[4] / -12.6;
@@ -300,16 +328,16 @@ TEST (attack_and_release_timing)
     CHECK (std::fabs (g.back () + 12.6) < 0.8, "settles at -12.6: %f", g.back ());
     // time scale 2x makes it slower
     auto e2 = engine ();
-    e2->setParam (bandParam (kMid, kAboveThresh), -20.0);
-    e2->setParam (bandParam (kMid, kAboveRatio), 10.0);
-    e2->setParam (bandParam (kMid, kAttack), 50.0);
+    e2->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+    e2->setParam (bandParam (kOnly, kAboveRatio), 10.0);
+    e2->setParam (bandParam (kOnly, kAttack), 50.0);
     e2->setParam (kTime, 2.0);
     run (*e2, quiet);
     Sig chunk;
     chunk.l.assign (loud.l.begin (), loud.l.begin () + 2400);
     chunk.r = chunk.l;
     run (*e2, chunk, nullptr, 480);
-    CHECK (e2->meter (kMid).gainDb / -12.6 < at50 * 0.8, "Time 200%% slows the attack: %f", e2->meter (kMid).gainDb);
+    CHECK (e2->meter (kOnly).gainDb / -12.6 < at50 * 0.8, "Time 200%% slows the attack: %f", e2->meter (kOnly).gainDb);
 }
 
 TEST (rms_ignores_short_peaks_more_than_peak)
@@ -317,9 +345,9 @@ TEST (rms_ignores_short_peaks_more_than_peak)
     auto measure = [] (int mode) {
         auto e = engine ();
         e->setParam (kDetector, mode);
-        e->setParam (bandParam (kMid, kAboveThresh), -20.0);
-        e->setParam (bandParam (kMid, kAboveRatio), 10.0);
-        e->setParam (bandParam (kMid, kAttack), 0.1);
+        e->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+        e->setParam (bandParam (kOnly, kAboveRatio), 10.0);
+        e->setParam (bandParam (kOnly, kAttack), 0.1);
         // quiet tone with a 1 ms click every 100 ms
         Sig in = sine (1000.0, -30.0, 1.0);
         for (size_t s = 0; s < in.l.size (); s += 4800)
@@ -333,7 +361,7 @@ TEST (rms_ignores_short_peaks_more_than_peak)
             c.l.assign (in.l.begin () + pos, in.l.begin () + pos + 96);
             c.r = c.l;
             run (eng, c, nullptr, 96);
-            worst = std::min (worst, eng.meter (kMid).gainDb);
+            worst = std::min (worst, eng.meter (kOnly).gainDb);
         }
         return worst;
     };
@@ -348,7 +376,7 @@ TEST (band_active_solo_and_gains)
     e->setParam (bandParam (kMid, kBandInput), 6.0);
     e->setParam (bandParam (kMid, kBandOutput), -3.0);
     e->reset ();
-    auto in = sine (700.0, -20.0, 0.5);
+    auto in = sine (350.0, -20.0, 0.5);
     auto out = run (*e, in);
     CHECK (std::fabs (rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000) - 3.0) < 0.3, "band gains +3 dB: %f",
            rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000));
@@ -366,15 +394,15 @@ TEST (band_active_solo_and_gains)
     e->setParam (bandParam (kHigh, kBandSolo), 1);
     e->reset ();
     out = run (*e, in);
-    CHECK (rmsDb (out.l, 12000, 24000) < -60.0, "700 Hz with only the high band soloed: %f", rmsDb (out.l, 12000, 24000));
+    CHECK (rmsDb (out.l, 12000, 24000) < -60.0, "350 Hz with only the high band soloed: %f", rmsDb (out.l, 12000, 24000));
 }
 
 TEST (sidechain_triggers_and_listen)
 {
     auto e = engine ();
-    e->setParam (bandParam (kMid, kAboveThresh), -20.0);
-    e->setParam (bandParam (kMid, kAboveRatio), 10.0);
-    e->setParam (bandParam (kMid, kRelease), 500.0);
+    e->setParam (bandParam (kOnly, kAboveThresh), -20.0);
+    e->setParam (bandParam (kOnly, kAboveRatio), 10.0);
+    e->setParam (bandParam (kOnly, kRelease), 500.0);
     auto mainSig = sine (1000.0, -30.0, 1.5);
     auto key = sine (1000.0, -6.0, 1.5, 1.0);
     auto out = run (*e, mainSig, &key);

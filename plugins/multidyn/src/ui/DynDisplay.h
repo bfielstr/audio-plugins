@@ -1,4 +1,4 @@
-// The Multidyn display: one lane per band (High, Mid, Low from the top). Each lane shows the
+// The Multidyn display: one lane per band (highest band on top). Each lane shows the
 // Below block (left of the below threshold) and the Above block (right of the above threshold),
 // the input level (thin bar) and output level (thick bar).
 //   drag a block edge          move that threshold          (Shift: fine)
@@ -37,6 +37,7 @@ public:
 
     enum class Hit { None, BelowEdge, AboveEdge, BelowBlock, AboveBlock };
     VSTGUI::CRect laneRect (int band) const;
+    int bands () const;
     double xOf (double db) const;
     Hit hitTest (const VSTGUI::CPoint& p, int& band) const;
 

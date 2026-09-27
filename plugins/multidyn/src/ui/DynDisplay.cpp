@@ -18,7 +18,6 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-const char* kBandNames[] = {"Low", "Mid", "High"};
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size,
            CHoriTxtAlign a = kCenterText, bool bold = false)
@@ -47,11 +46,14 @@ DynDisplay::DynDisplay (const CRect& r, pk::ParamHost* h, Controller* c) : CView
         shownIn[b] = shownOut[b] = -100.0f;
 }
 
+int DynDisplay::bands () const { return std::clamp ((int)std::lround (host->plainValue (kBands)) + 1, 1, kMaxBands); }
+
 CRect DynDisplay::laneRect (int band) const
 {
     const CRect r = getViewSize ();
-    const double laneH = (r.getHeight () - kScaleHeight) / kNumBands;
-    const int row = kNumBands - 1 - band; // High on top
+    const int n = bands ();
+    const double laneH = (r.getHeight () - kScaleHeight) / n;
+    const int row = n - 1 - band; // highest band on top
     return CRect (r.left, r.top + row * laneH + 1, r.right, r.top + (row + 1) * laneH - 1);
 }
 
@@ -66,16 +68,14 @@ void DynDisplay::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kPanel);
     ctx->drawRect (all, kDrawFilled);
-    const bool lowOn = host->plainValue (kLowOn) >= 0.5, highOn = host->plainValue (kHighOn) >= 0.5;
-
-    for (int b = 0; b < kNumBands; ++b)
+    const int n = bands ();
+    for (int b = 0; b < n; ++b)
     {
         const CRect lane = laneRect (b);
         ctx->setFillColor (theme::kWaveBg);
         ctx->drawRect (lane, kDrawFilled);
-        const bool used = b == kMid || (b == kLow ? lowOn : highOn);
         const bool active = host->plainValue (bandParam (b, kBandActive)) >= 0.5;
-        const bool dim = !used || !active;
+        const bool dim = !active;
         const double tb = host->plainValue (bandParam (b, kBelowThresh));
         const double ta = host->plainValue (bandParam (b, kAboveThresh));
         const double rb = host->plainValue (bandParam (b, kBelowRatio));
@@ -100,14 +100,15 @@ void DynDisplay::draw (CDrawContext* ctx)
         ctx->setLineWidth (1.0);
 
         // meters: thick = output, thin = input
-        if (used)
         {
-            const double mh = lane.getHeight () * 0.34;
-            const double my = lane.getCenter ().y - mh / 2;
+            // keep clear of the labels at the top and the ratio text at the bottom of the lane
+            const double top = lane.top + 18, bottom = lane.bottom - 18;
+            const double mh = std::max (4.0, (bottom - top) * 0.55);
+            const double my = (top + bottom) / 2 - mh / 2 + 2;
             ctx->setFillColor (dim ? theme::kKnobTrack : theme::kAccent);
             ctx->drawRect (CRect (lane.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
             ctx->setFillColor (CColor (240, 240, 240, dim ? 90 : 220));
-            ctx->drawRect (CRect (lane.left, my - 5, xOf (shownIn[b]), my - 2), kDrawFilled);
+            ctx->drawRect (CRect (lane.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
         }
 
         // labels
@@ -116,10 +117,8 @@ void DynDisplay::draw (CDrawContext* ctx)
         text (ctx, host->valueText (bandParam (b, kAboveRatio)), CRect (xa + 4, lane.bottom - 16, lane.right - 4, lane.bottom - 2), tc, 10.0);
         text (ctx, host->valueText (bandParam (b, kBelowThresh)), CRect (xb - 60, lane.top + 2, xb - 4, lane.top + 14), tc, 9.5, kRightText);
         text (ctx, host->valueText (bandParam (b, kAboveThresh)), CRect (xa + 4, lane.top + 2, xa + 60, lane.top + 14), tc, 9.5, kLeftText);
-        std::string tag = kBandNames[b];
-        if (!used)
-            tag += "  (off)";
-        else if (!active)
+        std::string tag = "Band " + std::to_string (b + 1);
+        if (!active)
             tag += "  (bypassed)";
         else if (std::fabs (shownGain[b]) > 0.05f)
         {
@@ -143,7 +142,7 @@ void DynDisplay::draw (CDrawContext* ctx)
 DynDisplay::Hit DynDisplay::hitTest (const CPoint& p, int& band) const
 {
     band = -1;
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b < bands (); ++b)
         if (laneRect (b).pointInside (p))
             band = b;
     if (band < 0)
@@ -171,7 +170,7 @@ std::vector<uint32_t> DynDisplay::targetsFor (Hit hit, int band, const Modifiers
     std::vector<uint32_t> ids;
     const bool allBands = mods.has (ModifierKey::Control);
     const bool both = mods.has (ModifierKey::Alt);
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b < bands (); ++b)
     {
         if (b != band && !allBands)
             continue;

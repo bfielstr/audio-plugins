@@ -59,10 +59,16 @@ void Engine::prepare (double sampleRate, int)
 
 void Engine::reset ()
 {
-    for (auto* s : {&split1, &split2, &scSplit1, &scSplit2})
-        s->reset ();
-    ap.reset ();
-    scAp.reset ();
+    for (int j = 0; j < kMaxBands - 1; ++j)
+    {
+        split[j].reset ();
+        scSplit[j].reset ();
+        for (int b = 0; b < kMaxBands - 1; ++b)
+        {
+            ap[b][j].reset ();
+            scAp[b][j].reset ();
+        }
+    }
     for (int b = 0; b < kNumBands; ++b)
     {
         bands[b] = BandState {};
@@ -75,50 +81,59 @@ void Engine::reset ()
     updateFilters (true);
 }
 
-bool Engine::bandUsed (int band) const
-{
-    if (band == kLow)
-        return on (p[kLowOn]);
-    if (band == kHigh)
-        return on (p[kHighOn]);
-    return true;
-}
+int Engine::bandCount () const { return std::clamp ((int)std::lround (p[kBands]) + 1, 1, kMaxBands); }
 
 void Engine::updateFilters (bool force)
 {
-    float t2 = (float)p[kHighFreq];
-    float t1 = (float)p[kLowFreq];
-    if (on (p[kLowOn]) && on (p[kHighOn]))
-        t1 = std::min (t1, t2 / 1.2f); // keep the mid band open
-    // glide crossover changes in the log domain to avoid zipper noise
-    auto glide = [force] (float cur, float target) {
-        if (force || cur <= 0.0f)
-            return target;
-        return std::exp (std::log (cur) + 0.35f * (std::log (target) - std::log (cur)));
-    };
-    const float n1 = glide (f1, t1), n2 = glide (f2, t2);
+    const int n = bandCount ();
     const float fsr = (float)sr;
-    if (force || std::fabs (n1 - f1) > 1e-3f * f1)
+    const float top = 0.45f * fsr;
+    float prev = 0.0f;
+    for (int j = 0; j < kMaxBands - 1; ++j)
     {
-        f1 = n1;
-        split1.setup (f1, fsr);
-        scSplit1.setup (f1, fsr);
+        float t = (float)p[kXover1 + j];
+        if (j < n - 1 && j > 0)
+            t = std::max (t, prev * 1.2f); // keep every band open and in order
+        t = std::min (t, top / std::pow (1.2f, (float)(kMaxBands - 2 - j)));
+        prev = t;
+        // glide crossover changes in the log domain to avoid zipper noise
+        const float next =
+            force || xf[j] <= 0.0f ? t : std::exp (std::log (xf[j]) + 0.35f * (std::log (t) - std::log (xf[j])));
+        if (force || std::fabs (next - xf[j]) > 1e-3f * xf[j])
+        {
+            xf[j] = next;
+            split[j].setup (next, fsr);
+            scSplit[j].setup (next, fsr);
+            for (int b = 0; b < kMaxBands - 1; ++b)
+            {
+                ap[b][j].setup (next, fsr);
+                scAp[b][j].setup (next, fsr);
+            }
+        }
     }
-    if (force || std::fabs (n2 - f2) > 1e-3f * f2)
+}
+
+void Engine::splitBands (float x, int c, int n, Lr4Split* sp, Allpass2 (*aps)[kMaxBands - 1], float* out)
+{
+    float rest = x;
+    for (int j = 0; j < n - 1; ++j)
     {
-        f2 = n2;
-        split2.setup (f2, fsr);
-        scSplit2.setup (f2, fsr);
-        ap.setup (f2, fsr);
-        scAp.setup (f2, fsr);
+        float lo, hi;
+        sp[j].tick (rest, c, lo, hi);
+        out[j] = lo;
+        rest = hi;
     }
+    out[n - 1] = rest;
+    for (int b = 0; b + 2 < n; ++b)
+        for (int j = b + 1; j < n - 1; ++j)
+            out[b] = aps[b][j].tick (out[b], c);
 }
 
 void Engine::process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL,
                       float* outR, int n)
 {
     updateFilters (false);
-    const bool lowOn = on (p[kLowOn]), highOn = on (p[kHighOn]);
+    const int nBands = bandCount ();
     const bool softKnee = on (p[kSoftKnee]);
     const bool rms = std::lround (p[kDetector]) == kRms;
     const double amount = std::clamp (p[kAmount], 0.0, 1.0);
@@ -166,33 +181,16 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         float scBand[kNumBands][2] {};
         for (int c = 0; c < 2; ++c)
         {
-            float low = 0.0f, rest = xs[c], mid, high = 0.0f;
-            if (lowOn)
-                split1.tick (xs[c], c, low, rest);
-            if (highOn)
-                split2.tick (rest, c, mid, high);
-            else
-                mid = rest;
-            if (lowOn && highOn)
-                low = ap.tick (low, c);
-            band[kLow][c] = low;
-            band[kMid][c] = mid;
-            band[kHigh][c] = high;
+            float tmp[kMaxBands] {};
+            splitBands (xs[c], c, nBands, split, ap, tmp);
+            for (int bb = 0; bb < nBands; ++bb)
+                band[bb][c] = tmp[bb];
             if (scActive)
             {
                 const float sx = (c == 0 ? scL[i] : scR[i]) * scGain;
-                float sLow = 0.0f, sRest = sx, sMid, sHigh = 0.0f;
-                if (lowOn)
-                    scSplit1.tick (sx, c, sLow, sRest);
-                if (highOn)
-                    scSplit2.tick (sRest, c, sMid, sHigh);
-                else
-                    sMid = sRest;
-                if (lowOn && highOn)
-                    sLow = scAp.tick (sLow, c);
-                scBand[kLow][c] = sLow;
-                scBand[kMid][c] = sMid;
-                scBand[kHigh][c] = sHigh;
+                splitBands (sx, c, nBands, scSplit, scAp, tmp);
+                for (int bb = 0; bb < nBands; ++bb)
+                    scBand[bb][c] = tmp[bb];
             }
         }
 

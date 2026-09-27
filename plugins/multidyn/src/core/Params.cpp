@@ -17,19 +17,18 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kTime, "Time", "Time", 0.1, 10.0, 1.0, Curve::Log, Disp::Percent));
     t.push_back (toggle (kSoftKnee, "Soft Knee", "Soft Knee", true));
     t.push_back (choice (kDetector, "Peak/RMS", "Detect", {"Peak", "RMS"}, kRms));
-    t.push_back (toggle (kLowOn, "Low Band On", "Low", true));
-    t.push_back (toggle (kHighOn, "High Band On", "High", true));
-    t.push_back (real (kLowFreq, "Low Crossover", "Low Freq", 20.0, 16000.0, 200.0, Curve::Log, Disp::Hz));
-    t.push_back (real (kHighFreq, "High Crossover", "High Freq", 20.0, 16000.0, 2500.0, Curve::Log, Disp::Hz));
+    t.push_back (choice (kBands, "Bands", "Bands", {"1", "2", "3", "4"}, 2));
+    t.push_back (real (kXover1, "Crossover 1", "X1", 20.0, 16000.0, 120.0, Curve::Log, Disp::Hz));
+    t.push_back (real (kXover2, "Crossover 2", "X2", 20.0, 16000.0, 1200.0, Curve::Log, Disp::Hz));
+    t.push_back (real (kXover3, "Crossover 3", "X3", 20.0, 16000.0, 6000.0, Curve::Log, Disp::Hz));
     t.push_back (toggle (kScOn, "Sidechain On", "Sidechain", false));
     t.push_back (real (kScGain, "Sidechain Gain", "SC Gain", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
     t.push_back (percent (kScMix, "Sidechain Dry/Wet", "SC Mix", 1.0));
     t.push_back (toggle (kScListen, "Sidechain Listen", "Listen", false));
 
-    const char* bandNames[] = {"Low", "Mid", "High"};
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b < kMaxBands; ++b)
     {
-        const std::string n = bandNames[b];
+        const std::string n = "Band " + std::to_string (b + 1);
         auto id = [b] (int f) { return bandParam (b, f); };
         t.push_back (toggle (id (kBandActive), keep (n + " Active"), keep (n + " On"), true));
         t.push_back (toggle (id (kBandSolo), keep (n + " Solo"), "Solo", false));

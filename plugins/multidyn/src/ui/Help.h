@@ -14,10 +14,10 @@ inline const char* forParam (uint32_t id)
         case kTime: return "Scales every Attack and Release time together, keeping their proportions.";
         case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";
         case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
-        case kLowOn: return "Switch the low band on or off. With Low and High off, Multidyn is a single-band processor (Mid).";
-        case kHighOn: return "Switch the high band on or off.";
-        case kLowFreq: return "Crossover between the low and mid bands.";
-        case kHighFreq: return "Crossover between the mid and high bands.";
+        case kBands: return "Number of frequency bands (1 = a single full-range processor).";
+        case kXover1: return "Crossover between bands 1 and 2.";
+        case kXover2: return "Crossover between bands 2 and 3.";
+        case kXover3: return "Crossover between bands 3 and 4.";
         case kScOn: return "Use the side-chain input (route another track to this plug-in's inputs 3/4) to trigger the processing.";
         case kScGain: return "Level of the side-chain signal feeding the detectors (it is never heard).";
         case kScMix: return "Detector blend: 0% = the processed signal itself, 100% = only the side-chain.";
