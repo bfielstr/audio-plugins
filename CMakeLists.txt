@@ -66,6 +66,22 @@ endif()
 
 # ---------------------------------------------------------------------------
 # VST3 plug-in
+
+# The SDK isn't vendored: fetch the pinned version on first configure if it's missing.
+set(SIMPLR_VST3SDK_TAG "v3.8.1_build_84")
+if(NOT EXISTS "${vst3sdk_SOURCE_DIR}/cmake/modules/SMTG_VST3_SDK.cmake")
+    find_package(Git REQUIRED)
+    message(STATUS "Simplr: fetching VST3 SDK ${SIMPLR_VST3SDK_TAG} into ${vst3sdk_SOURCE_DIR} (one-time)")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" clone --depth 1 --branch ${SIMPLR_VST3SDK_TAG} --recurse-submodules
+                --shallow-submodules https://github.com/steinbergmedia/vst3sdk.git "${vst3sdk_SOURCE_DIR}"
+        RESULT_VARIABLE _simplr_clone_result)
+    if(NOT _simplr_clone_result EQUAL 0 OR NOT EXISTS "${vst3sdk_SOURCE_DIR}/cmake/modules/SMTG_VST3_SDK.cmake")
+        message(FATAL_ERROR "Could not fetch the VST3 SDK. Clone it manually:\n"
+            "  git clone --depth 1 --branch ${SIMPLR_VST3SDK_TAG} --recurse-submodules --shallow-submodules "
+            "https://github.com/steinbergmedia/vst3sdk.git external/vst3sdk")
+    endif()
+endif()
 set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VST3_HOSTING_EXAMPLES ON CACHE BOOL "" FORCE) # builds the SDK validator
 set(SMTG_ENABLE_VSTGUI_SUPPORT ON CACHE BOOL "" FORCE)

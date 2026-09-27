@@ -33,9 +33,7 @@ and drop a sample on it.
 
 ```sh
 git clone https://github.com/bfielstr/simplr.git && cd simplr
-git clone --depth 1 --branch v3.8.1_build_84 --recurse-submodules --shallow-submodules \
-    https://github.com/steinbergmedia/vst3sdk.git external/vst3sdk
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake -B build -DCMAKE_BUILD_TYPE=Release  # first run downloads the VST3 SDK into external/
 cmake --build build --config Release       # also runs Steinberg's VST3 validator
 ctest --test-dir build -C Release          # DSP tests (+ plug-in host test on macOS)
 ```
