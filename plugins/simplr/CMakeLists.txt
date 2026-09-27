@@ -49,5 +49,5 @@ target_link_libraries(Simplr PRIVATE simplr_core)
 pk_add_host_test(simplr_hosttest
     PLUGIN Simplr
     SOURCES tests/host_test.mm src/plugin/StateIO.cpp
-    LIBS simplr_core)
-target_include_directories(simplr_hosttest PRIVATE src)
+    LIBS simplr_core
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -77,10 +77,10 @@ function(pk_add_plugin target)
     endif()
 endfunction()
 
-# pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...>)
+# pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...> INCLUDES <dirs...>)
 # macOS: loads the built bundle through the VST3 hosting API (see shared/pluginkit/testing).
 function(pk_add_host_test name)
-    cmake_parse_arguments(ARG "" "PLUGIN" "SOURCES;LIBS" ${ARGN})
+    cmake_parse_arguments(ARG "" "PLUGIN" "SOURCES;LIBS;INCLUDES" ${ARGN})
     if(NOT APPLE)
         return()
     endif()
@@ -90,7 +90,7 @@ function(pk_add_host_test name)
         ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp
         ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/plugprovider.cpp
         ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/module_mac.mm)
-    target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/shared)
+    target_include_directories(${name} PRIVATE ${CMAKE_SOURCE_DIR}/shared ${ARG_INCLUDES})
     target_link_libraries(${name} PRIVATE sdk_hosting ${ARG_LIBS} "-framework Cocoa")
     target_compile_options(${name} PRIVATE -fobjc-arc)
     add_dependencies(${name} ${ARG_PLUGIN})

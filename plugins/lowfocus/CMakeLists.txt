@@ -42,5 +42,5 @@ target_link_libraries(Lowfocus PRIVATE lowfocus_core)
 pk_add_host_test(lowfocus_hosttest
     PLUGIN Lowfocus
     SOURCES tests/host_test.mm src/plugin/State.cpp
-    LIBS lowfocus_core)
-target_include_directories(lowfocus_hosttest PRIVATE src)
+    LIBS lowfocus_core
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)

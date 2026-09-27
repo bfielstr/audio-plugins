@@ -42,5 +42,5 @@ target_link_libraries(Multidyn PRIVATE multidyn_core)
 pk_add_host_test(multidyn_hosttest
     PLUGIN Multidyn
     SOURCES tests/host_test.mm src/plugin/State.cpp
-    LIBS multidyn_core)
-target_include_directories(multidyn_hosttest PRIVATE src)
+    LIBS multidyn_core
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
