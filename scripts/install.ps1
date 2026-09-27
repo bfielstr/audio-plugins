@@ -55,7 +55,7 @@ try {
     $x = Join-Path $tmp 'x'
     Expand-Archive -Path $zip -DestinationPath $x -Force
     $plugins = if ($env:SIMPLR_PLUGINS) { $env:SIMPLR_PLUGINS -split '\s+' | Where-Object { $_ } }
-               else { Get-ChildItem -Path $x -Directory -Filter '*.vst3' | ForEach-Object { $_.BaseName } }
+               else { Get-ChildItem -Path $x -Directory -Filter '*.vst3' | ForEach-Object { $_.Name -replace '\.vst3$', '' } }
     if (-not $plugins) { throw 'Unexpected archive layout (no .vst3 inside).' }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     foreach ($p in $plugins) {

@@ -1,0 +1,61 @@
+name: Installers
+
+# Runs the real one-line installers (from this commit) against a published release on every OS.
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to install (e.g. v0.2.0), or latest"
+        default: latest
+  push:
+    branches: [main]
+    paths: ["scripts/install.sh", "scripts/install.ps1", ".github/workflows/installers.yml"]
+
+jobs:
+  install:
+    name: Installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      SIMPLR_REPO: ${{ github.repository }}
+      SIMPLR_VERSION: ${{ inputs.version || 'latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install.sh
+        if: runner.os != 'Windows'
+        env:
+          SIMPLR_DEST: ${{ runner.temp }}/vst3
+        run: |
+          sh scripts/install.sh
+          for p in Simplr Multidyn Lowfocus; do
+            if [ "$RUNNER_OS" = "macOS" ]; then
+              test -f "$SIMPLR_DEST/$p.vst3/Contents/MacOS/$p"
+              codesign -v "$SIMPLR_DEST/$p.vst3"
+            else
+              test -f "$SIMPLR_DEST/$p.vst3/Contents/x86_64-linux/$p.so"
+            fi
+            echo "$p installed"
+          done
+          # subset install
+          rm -rf "$SIMPLR_DEST"
+          SIMPLR_PLUGINS="Lowfocus" sh scripts/install.sh
+          test -d "$SIMPLR_DEST/Lowfocus.vst3" && test ! -d "$SIMPLR_DEST/Simplr.vst3"
+      - name: install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./scripts/install.ps1
+          $root = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3'
+          if (Test-Path "$env:CommonProgramW6432\VST3\Simplr.vst3") { $root = "$env:CommonProgramW6432\VST3" }
+          foreach ($p in 'Simplr', 'Multidyn', 'Lowfocus') {
+            if (-not (Test-Path "$root\$p.vst3\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
+            Write-Host "$p installed"
+          }
