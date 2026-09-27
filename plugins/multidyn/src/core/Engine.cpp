@@ -41,16 +41,18 @@ double aboveGainDb (double x, double thresh, double ratio, bool softKnee)
 
 double belowGainDb (double x, double thresh, double ratio, bool softKnee)
 {
-    return kneeGain (thresh - x, 1.0 - ratio, softKnee);
+    // Below the threshold the output slope is 1/ratio: ratio > 1 lifts quiet material (upward
+    // compression), ratio < 1 pushes it down (downward expansion).
+    return kneeGain (thresh - x, 1.0 - 1.0 / std::max (0.01, ratio), softKnee);
 }
 
 void Engine::prepare (double sampleRate, int)
 {
     sr = sampleRate;
     // Level detection. Peak: instant attack, 30 ms release (holds the peak between cycles, so
-    // the gain doesn't collapse at zero crossings). RMS: 30 ms mean-square window, slower to
+    // the gain doesn't collapse at zero crossings). RMS: 20 ms mean-square window, slower to
     // react to short transients.
-    rmsCoef = (float)std::exp (-1.0 / (0.030 * sr));
+    rmsCoef = (float)std::exp (-1.0 / (0.020 * sr));
     peakCoef = (float)std::exp (-1.0 / (0.030 * sr));
     meterFall = (float)std::exp (-1.0 / (0.300 * sr));    // meter decay
     smooth = (float)(1.0 - std::exp (-1.0 / (0.010 * sr))); // parameter smoothing
@@ -158,8 +160,10 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         audible[b] = used[b] && (!anySolo || on (p[bandParam (b, kBandSolo)]));
         inTarget[b] = dbToGain (p[bandParam (b, kBandInput)]);
         outTargetB[b] = dbToGain (p[bandParam (b, kBandOutput)]);
-        const double attackMs = std::max (0.01, p[bandParam (b, kAttack)] * timeScale);
-        const double releaseMs = std::max (0.1, p[bandParam (b, kRelease)] * timeScale);
+        // Attack/Release are the time to (almost) complete the change - about 95 % - as in
+        // "time to reach maximum compression", so the envelope time constant is a third of it.
+        const double attackMs = std::max (0.01, p[bandParam (b, kAttack)] * timeScale / 3.0);
+        const double releaseMs = std::max (0.1, p[bandParam (b, kRelease)] * timeScale / 3.0);
         atk[b] = (float)std::exp (-1.0 / (attackMs * 0.001 * sr));
         rel[b] = (float)std::exp (-1.0 / (releaseMs * 0.001 * sr));
         ta[b] = p[bandParam (b, kAboveThresh)];
@@ -232,11 +236,18 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                         st.peak = std::max (inst, st.peak * peakCoef);
                         level = st.peak;
                     }
-                    const double lev = std::max (-120.0f, gainToDb (level));
-                    const float tA = (float)(aboveGainDb (lev, ta[b], ra[b], softKnee) * amount);
-                    const float tB = (float)(belowGainDb (lev, tb[b], rb[b], softKnee) * amount);
-                    st.aboveDb = tA + (std::fabs (tA) > std::fabs (st.aboveDb) ? atk[b] : rel[b]) * (st.aboveDb - tA);
-                    st.belowDb = tB + (std::fabs (tB) > std::fabs (st.belowDb) ? atk[b] : rel[b]) * (st.belowDb - tB);
+                    const float lev = std::max (-120.0f, gainToDb (level));
+                    // Level-domain envelopes feed the static curves (so the audible timing
+                    // depends on how far the level is past a threshold, as in the original):
+                    // Above reacts with Attack to rising levels, Below with Attack to falling ones.
+                    st.envAbove = lev + (lev > st.envAbove ? atk[b] : rel[b]) * (st.envAbove - lev);
+                    st.envBelow = lev + (lev < st.envBelow ? atk[b] : rel[b]) * (st.envBelow - lev);
+                    st.aboveDb = (float)(aboveGainDb (st.envAbove, ta[b], ra[b], softKnee) * amount);
+                    st.belowDb = (float)(belowGainDb (st.envBelow, tb[b], rb[b], softKnee) * amount);
+                    // Upward compression never lifts the signal past the Below threshold, even while
+                    // its envelope is still releasing (e.g. a loud hit right after silence).
+                    if (st.belowDb > 0.0f)
+                        st.belowDb = std::min (st.belowDb, std::max (0.0f, (float)tb[b] - lev));
                     g = dbToGain (std::clamp (st.aboveDb + st.belowDb, kMaxCutDb, kMaxBoostDb));
                 }
                 else

@@ -34,28 +34,44 @@ jobs:
         env:
           SIMPLR_DEST: ${{ runner.temp }}/vst3
         run: |
+          # an old top-level copy of ours (must be removed) and another vendor's plug-in (must stay)
+          mkdir -p "$SIMPLR_DEST/Simplr.vst3/Contents/Resources" "$SIMPLR_DEST/Lowfocus.vst3/Contents/Resources"
+          echo '{ "Vendor": "Simplr", "Version": "0.1.1.0" }' > "$SIMPLR_DEST/Simplr.vst3/Contents/Resources/moduleinfo.json"
+          echo '{ "Vendor": "Someone Else" }' > "$SIMPLR_DEST/Lowfocus.vst3/Contents/Resources/moduleinfo.json"
           sh scripts/install.sh
+          test ! -d "$SIMPLR_DEST/Simplr.vst3"
+          test -d "$SIMPLR_DEST/Lowfocus.vst3"
           for p in Simplr Multidyn Lowfocus; do
+            b="$SIMPLR_DEST/bfielstr/$p.vst3"
             if [ "$RUNNER_OS" = "macOS" ]; then
-              test -f "$SIMPLR_DEST/$p.vst3/Contents/MacOS/$p"
-              codesign -v "$SIMPLR_DEST/$p.vst3"
+              test -f "$b/Contents/MacOS/$p"
+              codesign -v "$b"
             else
-              test -f "$SIMPLR_DEST/$p.vst3/Contents/x86_64-linux/$p.so"
+              test -f "$b/Contents/x86_64-linux/$p.so"
             fi
+            grep -q '"Vendor": "bfielstr"' "$b/Contents/Resources/moduleinfo.json"
             echo "$p installed"
           done
+          # installing again replaces in place
+          sh scripts/install.sh | grep -q "Replacing Simplr"
           # subset install
           rm -rf "$SIMPLR_DEST"
           SIMPLR_PLUGINS="Lowfocus" sh scripts/install.sh
-          test -d "$SIMPLR_DEST/Lowfocus.vst3" && test ! -d "$SIMPLR_DEST/Simplr.vst3"
+          test -d "$SIMPLR_DEST/bfielstr/Lowfocus.vst3" && test ! -d "$SIMPLR_DEST/bfielstr/Simplr.vst3"
       - name: install.ps1
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:SIMPLR_DEST = Join-Path $env:RUNNER_TEMP 'vst3'
+          $old = Join-Path $env:SIMPLR_DEST 'Simplr.vst3\Contents\Resources'
+          New-Item -ItemType Directory -Force -Path $old | Out-Null
+          '{ "Vendor": "Simplr", "Version": "0.1.1.0" }' | Set-Content (Join-Path $old 'moduleinfo.json')
           ./scripts/install.ps1
-          $root = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3'
-          if (Test-Path "$env:CommonProgramW6432\VST3\Simplr.vst3") { $root = "$env:CommonProgramW6432\VST3" }
+          if (Test-Path (Join-Path $env:SIMPLR_DEST 'Simplr.vst3')) { throw 'old top-level copy not removed' }
           foreach ($p in 'Simplr', 'Multidyn', 'Lowfocus') {
-            if (-not (Test-Path "$root\$p.vst3\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
+            $b = Join-Path $env:SIMPLR_DEST "bfielstr\$p.vst3"
+            if (-not (Test-Path "$b\Contents\x86_64-win\$p.vst3")) { throw "$p binary missing" }
             Write-Host "$p installed"
           }
+          $again = ./scripts/install.ps1 6>&1 | Out-String
+          if ($again -notmatch 'Replacing Simplr') { throw 'second install did not replace' }

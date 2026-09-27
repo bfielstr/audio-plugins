@@ -69,6 +69,17 @@ function(pk_add_plugin target)
 
     if(SMTG_MAC)
         smtg_target_set_bundle(${target} BUNDLE_IDENTIFIER ${ARG_BUNDLE_ID} COMPANY_NAME "bfielstr")
+        # The SDK only fills Info.plist for Xcode builds; provide it for Makefile/Ninja builds too
+        # (identifier and version are how macOS and hosts tell plug-ins and versions apart).
+        if(NOT XCODE)
+            set_target_properties(${target} PROPERTIES
+                MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/cmake/Info.plist.in
+                MACOSX_BUNDLE_GUI_IDENTIFIER ${ARG_BUNDLE_ID}
+                MACOSX_BUNDLE_BUNDLE_NAME ${target}
+                MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+                MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}"
+                MACOSX_BUNDLE_COPYRIGHT "Copyright (c) 2026 bfielstr, MIT License")
+        endif()
         # Always seal the bundle with an ad-hoc signature (hosts on Apple Silicon need a valid
         # signature, and the SDK only signs when a signing identity is configured).
         add_custom_command(TARGET ${target} POST_BUILD

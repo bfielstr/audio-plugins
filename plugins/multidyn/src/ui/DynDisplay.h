@@ -2,10 +2,11 @@
 // Below block (left of the below threshold) and the Above block (right of the above threshold),
 // the input level (thin bar) and output level (thick bar).
 //   drag a block edge          move that threshold          (Shift: fine)
-//   drag inside a block        up = louder, down = quieter  (changes the ratio)
+//   drag inside a block        up = louder, down = quieter  (changes the ratio: Above up = lower
+//                              ratio / expansion, Below up = higher ratio / upward compression)
 //   Cmd/Ctrl while dragging    same change on every band
 //   Alt/Option while dragging  above and below together for this band
-//   double-click a block       reset its ratio to 1:1
+//   double-click a block       reset its ratio to 1:1 (no processing)
 #pragma once
 
 #include "Params.h"
@@ -23,7 +24,7 @@ class Controller;
 class DynDisplay : public VSTGUI::CView
 {
 public:
-    static constexpr double kMinDb = -70.0, kMaxDb = 6.0;
+    static constexpr double kMinDb = -80.0, kMaxDb = 0.0;
     static constexpr double kScaleHeight = 16.0;
 
     DynDisplay (const VSTGUI::CRect& r, pk::ParamHost* host, Controller* controller);

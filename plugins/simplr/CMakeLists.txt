@@ -1,5 +1,5 @@
 # Simplr: a sampler modelled on Ableton Live's Simpler.
-project(Simplr VERSION 0.2.0.0)
+project(Simplr VERSION 0.3.0.0)
 
 add_library(simplr_core STATIC
     src/core/Params.cpp

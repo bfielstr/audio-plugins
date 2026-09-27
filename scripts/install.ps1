@@ -1,4 +1,6 @@
-# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus) on Windows.
+# Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus) on Windows,
+# into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
+# left at the top of the VST3 folder by older installers are removed (only if they are ours).
 #
 #   irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.ps1 | iex
 #
@@ -21,12 +23,22 @@ $base = if ($version -eq 'latest') { "https://github.com/$repo/releases/latest/d
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($env:SIMPLR_DEST) {
-    $dest = $env:SIMPLR_DEST
+    $root = $env:SIMPLR_DEST
 } elseif ($isAdmin) {
     $common = if (${env:CommonProgramW6432}) { ${env:CommonProgramW6432} } else { ${env:CommonProgramFiles} }
-    $dest = Join-Path $common 'VST3'
+    $root = Join-Path $common 'VST3'
 } else {
-    $dest = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3'
+    $root = Join-Path $env:LOCALAPPDATA 'Programs\Common\VST3'
+}
+$dest = Join-Path $root 'bfielstr'
+
+function Get-ModuleInfo ($bundle) {
+    $file = Join-Path $bundle 'Contents\Resources\moduleinfo.json'
+    if (Test-Path $file) { return Get-Content -Raw $file } else { return '' }
+}
+function Test-Ours ($bundle) { (Get-ModuleInfo $bundle) -match '"Vendor":\s*"(bfielstr|Simplr)"' }
+function Get-Version ($bundle) {
+    if ((Get-ModuleInfo $bundle) -match '"Version":\s*"([^"]*)"') { $Matches[1] } else { '' }
 }
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -61,15 +73,28 @@ try {
     foreach ($p in $plugins) {
         $bundle = Join-Path $x "$p.vst3"
         if (-not (Test-Path $bundle)) { Write-Warning "No $p.vst3 in this release - skipping."; continue }
+        # remove a copy an older installer put directly in the VST3 folder (it would show up twice)
+        $legacy = Join-Path $root "$p.vst3"
+        if (Test-Path $legacy) {
+            if (Test-Ours $legacy) {
+                Write-Host "Removing old copy $legacy ($(Get-Version $legacy))"
+                Remove-Item -Recurse -Force $legacy
+            } else {
+                Write-Warning "$legacy is from another vendor; leaving it alone."
+            }
+        }
         $target = Join-Path $dest "$p.vst3"
-        if (Test-Path $target) { Remove-Item -Recurse -Force $target }
+        if (Test-Path $target) {
+            Write-Host "Replacing $p $(Get-Version $target)"
+            Remove-Item -Recurse -Force $target
+        }
         Move-Item -Path $bundle -Destination $target
         Get-ChildItem -Recurse $target | Unblock-File
-        Write-Host "Installed: $target"
+        Write-Host "Installed: $target ($(Get-Version $target))"
     }
     if (-not $isAdmin -and -not $env:SIMPLR_DEST) {
         Write-Host "Installed for the current user. If REAPER doesn't find it, add this folder under"
-        Write-Host "Options > Preferences > Plug-ins > VST > VST plug-in paths:  $dest"
+        Write-Host "Options > Preferences > Plug-ins > VST > VST plug-in paths:  $root"
         Write-Host "(or re-run this command from an Administrator PowerShell to install system-wide)."
     }
     Write-Host "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan."

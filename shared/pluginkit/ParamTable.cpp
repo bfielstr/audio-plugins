@@ -26,21 +26,23 @@ std::string lower (std::string s)
 }
 
 
-constexpr double kRatioMax = 50.0;
-
-double ratioToPlain (double n)
+// Ratio curve: min .. 1 over the first half (log), 1 .. max over the second half (linear in 1/r,
+// so that equal knob steps sound like equal changes of the output slope).
+double ratioToPlain (double n, double mn, double mx)
 {
     if (n <= 0.5)
-        return std::pow (2.0, 2.0 * n - 1.0); // 0.5 .. 1
-    return std::min (kRatioMax, 1.0 / std::max (1.0 / kRatioMax, 1.0 - (n - 0.5) * 2.0 * (1.0 - 1.0 / kRatioMax)));
+        return mn * std::pow (1.0 / mn, 2.0 * n);
+    if (n >= 1.0)
+        return mx; // exact, so "infinity" compares equal after a round trip
+    return std::min (mx, 1.0 / std::max (1.0 / mx, 1.0 - (n - 0.5) * 2.0 * (1.0 - 1.0 / mx)));
 }
 
-double ratioToNormalized (double r)
+double ratioToNormalized (double r, double mn, double mx)
 {
-    r = std::clamp (r, 0.5, kRatioMax);
+    r = std::clamp (r, mn, mx);
     if (r <= 1.0)
-        return (std::log2 (r) + 1.0) / 2.0;
-    return 0.5 + (1.0 - 1.0 / r) / (2.0 * (1.0 - 1.0 / kRatioMax));
+        return 0.5 * std::log (r / mn) / std::log (1.0 / mn);
+    return 0.5 + (1.0 - 1.0 / r) / (2.0 * (1.0 - 1.0 / mx));
 }
 
 } // namespace
@@ -77,7 +79,7 @@ double ParamTable::toPlain (uint32_t id, double n) const
     }
     switch (p.curve)
     {
-        case Curve::Ratio: return ratioToPlain (n);
+        case Curve::Ratio: return ratioToPlain (n, p.min, p.max);
         case Curve::Log: return p.min * std::pow (p.max / p.min, n);
         case Curve::Power3: return p.min + (p.max - p.min) * n * n * n;
         case Curve::Linear: break;
@@ -95,7 +97,7 @@ double ParamTable::toNormalized (uint32_t id, double v) const
         return (std::round (v) - p.min) / (p.max - p.min);
     switch (p.curve)
     {
-        case Curve::Ratio: return ratioToNormalized (v);
+        case Curve::Ratio: return ratioToNormalized (v, p.min, p.max);
         case Curve::Log: return std::log (v / p.min) / std::log (p.max / p.min);
         case Curve::Power3: return std::cbrt ((v - p.min) / (p.max - p.min));
         case Curve::Linear: break;
@@ -143,10 +145,10 @@ std::string ParamTable::toText (uint32_t id, double v) const
                 return fmt ("%.0f st", v);
             return fmt ("%.1f st", v);
         case Disp::Cents: return fmt ("%.0f ct", v);
-        case Disp::Ratio:
-            if (v >= kRatioMax - 0.5)
-                return "inf : 1";
-            return fmt (v < 10.0 ? "%.2f : 1" : "%.1f : 1", v);
+        case Disp::Ratio: // Live-style "1 : x"
+            if (v >= p.max * 0.999)
+                return "1 : inf";
+            return fmt (v < 10.0 ? "1 : %.2f" : (v < 100.0 ? "1 : %.1f" : "1 : %.0f"), v);
         case Disp::Curve:
             if (std::fabs (v) < 0.005)
                 return "Linear";
@@ -201,6 +203,8 @@ bool ParamTable::fromText (uint32_t id, const std::string& textIn, double& out) 
         }
         return false;
     }
+    if (p.disp == Disp::Ratio && text.find (':') != std::string::npos)
+        text = text.substr (text.find (':') + 1); // "1 : 4.17" -> "4.17"
     if (text.find ("inf") != std::string::npos)
     {
         out = p.disp == Disp::Ratio ? p.max : p.min;

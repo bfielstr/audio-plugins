@@ -1,5 +1,5 @@
 # Lowfocus: low-end contrast processor in the spirit of Ozone's Low End Focus.
-project(Lowfocus VERSION 0.2.0.0)
+project(Lowfocus VERSION 0.3.0.0)
 
 add_library(lowfocus_core STATIC
     src/core/Params.cpp

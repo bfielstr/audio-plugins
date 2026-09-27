@@ -1,5 +1,6 @@
 #include "DynDisplay.h"
 
+#include "Engine.h"
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
@@ -27,16 +28,23 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 
-// Blue when the block is made quieter (ratio > 1), orange when louder (ratio < 1).
-CColor blockColor (double ratio, bool dim)
+// Orange when the block is made louder, blue when quieter. Above: ratio > 1 is quieter
+// (compression); Below: ratio > 1 is louder (upward compression).
+CColor blockColor (double ratio, bool below, bool dim)
 {
-    const uint8_t a = dim ? 18 : 0;
     if (std::fabs (ratio - 1.0) < 1e-3)
         return CColor (255, 255, 255, (uint8_t)(dim ? 8 : 16));
     const double amount = std::clamp (std::fabs (std::log2 (ratio)) / 3.0, 0.15, 1.0);
     const uint8_t alpha = (uint8_t)(dim ? 25 : 40 + 110 * amount);
-    (void)a;
-    return ratio > 1.0 ? CColor (70, 130, 235, alpha) : CColor (255, 150, 40, alpha);
+    const bool louder = below ? ratio > 1.0 : ratio < 1.0;
+    return louder ? CColor (255, 150, 40, alpha) : CColor (70, 130, 235, alpha);
+}
+
+std::string gainText (double db)
+{
+    char buf[16];
+    std::snprintf (buf, sizeof (buf), "%+.1f", db);
+    return buf;
 }
 } // namespace
 
@@ -85,13 +93,13 @@ void DynDisplay::draw (CDrawContext* ctx)
         // grid
         ctx->setLineWidth (1.0);
         ctx->setFrameColor (theme::kGrid);
-        for (double db = -60.0; db <= 0.0; db += 12.0)
+        for (double db = -70.0; db <= -10.0; db += 10.0)
             ctx->drawLine (CPoint (xOf (db), lane.top), CPoint (xOf (db), lane.bottom));
 
         // blocks
-        ctx->setFillColor (blockColor (rb, dim));
+        ctx->setFillColor (blockColor (rb, true, dim));
         ctx->drawRect (CRect (lane.left, lane.top, xb, lane.bottom), kDrawFilled);
-        ctx->setFillColor (blockColor (ra, dim));
+        ctx->setFillColor (blockColor (ra, false, dim));
         ctx->drawRect (CRect (xa, lane.top, lane.right, lane.bottom), kDrawFilled);
         ctx->setLineWidth (2.0);
         ctx->setFrameColor (dim ? theme::kTextDim : theme::kTextBright);
@@ -113,8 +121,17 @@ void DynDisplay::draw (CDrawContext* ctx)
 
         // labels
         const CColor tc = dim ? theme::kTextDim : theme::kText;
+        // ratio, and the gain the block applies at its extreme (silence / 0 dB), like the original
+        const bool knee = host->plainValue (kSoftKnee) >= 0.5;
+        const double amount = host->plainValue (kAmount);
+        const double belowMax = std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
+        const double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
         text (ctx, host->valueText (bandParam (b, kBelowRatio)), CRect (lane.left + 4, lane.bottom - 16, xb - 4, lane.bottom - 2), tc, 10.0);
         text (ctx, host->valueText (bandParam (b, kAboveRatio)), CRect (xa + 4, lane.bottom - 16, lane.right - 4, lane.bottom - 2), tc, 10.0);
+        if (std::fabs (belowMax) >= 0.05 && xb - lane.left > 120)
+            text (ctx, gainText (belowMax), CRect (lane.left + 4, lane.bottom - 16, lane.left + 60, lane.bottom - 2), tc, 10.0, kLeftText, true);
+        if (std::fabs (aboveMax) >= 0.05 && lane.right - xa > 120)
+            text (ctx, gainText (aboveMax), CRect (lane.right - 60, lane.bottom - 16, lane.right - 4, lane.bottom - 2), tc, 10.0, kRightText, true);
         text (ctx, host->valueText (bandParam (b, kBelowThresh)), CRect (xb - 60, lane.top + 2, xb - 4, lane.top + 14), tc, 9.5, kRightText);
         text (ctx, host->valueText (bandParam (b, kAboveThresh)), CRect (xa + 4, lane.top + 2, xa + 60, lane.top + 14), tc, 9.5, kLeftText);
         std::string tag = "Band " + std::to_string (b + 1);
@@ -131,11 +148,12 @@ void DynDisplay::draw (CDrawContext* ctx)
 
     // dB scale
     const double sy = all.bottom - kScaleHeight;
-    for (double db = -60.0; db <= 0.0; db += 12.0)
+    for (double db = -80.0; db <= 0.0; db += 10.0)
     {
         char buf[16];
-        std::snprintf (buf, sizeof (buf), "%.0f", db);
-        text (ctx, buf, CRect (xOf (db) - 20, sy + 1, xOf (db) + 20, all.bottom), theme::kTextDim, 9.5);
+        std::snprintf (buf, sizeof (buf), "%.0f", std::fabs (db)); // Live labels the scale 80 ... 0
+        const double cx = std::clamp (xOf (db), all.left + 12.0, all.right - 12.0);
+        text (ctx, buf, CRect (cx - 20, sy + 1, cx + 20, all.bottom), theme::kTextDim, 9.5);
     }
 }
 
@@ -193,7 +211,7 @@ void DynDisplay::onMouseDownEvent (MouseDownEvent& e)
     if (e.clickCount == 2 && (hit == Hit::BelowBlock || hit == Hit::AboveBlock))
     {
         for (auto id : ids)
-            host->setOnce (id, host->table ().defaultNormalized (id));
+            host->setOnce (id, host->table ().toNormalized (id, 1.0)); // 1:1 = no processing
         invalid ();
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);
@@ -235,8 +253,11 @@ void DynDisplay::onMouseMoveEvent (MouseMoveEvent& e)
         }
         else
         {
-            // "volume" of a block: dragging up makes it louder = lower ratio
-            const double v = t.start + (e.mousePosition.y - downPoint.y) / 200.0 * fine;
+            // "volume" of a block: dragging up makes it louder. Above: louder = lower ratio;
+            // Below: louder = higher ratio (upward compression).
+            const bool belowRatio = (t.id - kBandBase) % kBandBlock == kBelowRatio;
+            const double dir = belowRatio ? -1.0 : 1.0;
+            const double v = t.start + dir * (e.mousePosition.y - downPoint.y) / 200.0 * fine;
             host->setNorm (t.id, std::clamp (v, 0.0, 1.0));
         }
     }

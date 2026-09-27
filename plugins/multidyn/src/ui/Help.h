@@ -31,12 +31,12 @@ inline const char* forParam (uint32_t id)
             case kBandSolo: return "Solo: hear only the soloed band(s).";
             case kBandInput: return "Band level before the dynamics (changes how hard it hits the thresholds).";
             case kBandOutput: return "Band level after the dynamics.";
-            case kAboveThresh: return "Above threshold: levels above it are compressed (ratio > 1) or expanded upward (ratio < 1).";
-            case kAboveRatio: return "Above ratio. > 1: downward compression (loud gets quieter). < 1: upward expansion (loud gets louder).";
-            case kBelowThresh: return "Below threshold: levels under it are expanded downward (ratio > 1) or compressed upward (ratio < 1).";
-            case kBelowRatio: return "Below ratio. > 1: downward expansion (quiet gets quieter). < 1: upward compression (quiet gets louder).";
-            case kAttack: return "How fast the processing reacts when the level crosses into a block.";
-            case kRelease: return "How fast the processing recovers when the level leaves a block.";
+            case kAboveThresh: return "Above threshold: levels above it are compressed (1:x with x > 1) or expanded upward (x < 1).";
+            case kAboveRatio: return "Above ratio 1:x. x > 1: downward compression (loud gets quieter); 1:inf limits. x < 1: upward expansion (loud gets louder).";
+            case kBelowThresh: return "Below threshold: levels under it are compressed upward (1:x with x > 1) or expanded downward (x < 1).";
+            case kBelowRatio: return "Below ratio 1:x. x > 1: upward compression (quiet gets louder, up to +36 dB). x < 1: downward expansion (quiet gets quieter).";
+            case kAttack: return "How fast the level envelopes follow the signal into a block (rising for Above, falling for Below).";
+            case kRelease: return "How fast the level envelopes follow the signal out of a block.";
             default: break;
         }
     return nullptr;
@@ -45,7 +45,8 @@ inline const char* forParam (uint32_t id)
 constexpr const char* kDisplay =
     "Drag a block edge left/right to move a threshold. Drag inside a block up (louder) or down (quieter) to set its "
     "ratio. Cmd/Ctrl: all bands. Alt/Option: above and below together. Shift: fine. Double-click a block: 1:1. "
-    "Thin bars show input level, thick bars output level.";
+    "Thin bars show input level, thick bars output level; the number in a block is the gain it applies at its "
+    "extreme (silence for Below, 0 dB for Above).";
 constexpr const char* kTabs = "Right column shows: T = attack/release, B = below threshold/ratio, A = above threshold/ratio.";
 
 } // namespace multidyn::help

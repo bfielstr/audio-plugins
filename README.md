@@ -27,9 +27,12 @@ irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/instal
 ```
 
 The installers download the latest [release](https://github.com/bfielstr/audio-plugins/releases), verify
-its SHA-256 checksum and copy the `.vst3` bundles into the standard VST3 folder. Options (environment
-variables): `SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.2.0`
-picks a release, `SIMPLR_DEST=...` chooses the folder.
+its SHA-256 checksum and install the `.vst3` bundles into a **`bfielstr`** folder inside the standard
+VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running an installer again replaces the
+installed versions; copies that older installers put directly in the VST3 folder are removed (only
+ours; the vendor in the bundle is checked). Options (environment variables):
+`SIMPLR_PLUGINS="Multidyn Lowfocus"` installs only some plug-ins, `SIMPLR_VERSION=v0.3.0` picks a
+release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*.
 

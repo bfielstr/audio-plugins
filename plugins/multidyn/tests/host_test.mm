@@ -19,6 +19,9 @@ using namespace multidyn;
 
 enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
 
+static void set (State& st, uint32_t id, double plain);
+
+// The defaults are Live's OTT preset; audio checks start from a neutral device.
 static State baseState ()
 {
     State st;
@@ -26,6 +29,15 @@ static State baseState ()
     {
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
+    }
+    for (int b = 0; b < kMaxBands; ++b)
+    {
+        set (st, bandParam (b, kBandInput), 0.0);
+        set (st, bandParam (b, kBandOutput), 0.0);
+        set (st, bandParam (b, kAboveRatio), 1.0);
+        set (st, bandParam (b, kBelowRatio), 1.0);
+        set (st, bandParam (b, kAboveThresh), -12.0);
+        set (st, bandParam (b, kBelowThresh), -40.0);
     }
     return st;
 }
@@ -74,6 +86,10 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count %d", rig.controller->getParameterCount ());
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         CHECK (rig.component->getBusCount (kAudio, kInput) == 2, "main + side-chain inputs");
+        // a fresh instance is Live's OTT preset
+        CHECK (std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 && std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
+                   std::fabs (plainOf (rig, bandParam (2, kBandOutput)) - 10.3) < 1e-6 && plainOf (rig, bandParam (2, kAboveRatio)) >= kRatioInf * 0.999,
+               "OTT defaults");
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
         State st = baseState ();
@@ -125,6 +141,39 @@ int main (int argc, char** argv)
         CHECK (std::fabs (back.norm[kBands] - toNormalized (kBands, 3)) < 1e-9, "band count saved");
         rig.stop ();
 
+        // --- editor with the untouched OTT defaults while audio plays (docs screenshot) ---
+        {
+            State ott;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                ott.norm[id] = defaultNormalized (id);
+                ott.has[id] = true;
+            }
+            apply (rig, ott);
+            rig.start ();
+            EditorWindow win (rig.controller);
+            for (int i = 0; i < 12; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, [] (int bus, int, float* buf, int n, long long pos) {
+                    if (bus != 0)
+                        return;
+                    uint32_t seed = (uint32_t)pos * 2654435761u + 7;
+                    for (int k = 0; k < n; ++k)
+                    {
+                        seed = seed * 1664525u + 1013904223u;
+                        const double t = (double)(pos + k) / 48000.0;
+                        const double env = std::fmod (t, 0.5) < 0.1 ? 1.0 : 0.15; // loud hits, quiet tails
+                        buf[k] = (float)(env * (0.15 * (((seed >> 8) & 0xFFFF) / 32768.0 - 1.0) + 0.3 * std::sin (2.0 * M_PI * 60.0 * t)));
+                    }
+                });
+                pump (0.03);
+            }
+            CHECK (win.savePng (outDir + "/ui_multidyn_ott.png"), "OTT screenshot");
+            CHECK (allFinite (out), "OTT output finite");
+        }
+        rig.stop ();
+
         // --- editor: screenshot and the display's gestures ---
         State ui = baseState ();
         for (int b = 0; b < kNumBands; ++b)
@@ -152,33 +201,36 @@ int main (int argc, char** argv)
             pump (0.5); // let the meters settle
             CHECK (win.savePng (outDir + "/ui_multidyn.png"), "screenshot");
 
-            // display: x 8..912, y 40..260 with a 16 px scale; three lanes, band 3 on top
-            auto xOf = [] (double db) { return 8.0 + (db + 70.0) / 76.0 * 904.0; };
+            // display: x 8..912 = -80..0 dB, y 40..260 with a 16 px scale; three lanes, band 3 on top
+            auto xOf = [] (double db) { return 8.0 + (db + 80.0) / 80.0 * 904.0; };
+            const double pxPerDb = 904.0 / 80.0;
             const double laneH = (220.0 - 16.0) / 3.0;
             const double midY = 40.0 + laneH * 1.5;
             const double highY = 40.0 + laneH * 0.5;
             const uint32_t midAbove = bandParam (kMid, kAboveThresh);
 
             // 1. drag the mid band's above threshold 10 dB lower
-            const double x0 = xOf (plainOf (rig, midAbove));
-            win.drag (x0, midY, x0 - 10.0 / 76.0 * 904.0, midY);
-            CHECK (std::fabs (plainOf (rig, midAbove) - (-22.0)) < 0.3, "threshold drag -> %.2f (want -22)", plainOf (rig, midAbove));
+            const double a0 = plainOf (rig, midAbove);
+            const double x0 = xOf (a0);
+            win.drag (x0, midY, x0 - 10.0 * pxPerDb, midY);
+            CHECK (std::fabs (plainOf (rig, midAbove) - (a0 - 10.0)) < 0.3, "threshold drag -> %.2f (want %.2f)", plainOf (rig, midAbove), a0 - 10.0);
 
             // 2. Shift = fine: the same drag moves it only a fifth as far
             const double before = plainOf (rig, midAbove);
             const double x1 = xOf (before);
-            win.drag (x1, midY, x1 + 10.0 / 76.0 * 904.0, midY, kShift);
+            win.drag (x1, midY, x1 + 10.0 * pxPerDb, midY, kShift);
             CHECK (std::fabs (plainOf (rig, midAbove) - before - 2.0) < 0.3, "fine drag moved %.2f dB (want 2)",
                    plainOf (rig, midAbove) - before);
 
-            // 3. Cmd: move every band's below threshold together
-            const double lowBelow0 = plainOf (rig, bandParam (kLow, kBelowThresh));
-            const double xb = xOf (plainOf (rig, bandParam (kMid, kBelowThresh)));
-            win.drag (xb, midY, xb + 6.0 / 76.0 * 904.0, midY, kCmd);
+            // 3. Cmd: move every band's below threshold by the same amount
+            double below0[3];
             for (int b = 0; b < 3; ++b)
-                CHECK (std::fabs (plainOf (rig, bandParam (b, kBelowThresh)) - (-34.0)) < 0.4, "cmd drag band %d -> %.2f", b,
+                below0[b] = plainOf (rig, bandParam (b, kBelowThresh));
+            const double xb = xOf (below0[kMid]);
+            win.drag (xb, midY, xb + 6.0 * pxPerDb, midY, kCmd);
+            for (int b = 0; b < 3; ++b)
+                CHECK (std::fabs (plainOf (rig, bandParam (b, kBelowThresh)) - (below0[b] + 6.0)) < 0.4, "cmd drag band %d -> %.2f", b,
                        plainOf (rig, bandParam (b, kBelowThresh)));
-            (void)lowBelow0;
 
             // 4. drag down inside the mid above block: quieter = higher ratio
             const uint32_t midRatio = bandParam (kMid, kAboveRatio);
@@ -188,10 +240,11 @@ int main (int argc, char** argv)
             win.drag (880, midY, 880, midY - 160);
             CHECK (plainOf (rig, midRatio) < 1.0, "drag up past 1:1 gives upward expansion: %.2f", plainOf (rig, midRatio));
 
-            // 5. Alt: above and below ratios of the high band move together
+            // 5. Alt: both blocks of the high band get quieter together (drag down): the Above ratio
+            // rises (more compression), the Below ratio falls (towards downward expansion)
             const double ha = plainOf (rig, bandParam (kHigh, kAboveRatio)), hb = plainOf (rig, bandParam (kHigh, kBelowRatio));
             win.drag (880, highY, 880, highY + 30, kAlt);
-            CHECK (plainOf (rig, bandParam (kHigh, kAboveRatio)) > ha && plainOf (rig, bandParam (kHigh, kBelowRatio)) > hb,
+            CHECK (plainOf (rig, bandParam (kHigh, kAboveRatio)) > ha && plainOf (rig, bandParam (kHigh, kBelowRatio)) < hb,
                    "alt drag: above %.2f->%.2f below %.2f->%.2f", ha, plainOf (rig, bandParam (kHigh, kAboveRatio)), hb,
                    plainOf (rig, bandParam (kHigh, kBelowRatio)));
 

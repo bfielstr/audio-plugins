@@ -3,10 +3,11 @@
 // Per band, the detector level x (dB) drives two gain computers:
 //   above threshold Ta, ratio Ra:  gain = (x - Ta) * (1/Ra - 1)   for x > Ta
 //        Ra > 1 = downward compression, Ra < 1 = upward expansion
-//   below threshold Tb, ratio Rb:  gain = (Tb - x) * (1 - Rb)     for x < Tb
-//        Rb > 1 = downward expansion,   Rb < 1 = upward compression
-// i.e. a ratio above 1 always "lowers the volume" of that block, as in the original's display.
-// Each computer has its own attack/release smoothing (attack = gain change growing).
+//   below threshold Tb, ratio Rb:  gain = (Tb - x) * (1 - 1/Rb)   for x < Tb
+//        Rb > 1 = upward compression,   Rb < 1 = downward expansion
+// Ratios read Live-style as "1 : R": R > 1 always compresses (reduces dynamic range).
+// Each computer is driven by its own level envelope: Above uses Attack when the level rises and
+// Release when it falls, Below the other way round.
 #pragma once
 
 #include "Crossover.h"
@@ -49,7 +50,8 @@ public:
 private:
     struct BandState
     {
-        float aboveDb = 0.0f, belowDb = 0.0f; // smoothed gain changes
+        float aboveDb = 0.0f, belowDb = 0.0f;       // current gain changes (dB)
+        float envAbove = -120.0f, envBelow = -120.0f; // level envelopes (dB)
         float rms = 0.0f, peak = 0.0f;
         float inGain = 1.0f, outGain = 1.0f;  // smoothed linear gains
         float meterIn = 0.0f, meterOut = 0.0f;

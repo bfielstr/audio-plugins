@@ -48,6 +48,11 @@ constexpr uint32_t bandParam (int band, int field) { return (uint32_t)(kBandBase
 
 enum DetectorMode { kPeak = 0, kRms };
 
+// Ratios are written Live-style as "1 : r": r > 1 compresses (Above: loud gets quieter, Below:
+// quiet gets louder), r < 1 expands, and the maximum is treated as infinity (limiting).
+constexpr double kRatioMin = 0.25;
+constexpr double kRatioInf = 1000.0;
+
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }

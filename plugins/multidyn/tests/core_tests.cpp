@@ -100,10 +100,30 @@ static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
 enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
 constexpr int kOnly = 0;                  // the band in single-band mode
 
+// The defaults are Live's OTT preset; most tests start from a neutral device instead.
+static void neutralize (Engine& e)
+{
+    for (int b = 0; b < kMaxBands; ++b)
+    {
+        e.setParam (bandParam (b, kBandInput), 0.0);
+        e.setParam (bandParam (b, kBandOutput), 0.0);
+        e.setParam (bandParam (b, kAboveRatio), 1.0);
+        e.setParam (bandParam (b, kBelowRatio), 1.0);
+        e.setParam (bandParam (b, kAboveThresh), -12.0);
+        e.setParam (bandParam (b, kBelowThresh), -40.0);
+        e.setParam (bandParam (b, kAttack), 10.0);
+        e.setParam (bandParam (b, kRelease), 150.0);
+    }
+    e.setParam (kXover1, 120.0);
+    e.setParam (kXover2, 1200.0);
+    e.setParam (kXover3, 6000.0);
+}
+
 static std::unique_ptr<Engine> engine (bool singleBand = true)
 {
     auto e = std::make_unique<Engine> ();
     e->prepare (kSr, 512);
+    neutralize (*e);
     e->setParam (kBands, singleBand ? 0 : 2); // choice index: 1 or 3 bands
     e->setParam (kSoftKnee, 0);
     e->setParam (kDetector, kPeak);
@@ -131,8 +151,11 @@ TEST (params_roundtrip)
     }
     // ratio mapping: 1:1 sits in the middle, extremes 0.5 and inf
     CHECK (std::fabs (t.toNormalized (bandParam (0, kAboveRatio), 1.0) - 0.5) < 1e-9, "1:1 centred");
-    CHECK (t.toText (bandParam (0, kAboveRatio), 4.0) == "4.00 : 1", "%s", t.toText (bandParam (0, kAboveRatio), 4.0).c_str ());
-    CHECK (t.toText (bandParam (0, kAboveRatio), 50.0) == "inf : 1", "inf");
+    CHECK (t.toText (bandParam (0, kAboveRatio), 4.17) == "1 : 4.17", "%s", t.toText (bandParam (0, kAboveRatio), 4.17).c_str ());
+    CHECK (t.toText (bandParam (0, kAboveRatio), kRatioInf) == "1 : inf", "inf");
+    double parsed = 0;
+    CHECK (t.fromText (bandParam (0, kBelowRatio), "1 : 66.7", parsed) && std::fabs (parsed - 66.7) < 1e-9, "parse 1 : 66.7");
+    CHECK (t.fromText (bandParam (0, kBelowRatio), "1:inf", parsed) && parsed == kRatioInf, "parse 1:inf");
 }
 
 TEST (crossover_sums_flat)
@@ -213,9 +236,9 @@ TEST (four_kinds_of_dynamics)
          -20.0 + 14.0 / 4.0},
         {"upward expansion", -26.0, bandParam (kOnly, kAboveThresh), bandParam (kOnly, kAboveRatio), -30.0, 0.5,
          -30.0 + 4.0 * 2.0},
-        {"downward expansion", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 2.0,
+        {"downward expansion", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 0.5,
          -30.0 - 10.0 * 2.0},
-        {"upward compression", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 0.5,
+        {"upward compression", -40.0, bandParam (kOnly, kBelowThresh), bandParam (kOnly, kBelowRatio), -30.0, 2.0,
          -30.0 - 10.0 * 0.5},
     };
     for (const auto& c : cases)
@@ -225,7 +248,10 @@ TEST (four_kinds_of_dynamics)
         e->setParam (bandParam (kOnly, kBelowThresh), -70.0);
         e->setParam (c.tId, c.thresh);
         e->setParam (c.rId, c.ratio);
-        e->setParam (bandParam (kOnly, kRelease), 500.0);
+        // Above: a long release holds the gain steady. Below: its envelope rises from silence
+        // with the release time, so keep it short enough to settle within the test.
+        const bool below = c.rId == bandParam (kOnly, kBelowRatio);
+        e->setParam (bandParam (kOnly, kRelease), below ? 50.0 : 500.0);
         auto out = run (*e, sine (1000.0, c.inDb, 2.0));
         const double got = peakDb (out.l, (size_t)(1.5 * kSr), (size_t)(2.0 * kSr));
         CHECK (std::fabs (got - c.expectDb) < 0.6, "%s: %.2f dB (want %.2f)", c.name, got, c.expectDb);
@@ -295,7 +321,9 @@ TEST (soft_knee_is_gradual)
         prev = g;
     }
     CHECK (worst < 0.1, "soft knee jump %f", worst);
-    CHECK (belowGainDb (-50.0, -40.0, 2.0, false) == -10.0 && belowGainDb (-30.0, -40.0, 2.0, false) == 0.0, "below");
+    CHECK (belowGainDb (-50.0, -40.0, 0.5, false) == -10.0 && belowGainDb (-30.0, -40.0, 0.5, false) == 0.0,
+           "below: 1:0.5 doubles the distance under the threshold");
+    CHECK (std::fabs (belowGainDb (-50.0, -40.0, 2.0, false) - 5.0) < 1e-9, "below: 1:2 halves it (upward compression)");
 }
 
 TEST (attack_and_release_timing)
@@ -322,11 +350,17 @@ TEST (attack_and_release_timing)
         run (eng, chunk, nullptr, 480);
         g.push_back (eng.meter (kOnly).gainDb);
     }
-    // one attack time constant (50 ms) in: ~63 % of the final reduction
-    const double at50 = g[4] / -12.6;
-    CHECK (at50 > 0.5 && at50 < 0.75, "63%% point at 50 ms: %f", at50);
+    // Attack 50 ms = time to cover ~95 % of a level change (time constant 16.7 ms). The level
+    // envelope rising from -40 to -6 dB only crosses the -20 dB threshold after ~15 ms, so there
+    // is no reduction at 10 ms, most of it by 30 ms and essentially all of it by 50 ms - the
+    // gain follows the transfer curve rather than the attack time literally.
+    CHECK (std::fabs (g[0]) < 0.3, "no reduction before the envelope reaches the threshold: %f", g[0]);
+    const double at30 = g[2] / -12.6;
+    CHECK (at30 > 0.45 && at30 < 0.75, "most of the reduction at 30 ms: %f", at30);
+    CHECK (g[4] / -12.6 > 0.85, "nearly all of it at 50 ms: %f", g[4] / -12.6);
     CHECK (std::fabs (g.back () + 12.6) < 0.8, "settles at -12.6: %f", g.back ());
-    // time scale 2x makes it slower
+    const double at100 = at30;
+    // Time 200 % slows everything down
     auto e2 = engine ();
     e2->setParam (bandParam (kOnly, kAboveThresh), -20.0);
     e2->setParam (bandParam (kOnly, kAboveRatio), 10.0);
@@ -334,10 +368,55 @@ TEST (attack_and_release_timing)
     e2->setParam (kTime, 2.0);
     run (*e2, quiet);
     Sig chunk;
-    chunk.l.assign (loud.l.begin (), loud.l.begin () + 2400);
+    chunk.l.assign (loud.l.begin (), loud.l.begin () + 1440);
     chunk.r = chunk.l;
     run (*e2, chunk, nullptr, 480);
-    CHECK (e2->meter (kOnly).gainDb / -12.6 < at50 * 0.8, "Time 200%% slows the attack: %f", e2->meter (kOnly).gainDb);
+    CHECK (e2->meter (kOnly).gainDb / -12.6 < at100 * 0.5, "Time 200%% slows the attack: %f at 30 ms", e2->meter (kOnly).gainDb);
+}
+
+TEST (upward_compression_does_not_explode_after_silence)
+{
+    // Heavy upward compression, slow release: a loud burst right after silence must not be
+    // lifted above where it would sit anyway (the boost is capped at the Below threshold).
+    auto e = engine ();
+    e->setParam (kDetector, kRms);
+    e->setParam (bandParam (kOnly, kBelowThresh), -40.0);
+    e->setParam (bandParam (kOnly, kBelowRatio), kRatioInf);
+    e->setParam (bandParam (kOnly, kRelease), 2000.0);
+    Sig silence = sine (1000.0, -200.0, 1.0);
+    auto burst = sine (1000.0, -6.0, 0.5);
+    Sig in = silence;
+    in.l.insert (in.l.end (), burst.l.begin (), burst.l.end ());
+    in.r = in.l;
+    auto out = run (*e, in);
+    const double pk = peakDb (out.l, 48000, out.l.size ());
+    CHECK (pk < -5.5, "burst after silence peaks at %.2f dB (input -6)", pk);
+}
+
+TEST (ott_defaults)
+{
+    // A fresh engine is Live's OTT preset.
+    Engine e;
+    e.prepare (kSr, 512);
+    CHECK (std::lround (e.param (kBands)) == 2 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
+               std::fabs (e.param (kXover2) - 2500.0) < 1e-9,
+           "3 bands at 88.3 Hz / 2.5 kHz");
+    CHECK (e.param (bandParam (2, kAboveRatio)) == kRatioInf && std::fabs (e.param (bandParam (1, kAboveRatio)) - 66.7) < 1e-9 &&
+               std::fabs (e.param (bandParam (0, kBelowRatio)) - 4.17) < 1e-9,
+           "ratios");
+    CHECK (std::fabs (e.param (bandParam (1, kBandOutput)) - 5.7) < 1e-9 && std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9,
+           "gains and times");
+    // It squashes dynamics hard: a 44 dB level difference at 1 kHz comes out within ~15 dB.
+    auto level = [] (double inDb) {
+        Engine x;
+        x.prepare (kSr, 512);
+        auto out = run (x, sine (1000.0, inDb, 3.0));
+        return rmsDb (out.l, 96000, 144000);
+    };
+    const double quiet = level (-50.0), loud = level (-6.0);
+    std::printf ("    OTT: -50 dB in -> %.1f dB rms, -6 dB in -> %.1f dB rms\n", quiet, loud);
+    CHECK (loud - quiet < 16.0, "OTT output range %.1f dB for 44 dB in", loud - quiet);
+    CHECK (quiet > -45.0, "quiet material is lifted: %.1f", quiet);
 }
 
 TEST (rms_ignores_short_peaks_more_than_peak)
@@ -468,7 +547,8 @@ TEST (fuzz_random_params)
         worst = std::max (worst, pk);
     }
     std::printf ("    worst peak %.1f\n", worst);
-    CHECK (worst < 1000.0, "runaway gain %f", worst);
+    // bound: +24 dB band input, +36 dB maximum upward gain, +24 dB band output on a full-scale input
+    CHECK (worst < std::pow (10.0, 84.0 / 20.0) * 1.05, "runaway gain %f", worst);
 }
 
 TEST (performance)

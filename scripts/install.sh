@@ -1,12 +1,14 @@
 #!/bin/sh
 # Downloads the latest release and installs the VST3 plug-ins (Simplr, Multidyn, Lowfocus)
-# for the current user.
+# for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
+# versions are replaced; copies left at the top of the VST3 folder by older installers are
+# removed (only if they are ours).
 #
 #   curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.sh | sh
 #
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
-#   SIMPLR_DEST=/some/dir   install into a different VST3 folder
+#   SIMPLR_DEST=/some/dir   use a different VST3 folder (plug-ins go into <dir>/bfielstr)
 #   SIMPLR_PLUGINS="Multidyn Lowfocus"   install only some of the plug-ins
 set -eu
 
@@ -18,7 +20,7 @@ arch="$(uname -m)"
 case "$os" in
     Darwin)
         asset="Plugins-macOS.zip" # universal: Apple Silicon + Intel
-        dest="${SIMPLR_DEST:-$HOME/Library/Audio/Plug-Ins/VST3}"
+        root="${SIMPLR_DEST:-$HOME/Library/Audio/Plug-Ins/VST3}"
         ;;
     Linux)
         case "$arch" in
@@ -29,7 +31,7 @@ case "$os" in
                 exit 1
                 ;;
         esac
-        dest="${SIMPLR_DEST:-$HOME/.vst3}"
+        root="${SIMPLR_DEST:-$HOME/.vst3}"
         ;;
     *)
         echo "Unsupported system: $os. On Windows, run in PowerShell:" >&2
@@ -38,7 +40,9 @@ case "$os" in
         ;;
 esac
 
-if [ "$VERSION" = "latest" ]; then
+if [ -n "${SIMPLR_BASE_URL:-}" ]; then
+    base="$SIMPLR_BASE_URL" # testing: a folder (file://...) holding the zip and SHA256SUMS.txt
+elif [ "$VERSION" = "latest" ]; then
     base="https://github.com/$REPO/releases/latest/download"
 else
     base="https://github.com/$REPO/releases/download/$VERSION"
@@ -99,19 +103,43 @@ if [ -z "$plugins" ]; then
     exit 1
 fi
 
+vendor="bfielstr"
+dest="$root/$vendor"
+
+# True if the bundle at $1 was made by us (older builds reported the vendor as "Simplr").
+is_ours() {
+    grep -qE '"Vendor": *"(bfielstr|Simplr)"' "$1/Contents/Resources/moduleinfo.json" 2>/dev/null
+}
+
+version_of() {
+    sed -n 's/.*"Version": *"\([^"]*\)".*/\1/p' "$1/Contents/Resources/moduleinfo.json" 2>/dev/null | head -n 1
+}
+
 mkdir -p "$dest"
 for p in $plugins; do
     if [ ! -d "$tmp/x/$p.vst3" ]; then
         echo "No $p.vst3 in this release - skipping." >&2
         continue
     fi
-    rm -rf "$dest/$p.vst3"
+    # remove a copy an older installer put directly in the VST3 folder (it would show up twice)
+    if [ -d "$root/$p.vst3" ]; then
+        if is_ours "$root/$p.vst3"; then
+            echo "Removing old copy $root/$p.vst3 ($(version_of "$root/$p.vst3"))"
+            rm -rf "$root/$p.vst3"
+        else
+            echo "Note: $root/$p.vst3 is from another vendor; leaving it alone." >&2
+        fi
+    fi
+    if [ -d "$dest/$p.vst3" ]; then
+        echo "Replacing $p $(version_of "$dest/$p.vst3")"
+        rm -rf "$dest/$p.vst3"
+    fi
     mv "$tmp/x/$p.vst3" "$dest/"
     if [ "$os" = "Darwin" ]; then
         # Files fetched outside a browser aren't quarantined, but clear it in case.
         xattr -dr com.apple.quarantine "$dest/$p.vst3" 2>/dev/null || true
     fi
-    echo "Installed: $dest/$p.vst3"
+    echo "Installed: $dest/$p.vst3 ($(version_of "$dest/$p.vst3"))"
 done
 
 echo "In REAPER: Options > Preferences > Plug-ins > VST > Re-scan."

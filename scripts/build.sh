@@ -10,10 +10,15 @@ cmake --build build -j"$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"   # a
 ctest --test-dir build -C Release --output-on-failure
 
 if [ "$1" != "--no-install" ]; then
-    if [ "$(uname -s)" = "Darwin" ]; then dest="$HOME/Library/Audio/Plug-Ins/VST3"; else dest="$HOME/.vst3"; fi
+    if [ "$(uname -s)" = "Darwin" ]; then root="$HOME/Library/Audio/Plug-Ins/VST3"; else root="$HOME/.vst3"; fi
+    dest="$root/bfielstr"
     mkdir -p "$dest"
     for p in build/VST3/Release/*.vst3; do
         name="$(basename "$p")"
+        # remove a copy an older installer put directly in the VST3 folder (only if it is ours)
+        if grep -qE '"Vendor": *"(bfielstr|Simplr)"' "$root/$name/Contents/Resources/moduleinfo.json" 2>/dev/null; then
+            rm -rf "$root/$name"
+        fi
         rm -rf "$dest/$name"
         cp -R "$p" "$dest/"
         echo "Installed $dest/$name"
