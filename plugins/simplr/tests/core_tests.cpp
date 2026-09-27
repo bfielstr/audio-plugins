@@ -622,8 +622,10 @@ TEST (filter_attenuates_and_is_stable)
             CHECK (db < (slope ? -55 : -30), "circuit %d slope %d only %f dB", circuit, slope, db);
             // and the display model agrees on the slope
             const float disp = filterResponseDb (s, 5000.0f);
-            CHECK (std::fabs (disp - db) < 6.0, "display %f vs measured %f (circuit %d slope %d)", disp, db, circuit,
-                   slope);
+            // Below about -70 dB the measurement hits the float noise floor (MSVC's /fp:fast makes
+            // it a few dB higher), so there both only need to agree that the tone is gone.
+            CHECK (std::fabs (disp - db) < 6.0 || (disp < -70.0 && db < -66.0),
+                   "display %f vs measured %f (circuit %d slope %d)", disp, db, circuit, slope);
         }
 }
 
