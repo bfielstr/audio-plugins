@@ -17,10 +17,16 @@ inline const char* forParam (uint32_t id)
                    "onset), a wider knee and a release that slows down the deeper the gain change - a character "
                    "compressor rather than a peak grabber.";
         case kPreLimit:
-            return "A 1 ms look-ahead limiter on each band's driven input: a transient pushed hard into the "
-                   "thresholds is rounded off at the ceiling instead of being squared by the attack, and what "
-                   "follows it keeps its shape.";
-        case kPreLimitCeiling: return "Level the pre-limiter holds each band's input to (after the band's Input gain).";
+            return "A 1 ms look-ahead limiter on each band's driven input, with its ceiling relative to the band's "
+                   "Above threshold: a transient pushed hard into the thresholds is held where the compressor will "
+                   "settle instead of passing through at full level until the attack catches up, so it reaches "
+                   "whatever follows (a saturator) at the same level as the body.";
+        case kPreLimitCeiling: return "Pre-limiter ceiling relative to each band's Above threshold (0 dB = right at it).";
+        case kSatOn: return "The built-in Smacheratr after the Output gain: the usual chain in one device.";
+        case kSatCurve: return "Shaping curve of the built-in saturator (see Smacheratr).";
+        case kSatDrive: return "Gain into the built-in saturator.";
+        case kSatPostClip: return "Clip the saturator's output at 0 dB (Soft: Analog Clip curve, Hard: digital).";
+        case kSatMix: return "Dry/wet of the built-in saturator.";
         case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";
         case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
         case kBands: return "Number of frequency bands (1 = a single full-range processor).";

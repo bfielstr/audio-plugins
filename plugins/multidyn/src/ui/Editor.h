@@ -16,7 +16,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 920.0;
-    static constexpr double kHeight = 424.0;
+    static constexpr double kHeight = 508.0;
     // layout (also used by the host test)
     static constexpr double kDisplayLeft = 166.0, kDisplayTop = 40.0, kDisplayRight = 760.0, kDisplayBottom = 336.0;
     static constexpr double kBandColLeft = 8.0, kInputColLeft = 104.0, kOutputColLeft = 766.0, kGlobalColLeft = 842.0;

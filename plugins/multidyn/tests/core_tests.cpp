@@ -1,5 +1,6 @@
 // Headless tests for the Multidyn DSP. Run: ./multidyn_tests [filter]
 #include "Engine.h"
+#include "smacheratr/src/core/Engine.h"
 #include "Params.h"
 
 #include <chrono>
@@ -100,12 +101,26 @@ static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
 enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
 constexpr int kOnly = 0;                  // the band in single-band mode
 
+// Level of a single frequency in [a, b) (least-squares fit of sin/cos).
+static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
+{
+    double s = 0, c = 0;
+    for (size_t i = a; i < b; ++i)
+    {
+        s += x[i] * std::sin (2.0 * M_PI * f * i / kSr);
+        c += x[i] * std::cos (2.0 * M_PI * f * i / kSr);
+    }
+    const double amp = 2.0 * std::sqrt (s * s + c * c) / (double)(b - a);
+    return 20.0 * std::log10 (std::max (1e-12, amp));
+}
+
 // The defaults are a four-band upward-compression preset; most tests start from a neutral device.
 static void neutralize (Engine& e)
 {
     e.setParam (kOutput, 0.0);
     e.setParam (kMode, kBase);
     e.setParam (kPreLimit, 0.0);
+    e.setParam (kSatOn, 0.0);
     for (int b = 0; b < kMaxBands; ++b)
     {
         e.setParam (bandParam (b, kBandInput), 0.0);
@@ -404,7 +419,9 @@ TEST (preset_defaults)
     CHECK (std::lround (e.param (kBands)) == 2 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
                std::fabs (e.param (kXover2) - 2500.0) < 1e-9 && std::fabs (e.param (kXover3) - 8000.0) < 1e-9,
            "3 bands at 88.3 Hz / 2.5 kHz (8 kHz for a fourth)");
-    CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) < 0.5, "Character mode, pre-limit off");
+    CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) >= 0.5 && e.param (kPreLimitCeiling) == 0.0,
+           "Character mode, pre-limit on at the Above threshold");
+    CHECK (e.param (kSatOn) >= 0.5 && std::fabs (e.param (kSatDrive) - 14.0) < 1e-9, "saturator on, driven 14 dB");
     CHECK (e.param (bandParam (2, kAboveRatio)) == kRatioInf && std::fabs (e.param (bandParam (1, kAboveRatio)) - 66.7) < 1e-9 &&
                e.param (bandParam (0, kBelowRatio)) == kRatioInf && std::fabs (e.param (bandParam (3, kBelowRatio)) - 4.17) < 1e-9,
            "ratios");
@@ -428,10 +445,12 @@ TEST (pre_limiter_rounds_transients)
 {
     auto e = engine ();
     const int lat = e->latency ();
-    CHECK (lat == 48, "1 ms look-ahead at 48 kHz: %d", lat);
-    // under the ceiling nothing but the delay happens
+    smacheratr::Engine satAlone;
+    satAlone.prepare (kSr, 512);
+    CHECK (lat == 48 + satAlone.latency (), "1 ms look-ahead + the saturator's oversampling at 48 kHz: %d", lat);
+    // under the ceiling (the Above threshold, -12 dB here, + 0) nothing but the delay happens
     e->setParam (kPreLimit, 1.0);
-    e->setParam (kPreLimitCeiling, -12.0);
+    e->setParam (kPreLimitCeiling, 0.0);
     e->reset ();
     auto in = sine (1000.0, -20.0, 0.5);
     auto out = run (*e, in);
@@ -478,6 +497,27 @@ TEST (character_mode_is_slower_and_smoother)
     const double baseLate = levelAfter (kBase, 0.4), charLate = levelAfter (kCharacter, 0.4);
     CHECK (std::fabs (charLate - baseLate) < 1.5, "same steady state: %f vs %f", charLate, baseLate);
     CHECK (baseLate < -6.0 - 15.0, "compressing: %f", baseLate);
+}
+
+TEST (built_in_saturator)
+{
+    // after the Output gain: off = clean, on = harmonics, and Dry/Wet blends
+    auto e = engine ();
+    auto in = sine (1000.0, -6.0, 0.5);
+    auto out = run (*e, in);
+    const size_t a = 12000, b = 24000;
+    auto h3 = [&] (const Sig& s) { return toneDb (s.l, 3000.0, a, b) - toneDb (s.l, 1000.0, a, b); };
+    CHECK (h3 (out) < -80.0, "off: clean %f", h3 (out));
+    e->setParam (kSatOn, 1.0);
+    e->setParam (kSatDrive, 14.0);
+    e->reset ();
+    out = run (*e, in);
+    CHECK (h3 (out) > -30.0, "on: third harmonic %f dB", h3 (out));
+    CHECK (peakDb (out.l, a, b) <= 0.01, "analog clip holds 0 dB: %f", peakDb (out.l, a, b));
+    e->setParam (kSatMix, 0.0);
+    e->reset ();
+    out = run (*e, in);
+    CHECK (h3 (out) < -80.0, "dry/wet 0: clean %f", h3 (out));
 }
 
 TEST (rms_ignores_short_peaks_more_than_peak)
@@ -626,7 +666,7 @@ TEST (performance)
     run (*e, in, &in);
     const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
     std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
-    CHECK (secs / 10.0 < 0.05, "too slow");
+    CHECK (secs / 10.0 < 0.08, "too slow"); // 4 bands plus the 4x oversampled saturator
 }
 
 int main (int argc, char** argv)

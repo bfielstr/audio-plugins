@@ -56,8 +56,17 @@ std::vector<ParamInfo> buildTable ()
         t.push_back (real (id (kRelease), keep (n + " Release"), "Release", 1.0, 3000.0, d.release, Curve::Log, Disp::Ms));
     }
     t.push_back (choice (kMode, "Mode", "Mode", {"Base", "Character"}, kCharacter));
-    t.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", false));
-    t.push_back (real (kPreLimitCeiling, "Pre-Limit Ceiling", "Ceiling", -30.0, 0.0, -6.0, Curve::Linear, Disp::Db));
+    t.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", true));
+    t.push_back (real (kPreLimitCeiling, "Pre-Limit Above Threshold", "Ceiling", -12.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+    // the built-in saturator: the usual chain, Output -7 dB into an Analog Clip driven 14 dB
+    t.push_back (toggle (kSatOn, "Saturator", "Saturator", true));
+    t.push_back (choice (kSatCurve, "Saturator Curve", "Curve",
+                         {"Analog Clip", "Soft Sine", "Bass Shaper", "Medium Curve", "Hard Curve", "Sinoid Fold",
+                          "Digital Clip", "Waveshaper"},
+                         0));
+    t.push_back (real (kSatDrive, "Saturator Drive", "Drive", -36.0, 36.0, 14.0, Curve::Linear, Disp::Db));
+    t.push_back (choice (kSatPostClip, "Saturator Post Clip", "Post Clip", {"No Clip", "Soft Clip", "Hard Clip"}, 0));
+    t.push_back (percent (kSatMix, "Saturator Dry/Wet", "Dry/Wet", 1.0));
     return t;
 }
 

@@ -12,14 +12,20 @@
 // Modes: Base is the plain device. Character detects more slowly (a 50 ms RMS window, a
 // two-stage envelope), has a wider knee and a release that slows down the deeper the gain change,
 // so it moves like a character compressor rather than grabbing peaks.
-// Pre-Limit: a 1 ms look-ahead limiter on each band's driven input, so a transient pushed hard
-// into the thresholds is rounded off at the ceiling instead of squared by the attack. Every band
+// Pre-Limit: a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
+// the band's Above threshold, so a transient pushed hard into the thresholds is held where the
+// compressor will settle anyway instead of passing through at full level until the attack
+// catches up (and being squared by whatever follows). Every band
 // runs through the look-ahead delay whether the limiter is on or not, so the latency (1 ms) never
 // changes.
+// Saturator: a built-in Smacheratr after the Output gain (the usual chain), always in the path
+// with its dry/wet at zero when off, so its oversampling latency is constant too.
 #pragma once
 
 #include "Crossover.h"
 #include "Params.h"
+
+#include "smacheratr/src/core/Engine.h" // the built-in saturator
 
 #include <array>
 
@@ -48,7 +54,7 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain) { p[id] = plain; }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return look; } // the look-ahead, constant for a sample rate
+    int latency () const { return look + sat.latency (); } // look-ahead + saturator, constant for a sample rate
 
     // In-place capable. sc may be null (no side-chain connected). All buffers are n samples.
     void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
@@ -73,6 +79,7 @@ private:
         int delayPos = 0;
     };
     void updateFilters (bool force);
+    void syncSaturator (); // pushes the saturator parameters into its engine
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -88,6 +95,7 @@ private:
     float outGain = 1.0f, scGain = 1.0f;
     float rmsCoef = 0.0f, rmsCoefC = 0.0f, peakCoef = 0.0f, peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
+    smacheratr::Engine sat;
 };
 
 } // namespace multidyn

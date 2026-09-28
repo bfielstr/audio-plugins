@@ -63,6 +63,11 @@ void Engine::prepare (double sampleRate, int)
     limAtk = (float)std::exp (-4.0 / look);
     limPeakDecay = (float)std::exp (-1.0 / (2.0 * look)); // the input peak is held about twice the look-ahead
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
+    sat.setParam (smacheratr::kHiQuality, 1.0);
+    sat.setParam (smacheratr::kColorOn, 0.0);
+    sat.setParam (smacheratr::kDcFilter, 0.0);
+    sat.setParam (smacheratr::kOutput, 0.0);
+    sat.prepare (sr, 512);
     reset ();
 }
 
@@ -87,7 +92,17 @@ void Engine::reset ()
     }
     outGain = dbToGain (p[kOutput]);
     scGain = dbToGain (p[kScGain]);
+    syncSaturator ();
+    sat.reset ();
     updateFilters (true);
+}
+
+void Engine::syncSaturator ()
+{
+    sat.setParam (smacheratr::kCurve, p[kSatCurve]);
+    sat.setParam (smacheratr::kDrive, p[kSatDrive]);
+    sat.setParam (smacheratr::kPostClip, p[kSatPostClip]);
+    sat.setParam (smacheratr::kDryWet, on (p[kSatOn]) ? p[kSatMix] : 0.0);
 }
 
 int Engine::bandCount () const { return std::clamp ((int)std::lround (p[kBands]) + 1, 1, kMaxBands); }
@@ -149,13 +164,14 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const bool rms = std::lround (p[kDetector]) == kRms;
     const float rmsC = character ? rmsCoefC : rmsCoef, peakC = character ? peakCoefC : peakCoef;
     const bool preLimit = on (p[kPreLimit]);
-    const float ceiling = dbToGain (p[kPreLimitCeiling]);
+    const double ceilingOffset = p[kPreLimitCeiling]; // dB above each band's Above threshold
     const double amount = std::clamp (p[kAmount], 0.0, 1.0);
     const double timeScale = std::max (0.01, p[kTime]);
     const bool scActive = on (p[kScOn]) && scL != nullptr;
     const float scMix = scActive ? (float)std::clamp (p[kScMix], 0.0, 1.0) : 0.0f;
     const bool listen = on (p[kScListen]) && scActive;
     const float outTarget = dbToGain (p[kOutput]), scTarget = dbToGain (p[kScGain]);
+    syncSaturator ();
 
     bool used[kNumBands], active[kNumBands], audible[kNumBands];
     bool anySolo = false;
@@ -165,7 +181,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         active[b] = on (p[bandParam (b, kBandActive)]);
         anySolo |= used[b] && on (p[bandParam (b, kBandSolo)]);
     }
-    float inTarget[kNumBands], outTargetB[kNumBands], atk[kNumBands], rel[kNumBands], relSlow[kNumBands];
+    float inTarget[kNumBands], outTargetB[kNumBands], atk[kNumBands], rel[kNumBands], relSlow[kNumBands], ceiling[kNumBands];
     double ta[kNumBands], ra[kNumBands], tb[kNumBands], rb[kNumBands];
     for (int b = 0; b < kNumBands; ++b)
     {
@@ -180,6 +196,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         rel[b] = (float)std::exp (-1.0 / (releaseMs * 0.001 * sr));
         relSlow[b] = (float)std::exp (-1.0 / (3.0 * releaseMs * 0.001 * sr)); // Character, deep gain changes
         ta[b] = p[bandParam (b, kAboveThresh)];
+        ceiling[b] = dbToGain (ta[b] + ceilingOffset);
         ra[b] = p[bandParam (b, kAboveRatio)];
         tb[b] = p[bandParam (b, kBelowThresh)];
         rb[b] = p[bandParam (b, kBelowRatio)];
@@ -243,7 +260,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                     // the gain starts moving `look` samples before the peak reaches the output
                     const float ahead = std::max (std::fabs (band[b][0]), std::fabs (band[b][1])) * st.inGain;
                     st.limPeak = std::max (ahead, st.limPeak * limPeakDecay);
-                    const float need = st.limPeak > ceiling ? ceiling / st.limPeak : 1.0f;
+                    const float need = st.limPeak > ceiling[b] ? ceiling[b] / st.limPeak : 1.0f;
                     st.limGain = need < st.limGain ? need + limAtk * (st.limGain - need) : 1.0f + limRel * (st.limGain - 1.0f);
                     xl *= st.limGain;
                     xr *= st.limGain;
@@ -326,6 +343,10 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
             outR[i] = sumR * outGain;
         }
     }
+
+    // the built-in saturator after the Output gain (not on the side-chain listen signal)
+    if (!listen)
+        sat.process (outL, outR, outL, outR, n);
 
     for (int b = 0; b < kNumBands; ++b)
     {

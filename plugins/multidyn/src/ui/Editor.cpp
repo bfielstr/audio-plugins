@@ -19,6 +19,7 @@ namespace multidyn {
 
 using namespace VSTGUI;
 using pk::ActionButton;
+using pk::Choice;
 using pk::Knob;
 using pk::Label;
 using pk::NumberBox;
@@ -154,6 +155,14 @@ void Editor::buildUI (CFrame* f)
     root->addView (lp);
     bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
+    // the built-in Smacheratr after the Output gain
+    auto* sat = new Panel (CRect (8, 424, 912, 500), "SMACHERATR  (after Output)");
+    root->addView (sat);
+    bind (sat, new Toggle (CRect (12, 30, 66, 50), this, kSatOn, "On"));
+    bind (sat, new Choice (CRect (80, 30, 240, 52), this, kSatCurve));
+    bind (sat, new Knob (knobRect (260, 6), this, kSatDrive, nullptr, true));
+    bind (sat, new Choice (CRect (330, 30, 450, 52), this, kSatPostClip));
+    bind (sat, new Knob (knobRect (470, 6), this, kSatMix));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();

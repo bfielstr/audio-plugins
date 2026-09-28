@@ -41,6 +41,10 @@ static State baseState ()
         set (st, bandParam (b, kAboveThresh), -12.0);
         set (st, bandParam (b, kBelowThresh), -40.0);
     }
+    set (st, kSatOn, 0.0);
+    set (st, multidyn::kOutput, 0.0);
+    set (st, kPreLimit, 0.0);
+    set (st, kMode, kBase);
     return st;
 }
 
@@ -106,7 +110,7 @@ int main (int argc, char** argv)
         set (st, bandParam (0, kRelease), 500.0);
         CHECK (apply (rig, st), "setState");
         CHECK (rig.start (), "start");
-        CHECK (rig.processor->getLatencySamples () == 48, "look-ahead latency %u", rig.processor->getLatencySamples ());
+        CHECK (rig.processor->getLatencySamples () == 48 + 37, "look-ahead + saturator latency %u", rig.processor->getLatencySamples ());
         std::vector<float> out;
         rig.render (2.0, out, nullptr, tones (-6.0, -100.0));
         CHECK (allFinite (out), "finite");

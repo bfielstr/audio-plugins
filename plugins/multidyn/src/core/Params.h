@@ -27,7 +27,12 @@ enum ParamId : uint32_t
 
     kMode = kBandBase + 4 * 10, // Base / Character (appended after the bands: IDs are persisted)
     kPreLimit,                  // look-ahead limiter on each band's driven input
-    kPreLimitCeiling,           // dB
+    kPreLimitCeiling,           // dB relative to the band's Above threshold
+    kSatOn,                     // the built-in Smacheratr after Output
+    kSatCurve,                  // its curve (smacheratr::CurveType)
+    kSatDrive,                  // dB
+    kSatPostClip,               // No / Soft / Hard Clip
+    kSatMix,                    // dry/wet
 
     kNumParams
 };

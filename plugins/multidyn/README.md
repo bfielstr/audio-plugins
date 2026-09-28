@@ -33,11 +33,18 @@ on, and Output -7 dB to leave room for a saturator after it. Use Amount to dial 
 rounded onset instead of 20 ms), has a wider knee (12 dB) and a release that slows down up to 3x the
 deeper the gain change, so it moves like a character compressor rather than grabbing peaks.
 
-**Pre-Limit**: a 1 ms look-ahead limiter on each band's input (after the band's Input gain) at the
-**Ceiling**. When you push hard into the thresholds, the transient is rounded off at the ceiling
-instead of being squared by the compressor's attack, and what follows keeps its shape. Every band
-always runs through the 1 ms look-ahead, so the latency (48 samples at 48 kHz) never changes; it is
-reported to the host.
+**Smacheratr** (bottom panel): the saturator is built in after the Output gain, so the usual chain
+is one device: On, Curve, Drive (default Analog Clip at 14 dB), Post Clip and Dry/Wet. It always runs
+4x oversampled; with it off the dry signal passes with the same latency.
+
+**Pre-Limit** (on by default): a 1 ms look-ahead limiter on each band's input (after the band's
+Input gain) with its **Ceiling** relative to the band's Above threshold (0 dB = right at it). When you
+push hard into the thresholds, a transient would otherwise pass through at full level until the
+attack catches up and then be squared by whatever follows (a saturator); the pre-limiter holds it
+where the compressor settles anyway, so it reaches the saturator at the same level as the body and
+gets the same rounding. Raise the Ceiling to let more of the transient through. Every band
+always runs through the 1 ms look-ahead, and the saturator's oversampling adds its own, so the
+latency (85 samples at 48 kHz) never changes; it is reported to the host.
 
 Bands are split with Linkwitz-Riley (24 dB/oct) crossovers, phase-aligned so they sum back flat
 (within 0.05 dB, for any band count) when nothing is processed.

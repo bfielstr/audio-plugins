@@ -1,4 +1,4 @@
-# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smatcheratr
+# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -9,7 +9,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
-| [**Smatcheratr**](plugins/smatcheratr/README.md) | Waveshaping saturator: 8 curves from analog clip to wavefolding, Bass Shaper threshold, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
+| [**Smacheratr**](plugins/smacheratr/README.md) | Waveshaping saturator: 8 curves from analog clip to wavefolding, Bass Shaper threshold, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 
 ![Smempler](docs/smempler/ui_slicing.png)
 
@@ -78,7 +78,7 @@ plugins/smempler     sampler                 src/core (DSP) · src/plugin (VST3)
 plugins/multidyn   multiband dynamics      same structure
 plugins/locus   low-end focus           same structure
 plugins/stretchr   pitch/time editor       same structure (reuses Smempler's warp engines)
-plugins/smatcheratr saturator              same structure
+plugins/smacheratr saturator              same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

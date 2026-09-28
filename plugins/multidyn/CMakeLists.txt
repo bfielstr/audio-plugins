@@ -5,8 +5,8 @@ add_library(multidyn_core STATIC
     src/core/Params.cpp
     src/core/Engine.cpp
 )
-target_include_directories(multidyn_core PUBLIC src/core)
-target_link_libraries(multidyn_core PUBLIC pluginkit_core)
+target_include_directories(multidyn_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
+target_link_libraries(multidyn_core PUBLIC pluginkit_core smacheratr_core) # the built-in saturator
 pk_dsp_settings(multidyn_core)
 
 add_executable(multidyn_tests tests/core_tests.cpp)

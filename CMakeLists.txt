@@ -7,7 +7,7 @@ set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH
 
 project(AudioPlugins
     VERSION 0.5.0
-    DESCRIPTION "Smempler, Multidyn, Locus, Stretchr and Smatcheratr VST3 plug-ins"
+    DESCRIPTION "Smempler, Multidyn, Locus, Stretchr and Smacheratr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -43,4 +43,4 @@ add_subdirectory(plugins/smempler)
 add_subdirectory(plugins/multidyn)
 add_subdirectory(plugins/locus)
 add_subdirectory(plugins/stretchr)
-add_subdirectory(plugins/smatcheratr)
+add_subdirectory(plugins/smacheratr)
