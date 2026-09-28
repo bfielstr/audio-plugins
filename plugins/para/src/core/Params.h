@@ -31,9 +31,13 @@ enum ParamId : uint32_t
     kResLink,    // the low-pass uses the high-pass resonance
     kMovement,   // Free / Vocal (see Engine.h)
     kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
+    kDragGain = kTailBase + pk::kTailFields, // editor: dragging a handle up/down moves its gain with the resonance
 
-    kNumParams = kTailBase + pk::kTailFields
+    kNumParams
 };
+
+// The IDs a plug-in hosting Para (Smempler) reserves for it; the ones after are mapped one by one.
+constexpr uint32_t kHostedParams = kTailBase + pk::kTailFields;
 
 enum Slope { kSlope12 = 0, kSlope18, kSlope24 };
 enum Movement { kFree = 0, kVocal };

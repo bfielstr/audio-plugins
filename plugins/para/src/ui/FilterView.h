@@ -2,10 +2,13 @@
 // the low-pass in blue, the sum in white, with a handle at each cutoff. Behind them, live spectra of
 // the input (grey) and the output (light), so you can see the notch working; the handles move with
 // the tracked note and the envelope, and the envelope level shows at the top right.
+// A handle sits at its filter's cutoff, as high as the resonant peak (plus the filter's gain).
 //   drag a handle sideways   cutoff
-//   drag a handle up / down  that filter's gain (to the bottom: -inf)
-//   Alt + drag up / down      resonance
+//   drag a handle up / down  resonance, and the gain too with Drag Gain on
+//   Alt + drag up / down      gain only (to the bottom: -inf)
 //   double-click a handle    reset it
+// With audio running the display adds what the engine does (tracking, envelope, glide, Vocal) to
+// the current settings; without, it shows the settings with the last tracked note.
 // Used by Para and, through a pk::MappedParamHost, inside Smempler; the levels come from a
 // function so it does not depend on a controller.
 #pragma once
@@ -42,8 +45,10 @@ public:
     double xOfHz (double hz) const;
     double hzOfX (double x) const;
     double yOfDb (double db) const;
-    // effective cutoffs (tracking and envelope included) and the handles
+    // effective cutoffs (tracking and envelope included), the Vocal fades, and the handles
     void cutoffs (double& hp, double& lp) const;
+    void effective (double& hp, double& lp, float& hpMul, float& lpMul) const;
+    double handleDb (bool hp) const;
     VSTGUI::CPoint hpHandle () const;
     VSTGUI::CPoint lpHandle () const;
 
@@ -59,8 +64,12 @@ private:
     Drag drag = Drag::None;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRes = 0.0, startGain = 0.0;
-    float shownOffset = 0.0f, shownEnv = 0.0f, shownHpHz = 0.0f, shownLpHz = 0.0f, shownHpMul = 1.0f, shownLpMul = 1.0f;
-    bool live () const; // Vocal movement with audio running: positions and fades come from the engine
+    float shownOffset = 0.0f, shownEnv = 0.0f, shownHpShift = 0.0f, shownLpShift = 0.0f, shownHpMul = 1.0f,
+          shownLpMul = 1.0f;
+    bool shownLeaderLp = true;
+    bool live () const; // audio running: the engine's movement is added to the settings
+    uint32_t lastBlocks = 0;
+    int idleSinceBlock = 1 << 20; // idle calls since the block count last moved
     int shownNote = -1;
     uint32_t lastWritten = 0;
     bool haveSpectrum = false;

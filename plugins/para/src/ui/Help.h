@@ -12,7 +12,7 @@ inline const char* forParam (uint32_t id)
         case kHpRes: return "High-pass resonance. At 0 the two filters can meet without a bump.";
         case kLpFreq: return "Low-pass cutoff at the root note.";
         case kLpRes: return "Low-pass resonance.";
-        case kSlope: return "12 or 24 dB per octave for both filters.";
+        case kSlope: return "12, 18 or 24 dB per octave for both filters.";
         case kSplit:
             return "Moves the two filters apart (positive: high-pass up, low-pass down) or together (negative), in "
                    "semitones around their set frequencies. Automate it, or let the envelope drive it.";
@@ -33,6 +33,9 @@ inline const char* forParam (uint32_t id)
                    "filter sweeps alone. A low-pass swept up takes the high-pass with it, a resonant high-pass "
                    "swept down fades the low-pass out.";
         case kResLink: return "Link the resonances: the low-pass uses the high-pass resonance, so one control sets both.";
+        case kDragGain:
+            return "On: dragging a handle in the display up or down moves its gain along with its resonance. Off: "
+                   "only the resonance (Alt-drag moves the gain alone).";
         case kHpGain: return "Level of the high-pass filter's output, down to -inf (only the low-pass is heard).";
         case kLpGain: return "Level of the low-pass filter's output, down to -inf (only the high-pass is heard).";
         default: return nullptr;
@@ -41,8 +44,9 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kDisplay =
     "Orange: the high-pass, blue: the low-pass, white: what you hear (their sum). Behind them the live spectrum of "
-    "the input (grey) and the output (light). Drag a handle sideways for its cutoff and up/down for its gain (to the "
-    "bottom: -inf); Alt-drag for resonance; double-click resets it. Shift: fine. The handles follow the tracked note "
-    "and glow with the envelope.";
+    "the input (grey) and the output (light). Drag a handle sideways for its cutoff and up/down for its resonance "
+    "(with Drag Gain on, the gain moves too); Alt-drag for the gain alone (to the bottom: -inf); double-click resets "
+    "it. Shift: fine. A handle sits as high as its resonant peak; the handles follow the tracked note and glow with "
+    "the envelope.";
 
 } // namespace para::help

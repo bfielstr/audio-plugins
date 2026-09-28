@@ -122,11 +122,28 @@ int main (int argc, char** argv)
             const double f0 = plainOf (rig, kHpFreq);
             win.drag (hx, hy, hx + 40, hy);
             CHECK (plainOf (rig, kHpFreq) > f0 * 1.3, "drag raises the high-pass: %.0f -> %.0f", f0, plainOf (rig, kHpFreq));
+            // a handle sits as high as its gain plus its resonant peak (24 dB: Q squared)
+            auto handleY = [&] () {
+                const double q = resonanceToQ (plainOf (rig, kHpRes), kSlope24);
+                return yOfDb (plainOf (rig, kHpGain) + 20.0 * std::log10 (std::max (1.0, q * q)));
+            };
+            // up / down: the resonance, the gain stays
             const double hx2 = xOfHz (plainOf (rig, kHpFreq) * 2.0);
-            win.drag (hx2, hy, hx2, hy - 20);
-            CHECK (plainOf (rig, kHpGain) > 3.0, "drag up raises the high-pass gain: %.1f dB", plainOf (rig, kHpGain));
-            win.click (xOfHz (plainOf (rig, kHpFreq) * 2.0), yOfDb (plainOf (rig, kHpGain)), 2);
-            CHECK (std::fabs (plainOf (rig, kHpFreq) - 822.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6, "double-click resets");
+            win.drag (hx2, handleY (), hx2, handleY () - 30);
+            CHECK (plainOf (rig, kHpRes) > 0.15, "drag up raises the high-pass resonance: %.2f", plainOf (rig, kHpRes));
+            CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the gain stays: %.1f dB", plainOf (rig, kHpGain));
+            // with Drag Gain on, the gain rises with it
+            rig.param (kDragGain, 1.0);
+            const double res1 = plainOf (rig, kHpRes);
+            const double y1 = handleY ();
+            win.drag (hx2, y1, hx2, y1 - 20);
+            CHECK (plainOf (rig, kHpGain) > 3.0 && plainOf (rig, kHpRes) > res1, "Drag Gain: gain %.1f dB, resonance %.2f",
+                   plainOf (rig, kHpGain), plainOf (rig, kHpRes));
+            CHECK (win.savePng (outDir + "/ui_para_drag.png"), "drag screenshot");
+            win.click (xOfHz (plainOf (rig, kHpFreq) * 2.0), handleY (), 2);
+            CHECK (std::fabs (plainOf (rig, kHpFreq) - 822.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6 &&
+                       plainOf (rig, kHpRes) < 1e-6,
+                   "double-click resets");
         }
         rig.stop ();
         return finish ("para host test");

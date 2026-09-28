@@ -108,8 +108,8 @@ enum ParamId : uint32_t
     kEnvExtBase,    // per-envelope curves and breakpoints, see envParam()
     // --- added in 0.5 (append only): the built-in effects after the sampler, see fxParam() ---
     kFxParaOn = kEnvExtBase + 3 * 22,
-    kFxParaBase, // para::kNumParams entries (Para's own IDs, offset)
-    kFxMdOn = kFxParaBase + para::kNumParams,
+    kFxParaBase, // para::kHostedParams entries (Para's own IDs, offset)
+    kFxMdOn = kFxParaBase + para::kHostedParams,
     kFxMdBase, // multidyn::kNumParams entries (its own end-of-chain saturator is not used here)
     kMsOn = kFxMdBase + multidyn::kNumParams, // mid/side EQ after the effects
     kMsSideHp,   // Hz, high-pass on the side signal
@@ -119,6 +119,7 @@ enum ParamId : uint32_t
     kRootKey,    // the root note: the sample plays at its own pitch on this note
     kTailBase,   // the Smacheratr at the very end: pk::kTailFields entries
     kParaTransposeLock = kTailBase + pk::kTailFields, // Para's Transpose ignores the sampler's
+    kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
 
     kNumParams
 };

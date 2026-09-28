@@ -172,7 +172,7 @@ std::vector<ParamInfo> buildTable ()
     }
     // the built-in effects: their own tables, offset and prefixed (both off by default)
     add (toggle (kFxParaOn, "Para On", "Para", false));
-    for (uint32_t i = 0; i < para::kNumParams; ++i)
+    for (uint32_t i = 0; i < para::kHostedParams; ++i)
     {
         ParamInfo pi = para::paramTable ().info (i);
         pi.id = paraParam (i);
@@ -198,6 +198,7 @@ std::vector<ParamInfo> buildTable ()
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
     pk::addTailParams (t, kTailBase);
     add (toggle (kParaTransposeLock, "Para Transpose Lock", "Lock", false));
+    add (toggle (kParaDragGain, "Para Drag Gain", "Drag Gain", false));
     return t;
 }
 

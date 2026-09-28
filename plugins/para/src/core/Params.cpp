@@ -31,6 +31,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kResLink, "Link Resonance", "Link Res", false));
         v.push_back (choice (kMovement, "Movement", "Movement", {"Free", "Vocal"}, kFree));
         pk::addTailParams (v, kTailBase);
+        v.push_back (toggle (kDragGain, "Drag Gain", "Drag Gain", false));
         return v;
     }());
     return t;

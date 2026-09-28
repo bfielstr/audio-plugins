@@ -28,7 +28,10 @@ ParamArray defaultParams ();
 struct Meters
 {
     std::atomic<float> hpHz {800.0f}, lpHz {200.0f}; // effective cutoffs, tracking and envelope included
+    std::atomic<float> hpShift {0.0f}, lpShift {0.0f}; // semitones from the set cutoffs to the effective ones
     std::atomic<float> hpMul {1.0f}, lpMul {1.0f};   // Vocal: the fade of the pushed filter
+    std::atomic<bool> leaderLp {true};               // Vocal: the low-pass leads (it moved last)
+    std::atomic<uint32_t> blocks {0};                // counts processed blocks: the editor sees audio running
     std::atomic<float> offset {0.0f};                // semitones the tracked note moves both cutoffs
     std::atomic<float> env {0.0f};                   // envelope level 0 .. 1
     std::atomic<int> note {-1};                      // the note being tracked, -1 = none
@@ -47,6 +50,27 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
     return lpBase * std::pow (2.0, (offsetSemis - 0.5 * splitSemis) / 12.0);
 }
 
+// Vocal movement, shared with the display: once the low-pass is above the high-pass, the follower
+// sits at the leader's cutoff and fades out, to -inf an octave past.
+inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, float& hpMul, float& lpMul)
+{
+    hpMul = lpMul = 1.0f;
+    const double over = 12.0 * std::log2 (lpHz / hpHz);
+    if (over <= 0.0)
+        return;
+    const float keep = 1.0f - (float)std::fmin (1.0, over / 12.0);
+    if (leaderLp)
+    {
+        hpHz = lpHz;
+        hpMul = keep * keep;
+    }
+    else
+    {
+        lpHz = hpHz;
+        lpMul = keep * keep;
+    }
+}
+
 class Engine
 {
 public:
@@ -56,8 +80,10 @@ public:
     explicit Engine (bool withTail = true) : hasTail (withTail) {}
     void setParam (uint32_t id, double plain)
     {
+        if (id >= kNumParams)
+            return;
         p[id] = plain;
-        if (id >= kTailBase)
+        if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
     }
     double param (uint32_t id) const { return p[id]; }

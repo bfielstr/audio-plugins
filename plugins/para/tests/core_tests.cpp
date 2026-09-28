@@ -127,7 +127,8 @@ TEST (params)
     CHECK (std::fabs (resonanceToQ (0.0) - 0.5) < 1e-9 && std::fabs (resonanceToQ (1.0) - 10.0) < 1e-9, "Q range");
     CHECK (std::fabs (resonanceToQ (0.0, kSlope24) - M_SQRT1_2) < 1e-9 && resonanceToQ (0.0, kSlope18) == 1.0, "base Q");
     CHECK (std::fabs (t.info (kHpFreq).def - 822.0) < 1e-9 && std::fabs (t.info (kLpFreq).def - 185.0) < 1e-9 &&
-               t.info (kSlope).def == kSlope24, "defaults: HP 822 Hz, LP 185 Hz, 24 dB");
+               t.info (kSlope).def == (double)kSlope24, "defaults: HP 822 Hz, LP 185 Hz, 24 dB");
+    CHECK (t.info (kDragGain).def == 0.0 && kHostedParams == kTailBase + pk::kTailFields, "Drag Gain off, after the hosted IDs");
 }
 
 TEST (filters_meeting_sum_flat)
@@ -293,6 +294,30 @@ TEST (vocal_movement)
         e->setParam (kMovement, kFree);
         CHECK (gainAt (*e, 30.0) > -1.0, "free: the low-pass passes 30 Hz: %f", gainAt (*e, 30.0));
     }
+}
+
+TEST (meters_for_the_display)
+{
+    // the engine reports how far it moved the filters from their settings, so the display can add
+    // that to the settings (and show edits before the next block)
+    Meters m;
+    auto e = engine ();
+    e->setMeters (&m);
+    e->noteOn (72); // an octave above the root, key 100 %
+    run (*e, tones ({{440.0, -12.0}}, 0.1));
+    CHECK (m.blocks.load () > 0, "blocks counted");
+    CHECK (std::fabs (m.hpShift.load () - 12.0) < 0.05 && std::fabs (m.lpShift.load () - 12.0) < 0.05, "shift %f / %f",
+           m.hpShift.load (), m.lpShift.load ());
+    CHECK (std::fabs (822.0 * std::pow (2.0, m.hpShift.load () / 12.0) - m.hpHz.load ()) < 1.0, "shift matches the cutoff");
+    // Vocal: the low-pass swept above the high-pass pushes it; the display's push is the engine's
+    e->setParam (kMovement, kVocal);
+    e->setParam (kLpFreq, 2000.0);
+    run (*e, tones ({{440.0, -12.0}}, 0.1));
+    double hz = hpCutoff (822.0, 12.0, 0.0), lz = lpCutoff (2000.0, 12.0, 0.0);
+    float hm, lm;
+    vocalPush (hz, lz, m.leaderLp.load (), hm, lm);
+    CHECK (m.leaderLp.load () && std::fabs (hz - m.hpHz.load ()) < 1.0 && std::fabs (hm - m.hpMul.load ()) < 0.01,
+           "vocal push: %f vs %f, fade %f vs %f", hz, m.hpHz.load (), hm, m.hpMul.load ());
 }
 
 TEST (dry_wet_and_output)

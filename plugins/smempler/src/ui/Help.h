@@ -34,7 +34,9 @@ inline const char* forParam (uint32_t id)
     }
     if (id >= kTailBase)
         return nullptr; // the saturator panel has its own tips
-    if (id >= kFxParaBase && id < kFxParaBase + para::kNumParams)
+    if (id == kParaDragGain)
+        return para::help::forParam (para::kDragGain);
+    if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         return para::help::forParam (id - kFxParaBase);
     if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
         return multidyn::help::forParam (id - kFxMdBase);

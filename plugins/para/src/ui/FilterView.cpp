@@ -103,35 +103,63 @@ double FilterView::yOfDb (double db) const
     return r.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * (r.getHeight () - 16.0);
 }
 
-bool FilterView::live () const { return lastWritten != 0 && std::lround (host->plainValue (kMovement)) == kVocal; }
+// the editor idles about 30 times a second: audio counts as running while blocks arrived in the
+// last ~10 idles
+bool FilterView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
+
+void FilterView::effective (double& hp, double& lp, float& hpMul, float& lpMul) const
+{
+    const double hpBase = host->plainValue (kHpFreq), lpBase = host->plainValue (kLpFreq);
+    if (live ())
+    {
+        // the current settings moved as far as the engine moves them (tracking, envelope, glide,
+        // Vocal), so edits show at once and so does everything the notes do
+        hp = hpBase * std::pow (2.0, shownHpShift / 12.0);
+        lp = lpBase * std::pow (2.0, shownLpShift / 12.0);
+        hpMul = shownHpMul;
+        lpMul = shownLpMul;
+        return;
+    }
+    // no audio: the settings at the last tracked note, pushed as the engine would push them
+    const double split = host->plainValue (kSplit);
+    hp = hpCutoff (hpBase, shownOffset, split);
+    lp = lpCutoff (lpBase, shownOffset, split);
+    hpMul = lpMul = 1.0f;
+    if (std::lround (host->plainValue (kMovement)) == kVocal)
+        vocalPush (hp, lp, shownLeaderLp, hpMul, lpMul);
+}
 
 void FilterView::cutoffs (double& hp, double& lp) const
 {
-    if (live ())
-    {
-        hp = shownHpHz;
-        lp = shownLpHz;
-        return;
-    }
-    // from the parameters, so edits show at once; the processor adds where the tracked note and
-    // the envelope have moved the filters
-    const double split = host->plainValue (kSplit) + host->plainValue (kEnvAmount) * shownEnv;
-    hp = hpCutoff (host->plainValue (kHpFreq), shownOffset, split);
-    lp = lpCutoff (host->plainValue (kLpFreq), shownOffset, split);
+    float a, b;
+    effective (hp, lp, a, b);
+}
+
+double FilterView::handleDb (bool hpSide) const
+{
+    // the filter's gain plus its resonant peak at the cutoff (Q per second-order section; the
+    // first-order section of 18 dB takes 3 dB off), so pulling a handle up shows the resonance
+    const double gainDb = host->plainValue (hpSide ? kHpGain : kLpGain);
+    if (gainDb <= kGainMinDb + 0.01)
+        return kMinDb + 1.0;
+    const int slope = (int)std::lround (host->plainValue (kSlope));
+    const double q = resonanceToQ (host->plainValue (resId (hpSide)), slope);
+    const double peak = slope == kSlope24 ? q * q : (slope == kSlope18 ? q * M_SQRT1_2 : q);
+    return std::max (kMinDb + 1.0, gainDb + 20.0 * std::log10 (std::max (1.0, peak)));
 }
 
 CPoint FilterView::hpHandle () const
 {
     double hp, lp;
     cutoffs (hp, lp);
-    return CPoint (xOfHz (hp), yOfDb (std::max (kMinDb + 1.0, host->plainValue (kHpGain))));
+    return CPoint (xOfHz (hp), yOfDb (handleDb (true)));
 }
 
 CPoint FilterView::lpHandle () const
 {
     double hp, lp;
     cutoffs (hp, lp);
-    return CPoint (xOfHz (lp), yOfDb (std::max (kMinDb + 1.0, host->plainValue (kLpGain))));
+    return CPoint (xOfHz (lp), yOfDb (handleDb (false)));
 }
 
 double FilterView::specAt (const std::vector<float>& spec, double f0, double f1) const
@@ -216,18 +244,30 @@ void FilterView::draw (CDrawContext* ctx)
 
     // the filters and their sum
     double hp, lp;
-    cutoffs (hp, lp);
+    float hpMul, lpMul;
+    effective (hp, lp, hpMul, lpMul);
     const int slope = (int)std::lround (host->plainValue (kSlope));
-    const double qHp = resonanceToQ (host->plainValue (kHpRes), slope), qLp = resonanceToQ (host->plainValue (host->plainValue (kResLink) >= 0.5 ? kHpRes : kLpRes), slope);
+    const double qHp = resonanceToQ (host->plainValue (resId (true)), slope), qLp = resonanceToQ (host->plainValue (resId (false)), slope);
+    // the digital filters as they are: the cutoffs clamped like the engine's, and the analog
+    // responses read at the warped frequency (bilinear, prewarped at the cutoff), which bends the
+    // curves near the top of the spectrum
+    const double nyquist = 0.5 * rate;
+    const double hc = std::clamp (hp, 5.0, 0.49 * rate), lc = std::clamp (lp, 5.0, 0.49 * rate);
+    auto warped = [&] (double f, double fc) { return fc * std::tan (M_PI * f / rate) / std::tan (M_PI * fc / rate); };
+    const double hpGain = filterGain (host->plainValue (kHpGain)) * hpMul, lpGain = filterGain (host->plainValue (kLpGain)) * lpMul;
     auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
             return;
         const double base = yOfDb (kMinDb);
+        double lastX = all.left;
         for (int i = 0; i <= kPoints; ++i)
         {
             const double f = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / kPoints);
-            std::complex<double> a = highPassResponse (f, hp, qHp), b = lowPassResponse (f, lp, qLp);
+            if (f >= nyquist * 0.998)
+                break;
+            const double fh = warped (f, hc), fl = warped (f, lc);
+            std::complex<double> a = highPassResponse (fh, hc, qHp), b = lowPassResponse (fl, lc, qLp);
             if (slope == kSlope24)
             {
                 a *= a;
@@ -235,14 +275,15 @@ void FilterView::draw (CDrawContext* ctx)
             }
             else if (slope == kSlope18)
             {
-                a *= highPass1Response (f, hp);
-                b *= lowPass1Response (f, lp);
+                a *= highPass1Response (fh, hc);
+                b *= lowPass1Response (fl, lc);
             }
-            a *= filterGain (host->plainValue (kHpGain)) * (live () ? shownHpMul : 1.0);
-            b *= filterGain (host->plainValue (kLpGain)) * (live () ? shownLpMul : 1.0);
+            a *= hpGain;
+            b *= lpGain;
             // the sum uses the polarity the engine uses (inverted high-pass at 12 dB)
             const std::complex<double> h = which == 0 ? a : (which == 1 ? b : (slope == kSlope12 ? b - a : a + b));
             const CPoint pt (xOfHz (f), yOfDb (20.0 * std::log10 (std::max (1e-6, std::abs (h)))));
+            lastX = pt.x;
             if (i == 0)
             {
                 path->beginSubpath (fill ? CPoint (pt.x, base) : pt);
@@ -254,7 +295,7 @@ void FilterView::draw (CDrawContext* ctx)
         }
         if (fill)
         {
-            path->addLine (CPoint (all.right, base));
+            path->addLine (CPoint (lastX, base));
             path->closeSubpath ();
             ctx->setFillColor (*fill);
             ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
@@ -372,11 +413,14 @@ void FilterView::onMouseMoveEvent (MouseMoveEvent& e)
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     const uint32_t fId = drag == Drag::Hp ? kHpFreq : kLpFreq, rId = resId (drag == Drag::Hp);
     host->setNorm (fId, host->table ().toNormalized (fId, startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ())));
-    if (e.modifiers.has (ModifierKey::Alt))
-        host->setNorm (rId, std::clamp (startRes - dy / 150.0, 0.0, 1.0)); // Alt: resonance
-    else
+    // up / down: the resonance (150 px for the whole range), and the gain with it when Drag Gain is
+    // on; Alt: the gain alone
+    const bool gainOnly = e.modifiers.has (ModifierKey::Alt);
+    if (!gainOnly)
+        host->setNorm (rId, host->table ().toNormalized (rId, std::clamp (startRes - dy / 150.0, 0.0, 1.0)));
+    if (gainOnly || host->plainValue (kDragGain) >= 0.5)
     {
-        // gain follows the handle; dragged to the bottom it is -inf
+        // the gain follows the pointer; dragged to the bottom it is -inf
         const uint32_t gId = drag == Drag::Hp ? kHpGain : kLpGain;
         const double dbPerPx = (kMaxDb - kMinDb) / (r.getHeight () - 16.0);
         double db = std::max (startGain, kMinDb) - dy * dbPerPx;
@@ -431,19 +475,33 @@ void FilterView::idle ()
     if (!m)
         return;
     bool changed = false;
-    const float hpHz = m->hpHz.load (std::memory_order_relaxed), lpHz = m->lpHz.load (std::memory_order_relaxed);
-    const float hpMul = m->hpMul.load (std::memory_order_relaxed), lpMul = m->lpMul.load (std::memory_order_relaxed);
-    if (std::fabs (hpHz - shownHpHz) > 0.5f || std::fabs (lpHz - shownLpHz) > 0.5f || std::fabs (hpMul - shownHpMul) > 0.005f ||
-        std::fabs (lpMul - shownLpMul) > 0.005f)
+    // audio running or not: when it stops, the display goes back to the settings
+    const bool wasLive = live ();
+    const uint32_t blocks = m->blocks.load (std::memory_order_relaxed);
+    if (blocks != lastBlocks)
     {
-        shownHpHz = hpHz;
-        shownLpHz = lpHz;
+        lastBlocks = blocks;
+        idleSinceBlock = 0;
+    }
+    else if (idleSinceBlock < (1 << 20))
+        ++idleSinceBlock;
+    if (live () != wasLive)
+        changed = true;
+    const float hpShift = m->hpShift.load (std::memory_order_relaxed), lpShift = m->lpShift.load (std::memory_order_relaxed);
+    const float hpMul = m->hpMul.load (std::memory_order_relaxed), lpMul = m->lpMul.load (std::memory_order_relaxed);
+    const bool leader = m->leaderLp.load (std::memory_order_relaxed);
+    if (std::fabs (hpShift - shownHpShift) > 0.01f || std::fabs (lpShift - shownLpShift) > 0.01f ||
+        std::fabs (hpMul - shownHpMul) > 0.005f || std::fabs (lpMul - shownLpMul) > 0.005f || leader != shownLeaderLp)
+    {
+        shownHpShift = hpShift;
+        shownLpShift = lpShift;
         shownHpMul = hpMul;
         shownLpMul = lpMul;
+        shownLeaderLp = leader;
         changed = true;
     }
     const float offset = m->offset.load (std::memory_order_relaxed);
-    const float env = m->env.load (std::memory_order_relaxed);
+    const float env = live () ? m->env.load (std::memory_order_relaxed) : 0.0f; // stale without audio
     const int note = m->note.load (std::memory_order_relaxed);
     if (std::fabs (offset - shownOffset) > 0.01f || std::fabs (env - shownEnv) > 0.005f || note != shownNote)
     {

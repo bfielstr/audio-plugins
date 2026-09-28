@@ -28,8 +28,12 @@ quadrature Butterworth pair at 18 dB).
 - **SMACHERATR** (end of the chain): the optional saturator every plug-in here has (off, Drive 0 dB).
 
 The display shows the high-pass (orange), the low-pass (blue) and what you hear (white), over live
-spectra of the input (grey) and the output (light). Drag a handle sideways for its cutoff and
-up/down for its gain (to the bottom: -inf); Alt-drag for resonance; double-click resets it. The
-handles follow the tracked note and glow with the envelope, and the ENV meter shows the envelope.
+spectra of the input (grey) and the output (light). The curves are the digital filters as they
+are (they bend near the top of the spectrum). A handle sits at its cutoff, as high as its resonant
+peak: drag it sideways for the cutoff and up/down for the **resonance**; with **Drag Gain** on (the
+button on the display) the gain moves with it; Alt-drag moves the gain alone (to the bottom: -inf);
+double-click resets it. With audio running the display adds everything the engine does to the
+settings (tracking, envelope, glide, Vocal), so edits show at once; the handles glow with the
+envelope and the ENV meter shows it.
 
 Para is also built into Smempler, where it tracks the sampler's own notes and root note.

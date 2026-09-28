@@ -68,6 +68,8 @@ void Editor::buildUI (CFrame* f)
     });
     view->setTooltipText (help::kDisplay);
     root->addView (view);
+    // on the display, under the envelope meter: what dragging a handle up or down moves
+    bind (root, new Toggle (CRect (kViewRight - 90, kViewTop + 22, kViewRight - 8, kViewTop + 40), this, kDragGain, "Drag Gain"));
 
     // first row: the two filters and the split, as sections of a Live device
     auto section = [&] (const CRect& r, const char* title) {

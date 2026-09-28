@@ -557,7 +557,7 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kFxParaBase && id < kFxParaBase + para::kNumParams)
+    if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         fxPara.setParam (id - kFxParaBase, plain);
     else if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
         fxMultidyn.setParam (id - kFxMdBase, plain);

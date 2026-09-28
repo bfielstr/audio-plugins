@@ -89,6 +89,8 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
 {
     // the effects' own displays edit this plug-in's parameters through these
     paraHost = std::make_unique<pk::MappedParamHost> (this, para::paramTable (), [] (uint32_t id) -> int64_t {
+        if (id == para::kDragGain)
+            return (int64_t)kParaDragGain;
         return id < para::kTailBase ? (int64_t)paraParam (id) : -1;
     });
     mdHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (),
@@ -378,6 +380,7 @@ void Editor::buildUI (CFrame* f)
         });
         fxFilterView->setTooltipText (para::help::kDisplay);
         g->addView (fxFilterView);
+        bind (g, new Toggle (CRect (380, 30, 462, 48), this, kParaDragGain, "Drag Gain"));
         bind (g, new Toggle (CRect (480, 8, 524, 26), this, kFxParaOn, "On"));
         bind (g, new Segmented (CRect (530, 8, 620, 26), this, paraParam (para::kSlope), {"12", "18", "24"}));
         bind (g, new Segmented (CRect (626, 8, 726, 26), this, paraParam (para::kMovement), {"Free", "Vocal"}));

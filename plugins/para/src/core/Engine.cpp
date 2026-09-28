@@ -126,25 +126,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         {
             double hz = hpCutoff (hpBase, offset, split), lz = lpCutoff (lpBase, offset, split);
             hpMulT = lpMulT = 1.0f;
-            if (vocal)
-            {
-                // crossed: the follower sits at the leader's cutoff and fades over an octave
-                const double over = 12.0 * std::log2 (lz / hz);
-                if (over > 0.0)
-                {
-                    const float keep = 1.0f - (float)std::min (1.0, over / 12.0);
-                    if (leaderLp)
-                    {
-                        hz = lz;
-                        hpMulT = keep * keep;
-                    }
-                    else
-                    {
-                        lz = hz;
-                        lpMulT = keep * keep;
-                    }
-                }
-            }
+            if (vocal) // crossed: the follower sits at the leader's cutoff and fades over an octave
+                vocalPush (hz, lz, leaderLp, hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;
             hpC.set (hz, qHp, sr);
@@ -205,6 +188,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->hpMul.store (hpMul, std::memory_order_relaxed);
         meters->lpMul.store (lpMul, std::memory_order_relaxed);
         meters->lpHz.store ((float)curLp, std::memory_order_relaxed);
+        // how far the engine has moved the filters from where they are set: the display adds this to
+        // the current settings, so edits show at once and the movement shows too
+        meters->hpShift.store ((float)(12.0 * std::log2 (curHp / std::max (1.0, p[kHpFreq]))), std::memory_order_relaxed);
+        meters->lpShift.store ((float)(12.0 * std::log2 (curLp / std::max (1.0, p[kLpFreq]))), std::memory_order_relaxed);
+        meters->leaderLp.store (leaderLp, std::memory_order_relaxed);
+        meters->blocks.fetch_add (1, std::memory_order_relaxed);
         meters->env.store ((float)envPeak, std::memory_order_relaxed);
         meters->note.store (lastNote, std::memory_order_relaxed);
     }
