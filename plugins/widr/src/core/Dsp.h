@@ -23,7 +23,7 @@ public:
     {
 #if defined(WIDR_SSE)
         old = _mm_getcsr ();
-        _mm_setcsr (old | 0x8040); // FTZ | DAZ
+        _mm_setcsr ((unsigned int)(old | 0x8040)); // FTZ | DAZ
 #elif defined(__aarch64__) && !defined(_MSC_VER)
         uint64_t fpcr;
         asm volatile ("mrs %0, fpcr" : "=r"(fpcr));
