@@ -118,11 +118,13 @@ enum ParamId : uint32_t
     kMsMidGain,  // dB
     kRootKey,    // the root note: the sample plays at its own pitch on this note
     kTailBase,   // the Smacheratr at the very end: pk::kTailFields entries
+    kParaTransposeLock = kTailBase + pk::kTailFields, // Para's Transpose ignores the sampler's
 
-    kNumParams = kTailBase + pk::kTailFields
+    kNumParams
 };
 
 constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
+constexpr double kParaTransposeDefault = 48.0; // Para sits four octaves above the played note
 constexpr uint32_t multidynParam (uint32_t id) { return kFxMdBase + id; }
 
 // Breakpoint-envelope parameters. Each envelope (0 amp, 1 filter, 2 pitch) owns a block of

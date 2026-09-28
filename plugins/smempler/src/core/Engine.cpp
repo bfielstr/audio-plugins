@@ -882,9 +882,9 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
 
 void Engine::renderEffects (float* L, float* R, int n)
 {
-    // Para follows the sampler's pitch: its Transpose is an offset on top of the sampler's, and
-    // the pitch bend range is the sampler's
-    fxPara.setParam (para::kTranspose, p[kTranspose] + p[paraParam (para::kTranspose)]);
+    // Para follows the sampler's pitch: its Transpose is an offset on top of the sampler's (unless
+    // locked), and the pitch bend range is the sampler's
+    fxPara.setParam (para::kTranspose, paraTransposeOf (p));
     fxPara.setParam (para::kPbRange, p[kPbRange]);
     fxPara.setParam (para::kRoot, p[kRootKey]); // Para tracks around the sampler's root note
     if (on (p[kFxParaOn]))

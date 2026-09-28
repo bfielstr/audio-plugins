@@ -37,6 +37,12 @@ ParamArray defaultParams ();
 
 // The root note: the sample plays at its own pitch on it.
 inline int rootOf (const ParamArray& p) { return std::clamp ((int)std::lround (p[kRootKey]), 0, 127); }
+// Para's Transpose: an offset on top of the sampler's, or on its own when locked
+inline double paraTransposeOf (const ParamArray& p)
+{
+    const double own = p[paraParam (para::kTranspose)];
+    return p[kParaTransposeLock] >= 0.5 ? own : own + p[kTranspose];
+}
 
 // Computes the [start, end) flag region in frames (with snapping applied).
 void flagRegion (const SampleData& s, const ParamArray& p, double& fs, double& fe);

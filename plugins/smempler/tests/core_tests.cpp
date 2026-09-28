@@ -247,6 +247,7 @@ TEST (built_in_effects)
     e->setParam (kFxParaOn, 1.0);
     e->setParam (paraParam (para::kHpFreq), 880.0);
     e->setParam (paraParam (para::kLpFreq), 220.0);
+    e->setParam (paraParam (para::kTranspose), 0.0); // the filters on the played note, not four octaves up
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
@@ -285,6 +286,17 @@ TEST (defaults_one_voice_and_root_note)
     const auto& t = paramTable ();
     CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
     CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
+    CHECK (t.info (paraParam (para::kTranspose)).def == 48.0 && t.info (kParaTransposeLock).def == 0.0,
+           "Para Transpose +48, unlocked");
+    {
+        ParamArray p {};
+        for (uint32_t i = 0; i < kNumParams; ++i)
+            p[i] = t.info (i).def;
+        p[kTranspose] = -12.0;
+        CHECK (paraTransposeOf (p) == 36.0, "unlocked: follows the sampler's Transpose");
+        p[kParaTransposeLock] = 1.0;
+        CHECK (paraTransposeOf (p) == 48.0, "locked: stays at its own value");
+    }
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
     // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
     auto s = sine (440.0, 1.0);

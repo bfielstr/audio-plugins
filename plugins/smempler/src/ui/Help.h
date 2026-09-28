@@ -24,6 +24,12 @@ inline const char* forParam (uint32_t id)
         case kMsSideGain: return "Level of the side signal (the stereo width).";
         case kMsMidGain: return "Level of the mid signal.";
         case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default). Para's tracking follows it.";
+        case kParaTransposeLock:
+            return "Lock Para's Transpose: the filters stay at its value (+48 by default) from the played note, "
+                   "whatever the sampler's Transpose. Off, the sampler's Transpose is added to it.";
+        case kFxParaBase + para::kTranspose:
+            return "Where Para's filters track, in semitones from the played note (+48 by default, four octaves "
+                   "up), added to the sampler's Transpose unless Lock is on.";
         default: break;
     }
     if (id >= kTailBase)
