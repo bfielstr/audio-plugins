@@ -1,5 +1,6 @@
 // End-to-end test of the built Para.vst3. usage: para_hosttest <Para.vst3> <output dir>
 #include "Params.h"
+#include "Svf.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
