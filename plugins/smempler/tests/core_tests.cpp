@@ -110,6 +110,7 @@ static Engine* makeEngine (std::shared_ptr<SampleData> s)
     e->setParam (kVolume, 0.0);
     e->setParam (kVelVol, 0.0);
     e->setParam (kLoopOn, 0.0); // looping is on by default; tests switch it on where they need it
+    e->setParam (kVoices, 7);   // 8 voices (the default is 1): the tests play chords
     return e;
 }
 
@@ -236,16 +237,16 @@ TEST (fft_roundtrip)
 
 TEST (built_in_effects)
 {
-    // a 440 Hz sample; Perrera's notch between its filters lands on it, and follows the note
+    // a 440 Hz sample; Para's notch between its filters lands on it, and follows the note
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     CHECK (e->latency () > 0, "the effects report their latency: %d", e->latency ());
     e->noteOn (60, 1.0f);
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
-    e->setParam (kFxPerreraOn, 1.0);
-    e->setParam (perreraParam (perrera::kHpFreq), 880.0);
-    e->setParam (perreraParam (perrera::kLpFreq), 220.0);
+    e->setParam (kFxParaOn, 1.0);
+    e->setParam (paraParam (para::kHpFreq), 880.0);
+    e->setParam (paraParam (para::kLpFreq), 220.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
@@ -257,15 +258,15 @@ TEST (built_in_effects)
     o = run (*e, 24000);
     CHECK (rms (o.l, 12000, 24000) < dry * 0.4, "the notch follows the note: %f", rms (o.l, 12000, 24000));
     // without key tracking the filters stay put: with the pair two octaves down, 880 Hz passes
-    e->setParam (perreraParam (perrera::kKey), 0.0);
-    e->setParam (perreraParam (perrera::kHpFreq), 220.0);
-    e->setParam (perreraParam (perrera::kLpFreq), 55.0);
+    e->setParam (paraParam (para::kKey), 0.0);
+    e->setParam (paraParam (para::kHpFreq), 220.0);
+    e->setParam (paraParam (para::kLpFreq), 55.0);
     e->reset ();
     e->noteOn (72, 1.0f);
     o = run (*e, 24000);
     CHECK (rms (o.l, 12000, 24000) > dry * 0.7, "without key tracking 880 Hz passes: %f vs %f", rms (o.l, 12000, 24000), dry);
     // Multidyn on: its preset lifts a quiet sample
-    e->setParam (kFxPerreraOn, 0.0);
+    e->setParam (kFxParaOn, 0.0);
     e->setParam (kFxMdOn, 1.0);
     e->setParam (kGain, -30.0);
     e->reset ();
@@ -277,6 +278,115 @@ TEST (built_in_effects)
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
+}
+
+TEST (defaults_one_voice_and_root_note)
+{
+    const auto& t = paramTable ();
+    CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
+    CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
+    // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
+    auto s = sine (440.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (kRootKey, 72.0);
+    e->noteOn (72, 1.0f);
+    auto o = run (*e, 12000);
+    CHECK (std::fabs (freqOf (o.l, 2000, 12000) / 440.0 - 1.0) < 0.003, "root plays the sample's pitch: %f", freqOf (o.l, 2000, 12000));
+    e->allNotesOff ();
+    run (*e, 9600);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 12000);
+    CHECK (std::fabs (freqOf (o.l, 2000, 12000) / 220.0 - 1.0) < 0.003, "an octave below the root: %f", freqOf (o.l, 2000, 12000));
+}
+
+// Amplitude of frequency f in x[a, b).
+static double toneAmp (const std::vector<float>& x, double f, size_t a, size_t b)
+{
+    double s = 0, c = 0;
+    for (size_t i = a; i < b; ++i)
+    {
+        s += x[i] * std::sin (2.0 * M_PI * f * i / kHostSr);
+        c += x[i] * std::cos (2.0 * M_PI * f * i / kHostSr);
+    }
+    return 2.0 * std::sqrt (s * s + c * c) / (double)(b - a);
+}
+
+TEST (mid_side_eq_tapers_the_sides)
+{
+    // mid: 100 Hz; side: 50 Hz and 3 kHz. The side high-pass at 300 Hz removes the 50 Hz side
+    // and keeps the rest.
+    const double sr = kHostSr;
+    std::vector<float> l ((size_t)sr), r ((size_t)sr);
+    for (size_t i = 0; i < l.size (); ++i)
+    {
+        const double t = (double)i / sr;
+        const double m = 0.2 * std::sin (2 * M_PI * 100 * t), sd = 0.2 * std::sin (2 * M_PI * 50 * t) + 0.1 * std::sin (2 * M_PI * 3000 * t);
+        l[i] = (float)(m + sd);
+        r[i] = (float)(m - sd);
+    }
+    auto smp = SampleData::fromBuffers (l, r, sr);
+    auto measure = [&] (bool msOn, int slope, double sideDb) {
+        std::unique_ptr<Engine> e (makeEngine (smp));
+        e->setParam (kFilterOn, 0.0);
+        e->setParam (kMsOn, msOn ? 1.0 : 0.0);
+        e->setParam (kMsSideHp, 300.0);
+        e->setParam (kMsSlope, slope);
+        e->setParam (kMsSideGain, sideDb);
+        e->noteOn (60, 1.0f);
+        auto o = run (*e, 36000);
+        std::vector<float> mid (o.l.size ()), side (o.l.size ());
+        for (size_t i = 0; i < o.l.size (); ++i)
+        {
+            mid[i] = 0.5f * (o.l[i] + o.r[i]);
+            side[i] = 0.5f * (o.l[i] - o.r[i]);
+        }
+        struct R { double mid100, side50, side3k; };
+        return R {toneAmp (mid, 100.0, 12000, 36000), toneAmp (side, 50.0, 12000, 36000), toneAmp (side, 3000.0, 12000, 36000)};
+    };
+    const auto off = measure (false, MsEq::k24, 0.0);
+    const auto on = measure (true, MsEq::k24, 0.0);
+    CHECK (off.side50 > 0.1, "off: the low side is there: %f", off.side50);
+    CHECK (on.side50 < off.side50 * 0.03, "24 dB: the low side is gone: %f vs %f", on.side50, off.side50);
+    CHECK (std::fabs (on.side3k / off.side3k - 1.0) < 0.05, "the high side stays: %f vs %f", on.side3k, off.side3k);
+    CHECK (std::fabs (on.mid100 / off.mid100 - 1.0) < 0.02, "the mid stays: %f vs %f", on.mid100, off.mid100);
+    const auto gentle = measure (true, MsEq::k6, 0.0);
+    CHECK (gentle.side50 > on.side50 * 3.0 && gentle.side50 < off.side50 * 0.3, "6 dB tapers more gently: %f", gentle.side50);
+    const auto quiet = measure (true, MsEq::k24, -6.0);
+    CHECK (std::fabs (quiet.side3k / on.side3k - 0.501) < 0.03, "side gain -6 dB: %f", quiet.side3k / on.side3k);
+    for (int sl : {MsEq::k6, MsEq::k12, MsEq::k24})
+        CHECK (std::fabs (MsEq::responseDb (300.0, 300.0, sl) + 3.01) < 0.05, "slope %d: -3 dB at the cutoff", sl);
+}
+
+TEST (effects_fuzz)
+{
+    // every effect on, random settings and automation: finite output
+    auto s = sine (220.0, 1.0, 44100.0, true);
+    uint32_t seed = 77;
+    auto r01 = [&] {
+        seed = seed * 1664525u + 1013904223u;
+        return (float)((seed >> 8) & 0xFFFFFF) / 16777216.0f;
+    };
+    for (int iter = 0; iter < 30; ++iter)
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        for (uint32_t id = kFxParaOn; id < kNumParams; ++id)
+            e->setParam (id, toPlain (id, r01 ()));
+        for (uint32_t id : {(uint32_t)kFxParaOn, (uint32_t)kFxMdOn, (uint32_t)kMsOn, (uint32_t)(kTailBase + pk::kTailOn)})
+            e->setParam (id, 1.0);
+        bool finite = true;
+        for (int step = 0; step < 6; ++step)
+        {
+            e->noteOn (36 + (int)(r01 () * 48), 1.0f);
+            const uint32_t id = kFxParaOn + (uint32_t)(r01 () * (kNumParams - kFxParaOn - 1));
+            e->setParam (id, toPlain (id, r01 ()));
+            auto o = run (*e, 2000);
+            for (float v : o.l)
+                finite &= std::isfinite (v);
+        }
+        CHECK (finite, "iteration %d produced non-finite output", iter);
+    }
 }
 
 TEST (classic_pitch_and_samplerate)
@@ -994,6 +1104,8 @@ TEST (fuzz_random_params_with_sample)
             if (r01 () < 0.6f)
                 e->setParam (id, toPlain (id, r01 ()));
         e->setParam (kVolume, 0.0);
+        for (uint32_t id : {(uint32_t)kFxParaOn, (uint32_t)kFxMdOn, (uint32_t)kMsOn, (uint32_t)(kTailBase + pk::kTailOn)})
+            e->setParam (id, 0.0);
         HostInfo h;
         h.bpm = 40.0 + 200.0 * r01 ();
         h.playing = r01 () < 0.5f;
@@ -1012,7 +1124,7 @@ TEST (fuzz_random_params_with_sample)
                 e->setSustain (r01 () < 0.5f);
             if (r01 () < 0.15f) // automate something mid-note
             {
-                const uint32_t id = (uint32_t)(r01 () * (kNumParams - 1));
+                const uint32_t id = (uint32_t)(r01 () * (kFxParaOn - 1)); // the sampler (the effects have their own fuzz)
                 e->setParam (id, toPlain (id, r01 ()));
             }
             auto o = run (*e, 1024 + (int)(r01 () * 3000), h, 1 + (int)(r01 () * 700));

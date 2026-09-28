@@ -23,8 +23,11 @@ inline const char* forParam (uint32_t id)
                    "whatever follows (a saturator) at the same level as the body.";
         case kPreLimitCeiling: return "Pre-limiter ceiling relative to each band's Above threshold (0 dB = right at it).";
         case kSatOn: return "The built-in Smacheratr after the Output gain: the usual chain in one device.";
-        case kSatCurve: return "Shaping curve of the built-in saturator (see Smacheratr).";
-        case kSatDrive: return "Gain into the built-in saturator.";
+        case kSatPreLimit:
+            return "A look-ahead limiter before the saturator's drive: the signal is held at the threshold, so a "
+                   "transient cannot push further into the curve than the rest of the sound.";
+        case kSatPreLimitThreshold: return "Level the saturator's pre-limiter holds the signal to, before the drive.";
+        case kSatDrive: return "Gain into the built-in saturator's Analog curve (after its pre-limiter).";
         case kSatPostClip: return "Clip the saturator's output at 0 dB (Soft: Analog Clip curve, Hard: digital).";
         case kSatMix: return "Dry/wet of the built-in saturator.";
         case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";

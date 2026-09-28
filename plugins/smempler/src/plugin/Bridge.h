@@ -8,6 +8,11 @@
 #include "Slices.h"
 
 #include "pluginkit/RtShared.h"
+#include "pluginkit/ScopeBuffer.h"
+
+#include "multidyn/src/plugin/Meters.h"
+#include "para/src/core/Engine.h"
+#include "smacheratr/src/core/Engine.h"
 
 #include <array>
 #include <atomic>
@@ -71,6 +76,15 @@ public:
     std::atomic<double> hostBpm {120.0};
     std::atomic<bool> hostPlaying {false};
     std::atomic<uint32_t> changeCounter {0}; // bumps whenever sample/edits change
+
+    // the effects' displays and the output scope (audio thread -> editor)
+    para::Meters paraMeters;
+    multidyn::Meters mdMeters;
+    smacheratr::Meters satMeters;
+    std::atomic<float> msMid {0.0f}, msSide {0.0f};
+    static constexpr int kScopeSize = 65536;
+    pk::ScopeBuffer<kScopeSize> outScope; // the final output
+    std::atomic<double> sampleRate {48000.0};
 
 private:
     ~Bridge () = default;

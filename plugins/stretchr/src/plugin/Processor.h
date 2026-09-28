@@ -2,6 +2,8 @@
 
 #include "Session.h"
 
+#include "smacheratr/src/core/Tail.h"
+
 #include "public.sdk/source/vst/vstaudioeffect.h"
 
 #include <array>
@@ -25,12 +27,15 @@ public:
     Steinberg::tresult PLUGIN_API setupProcessing (Steinberg::Vst::ProcessSetup& setup) override;
     Steinberg::tresult PLUGIN_API setActive (Steinberg::TBool state) override;
     Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) override;
+    Steinberg::uint32 PLUGIN_API getLatencySamples () override { return (Steinberg::uint32)tail.latency (); }
     Steinberg::tresult PLUGIN_API setState (Steinberg::IBStream* state) override;
     Steinberg::tresult PLUGIN_API getState (Steinberg::IBStream* state) override;
     Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override;
 
 private:
     Session* session = nullptr;
+    smacheratr::Tail tail; // the end-of-chain saturator, after the clip
+    void syncTail ();
     std::array<std::atomic<double>, kNumParams> normMirror;
     RenderedPtr cur, prev;
     uint32_t renderGen = 0;

@@ -72,7 +72,7 @@ try {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
     # Removed only when this release no longer ships it under that name.
-    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr') {
+    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr', 'Perrera') {
         if (Test-Path (Join-Path $x "$old.vst3")) { continue }
         foreach ($dir in $dest, $root) {
             $oldBundle = Join-Path $dir "$old.vst3"

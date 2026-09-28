@@ -7,6 +7,7 @@
 #include "Params.h"
 #include "plugin/StateIO.h"
 #include "pluginkit/testing/HostRig.h"
+#include "ui/Editor.h"
 
 #include "dr_wav.h"
 
@@ -438,6 +439,32 @@ int main (int argc, char** argv)
         rig.note (60, 1.0f);
         rig.render (0.3, out);
         CHECK (snapshot (rig, outDir + "/ui_classic.png"), "classic snapshot");
+
+        // the effects strip with audio flowing: every effect on, one screenshot per tab
+        for (uint32_t id : {(uint32_t)smempler::kFxParaOn, (uint32_t)smempler::kFxMdOn, (uint32_t)smempler::kMsOn,
+                            (uint32_t)(smempler::kTailBase + pk::kTailOn)})
+            rig.param (id, 1.0);
+        rig.param (smempler::kTailBase + pk::kTailDrive, smempler::toNormalized (smempler::kTailBase + pk::kTailDrive, 12.0));
+        {
+            EditorWindow fx (rig.controller);
+            CHECK (fx.ok (), "fx editor");
+            const char* tabs[smempler::Editor::kFxTabs] = {"para", "multidyn", "ms", "smacheratr"};
+            for (int t = 0; t < smempler::Editor::kFxTabs; ++t)
+            {
+                fx.click (8 + t * smempler::Editor::kFxTabWidth + 50, smempler::Editor::kFxTabTop + 10);
+                rig.note (60, 1.0f);
+                for (int i = 0; i < 12; ++i)
+                {
+                    rig.render (0.05, out);
+                    pump (0.03);
+                }
+                rig.note (60, 0.0f);
+                CHECK (fx.savePng (outDir + "/ui_fx_" + tabs[t] + ".png"), "fx %s snapshot", tabs[t]);
+            }
+        }
+        for (uint32_t id : {(uint32_t)smempler::kFxParaOn, (uint32_t)smempler::kFxMdOn, (uint32_t)smempler::kMsOn,
+                            (uint32_t)(smempler::kTailBase + pk::kTailOn)})
+            rig.param (id, 0.0);
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 
@@ -511,7 +538,7 @@ int main (int argc, char** argv)
             CHECK (v->canResize () == kResultTrue, "resizable");
             v->checkSizeConstraint (&r);
             // the editor keeps its aspect ratio (1110 x 904 with the effects strip)
-            CHECK (std::abs (r.getWidth () * 904 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
+            CHECK (std::abs (r.getWidth () * 988 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
                    r.getHeight ());
             v->release ();
         }

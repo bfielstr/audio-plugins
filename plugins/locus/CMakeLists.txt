@@ -5,8 +5,8 @@ add_library(locus_core STATIC
     src/core/Params.cpp
     src/core/Engine.cpp
 )
-target_include_directories(locus_core PUBLIC src/core)
-target_link_libraries(locus_core PUBLIC pluginkit_core)
+target_include_directories(locus_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
+target_link_libraries(locus_core PUBLIC pluginkit_core smacheratr_core)
 pk_dsp_settings(locus_core)
 
 add_executable(locus_tests tests/core_tests.cpp)

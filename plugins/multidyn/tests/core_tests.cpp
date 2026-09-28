@@ -117,14 +117,14 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
 // The defaults are a four-band upward-compression preset; most tests start from a neutral device.
 static void neutralize (Engine& e)
 {
-    e.setParam (kOutput, 0.0);
+    e.setParam (kOutput, -kBakedMasterDb); // cancel the baked gains
     e.setParam (kMode, kBase);
     e.setParam (kPreLimit, 0.0);
     e.setParam (kSatOn, 0.0);
     for (int b = 0; b < kMaxBands; ++b)
     {
-        e.setParam (bandParam (b, kBandInput), 0.0);
-        e.setParam (bandParam (b, kBandOutput), 0.0);
+        e.setParam (bandParam (b, kBandInput), -kBakedInputDb);
+        e.setParam (bandParam (b, kBandOutput), -kBakedOutputDb[b]);
         e.setParam (bandParam (b, kAboveRatio), 1.0);
         e.setParam (bandParam (b, kBelowRatio), 1.0);
         e.setParam (bandParam (b, kAboveThresh), -12.0);
@@ -419,14 +419,14 @@ TEST (preset_defaults)
     CHECK (std::lround (e.param (kBands)) == 2 && std::fabs (e.param (kXover1) - 88.3) < 1e-9 &&
                std::fabs (e.param (kXover2) - 2500.0) < 1e-9 && std::fabs (e.param (kXover3) - 8000.0) < 1e-9,
            "3 bands at 88.3 Hz / 2.5 kHz (8 kHz for a fourth)");
-    CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) >= 0.5 && e.param (kPreLimitCeiling) == 0.0,
-           "Character mode, pre-limit on at the Above threshold");
-    CHECK (e.param (kSatOn) >= 0.5 && std::fabs (e.param (kSatDrive) - 14.0) < 1e-9, "saturator on, driven 14 dB");
+    CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) < 0.5 && e.param (kPreLimitCeiling) == 0.0,
+           "Character mode, pre-limit off");
+    CHECK (e.param (kSatOn) < 0.5 && e.param (kSatDrive) == 0.0, "end-of-chain saturator off, Drive 0 dB");
     CHECK (e.param (bandParam (2, kAboveRatio)) == kRatioInf && std::fabs (e.param (bandParam (1, kAboveRatio)) - 66.7) < 1e-9 &&
                e.param (bandParam (0, kBelowRatio)) == kRatioInf && std::fabs (e.param (bandParam (3, kBelowRatio)) - 4.17) < 1e-9,
            "ratios");
-    CHECK (std::fabs (e.param (bandParam (0, kBandOutput)) - 24.0) < 1e-9 && std::fabs (e.param (bandParam (1, kBandOutput)) - 9.1) < 1e-9 &&
-               std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9 && std::fabs (e.param (kOutput) + 7.0) < 1e-9,
+    CHECK (e.param (bandParam (0, kBandOutput)) == 0.0 && e.param (bandParam (1, kBandInput)) == 0.0 && e.param (kOutput) == 0.0 &&
+               std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9 && kBakedOutputDb[0] == 24.0 && kBakedMasterDb == -7.0,
            "gains and times");
     // It squashes dynamics hard: a 44 dB level difference at 1 kHz comes out within ~15 dB.
     auto level = [] (double inDb) {
@@ -553,8 +553,8 @@ TEST (band_active_solo_and_gains)
 {
     auto e = engine (false);
     // mid band: +6 dB input, -3 dB output, and heavy compression that would otherwise act
-    e->setParam (bandParam (kMid, kBandInput), 6.0);
-    e->setParam (bandParam (kMid, kBandOutput), -3.0);
+    e->setParam (bandParam (kMid, kBandInput), -kBakedInputDb + 6.0);
+    e->setParam (bandParam (kMid, kBandOutput), -kBakedOutputDb[kMid] - 3.0);
     e->reset ();
     auto in = sine (350.0, -20.0, 0.5);
     auto out = run (*e, in);
@@ -565,12 +565,12 @@ TEST (band_active_solo_and_gains)
     out = run (*e, in);
     CHECK (std::fabs (rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000)) < 0.1, "inactive band bypasses gains");
     // global output
-    e->setParam (kOutput, -6.0);
+    e->setParam (kOutput, -kBakedMasterDb - 6.0);
     e->reset ();
     out = run (*e, in);
     CHECK (std::fabs (rmsDb (out.l, 12000, 24000) - rmsDb (in.l, 12000, 24000) + 6.0) < 0.1, "output -6 dB");
     // solo mutes the others
-    e->setParam (kOutput, 0.0);
+    e->setParam (kOutput, -kBakedMasterDb);
     e->setParam (bandParam (kHigh, kBandSolo), 1);
     e->reset ();
     out = run (*e, in);

@@ -385,7 +385,7 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
         float lfoV = 0.0f;
         if (on (p[kLfoOn]))
         {
-            const double keyF = std::exp2 (p[kLfoKey] * (st.note - kRootNote) / 12.0);
+            const double keyF = std::exp2 (p[kLfoKey] * (st.note - rootOf (p)) / 12.0);
             double freq;
             if (idx (p[kLfoSync]) == 1)
             {
@@ -425,7 +425,7 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
             fset.res = (float)p[kFilterRes];
             fset.driveDb = (float)p[kFilterDrive];
             fset.morph = (float)p[kFilterMorph];
-            const double mod = st.velocity * p[kFilterVel] * 48.0 + p[kFilterKey] * (st.note - kRootNote) +
+            const double mod = st.velocity * p[kFilterVel] * 48.0 + p[kFilterKey] * (st.note - rootOf (p)) +
                                filtEnv.value () * p[kFilterEnvAmt] + lfoV * p[kLfoFilter] * 48.0;
             fset.cutoff = (float)(p[kFilterFreq] * std::exp2 (mod / 12.0));
             filter.setup (fset, fsr);
@@ -507,15 +507,21 @@ void Engine::prepare (double sampleRate, int)
     sr = sampleRate;
     for (auto& v : voices)
         v.prepare (sr);
-    fxPerrera.prepare (sr, 512);
+    fxPara.prepare (sr, 512);
     fxMultidyn.prepare (sr, 512);
+    ms.prepare (sr);
+    tail.prepare (sr, 512);
+    for (uint32_t f = 0; f < pk::kTailFields; ++f)
+        tail.setParam (f, p[kTailBase + f]);
     reset ();
 }
 
 void Engine::reset ()
 {
-    fxPerrera.reset ();
+    fxPara.reset ();
     fxMultidyn.reset ();
+    ms.reset ();
+    tail.reset ();
     for (auto& v : voices)
         v.hardStop ();
     monoStack.clear ();
@@ -544,10 +550,12 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kFxPerreraBase && id < kFxPerreraBase + perrera::kNumParams)
-        fxPerrera.setParam (id - kFxPerreraBase, plain);
+    if (id >= kFxParaBase && id < kFxParaBase + para::kNumParams)
+        fxPara.setParam (id - kFxParaBase, plain);
     else if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
         fxMultidyn.setParam (id - kFxMdBase, plain);
+    else if (id >= kTailBase)
+        tail.setParam (id - kTailBase, plain);
 }
 
 void Engine::setSustain (bool onOff)
@@ -648,7 +656,7 @@ void Engine::noteOn (int note, float velocity)
         noteOff (note);
         return;
     }
-    fxPerrera.noteOn (note); // the built-in Perrera tracks the sampler's notes
+    fxPara.noteOn (note); // the built-in Para tracks the sampler's notes
     if (!smp)
         return;
     updateSlices ();
@@ -663,13 +671,13 @@ void Engine::noteOn (int note, float velocity)
         for (auto& v : voices)
             if (v.isActive () && !v.isReleased () && !v.isKilling ())
             {
-                v.glideTo (note, note - kRootNote, p[kGlideTime]);
+                v.glideTo (note, note - rootOf (p), p[kGlideTime]);
                 glided = true;
             }
         if (glided)
         {
             lastNote = note;
-            lastPitch = note - kRootNote;
+            lastPitch = note - rootOf (p);
             return;
         }
     }
@@ -729,7 +737,7 @@ void Engine::startNote (int note, float velocity, bool)
     if (warp && warpMode == kWarpBeatsMode)
         computeBeatBounds (r);
 
-    const double base = mode == kModeSlicing ? 0.0 : (double)(note - kRootNote);
+    const double base = mode == kModeSlicing ? 0.0 : (double)(note - rootOf (p));
     double glideFrom = 0.0;
     if (idx (p[kGlideMode]) != kGlideOff && lastNote >= 0)
         glideFrom = lastPitch - base;
@@ -795,9 +803,9 @@ void Engine::noteOff (int note)
             const int top = monoStack.back ();
             for (auto& v : voices)
                 if (v.isActive () && !v.isReleased ())
-                    v.glideTo (top, top - kRootNote, p[kGlideTime]);
+                    v.glideTo (top, top - rootOf (p), p[kGlideTime]);
             lastNote = top;
-            lastPitch = top - kRootNote;
+            lastPitch = top - rootOf (p);
             return;
         }
     }
@@ -851,7 +859,7 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
     makeCtx (host, c);
 
     PlayRegion loopRegion;
-    const bool liveLoop = idx (p[kMode]) == kModeClassic && regionFor (kRootNote, loopRegion);
+    const bool liveLoop = idx (p[kMode]) == kModeClassic && regionFor (rootOf (p), loopRegion);
     for (auto& v : voices)
     {
         if (!v.isActive ())
@@ -874,14 +882,20 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
 
 void Engine::renderEffects (float* L, float* R, int n)
 {
-    // Perrera follows the sampler's pitch: its Transpose is an offset on top of the sampler's, and
+    // Para follows the sampler's pitch: its Transpose is an offset on top of the sampler's, and
     // the pitch bend range is the sampler's
-    fxPerrera.setParam (perrera::kTranspose, p[kTranspose] + p[perreraParam (perrera::kTranspose)]);
-    fxPerrera.setParam (perrera::kPbRange, p[kPbRange]);
-    if (on (p[kFxPerreraOn]))
-        fxPerrera.process (L, R, L, R, n);
+    fxPara.setParam (para::kTranspose, p[kTranspose] + p[paraParam (para::kTranspose)]);
+    fxPara.setParam (para::kPbRange, p[kPbRange]);
+    fxPara.setParam (para::kRoot, p[kRootKey]); // Para tracks around the sampler's root note
+    if (on (p[kFxParaOn]))
+        fxPara.process (L, R, L, R, n);
     fxMultidyn.setBypass (!on (p[kFxMdOn]));
     fxMultidyn.process (L, R, nullptr, nullptr, L, R, n);
+    if (on (p[kMsOn]))
+        ms.process (L, R, n, p[kMsSideHp], idx (p[kMsSlope]), p[kMsSideGain], p[kMsMidGain]);
+    else
+        ms.measure (L, R, n);
+    tail.process (L, R, n);
 }
 
 int Engine::activeVoices () const

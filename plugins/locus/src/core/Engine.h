@@ -16,6 +16,8 @@
 #include "Fft.h"
 #include "Params.h"
 
+#include "smacheratr/src/core/Tail.h"
+
 #include <array>
 #include <atomic>
 #include <vector>
@@ -41,9 +43,14 @@ class Engine
 public:
     void prepare (double sampleRate, int maxBlock);
     void reset ();
-    void setParam (uint32_t id, double plain) { p[id] = plain; }
+    void setParam (uint32_t id, double plain)
+    {
+        p[id] = plain;
+        if (id >= kTailBase)
+            tail.setParam (id - kTailBase, plain);
+    }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return fftSize; }
+    int latency () const { return fftSize + tail.latency (); } // the STFT and the end-of-chain saturator
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -65,6 +72,7 @@ private:
     float norm = 1.0f, normDbSmoothed = 0.0f;
     float outGain = 1.0f, smooth = 0.0f;
     Spectrum* spectrum = nullptr;
+    smacheratr::Tail tail;
 };
 
 } // namespace locus

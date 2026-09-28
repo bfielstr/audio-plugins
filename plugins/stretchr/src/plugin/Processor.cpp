@@ -66,9 +66,17 @@ tresult PLUGIN_API Processor::setBusArrangements (SpeakerArrangement* inputs, in
 
 tresult PLUGIN_API Processor::canProcessSampleSize (int32 s) { return s == kSample32 ? kResultTrue : kResultFalse; }
 
+void Processor::syncTail ()
+{
+    for (uint32_t f = 0; f < pk::kTailFields; ++f)
+        tail.setParam (f, toPlain (kTailBase + f, normMirror[kTailBase + f].load ()));
+}
+
 tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
 {
     session->hostRate.store (setup.sampleRate);
+    tail.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
+    syncTail ();
     return AudioEffect::setupProcessing (setup);
 }
 
@@ -78,6 +86,8 @@ tresult PLUGIN_API Processor::setActive (TBool state)
     prev.reset ();
     renderGen = 0;
     fade = 0;
+    syncTail ();
+    tail.reset ();
     return AudioEffect::setActive (state);
 }
 
@@ -102,7 +112,10 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             {
                 const uint32_t id = q->getParameterId ();
                 normMirror[id].store (v);
-                session->setParam (id, toPlain (id, v), false);
+                if (id >= kTailBase)
+                    tail.setParam (id - kTailBase, toPlain (id, v));
+                else
+                    session->setParam (id, toPlain (id, v), false);
             }
         }
 
@@ -186,6 +199,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     }
     if (fade <= 0 && prev)
         prev.reset (); // still referenced by the session's graveyard: never frees here
+    tail.process (outL, outR, n);
     data.outputs[0].silenceFlags = 0;
     return kResultOk;
 }
@@ -200,7 +214,8 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         normMirror[id].store (st.norm[id]);
-        session->setParam (id, toPlain (id, st.norm[id]));
+        if (id < kTailBase)
+            session->setParam (id, toPlain (id, st.norm[id]));
     }
     session->setClip (st.hasClip ? std::move (st.clip) : Clip {}, false);
     return kResultOk;

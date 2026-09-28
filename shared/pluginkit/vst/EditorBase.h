@@ -63,6 +63,10 @@ protected:
             byParam[view->paramId ()].push_back (view);
         return view;
     }
+    // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`):
+    // On, Pre-Limit and its threshold, Drive, Post Clip, Dry/Wet. Needs about 480 x 78.
+    Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base,
+                         const char* title = "SMACHERATR  (end of the chain)");
     // Sets tooltips on every bound parameter view from a help lookup.
     void applyParamTooltips (const char* (*helpFor) (uint32_t));
     // Called before the frame is released.

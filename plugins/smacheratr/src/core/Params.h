@@ -9,40 +9,21 @@ namespace smacheratr {
 
 enum ParamId : uint32_t
 {
-    kDrive = 0,     // dB, gain into the shaper
-    kCurve,         // shaping curve
-    kBassThreshold, // dB, where the Bass Shaper curve starts to clip
-    kPostClip,      // Off / Soft Clip / Hard Clip after the shaper
-    kColorOn,       // colour filters (pre-shaper EQ, undone after the shaper)
-    kColorLo,       // -1 .. 1, low shelf amount (Amt Lo, +-24 dB)
-    kColorHi,       // -1 .. 1, peak amount (Amt Hi, +-24 dB)
-    kColorFreq,     // Hz, peak centre
-    kColorWidth,    // peak width (1 / Q)
-    kOutput,        // dB, final attenuation
+    kDrive = 0,         // dB, gain into the shaper (after the pre-limiter)
+    kPreLimit,          // look-ahead limiter before the drive
+    kPreLimitThreshold, // dB, where the pre-limiter holds the input
+    kPostClip,          // No Clip / Soft Clip / Hard Clip after the shaper
+    kColorOn,           // colour filters (pre-shaper EQ, undone after the shaper)
+    kColorLo,           // -1 .. 1, low shelf amount (Amt Lo, +-24 dB)
+    kColorHi,           // -1 .. 1, peak amount (Amt Hi, +-24 dB)
+    kColorFreq,         // Hz, peak centre
+    kColorWidth,        // peak width (1 / Q)
+    kOutput,            // dB, final attenuation
     kDryWet,
-    kWsDrive,       // Waveshaper curve controls
-    kWsCurve,
-    kWsDepth,
-    kWsLinear,
-    kWsDamp,
-    kWsPeriod,
-    kHiQuality,     // 4x oversampling around the shaper
-    kDcFilter,      // high-pass at the input
+    kHiQuality, // 4x oversampling around the shaper
+    kDcFilter,  // high-pass at the input
 
     kNumParams
-};
-
-enum CurveType
-{
-    kAnalogClip = 0,
-    kSoftSine,
-    kBassShaper,
-    kMediumCurve,
-    kHardCurve,
-    kSinoidFold,
-    kDigitalClip,
-    kWaveshaper,
-    kNumCurves
 };
 
 enum PostClipMode { kPostOff = 0, kPostSoft, kPostHard };

@@ -18,9 +18,12 @@ ParamArray defaultParams ()
     return p;
 }
 
-void Engine::prepare (double sampleRate, int)
+void Engine::prepare (double sampleRate, int maxBlock)
 {
     sr = sampleRate;
+    tail.prepare (sr, maxBlock);
+    for (uint32_t f = 0; f < pk::kTailFields; ++f)
+        tail.setParam (f, p[kTailBase + f]);
     // ~85 ms analysis window at any rate, 8x overlap for good time resolution
     fftSize = 1;
     while (fftSize < sr * 0.085)
@@ -51,6 +54,7 @@ void Engine::reset ()
     inPos = outPos = hopCount = 0;
     normDbSmoothed = 0.0f;
     outGain = dbToGain ((float)p[kOutput]);
+    tail.reset ();
 }
 
 float Engine::rangeWeight (int bin) const
@@ -92,6 +96,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             processFrame ();
         }
     }
+    tail.process (yl, yr, n);
 }
 
 void Engine::processFrame ()

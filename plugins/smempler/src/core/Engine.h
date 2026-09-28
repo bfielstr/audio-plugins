@@ -5,15 +5,19 @@
 #include "Envelope.h"
 #include "Filter.h"
 #include "Lfo.h"
+#include "MsEq.h"
 #include "Params.h"
 #include "SampleData.h"
 #include "Slices.h"
 #include "Warp.h"
 
 #include "multidyn/src/core/Engine.h"
-#include "perrera/src/core/Engine.h"
+#include "para/src/core/Engine.h"
+#include "smacheratr/src/core/Tail.h"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -30,6 +34,9 @@ struct HostInfo
 using ParamArray = std::array<double, kNumParams>; // plain values
 
 ParamArray defaultParams ();
+
+// The root note: the sample plays at its own pitch on it.
+inline int rootOf (const ParamArray& p) { return std::clamp ((int)std::lround (p[kRootKey]), 0, 127); }
 
 // Computes the [start, end) flag region in frames (with snapping applied).
 void flagRegion (const SampleData& s, const ParamArray& p, double& fs, double& fe);
@@ -152,11 +159,20 @@ public:
     void setPitchBend (float bipolar)
     {
         bend = bipolar;
-        fxPerrera.setPitchBend (bipolar);
+        fxPara.setPitchBend (bipolar);
     }
-    // The built-in effects (Perrera, then Multidyn with its Smacheratr) run after the sampler; the
-    // latency is theirs and constant.
-    int latency () const { return fxMultidyn.latency (); }
+    // After the sampler: Para, Multidyn, the mid/side EQ and the Smacheratr at the very end. The
+    // latency is theirs (Multidyn's look-ahead and the saturator's) and constant.
+    int latency () const { return fxMultidyn.latency () + tail.latency (); }
+    // Destinations for the editor's displays (may be null).
+    void setFxMeters (para::Meters* pm, smacheratr::Meters* sm)
+    {
+        fxPara.setMeters (pm);
+        tail.setMeters (sm);
+    }
+    const multidyn::BandMeter& fxMultidynMeter (int band) const { return fxMultidyn.meter (band); }
+    float msMidPeak () const { return ms.midPeak; }
+    float msSidePeak () const { return ms.sidePeak; }
     void setSustain (bool on);
     void noteOn (int note, float velocity);
     void noteOff (int note);
@@ -200,8 +216,11 @@ private:
     double globalLfoPhase = 0.0;
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
-    perrera::Engine fxPerrera;
-    multidyn::Engine fxMultidyn;
+    // built in without their own end-of-chain saturators (Smempler has one at the very end)
+    para::Engine fxPara {false};
+    multidyn::Engine fxMultidyn {false};
+    MsEq ms;
+    smacheratr::Tail tail;
 };
 
 } // namespace smempler

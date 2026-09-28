@@ -21,7 +21,7 @@ using pk::ActionButton;
 using pk::Choice;
 using pk::Knob;
 using pk::Label;
-using pk::Panel;
+using pk::NumberBox;
 using pk::Toggle;
 
 namespace {
@@ -49,8 +49,7 @@ void Editor::onClose ()
     shaper = nullptr;
     color = nullptr;
     status = nullptr;
-    bassView = nullptr;
-    wsViews.clear ();
+    thresholdView = nullptr;
     colorViews.clear ();
 }
 
@@ -69,36 +68,30 @@ void Editor::buildUI (CFrame* f)
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
-    // left: the device as Live shows it
-    bind (root, new Choice (CRect (kShaperLeft, 40, kShaperLeft + kShaperWidth, 62), this, kCurve));
-    shaper = new ShaperView (CRect (kShaperLeft, kShaperTop, kShaperLeft + kShaperWidth, kShaperTop + kShaperHeight), this, ctl);
+    // left: the device as Live shows it, with the pre-limiter in front of the curve
+    bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 86, 62), this, kPreLimit, "Pre-Limit"));
+    thresholdView = bind (root, new NumberBox (CRect (kShaperLeft + 92, 42, kShaperLeft + 172, 60), this, kPreLimitThreshold));
+    shaper = new ShaperView (CRect (kShaperLeft, kShaperTop, kShaperLeft + kShaperWidth, kShaperTop + kShaperHeight), this,
+                             [c = ctl] () -> const Meters* {
+                                 auto* s = c->getShared ();
+                                 return s ? &s->meters : nullptr;
+                             });
     shaper->setTooltipText (help::kShaperDisplay);
     root->addView (shaper);
     bind (root, new Choice (CRect (8, 266, 112, 288), this, kPostClip));
     bind (root, new Toggle (CRect (120, 266, 176, 288), this, kColorOn, "Color"));
     colorViews.push_back (bind (root, new Knob (knobRect (184, 262), this, kColorLo)));
-    bassView = bind (root, new Knob (knobRect (252, 262), this, kBassThreshold, "Bass Thr"));
     bind (root, new Knob (knobRect (24, 346, 68, 78), this, kDrive, nullptr, true));
     bind (root, new Knob (knobRect (128, 346, 68, 78), this, kOutput));
     bind (root, new Knob (knobRect (232, 346, 68, 78), this, kDryWet));
 
-    // right: the expanded view
+    // right: the colour curve and its controls
     color = new ColorView (CRect (kColorLeft, kColorTop, kColorLeft + kColorViewWidth, kColorTop + kColorViewHeight), this, ctl);
     color->setTooltipText (help::kColorDisplay);
     root->addView (color);
     const uint32_t colorIds[3] = {kColorHi, kColorFreq, kColorWidth};
     for (int i = 0; i < 3; ++i)
-        colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 206), this, colorIds[i])));
-
-    auto* wp = new Panel (CRect (kColorLeft, 280, 752, 432), "WAVESHAPER");
-    root->addView (wp);
-    const uint32_t wsIds[6] = {kWsDrive, kWsCurve, kWsDepth, kWsLinear, kWsDamp, kWsPeriod};
-    const char* wsLabels[6] = {"Drive", "Curve", "Depth", "Linear", "Damp", "Period"};
-    for (int i = 0; i < 6; ++i)
-        wsViews.push_back (bind (wp, new Knob (knobRect (10 + i * 71, 30), this, wsIds[i], wsLabels[i])));
-    auto* wsNote = new Label (CRect (8, 112, 428, 126), "Active with the Waveshaper curve", 9.5, false, 1);
-    wsNote->setDim (true);
-    wp->addView (wsNote);
+        colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
     applyParamTooltips (&help::forParam);
     updateLooks ();
@@ -107,11 +100,8 @@ void Editor::buildUI (CFrame* f)
 
 void Editor::updateLooks ()
 {
-    const int curve = (int)std::lround (plainValue (kCurve));
-    for (auto* v : wsViews)
-        v->setEnabledLook (curve == kWaveshaper);
-    if (bassView)
-        bassView->setEnabledLook (curve == kBassShaper);
+    if (thresholdView)
+        thresholdView->setEnabledLook (plainValue (kPreLimit) >= 0.5);
     const bool on = plainValue (kColorOn) >= 0.5;
     for (auto* v : colorViews)
         v->setEnabledLook (on);
@@ -124,7 +114,7 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kCurve || id == kColorOn)
+    if (id == kPreLimit || id == kColorOn)
         updateLooks ();
 }
 

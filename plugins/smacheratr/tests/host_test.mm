@@ -81,8 +81,7 @@ int main (int argc, char** argv)
             err = std::max (err, (double)std::fabs (out[i] - ref[i - latency]));
         CHECK (err < 2e-3, "passthrough error %g", err);
 
-        // drive through the plug-in: harmonics appear, the clip holds the peak at 0 dB
-        rig.param (kCurve, toNormalized (kCurve, kMediumCurve));
+        // drive through the plug-in: harmonics appear, the curve holds the peak at 0 dB
         rig.param (kDrive, toNormalized (kDrive, 18.0));
         out.clear ();
         rig.render (1.0, out, nullptr, tone (1000.0, 0.25));
@@ -97,7 +96,6 @@ int main (int argc, char** argv)
         State back;
         CHECK (readState (&saved, back), "readState");
         CHECK (std::fabs (toPlain (kDrive, back.norm[kDrive]) - 18.0) < 1e-6, "drive saved");
-        CHECK (std::lround (toPlain (kCurve, back.norm[kCurve])) == kMediumCurve, "curve saved");
 
         // editor: screenshot while audio is flowing, then gestures
         rig.param (kColorOn, toNormalized (kColorOn, 1.0));
@@ -114,13 +112,18 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_smacheratr.png"), "screenshot");
 
+            // the Pre-Limit toggle above the curve
+            win.click (Editor::kShaperLeft + 40, 51);
+            CHECK (plainOf (rig, kPreLimit) >= 0.5, "pre-limit switched on from the editor");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
+
             // shaper display: drag down lowers Drive, double-click resets it
             const double sx = Editor::kShaperLeft + Editor::kShaperWidth / 2, sy = Editor::kShaperTop + Editor::kShaperHeight / 2;
             const double d0 = plainOf (rig, kDrive);
             win.drag (sx, sy, sx, sy + 60);
             CHECK (plainOf (rig, kDrive) < d0 - 6.0, "drag down lowers drive: %.1f -> %.1f", d0, plainOf (rig, kDrive));
             win.click (sx, sy, 2);
-            CHECK (std::fabs (plainOf (rig, kDrive) - 14.0) < 1e-6, "double-click resets drive to the default: %.2f", plainOf (rig, kDrive));
+            CHECK (std::fabs (plainOf (rig, kDrive)) < 1e-6, "double-click resets drive to the default: %.2f", plainOf (rig, kDrive));
 
             // colour display: the right handle sits at Freq / Amt Hi; dragging it up raises Amt Hi
             auto xOfHz = [] (double hz) {

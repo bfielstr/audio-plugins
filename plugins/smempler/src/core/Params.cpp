@@ -64,7 +64,7 @@ std::vector<ParamInfo> buildTable ()
     add (pct (kLoopFade, "Loop Fade", "Fade", 0.0));
     add (toggle (kSnap, "Snap", "Snap", false));
     add (fl (kGain, "Sample Gain", "Gain", -36.0, 24.0, 0.0, Curve::Linear, Disp::DbGain));
-    add (choice (kVoices, "Voices", "Voices", kVoiceNames, 7));
+    add (choice (kVoices, "Voices", "Voices", kVoiceNames, 0)); // 1 voice
     add (toggle (kRetrig, "Retrigger", "Retrig", false));
     add (choice (kTriggerGate, "Trigger Mode", "Trig/Gate", {"Trigger", "Gate"}, 0));
     add (fl (kFadeIn, "Fade In", "Fade In", 0.0, 2000.0, 0.0, Curve::Power3, Disp::Ms));
@@ -171,12 +171,12 @@ std::vector<ParamInfo> buildTable ()
         }
     }
     // the built-in effects: their own tables, offset and prefixed (both off by default)
-    add (toggle (kFxPerreraOn, "Perrera On", "Perrera", false));
-    for (uint32_t i = 0; i < perrera::kNumParams; ++i)
+    add (toggle (kFxParaOn, "Para On", "Para", false));
+    for (uint32_t i = 0; i < para::kNumParams; ++i)
     {
-        ParamInfo pi = perrera::paramTable ().info (i);
-        pi.id = perreraParam (i);
-        pi.name = keep (std::string ("Perrera ") + pi.name);
+        ParamInfo pi = para::paramTable ().info (i);
+        pi.id = paraParam (i);
+        pi.name = keep (std::string ("Para ") + pi.name);
         add (pi);
     }
     add (toggle (kFxMdOn, "Multidyn On", "Multidyn", false));
@@ -187,6 +187,14 @@ std::vector<ParamInfo> buildTable ()
         pi.name = keep (std::string ("Multidyn ") + pi.name);
         add (pi);
     }
+    // after the effects: the mid/side EQ, the root note, the end-of-chain Smacheratr
+    add (toggle (kMsOn, "M/S EQ On", "M/S", false));
+    add (fl (kMsSideHp, "Side High-Pass", "Side HP", 20.0, 2000.0, 150.0, Curve::Log, Disp::Hz));
+    add (choice (kMsSlope, "Side High-Pass Slope", "Slope", {"6 dB", "12 dB", "24 dB"}, 2));
+    add (fl (kMsSideGain, "Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+    add (fl (kMsMidGain, "Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+    add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
+    pk::addTailParams (t, kTailBase);
     return t;
 }
 

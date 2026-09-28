@@ -63,10 +63,6 @@ void Engine::prepare (double sampleRate, int)
     limAtk = (float)std::exp (-4.0 / look);
     limPeakDecay = (float)std::exp (-1.0 / (2.0 * look)); // the input peak is held about twice the look-ahead
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
-    sat.setParam (smacheratr::kHiQuality, 1.0);
-    sat.setParam (smacheratr::kColorOn, 0.0);
-    sat.setParam (smacheratr::kDcFilter, 0.0);
-    sat.setParam (smacheratr::kOutput, 0.0);
     sat.prepare (sr, 512);
     for (auto& d : bypassDelay)
         d.assign ((size_t)std::max (1, latency ()), 0.0f);
@@ -89,11 +85,11 @@ void Engine::reset ()
     for (int b = 0; b < kNumBands; ++b)
     {
         bands[b] = BandState {};
-        bands[b].inGain = dbToGain (p[bandParam (b, kBandInput)]);
-        bands[b].outGain = dbToGain (p[bandParam (b, kBandOutput)]);
+        bands[b].inGain = dbToGain (p[bandParam (b, kBandInput)] + kBakedInputDb);
+        bands[b].outGain = dbToGain (p[bandParam (b, kBandOutput)] + kBakedOutputDb[b]);
         meters[b] = BandMeter {};
     }
-    outGain = dbToGain (p[kOutput]);
+    outGain = dbToGain (p[kOutput] + kBakedMasterDb);
     scGain = dbToGain (p[kScGain]);
     syncSaturator ();
     sat.reset ();
@@ -102,10 +98,8 @@ void Engine::reset ()
 
 void Engine::syncSaturator ()
 {
-    sat.setParam (smacheratr::kCurve, p[kSatCurve]);
-    sat.setParam (smacheratr::kDrive, p[kSatDrive]);
-    sat.setParam (smacheratr::kPostClip, p[kSatPostClip]);
-    sat.setParam (smacheratr::kDryWet, on (p[kSatOn]) ? p[kSatMix] : 0.0);
+    for (uint32_t f = 0; f < pk::kTailFields; ++f)
+        sat.setParam (f, p[kSatOn + f]);
 }
 
 int Engine::bandCount () const { return std::clamp ((int)std::lround (p[kBands]) + 1, 1, kMaxBands); }
@@ -190,7 +184,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const bool scActive = on (p[kScOn]) && scL != nullptr;
     const float scMix = scActive ? (float)std::clamp (p[kScMix], 0.0, 1.0) : 0.0f;
     const bool listen = on (p[kScListen]) && scActive;
-    const float outTarget = dbToGain (p[kOutput]), scTarget = dbToGain (p[kScGain]);
+    const float outTarget = dbToGain (p[kOutput] + kBakedMasterDb), scTarget = dbToGain (p[kScGain]);
     syncSaturator ();
 
     bool used[kNumBands], active[kNumBands], audible[kNumBands];
@@ -206,8 +200,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     for (int b = 0; b < kNumBands; ++b)
     {
         audible[b] = used[b] && (!anySolo || on (p[bandParam (b, kBandSolo)]));
-        inTarget[b] = dbToGain (p[bandParam (b, kBandInput)]);
-        outTargetB[b] = dbToGain (p[bandParam (b, kBandOutput)]);
+        inTarget[b] = dbToGain (p[bandParam (b, kBandInput)] + kBakedInputDb);
+        outTargetB[b] = dbToGain (p[bandParam (b, kBandOutput)] + kBakedOutputDb[b]);
         // Attack/Release are the time to (almost) complete the change - about 95 % - as in
         // "time to reach maximum compression", so the envelope time constant is a third of it.
         const double attackMs = std::max (0.01, p[bandParam (b, kAttack)] * timeScale / 3.0);
@@ -365,8 +359,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     }
 
     // the built-in saturator after the Output gain (not on the side-chain listen signal)
-    if (!listen)
-        sat.process (outL, outR, outL, outR, n);
+    if (!listen && hasTail)
+        sat.process (outL, outR, n);
 
     for (int b = 0; b < kNumBands; ++b)
     {

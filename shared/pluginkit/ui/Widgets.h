@@ -32,6 +32,45 @@ struct ParamHost
     }
 };
 
+// A ParamHost that shows another plug-in's parameter table on this plug-in's parameters (the
+// built-in effects in Smempler): ids go through `map`; ids it does not map (< 0) read as their
+// defaults and ignore edits. Normalized values pass through unchanged, so both tables must give
+// the parameters the same ranges.
+class MappedParamHost : public ParamHost
+{
+public:
+    using Map = std::function<int64_t (uint32_t)>;
+    MappedParamHost (ParamHost* host, const ParamTable& table, Map map) : in (host), tbl (table), idOf (std::move (map)) {}
+    const ParamTable& table () override { return tbl; }
+    double norm (uint32_t id) override
+    {
+        const int64_t m = idOf (id);
+        return m < 0 ? tbl.defaultNormalized (id) : in->norm ((uint32_t)m);
+    }
+    double plainValue (uint32_t id) override { return tbl.toPlain (id, norm (id)); }
+    void beginEdit (uint32_t id) override
+    {
+        if (const int64_t m = idOf (id); m >= 0)
+            in->beginEdit ((uint32_t)m);
+    }
+    void setNorm (uint32_t id, double v) override
+    {
+        if (const int64_t m = idOf (id); m >= 0)
+            in->setNorm ((uint32_t)m, v);
+    }
+    void endEdit (uint32_t id) override
+    {
+        if (const int64_t m = idOf (id); m >= 0)
+            in->endEdit ((uint32_t)m);
+    }
+    std::string valueText (uint32_t id) override { return tbl.toText (id, plainValue (id)); }
+
+private:
+    ParamHost* in;
+    const ParamTable& tbl;
+    Map idOf;
+};
+
 // A view bound to one parameter.
 class ParamView : public VSTGUI::CView
 {

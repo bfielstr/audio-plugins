@@ -30,24 +30,35 @@ void Engine::Channel::reset ()
     os.reset ();
     dryDelay.reset ();
     wetDelay.reset ();
+    lookDelay.reset ();
 }
 
 void Engine::prepare (double sampleRate, int mb)
 {
     sr = sampleRate;
     maxBlock = std::max (1, mb);
+    look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
+    // the limiter's gain (in dB) reaches its target within the look-ahead and releases in 50 ms
+    limAtk = (float)std::exp (-5.0 / look);
+    limRel = (float)std::exp (-1.0 / (0.050 * sr));
+    lookPeaks.assign ((size_t)look, 0.0f);
     for (auto& c : chan)
     {
         c.os.prepare (sr, maxBlock);
         c.dc.c = highPass (sr, kDcHz, M_SQRT1_2);
+        c.lookDelay.resize (look);
     }
-    const int lat = latency ();
     for (auto& c : chan)
     {
-        c.dryDelay.resize (lat);
-        c.wetDelay.resize (lat);
+        c.dryDelay.resize (latency ());
+        c.wetDelay.resize (c.os.latency ()); // stands in for the oversampler when Hi-Quality is off
     }
-    for (auto* v : {&dry, &pre, &wet, &gDrive, &gOut, &gMix})
+    for (int c = 0; c < 2; ++c)
+    {
+        dry[c].assign ((size_t)maxBlock, 0.0f);
+        pre[c].assign ((size_t)maxBlock, 0.0f);
+    }
+    for (auto* v : {&wet, &gDrive, &gOut, &gMix})
         v->assign ((size_t)maxBlock, 0.0f);
     osBuf.assign ((size_t)maxBlock * 4, 0.0f);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -62,20 +73,9 @@ void Engine::reset ()
     drive = dbToGain (p[kDrive]);
     out = dbToGain (p[kOutput]);
     mix = (float)std::clamp (p[kDryWet], 0.0, 1.0);
-}
-
-ShaperSettings Engine::shaperSettings () const
-{
-    ShaperSettings s;
-    s.curve = std::clamp ((int)std::lround (p[kCurve]), 0, kNumCurves - 1);
-    s.bassThresholdDb = p[kBassThreshold];
-    s.ws.drive = p[kWsDrive];
-    s.ws.curve = p[kWsCurve];
-    s.ws.depth = p[kWsDepth];
-    s.ws.linear = p[kWsLinear];
-    s.ws.damp = p[kWsDamp];
-    s.ws.period = p[kWsPeriod];
-    return s;
+    limGainDb = 0.0f;
+    std::fill (lookPeaks.begin (), lookPeaks.end (), 0.0f);
+    lookPos = 0;
 }
 
 void Engine::updateFilters (bool force)
@@ -101,7 +101,7 @@ void Engine::updateFilters (bool force)
     }
 }
 
-float Engine::shapeChain (Channel& c, float v, const ShaperSettings& s, bool color, int post) const
+float Engine::shapeChain (Channel& c, float v, bool color, int post) const
 {
     double d = v;
     if (color)
@@ -109,7 +109,7 @@ float Engine::shapeChain (Channel& c, float v, const ShaperSettings& s, bool col
         d = c.preLo.process (d);
         d = c.preHi.process (d);
     }
-    d = shape (d, s);
+    d = analogClip (d);
     if (color)
     {
         d = c.postLo.process (d);
@@ -133,14 +133,56 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         return;
     }
+    const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0);
+    if (mixT <= 0.0f && mix < 1e-5f)
+    {
+        // fully dry: only the dry delay runs (the latency stays), the wet path restarts from
+        // silence when the dry/wet opens again
+        const float outT = dbToGain (p[kOutput]);
+        for (int i = 0; i < n; ++i)
+        {
+            out += (outT - out) * smooth;
+            const float l = chan[0].dryDelay.push (xl[i]), r = chan[1].dryDelay.push (xr[i]);
+            yl[i] = l * out;
+            yr[i] = r * out;
+        }
+        mix = 0.0f;
+        if (!wetIdle)
+        {
+            wetIdle = true;
+            if (meters)
+            {
+                meters->inPeak.store (0.0f, std::memory_order_relaxed);
+                meters->outPeak.store (0.0f, std::memory_order_relaxed);
+            }
+        }
+        return;
+    }
+    if (wetIdle)
+    {
+        wetIdle = false;
+        for (auto& c : chan)
+        {
+            c.dc.reset ();
+            c.preLo.reset ();
+            c.preHi.reset ();
+            c.postLo.reset ();
+            c.postHi.reset ();
+            c.os.reset ();
+            c.wetDelay.reset ();
+            c.lookDelay.reset ();
+        }
+        limGainDb = 0.0f;
+        std::fill (lookPeaks.begin (), lookPeaks.end (), 0.0f);
+    }
     updateFilters (false);
-    const ShaperSettings s = shaperSettings ();
     const bool hiq = p[kHiQuality] >= 0.5, color = p[kColorOn] >= 0.5, dc = p[kDcFilter] >= 0.5;
+    const bool preLimit = p[kPreLimit] >= 0.5;
+    const float threshold = dbToGain (p[kPreLimitThreshold]);
     const int post = std::clamp ((int)std::lround (p[kPostClip]), (int)kPostOff, (int)kPostHard);
 
     // per-sample smoothed gains, shared by both channels
     const float driveT = dbToGain (p[kDrive]), outT = dbToGain (p[kOutput]);
-    const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     for (int i = 0; i < n; ++i)
     {
         drive += (driveT - drive) * smooth;
@@ -151,39 +193,61 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
+    // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
     float inPk = 0.0f, outPk = 0.0f;
-    const float* ins[2] = {xl, xr};
+    for (int i = 0; i < n; ++i)
+    {
+        float v[2] = {xl[i], xr[i]};
+        for (int c = 0; c < 2; ++c)
+        {
+            dry[c][(size_t)i] = chan[c].dryDelay.push (v[c]);
+            if (dc)
+                v[c] = (float)chan[c].dc.process (v[c]);
+        }
+        // the loudest sample in the look-ahead window sets the gain the window needs; the gain
+        // gets there (in dB) before that sample reaches the drive
+        lookPeaks[(size_t)lookPos] = std::max (std::fabs (v[0]), std::fabs (v[1]));
+        if (++lookPos >= look)
+            lookPos = 0;
+        float limGain = 1.0f;
+        if (preLimit)
+        {
+            float pk = 0.0f;
+            for (float x : lookPeaks)
+                pk = std::max (pk, x);
+            const float needDb = pk > threshold ? 20.0f * std::log10 (threshold / pk) : 0.0f;
+            limGainDb = needDb + (needDb < limGainDb ? limAtk : limRel) * (limGainDb - needDb);
+            limGain = std::exp (limGainDb * 0.11512925f); // dB -> gain
+        }
+        else
+            limGainDb = 0.0f;
+        for (int c = 0; c < 2; ++c)
+        {
+            const float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
+            pre[c][(size_t)i] = d;
+            inPk = std::max (inPk, std::fabs (d));
+        }
+    }
+
     float* outs[2] = {yl, yr};
     for (int c = 0; c < 2; ++c)
     {
         Channel& ch = chan[c];
-        const float* x = ins[c];
-        float* y = outs[c];
-        for (int i = 0; i < n; ++i)
-        {
-            float v = x[i];
-            dry[(size_t)i] = ch.dryDelay.push (v);
-            if (dc)
-                v = (float)ch.dc.process (v);
-            v *= gDrive[(size_t)i];
-            inPk = std::max (inPk, std::fabs (v));
-            pre[(size_t)i] = v;
-        }
         if (hiq)
         {
-            ch.os.up (pre.data (), osBuf.data (), n);
+            ch.os.up (pre[c].data (), osBuf.data (), n);
             for (int i = 0; i < 4 * n; ++i)
-                osBuf[(size_t)i] = shapeChain (ch, osBuf[(size_t)i], s, color, post);
+                osBuf[(size_t)i] = shapeChain (ch, osBuf[(size_t)i], color, post);
             ch.os.down (osBuf.data (), wet.data (), n);
         }
         else
             for (int i = 0; i < n; ++i)
-                wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[(size_t)i], s, color, post));
+                wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
         for (int i = 0; i < n; ++i)
         {
             const float w = wet[(size_t)i], m = gMix[(size_t)i];
             outPk = std::max (outPk, std::fabs (w));
-            y[i] = (dry[(size_t)i] * (1.0f - m) + w * m) * gOut[(size_t)i];
+            outs[c][i] = (dry[c][(size_t)i] * (1.0f - m) + w * m) * gOut[(size_t)i];
         }
     }
     if (meters)

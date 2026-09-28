@@ -1,5 +1,7 @@
 #include "EditorBase.h"
 
+#include "pluginkit/TailParams.h"
+
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cvstguitimer.h"
 
@@ -97,6 +99,26 @@ void EditorBase::setTooltipsEnabled (bool on)
         frame->enableTooltips (on, 600);
         frame->invalid ();
     }
+}
+
+Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_t base, const char* title)
+{
+    auto* p = new Panel (r, title);
+    parent->addView (p);
+    const double y = r.getHeight () - 72.0; // knobs at the bottom, the other controls centred on them
+    auto tip = [] (CView* v, const char* t) { v->setTooltipText (t); };
+    tip (bind (p, new Toggle (CRect (10, y + 28, 56, y + 48), this, base + kTailOn, "On")),
+         "Smacheratr (the Analog curve) at the very end of this plug-in: off, the sound passes untouched.");
+    tip (bind (p, new Toggle (CRect (64, y + 28, 144, y + 48), this, base + kTailPreLimit, "Pre-Limit")),
+         "A look-ahead limiter before the drive, so transients do not push further into the curve than the rest.");
+    tip (bind (p, new NumberBox (CRect (150, y + 29, 216, y + 47), this, base + kTailThreshold)),
+         "Level the pre-limiter holds the signal to, before the drive.");
+    tip (bind (p, new Knob (CRect (228, y + 4, 284, y + 68), this, base + kTailDrive, nullptr, true)),
+         "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
+    tip (bind (p, new Choice (CRect (298, y + 28, 408, y + 48), this, base + kTailPostClip)),
+         "Clip the output at 0 dB after the curve (Soft: the Analog curve again, Hard: a digital clip).");
+    tip (bind (p, new Knob (CRect (420, y + 4, 476, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
+    return p;
 }
 
 void EditorBase::applyParamTooltips (const char* (*helpFor) (uint32_t))

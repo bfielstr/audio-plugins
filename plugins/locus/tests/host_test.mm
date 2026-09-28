@@ -70,7 +70,7 @@ int main (int argc, char** argv)
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
-        CHECK (latency == 4096, "latency reported %u", latency);
+        CHECK (latency > 4096, "latency reported %u", latency);
 
         // transparent at contrast 0: output == input delayed by the reported latency
         std::vector<float> out;

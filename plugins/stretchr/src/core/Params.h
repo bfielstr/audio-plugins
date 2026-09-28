@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
 
 #include <cstdint>
 
@@ -22,8 +23,9 @@ enum ParamId : uint32_t
     kSmear,            // s, Extreme analysis window
     kGain,             // dB
     kOutside,          // what the input does outside the clip: Thru / Mute
+    kTailBase,         // the Smacheratr at the end of the chain: pk::kTailFields entries (not render settings)
 
-    kNumParams
+    kNumParams = kTailBase + pk::kTailFields
 };
 
 enum Algorithm

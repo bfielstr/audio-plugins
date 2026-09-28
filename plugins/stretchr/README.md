@@ -98,6 +98,12 @@ pitch envelope and stretch markers for changes over time.
 | Gain | Level of the rendered clip |
 | Outside Clip | Thru or Mute the track's audio outside the clip |
 
+## Smacheratr
+
+The bottom panel is the optional saturator every plug-in here has at the end of its chain (the
+Analog curve with a pre-limiter; off, Drive 0 dB). It adds 1.7 ms of latency, reported to the host,
+which keeps the clip aligned.
+
 ## Limits
 
 - Stereo in/out. Captures up to about 45 minutes at 48 kHz; the project stores the clip audio, so

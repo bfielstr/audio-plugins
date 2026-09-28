@@ -1,0 +1,55 @@
+// The optional Smacheratr at the end of a plug-in's chain (its parameters: pk::addTailParams). It
+// is always in the path, with its dry/wet at zero when off, so the latency it adds never changes;
+// while off it skips the curve and only delays the signal.
+#pragma once
+
+#include "Engine.h"
+
+#include "pluginkit/TailParams.h"
+
+namespace smacheratr {
+
+class Tail
+{
+public:
+    Tail ()
+    {
+        eng.setParam (kColorOn, 0.0);
+        eng.setParam (kHiQuality, 1.0);
+        eng.setParam (kDcFilter, 0.0);
+        eng.setParam (kOutput, 0.0);
+        eng.setParam (kDrive, 0.0);
+        eng.setParam (kDryWet, 0.0);
+    }
+    void prepare (double sampleRate, int maxBlock) { eng.prepare (sampleRate, maxBlock); }
+    void reset () { eng.reset (); }
+    int latency () const { return eng.latency (); }
+    void setMeters (Meters* m) { eng.setMeters (m); }
+    bool isOn () const { return on; }
+
+    // the plain value of one of the tail's fields (pk::TailField)
+    void setParam (uint32_t field, double v)
+    {
+        switch (field)
+        {
+            case pk::kTailOn: on = v >= 0.5; break;
+            case pk::kTailPreLimit: eng.setParam (kPreLimit, v); break;
+            case pk::kTailDrive: eng.setParam (kDrive, v); break;
+            case pk::kTailPostClip: eng.setParam (kPostClip, v); break;
+            case pk::kTailMix: mix = v; break;
+            case pk::kTailThreshold: eng.setParam (kPreLimitThreshold, v); break;
+            default: return;
+        }
+        eng.setParam (kDryWet, on ? mix : 0.0);
+    }
+
+    // In place.
+    void process (float* l, float* r, int n) { eng.process (l, r, l, r, n); }
+
+private:
+    Engine eng;
+    bool on = false;
+    double mix = 1.0;
+};
+
+} // namespace smacheratr

@@ -114,7 +114,8 @@ void Editor::buildUI (CFrame* f)
     header (kInputColLeft, kInputColLeft + kKnobW, "Input");
     header (kOutputColLeft, kOutputColLeft + kKnobW, "Output");
 
-    display = new DynDisplay (CRect (kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom), this, ctl);
+    display = new DynDisplay (CRect (kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom), this,
+                              [c = ctl] { return c->getMeters (); });
     display->setTooltipText (help::kDisplay);
     root->addView (display);
 
@@ -155,14 +156,8 @@ void Editor::buildUI (CFrame* f)
     root->addView (lp);
     bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
-    // the built-in Smacheratr after the Output gain
-    auto* sat = new Panel (CRect (8, 424, 912, 500), "SMACHERATR  (after Output)");
-    root->addView (sat);
-    bind (sat, new Toggle (CRect (12, 30, 66, 50), this, kSatOn, "On"));
-    bind (sat, new Choice (CRect (80, 30, 240, 52), this, kSatCurve));
-    bind (sat, new Knob (knobRect (260, 6), this, kSatDrive, nullptr, true));
-    bind (sat, new Choice (CRect (330, 30, 450, 52), this, kSatPostClip));
-    bind (sat, new Knob (knobRect (470, 6), this, kSatMix));
+    // the end-of-chain Smacheratr, after the Output gain
+    addTailPanel (root, CRect (8, 424, 912, 502), kSatOn);
 
     applyParamTooltips (&help::forParam);
     updateLayout ();

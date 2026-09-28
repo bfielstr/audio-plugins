@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
 
 #include <cstdint>
 #include <string>
@@ -17,8 +18,9 @@ enum ParamId : uint32_t
     kHighFreq,
     kSolo,         // hear only the focus range
     kOutput,
+    kTailBase, // the Smacheratr at the end of the chain: pk::kTailFields entries
 
-    kNumParams
+    kNumParams = kTailBase + pk::kTailFields
 };
 
 enum Mode { kPunchy = 0, kSmooth };

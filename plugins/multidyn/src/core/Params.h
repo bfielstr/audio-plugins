@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
 
 #include <cstdint>
 #include <string>
@@ -29,10 +30,11 @@ enum ParamId : uint32_t
     kPreLimit,                  // look-ahead limiter on each band's driven input
     kPreLimitCeiling,           // dB relative to the band's Above threshold
     kSatOn,                     // the built-in Smacheratr after Output
-    kSatCurve,                  // its curve (smacheratr::CurveType)
+    kSatPreLimit,               // its pre-limiter before the drive
     kSatDrive,                  // dB
     kSatPostClip,               // No / Soft / Hard Clip
     kSatMix,                    // dry/wet
+    kSatPreLimitThreshold,      // dB
 
     kNumParams
 };
@@ -54,6 +56,13 @@ enum BandField
     kRelease
 };
 constexpr uint32_t bandParam (int band, int field) { return (uint32_t)(kBandBase + band * kBandBlock + field); }
+
+// The preset's gain staging is baked into the processing: with the band Input, band Output and
+// Output controls at 0 dB you hear the preset (Input +5.2 dB, band Outputs +24 / +9.1 / +11.3 /
+// +11.7 dB, Output -7 dB), and the controls trim around it.
+inline constexpr double kBakedInputDb = 5.2;
+inline constexpr double kBakedOutputDb[4] = {24.0, 9.1, 11.3, 11.7};
+inline constexpr double kBakedMasterDb = -7.0;
 
 enum DetectorMode { kPeak = 0, kRms };
 enum Mode { kBase = 0, kCharacter };

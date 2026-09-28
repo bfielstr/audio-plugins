@@ -12,7 +12,9 @@
 // Modes: Base is the plain device. Character detects more slowly (a 50 ms RMS window, a
 // two-stage envelope), has a wider knee and a release that slows down the deeper the gain change,
 // so it moves like a character compressor rather than grabbing peaks.
-// Pre-Limit: a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
+// Gains: the preset's gain staging is baked in (kBakedInputDb and friends), so every gain control
+// reads 0 dB at the default and trims around it.
+// Pre-Limit (off by default): a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
 // the band's Above threshold, so a transient pushed hard into the thresholds is held where the
 // compressor will settle anyway instead of passing through at full level until the attack
 // catches up (and being squared by whatever follows). Every band
@@ -25,7 +27,7 @@
 #include "Crossover.h"
 #include "Params.h"
 
-#include "smacheratr/src/core/Engine.h" // the built-in saturator
+#include "smacheratr/src/core/Tail.h" // the end-of-chain saturator
 
 #include <array>
 #include <vector>
@@ -55,9 +57,13 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain) { p[id] = plain; }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return look + sat.latency (); } // look-ahead + saturator, constant for a sample rate
+    // withTail: the end-of-chain Smacheratr (off where Multidyn is built into another plug-in)
+    explicit Engine (bool withTail = true) : hasTail (withTail) {}
+    int latency () const { return look + (hasTail ? sat.latency () : 0); } // constant for a sample rate
     // Bypassed, the dry signal passes with the same latency (for the built-in use in Smempler).
     void setBypass (bool b) { bypass = b; }
+    // Levels of the built-in saturator for an editor (may be null).
+    void setSatMeters (smacheratr::Meters* m) { sat.setMeters (m); }
 
     // In-place capable. sc may be null (no side-chain connected). All buffers are n samples.
     void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
@@ -98,7 +104,8 @@ private:
     float outGain = 1.0f, scGain = 1.0f;
     float rmsCoef = 0.0f, rmsCoefC = 0.0f, peakCoef = 0.0f, peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
-    smacheratr::Engine sat;
+    smacheratr::Tail sat;
+    bool hasTail = true;
     bool bypass = false;
     std::vector<float> bypassDelay[2];
     int bypassPos = 0;

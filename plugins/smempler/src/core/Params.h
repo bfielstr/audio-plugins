@@ -3,9 +3,10 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
 
 #include "multidyn/src/core/Params.h"
-#include "perrera/src/core/Params.h"
+#include "para/src/core/Params.h"
 
 #include <cstdint>
 #include <string>
@@ -106,15 +107,22 @@ enum ParamId : uint32_t
     kLoopFadePower, // constant-power (on) or linear loop crossfade
     kEnvExtBase,    // per-envelope curves and breakpoints, see envParam()
     // --- added in 0.5 (append only): the built-in effects after the sampler, see fxParam() ---
-    kFxPerreraOn = kEnvExtBase + 3 * 22,
-    kFxPerreraBase, // perrera::kNumParams entries (Perrera's own IDs, offset)
-    kFxMdOn = kFxPerreraBase + perrera::kNumParams,
-    kFxMdBase, // multidyn::kNumParams entries (with the built-in Smacheratr)
+    kFxParaOn = kEnvExtBase + 3 * 22,
+    kFxParaBase, // para::kNumParams entries (Para's own IDs, offset)
+    kFxMdOn = kFxParaBase + para::kNumParams,
+    kFxMdBase, // multidyn::kNumParams entries (its own end-of-chain saturator is not used here)
+    kMsOn = kFxMdBase + multidyn::kNumParams, // mid/side EQ after the effects
+    kMsSideHp,   // Hz, high-pass on the side signal
+    kMsSlope,    // 6 / 12 / 24 dB per octave
+    kMsSideGain, // dB
+    kMsMidGain,  // dB
+    kRootKey,    // the root note: the sample plays at its own pitch on this note
+    kTailBase,   // the Smacheratr at the very end: pk::kTailFields entries
 
-    kNumParams = kFxMdBase + multidyn::kNumParams
+    kNumParams = kTailBase + pk::kTailFields
 };
 
-constexpr uint32_t perreraParam (uint32_t id) { return kFxPerreraBase + id; }
+constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
 constexpr uint32_t multidynParam (uint32_t id) { return kFxMdBase + id; }
 
 // Breakpoint-envelope parameters. Each envelope (0 amp, 1 filter, 2 pitch) owns a block of

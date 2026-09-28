@@ -10,7 +10,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2; // 2: the Analog-only parameter layout (version 1 states are ignored)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -30,7 +30,7 @@ bool readState (IBStream* stream, State& st)
 {
     IBStreamer s (stream, kLittleEndian);
     int32 magic = 0, version = 0, count = 0;
-    if (!s.readInt32 (magic) || magic != kMagic || !s.readInt32 (version) || version < 1 || !s.readInt32 (count) ||
+    if (!s.readInt32 (magic) || magic != kMagic || !s.readInt32 (version) || version < 2 || !s.readInt32 (count) ||
         count < 0 || count > 100000)
         return false;
     for (uint32 id = 0; id < kNumParams; ++id)

@@ -8,10 +8,10 @@ add_library(stretchr_core STATIC
     src/core/Wav.cpp
     src/core/Session.cpp
 )
-target_include_directories(stretchr_core PUBLIC src/core)
+target_include_directories(stretchr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 # Reuses Smempler's warp engines, sample loading and FFT (included as "smempler/src/core/...").
 find_package(Threads REQUIRED)
-target_link_libraries(stretchr_core PUBLIC pluginkit_core smempler_core Threads::Threads)
+target_link_libraries(stretchr_core PUBLIC pluginkit_core smacheratr_core smempler_core Threads::Threads)
 pk_dsp_settings(stretchr_core)
 
 add_executable(stretchr_tests tests/core_tests.cpp)

@@ -1,18 +1,20 @@
-# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Perrera
+# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO | Ableton Live's Simpler |
+| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; Para, Multidyn, an M/S EQ and Smacheratr built in, with an output scope | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
-| [**Smacheratr**](plugins/smacheratr/README.md) | Waveshaping saturator: 8 curves from analog clip to wavefolding, Bass Shaper threshold, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
-| [**Perrera**](plugins/perrera/README.md) | Parallel high-pass + low-pass that track MIDI (root, transpose, bend, key), with a split envelope | a morphing EQ, Live-styled |
+| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, an optional pre-limiter before the drive, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
+| [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf that track MIDI (root, transpose, bend, key), a split envelope and a Vocal movement mode | a morphing EQ, Live-styled |
 
 ![Smempler](docs/smempler/ui_slicing.png)
+
+Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB).
 
 The plug-ins were called Simplr and Lowfocus until 0.5.0; projects keep loading (the plug-in IDs are unchanged).
 
@@ -80,7 +82,7 @@ plugins/multidyn   multiband dynamics      same structure
 plugins/locus   low-end focus           same structure
 plugins/stretchr   pitch/time editor       same structure (reuses Smempler's warp engines)
 plugins/smacheratr saturator              same structure
-plugins/perrera    parallel filters        same structure
+plugins/para    parallel filters        same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

@@ -13,7 +13,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 980.0;
-    static constexpr double kHeight = 600.0;
+    static constexpr double kHeight = 686.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

@@ -159,7 +159,7 @@ TEST (transparent_at_zero_contrast)
         err = std::max (err, (double)std::fabs (out.r[i] - in.r[i - (size_t)lat]));
     }
     CHECK (err < 1e-4, "reconstruction error %g (latency %d)", err, lat);
-    CHECK (lat == 4096, "latency %d at 48 kHz", lat);
+    CHECK (lat > 4096 && lat < 4096 + 200, "latency %d at 48 kHz (STFT + end-of-chain saturator)", lat);
 }
 
 TEST (contrast_widens_and_narrows_level_differences)

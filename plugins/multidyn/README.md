@@ -26,18 +26,20 @@ after silence don't jump.
 **Default settings** are a heavy upward-compression preset (Live's "OTT" pushed further) in
 Character mode: 3 bands split at 88.3 Hz and 2.5 kHz (8 kHz for a fourth), Below -40.8 / -41.8 /
 -40.8 dB at 1 : inf (a fourth band at 1 : 4.17), Above -33.8 / -30.2 / -35.5 dB at 1 : 66.7 / 1 : 66.7 /
-1 : inf, input +5.2 dB, output +24.0 / +9.1 / +11.3 dB, OTT's attack/release times, Soft Knee and RMS
-on, and Output -7 dB to leave room for a saturator after it. Use Amount to dial it back.
+1 : inf, OTT's attack/release times, Soft Knee and RMS on. The preset's gain staging (input +5.2 dB,
+band outputs +24 / +9.1 / +11.3 / +11.7 dB, output -7 dB) is **baked into the processing**, so every
+Input, Output and band gain control reads 0 dB at the default and trims around the preset. Use Amount
+to dial the processing back.
 
 **Mode**: *Base* is the plain device. *Character* detects more slowly (a 50 ms RMS window and a
 rounded onset instead of 20 ms), has a wider knee (12 dB) and a release that slows down up to 3x the
 deeper the gain change, so it moves like a character compressor rather than grabbing peaks.
 
-**Smacheratr** (bottom panel): the saturator is built in after the Output gain, so the usual chain
-is one device: On, Curve, Drive (default Analog Clip at 14 dB), Post Clip and Dry/Wet. It always runs
-4x oversampled; with it off the dry signal passes with the same latency.
+**Smacheratr** (bottom panel, end of the chain): the Analog curve after the Output gain, with its
+optional pre-limiter, Drive, Post Clip and Dry/Wet. Off by default, Drive 0 dB; its latency is
+constant whether it is on or off.
 
-**Pre-Limit** (on by default): a 1 ms look-ahead limiter on each band's input (after the band's
+**Pre-Limit** (off by default): a 1 ms look-ahead limiter on each band's input (after the band's
 Input gain) with its **Ceiling** relative to the band's Above threshold (0 dB = right at it). When you
 push hard into the thresholds, a transient would otherwise pass through at full level until the
 attack catches up and then be squared by whatever follows (a saturator); the pre-limiter holds it

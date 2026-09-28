@@ -23,6 +23,7 @@ Processor::Processor ()
 {
     setControllerClass (kControllerUID);
     bridge = new Bridge ();
+    engine.setFxMeters (&bridge->paraMeters, &bridge->satMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
 }
@@ -85,6 +86,7 @@ tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
     engine.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
     for (uint32_t id = 0; id < kNumParams; ++id)
         engine.setParam (id, toPlain (id, normMirror[id].load ()));
+    bridge->sampleRate.store (setup.sampleRate);
     return AudioEffect::setupProcessing (setup);
 }
 
@@ -246,7 +248,24 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         bridge->playheads[(size_t)i].store (heads[i], std::memory_order_relaxed);
     bridge->numPlayheads.store (nh, std::memory_order_release);
 
-    data.outputs[0].silenceFlags = engine.activeVoices () == 0 ? 3 : 0;
+    // the output scope and the effects' displays
+    for (int i = 0; i < n; ++i)
+        bridge->outScope.push (L[i], R[i]);
+    for (int b = 0; b < multidyn::kNumBands; ++b)
+    {
+        const auto& m = engine.fxMultidynMeter (b);
+        bridge->mdMeters.inputDb[(size_t)b].store (m.inputDb, std::memory_order_relaxed);
+        bridge->mdMeters.outputDb[(size_t)b].store (m.outputDb, std::memory_order_relaxed);
+        bridge->mdMeters.gainDb[(size_t)b].store (m.gainDb, std::memory_order_relaxed);
+    }
+    bridge->msMid.store (engine.msMidPeak (), std::memory_order_relaxed);
+    bridge->msSide.store (engine.msSidePeak (), std::memory_order_relaxed);
+
+    // silent only when it really is (the effects have tails)
+    bool silent = true;
+    for (int i = 0; i < n && silent; ++i)
+        silent = L[i] == 0.0f && R[i] == 0.0f;
+    data.outputs[0].silenceFlags = silent ? 3 : 0;
     return kResultOk;
 }
 

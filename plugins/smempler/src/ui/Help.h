@@ -4,18 +4,32 @@
 #include "Params.h"
 
 #include "multidyn/src/ui/Help.h"
-#include "perrera/src/ui/Help.h"
+#include "para/src/ui/Help.h"
 
 namespace smempler::help {
 
 inline const char* forParam (uint32_t id)
 {
-    if (id == kFxPerreraOn)
-        return "Perrera after the sampler: a parallel high-pass and low-pass that track the notes you play here.";
+    if (id == kFxParaOn)
+        return "Para after the sampler: a parallel high-pass and low-pass that track the notes you play here.";
     if (id == kFxMdOn)
-        return "Multidyn (with its Smacheratr) after Perrera. Off, the sound passes untouched with the same latency.";
-    if (id >= kFxPerreraBase && id < kFxPerreraBase + perrera::kNumParams)
-        return perrera::help::forParam (id - kFxPerreraBase);
+        return "Multidyn (with its Smacheratr) after Para. Off, the sound passes untouched with the same latency.";
+    switch (id)
+    {
+        case kMsOn:
+            return "The mid/side EQ after the effects: a high-pass on the side signal makes the low end mono below "
+                   "its cutoff.";
+        case kMsSideHp: return "Below this frequency the side signal is removed, so the low end is mono.";
+        case kMsSlope: return "How steeply the sides are tapered: 6, 12 or 24 dB per octave.";
+        case kMsSideGain: return "Level of the side signal (the stereo width).";
+        case kMsMidGain: return "Level of the mid signal.";
+        case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default). Para's tracking follows it.";
+        default: break;
+    }
+    if (id >= kTailBase)
+        return nullptr; // the saturator panel has its own tips
+    if (id >= kFxParaBase && id < kFxParaBase + para::kNumParams)
+        return para::help::forParam (id - kFxParaBase);
     if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
         return multidyn::help::forParam (id - kFxMdBase);
     switch (id)
@@ -120,6 +134,8 @@ inline const char* forParam (uint32_t id)
     (void)b;
     return nullptr;
 }
+
+constexpr const char* kScope = "The final output (after every effect): left bright, right dim, 0 dBFS in red. Click to change the time span.";
 
 constexpr const char* kWaveform =
     "Waveform. Drag the orange flags to set the sample region. Classic: drag the white markers for Start / Length, "

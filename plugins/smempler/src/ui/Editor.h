@@ -5,8 +5,22 @@
 #include "pluginkit/vst/EditorBase.h"
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
+
+namespace para {
+class FilterView;
+}
+namespace multidyn {
+class DynDisplay;
+}
+namespace smacheratr {
+class ShaperView;
+}
+namespace pk {
+class ScopeView;
+}
 
 namespace smempler {
 
@@ -14,12 +28,16 @@ class Controller;
 class WaveformView;
 class FilterDisplay;
 class EnvelopeDisplay;
+class MsView;
 
 class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 1110.0;
-    static constexpr double kHeight = 904.0;
+    static constexpr double kHeight = 988.0;
+    // the effects strip at the bottom (also used by the host test)
+    static constexpr int kFxTabs = 4; // Para, Multidyn, M/S EQ, Smacheratr
+    static constexpr double kFxTabTop = 722.0, kFxTabWidth = 104.0;
 
     explicit Editor (Controller* c);
 
@@ -35,6 +53,7 @@ public:
 
 private:
     void updateVisibility ();
+    void updateMdLayout ();
     void browseForSample ();
     void stepSample (int dir);
     void loadFile (const std::string& path);
@@ -60,9 +79,19 @@ private:
     VSTGUI::CViewContainer* envTabs[3] {};
     VSTGUI::CView *ampLoopTime = nullptr, *ampLoopRate = nullptr;
     std::vector<VSTGUI::CView*> tabButtons, fxTabButtons;
-    VSTGUI::CViewContainer* fxTabs[3] {};
     int envTab = 0, fxTab = 0;
     std::string lastName;
+
+    // the effects strip: the plug-ins' own displays on this plug-in's parameters
+    std::unique_ptr<pk::MappedParamHost> paraHost, mdHost, satHost;
+    VSTGUI::CViewContainer* fxTabs[kFxTabs] {};
+    para::FilterView* fxFilterView = nullptr;
+    multidyn::DynDisplay* fxDynDisplay = nullptr;
+    smacheratr::ShaperView* fxShaperView = nullptr;
+    MsView* msView = nullptr;
+    pk::ScopeView* scope = nullptr;
+    Label* mdNames[4] {};
+    VSTGUI::CView *mdOn[4] {}, *mdSolo[4] {}, *mdIn[4] {}, *mdOut[4] {}, *mdBoxes[4][6] {};
 };
 
 } // namespace smempler

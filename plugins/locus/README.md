@@ -26,4 +26,7 @@ The display shows the input spectrum (grey), the output (orange) and the gain ap
 Drag the range edges to move them, drag inside the range sideways to move it or up/down to set
 Contrast, and double-click to reset Contrast.
 
-Latency: about 85 ms (4096 samples at 48 kHz), reported to the host for automatic compensation.
+**Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB).
+
+Latency: about 87 ms (4096 samples at 48 kHz for the analysis plus the saturator's 1.7 ms), reported
+to the host for automatic compensation.

@@ -174,6 +174,12 @@ std::string ParamTable::toText (uint32_t id, double v) const
                 return fmt ("%.0f", v);
             return fmt ("%.0f", v);
         case Disp::Number: return fmt ("%.2f", v);
+        case Disp::Note:
+        {
+            static const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            const int n = std::clamp ((int)std::lround (v), 0, 127);
+            return std::string (names[n % 12]) + std::to_string (n / 12 - 2);
+        }
     }
     return fmt ("%.2f", v);
 }
@@ -210,6 +216,21 @@ bool ParamTable::fromText (uint32_t id, const std::string& textIn, double& out) 
     if (text.find ("inf") != std::string::npos)
     {
         out = p.disp == Disp::Ratio ? p.max : p.min;
+        return true;
+    }
+    if (p.disp == Disp::Note && !text.empty () && text[0] >= 'a' && text[0] <= 'g')
+    {
+        // a note name: letter, optional # or b, octave (60 = C3)
+        static const int semis[7] = {9, 11, 0, 2, 4, 5, 7}; // a b c d e f g
+        int n = semis[text[0] - 'a'];
+        size_t i = 1;
+        if (i < text.size () && (text[i] == '#' || text[i] == 'b'))
+            n += text[i++] == '#' ? 1 : -1;
+        char* octEnd = nullptr;
+        const long oct = std::strtol (text.c_str () + i, &octEnd, 10);
+        if (octEnd == text.c_str () + i)
+            return false;
+        out = std::clamp ((double)(n + 12 * (oct + 2)), p.min, p.max);
         return true;
     }
     char* end = nullptr;

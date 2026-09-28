@@ -19,6 +19,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kHighFreq, "High Frequency", "High", 20.0, 1000.0, 300.0, Curve::Log, Disp::Hz));
         v.push_back (toggle (kSolo, "Solo Focus Range", "Solo", false));
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        pk::addTailParams (v, kTailBase);
         return v;
     }());
     return t;

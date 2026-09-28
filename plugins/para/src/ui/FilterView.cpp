@@ -1,0 +1,469 @@
+#include "FilterView.h"
+
+#include "../core/Svf.h"
+
+#include "pluginkit/ui/Theme.h"
+
+#include "vstgui/lib/cdrawcontext.h"
+#include "vstgui/lib/cframe.h"
+#include "vstgui/lib/cgraphicspath.h"
+#include "vstgui/lib/events.h"
+
+#include <algorithm>
+#include <cmath>
+#include <complex>
+#include <cstdio>
+
+namespace para {
+
+using namespace VSTGUI;
+namespace theme = pk::theme;
+
+namespace {
+// the palette of the other devices: orange and blue as in Multidyn, the sum in white
+const CColor kHpColor (255, 164, 40), kLpColor (110, 165, 255);
+const CColor kSpecIn (120, 124, 134, 40), kSpecOutFill (205, 208, 216, 38), kSpecOutLine (215, 218, 226, 110);
+constexpr double kHandleRadius = 6.0;
+constexpr int kPoints = 200; // along the frequency axis
+
+void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size,
+           CHoriTxtAlign a = kCenterText, bool bold = false)
+{
+    ctx->setFont (theme::font (size, bold));
+    ctx->setFontColor (c);
+    ctx->drawString (s.c_str (), r, a, true);
+}
+
+std::string noteName (int note)
+{
+    static const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    char buf[16];
+    std::snprintf (buf, sizeof (buf), "%s%d", names[note % 12], note / 12 - 2);
+    return buf;
+}
+
+// in-place radix-2 FFT
+void fft (std::vector<std::complex<float>>& a)
+{
+    const size_t n = a.size ();
+    for (size_t i = 1, j = 0; i < n; ++i)
+    {
+        size_t bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if (i < j)
+            std::swap (a[i], a[j]);
+    }
+    for (size_t len = 2; len <= n; len <<= 1)
+    {
+        const float ang = -2.0f * (float)M_PI / (float)len;
+        const std::complex<float> wl (std::cos (ang), std::sin (ang));
+        for (size_t i = 0; i < n; i += len)
+        {
+            std::complex<float> w (1.0f, 0.0f);
+            for (size_t k = 0; k < len / 2; ++k)
+            {
+                const auto u = a[i + k], v = a[i + k + len / 2] * w;
+                a[i + k] = u + v;
+                a[i + k + len / 2] = u - v;
+                w *= wl;
+            }
+        }
+    }
+}
+} // namespace
+
+FilterView::FilterView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
+{
+    window.resize (kFftSize);
+    for (int i = 0; i < kFftSize; ++i)
+        window[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / kFftSize);
+    bufIn.resize (kFftSize);
+    bufOut.resize (kFftSize);
+    specIn.assign (kFftSize / 2 + 1, (float)kSpecFloorDb);
+    specOut.assign (kFftSize / 2 + 1, (float)kSpecFloorDb);
+}
+
+double FilterView::xOfHz (double hz) const
+{
+    const CRect r = getViewSize ();
+    return r.left + std::log (std::clamp (hz, kMinHz, kMaxHz) / kMinHz) / std::log (kMaxHz / kMinHz) * r.getWidth ();
+}
+
+double FilterView::hzOfX (double x) const
+{
+    const CRect r = getViewSize ();
+    return kMinHz * std::pow (kMaxHz / kMinHz, std::clamp ((x - r.left) / r.getWidth (), 0.0, 1.0));
+}
+
+double FilterView::yOfDb (double db) const
+{
+    const CRect r = getViewSize ();
+    return r.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * (r.getHeight () - 16.0);
+}
+
+bool FilterView::live () const { return lastWritten != 0 && std::lround (host->plainValue (kMovement)) == kVocal; }
+
+void FilterView::cutoffs (double& hp, double& lp) const
+{
+    if (live ())
+    {
+        hp = shownHpHz;
+        lp = shownLpHz;
+        return;
+    }
+    // from the parameters, so edits show at once; the processor adds where the tracked note and
+    // the envelope have moved the filters
+    const double split = host->plainValue (kSplit) + host->plainValue (kEnvAmount) * shownEnv;
+    hp = hpCutoff (host->plainValue (kHpFreq), shownOffset, split);
+    lp = lpCutoff (host->plainValue (kLpFreq), shownOffset, split);
+}
+
+CPoint FilterView::hpHandle () const
+{
+    double hp, lp;
+    cutoffs (hp, lp);
+    return CPoint (xOfHz (hp), yOfDb (std::max (kMinDb + 1.0, host->plainValue (kHpGain))));
+}
+
+CPoint FilterView::lpHandle () const
+{
+    double hp, lp;
+    cutoffs (hp, lp);
+    return CPoint (xOfHz (lp), yOfDb (std::max (kMinDb + 1.0, host->plainValue (kLpGain))));
+}
+
+double FilterView::specAt (const std::vector<float>& spec, double f0, double f1) const
+{
+    const double binHz = rate / kFftSize;
+    const double b0 = f0 / binHz, b1 = f1 / binHz;
+    const int last = (int)spec.size () - 1;
+    if (b1 - b0 < 1.0)
+    {
+        // between bins: interpolate
+        const int i = std::clamp ((int)b0, 1, last - 1);
+        const double t = std::clamp (b0 - i, 0.0, 1.0);
+        return spec[(size_t)i] + (spec[(size_t)i + 1] - spec[(size_t)i]) * t;
+    }
+    float mx = (float)kSpecFloorDb;
+    for (int i = std::max (1, (int)b0); i <= std::min (last, (int)b1); ++i)
+        mx = std::max (mx, spec[(size_t)i]);
+    return mx;
+}
+
+void FilterView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    ctx->setFillColor (theme::kWaveBg);
+    ctx->drawRect (all, kDrawFilled);
+    ctx->setClipRect (all);
+    const double plotBottom = all.bottom - 16.0;
+
+    // grid
+    ctx->setLineWidth (1.0);
+    for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
+    {
+        const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
+        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->drawLine (CPoint (xOfHz (f), all.top), CPoint (xOfHz (f), plotBottom));
+        char buf[16];
+        std::snprintf (buf, sizeof (buf), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
+        text (ctx, buf, CRect (xOfHz (f) - 20, all.bottom - 15, xOfHz (f) + 20, all.bottom - 2), theme::kTextDim, 9.5);
+    }
+    for (double db : {-24.0, -12.0, 0.0, 12.0})
+    {
+        ctx->setFrameColor (db == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
+        char buf[8];
+        std::snprintf (buf, sizeof (buf), "%.0f", db);
+        text (ctx, buf, CRect (all.left + 2, yOfDb (db) - 12, all.left + 30, yOfDb (db)), theme::kTextDim, 9.0, kLeftText);
+    }
+
+    // live spectra: input (grey) and output (blue), on their own scale (0 dBFS at the top)
+    if (haveSpectrum)
+    {
+        auto ySpec = [&] (double db) {
+            return all.top + (-std::clamp (db, kSpecFloorDb, 0.0)) / -kSpecFloorDb * (plotBottom - all.top);
+        };
+        auto spectrum = [&] (const std::vector<float>& spec, const CColor& fill, const CColor* line) {
+            auto path = owned (ctx->createGraphicsPath ());
+            if (!path)
+                return;
+            path->beginSubpath (CPoint (all.left, plotBottom));
+            for (int i = 0; i <= kPoints; ++i)
+            {
+                const double f0 = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / kPoints);
+                const double f1 = kMinHz * std::pow (kMaxHz / kMinHz, (double)(i + 1) / kPoints);
+                if (f0 >= rate * 0.5)
+                    break;
+                path->addLine (CPoint (xOfHz (f0), ySpec (specAt (spec, f0, f1))));
+            }
+            path->addLine (CPoint (all.right, plotBottom));
+            path->closeSubpath ();
+            ctx->setFillColor (fill);
+            ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
+            if (line)
+            {
+                ctx->setLineWidth (1.0);
+                ctx->setFrameColor (*line);
+                ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+            }
+        };
+        spectrum (specIn, kSpecIn, nullptr);
+        spectrum (specOut, kSpecOutFill, &kSpecOutLine);
+    }
+
+    // the filters and their sum
+    double hp, lp;
+    cutoffs (hp, lp);
+    const int slope = (int)std::lround (host->plainValue (kSlope));
+    const double qHp = resonanceToQ (host->plainValue (kHpRes), slope), qLp = resonanceToQ (host->plainValue (host->plainValue (kResLink) >= 0.5 ? kHpRes : kLpRes), slope);
+    auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width) {
+        auto path = owned (ctx->createGraphicsPath ());
+        if (!path)
+            return;
+        const double base = yOfDb (kMinDb);
+        for (int i = 0; i <= kPoints; ++i)
+        {
+            const double f = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / kPoints);
+            std::complex<double> a = highPassResponse (f, hp, qHp), b = lowPassResponse (f, lp, qLp);
+            if (slope == kSlope24)
+            {
+                a *= a;
+                b *= b;
+            }
+            else if (slope == kSlope18)
+            {
+                a *= highPass1Response (f, hp);
+                b *= lowPass1Response (f, lp);
+            }
+            a *= filterGain (host->plainValue (kHpGain)) * (live () ? shownHpMul : 1.0);
+            b *= filterGain (host->plainValue (kLpGain)) * (live () ? shownLpMul : 1.0);
+            // the sum uses the polarity the engine uses (inverted high-pass at 12 dB)
+            const std::complex<double> h = which == 0 ? a : (which == 1 ? b : (slope == kSlope12 ? b - a : a + b));
+            const CPoint pt (xOfHz (f), yOfDb (20.0 * std::log10 (std::max (1e-6, std::abs (h)))));
+            if (i == 0)
+            {
+                path->beginSubpath (fill ? CPoint (pt.x, base) : pt);
+                if (fill)
+                    path->addLine (pt);
+            }
+            else
+                path->addLine (pt);
+        }
+        if (fill)
+        {
+            path->addLine (CPoint (all.right, base));
+            path->closeSubpath ();
+            ctx->setFillColor (*fill);
+            ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
+        }
+        ctx->setLineWidth (width);
+        ctx->setFrameColor (stroke);
+        ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+    };
+    const CColor hpFill (255, 164, 40, 30), lpFill (110, 165, 255, 30);
+    curve (0, kHpColor, &hpFill, 1.4);
+    curve (1, kLpColor, &lpFill, 1.4);
+    curve (2, theme::kTextBright, nullptr, 2.2);
+
+    // handles, with a halo that grows with the envelope
+    for (int k = 0; k < 2; ++k)
+    {
+        const CPoint h = k == 0 ? hpHandle () : lpHandle ();
+        const CColor c = k == 0 ? kHpColor : kLpColor;
+        if (shownEnv > 0.01f)
+        {
+            const double rr = kHandleRadius + 10.0 * shownEnv;
+            ctx->setFillColor (CColor (c.red, c.green, c.blue, (uint8_t)(40 + 80 * shownEnv)));
+            ctx->drawEllipse (CRect (h.x - rr, h.y - rr, h.x + rr, h.y + rr), kDrawFilled);
+        }
+        const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
+        ctx->setFillColor (c);
+        ctx->drawEllipse (hr, kDrawFilled);
+        ctx->setLineWidth (1.5);
+        ctx->setFrameColor (theme::kTextBright);
+        ctx->drawEllipse (hr, kDrawStroked);
+    }
+
+    // labels, the tracked note and the envelope meter
+    char buf[112];
+    std::snprintf (buf, sizeof (buf), "HP %s   LP %s   Split %s", host->valueText (kHpFreq).c_str (),
+                   host->valueText (kLpFreq).c_str (), host->valueText (kSplit).c_str ());
+    text (ctx, buf, CRect (all.left + 36, all.top + 4, all.right - 90, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    if (shownNote >= 0)
+        std::snprintf (buf, sizeof (buf), "tracking %s   now HP %.0f Hz / LP %.0f Hz", noteName (shownNote).c_str (), hp, lp);
+    else
+        std::snprintf (buf, sizeof (buf), "no note yet: the filters sit at their set frequencies");
+    text (ctx, buf, CRect (all.left + 36, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
+    const CRect envBar (all.right - 84, all.top + 7, all.right - 8, all.top + 15);
+    text (ctx, "ENV", CRect (envBar.left - 28, all.top + 4, envBar.left - 4, all.top + 18), theme::kTextDim, 9.0, kRightText);
+    ctx->setFillColor (theme::kControlBg);
+    ctx->drawRect (envBar, kDrawFilled);
+    if (shownEnv > 0.001f)
+    {
+        ctx->setFillColor (theme::kAccent);
+        ctx->drawRect (CRect (envBar.left, envBar.top, envBar.left + envBar.getWidth () * shownEnv, envBar.bottom), kDrawFilled);
+    }
+    if (!haveSpectrum)
+        text (ctx, "play audio through it to see the spectrum", CRect (all.left, plotBottom - 30, all.right, plotBottom - 14),
+              theme::kTextDim, 9.5);
+    ctx->setLineWidth (1.0);
+    ctx->resetClipRect ();
+}
+
+uint32_t FilterView::resId (bool hp) const
+{
+    // linked, both handles edit the high-pass resonance
+    return hp || host->plainValue (kResLink) >= 0.5 ? kHpRes : kLpRes;
+}
+
+FilterView::Drag FilterView::hit (const CPoint& p) const
+{
+    auto near = [&] (const CPoint& h) { return std::hypot (p.x - h.x, p.y - h.y) <= kHandleRadius + 4.0; };
+    if (near (hpHandle ()))
+        return Drag::Hp;
+    if (near (lpHandle ()))
+        return Drag::Lp;
+    return Drag::None;
+}
+
+void FilterView::onMouseDownEvent (MouseDownEvent& e)
+{
+    if (!e.buttonState.isLeft ())
+        return;
+    drag = hit (e.mousePosition);
+    if (drag == Drag::None)
+        return;
+    const uint32_t fId = drag == Drag::Hp ? kHpFreq : kLpFreq, rId = resId (drag == Drag::Hp);
+    const uint32_t gId = drag == Drag::Hp ? kHpGain : kLpGain;
+    if (e.clickCount == 2)
+    {
+        host->setOnce (fId, host->table ().defaultNormalized (fId));
+        host->setOnce (rId, host->table ().defaultNormalized (rId));
+        host->setOnce (gId, host->table ().defaultNormalized (gId));
+        drag = Drag::None;
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
+    down = e.mousePosition;
+    startFreq = host->plainValue (fId);
+    startRes = host->plainValue (rId);
+    startGain = host->plainValue (gId);
+    host->beginEdit (fId);
+    host->beginEdit (rId);
+    host->beginEdit (gId);
+    e.consumed = true;
+}
+
+void FilterView::onMouseMoveEvent (MouseMoveEvent& e)
+{
+    if (drag == Drag::None)
+    {
+        if (auto* f = getFrame ())
+            f->setCursor (hit (e.mousePosition) != Drag::None ? kCursorSizeAll : kCursorDefault);
+        return;
+    }
+    const CRect r = getViewSize ();
+    const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
+    const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
+    const uint32_t fId = drag == Drag::Hp ? kHpFreq : kLpFreq, rId = resId (drag == Drag::Hp);
+    host->setNorm (fId, host->table ().toNormalized (fId, startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ())));
+    if (e.modifiers.has (ModifierKey::Alt))
+        host->setNorm (rId, std::clamp (startRes - dy / 150.0, 0.0, 1.0)); // Alt: resonance
+    else
+    {
+        // gain follows the handle; dragged to the bottom it is -inf
+        const uint32_t gId = drag == Drag::Hp ? kHpGain : kLpGain;
+        const double dbPerPx = (kMaxDb - kMinDb) / (r.getHeight () - 16.0);
+        double db = std::max (startGain, kMinDb) - dy * dbPerPx;
+        if (db <= kMinDb + 0.5)
+            db = kGainMinDb;
+        host->setNorm (gId, host->table ().toNormalized (gId, std::min (db, 12.0)));
+    }
+    invalid ();
+    e.consumed = true;
+}
+
+void FilterView::onMouseUpEvent (MouseUpEvent& e)
+{
+    if (drag == Drag::None)
+        return;
+    host->endEdit (drag == Drag::Hp ? kHpFreq : kLpFreq);
+    host->endEdit (resId (drag == Drag::Hp));
+    host->endEdit (drag == Drag::Hp ? kHpGain : kLpGain);
+    drag = Drag::None;
+    e.consumed = true;
+}
+
+void FilterView::onMouseExitEvent (MouseExitEvent& e)
+{
+    if (auto* f = getFrame ())
+        f->setCursor (kCursorDefault);
+    e.consumed = true;
+}
+
+void FilterView::analyse (const std::vector<float>& x, std::vector<float>& spec)
+{
+    std::vector<std::complex<float>> a ((size_t)kFftSize);
+    float wsum = 0.0f;
+    for (int i = 0; i < kFftSize; ++i)
+    {
+        a[(size_t)i] = x[(size_t)i] * window[(size_t)i];
+        wsum += window[(size_t)i];
+    }
+    fft (a);
+    const float scale = 2.0f / wsum; // a sine of amplitude A reads A
+    for (size_t k = 1; k < spec.size (); ++k)
+    {
+        const float db = 20.0f * std::log10 (std::max (1e-7f, std::abs (a[k]) * scale));
+        float& s = spec[k];
+        s += (db - s) * (db > s ? 0.6f : 0.25f); // quick to rise, slower to fall
+    }
+}
+
+void FilterView::idle ()
+{
+    Meters* m = meters ? meters () : nullptr;
+    if (!m)
+        return;
+    bool changed = false;
+    const float hpHz = m->hpHz.load (std::memory_order_relaxed), lpHz = m->lpHz.load (std::memory_order_relaxed);
+    const float hpMul = m->hpMul.load (std::memory_order_relaxed), lpMul = m->lpMul.load (std::memory_order_relaxed);
+    if (std::fabs (hpHz - shownHpHz) > 0.5f || std::fabs (lpHz - shownLpHz) > 0.5f || std::fabs (hpMul - shownHpMul) > 0.005f ||
+        std::fabs (lpMul - shownLpMul) > 0.005f)
+    {
+        shownHpHz = hpHz;
+        shownLpHz = lpHz;
+        shownHpMul = hpMul;
+        shownLpMul = lpMul;
+        changed = true;
+    }
+    const float offset = m->offset.load (std::memory_order_relaxed);
+    const float env = m->env.load (std::memory_order_relaxed);
+    const int note = m->note.load (std::memory_order_relaxed);
+    if (std::fabs (offset - shownOffset) > 0.01f || std::fabs (env - shownEnv) > 0.005f || note != shownNote)
+    {
+        shownOffset = offset;
+        shownEnv = env;
+        shownNote = note;
+        changed = true;
+    }
+    rate = std::max (1000.0f, m->sampleRate.load (std::memory_order_relaxed));
+    const uint32_t w = m->scope.written ();
+    if (w != lastWritten && m->scope.read (bufIn.data (), bufOut.data (), kFftSize) >= kFftSize / 4)
+    {
+        lastWritten = w;
+        analyse (bufIn, specIn);
+        analyse (bufOut, specOut);
+        haveSpectrum = true;
+        changed = true;
+    }
+    if (changed)
+        invalid ();
+}
+
+} // namespace para

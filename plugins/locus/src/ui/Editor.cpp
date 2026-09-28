@@ -73,6 +73,8 @@ void Editor::buildUI (CFrame* f)
     bind (p, new Toggle (CRect (516, 50, 580, 70), this, kSolo, "Solo"));
     bind (p, new Knob (CRect (600, 30, 656, 94), this, kOutput, nullptr, true));
 
+    addTailPanel (root, CRect (8, 440, 752, 518), kTailBase);
+
     applyParamTooltips (&help::forParam);
     idle ();
 }

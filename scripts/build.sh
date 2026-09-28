@@ -13,7 +13,7 @@ if [ "$1" != "--no-install" ]; then
     if [ "$(uname -s)" = "Darwin" ]; then root="$HOME/Library/Audio/Plug-Ins/VST3"; else root="$HOME/.vst3"; fi
     dest="$root/bfielstr"
     mkdir -p "$dest"
-    for old in Simplr Lowfocus Smatcheratr; do # renamed in 0.5.0: remove our copies under the old names
+    for old in Simplr Lowfocus Smatcheratr Perrera; do # renamed in 0.5.0: remove our copies under the old names
         for dir in "$dest" "$root"; do
             if grep -qE '"Vendor": *"(bfielstr|Simplr)"' "$dir/$old.vst3/Contents/Resources/moduleinfo.json" 2>/dev/null; then
                 rm -rf "$dir/$old.vst3"

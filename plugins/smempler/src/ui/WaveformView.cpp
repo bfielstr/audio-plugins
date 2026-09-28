@@ -574,7 +574,7 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
         {
             // audition: the slice under the mouse, or the root note
             drag = Handle::Preview;
-            int note = kRootNote;
+            int note = (int)std::lround (host->plainValue (kRootKey));
             if (mode == kModeSlicing)
             {
                 SliceList sl;

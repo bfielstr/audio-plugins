@@ -10,17 +10,17 @@
 //   double-click a block       reset its ratio to 1:1 (no processing)
 #pragma once
 
-#include "Params.h"
+#include "../core/Params.h"
+#include "../plugin/Meters.h"
 
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
 
+#include <functional>
 #include <vector>
 
 namespace multidyn {
-
-class Controller;
 
 class DynDisplay : public VSTGUI::CView
 {
@@ -30,7 +30,8 @@ public:
     // value columns left (Below) and right (Above, Att/Rel) of the graph
     static constexpr double kLeftCol = 76.0, kRightCol = 156.0;
 
-    DynDisplay (const VSTGUI::CRect& r, pk::ParamHost* host, Controller* controller);
+    using MeterSource = std::function<Meters* ()>;
+    DynDisplay (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
 
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
@@ -55,7 +56,7 @@ private:
     std::vector<uint32_t> targetsFor (Hit hit, int band, const VSTGUI::Modifiers& mods) const;
 
     pk::ParamHost* host;
-    Controller* controller;
+    MeterSource meters;
     Hit dragHit = Hit::None;
     std::vector<Target> targets;
     VSTGUI::CPoint downPoint;

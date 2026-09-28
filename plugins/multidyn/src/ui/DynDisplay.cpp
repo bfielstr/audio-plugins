@@ -1,7 +1,6 @@
 #include "DynDisplay.h"
 
-#include "Engine.h"
-#include "plugin/Controller.h"
+#include "../core/Engine.h"
 
 #include "pluginkit/ui/Theme.h"
 
@@ -48,7 +47,7 @@ std::string gainText (double db)
 }
 } // namespace
 
-DynDisplay::DynDisplay (const CRect& r, pk::ParamHost* h, Controller* c) : CView (r), host (h), controller (c)
+DynDisplay::DynDisplay (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
 {
     for (int b = 0; b < kNumBands; ++b)
         shownIn[b] = shownOut[b] = -100.0f;
@@ -293,7 +292,7 @@ void DynDisplay::onMouseExitEvent (MouseExitEvent& e)
 
 void DynDisplay::idle ()
 {
-    Meters* m = controller->getMeters ();
+    Meters* m = meters ? meters () : nullptr;
     bool changed = false;
     for (int b = 0; b < kNumBands; ++b)
     {

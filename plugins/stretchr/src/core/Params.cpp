@@ -26,6 +26,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kSmear, "Smear", "Smear", 100.0, 4000.0, 500.0, Curve::Log, Disp::Ms));
         v.push_back (real (kGain, "Gain", "Gain", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (choice (kOutside, "Outside Clip", "Outside", {"Thru", "Mute"}, kThru));
+        pk::addTailParams (v, kTailBase);
         return v;
     }());
     return t;

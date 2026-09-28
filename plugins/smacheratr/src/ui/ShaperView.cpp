@@ -1,7 +1,5 @@
 #include "ShaperView.h"
 
-#include "plugin/Controller.h"
-
 #include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cdrawcontext.h"
@@ -37,21 +35,7 @@ std::string levelText (float linear)
 }
 } // namespace
 
-ShaperSettings shaperSettingsFrom (pk::ParamHost* host)
-{
-    ShaperSettings s;
-    s.curve = std::clamp ((int)std::lround (host->plainValue (kCurve)), 0, kNumCurves - 1);
-    s.bassThresholdDb = host->plainValue (kBassThreshold);
-    s.ws.drive = host->plainValue (kWsDrive);
-    s.ws.curve = host->plainValue (kWsCurve);
-    s.ws.depth = host->plainValue (kWsDepth);
-    s.ws.linear = host->plainValue (kWsLinear);
-    s.ws.damp = host->plainValue (kWsDamp);
-    s.ws.period = host->plainValue (kWsPeriod);
-    return s;
-}
-
-ShaperView::ShaperView (const CRect& r, pk::ParamHost* h, Controller* c) : CView (r), host (h), controller (c) {}
+ShaperView::ShaperView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m)) {}
 
 double ShaperView::xOf (double in) const
 {
@@ -83,6 +67,24 @@ void ShaperView::draw (CDrawContext* ctx)
     ctx->setFrameColor (theme::kGrid);
     ctx->drawLine (CPoint (xOf (-kRange), yOf (-kRange)), CPoint (xOf (kRange), yOf (kRange)));
 
+    // the pre-limiter's ceiling as the drive sees it: nothing reaches past these lines
+    const bool limiting = host->plainValue (kPreLimit) >= 0.5;
+    if (limiting)
+    {
+        const double ceil = std::pow (10.0, (host->plainValue (kPreLimitThreshold) + host->plainValue (kDrive)) / 20.0);
+        if (ceil < kRange)
+        {
+            ctx->setFillColor (CColor (90, 150, 255, 18));
+            ctx->drawRect (CRect (all.left, all.top, xOf (-ceil), all.bottom), kDrawFilled);
+            ctx->drawRect (CRect (xOf (ceil), all.top, all.right, all.bottom), kDrawFilled);
+            ctx->setFrameColor (CColor (110, 165, 255, 170));
+            ctx->drawLine (CPoint (xOf (-ceil), all.top), CPoint (xOf (-ceil), all.bottom));
+            ctx->drawLine (CPoint (xOf (ceil), all.top), CPoint (xOf (ceil), all.bottom));
+            text (ctx, "limit", CRect (xOf (ceil) + 3, all.bottom - 30, xOf (ceil) + 60, all.bottom - 18), CColor (110, 165, 255), 9.0,
+                  kLeftText);
+        }
+    }
+
     // where the driven signal sits
     const double reach = std::min ((double)shownIn, kRange);
     if (reach > 0.005)
@@ -92,22 +94,19 @@ void ShaperView::draw (CDrawContext* ctx)
     }
 
     // the curve, with the reached part highlighted
-    const ShaperSettings s = shaperSettingsFrom (host);
     const int steps = 240;
     auto curve = [&] (double from, double to, const CColor& c, double width) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
             return;
-        bool started = false;
         for (int i = 0; i <= steps; ++i)
         {
             const double x = from + (to - from) * i / steps;
-            const CPoint pt (xOf (x), yOf (shape (x, s)));
-            if (!started)
+            const CPoint pt (xOf (x), yOf (analogClip (x)));
+            if (i == 0)
                 path->beginSubpath (pt);
             else
                 path->addLine (pt);
-            started = true;
         }
         ctx->setLineWidth (width);
         ctx->setFrameColor (c);
@@ -118,11 +117,13 @@ void ShaperView::draw (CDrawContext* ctx)
         curve (-reach, reach, theme::kTextBright, 2.6);
 
     // labels
-    const auto& info = host->table ().info (kCurve);
-    const char* name = info.choices[(size_t)s.curve];
-    text (ctx, name, CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
-    char buf[64];
-    std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
+    text (ctx, "Analog", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    char buf[80];
+    if (limiting)
+        std::snprintf (buf, sizeof (buf), "Drive %s after Pre-Limit %s", host->valueText (kDrive).c_str (),
+                       host->valueText (kPreLimitThreshold).c_str ());
+    else
+        std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
     if (shownIn > 1e-4f)
     {
@@ -185,12 +186,12 @@ void ShaperView::onMouseExitEvent (MouseExitEvent& e)
 
 void ShaperView::idle ()
 {
-    SharedMeters* s = controller->getShared ();
-    if (!s)
+    const Meters* m = meters ? meters () : nullptr;
+    if (!m)
         return;
-    auto ease = [] (float& v, float t, float up, float down) { v += (t - v) * (t > v ? up : down); };
-    ease (shownIn, s->meters.inPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
-    ease (shownOut, s->meters.outPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
+    auto ease = [] (float& v, float t, float up, float dn) { v += (t - v) * (t > v ? up : dn); };
+    ease (shownIn, m->inPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
+    ease (shownOut, m->outPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
     if (shownIn < 1e-4f)
         shownIn = 0.0f;
     invalid ();

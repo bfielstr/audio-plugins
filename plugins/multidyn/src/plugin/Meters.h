@@ -2,7 +2,7 @@
 // it and passes a pointer to the controller in a connection message (same process only).
 #pragma once
 
-#include "Params.h"
+#include "../core/Params.h"
 
 #include <array>
 #include <atomic>
