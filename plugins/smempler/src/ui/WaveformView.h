@@ -41,7 +41,7 @@ public:
     }
 
 private:
-    enum class Handle { None, FlagStart, FlagEnd, Start, LengthEnd, LoopEnd, LoopBody, Slice, Ruler, Preview };
+    enum class Handle { None, FlagStart, FlagEnd, Start, LoopEnd, LoopBody, Slice, Ruler, Preview };
 
     SamplePtr sample () const;
     VSTGUI::CRect waveArea () const;

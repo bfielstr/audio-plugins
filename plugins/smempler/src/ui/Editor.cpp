@@ -175,10 +175,9 @@ void Editor::buildUI (CFrame* f)
     bind (classicGroup, new Knob (knobRect (10, 24), this, kGain));
     bind (classicGroup, new Knob (knobRect (70, 24), this, kStart));
     bind (classicGroup, new Knob (knobRect (130, 24), this, kLength));
-    bind (classicGroup, new Knob (knobRect (190, 24), this, kLoopLen));
-    bind (classicGroup, new Knob (knobRect (250, 24), this, kLoopFade));
-    bind (classicGroup, new Toggle (CRect (316, 32, 370, 50), this, kLoopOn, "Loop"));
-    bind (classicGroup, new Toggle (CRect (316, 58, 370, 76), this, kSnap, "Snap"));
+    bind (classicGroup, new Knob (knobRect (190, 24), this, kLoopFade));
+    bind (classicGroup, new Toggle (CRect (256, 32, 310, 50), this, kLoopOn, "Loop"));
+    bind (classicGroup, new Toggle (CRect (256, 58, 310, 76), this, kSnap, "Snap"));
     bind (classicGroup, new Choice (CRect (384, 24, 454, 58), this, kVoices, "Voices"));
     bind (classicGroup, new Toggle (CRect (384, 64, 454, 82), this, kRetrig, "Retrig"));
 

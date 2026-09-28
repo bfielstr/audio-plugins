@@ -10,7 +10,7 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 
 | Simpler | Smempler |
 |---|---|
-| **Classic** mode: start/end flags, Start / Length / Loop %, Loop on/off, loop crossfade (constant-power or linear), Snap to zero crossings, Gain, Voices (1–32) with subtle voice stealing, Retrig | ✓ (Loop is on by default and begins at Start; Loop % sets how far it runs) |
+| **Classic** mode: start/end flags, Start / Length, Loop on/off, loop Fade (constant-power or linear), Snap to zero crossings, Gain, Voices (1–32) with subtle voice stealing, Retrig | ✓ (Loop is on by default and begins at Start; **Length** is the loop's length and never shortens the sample, which plays to the end flag; what does not play is dimmed. **Fade**, off by default, crossfades the loop's end into its start and also fades the start in on the first pass) |
 | **One-Shot** mode: monophonic, Trigger / Gate, Fade In / Fade Out, Snap | ✓ |
 | **Slicing** mode: Slice by Transient (Sensitivity, ≤64) / Beat (Division) / Region / Manual; Mono / Poly / Thru playback; Trigger / Gate; fades per slice or to region end; slices mapped chromatically from C1 (MIDI 36) | ✓ |
 | Slice editing: double-click adds a slice (white) or removes one; drag to move; Alt-click toggles manual/auto | ✓ |

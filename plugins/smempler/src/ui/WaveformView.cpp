@@ -136,7 +136,7 @@ void WaveformView::markerPositions (const SampleData& s, double& fs, double& fe,
     classicRegion (s, p, r);
     rs = r.start;
     re = r.end;
-    le = r.loop ? r.loopEnd : std::min (re, rs + std::max (16.0, p[kLoopLen] * (re - rs)));
+    le = r.loopEnd; // Length: the loop's end (filled in with Loop off too)
 }
 
 void WaveformView::computeSlicesForDisplay (SliceList& out, const SampleData& s) const
@@ -314,13 +314,26 @@ void WaveformView::draw (CDrawContext* ctx)
         }
     }
 
-    // --- dim outside the flags ---------------------------------------------------
-    ctx->setFillColor (CColor (0, 0, 0, 90));
+    // --- dim what does not play: outside the flags, and in Classic outside Start..loop end
+    // (Start..end flag with Loop off) ----------------------------------------------
     const double xfs = posToX (nfs), xfe = posToX (nfe);
-    if (xfs > w.left)
-        ctx->drawRect (CRect (w.left, w.top, std::min (xfs, w.right), w.bottom), kDrawFilled);
-    if (xfe < w.right)
-        ctx->drawRect (CRect (std::max (xfe, w.left), w.top, w.right, w.bottom), kDrawFilled);
+    auto dim = [&] (double x0, double x1, uint8_t alpha) {
+        x0 = std::max (x0, w.left);
+        x1 = std::min (x1, w.right);
+        if (x1 > x0)
+        {
+            ctx->setFillColor (CColor (0, 0, 0, alpha));
+            ctx->drawRect (CRect (x0, w.top, x1, w.bottom), kDrawFilled);
+        }
+    };
+    dim (w.left, xfs, 150);
+    dim (xfe, w.right, 150);
+    if (mode == kModeClassic)
+    {
+        const bool looping = host->plainValue (kLoopOn) >= 0.5;
+        dim (xfs, posToX (rs / len), 120);
+        dim (posToX ((looping ? le : re) / len), xfe, 120);
+    }
 
     // --- mode markers ------------------------------------------------------------
     auto vline = [&] (double x, const CColor& c, double width = 1.0) {
@@ -334,7 +347,7 @@ void WaveformView::draw (CDrawContext* ctx)
     if (mode == kModeClassic)
     {
         const bool loopOn = host->plainValue (kLoopOn) >= 0.5;
-        const double xs = posToX (rs / len), xe = posToX (re / len), xl = posToX (le / len);
+        const double xs = posToX (rs / len), xl = posToX (le / len);
         const CRect region (std::max (w.left, xs), w.top, std::min (w.right, xl), w.bottom);
         const CRect bar = loopBar (*s);
         const CRect barClip (std::max (w.left, bar.left), bar.top, std::min (w.right, bar.right), bar.bottom);
@@ -361,11 +374,12 @@ void WaveformView::draw (CDrawContext* ctx)
             ctx->drawRect (barClip, kDrawFilled);
             drawText (ctx, "loop off (click)", barClip, CColor (160, 200, 160), 9.0, kCenterText);
         }
+        // Start and Length (the loop's end)
         vline (xs, CColor (255, 255, 255, 150));
-        vline (xe, CColor (255, 255, 255, 150));
+        vline (xl, CColor (255, 255, 255, 150));
         ctx->setFillColor (CColor (255, 255, 255, 170));
         ctx->drawPolygon ({CPoint (xs, w.bottom - 10), CPoint (xs + 7, w.bottom - 5), CPoint (xs, w.bottom)}, kDrawFilled);
-        ctx->drawPolygon ({CPoint (xe, w.bottom - 10), CPoint (xe - 7, w.bottom - 5), CPoint (xe, w.bottom)}, kDrawFilled);
+        ctx->drawPolygon ({CPoint (xl, w.bottom - 10), CPoint (xl - 7, w.bottom - 5), CPoint (xl, w.bottom)}, kDrawFilled);
     }
     else if (mode == kModeSlicing)
     {
@@ -471,20 +485,16 @@ WaveformView::Handle WaveformView::hitTest (const CPoint& p, int& sliceIndex) co
         const bool lower = p.y > w.getCenter ().y;
         const CRect bar = loopBar (*s);
         const bool inBarRow = p.y >= bar.top - 2 && p.y <= w.bottom;
-        if (inBarRow && near (le) && le < re - 1)
+        if (inBarRow && near (le))
             return Handle::LoopEnd;
-        if (inBarRow && near (re))
-            return Handle::LengthEnd;
         if (inBarRow && near (rs))
             return Handle::Start;
         if (inBarRow && p.x > bar.left && p.x < bar.right)
             return Handle::LoopBody;
-        if (host->plainValue (kLoopOn) >= 0.5 && near (le) && le < re - 1)
+        if (near (le) && (lower || !near (fe)))
             return Handle::LoopEnd;
         if (near (rs) && (lower || !near (fs)))
             return Handle::Start;
-        if (near (re) && (lower || !near (fe)))
-            return Handle::LengthEnd;
     }
     return Handle::None;
 }
@@ -555,8 +565,7 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
         case Handle::FlagStart: host->beginEdit (kSampleStart); break;
         case Handle::FlagEnd: host->beginEdit (kSampleEnd); break;
         case Handle::Start: host->beginEdit (kStart); break;
-        case Handle::LengthEnd: host->beginEdit (kLength); break;
-        case Handle::LoopEnd: host->beginEdit (kLoopLen); break;
+        case Handle::LoopEnd: host->beginEdit (kLength); break;
         case Handle::LoopBody:
         {
             double fs, fe, rs, re, le;
@@ -566,7 +575,6 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
             loopDragLen = le - rs;
             host->beginEdit (kStart);
             host->beginEdit (kLength);
-            host->beginEdit (kLoopLen);
             break;
         }
         case Handle::Ruler: break;
@@ -643,19 +651,14 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
         case Handle::FlagStart: host->setNorm (kSampleStart, std::min (pos, fe / len - minGap)); break;
         case Handle::FlagEnd: host->setNorm (kSampleEnd, std::max (pos, fs / len + minGap)); break;
         case Handle::Start: host->setNorm (kStart, std::clamp ((pos * len - fs) / (fe - fs), 0.0, 1.0)); break;
-        case Handle::LengthEnd: host->setNorm (kLength, std::clamp ((pos * len - rs) / (fe - fs), 0.0, 1.0)); break;
-        case Handle::LoopEnd:
-            host->setNorm (kLoopLen, std::clamp ((pos * len - rs) / std::max (1.0, re - rs), 0.0, 1.0));
-            break;
+        case Handle::LoopEnd: host->setNorm (kLength, std::clamp ((pos * len - rs) / std::max (1.0, fe - fs), 0.0, 1.0)); break;
         case Handle::LoopBody:
         {
-            // move the whole loop: it begins at Start, so Start moves with it; the loop keeps its
-            // length and the playback end stays where it is
+            // move the whole loop: it begins at Start, so Start moves with it and Length stays
             const double span = std::max (1.0, fe - fs);
-            const double newRs = std::clamp (loopDragRs + (pos * len - loopDragDownPos), fs, re - loopDragLen);
+            const double newRs = std::clamp (loopDragRs + (pos * len - loopDragDownPos), fs, fe - loopDragLen);
             host->setNorm (kStart, std::clamp ((newRs - fs) / span, 0.0, 1.0));
-            host->setNorm (kLength, std::clamp ((re - newRs) / span, 0.0, 1.0));
-            host->setNorm (kLoopLen, std::clamp (loopDragLen / std::max (1.0, re - newRs), 0.0, 1.0));
+            host->setNorm (kLength, std::clamp (loopDragLen / span, 0.0, 1.0));
             break;
         }
         case Handle::Slice: dragSlicePos = std::clamp (pos, fs / len, fe / len); break;
@@ -687,12 +690,10 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
         case Handle::FlagStart: host->endEdit (kSampleStart); break;
         case Handle::FlagEnd: host->endEdit (kSampleEnd); break;
         case Handle::Start: host->endEdit (kStart); break;
-        case Handle::LengthEnd: host->endEdit (kLength); break;
-        case Handle::LoopEnd: host->endEdit (kLoopLen); break;
+        case Handle::LoopEnd: host->endEdit (kLength); break;
         case Handle::LoopBody:
             host->endEdit (kStart);
             host->endEdit (kLength);
-            host->endEdit (kLoopLen);
             if (!moved) // a click toggles looping
                 host->setOnce (kLoopOn, host->plainValue (kLoopOn) >= 0.5 ? 0.0 : 1.0);
             break;

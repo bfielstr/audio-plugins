@@ -58,9 +58,9 @@ std::vector<ParamInfo> buildTable ()
     add (pct (kSampleStart, "Sample Start", "S.Start", 0.0));
     add (pct (kSampleEnd, "Sample End", "S.End", 1.0));
     add (pct (kStart, "Start", "Start", 0.0));
-    add (pct (kLength, "Length", "Length", 1.0));
+    add (pct (kLength, "Length", "Length", 1.0)); // the loop's length
     add (toggle (kLoopOn, "Loop On", "Loop", true));
-    add (pct (kLoopLen, "Loop Length", "Loop", 1.0));
+    add (pct (kLoopLen, "Loop Length (unused)", "Unused", 1.0)); // kept for old projects; Length sets the loop
     add (pct (kLoopFade, "Loop Fade", "Fade", 0.0));
     add (toggle (kSnap, "Snap", "Snap", false));
     add (fl (kGain, "Sample Gain", "Gain", -36.0, 24.0, 0.0, Curve::Linear, Disp::DbGain));

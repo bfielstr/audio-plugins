@@ -96,7 +96,9 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         CHECK (rig.start (), "start");
-        CHECK (rig.processor->getLatencySamples () == 0, "no latency");
+        // the only latency is the end-of-chain saturator's (constant, even when it is off)
+        const size_t lat = rig.processor->getLatencySamples ();
+        CHECK (lat > 0 && lat < 200, "latency %zu", lat);
 
         // --- no clip: transparent ------------------------------------------------------
         std::vector<float> out, outR;
@@ -104,8 +106,8 @@ int main (int argc, char** argv)
         rig.render (0.2, out, nullptr, tone (330.0));
         {
             double err = 0.0;
-            for (size_t i = 0; i < out.size (); ++i)
-                err = std::max (err, std::fabs (out[i] - 0.5 * std::sin (2.0 * M_PI * 330.0 * i / kSr)));
+            for (size_t i = lat; i < out.size (); ++i)
+                err = std::max (err, std::fabs (out[i] - 0.5 * std::sin (2.0 * M_PI * 330.0 * (double)(i - lat) / kSr)));
             CHECK (err < 1e-6, "pass-through without a clip (err %g)", err);
         }
 
@@ -155,7 +157,7 @@ int main (int argc, char** argv)
         playFrom (rig, 0);
         out.clear ();
         rig.render (0.5, out, nullptr, tone (523.0, 0.25));
-        CHECK (rms (out, 0, out.size ()) < 1e-6, "input muted outside the clip");
+        CHECK (rms (out, lat, out.size ()) < 1e-6, "input muted outside the clip");
         setParam (rig, kOutside, 0.0);
 
         // --- editor: add a stretch marker and drag it -----------------------------------
@@ -213,7 +215,7 @@ int main (int argc, char** argv)
         std::vector<float> copy;
         rig2.render (4.0, copy, nullptr, tone (523.0, 0.25));
         double diff = 0.0;
-        for (size_t i = 0; i < ref.size () && i < copy.size (); ++i)
+        for (size_t i = lat; i < ref.size () && i < copy.size (); ++i) // the delay held the previous render
             diff = std::max (diff, (double)std::fabs (ref[i] - copy[i]));
         CHECK (diff < 2e-3, "restored instance renders the same clip offline (max diff %g)", diff);
         CHECK (std::fabs (rig2.controller->getParamNormalized (kPitch) - toNormalized (kPitch, 12.0)) < 1e-9,

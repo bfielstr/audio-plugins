@@ -136,17 +136,17 @@ static void uiInteraction (Rig& rig)
     CHECK (std::fabs (rig.controller->getParamNormalized (smempler::kFilterFreq) - smempler::defaultNormalized (smempler::kFilterFreq)) < 1e-6,
            "double-click reset: %f", rig.controller->getParamNormalized (smempler::kFilterFreq));
 
-    // --- loop bar (Classic, state has loop on, flags 0.1..0.8, start 10 %, length 80 %, loop 40 %) ---
-    // the loop begins at Start and runs 40 % of the played region
+    // --- loop bar (Classic, state has loop on, flags 0.1..0.8, start 10 %, length 32 %) ---
+    // the loop begins at Start and Length is its length (a share of the flagged region)
     auto wx = [] (double pos) { return 8.0 + pos * 1094.0; };
-    const double rs = 0.1 + 0.1 * 0.7, re = rs + 0.8 * 0.7, le = rs + 0.4 * (re - rs);
+    const double rs = 0.1 + 0.1 * 0.7, le = rs + 0.32 * 0.7;
     const double barX = wx ((rs + le) / 2), barY = 285;
     CHECK (plain (smempler::kLoopOn) >= 0.5, "loop should start on");
     win.click (barX, barY);
     CHECK (plain (smempler::kLoopOn) < 0.5, "clicking the loop bar should switch looping off");
     win.click (barX, barY);
     CHECK (plain (smempler::kLoopOn) >= 0.5, "clicking again should switch it back on");
-    const double loopFramesBefore = plain (smempler::kLoopLen) * (re - rs);
+    const double lengthBefore = plain (smempler::kLength);
     win.mouseDown (barX, barY);
     win.mouseDrag (barX + 40, barY);
     win.mouseDrag (barX + 84, barY);
@@ -154,10 +154,8 @@ static void uiInteraction (Rig& rig)
     const double newRs = 0.1 + plain (smempler::kStart) * 0.7;
     CHECK (std::fabs (newRs - (rs + 84.0 / 1094.0)) < 0.004, "loop drag moved Start to %f (want %f)", newRs,
            rs + 84.0 / 1094.0);
-    const double newRe = newRs + plain (smempler::kLength) * 0.7;
-    CHECK (std::fabs (newRe - re) < 0.004, "the playback end stays: %f (was %f)", newRe, re);
-    CHECK (std::fabs (plain (smempler::kLoopLen) * (newRe - newRs) - loopFramesBefore) < 0.004,
-           "loop length should be kept while moving (%f vs %f)", plain (smempler::kLoopLen) * (newRe - newRs), loopFramesBefore);
+    CHECK (std::fabs (plain (smempler::kLength) - lengthBefore) < 0.004, "the loop keeps its length while moving (%f vs %f)",
+           plain (smempler::kLength), lengthBefore);
     CHECK (plain (smempler::kLoopOn) >= 0.5, "dragging must not toggle the loop");
 
     // --- envelope display: shift-drag bends a curve, double-click adds / removes breakpoints ---
@@ -490,8 +488,7 @@ int main (int argc, char** argv)
         st4.norm[smempler::kSampleStart] = 0.1;
         st4.norm[smempler::kSampleEnd] = 0.8;
         st4.norm[smempler::kStart] = 0.1;
-        st4.norm[smempler::kLength] = 0.8;
-        st4.norm[smempler::kLoopLen] = 0.4;
+        st4.norm[smempler::kLength] = 0.32;
         st4.norm[smempler::kFilterType] = smempler::toNormalized (smempler::kFilterType, smempler::kMorph);
         st4.norm[smempler::kFilterMorph] = 0.35;
         st4.norm[smempler::kFilterRes] = 0.5;

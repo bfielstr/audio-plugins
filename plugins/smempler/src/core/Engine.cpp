@@ -62,23 +62,21 @@ bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r)
     rs = std::min (rs, fe - 16.0);
     if (snap)
         rs = std::min ((double)s.snapToZero ((int)rs), fe - 16.0);
-    const double re = std::min (fe, rs + std::max (16.0, p[kLength] * span));
+    // the region always plays to the end flag; Length is the loop's length from Start (a share of
+    // the flagged region), so it never shortens the sample. The loop is filled in with Loop off
+    // too, for the display.
+    const double re = fe;
     r.start = std::max (0.0, rs);
     r.end = re;
     r.loop = on (p[kLoopOn]);
-    if (r.loop)
-    {
-        // the loop begins at Start; Loop Length sets how far into the region it runs
-        const double ll = std::max (16.0, p[kLoopLen] * (re - rs));
-        const double ls = rs;
-        double le = std::min (re, rs + ll);
-        if (snap)
-            le = std::min (re, (double)s.snapToZero ((int)le));
-        if (le - ls < 16.0)
-            le = std::min (re, ls + 16.0);
-        r.loopStart = ls;
-        r.loopEnd = le;
-    }
+    const double ls = rs;
+    double le = std::min (re, rs + std::max (16.0, p[kLength] * span));
+    if (snap)
+        le = std::min (re, (double)s.snapToZero ((int)le));
+    if (le - ls < 16.0)
+        le = std::min (re, ls + 16.0);
+    r.loopStart = ls;
+    r.loopEnd = le;
     return r.end > r.start;
 }
 
@@ -329,6 +327,15 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
             }
             l = l * ga + l2 * gb;
             rr = rr * ga + r2 * gb;
+        }
+        // the loop's head fades in on the first pass as well, the way it enters on every wrap, so
+        // the note does not start abruptly (after a wrap the position is always past the head)
+        if (fade > 1.0 && pos < r.loopStart + fade)
+        {
+            const double x = std::max (0.0, (pos - r.loopStart) / fade);
+            const float g = c.constantPowerFade ? (float)std::sin (x * M_PI * 0.5) : (float)x;
+            l *= g;
+            rr *= g;
         }
         L[i] = l;
         R[i] = rr;

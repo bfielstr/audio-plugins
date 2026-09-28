@@ -87,7 +87,13 @@ int main (int argc, char** argv)
         rig.render (1.0, out, nullptr, tone (1000.0, 0.25));
         const size_t a = 24000, b = 48000;
         CHECK (toneDb (out, 3000.0, a, b) > -30.0, "third harmonic %.1f dB", toneDb (out, 3000.0, a, b));
-        CHECK (std::fabs (out[a + 100]) <= 1.0001, "peak");
+        {
+            // the curve holds 1.0; Hi-Quality's downsampling filter rings a little past it
+            float pk = 0.0f;
+            for (size_t i = a; i < b; ++i)
+                pk = std::max (pk, std::fabs (out[i]));
+            CHECK (pk <= 1.05f, "peak %f", pk);
+        }
 
         // state round trip
         MemoryStream saved;

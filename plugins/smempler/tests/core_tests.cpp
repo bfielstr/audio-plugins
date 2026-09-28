@@ -428,7 +428,7 @@ TEST (classic_loop_sustains_and_releases)
     auto s = sine (220.0, 0.5, 44100.0, true);
     std::unique_ptr<Engine> e (makeEngine (s));
     e->setParam (kLoopOn, 1);
-    e->setParam (kLoopLen, 0.5);
+    e->setParam (kLength, 0.5);
     e->setParam (kAmpR, 100.0);
     e->noteOn (60, 1.0f);
     auto o = run (*e, 96000); // 2 s, sample is only 0.5 s
@@ -450,7 +450,7 @@ TEST (loop_crossfade_smooths_discontinuity)
         std::unique_ptr<Engine> e (makeEngine (s));
         e->setParam (kFilterOn, 0);
         e->setParam (kLoopOn, 1);
-        e->setParam (kLoopLen, 0.3);
+        e->setParam (kLength, 0.3);
         e->setParam (kLoopFade, fade);
         e->noteOn (60, 1.0f);
         auto o = run (*e, 144000);
@@ -462,6 +462,33 @@ TEST (loop_crossfade_smooths_discontinuity)
     const double hard = maxJump (0.0), soft = maxJump (0.5);
     CHECK (hard > 0.15, "expected a jump without fade: %f", hard);
     CHECK (soft < hard * 0.2, "fade didn't smooth: %f vs %f", soft, hard);
+}
+
+TEST (length_is_the_loop_and_fade_fades_the_start_in)
+{
+    // a constant level: the loop's crossfade is inaudible, the fade-in at the start is not
+    auto s = SampleData::fromBuffers (std::vector<float> (44100, 0.5f), {}, 44100.0);
+    auto play = [&] (double length, double fade, bool loop, int frames) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, loop ? 1 : 0);
+        e->setParam (kLength, length);
+        e->setParam (kLoopFade, fade);
+        e->noteOn (60, 1.0f);
+        return run (*e, frames);
+    };
+    CHECK (paramTable ().info (kLoopFade).def == 0.0, "Fade off by default");
+    // Length no longer shortens the sample: with Loop off it plays to the end (1 s)
+    auto o = play (0.25, 0.0, false, 60000);
+    const double end = soundEnd (o.l) / kHostSr;
+    CHECK (std::fabs (end - 1.0) < 0.02, "plays to the end flag: %f s", end);
+    // with Fade the loop's start fades in on the first pass; without, it starts at once
+    const double hard = rms (play (0.3, 0.0, true, 4800).l, 480, 960);
+    const double soft = rms (play (0.3, 0.5, true, 4800).l, 480, 960);
+    CHECK (hard > 0.3, "no fade: starts at full level (%f)", hard);
+    CHECK (soft < hard * 0.4, "fade: the start fades in (%f vs %f)", soft, hard);
+    auto held = play (0.3, 0.5, true, 48000);
+    CHECK (rms (held.l, 24000, 48000) > hard * 0.9, "then holds the level through the loop (%f)", rms (held.l, 24000, 48000));
 }
 
 TEST (oneshot_trigger_and_gate)
@@ -1014,7 +1041,7 @@ TEST (warp_classic_loop)
         e->setParam (kWarpMode, mode);
         e->setParam (kWarpBeats, 4);
         e->setParam (kLoopOn, 1);
-        e->setParam (kLoopLen, 0.5);
+        e->setParam (kLength, 0.5);
         HostInfo h;
         h.bpm = 120.0;
         e->noteOn (60, 1.0f);

@@ -236,6 +236,11 @@ TEST (drive_adds_harmonics_and_the_curve_holds_one)
     auto out = run (*e, in);
     CHECK (toneDb (out.l, 3000.0, a, b) > -30.0, "third harmonic %f dB", toneDb (out.l, 3000.0, a, b));
     CHECK (peakOf (out.l, a, b) <= 1.0 + 1e-6, "peak %f", peakOf (out.l, a, b));
+    // with Hi-Quality the downsampling filter rings a little past the curve
+    e = engine (true);
+    e->setParam (kDrive, 18.0);
+    out = run (*e, in);
+    CHECK (peakOf (out.l, a, b) <= 1.05, "hi-quality peak %f", peakOf (out.l, a, b));
     e = engine (false);
     e->setParam (kDrive, -6.0);
     out = run (*e, in);

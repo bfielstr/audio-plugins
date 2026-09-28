@@ -45,9 +45,14 @@ inline const char* forParam (uint32_t id)
                    "once, monophonic (drums, phrases). Slicing: cuts the sample into slices played from C1 upwards.";
         case kGain: return "Level of the sample before the filter (separate from the output Volume).";
         case kStart: return "Where playback starts, as a percentage of the region between the flags.";
-        case kLength: return "How much of the region plays, from Start.";
-        case kLoopLen: return "How much of the played region loops, measured from Start. Needs Loop on.";
-        case kLoopFade: return "Crossfades the loop end into the loop start to hide clicks. Not available while warping.";
+        case kLength:
+            return "The loop's length, from Start (a share of the region between the flags). The sample itself "
+                   "always plays to the end flag; with Loop off Length does nothing.";
+        case kLoopLen: return "Not used any more: Length sets the loop.";
+        case kLoopFade:
+            return "Crossfades the loop end into the loop start to hide clicks, and fades the loop's start in on the "
+                   "first pass too, so the note does not start abruptly. Off (0 %) by default. Not available while "
+                   "warping.";
         case kLoopOn: return "Loop from Start while the note is held (on by default). You can also click the loop bar in the waveform.";
         case kSnap: return "Snap the flags and loop points to zero crossings (left channel) to avoid clicks.";
         case kVoices: return "Maximum number of simultaneous notes. The oldest note is faded out when you exceed it.";

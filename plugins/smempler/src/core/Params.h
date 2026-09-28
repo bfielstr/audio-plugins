@@ -23,7 +23,7 @@ enum ParamId : uint32_t
     kStart,
     kLength,
     kLoopOn,
-    kLoopLen,
+    kLoopLen, // unused since 0.6: Length is the loop length
     kLoopFade,
     kSnap,
     kGain,
