@@ -3,10 +3,21 @@
 
 #include "Params.h"
 
+#include "multidyn/src/ui/Help.h"
+#include "perrera/src/ui/Help.h"
+
 namespace smempler::help {
 
 inline const char* forParam (uint32_t id)
 {
+    if (id == kFxPerreraOn)
+        return "Perrera after the sampler: a parallel high-pass and low-pass that track the notes you play here.";
+    if (id == kFxMdOn)
+        return "Multidyn (with its Smacheratr) after Perrera. Off, the sound passes untouched with the same latency.";
+    if (id >= kFxPerreraBase && id < kFxPerreraBase + perrera::kNumParams)
+        return perrera::help::forParam (id - kFxPerreraBase);
+    if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
+        return multidyn::help::forParam (id - kFxMdBase);
     switch (id)
     {
         case kMode:

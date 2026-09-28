@@ -1,7 +1,7 @@
 // Hover help for Multidyn (toggle with the "?" button).
 #pragma once
 
-#include "Params.h"
+#include "../core/Params.h"
 
 namespace multidyn::help {
 

@@ -32,6 +32,8 @@ extern char** environ;
 
 namespace smempler {
 
+using pk::NumberBox;
+
 using namespace VSTGUI;
 using namespace Steinberg;
 
@@ -80,6 +82,9 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
+    for (auto& t : fxTabs)
+        t = nullptr;
+    fxTabButtons.clear ();
     waveform = nullptr;
     filterDisplay = nullptr;
     envDisplay = nullptr;
@@ -303,9 +308,100 @@ void Editor::buildUI (CFrame* f)
     bind (gp, new Segmented (CRect (4, 252, 174, 272), this, kGlideMode, {"Off", "Glide", "Porta"}));
 
     // hover help for every parameter control
+
+    // ---- built-in effects: Perrera, Multidyn, Smacheratr (tabs) ------------------
+    const char* fxNames[] = {"PERRERA", "MULTIDYN", "SMACHERATR"};
+    fxTabButtons.clear ();
+    for (int i = 0; i < 3; ++i)
+    {
+        auto* b = new ActionButton (CRect (8 + i * 116, 722, 116 + i * 116, 742), fxNames[i], [this, i] { setFxTab (i); },
+                                    [this, i] { return fxTab == i; });
+        root->addView (b);
+        fxTabButtons.push_back (b);
+    }
+    auto* fxNote = new Label (CRect (360, 722, 1102, 742), "after the sampler: Perrera, then Multidyn with its Smacheratr", 10.0);
+    fxNote->setDim (true);
+    root->addView (fxNote);
+    auto* fxp = new Panel (CRect (8, 746, 1102, 896));
+    root->addView (fxp);
+    for (int i = 0; i < 3; ++i)
+    {
+        fxTabs[i] = new Group (CRect (0, 0, 1094, 150));
+        fxp->addView (fxTabs[i]);
+    }
+    {
+        // Perrera
+        auto* g = fxTabs[0];
+        bind (g, new Toggle (CRect (10, 8, 56, 26), this, kFxPerreraOn, "On"));
+        g->addView (new Label (CRect (64, 8, 104, 26), "Slope", 10.5, false, 2));
+        bind (g, new Segmented (CRect (110, 8, 170, 26), this, perreraParam (perrera::kSlope), {"12", "24"}));
+        const uint32_t ids[11] = {perrera::kHpFreq, perrera::kHpRes, perrera::kLpFreq, perrera::kLpRes, perrera::kSplit,
+                                  perrera::kEnvAmount, perrera::kEnvAttack, perrera::kEnvDecay, perrera::kKey,
+                                  perrera::kDryWet, perrera::kOutput};
+        const bool bipolar[11] = {false, false, false, false, true, true, false, false, false, false, true};
+        for (int i = 0; i < 11; ++i)
+            bind (g, new Knob (knobRect (10 + i * 58, 34), this, perreraParam (ids[i]), nullptr, bipolar[i]));
+        g->addView (new Label (CRect (660, 36, 730, 50), "Transpose", 9.5, false, 1));
+        bind (g, new NumberBox (CRect (660, 52, 730, 70), this, perreraParam (perrera::kTranspose)));
+        g->addView (new Label (CRect (740, 36, 810, 50), "Root", 9.5, false, 1));
+        bind (g, new NumberBox (CRect (740, 52, 810, 70), this, perreraParam (perrera::kRoot)));
+        auto* n1 = new Label (CRect (660, 78, 1080, 92), "tracks the notes played here; Transpose adds to the sampler's, bend range is the sampler's", 9.5);
+        n1->setDim (true);
+        g->addView (n1);
+    }
+    {
+        // Multidyn
+        auto* g = fxTabs[1];
+        bind (g, new Toggle (CRect (10, 8, 56, 26), this, kFxMdOn, "On"));
+        bind (g, new Segmented (CRect (64, 8, 184, 26), this, multidynParam (multidyn::kMode), {"Base", "Character"}));
+        g->addView (new Label (CRect (192, 8, 232, 26), "Bands", 10.5, false, 2));
+        bind (g, new Segmented (CRect (238, 8, 338, 26), this, multidynParam (multidyn::kBands), {"1", "2", "3", "4"}));
+        bind (g, new Toggle (CRect (348, 8, 428, 26), this, multidynParam (multidyn::kSoftKnee), "Soft Knee"));
+        bind (g, new Segmented (CRect (436, 8, 536, 26), this, multidynParam (multidyn::kDetector), {"Peak", "RMS"}));
+        bind (g, new Toggle (CRect (546, 8, 626, 26), this, multidynParam (multidyn::kPreLimit), "Pre-Limit"));
+        bind (g, new NumberBox (CRect (632, 8, 702, 26), this, multidynParam (multidyn::kPreLimitCeiling)));
+        const char* heads[8] = {"Below", "Ratio", "Above", "Ratio", "Attack", "Release", "In", "Out"};
+        for (int c = 0; c < 8; ++c)
+        {
+            auto* h = new Label (CRect (66 + c * 74, 30, 136 + c * 74, 44), heads[c], 9.5, true, 1);
+            h->setDim (true);
+            g->addView (h);
+        }
+        const int fields[8] = {multidyn::kBelowThresh, multidyn::kBelowRatio, multidyn::kAboveThresh, multidyn::kAboveRatio,
+                               multidyn::kAttack, multidyn::kRelease, multidyn::kBandInput, multidyn::kBandOutput};
+        const char* bandNames[4] = {"Band 1", "Band 2", "Band 3", "Band 4"};
+        for (int b = 0; b < 4; ++b)
+        {
+            const double y = 46 + b * 22;
+            g->addView (new Label (CRect (10, y + 2, 60, y + 16), bandNames[b], 10.0, false, 0));
+            for (int c = 0; c < 8; ++c)
+                bind (g, new NumberBox (CRect (66 + c * 74, y, 136 + c * 74, y + 18), this,
+                                        multidynParam (multidyn::bandParam (b, fields[c]))));
+        }
+        g->addView (new Label (CRect (670, 30, 740, 44), "Splits", 9.5, true, 1));
+        for (int x = 0; x < 3; ++x)
+            bind (g, new NumberBox (CRect (670, 46 + x * 22, 740, 64 + x * 22), this, multidynParam ((uint32_t)(multidyn::kXover1 + x))));
+        bind (g, new Knob (knobRect (760, 34), this, multidynParam (multidyn::kAmount)));
+        bind (g, new Knob (knobRect (820, 34), this, multidynParam (multidyn::kTime)));
+        bind (g, new Knob (knobRect (880, 34), this, multidynParam (multidyn::kOutput), nullptr, true));
+    }
+    {
+        // Smacheratr (Multidyn's built-in saturator, after its Output)
+        auto* g = fxTabs[2];
+        bind (g, new Toggle (CRect (10, 8, 56, 26), this, multidynParam (multidyn::kSatOn), "On"));
+        bind (g, new Choice (CRect (64, 8, 224, 26), this, multidynParam (multidyn::kSatCurve)));
+        bind (g, new Choice (CRect (232, 8, 352, 26), this, multidynParam (multidyn::kSatPostClip)));
+        bind (g, new Knob (knobRect (10, 40), this, multidynParam (multidyn::kSatDrive), nullptr, true));
+        bind (g, new Knob (knobRect (70, 40), this, multidynParam (multidyn::kSatMix)));
+        auto* n2 = new Label (CRect (140, 60, 700, 74), "the saturator at the end of Multidyn (needs Multidyn on)", 9.5);
+        n2->setDim (true);
+        g->addView (n2);
+    }
+
     applyParamTooltips (&help::forParam);
 
     updateVisibility ();
+    setFxTab (fxTab);
     lastName.clear ();
     idle ();
 }
@@ -342,6 +438,16 @@ void Editor::bridgeChanged ()
 {
     if (waveform)
         waveform->invalid ();
+}
+
+void Editor::setFxTab (int t)
+{
+    fxTab = std::clamp (t, 0, 2);
+    for (int i = 0; i < 3; ++i)
+        if (fxTabs[i])
+            fxTabs[i]->setVisible (i == fxTab);
+    for (auto* b : fxTabButtons)
+        b->invalid ();
 }
 
 void Editor::setEnvTab (int t)

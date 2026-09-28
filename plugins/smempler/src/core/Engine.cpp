@@ -507,11 +507,15 @@ void Engine::prepare (double sampleRate, int)
     sr = sampleRate;
     for (auto& v : voices)
         v.prepare (sr);
+    fxPerrera.prepare (sr, 512);
+    fxMultidyn.prepare (sr, 512);
     reset ();
 }
 
 void Engine::reset ()
 {
+    fxPerrera.reset ();
+    fxMultidyn.reset ();
     for (auto& v : voices)
         v.hardStop ();
     monoStack.clear ();
@@ -537,8 +541,13 @@ void Engine::setSliceEdits (SliceEditsPtr e)
 
 void Engine::setParam (uint32_t id, double plain)
 {
-    if (id < kNumParams)
-        p[id] = plain;
+    if (id >= kNumParams)
+        return;
+    p[id] = plain;
+    if (id >= kFxPerreraBase && id < kFxPerreraBase + perrera::kNumParams)
+        fxPerrera.setParam (id - kFxPerreraBase, plain);
+    else if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
+        fxMultidyn.setParam (id - kFxMdBase, plain);
 }
 
 void Engine::setSustain (bool onOff)
@@ -639,6 +648,7 @@ void Engine::noteOn (int note, float velocity)
         noteOff (note);
         return;
     }
+    fxPerrera.noteOn (note); // the built-in Perrera tracks the sampler's notes
     if (!smp)
         return;
     updateSlices ();
@@ -832,7 +842,10 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
     globalLfoPhase += p[kLfoRate] * n / sr;
     globalLfoPhase -= std::floor (globalLfoPhase);
     if (!smp)
+    {
+        renderEffects (L, R, n);
         return;
+    }
     updateSlices ();
     BlockCtx c;
     makeCtx (host, c);
@@ -856,6 +869,19 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
         L[i] *= volGain;
         R[i] *= volGain;
     }
+    renderEffects (L, R, n);
+}
+
+void Engine::renderEffects (float* L, float* R, int n)
+{
+    // Perrera follows the sampler's pitch: its Transpose is an offset on top of the sampler's, and
+    // the pitch bend range is the sampler's
+    fxPerrera.setParam (perrera::kTranspose, p[kTranspose] + p[perreraParam (perrera::kTranspose)]);
+    fxPerrera.setParam (perrera::kPbRange, p[kPbRange]);
+    if (on (p[kFxPerreraOn]))
+        fxPerrera.process (L, R, L, R, n);
+    fxMultidyn.setBypass (!on (p[kFxMdOn]));
+    fxMultidyn.process (L, R, nullptr, nullptr, L, R, n);
 }
 
 int Engine::activeVoices () const

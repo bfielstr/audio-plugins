@@ -68,6 +68,9 @@ void Engine::prepare (double sampleRate, int)
     sat.setParam (smacheratr::kDcFilter, 0.0);
     sat.setParam (smacheratr::kOutput, 0.0);
     sat.prepare (sr, 512);
+    for (auto& d : bypassDelay)
+        d.assign ((size_t)std::max (1, latency ()), 0.0f);
+    bypassPos = 0;
     reset ();
 }
 
@@ -156,6 +159,23 @@ void Engine::splitBands (float x, int c, int n, Lr4Split* sp, Allpass2 (*aps)[kM
 void Engine::process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL,
                       float* outR, int n)
 {
+    if (bypass)
+    {
+        const int len = (int)bypassDelay[0].size ();
+        for (int i = 0; i < n; ++i)
+        {
+            const float l = bypassDelay[0][(size_t)bypassPos], r = bypassDelay[1][(size_t)bypassPos];
+            bypassDelay[0][(size_t)bypassPos] = inL[i];
+            bypassDelay[1][(size_t)bypassPos] = inR[i];
+            if (++bypassPos >= len)
+                bypassPos = 0;
+            outL[i] = l;
+            outR[i] = r;
+        }
+        for (auto& m : meters)
+            m = BandMeter {};
+        return;
+    }
     updateFilters (false);
     const int nBands = bandCount ();
     const bool character = std::lround (p[kMode]) == kCharacter;

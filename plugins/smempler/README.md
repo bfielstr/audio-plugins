@@ -23,6 +23,11 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | Sustain pedal (CC64) | ✓ |
 | Sample stays at its original pitch on C3 (MIDI 60) | ✓ |
 
+**Built-in effects** (tabs at the bottom): **Perrera** (the parallel high-pass / low-pass, tracking
+the notes played here, with its own Transpose offset on top of the sampler's Transpose and the
+sampler's pitch bend range) and **Multidyn** with its **Smacheratr**, after the sampler. Both are off
+by default; every control is an automatable parameter. The effects report their latency to the host.
+
 Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
 the waveform, audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
 ◀ ▶ step through the samples in the current folder, zoom (Cmd/Alt + scroll, or drag the ruler

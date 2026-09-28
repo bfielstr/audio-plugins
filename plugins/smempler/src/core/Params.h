@@ -4,6 +4,9 @@
 
 #include "pluginkit/ParamTable.h"
 
+#include "multidyn/src/core/Params.h"
+#include "perrera/src/core/Params.h"
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -102,9 +105,17 @@ enum ParamId : uint32_t
     // --- added in 0.2 (append only) ---
     kLoopFadePower, // constant-power (on) or linear loop crossfade
     kEnvExtBase,    // per-envelope curves and breakpoints, see envParam()
+    // --- added in 0.5 (append only): the built-in effects after the sampler, see fxParam() ---
+    kFxPerreraOn = kEnvExtBase + 3 * 22,
+    kFxPerreraBase, // perrera::kNumParams entries (Perrera's own IDs, offset)
+    kFxMdOn = kFxPerreraBase + perrera::kNumParams,
+    kFxMdBase, // multidyn::kNumParams entries (with the built-in Smacheratr)
 
-    kNumParams = kEnvExtBase + 3 * 22
+    kNumParams = kFxMdBase + multidyn::kNumParams
 };
+
+constexpr uint32_t perreraParam (uint32_t id) { return kFxPerreraBase + id; }
+constexpr uint32_t multidynParam (uint32_t id) { return kFxMdBase + id; }
 
 // Breakpoint-envelope parameters. Each envelope (0 amp, 1 filter, 2 pitch) owns a block of
 // 22 IDs: curves for attack/decay/release, the breakpoint count, then (time, level, curve)

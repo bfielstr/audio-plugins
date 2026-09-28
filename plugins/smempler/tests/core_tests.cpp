@@ -234,6 +234,51 @@ TEST (fft_roundtrip)
     }
 }
 
+TEST (built_in_effects)
+{
+    // a 440 Hz sample; Perrera's notch between its filters lands on it, and follows the note
+    auto s = sine (440.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    CHECK (e->latency () > 0, "the effects report their latency: %d", e->latency ());
+    e->noteOn (60, 1.0f);
+    auto o = run (*e, 24000);
+    const double dry = rms (o.l, 12000, 24000);
+    e->setParam (kFxPerreraOn, 1.0);
+    e->setParam (perreraParam (perrera::kHpFreq), 880.0);
+    e->setParam (perreraParam (perrera::kLpFreq), 220.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 24000);
+    const double notched = rms (o.l, 12000, 24000);
+    CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
+    // an octave up: the sample plays 880 Hz and the notch tracks up with it
+    e->reset ();
+    e->noteOn (72, 1.0f);
+    o = run (*e, 24000);
+    CHECK (rms (o.l, 12000, 24000) < dry * 0.4, "the notch follows the note: %f", rms (o.l, 12000, 24000));
+    // without key tracking the filters stay put: with the pair two octaves down, 880 Hz passes
+    e->setParam (perreraParam (perrera::kKey), 0.0);
+    e->setParam (perreraParam (perrera::kHpFreq), 220.0);
+    e->setParam (perreraParam (perrera::kLpFreq), 55.0);
+    e->reset ();
+    e->noteOn (72, 1.0f);
+    o = run (*e, 24000);
+    CHECK (rms (o.l, 12000, 24000) > dry * 0.7, "without key tracking 880 Hz passes: %f vs %f", rms (o.l, 12000, 24000), dry);
+    // Multidyn on: its preset lifts a quiet sample
+    e->setParam (kFxPerreraOn, 0.0);
+    e->setParam (kFxMdOn, 1.0);
+    e->setParam (kGain, -30.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    const double lifted = rms (o.l, 24000, 48000);
+    e->setParam (kFxMdOn, 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
+}
+
 TEST (classic_pitch_and_samplerate)
 {
     auto s = sine (440.0, 1.0);

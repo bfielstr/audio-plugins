@@ -19,7 +19,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 1110.0;
-    static constexpr double kHeight = 724.0;
+    static constexpr double kHeight = 904.0;
 
     explicit Editor (Controller* c);
 
@@ -30,6 +30,7 @@ public:
 
     // exposed for tests
     void setEnvTab (int t);
+    void setFxTab (int t);
     void showMenu (VSTGUI::CPoint where);
 
 private:
@@ -58,8 +59,9 @@ private:
     VSTGUI::CView *lfoRateHz = nullptr, *lfoRateSync = nullptr;
     VSTGUI::CViewContainer* envTabs[3] {};
     VSTGUI::CView *ampLoopTime = nullptr, *ampLoopRate = nullptr;
-    std::vector<VSTGUI::CView*> tabButtons;
-    int envTab = 0;
+    std::vector<VSTGUI::CView*> tabButtons, fxTabButtons;
+    VSTGUI::CViewContainer* fxTabs[3] {};
+    int envTab = 0, fxTab = 0;
     std::string lastName;
 };
 

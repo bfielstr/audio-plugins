@@ -28,6 +28,7 @@
 #include "smacheratr/src/core/Engine.h" // the built-in saturator
 
 #include <array>
+#include <vector>
 
 namespace multidyn {
 
@@ -55,6 +56,8 @@ public:
     void setParam (uint32_t id, double plain) { p[id] = plain; }
     double param (uint32_t id) const { return p[id]; }
     int latency () const { return look + sat.latency (); } // look-ahead + saturator, constant for a sample rate
+    // Bypassed, the dry signal passes with the same latency (for the built-in use in Smempler).
+    void setBypass (bool b) { bypass = b; }
 
     // In-place capable. sc may be null (no side-chain connected). All buffers are n samples.
     void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
@@ -96,6 +99,9 @@ private:
     float rmsCoef = 0.0f, rmsCoefC = 0.0f, peakCoef = 0.0f, peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
     smacheratr::Engine sat;
+    bool bypass = false;
+    std::vector<float> bypassDelay[2];
+    int bypassPos = 0;
 };
 
 } // namespace multidyn

@@ -10,6 +10,9 @@
 #include "Slices.h"
 #include "Warp.h"
 
+#include "multidyn/src/core/Engine.h"
+#include "perrera/src/core/Engine.h"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -146,7 +149,14 @@ public:
     double param (uint32_t id) const { return p[id]; }
     const ParamArray& params () const { return p; }
 
-    void setPitchBend (float bipolar) { bend = bipolar; }
+    void setPitchBend (float bipolar)
+    {
+        bend = bipolar;
+        fxPerrera.setPitchBend (bipolar);
+    }
+    // The built-in effects (Perrera, then Multidyn with its Smacheratr) run after the sampler; the
+    // latency is theirs and constant.
+    int latency () const { return fxMultidyn.latency (); }
     void setSustain (bool on);
     void noteOn (int note, float velocity);
     void noteOff (int note);
@@ -166,6 +176,7 @@ private:
     void killGroup (int group);
     void updateSlices ();
     void makeCtx (const HostInfo& host, BlockCtx& c) const;
+    void renderEffects (float* L, float* R, int n);
     bool regionFor (int note, PlayRegion& r) const;
     void computeBeatBounds (const PlayRegion& r);
 
@@ -189,6 +200,8 @@ private:
     double globalLfoPhase = 0.0;
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
+    perrera::Engine fxPerrera;
+    multidyn::Engine fxMultidyn;
 };
 
 } // namespace smempler

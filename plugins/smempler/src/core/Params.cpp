@@ -170,6 +170,23 @@ std::vector<ParamInfo> buildTable ()
                      0.0, Curve::Linear, Disp::Curve));
         }
     }
+    // the built-in effects: their own tables, offset and prefixed (both off by default)
+    add (toggle (kFxPerreraOn, "Perrera On", "Perrera", false));
+    for (uint32_t i = 0; i < perrera::kNumParams; ++i)
+    {
+        ParamInfo pi = perrera::paramTable ().info (i);
+        pi.id = perreraParam (i);
+        pi.name = keep (std::string ("Perrera ") + pi.name);
+        add (pi);
+    }
+    add (toggle (kFxMdOn, "Multidyn On", "Multidyn", false));
+    for (uint32_t i = 0; i < multidyn::kNumParams; ++i)
+    {
+        ParamInfo pi = multidyn::paramTable ().info (i);
+        pi.id = multidynParam (i);
+        pi.name = keep (std::string ("Multidyn ") + pi.name);
+        add (pi);
+    }
     return t;
 }
 

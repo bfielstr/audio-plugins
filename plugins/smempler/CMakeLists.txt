@@ -10,7 +10,7 @@ add_library(smempler_core STATIC
 )
 # Other plug-ins reuse the warp engines as "smempler/src/core/Warp.h"; Smempler's own code includes src/core directly.
 target_include_directories(smempler_core PUBLIC ${CMAKE_SOURCE_DIR}/plugins ${CMAKE_SOURCE_DIR}/third_party/dr_libs PRIVATE src/core)
-target_link_libraries(smempler_core PUBLIC pluginkit_core)
+target_link_libraries(smempler_core PUBLIC pluginkit_core perrera_core multidyn_core) # the built-in effects
 pk_dsp_settings(smempler_core)
 
 add_executable(smempler_tests tests/core_tests.cpp)
