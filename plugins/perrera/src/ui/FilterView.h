@@ -45,7 +45,7 @@ private:
     Drag drag = Drag::None;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRes = 0.0;
-    float shownHp = 0.0f, shownLp = 0.0f, shownEnv = 0.0f;
+    float shownOffset = 0.0f, shownEnv = 0.0f;
     int shownNote = -1;
 };
 

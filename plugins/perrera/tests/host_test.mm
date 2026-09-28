@@ -81,12 +81,15 @@ int main (int argc, char** argv)
         rig.render (1.0, out, nullptr, tone (800.0, 0.25));
         const double notchUp = toneDb (out, 800.0, a, b) + 12.0;
         CHECK (std::fabs (notchUp - notch) < 1.0, "tracked notch %.1f dB (root %.1f)", notchUp, notch);
+        // the low-pass is at 400 Hz now, so two octaves below it passes
         out.clear ();
-        rig.render (1.0, out, nullptr, tone (400.0, 0.25));
-        CHECK (toneDb (out, 400.0, a, b) + 12.0 > -2.0, "400 Hz passes with the note up: %.1f", toneDb (out, 400.0, a, b) + 12.0);
+        rig.render (1.0, out, nullptr, tone (100.0, 0.25));
+        CHECK (toneDb (out, 100.0, a, b) + 12.0 > -2.0, "100 Hz passes with the note up: %.1f", toneDb (out, 100.0, a, b) + 12.0);
 
         // state round trip
         rig.param (kSplit, toNormalized (kSplit, 7.0));
+        out.clear ();
+        rig.render (0.1, out, nullptr, tone (400.0, 0.25));
         MemoryStream saved;
         CHECK (rig.component->getState (&saved) == kResultOk, "getState");
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
@@ -94,6 +97,8 @@ int main (int argc, char** argv)
         CHECK (readState (&saved, back), "readState");
         CHECK (std::fabs (toPlain (kSplit, back.norm[kSplit]) - 7.0) < 1e-6, "split saved");
         rig.param (kSplit, toNormalized (kSplit, 0.0));
+        out.clear ();
+        rig.render (0.1, out, nullptr, tone (400.0, 0.25));
 
         // editor: screenshot while audio is flowing, then gestures
         {

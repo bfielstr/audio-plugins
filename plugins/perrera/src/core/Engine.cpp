@@ -126,6 +126,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     }
     if (meters)
     {
+        meters->offset.store ((float)offset, std::memory_order_relaxed);
         meters->hpHz.store ((float)hpCutoff (hpBase, offset, split), std::memory_order_relaxed);
         meters->lpHz.store ((float)lpCutoff (lpBase, offset, split), std::memory_order_relaxed);
         meters->env.store ((float)envPeak, std::memory_order_relaxed);

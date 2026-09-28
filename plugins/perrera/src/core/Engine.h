@@ -21,6 +21,7 @@ ParamArray defaultParams ();
 struct Meters
 {
     std::atomic<float> hpHz {800.0f}, lpHz {200.0f}; // effective cutoffs, tracking and envelope included
+    std::atomic<float> offset {0.0f};                // semitones the tracked note moves both cutoffs
     std::atomic<float> env {0.0f};                   // envelope level 0 .. 1
     std::atomic<int> note {-1};                      // the note being tracked, -1 = none
 };

@@ -41,11 +41,7 @@ std::string noteName (int note)
 }
 } // namespace
 
-FilterView::FilterView (const CRect& r, pk::ParamHost* h, Controller* c) : CView (r), host (h), controller (c)
-{
-    shownHp = (float)host->plainValue (kHpFreq);
-    shownLp = (float)host->plainValue (kLpFreq);
-}
+FilterView::FilterView (const CRect& r, pk::ParamHost* h, Controller* c) : CView (r), host (h), controller (c) {}
 
 double FilterView::xOfHz (double hz) const
 {
@@ -67,9 +63,11 @@ double FilterView::yOfDb (double db) const
 
 void FilterView::cutoffs (double& hp, double& lp) const
 {
-    // the split parameter always shows; tracking and the envelope come from the processor's meters
-    hp = shownHp > 0.0f ? shownHp : hpCutoff (host->plainValue (kHpFreq), 0.0, host->plainValue (kSplit));
-    lp = shownLp > 0.0f ? shownLp : lpCutoff (host->plainValue (kLpFreq), 0.0, host->plainValue (kSplit));
+    // from the parameters, so edits show at once; the processor adds where the tracked note and
+    // the envelope have moved the filters
+    const double split = host->plainValue (kSplit) + host->plainValue (kEnvAmount) * shownEnv;
+    hp = hpCutoff (host->plainValue (kHpFreq), shownOffset, split);
+    lp = lpCutoff (host->plainValue (kLpFreq), shownOffset, split);
 }
 
 CPoint FilterView::hpHandle () const
@@ -263,13 +261,12 @@ void FilterView::idle ()
     SharedMeters* s = controller->getShared ();
     if (!s)
         return;
-    const float hp = s->meters.hpHz.load (std::memory_order_relaxed), lp = s->meters.lpHz.load (std::memory_order_relaxed);
+    const float offset = s->meters.offset.load (std::memory_order_relaxed);
     const float env = s->meters.env.load (std::memory_order_relaxed);
     const int note = s->meters.note.load (std::memory_order_relaxed);
-    if (std::fabs (hp - shownHp) > 0.5f || std::fabs (lp - shownLp) > 0.5f || std::fabs (env - shownEnv) > 0.01f || note != shownNote)
+    if (std::fabs (offset - shownOffset) > 0.01f || std::fabs (env - shownEnv) > 0.01f || note != shownNote)
     {
-        shownHp = hp;
-        shownLp = lp;
+        shownOffset = offset;
         shownEnv = env;
         shownNote = note;
         invalid ();

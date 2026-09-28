@@ -510,7 +510,8 @@ int main (int argc, char** argv)
             ViewRect r (0, 0, 1665, 900);
             CHECK (v->canResize () == kResultTrue, "resizable");
             v->checkSizeConstraint (&r);
-            CHECK (std::abs (r.getWidth () * 724 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
+            // the editor keeps its aspect ratio (1110 x 904 with the effects strip)
+            CHECK (std::abs (r.getWidth () * 904 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
                    r.getHeight ());
             v->release ();
         }
