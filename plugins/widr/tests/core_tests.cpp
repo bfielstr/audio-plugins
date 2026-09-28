@@ -1,7 +1,9 @@
 // Headless tests for the Widr DSP. Run: ./widr_tests [filter]
 #include "Engine.h"
+#include "Mix.h"
 #include "Params.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -394,6 +396,201 @@ TEST (silence_after_a_burst)
         CHECK (finite && !subnormal, "Character %d: finite %d, subnormal %d", c, finite, subnormal);
         CHECK (last < 1e-6f, "Character %d: dies away (%g after a minute)", c, last);
     }
+}
+
+// --- mix awareness -----------------------------------------------------------------
+TEST (registry_claim_release_and_limit)
+{
+    auto reg = std::make_unique<Registry> ();
+    std::vector<int> slots;
+    for (int i = 0; i < Registry::kSlots; ++i)
+        slots.push_back (reg->claim (reg->newId ()));
+    CHECK (std::all_of (slots.begin (), slots.end (), [] (int s) { return s >= 0; }) && reg->used () == 64, "64 slots claimed");
+    CHECK (reg->claim (reg->newId ()) == -1, "the 65th finds no slot");
+    reg->release (slots[10]);
+    CHECK (reg->used () == 63 && !reg->inUse (slots[10]), "released");
+    const uint64_t id = reg->newId ();
+    CHECK (reg->claim (id) == slots[10] && reg->slot (slots[10]).id.load () == id, "a freed slot is claimed again");
+    CHECK (reg->slot (slots[10]).data.side[3].load () == 0.0f && reg->slot (slots[10]).data.group.load () == 1u, "cleared");
+}
+
+TEST (registry_heartbeat_expiry)
+{
+    auto reg = std::make_unique<Registry> ();
+    Liveness live;
+    const int a = reg->claim (reg->newId ());
+    live.update (*reg, 480, kSr);
+    CHECK (live.alive (a), "a new instance is alive at once");
+    for (int i = 0; i < 90; ++i) // 0.9 s of the reader's audio, beating
+    {
+        reg->beat (a);
+        live.update (*reg, 480, kSr);
+    }
+    CHECK (live.alive (a), "alive while beating");
+    for (int i = 0; i < 90; ++i) // 0.9 s without a beat: still within the second
+        live.update (*reg, 480, kSr);
+    CHECK (live.alive (a), "still alive after 0.9 s of silence");
+    for (int i = 0; i < 20; ++i)
+        live.update (*reg, 480, kSr);
+    CHECK (!live.alive (a), "gone after 1.1 s without a heartbeat");
+    reg->beat (a);
+    live.update (*reg, 480, kSr);
+    CHECK (live.alive (a), "back with the next beat");
+    reg->release (a);
+    live.update (*reg, 480, kSr);
+    CHECK (!live.alive (a), "released: gone");
+}
+
+TEST (negotiation_is_order_independent)
+{
+    std::vector<Peer> peers (7);
+    for (size_t i = 0; i < peers.size (); ++i)
+    {
+        peers[i].id = 100 + (i * 37) % 11;
+        peers[i].role = (int)(i % kNumRoles);
+        for (int k = 0; k < kBands; ++k)
+            peers[i].side[(size_t)k] = (float)(1e-3 * (double)(1 + (i * 7 + (size_t)k * 3) % 13) * (1.0 + 0.1 * white ()));
+    }
+    Peer self;
+    self.id = 105;
+    self.role = kWideRole;
+    for (int k = 0; k < kBands; ++k)
+        self.side[(size_t)k] = 2e-3f;
+    const MixOutcome ref = negotiate (self, peers.data (), (int)peers.size (), 0.7);
+    bool same = true;
+    for (int perm = 0; perm < 20; ++perm)
+    {
+        std::rotate (peers.begin (), peers.begin () + 1 + perm % 3, peers.end ());
+        if (perm % 2)
+            std::reverse (peers.begin (), peers.end ());
+        const MixOutcome o = negotiate (self, peers.data (), (int)peers.size (), 0.7);
+        same &= o.yield == ref.yield && o.roleScale == ref.roleScale && o.mirror == ref.mirror && o.peers == ref.peers;
+    }
+    CHECK (same, "the same outcome in any order");
+    // alone: neutral; Mix Aware 0: nobody yields
+    const MixOutcome alone = negotiate (self, nullptr, 0, 1.0);
+    CHECK (alone.roleScale == 1.0f && alone.mirror == 1.0f && alone.yield[5] == 1.0f, "alone");
+    const MixOutcome deaf = negotiate (self, peers.data (), (int)peers.size (), 0.0);
+    CHECK (std::all_of (deaf.yield.begin (), deaf.yield.end (), [] (float y) { return y == 1.0f; }) && deaf.roleScale == 1.0f,
+           "Mix Aware 0 ignores the others");
+    // the Anchor yields to nobody; twins of one role widen in opposite directions
+    Peer anchor = self;
+    anchor.role = kAnchor;
+    const MixOutcome a = negotiate (anchor, peers.data (), (int)peers.size (), 1.0);
+    CHECK (std::all_of (a.yield.begin (), a.yield.end (), [] (float y) { return y == 1.0f; }) && a.roleScale < 0.5f,
+           "Anchor: no yielding, narrower (%f)", a.roleScale);
+    Peer twinA = self, twinB = self;
+    twinA.id = 1;
+    twinB.id = 2;
+    const MixOutcome ma = negotiate (twinA, &twinB, 1, 1.0), mb = negotiate (twinB, &twinA, 1, 1.0);
+    CHECK (ma.mirror == 1.0f && mb.mirror == -1.0f, "twins mirror: %f / %f", ma.mirror, mb.mirror);
+}
+
+// Two engines in one registry and group: an Anchor with side only between ~500 Hz and 2 kHz, a Wide
+// with full-band material. The Wide gives way in the Anchor's bands only.
+static void anchorAndWide (bool anchorFirst, std::array<float, kBands>& wideGains, int& peersSeen)
+{
+    auto reg = std::make_unique<Registry> ();
+    Engine anchor, wide;
+    anchor.prepare (kSr, 480);
+    wide.prepare (kSr, 480);
+    anchor.setParam (kRole, kAnchor);
+    anchor.setParam (kGuard, 0.0);
+    wide.setParam (kRole, kWideRole);
+    wide.setParam (kGuard, 0.0);
+    wide.setParam (kAware, 1.0);
+    anchor.reset ();
+    wide.reset ();
+    MixMember ma (*reg), mw (*reg);
+    ma.join ();
+    mw.join ();
+    // the Anchor's source: pink noise band-passed to 500 Hz .. 2 kHz
+    gSeed = 99;
+    auto band = pink (6.0, false, 0.3f);
+    {
+        const auto hp = BiquadCoeffs::highPass (600.0, 0.7, kSr), lp = BiquadCoeffs::lowPass (1600.0, 0.7, kSr);
+        Biquad a1, a2, b1, b2;
+        for (auto& v : band.l)
+            v = (float)b2.tick (lp, b1.tick (lp, a2.tick (hp, a1.tick (hp, v))));
+        band.r = band.l;
+    }
+    auto full = pink (6.0, false);
+    std::vector<float> ol (480), outR (480);
+    for (size_t pos = 0; pos + 480 <= band.l.size (); pos += 480)
+    {
+        auto step = [&] (Engine& e, MixMember& m, Sig& in) {
+            e.process (in.l.data () + pos, in.r.data () + pos, ol.data (), outR.data (), 480);
+            m.update (e, 480);
+        };
+        if (anchorFirst)
+        {
+            step (anchor, ma, band);
+            step (wide, mw, full);
+        }
+        else
+        {
+            step (wide, mw, full);
+            step (anchor, ma, band);
+        }
+    }
+    for (int k = 0; k < kBands; ++k)
+        wideGains[(size_t)k] = wide.bandGain (k);
+    peersSeen = ma.peers () + mw.peers ();
+}
+
+TEST (anchor_and_wide_share_the_bands)
+{
+    std::array<float, kBands> g1 {}, g2 {};
+    int seen = 0;
+    anchorAndWide (true, g1, seen);
+    CHECK (seen == 2, "each sees the other (%d)", seen);
+    for (int k = 0; k < kBands; ++k)
+    {
+        const double f = bandHz (k);
+        if (f >= 700.0 && f <= 1300.0)
+            CHECK (g1[(size_t)k] < 0.6f, "the Wide yields at %.0f Hz: %f", f, g1[(size_t)k]);
+        if (f >= 5000.0 && f <= 12000.0)
+            CHECK (g1[(size_t)k] > 0.85f, "and keeps its width at %.0f Hz: %f", f, g1[(size_t)k]);
+    }
+    int s2 = 0;
+    anchorAndWide (false, g2, s2);
+    float diff = 0.0f;
+    for (int k = 0; k < kBands; ++k)
+        diff = std::max (diff, std::fabs (g1[(size_t)k] - g2[(size_t)k]));
+    CHECK (diff < 0.02f, "processing order does not matter: %f", diff);
+}
+
+TEST (groups_are_separate)
+{
+    auto reg = std::make_unique<Registry> ();
+    Engine a, b;
+    a.prepare (kSr, 480);
+    b.prepare (kSr, 480);
+    b.setParam (kGroup, 2.0);
+    MixMember ma (*reg), mb (*reg);
+    CHECK (ma.join () && mb.join (), "joined");
+    auto in = pink (0.1, true);
+    std::vector<float> ol (480), outR (480);
+    for (size_t pos = 0; pos + 480 <= in.l.size (); pos += 480)
+    {
+        a.process (in.l.data () + pos, in.r.data () + pos, ol.data (), outR.data (), 480);
+        ma.update (a, 480);
+        b.process (in.l.data () + pos, in.r.data () + pos, ol.data (), outR.data (), 480);
+        mb.update (b, 480);
+    }
+    CHECK (ma.peers () == 0 && mb.peers () == 0, "different groups: alone (%d, %d)", ma.peers (), mb.peers ());
+    b.setParam (kGroup, 1.0);
+    for (int i = 0; i < 3; ++i)
+    {
+        a.process (in.l.data (), in.r.data (), ol.data (), outR.data (), 480);
+        ma.update (a, 480);
+        b.process (in.l.data (), in.r.data (), ol.data (), outR.data (), 480);
+        mb.update (b, 480);
+    }
+    CHECK (ma.peers () == 1 && mb.peers () == 1, "same group: they meet");
+    mb.leave ();
+    ma.update (a, 480);
+    CHECK (ma.peers () == 0, "left: alone again");
 }
 
 TEST (fuzz_and_automation)

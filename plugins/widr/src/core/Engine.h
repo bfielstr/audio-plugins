@@ -100,9 +100,20 @@ public:
 
     // The negotiation's outcome for the next blocks (smoothed inside).
     void setMixOutcome (const MixOutcome& o) { mix = o; }
-    // What this instance publishes: its generated side and mid energy per band (smoothed).
+    // What the group sees (Mix.h): the generated side per band after this instance's own gains,
+    // what it would generate before yielding, the mid energy (all smoothed), the width it plays at.
     const std::array<float, kBands>& sideEnergy () const { return pubSide; }
+    const std::array<float, kBands>& desiredSide () const { return eG; }
     const std::array<float, kBands>& midEnergy () const { return eM; }
+    double effectiveWidth () const { return p[kWidth] * mix.roleScale; }
+    void reportMix (int peers, int slot)
+    {
+        if (meters)
+        {
+            meters->peers.store (peers, std::memory_order_relaxed);
+            meters->slot.store (slot, std::memory_order_relaxed);
+        }
+    }
     double sampleRate () const { return sr; }
     float correlation () const { return corr; }
     float bandGain (int k) const { return gCur[(size_t)k]; }

@@ -4,6 +4,7 @@ project(Widr VERSION 0.5.0.0)
 add_library(widr_core STATIC
     src/core/Params.cpp
     src/core/Engine.cpp
+    src/core/Mix.cpp
 )
 target_include_directories(widr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(widr_core PUBLIC pluginkit_core smacheratr_core)
