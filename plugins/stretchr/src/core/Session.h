@@ -81,6 +81,8 @@ public:
     // UI: arm, disarm, or (while recording) stop and keep the recording.
     void setArmed (bool on);
     double capturedSeconds () const;
+    // Capture buffers the worker has allocated so far (each holds kChunkFrames frames).
+    int captureChunksReady () const { return chunksReady.load (std::memory_order_acquire); }
     // Audio thread, once per block: records while armed and the transport plays.
     void captureBlock (const float* l, const float* r, int n, long long projectSample, bool isPlaying,
                        double sampleRate);

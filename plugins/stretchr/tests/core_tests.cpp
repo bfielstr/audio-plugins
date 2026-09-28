@@ -641,7 +641,8 @@ TEST (session_capture_records_the_transport)
     // nothing is recorded while stopped
     s->captureBlock (in.data (), inR.data (), 480, startPos, false, kSr);
     CHECK (s->captureState () == Session::kArmed, "still armed while stopped");
-    std::this_thread::sleep_for (std::chrono::milliseconds (50)); // the worker allocates capture buffers
+    // the worker allocates the capture buffers: wait for enough of them for 1.5 s, however busy the machine
+    CHECK (waitFor ([&] { return s->captureChunksReady () >= 3; }), "capture buffers ready");
     for (size_t i = 0; i + 480 <= in.size (); i += 480)
         s->captureBlock (in.data () + i, inR.data () + i, 480, startPos + (long long)i, true, kSr);
     CHECK (s->captureState () == Session::kRecording, "recording");
@@ -663,7 +664,7 @@ TEST (session_capture_records_the_transport)
     // a loop jump ends a recording
     s->setArmed (true);
     waitFor ([&] { return s->captureState () == Session::kArmed; });
-    std::this_thread::sleep_for (std::chrono::milliseconds (50));
+    CHECK (waitFor ([&] { return s->captureChunksReady () >= 1; }), "capture buffers ready");
     for (int b = 0; b < 20; ++b)
         s->captureBlock (in.data (), inR.data (), 480, 480LL * b, true, kSr);
     s->captureBlock (in.data (), inR.data (), 480, 0, true, kSr); // jumped back
@@ -673,7 +674,7 @@ TEST (session_capture_records_the_transport)
     // stop requested while the host has stopped calling process
     s->setArmed (true);
     waitFor ([&] { return s->captureState () == Session::kArmed; });
-    std::this_thread::sleep_for (std::chrono::milliseconds (50));
+    CHECK (waitFor ([&] { return s->captureChunksReady () >= 1; }), "capture buffers ready");
     s->processBegin ();
     for (int b = 0; b < 20; ++b)
         s->captureBlock (in.data (), inR.data (), 480, 480LL * b, true, kSr);
