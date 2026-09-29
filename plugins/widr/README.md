@@ -66,5 +66,5 @@ vertical line) and a **correlation** meter (+1 mono, 0 unrelated, below 0 it can
 
 **Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB).
 
-Latency: 1.7 ms (83 samples at 48 kHz, the saturator's, constant whether it is on or off), reported
-to the host for automatic compensation.
+Latency: about 1.8 ms (85 samples at 48 kHz, the saturator's, constant whether it is on or off),
+reported to the host for automatic compensation.

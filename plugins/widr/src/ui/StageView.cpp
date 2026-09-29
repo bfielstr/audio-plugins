@@ -197,7 +197,7 @@ void StageView::draw (CDrawContext* ctx)
     for (const auto& [k, name] : ticks)
         text (ctx, name, CRect (s.left + k * bw + 2, s.bottom - 13, s.left + k * bw + 42, s.bottom - 1), theme::kTextDim, 9.0,
               kLeftText);
-    text (ctx, "per band: orange = side kept, blue = given to the group", CRect (s.right - 290, s.bottom - 13, s.right - 4, s.bottom - 1),
+    text (ctx, "bands: orange = width kept, blue = given to the group", CRect (f.right - 290, f.top + 4, f.right - 8, f.top + 18),
           theme::kTextDim, 9.0, kRightText);
     if (shown.size () <= 1)
         text (ctx, "Alone: no other Widr in this group (instances in other processes cannot be seen)",

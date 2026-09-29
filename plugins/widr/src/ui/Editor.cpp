@@ -79,7 +79,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (wp);
     wp->addView (new Label (CRect (14, 24, 254, 38), "Character", 10.5, false, 1));
     bind (wp, new Segmented (CRect (14, 42, 254, 66), this, kCharacter, {"Tight", "Wide", "Epic", "Surround"}));
-    bind (wp, new Knob (CRect (270, 18, 350, 118), this, kWidth));
+    bind (wp, new Knob (CRect (270, 18, 350, 118), this, widr::kWidth)); // (Editor::kWidth is the window)
     bind (wp, new Knob (knobAt (380, 30), this, kAir));
     bind (wp, new Knob (knobAt (460, 30), this, kBeyond));
     bind (wp, new Knob (knobAt (540, 30), this, kMonoBelow));
