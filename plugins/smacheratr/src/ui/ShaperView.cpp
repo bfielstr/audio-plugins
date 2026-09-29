@@ -125,6 +125,19 @@ void ShaperView::draw (CDrawContext* ctx)
     else
         std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
+    // Clarity at work: how far the low mids are turned down before the curve
+    if (host->plainValue (kClarity) >= 0.5)
+    {
+        const CColor c (120, 210, 140);
+        const double cut = std::clamp (-(double)shownClarity, 0.0, 8.0);
+        std::snprintf (buf, sizeof (buf), "Clarity %.1f dB", -cut);
+        text (ctx, buf, CRect (all.right - 120, all.top + 4, all.right - 6, all.top + 18), c, 9.5, kRightText, true);
+        const CRect bar (all.right - 86, all.top + 21, all.right - 6, all.top + 25);
+        ctx->setFillColor (CColor (255, 255, 255, 20));
+        ctx->drawRect (bar, kDrawFilled);
+        ctx->setFillColor (c);
+        ctx->drawRect (CRect (bar.right - bar.getWidth () * cut / 8.0, bar.top, bar.right, bar.bottom), kDrawFilled);
+    }
     if (shownIn > 1e-4f)
     {
         std::snprintf (buf, sizeof (buf), "in %s  out %s", levelText (shownIn).c_str (), levelText (shownOut).c_str ());
@@ -193,6 +206,7 @@ void ShaperView::idle ()
     auto ease = [] (float& v, float t, float up, float dn) { v += (t - v) * (t > v ? up : dn); };
     ease (shownIn, m->inPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
     ease (shownOut, m->outPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
+    ease (shownClarity, m->clarityDb.load (std::memory_order_relaxed), 0.3f, 0.3f);
     if (shownIn < 1e-4f)
         shownIn = 0.0f;
     invalid ();

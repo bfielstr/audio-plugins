@@ -40,6 +40,7 @@ private:
     VSTGUI::CView* valueBoxes[4][6] {}; // below thr / ratio, above thr / ratio, attack, release
     VSTGUI::CView* xoverBoxes[3] {};
     pk::Label* scStatus = nullptr;
+    pk::NumberBox* rmsWindowBox = nullptr; // dimmed with the Peak detector
 };
 
 } // namespace multidyn

@@ -40,7 +40,7 @@ private:
     bool dragging = false;
     VSTGUI::CPoint down;
     double startDriveN = 0.0;
-    float shownIn = 0.0f, shownOut = 0.0f;
+    float shownIn = 0.0f, shownOut = 0.0f, shownClarity = 0.0f;
 };
 
 } // namespace smacheratr

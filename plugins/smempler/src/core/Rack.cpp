@@ -23,9 +23,65 @@ const pk::ParamTable& paramTable ()
 }
 } // namespace mseq
 
-static_assert (kSlotBlock >= multidyn::kNumParams && kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams &&
-                   kSlotBlock >= smacheratr::kNumParams && kSlotBlock >= mseq::kNumParams,
+static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams &&
+                   kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
+// Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
+static_assert (multidyn::kNumParams == kSlotBlock + 2 && multidyn::kRmsWindow == kSlotBlock &&
+                   multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1,
+               "Multidyn grew: give its new parameters places in the block");
+
+int64_t fxIdAt (int type, uint32_t j)
+{
+    if (type == kFxMultidyn)
+    {
+        if (j == multidyn::kSatOn)
+            return multidyn::kRmsWindow;
+        if (j == multidyn::kSatPreLimit)
+            return multidyn::kSoften;
+        if (j > multidyn::kSatPreLimit && j <= multidyn::kSatPreLimitThreshold)
+            return -1;
+    }
+    return j < fxBlockTable (type).size () ? (int64_t)j : -1;
+}
+
+int64_t fxBlockOf (int type, uint32_t id)
+{
+    if (type == kFxMultidyn)
+    {
+        if (id == multidyn::kRmsWindow)
+            return multidyn::kSatOn;
+        if (id == multidyn::kSoften)
+            return multidyn::kSatPreLimit;
+        if (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold)
+            return -1;
+    }
+    return id < fxBlockTable (type).size () ? (int64_t)id : -1;
+}
+
+const pk::ParamTable& fxBlockTable (int type)
+{
+    if (type != kFxMultidyn)
+        return fxTable (type);
+    static const pk::ParamTable t ([] {
+        const auto& md = multidyn::paramTable ();
+        std::vector<pk::ParamInfo> v;
+        for (uint32_t j = 0; j < kSlotBlock; ++j)
+        {
+            // the saturator's places that nothing uses keep its entries
+            uint32_t id = j;
+            if (j == multidyn::kSatOn)
+                id = multidyn::kRmsWindow;
+            else if (j == multidyn::kSatPreLimit)
+                id = multidyn::kSoften;
+            pk::ParamInfo pi = md.info (id);
+            pi.id = j;
+            v.push_back (pi);
+        }
+        return v;
+    }());
+    return t;
+}
 
 const char* fxName (int type)
 {
@@ -99,12 +155,14 @@ void Rack::setMeters (RackMeters* m)
     }
 }
 
-void Rack::apply (Slot& s, uint32_t j)
+void Rack::apply (Slot& s, uint32_t block)
 {
-    const auto& t = fxTable (s.type);
-    if (j >= t.size ())
+    const auto& t = fxBlockTable (s.type);
+    const int64_t id = fxIdAt (s.type, block);
+    if (block >= t.size () || id < 0)
         return;
-    const double v = t.toPlain (j, std::clamp (s.norm[j], 0.0, 1.0));
+    const double v = t.toPlain (block, std::clamp (s.norm[block], 0.0, 1.0));
+    const auto j = (uint32_t)id;
     switch (s.type)
     {
         case kFxPara: s.para.setParam (j, v); break;

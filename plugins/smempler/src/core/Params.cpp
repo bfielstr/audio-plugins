@@ -180,7 +180,7 @@ std::vector<ParamInfo> buildTable ()
         add (pi);
     }
     add (toggle (kFxMdOn, "Old Multidyn On", "Multidyn", false));
-    for (uint32_t i = 0; i < multidyn::kNumParams; ++i)
+    for (uint32_t i = 0; i < kLegacyMdParams; ++i)
     {
         ParamInfo pi = multidyn::paramTable ().info (i);
         pi.id = multidynParam (i);
@@ -194,7 +194,7 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kMsSideGain, "Old Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (fl (kMsMidGain, "Old Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
-    pk::addTailParams (t, kTailBase);
+    pk::addTailParams (t, kTailBase, true); // on by default in Smempler (Drive 0 dB)
     add (toggle (kParaTransposeLock, "Old Para Transpose Lock", "Lock", false));
     add (toggle (kParaDragGain, "Old Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Old Para Liquid", "Liquid", false));

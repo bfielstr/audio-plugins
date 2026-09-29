@@ -14,7 +14,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534d5052; // 'SMPR'
-constexpr int32 kVersion = 1;
+// 2: Multidyn's RMS Window and Soften in its rack slots (they read 0 in a version 1 state)
+constexpr int32 kVersion = 2;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -101,6 +102,20 @@ bool readState (IBStream* stream, PluginState& st)
         st.has[kLoopFadePower] = true;
     }
     migrateToRack (st);
+    if (version < 2)
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (!st.has[typeId] || std::lround (toPlain (typeId, st.norm[typeId])) != kFxMultidyn)
+                continue;
+            const auto& t = fxBlockTable (kFxMultidyn);
+            for (uint32_t id : {multidyn::kRmsWindow, multidyn::kSoften})
+            {
+                const auto j = (uint32_t)fxBlockOf (kFxMultidyn, id);
+                st.norm[slotBlockParam (slot, j)] = t.defaultNormalized (j);
+                st.has[slotBlockParam (slot, j)] = true;
+            }
+        }
     return true;
 }
 
@@ -143,8 +158,11 @@ void migrateToRack (PluginState& st)
     }
     if (legacyOn (kFxMdOn))
     {
-        const auto& t = multidyn::paramTable ();
-        put (kFxMultidyn, t, [&] (uint32_t j) { return old (multidynParam (j), t, j); });
+        const auto& t = fxBlockTable (kFxMultidyn);
+        put (kFxMultidyn, t, [&] (uint32_t j) {
+            const int64_t id = fxIdAt (kFxMultidyn, j);
+            return id >= 0 && id < (int64_t)kLegacyMdParams ? old (multidynParam ((uint32_t)id), t, j) : t.defaultNormalized (j);
+        });
         st.norm[kFxMdOn] = 0.0;
     }
     if (legacyOn (kMsOn))

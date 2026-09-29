@@ -63,6 +63,8 @@ std::vector<ParamInfo> buildTable ()
                    kSatPostClip == kSatOn + pk::kTailPostClip && kSatMix == kSatOn + pk::kTailMix &&
                    kSatPreLimitThreshold == kSatOn + pk::kTailThreshold);
     pk::addTailParams (t, kSatOn);
+    t.push_back (real (kRmsWindow, "RMS Window", "RMS", 5.0, 300.0, 20.0, Curve::Log, Disp::Ms));
+    t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
     return t;
 }
 

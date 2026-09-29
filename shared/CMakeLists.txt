@@ -1,8 +1,11 @@
 # pluginkit: code shared by all plug-ins.
 
 # Parameter tables (no SDK dependency, used by DSP tests too).
-add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h)
+add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp)
 target_include_directories(pluginkit_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+if(WIN32)
+    target_link_libraries(pluginkit_core PUBLIC dbghelp)
+endif()
 pk_dsp_settings(pluginkit_core)
 
 if(PK_BUILD_PLUGINS)

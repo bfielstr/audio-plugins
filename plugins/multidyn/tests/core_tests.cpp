@@ -549,6 +549,69 @@ TEST (rms_ignores_short_peaks_more_than_peak)
     CHECK (peak < rms - 3.0f, "peak mode should react more to clicks: peak %f rms %f", peak, rms);
 }
 
+TEST (rms_window_sets_the_detector_speed)
+{
+    // a level step into downward compression: a short RMS window catches it sooner than a long one
+    auto gainAfter = [] (double windowMs, double ms) {
+        auto e = engine ();
+        e->setParam (kDetector, kRms);
+        e->setParam (kRmsWindow, windowMs);
+        e->setParam (bandParam (kOnly, kAboveRatio), 4.0);
+        e->setParam (bandParam (kOnly, kAboveThresh), -30.0);
+        e->setParam (bandParam (kOnly, kAttack), 1.0);
+        Sig in = sine (1000.0, -50.0, 0.5);
+        Sig loud = sine (1000.0, -6.0, 0.5);
+        in.l.insert (in.l.end (), loud.l.begin (), loud.l.end ());
+        in.r.insert (in.r.end (), loud.r.begin (), loud.r.end ());
+        auto out = run (*e, in);
+        const size_t at = (size_t)((0.5 + ms * 0.001) * kSr);
+        return rmsDb (out.l, at, at + 96) - rmsDb (in.l, at, at + 96);
+    };
+    const double fast = gainAfter (5.0, 15.0), slow = gainAfter (200.0, 15.0);
+    std::printf ("    15 ms after the step: %.1f dB (5 ms window), %.1f dB (200 ms window)\n", fast, slow);
+    CHECK (fast < slow - 3.0, "a short window compresses sooner: %.1f vs %.1f dB", fast, slow);
+    const double fastLate = gainAfter (5.0, 400.0), slowLate = gainAfter (200.0, 400.0);
+    CHECK (std::fabs (fastLate - slowLate) < 1.5, "both settle to the same gain: %.1f vs %.1f dB", fastLate, slowLate);
+    CHECK (paramTable ().info (kRmsWindow).def == 20.0, "20 ms by default");
+}
+
+TEST (soften_tames_the_lifted_top_band)
+{
+    // the preset's top band lifts everything quiet up to its Below threshold, 5.3 dB under Above: Soften
+    // low-passes the lifted part, so quiet hiss at 14 kHz comes out much lower while 3.5 kHz barely moves
+    auto measure = [] (double soften, double f) {
+        Engine e;
+        e.prepare (kSr, 512);
+        e.setParam (kSoften, soften);
+        Sig in = sine (3500.0, -60.0, 2.0);
+        Sig hi = sine (14000.0, -60.0, 2.0);
+        for (size_t i = 0; i < in.l.size (); ++i)
+        {
+            in.l[i] += hi.l[i];
+            in.r[i] += hi.r[i];
+        }
+        auto out = run (e, in);
+        return toneDb (out.l, f, 48000, 96000);
+    };
+    const double hiOff = measure (0.0, 14000.0), hiOn = measure (1.0, 14000.0);
+    const double loOff = measure (0.0, 3500.0), loOn = measure (1.0, 3500.0);
+    std::printf ("    14 kHz: %.1f -> %.1f dB, 3.5 kHz: %.1f -> %.1f dB\n", hiOff, hiOn, loOff, loOn);
+    CHECK (hiOn < hiOff - 6.0, "the lifted air is softened: %.1f vs %.1f dB", hiOn, hiOff);
+    CHECK (loOn > loOff - 3.0, "the top band's body stays: %.1f vs %.1f dB", loOn, loOff);
+    // far-apart thresholds: Soften does nothing
+    auto apart = [] (double soften) {
+        Engine e;
+        e.prepare (kSr, 512);
+        e.setParam (kSoften, soften);
+        e.setParam (bandParam (2, kBelowThresh), -60.0);
+        e.setParam (bandParam (2, kAboveThresh), -20.0);
+        auto out = run (e, sine (14000.0, -50.0, 1.0));
+        return toneDb (out.l, 14000.0, 24000, 48000);
+    };
+    CHECK (std::fabs (apart (1.0) - apart (0.0)) < 0.05, "no effect 40 dB apart: %.2f vs %.2f dB", apart (1.0), apart (0.0));
+    CHECK (std::fabs (paramTable ().info (kSoften).def - 0.5) < 1e-9, "50 %% by default");
+}
+
 TEST (band_active_solo_and_gains)
 {
     auto e = engine (false);

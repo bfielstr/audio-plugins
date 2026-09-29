@@ -49,7 +49,7 @@ public:
     }
     void toString (ParamValue n, String128 string) const override
     {
-        const auto& t = fxTable (ctl->slotType (slot));
+        const auto& t = fxBlockTable (ctl->slotType (slot));
         if (index >= t.size ())
         {
             pk::TableParameter::toString (n, string);
@@ -59,7 +59,7 @@ public:
     }
     bool fromString (const TChar* string, ParamValue& n) const override
     {
-        const auto& t = fxTable (ctl->slotType (slot));
+        const auto& t = fxBlockTable (ctl->slotType (slot));
         if (index >= t.size ())
             return pk::TableParameter::fromString (string, n);
         double v;
@@ -98,7 +98,7 @@ void Controller::retitleSlot (int slot)
     if (titledType[(size_t)slot] == type)
         return;
     titledType[(size_t)slot] = type;
-    const auto& t = fxTable (type);
+    const auto& t = fxBlockTable (type);
     for (uint32_t j = 0; j < kSlotBlock; ++j)
         if (auto* prm = parameters.getParameter (slotBlockParam (slot, j)))
         {

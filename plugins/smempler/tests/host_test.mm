@@ -444,7 +444,7 @@ int main (int argc, char** argv)
         auto loadFx = [&] (int slot, int type) {
             rig.param (slotParam (slot, smempler::kSlotType), smempler::toNormalized (slotParam (slot, smempler::kSlotType), type));
             rig.param (slotParam (slot, smempler::kSlotOn), 1.0);
-            const auto& t = smempler::fxTable (type);
+            const auto& t = smempler::fxBlockTable (type);
             for (uint32_t j = 0; j < smempler::kSlotBlock; ++j)
                 rig.param (smempler::slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
         };

@@ -34,7 +34,14 @@ const pk::ParamTable& paramTable ();
 
 const char* fxName (int type); // "para", ...; "" for Empty
 // The table a kind reads its block through (an empty table for Empty).
-const pk::ParamTable& fxTable (int type);
+const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
+// A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
+// added after the rack (RMS Window, Soften) sit where its saturator's are (not used in the rack):
+// the block has room for 62. fxBlockTable is the table by block position; fxIdAt and fxBlockOf
+// convert (-1: none).
+const pk::ParamTable& fxBlockTable (int type);
+int64_t fxIdAt (int type, uint32_t block);
+int64_t fxBlockOf (int type, uint32_t id);
 
 // What the rack's effects show in the editor, per slot.
 struct RackMeters

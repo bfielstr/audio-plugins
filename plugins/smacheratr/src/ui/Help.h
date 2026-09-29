@@ -30,9 +30,10 @@ inline const char* forParam (uint32_t id)
         case kHiQuality: return "Runs the curve 4x oversampled to reduce aliasing (a little more CPU).";
         case kDcFilter: return "Removes DC offset from the input before the curve.";
         case kClarity:
-            return "Keeps a hard-pushed drive from going muddy: when the low mids (around 320 Hz) hit the curve hard "
-                   "they are turned down before it (up to 8 dB, only when pushed), and the lows go into the curve "
-                   "4 dB down and are lifted back after it, so the bass drives it less but keeps its level.";
+            return "A low-mid compressor that keeps a hard-pushed drive from going muddy: when the low mids (around "
+                   "320 Hz) hit the curve hard they are turned down before it (up to 8 dB, only when pushed) and after "
+                   "it by half as much, and the lows go into the curve 4 dB down and are lifted back after it, so the "
+                   "bass drives it less but keeps its level. The display shows the cut (top right) while it is on.";
         case kMidSide:
             return "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound "
                    "stays wide when you push the drive (Menu).";

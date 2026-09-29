@@ -73,6 +73,7 @@ void Editor::onClose ()
 {
     display = nullptr;
     scStatus = nullptr;
+    rmsWindowBox = nullptr;
     for (int b = 0; b < kMaxBands; ++b)
     {
         nameLabels[b] = nullptr;
@@ -140,14 +141,16 @@ void Editor::buildUI (CFrame* f)
         xoverBoxes[x] = bind (root, new NumberBox (none, this, (uint32_t)(kXover1 + x)));
 
     // global column
-    bind (root, new Knob (knobRect (kGlobalColLeft, 44), this, kOutput, nullptr, true));
-    bind (root, new Knob (knobRect (kGlobalColLeft, 132), this, kTime));
-    bind (root, new Knob (knobRect (kGlobalColLeft, 220), this, kAmount));
+    bind (root, new Knob (knobRect (kGlobalColLeft, 40), this, kOutput, nullptr, true));
+    bind (root, new Knob (knobRect (kGlobalColLeft, 114), this, kTime));
+    bind (root, new Knob (knobRect (kGlobalColLeft, 188), this, kAmount));
+    bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
 
     // bottom row
     bind (root, new Segmented (CRect (8, 352, 128, 372), this, kMode, {"Base", "Character"}));
     bind (root, new Toggle (CRect (136, 352, 218, 372), this, kSoftKnee, "Soft Knee"));
-    bind (root, new Segmented (CRect (226, 352, 338, 372), this, kDetector, {"Peak", "RMS"}));
+    bind (root, new Segmented (CRect (226, 352, 292, 372), this, kDetector, {"Peak", "RMS"}));
+    rmsWindowBox = bind (root, new NumberBox (CRect (296, 353, 344, 371), this, kRmsWindow));
     auto* sp = new Panel (CRect (350, 344, 640, 416), "SIDECHAIN");
     root->addView (sp);
     bind (sp, new Toggle (CRect (12, 30, 66, 50), this, kScOn, "On"));
@@ -163,6 +166,7 @@ void Editor::buildUI (CFrame* f)
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
+    rmsWindowBox->setEnabledLook (std::lround (plainValue (kDetector)) == kRms);
     idle ();
 }
 
@@ -225,6 +229,8 @@ void Editor::paramChanged (uint32_t id)
         display->invalid ();
     if (id == kBands)
         updateLayout ();
+    if (id == kDetector && rmsWindowBox)
+        rmsWindowBox->setEnabledLook (std::lround (plainValue (kDetector)) == kRms);
 }
 
 void Editor::idle ()

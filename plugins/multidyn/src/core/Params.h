@@ -35,6 +35,8 @@ enum ParamId : uint32_t
     kSatPostClip,               // No / Soft / Hard Clip
     kSatMix,                    // dry/wet
     kSatPreLimitThreshold,      // dB
+    kRmsWindow,                 // ms, the RMS detector's window (Character: 2.5 times as long)
+    kSoften,                    // the top band: softens what upward compression lifts as its thresholds close in
 
     kNumParams
 };

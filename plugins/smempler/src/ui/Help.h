@@ -39,7 +39,7 @@ inline const char* forParam (uint32_t id)
         return para::help::forParam (para::kNotch);
     if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         return para::help::forParam (id - kFxParaBase);
-    if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
+    if (id >= kFxMdBase && id < kFxMdBase + kLegacyMdParams)
         return multidyn::help::forParam (id - kFxMdBase);
     switch (id)
     {

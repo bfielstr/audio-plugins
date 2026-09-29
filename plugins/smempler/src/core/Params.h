@@ -20,7 +20,9 @@ namespace smempler {
 // the same whatever is loaded where.
 enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kNumFxTypes };
 constexpr int kRackSlots = 8;
-constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn)
+constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn, see fxBlockTable)
+// Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
+constexpr uint32_t kLegacyMdParams = 62;
 enum SlotField : uint32_t { kSlotType = 0, kSlotOn, kSlotParams };
 constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
 
@@ -120,8 +122,8 @@ enum ParamId : uint32_t
     kFxParaOn = kEnvExtBase + 3 * 22,
     kFxParaBase, // para::kHostedParams entries (Para's own IDs, offset)
     kFxMdOn = kFxParaBase + para::kHostedParams,
-    kFxMdBase, // multidyn::kNumParams entries (its own end-of-chain saturator is not used here)
-    kMsOn = kFxMdBase + multidyn::kNumParams, // mid/side EQ after the effects
+    kFxMdBase, // kLegacyMdParams entries (its own end-of-chain saturator is not used here)
+    kMsOn = kFxMdBase + kLegacyMdParams, // mid/side EQ after the effects
     kMsSideHp,   // Hz, high-pass on the side signal
     kMsSlope,    // 6 / 12 / 24 dB per octave
     kMsSideGain, // dB

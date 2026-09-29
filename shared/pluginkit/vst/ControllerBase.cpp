@@ -1,5 +1,7 @@
 #include "ControllerBase.h"
 
+#include "pluginkit/CrashDump.h"
+
 #include "EditorBase.h"
 #include "Presets.h"
 
@@ -55,6 +57,7 @@ tresult PLUGIN_API ControllerBase::initialize (FUnknown* context)
     const tresult r = EditController::initialize (context);
     if (r != kResultOk)
         return r;
+    installCrashDump (); // a crash in this plug-in leaves a dump in Documents/bfielstr/CrashDumps
     for (uint32_t id = 0; id < tableRef.size (); ++id)
         parameters.addParameter (makeParameter (id));
     return kResultOk;

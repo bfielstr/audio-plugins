@@ -32,6 +32,14 @@ inline const char* forParam (uint32_t id)
         case kSatMix: return "Dry/wet of the built-in saturator.";
         case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";
         case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
+        case kRmsWindow:
+            return "RMS detector: how long a stretch of audio the level is averaged over. Short follows the audio closely, "
+                   "long is smoother and lets transients through. Character mode uses 2.5 times this (50 ms at the default).";
+        case kSoften:
+            return "Keeps a squashed top band from sounding noisy and grainy. The closer the top band's Below threshold is "
+                   "to its Above threshold, the more the hiss and air that upward compression lifts is softened (a low-pass "
+                   "on the lifted part only), and the gain changes are rounded off. Fully at work 6 dB apart or closer "
+                   "(the defaults), nothing happens 18 dB or more apart.";
         case kBands: return "Number of frequency bands (1 = a single full-range processor).";
         case kXover1: return "Crossover between bands 1 and 2.";
         case kXover2: return "Crossover between bands 2 and 3.";

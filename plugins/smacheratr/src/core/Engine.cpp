@@ -24,6 +24,7 @@ void Engine::Channel::reset ()
 {
     lmSense.reset ();
     lmCut.reset ();
+    lmCutPost.reset ();
     clarityPre.reset ();
     clarityPost.reset ();
     dc.reset ();
@@ -166,6 +167,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             {
                 meters->inPeak.store (0.0f, std::memory_order_relaxed);
                 meters->outPeak.store (0.0f, std::memory_order_relaxed);
+                meters->clarityDb.store (0.0f, std::memory_order_relaxed);
             }
         }
         return;
@@ -227,7 +229,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     }
 
     // Clarity, when the drive pushes the low mids (around 320 Hz) past -18 dBFS into the curve, they are
-    // turned down before it (3 dB for every 5 over, at most 8 dB), so they do not pile up into mud;
+    // turned down before it (3 dB for every 5 over, at most 8 dB), so they do not pile up into mud,
+    // and after it by half as much (the curve squashes the cut before it back up);
     // and the lows go into the curve 4 dB down and are lifted back after it, so the bass drives the
     // curve less (less intermodulation) but keeps its level.
     const bool clarity = p[kClarity] >= 0.5;
@@ -240,6 +243,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         {
             c.lmSense.reset ();
             c.lmCut.reset ();
+            c.lmCutPost.reset ();
             c.clarityPre.reset ();
             c.clarityPost.reset ();
         }
@@ -248,9 +252,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     {
         const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv));
         lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, 8.0);
-        const BiquadCoeffs cut = peak (sr, 320.0, -lmCutDb, 0.8);
+        const BiquadCoeffs cut = peak (sr, 320.0, -lmCutDb, 0.8), cutPost = peak (sr, 320.0, -0.5 * lmCutDb, 0.8);
         for (auto& c : chan)
+        {
             c.lmCut.c = cut;
+            c.lmCutPost.c = cutPost;
+        }
     }
 
     // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
@@ -314,7 +321,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
         if (clarity)
             for (int i = 0; i < n; ++i)
-                wet[(size_t)i] = (float)ch.clarityPost.process (wet[(size_t)i]);
+                wet[(size_t)i] = (float)ch.lmCutPost.process (ch.clarityPost.process (wet[(size_t)i]));
         for (int i = 0; i < n; ++i)
         {
             const float w = wet[(size_t)i], m = gMix[(size_t)i];
@@ -326,6 +333,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     {
         meters->inPeak.store (inPk, std::memory_order_relaxed);
         meters->outPeak.store (outPk, std::memory_order_relaxed);
+        meters->clarityDb.store (clarity ? -lmCutDb : 0.0f, std::memory_order_relaxed);
     }
 }
 

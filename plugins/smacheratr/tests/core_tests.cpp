@@ -412,8 +412,18 @@ TEST (clarity_keeps_the_low_mids_clean)
         auto out = run (*e, in);
         return toneDb (out.l, f, 24000, 48000);
     };
-    CHECK (measure (14.0, true, 320.0) < measure (14.0, false, 320.0) - 2.0, "pushed: the low mids come down: %.1f vs %.1f dB",
+    CHECK (measure (14.0, true, 320.0) < measure (14.0, false, 320.0) - 3.5, "pushed: the low mids come down: %.1f vs %.1f dB",
            measure (14.0, true, 320.0), measure (14.0, false, 320.0));
+    {
+        // the meter shows the cut
+        Meters m;
+        auto e = engine ();
+        e->setMeters (&m);
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        run (*e, in);
+        CHECK (m.clarityDb.load () < -3.0 && m.clarityDb.load () >= -8.0, "Clarity meter %.1f dB", m.clarityDb.load ());
+    }
     // the curve is symmetric, so its intermodulation is odd-order: 320 -+ 2 x 80 = 160 and 480 Hz
     for (double f : {160.0, 480.0})
     {

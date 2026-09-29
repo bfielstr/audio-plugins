@@ -407,7 +407,8 @@ void Editor::setNorm (uint32_t id, double v)
         const uint32_t field = (id - kRackBase) % kSlotSize;
         if (field >= kSlotParams && ctl->slotType (slot) == kFxMultidyn)
             if (auto* h = hostFor (slot))
-                multidyn::pushThresholds (*h, field - kSlotParams, v);
+                if (const int64_t mdId = fxIdAt (kFxMultidyn, field - kSlotParams); mdId >= 0)
+                    multidyn::pushThresholds (*h, (uint32_t)mdId, v);
     }
 }
 
@@ -526,9 +527,9 @@ pk::MappedParamHost* Editor::hostFor (int slot)
     auto& h = slotHosts[(size_t)slot];
     if (!h || slotHostType[(size_t)slot] != type)
     {
-        const uint32_t n = (uint32_t)fxTable (type).size ();
-        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, n] (uint32_t id) -> int64_t {
-            return id < n ? (int64_t)slotBlockParam (slot, id) : -1;
+        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) -> int64_t {
+            const int64_t j = fxBlockOf (type, id);
+            return j < 0 ? -1 : (int64_t)slotBlockParam (slot, (uint32_t)j);
         });
         slotHostType[(size_t)slot] = type;
     }
@@ -550,7 +551,7 @@ void Editor::addFx (int type)
     if (slot < 0 || type <= kFxEmpty || type >= kNumFxTypes)
         return;
     // the effect with its own defaults, on
-    const auto& t = fxTable (type);
+    const auto& t = fxBlockTable (type);
     setOnce (slotParam (slot, kSlotType), paramTable ().toNormalized (slotParam (slot, kSlotType), (double)type));
     setOnce (slotParam (slot, kSlotOn), 1.0);
     for (uint32_t j = 0; j < kSlotBlock; ++j)
@@ -769,8 +770,13 @@ void Editor::buildBody ()
             for (int x = 0; x < 3; ++x)
                 add (new NumberBox (CRect (608 + x * 74, 94, 676 + x * 74, 112), h, (uint32_t)(kXover1 + x)), tip ((uint32_t)(kXover1 + x)));
             add (new Knob (knobRect (608, 122), h, kAmount), tip (kAmount));
-            add (new Knob (knobRect (672, 122), h, kTime), tip (kTime));
-            add (new Knob (knobRect (736, 122), h, kOutput, nullptr, true), tip (kOutput));
+            add (new Knob (knobRect (664, 122), h, kTime), tip (kTime));
+            add (new Knob (knobRect (720, 122), h, kOutput, nullptr, true), tip (kOutput));
+            add (new Knob (knobRect (776, 122), h, kSoften), tip (kSoften));
+            auto* rl = new Label (CRect (608, 198, 660, 214), "RMS window", 9.5, true, 0);
+            rl->setDim (true);
+            g->addView (rl);
+            add (new NumberBox (CRect (664, 196, 720, 214), h, kRmsWindow), tip (kRmsWindow));
             mdLayoutHost = h;
             updateMdLayout ();
             break;

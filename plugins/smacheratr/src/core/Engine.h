@@ -30,6 +30,7 @@ struct Meters
 {
     std::atomic<float> inPeak {0.0f};
     std::atomic<float> outPeak {0.0f};
+    std::atomic<float> clarityDb {0.0f}; // Clarity's low-mid cut before the curve (dB, 0 or less)
 };
 
 class Engine
@@ -78,7 +79,7 @@ private:
     struct Channel
     {
         Biquad dc, preLo, preHi, postLo, postHi;
-        Biquad lmSense, lmCut, clarityPre, clarityPost; // Clarity
+        Biquad lmSense, lmCut, lmCutPost, clarityPre, clarityPost; // Clarity
         Oversampler os;
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();

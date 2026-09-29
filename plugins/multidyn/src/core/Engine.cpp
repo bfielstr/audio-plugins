@@ -50,12 +50,11 @@ void Engine::prepare (double sampleRate, int)
 {
     sr = sampleRate;
     // Level detection. Peak: instant attack, 30 ms release (holds the peak between cycles, so
-    // the gain doesn't collapse at zero crossings). RMS: 20 ms mean-square window, slower to
-    // react to short transients. Character: 50 ms RMS window, 60 ms peak release.
-    rmsCoef = (float)std::exp (-1.0 / (0.020 * sr));
-    rmsCoefC = (float)std::exp (-1.0 / (0.050 * sr));
+    // the gain doesn't collapse at zero crossings). RMS: the RMS Window (see process). Character:
+    // 60 ms peak release.
     peakCoef = (float)std::exp (-1.0 / (0.030 * sr));
     peakCoefC = (float)std::exp (-1.0 / (0.060 * sr));
+    liftA = (float)(1.0 - std::exp (-2.0 * M_PI * std::min (7000.0, 0.4 * sr) / sr)); // Soften's low-pass
     meterFall = (float)std::exp (-1.0 / (0.300 * sr));    // meter decay
     smooth = (float)(1.0 - std::exp (-1.0 / (0.010 * sr))); // parameter smoothing
     // pre-limiter: the gain reaches most of its reduction over the look-ahead, releases in 50 ms
@@ -176,7 +175,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const bool softKnee = on (p[kSoftKnee]);
     const double kneeDb = character ? kCharacterKneeDb : kKneeDb;
     const bool rms = std::lround (p[kDetector]) == kRms;
-    const float rmsC = character ? rmsCoefC : rmsCoef, peakC = character ? peakCoefC : peakCoef;
+    const double rmsWindowMs = std::clamp (p[kRmsWindow], 1.0, 1000.0) * (character ? 2.5 : 1.0);
+    const float rmsC = (float)std::exp (-1.0 / (rmsWindowMs * 0.001 * sr)), peakC = character ? peakCoefC : peakCoef;
     const bool preLimit = on (p[kPreLimit]);
     const double ceilingOffset = p[kPreLimitCeiling]; // dB above each band's Above threshold
     const double amount = std::clamp (p[kAmount], 0.0, 1.0);
@@ -219,6 +219,13 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     bool neutral[kNumBands];
     for (int b = 0; b < kNumBands; ++b)
         neutral[b] = amount <= 0.0 || (std::fabs (ra[b] - 1.0) < 1e-6 && std::fabs (rb[b] - 1.0) < 1e-6);
+    // Soften, on the top band: how far it is engaged (the thresholds' closeness times the knob)
+    const int top = nBands - 1;
+    const double soften =
+        std::clamp (p[kSoften], 0.0, 1.0) * std::clamp ((18.0 - (ta[top] - tb[top])) / 12.0, 0.0, 1.0);
+    const float gainSmooth = soften > 1e-3 ? (float)(1.0 - std::exp (-1.0 / (soften * 0.010 * sr))) : 1.0f;
+    const double topKneeDb = (softKnee ? kneeDb : 0.0) + (softKnee ? 12.0 : 18.0) * soften;
+    const float liftBlend = (float)soften;
 
     for (int i = 0; i < n; ++i)
     {
@@ -282,6 +289,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                 else
                     st.limGain = 1.0f;
                 float g = 1.0f;
+                float wl = xl, wr = xr; // what the gain applies to (Soften reshapes it)
                 if (!neutral[b])
                 {
                     // detector: the band itself, the side-chain band, or a blend of both
@@ -321,13 +329,47 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                         eA = st.envAbove2;
                         eB = st.envBelow2;
                     }
-                    st.aboveDb = (float)(aboveGainDb (eA, ta[b], ra[b], softKnee, kneeDb) * amount);
-                    st.belowDb = (float)(belowGainDb (eB, tb[b], rb[b], softKnee, kneeDb) * amount);
+                    const bool softened = b == top && soften > 1e-3;
+                    const bool knee = softened ? topKneeDb > 0.01 : softKnee;
+                    const double kDb = softened ? topKneeDb : kneeDb;
+                    float aDb = (float)(aboveGainDb (eA, ta[b], ra[b], knee, kDb) * amount);
+                    float bDb = (float)(belowGainDb (eB, tb[b], rb[b], knee, kDb) * amount);
                     // Upward compression never lifts the signal past the Below threshold, even while
                     // its envelope is still releasing (e.g. a loud hit right after silence).
-                    if (st.belowDb > 0.0f)
-                        st.belowDb = std::min (st.belowDb, std::max (0.0f, (float)tb[b] - lev));
-                    g = dbToGain (std::clamp (st.aboveDb + st.belowDb, kMaxCutDb, kMaxBoostDb));
+                    const float room = std::max (0.0f, (float)tb[b] - lev);
+                    if (bDb > 0.0f)
+                        bDb = std::min (bDb, room);
+                    if (softened)
+                    {
+                        // Soften rounds the gain changes off (and the cap above still holds)
+                        aDb = st.aboveDb + (aDb - st.aboveDb) * gainSmooth;
+                        bDb = st.belowDb + (bDb - st.belowDb) * gainSmooth;
+                        if (bDb > 0.0f)
+                            bDb = std::min (bDb, room);
+                    }
+                    st.aboveDb = aDb;
+                    st.belowDb = bDb;
+                    const float totalDb = std::clamp (aDb + bDb, kMaxCutDb, kMaxBoostDb);
+                    g = dbToGain (totalDb);
+                    if (softened)
+                    {
+                        // the lifted part (what upward compression adds on top of the rest) is
+                        // low-passed, in proportion to Soften
+                        const float gBase = dbToGain (totalDb - std::max (0.0f, bDb));
+                        const float gLift = g - gBase;
+                        float* ch[2] = {&wl, &wr};
+                        for (int c = 0; c < 2; ++c)
+                        {
+                            const float lift = *ch[c] * gLift;
+                            float* lp = st.liftLp[c];
+                            lp[0] += (lift - lp[0]) * liftA;
+                            lp[1] += (lp[0] - lp[1]) * liftA;
+                            *ch[c] = *ch[c] * gBase + lift + (lp[1] - lift) * liftBlend;
+                        }
+                        g = 1.0f; // applied above
+                    }
+                    else
+                        st.liftLp[0][0] = st.liftLp[0][1] = st.liftLp[1][0] = st.liftLp[1][1] = 0.0f;
                 }
                 else
                 {
@@ -335,8 +377,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                     st.belowDb *= rel[b];
                     g = dbToGain (st.aboveDb + st.belowDb);
                 }
-                yl = xl * g * st.outGain;
-                yr = xr * g * st.outGain;
+                yl = wl * g * st.outGain;
+                yr = wr * g * st.outGain;
                 st.meterIn = std::max (std::max (std::fabs (xl), std::fabs (xr)), st.meterIn * meterFall);
                 st.meterOut = std::max (std::max (std::fabs (yl), std::fabs (yr)), st.meterOut * meterFall);
             }

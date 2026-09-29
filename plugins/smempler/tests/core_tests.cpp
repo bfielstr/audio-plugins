@@ -8,6 +8,7 @@
 #include "Slices.h"
 
 #include "dr_wav.h"
+#include "pluginkit/CrashDump.h"
 #include "pluginkit/SampleFiles.h"
 
 #include <chrono>
@@ -16,6 +17,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -244,13 +246,13 @@ static void loadFx (Engine& e, int slot, int type)
 {
     e.setParam (slotParam (slot, kSlotType), (double)type);
     e.setParam (slotParam (slot, kSlotOn), 1.0);
-    const auto& t = fxTable (type);
+    const auto& t = fxBlockTable (type);
     for (uint32_t j = 0; j < kSlotBlock; ++j)
         e.setParam (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
 }
 static void setFx (Engine& e, int slot, uint32_t id, double plain)
 {
-    e.setParam (slotBlockParam (slot, id), fxTable (e.rackType (slot)).toNormalized (id, plain));
+    e.setParam (slotBlockParam (slot, (uint32_t)fxBlockOf (e.rackType (slot), id)), fxTable (e.rackType (slot)).toNormalized (id, plain));
 }
 
 TEST (rack_effects)
@@ -303,6 +305,33 @@ TEST (rack_effects)
     CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
 }
 
+TEST (rack_block_mapping)
+{
+    // every block position maps to one effect parameter and back; Multidyn's RMS Window and Soften
+    // sit where its (unused) saturator's first two are
+    for (int type = kFxPara; type < kNumFxTypes; ++type)
+        for (uint32_t j = 0; j < kSlotBlock; ++j)
+        {
+            const int64_t id = fxIdAt (type, j);
+            if (id >= 0)
+                CHECK (fxBlockOf (type, (uint32_t)id) == (int64_t)j, "type %d block %u", type, j);
+        }
+    for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
+    {
+        const bool sat = id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold;
+        CHECK ((fxBlockOf (kFxMultidyn, id) < 0) == sat, "multidyn %u", id);
+    }
+    const auto& t = fxBlockTable (kFxMultidyn);
+    CHECK (t.info (multidyn::kSatOn).def == 20.0 && t.info (multidyn::kSatPreLimit).def == 0.5, "RMS Window, Soften defaults");
+    // and the rack's Multidyn runs with them
+    auto e = std::make_unique<Engine> ();
+    e->prepare (48000.0, 256);
+    loadFx (*e, 0, kFxMultidyn);
+    setFx (*e, 0, multidyn::kSoften, 1.0);
+    setFx (*e, 0, multidyn::kRmsWindow, 80.0);
+    CHECK (std::fabs (e->param (slotBlockParam (0, multidyn::kSatPreLimit)) - 1.0) < 1e-9, "Soften stored in its place");
+}
+
 TEST (rack_order_and_widr)
 {
     auto s = sine (440.0, 1.0);
@@ -349,7 +378,7 @@ TEST (defaults_one_voice_and_root_note)
     const auto& t = paramTable ();
     CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
     CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator on, 0 dB");
     // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
@@ -1201,6 +1230,45 @@ TEST (file_decode_and_ops)
     std::error_code ec;
     fs::remove_all (tmp, ec);
 }
+
+#if defined(_WIN32)
+// A crash in our code leaves a dump; the crash itself is still passed on (here to the __except).
+static int crashHere ()
+{
+    __try
+    {
+        *(volatile int*)nullptr = 1;
+    }
+    __except (1)
+    {
+        return 1;
+    }
+    return 0;
+}
+
+TEST (crash_dump)
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path () / ("smempler_dumps_" + std::to_string (std::rand ()));
+    pk::installCrashDump (dir);
+    pk::installCrashDump (dir); // twice is harmless
+    try
+    {
+        throw std::runtime_error ("caught"); // not a crash: no dump
+    }
+    catch (const std::exception&)
+    {
+    }
+    CHECK (pk::lastCrashDump ().empty (), "a C++ exception is not a crash");
+    CHECK (crashHere () == 1, "the crash reaches its handler");
+    const std::string dump = pk::lastCrashDump ();
+    std::error_code ec;
+    const auto size = dump.empty () ? 0 : fs::file_size (pathFromUtf8 (dump), ec);
+    CHECK (!dump.empty () && size > 10000, "dump %s (%d bytes)", dump.c_str (), (int)size);
+    CHECK (dump.find ("smempler_tests") != std::string::npos, "named after the module: %s", dump.c_str ());
+    fs::remove_all (dir, ec);
+}
+#endif
 
 TEST (snap_to_zero)
 {
