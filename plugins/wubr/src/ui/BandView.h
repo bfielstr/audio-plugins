@@ -2,6 +2,7 @@
 // the range its shape covers (dashed: the gain swing, or the frequency sweep's ends), and a handle at
 // its setting.
 //   handle, sideways / up-down    the band's Frequency / Gain
+//   a band's edge, sideways       its Width (the band stays centred)
 //   wheel on a handle             its Width
 //   click a handle                shows that band's controls
 #pragma once
@@ -37,14 +38,17 @@ public:
     double xOfHz (double hz) const;
     double yOfDb (double db) const;
     VSTGUI::CPoint handle (int band) const;
+    double edgeX (int band, bool high) const; // the band's edges (Width octaves apart around its centre)
 
 private:
-    int hit (const VSTGUI::CPoint& p) const;
+    int hit (const VSTGUI::CPoint& p) const;     // a handle, or -1
+    int hitEdge (const VSTGUI::CPoint& p) const; // a band's edge, or -1 (a band that is on)
     bool live () const;
 
     pk::ParamHost* host;
     MeterSource meters;
     int drag = -1;
+    bool dragEdge = false;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startGain = 0.0;
     float shownFreq[kBands] = {120.0f, 2000.0f}, shownDb[kBands] = {0.0f, 0.0f};

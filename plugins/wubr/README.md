@@ -10,7 +10,10 @@ or run once as envelopes. Then Smacheratr at the end of the chain.
 - **Shape** (one per band): up to 8 points. Drag a point to move it, drag a line up or down to bend it,
   double-click to add or remove a point, right-click a line to straighten it. A dot shows where the band is.
 - **Rate** (per band): **Sync** (1/32 to 4 bars, dotted and triplet; locked to the song position while the
-  host plays) or **Free** (Hz), and a Phase offset.
+  host plays) or **Free** (Hz, 0.75 by default), and a Phase offset. **Link Rates** (on by default): both
+  bands run at band 1's rate, each with its own phase.
+- **Defaults**: both bands on, sweeping their centres (Target Frequency) at Gain 0 dB: raise or lower a
+  band's Gain (drag its handle up or down) to hear its sweep.
 - **Mode**:
   - **LFO**: the shapes run over and over.
   - **Envelope**: a trigger starts the shapes from the beginning; each runs to its **hold point**
@@ -20,4 +23,4 @@ or run once as envelopes. Then Smacheratr at the end of the chain.
 - **Dry/Wet**, **Output**, then the end-of-chain **Smacheratr** with all its controls and displays.
 
 The band display shows both bands as they are right now; drag a band's handle for its frequency (sideways)
-and gain (up/down), the wheel for its width.
+and gain (up/down), its edges (or the wheel) for its width. Both bands' shapes are shown, band 1 above band 2.

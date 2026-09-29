@@ -56,7 +56,7 @@ void Editor::onClose ()
         v.clear ();
     bandButtons.clear ();
     for (int b = 0; b < kBands; ++b)
-        syncViews[b] = hzViews[b] = nullptr;
+        rateModeViews[b] = syncViews[b] = hzViews[b] = nullptr;
     envViews.clear ();
     sensView = nullptr;
 }
@@ -114,21 +114,23 @@ void Editor::buildUI (CFrame* f)
         auto* hold = bind (root, new NumberBox (CRect (840, kRowTop + 2, 892, kRowTop + 20), this, bandParam (b, kHold)));
         envViews.push_back (hold);
         add (hold);
-        shapes[b] = new ShapeView (CRect (kShapeLeft, kShapeTop, kShapeRight, kShapeBottom), this, b, metersOf);
+        // both bands' shapes, always shown: band 1 above band 2
+        const double half = (kShapeBottom - kShapeTop - 4.0) / 2.0;
+        const double top = kShapeTop + b * (half + 4.0);
+        shapes[b] = new ShapeView (CRect (kShapeLeft, top, kShapeRight, top + half), this, b, metersOf);
         shapes[b]->setTooltipText (help::kShapeDisplay);
         root->addView (shapes[b]);
-        add (shapes[b]);
         // knobs: the band, then its rate
         const uint32_t ids[5] = {kFreq, wubr::kWidth, kGain, kDepth, kSweep}; // (kWidth alone is the window width here)
         for (int i = 0; i < 5; ++i)
             add (bind (root, new Knob (knobRect (604 + i * 57, kShapeTop), this, bandParam (b, ids[i]), nullptr, i == 2 || i == 3)));
-        add (bind (root, new Segmented (CRect (604, kShapeTop + 80, 700, kShapeTop + 100), this, bandParam (b, kRateMode), {"Sync", "Free"})));
+        // the rate: shown for the band whose rate runs (band 1's while linked; see updateLooks)
+        rateModeViews[b] = bind (root, new Segmented (CRect (604, kShapeTop + 80, 700, kShapeTop + 100), this, bandParam (b, kRateMode), {"Sync", "Free"}));
         syncViews[b] = bind (root, new Choice (CRect (604, kShapeTop + 108, 700, kShapeTop + 128), this, bandParam (b, kSync)));
-        add (syncViews[b]);
         hzViews[b] = bind (root, new NumberBox (CRect (604, kShapeTop + 108, 700, kShapeTop + 128), this, bandParam (b, kRateHz)));
-        add (hzViews[b]);
         add (bind (root, new Knob (knobRect (718, kShapeTop + 80), this, bandParam (b, kPhase))));
     }
+    bind (root, new Toggle (CRect (604, kShapeTop + 136, 700, kShapeTop + 156), this, kLinkRate, "Link Rates"));
     bind (root, new Knob (knobRect (775, kShapeTop + 80), this, kDryWet));
     bind (root, new Knob (knobRect (832, kShapeTop + 80), this, kOutput));
 
@@ -170,12 +172,15 @@ void Editor::showBand (int band)
 
 void Editor::updateLooks ()
 {
+    // the rate controls of the band whose rate runs: band 1's while linked
+    const int rb = plainValue (kLinkRate) >= 0.5 ? 0 : shown;
     for (int b = 0; b < kBands; ++b)
-        if (syncViews[b] && hzViews[b])
+        if (rateModeViews[b] && syncViews[b] && hzViews[b])
         {
             const bool free = std::lround (plainValue (bandParam (b, kRateMode))) == kFree;
-            syncViews[b]->setVisible (b == shown && !free);
-            hzViews[b]->setVisible (b == shown && free);
+            rateModeViews[b]->setVisible (b == rb);
+            syncViews[b]->setVisible (b == rb && !free);
+            hzViews[b]->setVisible (b == rb && free);
         }
     const bool envelope = std::lround (plainValue (kMode)) == kEnvelope;
     for (auto* v : envViews)
@@ -194,7 +199,8 @@ void Editor::paramChanged (uint32_t id)
     for (auto* s : shapes)
         if (s)
             s->invalid ();
-    if (id == kMode || id == kTrigger || (id >= kBandBase && id < kTailExtBase && (id - kBandBase) % kBandBlock == kRateMode))
+    if (id == kMode || id == kTrigger || id == kLinkRate ||
+        (id >= kBandBase && id < kTailExtBase && (id - kBandBase) % kBandBlock == kRateMode))
         updateLooks ();
 }
 
@@ -204,8 +210,9 @@ void Editor::idle ()
         tailDisplays->idle ();
     if (bands)
         bands->idle ();
-    if (shapes[shown])
-        shapes[shown]->idle ();
+    for (auto* s : shapes)
+        if (s)
+            s->idle ();
 }
 
 void Editor::showMenu (CPoint where)

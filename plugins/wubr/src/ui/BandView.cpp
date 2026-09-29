@@ -51,6 +51,13 @@ CPoint BandView::handle (int b) const
     return CPoint (xOfHz (host->plainValue (bandParam (b, kFreq))), yOfDb (host->plainValue (bandParam (b, kGain))));
 }
 
+double BandView::edgeX (int b, bool high) const
+{
+    const double half = std::pow (2.0, 0.5 * host->plainValue (bandParam (b, kWidth)));
+    const double f = host->plainValue (bandParam (b, kFreq));
+    return xOfHz (high ? f * half : f / half);
+}
+
 bool BandView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
 
 void BandView::idle ()
@@ -136,6 +143,14 @@ void BandView::draw (CDrawContext* ctx)
         const double q = bellQ (host->plainValue (bandParam (b, kWidth)));
         const int target = (int)std::lround (host->plainValue (bandParam (b, kTarget)));
         const uint8_t a = on ? 255 : 90;
+        // its edges (drag them for the width)
+        if (on)
+        {
+            ctx->setLineWidth (1.0);
+            ctx->setFrameColor (bandColor (b, drag == b && dragEdge ? 200 : (b == selected ? 90 : 45)));
+            for (bool high : {false, true})
+                ctx->drawLine (CPoint (edgeX (b, high), all.top + 20), CPoint (edgeX (b, high), all.bottom - 16));
+        }
         // the range the shape covers
         ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
         ctx->setLineWidth (1.0);
@@ -189,6 +204,20 @@ int BandView::hit (const CPoint& p) const
     return -1;
 }
 
+int BandView::hitEdge (const CPoint& p) const
+{
+    for (int pass = 0; pass < kBands; ++pass)
+    {
+        const int b = pass == 0 ? selected : 1 - selected;
+        if (host->plainValue (bandParam (b, kBandOn)) < 0.5)
+            continue;
+        for (bool high : {false, true})
+            if (std::fabs (p.x - edgeX (b, high)) <= 4.0)
+                return b;
+    }
+    return -1;
+}
+
 void BandView::onMouseDownEvent (MouseDownEvent& e)
 {
     const bool right = e.buttonState.isRight ();
@@ -200,6 +229,27 @@ void BandView::onMouseDownEvent (MouseDownEvent& e)
         onMouseUpEvent (up);
     }
     drag = hit (e.mousePosition);
+    dragEdge = false;
+    if (drag < 0 && (drag = hitEdge (e.mousePosition)) >= 0)
+    {
+        // an edge: the width
+        if (onBandPicked)
+            onBandPicked (drag);
+        const uint32_t w = bandParam (drag, kWidth);
+        if (e.clickCount == 2 || right)
+        {
+            host->setOnce (w, host->table ().defaultNormalized (w));
+            drag = -1;
+            invalid ();
+            e.consumed = true;
+            e.ignoreFollowUpMoveAndUpEvents (true);
+            return;
+        }
+        dragEdge = true;
+        host->beginEdit (w);
+        e.consumed = true;
+        return;
+    }
     if (drag < 0)
         return;
     if (onBandPicked)
@@ -228,10 +278,20 @@ void BandView::onMouseMoveEvent (MouseMoveEvent& e)
     if (drag < 0)
     {
         if (auto* fr = getFrame ())
-            fr->setCursor (hit (e.mousePosition) >= 0 ? kCursorSizeAll : kCursorDefault);
+            fr->setCursor (hit (e.mousePosition) >= 0 ? kCursorSizeAll : (hitEdge (e.mousePosition) >= 0 ? kCursorHSize : kCursorDefault));
         return;
     }
     const CRect r = getViewSize ();
+    if (dragEdge)
+    {
+        // the edge follows the mouse; the band stays centred, so the width is twice the distance
+        const double hz = kMinHz * std::pow (kMaxHz / kMinHz, (e.mousePosition.x - r.left) / r.getWidth ());
+        const double w = 2.0 * std::fabs (std::log2 (hz / host->plainValue (bandParam (drag, kFreq))));
+        host->setNorm (bandParam (drag, kWidth), host->table ().toNormalized (bandParam (drag, kWidth), std::clamp (w, 0.5, 4.0)));
+        invalid ();
+        e.consumed = true;
+        return;
+    }
     const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     auto setPlain = [this] (uint32_t id, double v) { host->setNorm (id, host->table ().toNormalized (id, v)); };
@@ -252,9 +312,15 @@ void BandView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag < 0)
         return;
-    host->endEdit (bandParam (drag, kFreq));
-    host->endEdit (bandParam (drag, kGain));
+    if (dragEdge)
+        host->endEdit (bandParam (drag, kWidth));
+    else
+    {
+        host->endEdit (bandParam (drag, kFreq));
+        host->endEdit (bandParam (drag, kGain));
+    }
     drag = -1;
+    dragEdge = false;
     e.consumed = true;
 }
 

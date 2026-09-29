@@ -124,17 +124,18 @@ private:
     void showClarityBand (int band);
     smacheratr::ShaperView* endShaperView = nullptr;
     widr::GonioView* fxGonio = nullptr;
-    // the Wubr page: its band display, both bands' shapes and controls (the selected band's shown),
-    // each band's Sync / Hz (shown by its rate mode), and the controls only Envelope mode uses
+    // the Wubr page: its band display, both bands' shapes (stacked, always shown), both bands'
+    // controls (the selected band's shown), each band's rate controls (band 1's while Link Rates is
+    // on, else the selected band's; Sync or Hz by its rate mode), and the controls only Envelope mode uses
     wubr::BandView* wubrBands = nullptr;
     wubr::ShapeView* wubrShapes[2] {};
     int wubrBand = 0;
     std::vector<VSTGUI::CView*> wubrBandViews[2], wubrBandButtons;
-    VSTGUI::CView *wubrSync[2] {}, *wubrHz[2] {};
+    VSTGUI::CView *wubrRateMode[2] {}, *wubrSync[2] {}, *wubrHz[2] {};
     std::vector<ParamView*> wubrEnvViews;
     ParamView* wubrSensView = nullptr;
     void showWubrBand (int band);
-    void updateWubrLooks (); // Sync or Hz by the rate mode; the Envelope controls' look
+    void updateWubrLooks (); // the rate controls shown (Link, rate mode); the Envelope controls' look
     MsView* msView = nullptr;
     pk::ParamHost* mdLayoutHost = nullptr;
     pk::ScopeView* scope = nullptr;

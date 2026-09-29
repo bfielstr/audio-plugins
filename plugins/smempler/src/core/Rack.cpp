@@ -26,20 +26,26 @@ const pk::ParamTable& paramTable ()
 static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams &&
                    kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
-// Wubr in a slot: its own IDs without its end saturator (5 .. 10 and 85 on), in order
-constexpr uint32_t kWubrHosted = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase);
+// Wubr in a slot: its own IDs without its end saturator (5 .. 10 and 85 .. 101), in order, then the
+// ones after the saturator's block (Link Rates)
+constexpr uint32_t kWubrBands = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase); // positions before Link Rates
+constexpr uint32_t kWubrHosted = kWubrBands + (wubr::kNumParams - wubr::kLinkRate);
 static_assert (wubr::kTailBase == 5 && kWubrHosted <= kSlotBlockAll, "Wubr's parameters must fit a slot's block and extension");
 static int64_t wubrIdAt (uint32_t j)
 {
     if (j < wubr::kTailBase)
         return j;
-    return j < kWubrHosted ? (int64_t)(j - wubr::kTailBase + wubr::kBandBase) : -1;
+    if (j < kWubrBands)
+        return (int64_t)(j - wubr::kTailBase + wubr::kBandBase);
+    return j < kWubrHosted ? (int64_t)(j - kWubrBands + wubr::kLinkRate) : -1;
 }
 static int64_t wubrBlockOf (uint32_t id)
 {
     if (id < wubr::kTailBase)
         return id;
-    return id >= wubr::kBandBase && id < wubr::kTailExtBase ? (int64_t)(id - wubr::kBandBase + wubr::kTailBase) : -1;
+    if (id >= wubr::kBandBase && id < wubr::kTailExtBase)
+        return (int64_t)(id - wubr::kBandBase + wubr::kTailBase);
+    return id >= wubr::kLinkRate && id < wubr::kNumParams ? (int64_t)(id - wubr::kLinkRate + kWubrBands) : -1;
 }
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
 static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields && multidyn::kRmsWindow == kSlotBlock &&

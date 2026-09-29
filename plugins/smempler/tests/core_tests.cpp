@@ -408,13 +408,27 @@ static double meanOf (const std::vector<double>& v, size_t a, size_t b)
     return b > a ? s / (double)(b - a) : 0.0;
 }
 constexpr size_t kWin = 1200; // 25 ms: 3 whole cycles of 120 Hz at 48 kHz
+// The Wubr the sound tests below measure (not its defaults): band 1 on, band 2 off, both moving their
+// Gain, each at its own rate (Link Rates off), Sync 1/4
+static void wubrGainSync (Engine& e, int slot)
+{
+    for (int b = 0; b < wubr::kBands; ++b)
+    {
+        setFx (e, slot, wubr::bandParam (b, wubr::kBandOn), b == 0 ? 1.0 : 0.0);
+        setFx (e, slot, wubr::bandParam (b, wubr::kTarget), wubr::kTargetGain);
+        setFx (e, slot, wubr::bandParam (b, wubr::kRateMode), wubr::kSynced);
+        setFx (e, slot, wubr::bandParam (b, wubr::kSync), 8.0); // 1/4
+    }
+    setFx (e, slot, wubr::kLinkRate, 0.0);
+}
 
 TEST (rack_wubr_mapping)
 {
-    // Wubr's 79 parameters without its end saturator: 62 in the slot's block, 17 in its extension
+    // Wubr's 80 parameters without its end saturator: 62 in the slot's block, 18 in its extension
+    // (the last Link Rates, the one after its end saturator's block)
     const auto& t = fxBlockTable (kFxWubr);
     const auto& wt = wubr::paramTable ();
-    CHECK (t.size () == 79 && t.size () <= kSlotBlockAll, "Wubr's block table: %u", (unsigned)t.size ());
+    CHECK (t.size () == 80 && t.size () <= kSlotBlockAll, "Wubr's block table: %u", (unsigned)t.size ());
     int inExt = 0;
     for (uint32_t j = 0; j < kSlotBlockAll; ++j)
     {
@@ -446,17 +460,20 @@ TEST (rack_wubr_mapping)
         }
         inExt += j >= kSlotBlock ? 1 : 0;
     }
-    CHECK (inExt == 17, "17 in the extension: %d", inExt);
+    CHECK (inExt == 18, "18 in the extension: %d", inExt);
     // back: every Wubr ID has a position, except its end saturator's
     for (uint32_t id = 0; id < wubr::kNumParams; ++id)
         CHECK ((fxBlockOf (kFxWubr, id) < 0) == wubr::isTailParam (id), "wubr %u (%s): %lld", id, wt.info (id).name,
                (long long)fxBlockOf (kFxWubr, id));
     // the extension is where band 2's shape runs on: its third point's level is the first position there,
-    // its last point's curve the last
+    // its last point's curve at 78; then Link Rates, the last
     CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)) == (int64_t)kSlotBlock, "%lld",
            (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)));
     CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)) == 78, "%lld",
            (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)));
+    CHECK (fxBlockOf (kFxWubr, wubr::kLinkRate) == 79 && fxIdAt (kFxWubr, 79) == (int64_t)wubr::kLinkRate && t.size () > 79 &&
+               std::string (t.info (79).name) == "Link Rates",
+           "Link Rates at 79: %lld", (long long)fxBlockOf (kFxWubr, wubr::kLinkRate));
     // the end saturator's second block, between the rack and the extensions, is not the rack's
     for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
         CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
@@ -477,13 +494,16 @@ TEST (rack_wubr_mapping)
 TEST (rack_wubr_moves_the_sound)
 {
     // a 120 Hz sample through Wubr in slot 3: band 1's triangle (1/4, +-12 dB around 120 Hz) swings it,
-    // two cycles a second at 120 BPM and one at 60; switched off, the slot leaves it untouched
+    // two cycles a second at 120 BPM and one at 60; switched off, the slot leaves it untouched (Wubr set
+    // up by wubrGainSync: band 1 moving its gain, band 2 off)
     auto s = sine (120.0, 3.0);
     auto render = [&] (int type, bool on, HostInfo host, const std::function<void (Engine&)>& setup) {
         std::unique_ptr<Engine> e (makeEngine (s));
         e->setParam (kVolume, -20.0); // room for Wubr's +12 dB before the end saturator
         if (type != kFxEmpty)
             loadFx (*e, 2, type);
+        if (type == kFxWubr)
+            wubrGainSync (*e, 2);
         e->setParam (slotParam (2, kSlotOn), on ? 1.0 : 0.0);
         if (setup)
             setup (*e);
@@ -566,6 +586,7 @@ TEST (rack_wubr_envelope_follows_notes)
         e->setParam (kVolume, -20.0);
         e->setParam (kAmpR, 5000.0);
         loadFx (*e, 0, kFxWubr);
+        wubrGainSync (*e, 0); // band 1 moving its gain, band 2 off
         setFx (*e, 0, wubr::kMode, wubr::kEnvelope);
         setFx (*e, 0, wubr::bandParam (0, wubr::kHold), 2.0);
         e->setParam (slotParam (0, kSlotOn), on ? 1.0 : 0.0);
@@ -634,6 +655,7 @@ TEST (rack_wubr_slots_and_moves)
     auto setup = [&] (Engine& e, int slot) {
         e.setParam (kVolume, -20.0);
         loadFx (e, slot, kFxWubr);
+        wubrGainSync (e, slot);
         setFx (e, slot, wubr::bandParam (0, wubr::kBandOn), 0.0);
         setFx (e, slot, wubr::bandParam (1, wubr::kBandOn), 1.0);
         setFx (e, slot, wubr::bandParam (1, wubr::kFreq), 120.0);
@@ -672,6 +694,61 @@ TEST (rack_wubr_slots_and_moves)
         diff2 = std::max (diff2, (double)std::fabs (plain.l[i] - ref.l[i]));
     std::printf ("    moved: %g apart; without its extension value: %g\n", diff, diff2);
     CHECK (diff2 > 0.01, "the extension's value matters: %g", diff2);
+}
+
+TEST (rack_wubr_defaults_and_link)
+{
+    // Wubr loads into a slot with its defaults: both bands on, moving their centres (Frequency), free at
+    // 0.75 Hz, Link Rates on
+    auto s = sine (120.0, 3.0);
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        loadFx (*e, 3, kFxWubr);
+        auto plain = [&] (uint32_t id) {
+            return wubr::toPlain (id, e->param (slotBlockParam (3, (uint32_t)fxBlockOf (kFxWubr, id))));
+        };
+        for (int b = 0; b < wubr::kBands; ++b)
+        {
+            CHECK (plain (wubr::bandParam (b, wubr::kBandOn)) == 1.0, "band %d on", b + 1);
+            CHECK (std::lround (plain (wubr::bandParam (b, wubr::kTarget))) == wubr::kTargetFreq, "band %d: Frequency (%f)", b + 1,
+                   plain (wubr::bandParam (b, wubr::kTarget)));
+            CHECK (std::lround (plain (wubr::bandParam (b, wubr::kRateMode))) == wubr::kFree, "band %d: Free (%f)", b + 1,
+                   plain (wubr::bandParam (b, wubr::kRateMode)));
+            CHECK (std::fabs (plain (wubr::bandParam (b, wubr::kRateHz)) - 0.75) < 1e-6, "band %d: 0.75 Hz (%f)", b + 1,
+                   plain (wubr::bandParam (b, wubr::kRateHz)));
+        }
+        CHECK (plain (wubr::kLinkRate) == 1.0, "Link Rates on (%f)", plain (wubr::kLinkRate));
+    }
+    // linked, band 2 runs at band 1's rate: band 2 alone (band 1 off) moving the gain at 120 Hz, free,
+    // its own rate 0.5 Hz; band 1's at 2 Hz, then 1 Hz. Peaks of the triangle in 2 s: 4, then 2; unlinked
+    // it keeps its own 0.5 Hz (1)
+    auto render = [&] (bool link, double hz1) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kVolume, -20.0);
+        loadFx (*e, 3, kFxWubr);
+        setFx (*e, 3, wubr::bandParam (0, wubr::kBandOn), 0.0);
+        setFx (*e, 3, wubr::bandParam (0, wubr::kRateHz), hz1);
+        setFx (*e, 3, wubr::bandParam (1, wubr::kTarget), wubr::kTargetGain);
+        setFx (*e, 3, wubr::bandParam (1, wubr::kFreq), 120.0);
+        setFx (*e, 3, wubr::bandParam (1, wubr::kRateHz), 0.5);
+        setFx (*e, 3, wubr::kLinkRate, link ? 1.0 : 0.0);
+        e->setParam (slotParam (3, kSlotOn), 1.0);
+        e->noteOn (60, 1.0f);
+        const auto on = run (*e, 96000);
+        e->setParam (slotParam (3, kSlotOn), 0.0);
+        e->reset ();
+        e->noteOn (60, 1.0f);
+        const auto off = run (*e, 96000);
+        return dbOver (on.l, off.l, kWin);
+    };
+    const auto fast = render (true, 2.0), slower = render (true, 1.0), own = render (false, 2.0);
+    const auto [fLo, fHi] = std::minmax_element (fast.begin () + 1, fast.end ());
+    std::printf ("    band 2 linked to band 1 at 2 Hz: %d peaks (%.1f .. %.1f dB); at 1 Hz: %d; unlinked (its own 0.5 Hz): %d\n",
+                 peaksOver (fast, 6.0), *fLo, *fHi, peaksOver (slower, 6.0), peaksOver (own, 6.0));
+    CHECK (*fHi > 10.0 && *fLo < -10.0, "band 2 swings: %.1f .. %.1f dB", *fLo, *fHi);
+    CHECK (peaksOver (fast, 6.0) == 4, "linked: band 1's 2 Hz: %d peaks", peaksOver (fast, 6.0));
+    CHECK (peaksOver (slower, 6.0) == 2, "linked: band 1's 1 Hz: %d peaks", peaksOver (slower, 6.0));
+    CHECK (peaksOver (own, 6.0) == 1, "unlinked: band 2's own 0.5 Hz: %d peaks", peaksOver (own, 6.0));
 }
 
 TEST (defaults_one_voice_and_root_note)

@@ -42,6 +42,7 @@ private:
     ShapeView* shapes[kBands] {};
     int shown = 0;
     std::vector<VSTGUI::CView*> bandViews[kBands], bandButtons;
+    pk::ParamView* rateModeViews[kBands] {};
     pk::ParamView* syncViews[kBands] {};
     pk::ParamView* hzViews[kBands] {};
     std::vector<pk::ParamView*> envViews; // dimmed in LFO mode

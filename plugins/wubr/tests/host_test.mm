@@ -56,8 +56,13 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus (the envelope's MIDI trigger)");
         CHECK (rig.start (), "start");
+        // measured below: band 1 alone moving its gain, synced at 1/4 (the defaults sweep both bands' centres at 0 dB)
+        rig.param (bandParam (0, kTarget), toNormalized (bandParam (0, kTarget), kTargetGain));
+        rig.param (bandParam (0, kRateMode), toNormalized (bandParam (0, kRateMode), kSynced));
+        rig.param (bandParam (1, kBandOn), 0.0);
+        rig.param (kLinkRate, 0.0);
 
-        // the default LFO swings a 120 Hz tone through band 1 by about +-12 dB
+        // the LFO swings a 120 Hz tone through band 1 by about +-12 dB
         std::vector<float> out;
         rig.render (2.0, out, nullptr, tone (120.0, 0.1));
         auto w = windows (out);

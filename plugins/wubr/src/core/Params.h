@@ -45,8 +45,10 @@ enum ParamId : uint32_t
     kOutput, // dB
     kTailBase,                                   // the Smacheratr at the end of the chain: pk::kTailFields entries
     kBandBase = kTailBase + pk::kTailFields,     // kBands x kBandBlock
-    kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr (grows at the end)
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
+    // --- after the end saturator's block (which stays as it is from here on) ---
+    kLinkRate = kTailExtBase + 17, // both bands run at band 1's rate (Sync/Free, division, Hz); each keeps its phase
+    kNumParams
 };
 
 enum Mode { kLfo = 0, kEnvelope };

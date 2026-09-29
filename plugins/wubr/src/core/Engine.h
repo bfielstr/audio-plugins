@@ -74,6 +74,7 @@ private:
         bool shapeDirty = true;
     };
     double cycleHz (int band) const; // how many cycles a second the band's shape runs
+    int rateBand (int band) const;   // whose rate the band runs at (band 1's while linked)
     void refreshShape (int band);
 
     ParamArray p = defaultParams ();

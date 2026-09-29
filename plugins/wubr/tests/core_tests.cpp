@@ -49,9 +49,14 @@ struct Reg
 
 constexpr double kSr = 48000.0;
 
+// The tests measure band 1 alone moving its gain, synced at 1/4: the defaults set to that.
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (bandParam (0, kTarget), kTargetGain);
+    e->setParam (bandParam (0, kRateMode), kSynced);
+    e->setParam (bandParam (1, kBandOn), 0.0);
+    e->setParam (kLinkRate, 0.0);
     e->prepare (kSr, 512);
     return e;
 }
@@ -302,11 +307,45 @@ TEST (band_off_fades_and_split_blocks_stay_in_time)
     CHECK (diff < 1e-4, "split at a note, still in time: %.6f", diff);
 }
 
+TEST (linked_rates)
+{
+    // linked, band 2 runs at band 1's rate (its own Hz ignored), each with its own phase; unlinked, at its own
+    auto run = [] (bool link) {
+        Meters m;
+        auto e = engine ();
+        e->setMeters (&m);
+        e->setParam (kLinkRate, link ? 1.0 : 0.0);
+        e->setParam (bandParam (1, kBandOn), 1.0);
+        for (int b = 0; b < kBands; ++b)
+            e->setParam (bandParam (b, kRateMode), kFree);
+        e->setParam (bandParam (0, kRateHz), 2.0);
+        e->setParam (bandParam (1, kRateHz), 0.5);
+        std::vector<float> l (480), r (480);
+        double pos1 = 0.0, pos2 = 0.0;
+        for (int k = 0; k < 10; ++k) // 0.1 s
+        {
+            e->process (l.data (), r.data (), l.data (), r.data (), 480);
+            pos1 = m.pos[0].load ();
+            pos2 = m.pos[1].load ();
+        }
+        return std::pair<double, double> (pos1, pos2);
+    };
+    const auto linked = run (true), apart = run (false);
+    std::printf ("    after 0.1 s: linked %.3f / %.3f, apart %.3f / %.3f\n", linked.first, linked.second, apart.first, apart.second);
+    CHECK (std::fabs (linked.first - linked.second) < 0.01 && std::fabs (linked.first - 0.2) < 0.01, "linked: both at band 1's 2 Hz");
+    CHECK (std::fabs (apart.second - 0.05) < 0.01, "apart: band 2 at its own 0.5 Hz (%.3f)", apart.second);
+}
+
 TEST (defaults_and_the_end_saturator)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "every parameter: %u", (unsigned)t.size ());
-    CHECK (t.info (bandParam (0, kBandOn)).def == 1.0 && t.info (bandParam (1, kBandOn)).def == 0.0, "band 1 on, band 2 off");
+    for (int b = 0; b < kBands; ++b)
+        CHECK (t.info (bandParam (b, kBandOn)).def == 1.0 && t.info (bandParam (b, kTarget)).def == kTargetFreq &&
+                   t.info (bandParam (b, kRateMode)).def == kFree && t.info (bandParam (b, kRateHz)).def == 0.75 &&
+                   t.info (bandParam (b, kGain)).def == 0.0,
+               "band %d: on, Frequency, free at 0.75 Hz, Gain 0 dB", b + 1);
+    CHECK (t.info (kLinkRate).def == 1.0 && kLinkRate == kTailExtBase + pk::kTailExtFields, "rates linked, after the saturator's block");
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailExtBase + pk::kTailExtClarity).id == kTailExtBase + pk::kTailExtClarity,
            "the end Smacheratr, off");
     // dry passes when the bands are off and the mix is 0

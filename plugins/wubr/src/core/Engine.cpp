@@ -103,8 +103,11 @@ void Engine::trigger ()
         meters->triggers.fetch_add (1, std::memory_order_relaxed);
 }
 
-double Engine::cycleHz (int b) const
+int Engine::rateBand (int b) const { return p[kLinkRate] >= 0.5 ? 0 : b; }
+
+double Engine::cycleHz (int band) const
 {
+    const int b = rateBand (band);
     if (std::lround (p[bandParam (b, kRateMode)]) == kFree)
         return std::max (0.001, p[bandParam (b, kRateHz)]);
     const int d = std::clamp ((int)std::lround (p[bandParam (b, kSync)]), 0, kSyncDivisions - 1);
@@ -137,9 +140,10 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
         offset[b] = p[bandParam (b, kPhase)] / 360.0;
         target[b] = std::clamp ((int)std::lround (p[bandParam (b, kTarget)]), (int)kTargetGain, (int)kTargetBoth);
         // synced LFOs follow the song position while the host plays
-        if (!envMode && playing && std::lround (p[bandParam (b, kRateMode)]) == kSynced)
+        const int rb = rateBand (b);
+        if (!envMode && playing && std::lround (p[bandParam (rb, kRateMode)]) == kSynced)
         {
-            const int d = std::clamp ((int)std::lround (p[bandParam (b, kSync)]), 0, kSyncDivisions - 1);
+            const int d = std::clamp ((int)std::lround (p[bandParam (rb, kSync)]), 0, kSyncDivisions - 1);
             const double cycles = ppq / kSyncBeats[d];
             band.phase = cycles - std::floor (cycles);
         }

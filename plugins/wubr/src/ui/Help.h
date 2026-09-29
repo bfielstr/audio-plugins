@@ -39,6 +39,9 @@ inline const char* forParam (uint32_t id)
                    "the beginning; they run to their hold points.";
         case kTrigger: return "Envelope: what starts the shapes: MIDI notes, or transients (hits) in the audio.";
         case kSensitivity: return "Transient: how far a hit must jump over the recent level to start the shapes (lower: more hits count).";
+        case kLinkRate:
+            return "Both bands run at band 1's rate (Sync or Free, and its note length or Hz); each keeps its own phase. "
+                   "Off: each band has its own rate.";
         case kDryWet: return "Balance between the input and the banded signal.";
         case kOutput: return "Output level (before the Smacheratr at the end).";
         default: break;

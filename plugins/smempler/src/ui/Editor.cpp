@@ -121,7 +121,7 @@ void Editor::onClose ()
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
-        wubrSync[b] = wubrHz[b] = nullptr;
+        wubrRateMode[b] = wubrSync[b] = wubrHz[b] = nullptr;
         wubrBandViews[b].clear ();
     }
     wubrBandButtons.clear ();
@@ -498,13 +498,19 @@ void Editor::updateWubrLooks ()
     auto* h = hostFor (fxTab);
     if (!h)
         return;
+    // the rate controls: band 1's while Link Rates is on (both bands run at its rate), else the
+    // selected band's; Sync or Hz by that band's rate mode
+    const int rateBand = h->plainValue (wubr::kLinkRate) >= 0.5 ? 0 : wubrBand;
+    const bool free = std::lround (h->plainValue (wubr::bandParam (rateBand, wubr::kRateMode))) == wubr::kFree;
     for (int b = 0; b < wubr::kBands; ++b)
-        if (wubrSync[b] && wubrHz[b])
-        {
-            const bool free = std::lround (h->plainValue (wubr::bandParam (b, wubr::kRateMode))) == wubr::kFree;
-            wubrSync[b]->setVisible (b == wubrBand && !free);
-            wubrHz[b]->setVisible (b == wubrBand && free);
-        }
+    {
+        if (wubrRateMode[b])
+            wubrRateMode[b]->setVisible (b == rateBand);
+        if (wubrSync[b])
+            wubrSync[b]->setVisible (b == rateBand && !free);
+        if (wubrHz[b])
+            wubrHz[b]->setVisible (b == rateBand && free);
+    }
     const bool envelope = std::lround (h->plainValue (wubr::kMode)) == wubr::kEnvelope;
     for (auto* v : wubrEnvViews)
         v->setEnabledLook (envelope);
@@ -558,7 +564,7 @@ void Editor::paramChanged (uint32_t id)
                     const uint32_t wid = (uint32_t)w;
                     const bool rateMode = wid >= wubr::kBandBase && wid < wubr::kTailExtBase
                                           && (wid - wubr::kBandBase) % wubr::kBandBlock == wubr::kRateMode;
-                    if (wid == wubr::kMode || wid == wubr::kTrigger || rateMode)
+                    if (wid == wubr::kMode || wid == wubr::kTrigger || wid == wubr::kLinkRate || rateMode)
                         updateWubrLooks ();
                 }
         }
@@ -822,7 +828,7 @@ void Editor::buildBody ()
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
-        wubrSync[b] = wubrHz[b] = nullptr;
+        wubrRateMode[b] = wubrSync[b] = wubrHz[b] = nullptr;
         wubrBandViews[b].clear ();
     }
     wubrBandButtons.clear ();
@@ -1048,7 +1054,7 @@ void Editor::buildBody ()
             {
                 auto* bt = new ActionButton (CRect (8 + b * 60, 8, 64 + b * 60, 26), b == 0 ? "Band 1" : "Band 2",
                                              [this, b] { showWubrBand (b); }, [this, b] { return wubrBand == b; });
-                bt->setTooltipText (b == 0 ? "Show band 1 (green)." : "Show band 2 (blue).");
+                bt->setTooltipText (b == 0 ? "Show band 1's controls (green)." : "Show band 2's controls (blue).");
                 g->addView (bt);
                 wubrBandButtons.push_back (bt);
             }
@@ -1059,7 +1065,8 @@ void Editor::buildBody ()
             g->addView (new Label (CRect (592, 10, 622, 24), "Sens", 10.5, false, 2));
             wubrSensView = new NumberBox (CRect (626, 8, 676, 26), h, wubr::kSensitivity);
             add (wubrSensView, tip (wubr::kSensitivity));
-            // per band (both are made; the selected one is shown): its row controls, shape and knobs
+            // per band (both are made; the selected one's controls are shown): its row controls, shape
+            // (both shapes always shown, band 1 above band 2) and knobs
             for (int b = 0; b < wubr::kBands; ++b)
             {
                 auto& views = wubrBandViews[b];
@@ -1077,9 +1084,8 @@ void Editor::buildBody ()
                 auto* hold = new NumberBox (CRect (718, 8, 768, 26), h, wubr::bandParam (b, wubr::kHold));
                 band (hold, wubr::bandParam (b, wubr::kHold));
                 wubrEnvViews.push_back (hold);
-                wubrShapes[b] = new wubr::ShapeView (CRect (306, 32, 520, 226), h, b, metersOf);
+                wubrShapes[b] = new wubr::ShapeView (CRect (306, 32 + b * 99, 520, 127 + b * 99), h, b, metersOf);
                 add (wubrShapes[b], wubr::help::kShapeDisplay);
-                views.push_back (wubrShapes[b]);
                 // knobs: the band, then its rate
                 const uint32_t fields[5] = {wubr::kFreq, wubr::kWidth, wubr::kGain, wubr::kDepth, wubr::kSweep};
                 for (int i = 0; i < 5; ++i)
@@ -1087,15 +1093,22 @@ void Editor::buildBody ()
                     const uint32_t id = wubr::bandParam (b, fields[i]);
                     band (new Knob (knobRect (528 + i * 58, 32), h, id, nullptr, i == 2 || i == 3), id);
                 }
-                band (new Segmented (CRect (528, 104, 640, 122), h, wubr::bandParam (b, wubr::kRateMode), {"Sync", "Free"}),
-                      wubr::bandParam (b, wubr::kRateMode));
-                // Sync or Hz, by the rate mode (updateWubrLooks shows one)
+                // the rate: band 1's while Link Rates is on, else the selected band's; Sync or Hz by
+                // the rate mode (updateWubrLooks shows them)
+                wubrRateMode[b] = add (new Segmented (CRect (528, 104, 640, 122), h, wubr::bandParam (b, wubr::kRateMode), {"Sync", "Free"}),
+                                       tip (wubr::bandParam (b, wubr::kRateMode)));
                 wubrSync[b] = add (new Choice (CRect (528, 128, 640, 146), h, wubr::bandParam (b, wubr::kSync)),
                                    tip (wubr::bandParam (b, wubr::kSync)));
                 wubrHz[b] = add (new NumberBox (CRect (528, 128, 640, 146), h, wubr::bandParam (b, wubr::kRateHz)),
                                  tip (wubr::bandParam (b, wubr::kRateHz)));
                 band (new Knob (knobRect (644, 100), h, wubr::bandParam (b, wubr::kPhase)), wubr::bandParam (b, wubr::kPhase));
             }
+            // Link Rates, under the rate controls (both bands)
+            const char* linkTip = tip (wubr::kLinkRate);
+            add (new Toggle (CRect (528, 152, 584, 170), h, wubr::kLinkRate, "Link"),
+                 linkTip ? linkTip
+                         : "Link Rates: both bands run at band 1's rate (its Sync / Free, note length and Hz); "
+                           "each band keeps its own Phase. Off: each band has its own rate.");
             add (new Knob (knobRect (702, 100), h, wubr::kDryWet), tip (wubr::kDryWet));
             add (new Knob (knobRect (760, 100), h, wubr::kOutput), tip (wubr::kOutput));
             auto* n = new Label (CRect (528, 180, 834, 194), "Envelope + MIDI: the sampler's notes start the shapes", 9.5);
@@ -1210,8 +1223,9 @@ void Editor::idle ()
         fxColorView->idle ();
     if (wubrBands)
         wubrBands->idle ();
-    if (wubrShapes[wubrBand])
-        wubrShapes[wubrBand]->idle ();
+    for (auto* shape : wubrShapes)
+        if (shape)
+            shape->idle ();
     if (endColorView && fxEndBody && fxEndBody->isVisible ())
         endColorView->idle ();
     if (envDisplay)
