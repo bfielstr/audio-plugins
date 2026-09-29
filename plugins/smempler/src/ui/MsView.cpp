@@ -90,7 +90,7 @@ void MsView::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (pr.left, yOfDb (midDb)), CPoint (pr.right, yOfDb (midDb)));
     if (auto path = owned (ctx->createGraphicsPath ()))
     {
-        const int steps = 160;
+        const int steps = 320; // fine enough for the Brickwall's drop
         path->beginSubpath (CPoint (pr.left, pr.bottom));
         for (int i = 0; i <= steps; ++i)
         {
@@ -128,9 +128,10 @@ void MsView::draw (CDrawContext* ctx)
     bar (0, shownMid, kMidColor, "M");
     bar (1, shownSide, kSideColor, "S");
 
-    char buf[96];
-    std::snprintf (buf, sizeof (buf), "%s   Side HP %s  Side %s  Mid %s", on ? "MID / SIDE" : "MID / SIDE (off)",
-                   host->valueText (mseq::kSideHp).c_str (), host->valueText (mseq::kSideGain).c_str (), host->valueText (mseq::kMidGain).c_str ());
+    char buf[128];
+    std::snprintf (buf, sizeof (buf), "%s   Side HP %s  %s  Side %s  Mid %s", on ? "MID / SIDE" : "MID / SIDE (off)",
+                   host->valueText (mseq::kSideHp).c_str (), host->valueText (mseq::kSlope).c_str (),
+                   host->valueText (mseq::kSideGain).c_str (), host->valueText (mseq::kMidGain).c_str ());
     text (ctx, buf, CRect (pr.left + 6, pr.top + 4, pr.right - 6, pr.top + 18), on ? theme::kTextBright : theme::kTextDim, 10.0,
           kLeftText, true);
     ctx->setLineWidth (1.0);

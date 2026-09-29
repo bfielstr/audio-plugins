@@ -24,6 +24,9 @@ enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWid
 // the slot types before Wubr (states before version 8 stored the type over this many)
 constexpr int kFxTypesBeforeWubr = 6;
 constexpr int kRackSlots = 8;
+// A new Smempler's first slot (with the effect's own defaults; the other slots start empty). Before 0.9
+// a Smacheratr sat after the rack instead (kTailBase: kept for old projects, see StateIO.cpp).
+constexpr int kDefaultSlotType = kFxSmacheratr;
 constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn, see fxBlockTable)
 // Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
 constexpr uint32_t kLegacyMdParams = 62;
@@ -135,7 +138,7 @@ enum ParamId : uint32_t
     kMsSideGain, // dB
     kMsMidGain,  // dB
     kRootKey,    // the root note: the sample plays at its own pitch on this note
-    kTailBase,   // the Smacheratr at the very end: pk::kTailFields entries
+    kTailBase,   // the Smacheratr after the rack (before 0.9; now "Old End", off): pk::kTailFields entries
     kParaTransposeLock = kTailBase + pk::kTailFields, // unused since Para stopped tracking notes
     kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
     kParaLiquid,        // Para's Liquid movement

@@ -29,16 +29,20 @@
 #include "wubr/src/ui/Help.h"
 #include "wubr/src/ui/ShapeView.h"
 
+#include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cframe.h"
+#include "vstgui/lib/cgraphicspath.h"
 #include "vstgui/lib/controls/coptionmenu.h"
 #include "vstgui/lib/cvstguitimer.h"
+#include "vstgui/lib/events.h"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <functional>
 #include <type_traits>
 
 #if defined(_WIN32)
@@ -75,6 +79,134 @@ public:
     }
 };
 
+// A rack slot's tab. A click shows the slot; dragged sideways it follows the mouse along the row (drag
+// reports where it would land, `target`, a place in the row), and let go there, drop moves the effect.
+// Nothing is rebuilt from inside its own mouse handling: the editor does that on its next idle.
+class SlotTab : public CView
+{
+public:
+    using Place = std::function<void (int pos, int target)>;
+    SlotTab (const CRect& r, std::string t, int position, int tabs, std::function<void ()> click, std::function<bool ()> lit,
+             Place drag, Place drop)
+    : CView (r), home (r), text (std::move (t)), pos (position), count (tabs), onClick (std::move (click)), active (std::move (lit)),
+      onDrag (std::move (drag)), onDrop (std::move (drop))
+    {
+    }
+
+    void draw (CDrawContext* ctx) override
+    {
+        const CRect r = getViewSize ();
+        const bool lit = active && active ();
+        const CColor fill = dragging ? theme::kAccentDim : (pressed ? theme::kKnobTrack : (lit ? theme::kControlOn : theme::kControlBg));
+        if (auto path = VSTGUI::owned (ctx->createGraphicsPath ()))
+        {
+            path->addRoundRect (r, 3.0);
+            ctx->setFillColor (fill);
+            ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
+            if (dragging)
+            {
+                ctx->setFrameColor (theme::kAccent);
+                ctx->setLineWidth (1.0);
+                ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+            }
+        }
+        else
+        {
+            ctx->setFillColor (fill);
+            ctx->drawRect (r, kDrawFilled);
+        }
+        ctx->setFont (theme::font (10.5, lit));
+        ctx->setFontColor (lit && !dragging ? CColor (20, 20, 20) : theme::kText);
+        ctx->drawString (text.c_str (), r, kCenterText, true);
+    }
+
+    void onMouseDownEvent (MouseDownEvent& e) override
+    {
+        if (!e.buttonState.isLeft ())
+            return;
+        pressed = true;
+        dragging = false;
+        downX = e.mousePosition.x;
+        invalid ();
+        e.consumed = true;
+    }
+
+    void onMouseMoveEvent (MouseMoveEvent& e) override
+    {
+        if (!pressed)
+            return;
+        e.consumed = true;
+        double dx = e.mousePosition.x - downX;
+        if (!dragging && std::fabs (dx) < 4.0) // a click that wobbles is still a click
+            return;
+        if (!dragging)
+        {
+            dragging = true;
+            // drawn over the other tabs while it moves
+            if (auto* row = getParentView () ? getParentView ()->asViewContainer () : nullptr)
+                row->changeViewZOrder (this, row->getNbViews () - 1);
+        }
+        const double step = Editor::kFxTabWidth;
+        dx = std::clamp (dx, -pos * step, (count - 1 - pos) * step);
+        CRect r = home;
+        r.offset (dx, 0);
+        setViewSize (r);
+        setMouseableArea (r);
+        target = std::clamp (pos + (int)std::lround (dx / step), 0, count - 1);
+        if (onDrag)
+            onDrag (pos, target);
+        invalid ();
+    }
+
+    void onMouseUpEvent (MouseUpEvent& e) override
+    {
+        if (!pressed)
+            return;
+        pressed = false;
+        e.consumed = true;
+        if (dragging)
+        {
+            dragging = false;
+            const int to = target;
+            goHome ();
+            if (onDrop)
+                onDrop (pos, to);
+            return;
+        }
+        invalid ();
+        if (home.pointInside (e.mousePosition) && onClick)
+            onClick ();
+    }
+
+    void onMouseCancelEvent (MouseCancelEvent& e) override
+    {
+        if (dragging && onDrag)
+            onDrag (pos, pos); // (nothing moves)
+        pressed = dragging = false;
+        goHome ();
+        e.consumed = true;
+    }
+
+private:
+    void goHome ()
+    {
+        setViewSize (home);
+        setMouseableArea (home);
+        target = pos;
+        if (auto* row = getParentView ())
+            row->invalid ();
+    }
+
+    const CRect home;
+    std::string text;
+    int pos, count, target = 0;
+    std::function<void ()> onClick;
+    std::function<bool ()> active;
+    Place onDrag, onDrop;
+    bool pressed = false, dragging = false;
+    double downX = 0.0;
+};
+
 std::filesystem::path u8 (const std::string& s) { return pathFromUtf8 (s); }
 
 // Shows the file in Finder / Explorer / the desktop's file manager.
@@ -98,24 +230,20 @@ void revealInFileBrowser (const std::string& path)
 }
 } // namespace
 
-Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
-{
-    // the saturator at the very end: Smacheratr's display on the tail's parameters
-    satHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) -> int64_t {
-        const int f = smacheratr::tailFieldOf (id);
-        if (f < 0)
-            return -1;
-        return f < (int)pk::kTailFields ? (int64_t)(kTailBase + f) : (int64_t)(kTailExtBase + (f - pk::kTailFields));
-    });
-}
+Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    fxRow = fxCtl = fxBody = fxEndBody = nullptr;
+    fxRow = fxCtl = fxBody = nullptr;
+    fxDropMark = nullptr;
+    tabSlots.clear ();
     fxFilterView = nullptr;
     fxDynDisplay = nullptr;
-    fxShaperView = endShaperView = nullptr;
-    endColorView = nullptr;
+    fxShaperView = nullptr;
+    fxColorView = nullptr;
+    for (auto& v : rackBandViews)
+        v.clear ();
+    rackBandButtons.clear ();
     fxGonio = nullptr;
     wubrBands = nullptr;
     for (int b = 0; b < 2; ++b)
@@ -362,8 +490,8 @@ void Editor::buildUI (CFrame* f)
 
     // hover help for every parameter control
 
-    // ---- after the sampler: the effects rack (the slots in chain order, "+" to add one, the saturator
-    // at the very end on the right), and the output scope ----
+    // ---- after the sampler: the effects rack (the slots' tabs in chain order, "+" to add one), and the
+    // output scope ----
     fxRow = new Group (CRect (8, kFxTabTop, 846, kFxTabTop + 20));
     root->addView (fxRow);
     fxCtl = new Group (CRect (8, kFxCtlTop, 846, kFxCtlTop + 20));
@@ -372,74 +500,6 @@ void Editor::buildUI (CFrame* f)
     root->addView (fxp);
     fxBody = new Group (CRect (0, 0, 838, 234));
     fxp->addView (fxBody);
-    {
-        // the saturator at the very end (built once: its controls are bound)
-        fxEndBody = new Group (CRect (0, 0, 838, 234));
-        fxp->addView (fxEndBody);
-        auto satMeters = [this] () -> const smacheratr::Meters* {
-            auto* b = ctl->getBridge ();
-            return b ? &b->satMeters : nullptr;
-        };
-        endShaperView = new smacheratr::ShaperView (CRect (8, 8, 230, 226), satHost.get (), satMeters);
-        endShaperView->setTooltipText (smacheratr::help::kShaperDisplay);
-        fxEndBody->addView (endShaperView);
-        endColorView = new smacheratr::ColorView (
-            CRect (236, 34, 526, 226), satHost.get (),
-            [this] () {
-                auto* b = ctl->getBridge ();
-                return b ? b->sampleRate.load (std::memory_order_relaxed) : 48000.0;
-            },
-            satMeters);
-        endColorView->setTooltipText (smacheratr::help::kColorDisplay);
-        endColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
-        fxEndBody->addView (endColorView);
-        {
-            using namespace smacheratr;
-            auto* h = satHost.get ();
-            auto add = [&] (CView* v, uint32_t id) {
-                v->setTooltipText (smacheratr::help::forParam (id));
-                fxEndBody->addView (v);
-            };
-            bind (fxEndBody, new Toggle (CRect (236, 8, 280, 26), this, kTailBase + pk::kTailOn, "On"))
-                ->setTooltipText ("Smacheratr at the very end, after the rack: off, the sound passes untouched.");
-            add (new Toggle (CRect (284, 8, 350, 26), h, kPreLimit, "Pre-Limit"), kPreLimit);
-            add (new NumberBox (CRect (354, 8, 406, 26), h, kPreLimitThreshold), kPreLimitThreshold);
-            add (new Toggle (CRect (410, 8, 468, 26), h, kClarity, "Clarity"), kClarity);
-            add (new Toggle (CRect (472, 8, 512, 26), h, kMidSide, "M/S"), kMidSide);
-            add (new Choice (CRect (516, 8, 608, 26), h, kPostClip), kPostClip);
-            add (new Toggle (CRect (612, 8, 658, 26), h, kHiQuality, "Hi-Q"), kHiQuality);
-            add (new Toggle (CRect (662, 8, 730, 26), h, kDcFilter, "DC Filter"), kDcFilter);
-            add (new Toggle (CRect (734, 8, 786, 26), h, kColorOn, "Color"), kColorOn);
-            const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
-            for (int i = 0; i < 7; ++i)
-                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), ids[i]);
-            // Clarity: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
-            endBandButtons.clear ();
-            for (int k = 0; k < kClarityBands; ++k)
-            {
-                endBandViews[k].clear ();
-                const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
-                const char* bandNames[3] = {"Clarity Hz", "Clarity W", "Clarity dB"};
-                for (int i = 0; i < 3; ++i)
-                {
-                    auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
-                    kn->setTooltipText (smacheratr::help::forParam (bandIds[i]));
-                    fxEndBody->addView (kn);
-                    endBandViews[k].push_back (kn);
-                }
-                auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
-                                             [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-                bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
-                                           : "Show Clarity's second band (blue: it works once its Range is above 0 dB).");
-                fxEndBody->addView (bt);
-                endBandButtons.push_back (bt);
-            }
-            showClarityBand (clarityBand);
-        }
-        auto* n3 = new Label (CRect (534, 214, 830, 228), "after the rack, just before the output", 9.5);
-        n3->setDim (true);
-        fxEndBody->addView (n3);
-    }
     scope = new pk::ScopeView (
         CRect (852, kFxTabTop, 1102, kFxPanelTop + 234),
         [this] (float* l, float* r, int n) {
@@ -465,13 +525,10 @@ void Editor::buildUI (CFrame* f)
 void Editor::showClarityBand (int band)
 {
     clarityBand = band == 1 ? 1 : 0;
-    for (auto* views : {rackBandViews, endBandViews})
-        for (int k = 0; k < smacheratr::kClarityBands; ++k)
-            for (auto* v : views[k])
-                v->setVisible (k == clarityBand);
+    for (int k = 0; k < smacheratr::kClarityBands; ++k)
+        for (auto* v : rackBandViews[k])
+            v->setVisible (k == clarityBand);
     for (auto* b : rackBandButtons)
-        b->invalid ();
-    for (auto* b : endBandButtons)
         b->invalid ();
 }
 
@@ -493,7 +550,7 @@ void Editor::showWubrBand (int band)
 
 void Editor::updateWubrLooks ()
 {
-    if (!wubrBands || fxTab >= kFxEnd || ctl->slotType (fxTab) != kFxWubr)
+    if (!wubrBands || fxTab >= kFxNone || ctl->slotType (fxTab) != kFxWubr)
         return;
     auto* h = hostFor (fxTab);
     if (!h)
@@ -569,8 +626,8 @@ void Editor::paramChanged (uint32_t id)
                 }
         }
     }
-    if (isTailParam (id) && fxEndBody)
-        fxEndBody->invalid (); // the end tab's controls read the values when they draw
+    if (id == kTailBase + pk::kTailOn)
+        rackDirty = true; // the note about an old project's saturator after the rack
     switch (id)
     {
         case kMode:
@@ -646,8 +703,8 @@ void Editor::updateMdLayout ()
 
 void Editor::setFxTab (int t)
 {
-    // rebuilt on the next idle: the tab button that asked may be one of the views rebuilt
-    fxTab = std::clamp (t, 0, (int)kFxEnd);
+    // rebuilt on the next idle: the tab that asked is one of the views rebuilt
+    fxTab = std::clamp (t, 0, (int)kFxNone);
     rackDirty = true;
 }
 
@@ -659,6 +716,10 @@ pk::MappedParamHost* Editor::hostFor (int slot)
     auto& h = slotHosts[(size_t)slot];
     if (!h || slotHostType[(size_t)slot] != type)
     {
+        // the views of the page on screen may hold the old one until the panel is rebuilt (they draw
+        // before the next idle): it is kept until then
+        if (h)
+            retiredHosts.push_back (std::move (h));
         h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) -> int64_t {
             const int64_t j = fxBlockOf (type, id);
             return j < 0 ? -1 : (int64_t)slotBlockParam (slot, (uint32_t)j);
@@ -672,17 +733,26 @@ namespace {
 // every value of a slot: its Type, On, and every block position (the extension too)
 constexpr uint32_t kSlotValues = kSlotParams + kSlotBlockAll;
 uint32_t slotValueParam (int slot, uint32_t k) { return k < kSlotParams ? slotParam (slot, k) : slotBlockParam (slot, k - kSlotParams); }
+// an empty slot's values: Empty, On, the block at 0
+double emptySlotValue (uint32_t k) { return k == kSlotOn ? 1.0 : 0.0; }
 } // namespace
 
 void Editor::copySlot (int from, int to)
 {
+    // (only what differs, so the host's automation sees the real changes)
+    const bool empty = ctl->slotType (from) == kFxEmpty;
     for (uint32_t k = 0; k < kSlotValues; ++k)
-        setOnce (slotValueParam (to, k), norm (slotValueParam (from, k)));
+    {
+        const double v = empty ? emptySlotValue (k) : norm (slotValueParam (from, k));
+        if (norm (slotValueParam (to, k)) != v)
+            setOnce (slotValueParam (to, k), v);
+    }
 }
 
 void Editor::addFx (int type)
 {
-    int slot = -1;
+    // after the last effect (the first empty slot if the last slot is taken)
+    int slot = slotAfterChain ([this] (int s) { return ctl->slotType (s); });
     for (int s = 0; s < kRackSlots && slot < 0; ++s)
         if (ctl->slotType (s) == kFxEmpty)
             slot = s;
@@ -700,34 +770,80 @@ void Editor::addFx (int type)
 
 void Editor::removeFx (int slot)
 {
-    if (slot < 0 || slot >= kRackSlots)
+    if (slot < 0 || slot >= kRackSlots || ctl->slotType (slot) == kFxEmpty)
         return;
-    // the ones after it move up, so the chain stays in order without gaps
-    for (int s = slot; s + 1 < kRackSlots; ++s)
-        copySlot (s + 1, s);
-    setOnce (slotParam (kRackSlots - 1, kSlotType), 0.0);
-    setOnce (slotParam (kRackSlots - 1, kSlotOn), 1.0);
-    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
-        setOnce (slotBlockParam (kRackSlots - 1, j), 0.0);
-    fxTab = ctl->slotType (slot) != kFxEmpty ? slot : std::max (0, slot - 1);
-    if (ctl->slotType (fxTab) == kFxEmpty)
-        fxTab = kFxEnd;
+    // the page's views go first: the slots' effects change under them (and with them their hosts)
+    clearBody ();
+    // the ones after it move up, so the chain stays in order without gaps; the last one used is emptied
+    for (int s = slot; s < kRackSlots; ++s)
+        if (s + 1 < kRackSlots && (ctl->slotType (s + 1) != kFxEmpty || ctl->slotType (s) != kFxEmpty))
+            copySlot (s + 1, s);
+        else if (ctl->slotType (s) != kFxEmpty)
+            for (uint32_t k = 0; k < kSlotValues; ++k)
+                setOnce (slotValueParam (s, k), emptySlotValue (k));
+    // the effect that took its place is shown (else the one before it: see rebuildRack)
+    fxTab = slot;
     rackDirty = true;
 }
 
-void Editor::moveFx (int slot, int dir)
+void Editor::moveFx (int from, int to)
 {
-    const int other = slot + dir;
-    if (slot < 0 || slot >= kRackSlots || other < 0 || other >= kRackSlots || ctl->slotType (other) == kFxEmpty)
+    if (from < 0 || from >= kRackSlots || to < 0 || to >= kRackSlots || from == to || ctl->slotType (from) == kFxEmpty)
         return;
-    // swap the two slots, every value
-    std::array<double, kSlotValues> keepA;
+    clearBody (); // (as in removeFx)
+    std::array<double, kSlotValues> moving;
     for (uint32_t k = 0; k < kSlotValues; ++k)
-        keepA[k] = norm (slotValueParam (slot, k));
-    copySlot (other, slot);
+        moving[k] = norm (slotValueParam (from, k));
+    // the slots between move over by one, towards where it was; then it takes its new place
+    const int dir = to > from ? 1 : -1;
+    for (int s = from; s != to; s += dir)
+        copySlot (s + dir, s);
     for (uint32_t k = 0; k < kSlotValues; ++k)
-        setOnce (slotValueParam (other, k), keepA[k]);
-    fxTab = other;
+        if (norm (slotValueParam (to, k)) != moving[k])
+            setOnce (slotValueParam (to, k), moving[k]);
+    fxTab = to;
+    rackDirty = true;
+}
+
+void Editor::dragTab (int pos, int target)
+{
+    if (!fxDropMark)
+        return;
+    // a bar in the gap it would land in: before the tab it passes going left, after it going right
+    const int n = (int)tabSlots.size ();
+    if (target == pos || pos < 0 || pos >= n || target < 0 || target >= n)
+    {
+        fxDropMark->setVisible (false);
+        return;
+    }
+    const double left = std::max (0.0, (target > pos ? target + 1 : target) * kFxTabWidth - 4.0);
+    const CRect r (left, 0, left + 3.0, 20);
+    fxDropMark->setViewSize (r);
+    fxDropMark->setMouseableArea (r);
+    fxDropMark->setVisible (true);
+    if (fxRow)
+        fxRow->invalid ();
+}
+
+void Editor::dropTab (int pos, int target)
+{
+    if (fxDropMark)
+        fxDropMark->setVisible (false);
+    const int n = (int)tabSlots.size ();
+    if (pos >= 0 && pos < n && target >= 0 && target < n && target != pos)
+        moveFx (tabSlots[(size_t)pos], tabSlots[(size_t)target]); // (the row is rebuilt on the next idle)
+    else if (pos >= 0 && pos < n)
+        setFxTab (tabSlots[(size_t)pos]);
+}
+
+void Editor::moveOldEndIntoRack ()
+{
+    const int slot = slotAfterChain ([this] (int s) { return ctl->slotType (s); });
+    if (slot < 0)
+        return;
+    endSaturatorToSlot (slot, [this] (uint32_t id) { return norm (id); }, [this] (uint32_t id, double v) { setOnce (id, v); });
+    setOnce (kTailBase + pk::kTailOn, 0.0);
+    fxTab = slot;
     rackDirty = true;
 }
 
@@ -752,37 +868,56 @@ void Editor::rebuildRack ()
         return;
     fxRow->removeAll ();
     fxCtl->removeAll ();
-    int firstEmpty = -1;
+    fxDropMark = nullptr;
+    tabSlots.clear ();
+    bool anyEmpty = false;
     for (int s = 0; s < kRackSlots; ++s)
     {
         shownTypes[(size_t)s] = ctl->slotType (s);
-        if (shownTypes[(size_t)s] == kFxEmpty && firstEmpty < 0)
-            firstEmpty = s;
-    }
-    if (fxTab < kFxEnd && shownTypes[(size_t)fxTab] == kFxEmpty)
-        fxTab = kFxEnd;
-    // the slots, in chain order
-    double x = 0.0;
-    for (int s = 0; s < kRackSlots; ++s)
-    {
         if (shownTypes[(size_t)s] == kFxEmpty)
-            continue;
+            anyEmpty = true;
+        else
+            tabSlots.push_back (s);
+    }
+    // the slot shown: the one asked for; if it is empty, the last effect before it (else the first)
+    if (fxTab >= kFxNone || shownTypes[(size_t)fxTab] == kFxEmpty)
+    {
+        int pick = tabSlots.empty () ? (int)kFxNone : tabSlots.front ();
+        if (fxTab < kFxNone)
+            for (int s : tabSlots)
+                if (s < fxTab)
+                    pick = s;
+        fxTab = pick;
+    }
+    // the slots, in chain order: click one to show it, drag it sideways to move it
+    const int n = (int)tabSlots.size ();
+    for (int pos = 0; pos < n; ++pos)
+    {
+        const int s = tabSlots[(size_t)pos];
         char buf[32];
         std::snprintf (buf, sizeof (buf), "%d  %s", s + 1, fxName (shownTypes[(size_t)s]));
-        fxRow->addView (new ActionButton (CRect (x, 0, x + kFxTabWidth - 4, 20), buf, [this, s] { setFxTab (s); },
-                                          [this, s] { return fxTab == s; }));
-        x += kFxTabWidth;
+        auto* tab = new SlotTab (CRect (pos * kFxTabWidth, 0, pos * kFxTabWidth + kFxTabWidth - 4, 20), buf, pos, n,
+                                 [this, s] { setFxTab (s); }, [this, s] { return fxTab == s; },
+                                 [this] (int p, int t) { dragTab (p, t); }, [this] (int p, int t) { dropTab (p, t); });
+        tab->setTooltipText ("Click to show this effect. Drag it sideways to move it in the chain (the rack runs left to right).");
+        fxRow->addView (tab);
     }
-    if (firstEmpty >= 0)
+    const double x = n * kFxTabWidth;
+    if (anyEmpty)
     {
         auto* add = new ActionButton (CRect (x, 0, x + 26, 20), "+", [this, x] { showAddMenu (CPoint (8 + x, kFxTabTop + 20)); });
         add->setTooltipText ("Add an effect to the end of the rack (after the sampler; the rack runs left to right).");
         fxRow->addView (add);
     }
-    fxRow->addView (new ActionButton (CRect (838 - 132, 0, 838, 20), "end: smacheratr", [this] { setFxTab (kFxEnd); },
-                                      [this] { return fxTab == kFxEnd; }));
+    auto* mark = new Group (CRect (0, 0, 3, 20));
+    mark->setBackgroundColor (theme::kAccent);
+    mark->setMouseEnabled (false);
+    mark->setVisible (false);
+    fxRow->addView (mark);
+    fxDropMark = mark;
     // the selected slot's controls
-    if (fxTab < kFxEnd)
+    double noteX = 0.0;
+    if (fxTab < kFxNone)
     {
         const int s = fxTab;
         char buf[48];
@@ -791,32 +926,40 @@ void Editor::rebuildRack ()
         auto* onT = new Toggle (CRect (156, 1, 200, 19), this, slotParam (s, kSlotOn), "On");
         onT->setTooltipText ("Switch this effect off (it keeps its place, and its latency).");
         fxCtl->addView (onT);
-        auto* left = new ActionButton (CRect (208, 0, 234, 20), "<", [this, s] { moveFx (s, -1); });
-        left->setTooltipText ("Move it earlier in the chain.");
-        fxCtl->addView (left);
-        auto* right = new ActionButton (CRect (238, 0, 264, 20), ">", [this, s] { moveFx (s, +1); });
-        right->setTooltipText ("Move it later in the chain.");
-        fxCtl->addView (right);
-        auto* rm = new ActionButton (CRect (272, 0, 340, 20), "Remove", [this, s] { removeFx (s); });
-        rm->setTooltipText ("Take this effect out of the rack.");
+        auto* rm = new ActionButton (CRect (208, 0, 276, 20), "Remove", [this, s] { removeFx (s); });
+        rm->setTooltipText ("Take this effect out of the rack (the ones after it move up).");
         fxCtl->addView (rm);
+        noteX = 286.0;
     }
-    auto* note = new Label (CRect (fxTab < kFxEnd ? 350 : 0, 1, 838, 19),
-                            fxTab < kFxEnd ? "the rack runs left to right after the sampler; right click resets a control"
-                                           : "the saturator at the very end, after the rack",
-                            9.5);
-    note->setDim (true);
-    fxCtl->addView (note);
+    // an old project's saturator after the rack, still on because the rack had no room for it
+    if (plainValue (kTailBase + pk::kTailOn) >= 0.5)
+    {
+        const bool room = slotAfterChain ([this] (int s) { return ctl->slotType (s); }) >= 0;
+        auto* old = new ActionButton (CRect (838 - 250, 0, 838, 20),
+                                      room ? "old end saturator: move into the rack" : "old end saturator on (rack full)",
+                                      [this] { moveOldEndIntoRack (); });
+        old->setTooltipText ("This project still has the saturator that used to sit after the rack (its rack was full when it "
+                             "loaded): it runs after the rack as before. Once the last slot is free, click to move it into the rack.");
+        fxCtl->addView (old);
+    }
+    else
+    {
+        auto* note = new Label (CRect (noteX, 1, 838, 19),
+                                fxTab < kFxNone ? "drag a tab to move it; the rack runs left to right; right click resets a control"
+                                                : "the rack is empty: + adds an effect after the sampler",
+                                9.5);
+        note->setDim (true);
+        fxCtl->addView (note);
+    }
     buildBody ();
     if (frame)
         frame->invalid ();
 }
 
-void Editor::buildBody ()
+void Editor::clearBody ()
 {
-    if (!fxBody)
-        return;
-    fxBody->removeAll ();
+    if (fxBody)
+        fxBody->removeAll ();
     fxFilterView = nullptr;
     fxDynDisplay = nullptr;
     fxShaperView = nullptr;
@@ -844,17 +987,25 @@ void Editor::buildBody ()
         for (auto& v : mdBoxes[b])
             v = nullptr;
     }
-    const bool end = fxTab >= kFxEnd;
-    fxEndBody->setVisible (end);
-    fxBody->setVisible (!end);
-    if (end)
+    rackPageParams.clear ();
+    // no view holds a replaced host any more
+    retiredHosts.clear ();
+    if (fxBody)
+        fxBody->invalid ();
+}
+
+void Editor::buildBody ()
+{
+    if (!fxBody)
         return;
+    clearBody ();
+    if (fxTab >= kFxNone)
+        return; // the rack is empty
     const int s = fxTab;
     const int type = ctl->slotType (s);
     pk::MappedParamHost* h = hostFor (s);
     auto* g = fxBody;
     const CRect none (0, 0, 0, 0);
-    rackPageParams.clear ();
     auto add = [&] (CView* v, const char* tip) {
         if (tip)
             v->setTooltipText (tip);
@@ -885,6 +1036,10 @@ void Editor::buildBody ()
             add (new Knob (knobRect (480, 164), h, kDipStart, "Dip"), tip (kDipStart));
             add (new Knob (knobRect (538, 164), h, kFade, "Fade"), tip (kFade));
             add (new Knob (knobRect (596, 164), h, kLpFloor, "Floor"), tip (kLpFloor));
+            // the drive in Para's own path: on, before or after the filters, how hard
+            add (new Toggle (CRect (662, 168, 742, 186), h, kDriveOn, "Drive"), tip (kDriveOn));
+            add (new Segmented (CRect (662, 192, 742, 210), h, kDrivePos, {"Pre", "Post"}), tip (kDrivePos));
+            add (new Knob (knobRect (750, 164), h, kDrive, "Amount"), tip (kDrive));
             break;
         }
         case kFxMultidyn:
@@ -946,7 +1101,7 @@ void Editor::buildBody ()
                          "up/down for the side level, the mouse wheel for the slope (while holding the handle, or with Shift); "
                          "double-click or right click resets. Right: live mid and side levels.");
             g->addView (new Label (CRect (480, 8, 520, 26), "Slope", 10.5, false, 2));
-            add (new Segmented (CRect (526, 8, 646, 26), h, mseq::kSlope, {"6", "12", "24"}), help::forParam (kMsSlope));
+            add (new Choice (CRect (526, 8, 646, 26), h, mseq::kSlope), help::forParam (kMsSlope)); // 6 .. 96 dB, Brickwall
             add (new Knob (knobRect (480, 34), h, mseq::kSideHp), help::forParam (kMsSideHp));
             add (new Knob (knobRect (540, 34), h, mseq::kSideGain), help::forParam (kMsSideGain));
             add (new Knob (knobRect (600, 34), h, mseq::kMidGain), help::forParam (kMsMidGain));
@@ -1215,8 +1370,6 @@ void Editor::idle ()
         msView->idle ();
     if (fxGonio)
         fxGonio->idle ();
-    if (fxTab == kFxEnd && endShaperView)
-        endShaperView->idle ();
     if (fxShaperView)
         fxShaperView->idle ();
     if (fxColorView)
@@ -1226,8 +1379,6 @@ void Editor::idle ()
     for (auto* shape : wubrShapes)
         if (shape)
             shape->idle ();
-    if (endColorView && fxEndBody && fxEndBody->isVisible ())
-        endColorView->idle ();
     if (envDisplay)
         envDisplay->tick ();
     if (nameLabel)

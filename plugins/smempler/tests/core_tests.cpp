@@ -258,46 +258,47 @@ static void setFx (Engine& e, int slot, uint32_t id, double plain)
 TEST (rack_effects)
 {
     // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note
+    // (after a new Smempler's Smacheratr in the first slot: the effects here go in slots 2 and 3)
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     const int base = e->latency ();
-    CHECK (base > 0, "the saturator at the very end reports its latency: %d", base);
+    CHECK (e->rackType (0) == kFxSmacheratr && base > 0, "the first slot's Smacheratr reports its latency: %d", base);
     e->noteOn (60, 1.0f);
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
-    loadFx (*e, 0, kFxPara);
-    setFx (*e, 0, para::kHpFreq, 700.0);
-    setFx (*e, 0, para::kLpFreq, 275.0);
-    e->reset ();
-    e->noteOn (60, 1.0f);
-    o = run (*e, 24000);
-    const double notched = rms (o.l, 12000, 24000);
-    CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
-    // the same effect twice: two notches are deeper than one
     loadFx (*e, 1, kFxPara);
     setFx (*e, 1, para::kHpFreq, 700.0);
     setFx (*e, 1, para::kLpFreq, 275.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
+    const double notched = rms (o.l, 12000, 24000);
+    CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
+    // the same effect twice: two notches are deeper than one
+    loadFx (*e, 2, kFxPara);
+    setFx (*e, 2, para::kHpFreq, 700.0);
+    setFx (*e, 2, para::kLpFreq, 275.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 24000);
     CHECK (rms (o.l, 12000, 24000) < notched * 0.5, "two Paras: %f vs %f", rms (o.l, 12000, 24000), notched);
     // off: the slot passes the sound
-    e->setParam (slotParam (0, kSlotOn), 0.0);
     e->setParam (slotParam (1, kSlotOn), 0.0);
+    e->setParam (slotParam (2, kSlotOn), 0.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
     CHECK (std::fabs (rms (o.l, 12000, 24000) / dry - 1.0) < 0.02, "both off: untouched (%f vs %f)", rms (o.l, 12000, 24000), dry);
-    // Multidyn in the first slot instead: its preset lifts a quiet sample, and its latency counts
-    e->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
-    loadFx (*e, 0, kFxMultidyn);
+    // Multidyn in the second slot instead: its preset lifts a quiet sample, and its latency counts
+    e->setParam (slotParam (2, kSlotType), (double)kFxEmpty);
+    loadFx (*e, 1, kFxMultidyn);
     CHECK (e->latency () > base, "Multidyn's look-ahead is reported: %d", e->latency ());
     e->setParam (kGain, -30.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     const double lifted = rms (o.l, 24000, 48000);
-    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    e->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
     CHECK (e->latency () == base, "taken out: back to %d (%d)", base, e->latency ());
     e->reset ();
     e->noteOn (60, 1.0f);
@@ -756,7 +757,33 @@ TEST (defaults_one_voice_and_root_note)
     const auto& t = paramTable ();
     CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
     CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator on, 0 dB");
+    // a new Smempler: Smacheratr in the first slot, on, with its own defaults (the other slots empty),
+    // and no saturator after the rack (the old one's parameters are off)
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the old end saturator is off");
+    CHECK (t.info (slotParam (0, kSlotType)).def == (double)kFxSmacheratr && t.info (slotParam (0, kSlotOn)).def == 1.0,
+           "Smacheratr in the first slot, on");
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+    {
+        const double want = j < smacheratr::kNumParams ? smacheratr::paramTable ().defaultNormalized (j) : 0.0;
+        CHECK (std::fabs (defaultNormalized (slotBlockParam (0, j)) - want) < 1e-12, "first slot position %u: %f, want %f", j,
+               defaultNormalized (slotBlockParam (0, j)), want);
+    }
+    CHECK (smacheratr::paramTable ().info (smacheratr::kPreLimit).def == 1.0 &&
+               defaultNormalized (slotBlockParam (0, smacheratr::kPreLimit)) == 1.0,
+           "its Pre-Limit is on");
+    for (int slot = 1; slot < kRackSlots; ++slot)
+        CHECK (t.info (slotParam (slot, kSlotType)).def == (double)kFxEmpty, "slot %d empty", slot + 1);
+    CHECK (std::string (t.info (kTailBase + pk::kTailOn).name).rfind ("Old ", 0) == 0 &&
+               std::string (t.info (kTailExtBase + pk::kTailExtClarity).name).rfind ("Old ", 0) == 0,
+           "the old end saturator's parameters are named Old: %s, %s", t.info (kTailBase + pk::kTailOn).name,
+           t.info (kTailExtBase + pk::kTailExtClarity).name);
+    {
+        // and the engine starts that way: the Smacheratr's latency, nothing after the rack
+        Engine fresh;
+        fresh.prepare (kHostSr, 256);
+        CHECK (fresh.rackType (0) == kFxSmacheratr && fresh.rackType (1) == kFxEmpty && fresh.latency () > 0,
+               "a new engine's rack: %d %d, latency %d", fresh.rackType (0), fresh.rackType (1), fresh.latency ());
+    }
     // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
@@ -827,8 +854,225 @@ TEST (mid_side_eq_tapers_the_sides)
     CHECK (gentle.side50 > on.side50 * 3.0 && gentle.side50 < off.side50 * 0.3, "6 dB tapers more gently: %f", gentle.side50);
     const auto quiet = measure (true, MsEq::k24, -6.0);
     CHECK (std::fabs (quiet.side3k / on.side3k - 0.501) < 0.03, "side gain -6 dB: %f", quiet.side3k / on.side3k);
-    for (int sl : {MsEq::k6, MsEq::k12, MsEq::k24})
+    for (int sl = MsEq::k6; sl <= MsEq::k96; ++sl)
         CHECK (std::fabs (MsEq::responseDb (300.0, 300.0, sl) + 3.01) < 0.05, "slope %d: -3 dB at the cutoff", sl);
+    const auto brick = measure (true, MsEq::kBrickwall, 0.0);
+    CHECK (brick.side50 < on.side50 * 0.01, "Brickwall: far less low side than 24 dB: %g vs %g", brick.side50, on.side50);
+    CHECK (std::fabs (brick.side3k / off.side3k - 1.0) < 0.05 && std::fabs (brick.mid100 / off.mid100 - 1.0) < 0.02,
+           "Brickwall: the high side and the mid stay: %f, %f", brick.side3k / off.side3k, brick.mid100 / off.mid100);
+}
+
+TEST (mid_side_eq_slopes)
+{
+    // the rack's M/S EQ has ten slopes: 6 .. 96 dB per octave and Brickwall
+    const auto& t = mseq::paramTable ();
+    CHECK (t.info (mseq::kSlope).choices.size () == (size_t)MsEq::kNumSlopes && t.info (mseq::kSlope).def == (double)MsEq::k24,
+           "%u slopes, 24 dB by default", (unsigned)t.info (mseq::kSlope).choices.size ());
+    CHECK (std::string (t.info (mseq::kSlope).choices[MsEq::k96]) == "96 dB" &&
+               std::string (t.info (mseq::kSlope).choices[MsEq::kBrickwall]) == "Brickwall",
+           "the names");
+    // a side-only sine through the EQ at a few frequencies around a 400 Hz cutoff: what the filter does
+    // is what the display draws (within 1 dB, down to -120 dB), each slope steeper than the one before
+    const double sr = kHostSr, fc = 400.0;
+    auto sideGainDb = [&] (int slope, double f) {
+        MsEq eq;
+        eq.prepare (sr);
+        const int n = 48000, blk = 256;
+        std::vector<float> l ((size_t)n), r ((size_t)n);
+        for (int i = 0; i < n; ++i)
+        {
+            const float v = 0.5f * (float)std::sin (2.0 * M_PI * f * i / sr);
+            l[(size_t)i] = v;
+            r[(size_t)i] = -v;
+        }
+        for (int i = 0; i < n; i += blk)
+            eq.process (l.data () + i, r.data () + i, std::min (blk, n - i), fc, slope, 0.0, 0.0);
+        std::vector<double> side ((size_t)n);
+        for (int i = 0; i < n; ++i)
+            side[(size_t)i] = 0.5 * ((double)l[(size_t)i] - r[(size_t)i]);
+        double s = 0, c = 0;
+        for (int i = n / 2; i < n; ++i)
+        {
+            s += side[(size_t)i] * std::sin (2.0 * M_PI * f * i / sr);
+            c += side[(size_t)i] * std::cos (2.0 * M_PI * f * i / sr);
+        }
+        return 20.0 * std::log10 (2.0 * std::sqrt (s * s + c * c) / (n / 2) / 0.5 + 1e-15);
+    };
+    double prevOctave = 1.0;
+    for (int slope = 0; slope < MsEq::kNumSlopes; ++slope)
+    {
+        for (double f : {200.0, 300.0, 360.0, 400.0, 600.0, 2000.0})
+        {
+            const double want = MsEq::responseDb (f, fc, slope), got = sideGainDb (slope, f);
+            if (want > -120.0)
+                CHECK (std::fabs (got - want) < 1.0, "slope %d at %.0f Hz: %.2f dB, the display says %.2f", slope, f, got, want);
+            else
+                CHECK (got < -100.0, "slope %d at %.0f Hz: %.2f dB (the display: %.1f)", slope, f, got, want);
+        }
+        const double octave = MsEq::responseDb (fc / 2, fc, slope);
+        CHECK (octave < prevOctave, "slope %d is steeper than the one before: %.1f dB an octave down (%.1f)", slope, octave, prevOctave);
+        prevOctave = octave;
+        if (slope <= MsEq::k96)
+        {
+            // a Butterworth of order n: 6n dB per octave well below the cutoff
+            const double perOctave = MsEq::responseDb (fc / 8, fc, slope) - MsEq::responseDb (fc / 16, fc, slope);
+            CHECK (std::fabs (perOctave - 6.02 * MsEq::order (slope)) < 0.1, "slope %d: %.2f dB per octave", slope, perOctave);
+        }
+    }
+    // Brickwall: flat to the cutoff, then gone
+    CHECK (MsEq::responseDb (fc, fc, MsEq::kBrickwall) > -0.06 && MsEq::responseDb (fc * 1.5, fc, MsEq::kBrickwall) > -0.06,
+           "Brickwall passes from the cutoff up");
+    CHECK (MsEq::responseDb (fc * 0.9, fc, MsEq::kBrickwall) < -35.0 && MsEq::responseDb (fc * 0.8, fc, MsEq::kBrickwall) < -60.0,
+           "Brickwall: %.1f dB at 0.9 x the cutoff, %.1f at 0.8 x", MsEq::responseDb (fc * 0.9, fc, MsEq::kBrickwall),
+           MsEq::responseDb (fc * 0.8, fc, MsEq::kBrickwall));
+    // the mid is never filtered: a mono signal passes untouched with any slope (so the mono fold is too)
+    for (int slope : {(int)MsEq::k96, (int)MsEq::kBrickwall})
+    {
+        MsEq eq;
+        eq.prepare (sr);
+        std::vector<float> l (4096), r (4096);
+        for (size_t i = 0; i < l.size (); ++i)
+            l[i] = r[i] = 0.4f * (float)std::sin (2.0 * M_PI * 60.0 * (double)i / sr);
+        const std::vector<float> in = l;
+        eq.process (l.data (), r.data (), (int)l.size (), 2000.0, slope, 0.0, 0.0);
+        double err = 0.0;
+        for (size_t i = 0; i < l.size (); ++i)
+            err = std::max (err, (double)std::max (std::fabs (l[i] - in[i]), std::fabs (r[i] - in[i])));
+        CHECK (err < 1e-6, "slope %d: the mid passes untouched (%g)", slope, err);
+    }
+    // states before version 9 stored the slope over three choices: the same slopes now
+    CHECK (std::lround (t.toPlain (mseq::kSlope, mseq::slopeFromThreeChoices (0.0))) == MsEq::k6 &&
+               std::lround (t.toPlain (mseq::kSlope, mseq::slopeFromThreeChoices (0.5))) == MsEq::k12 &&
+               std::lround (t.toPlain (mseq::kSlope, mseq::slopeFromThreeChoices (1.0))) == MsEq::k24,
+           "old slopes 6 / 12 / 24 dB");
+}
+
+TEST (old_end_saturator_moves_into_the_rack)
+{
+    // a state from before 0.9: its values, and whether it had them
+    auto oldState = [] (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has) {
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            norm[id] = defaultNormalized (id);
+            has[id] = true;
+        }
+        for (int s = 0; s < kRackSlots; ++s) // an empty rack, as 0.8 saved it
+        {
+            norm[slotParam (s, kSlotType)] = 0.0;
+            for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+                norm[slotBlockParam (s, j)] = 0.0;
+        }
+    };
+    auto typeOf = [] (const std::array<double, kNumParams>& norm, int s) {
+        return (int)std::lround (toPlain (slotParam (s, kSlotType), norm[slotParam (s, kSlotType)]));
+    };
+    auto satValue = [] (const std::array<double, kNumParams>& norm, int s, uint32_t id) {
+        return smacheratr::paramTable ().toPlain (id, norm[slotBlockParam (s, id)]);
+    };
+    const uint32_t onId = kTailBase + pk::kTailOn;
+    std::array<double, kNumParams> norm {};
+    std::array<bool, kNumParams> has {};
+    {
+        // on, with Para and Multidyn in the rack: a Smacheratr in the third slot with its settings
+        oldState (norm, has);
+        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+        norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxMultidyn);
+        norm[onId] = 1.0;
+        norm[kTailBase + pk::kTailDrive] = toNormalized (kTailBase + pk::kTailDrive, 9.0);
+        norm[kTailBase + pk::kTailPreLimit] = 0.0;
+        norm[kTailBase + pk::kTailMix] = 0.6;
+        norm[kTailExtBase + pk::kTailExtMidSide] = 1.0;
+        norm[kTailExtBase + pk::kTailExtOutput] = toNormalized (kTailExtBase + pk::kTailExtOutput, -4.0);
+        norm[kTailExtBase + pk::kTailExtClarityFreq] = toNormalized (kTailExtBase + pk::kTailExtClarityFreq, 900.0);
+        moveEndSaturatorIntoRack (norm, has);
+        CHECK (typeOf (norm, 0) == kFxPara && typeOf (norm, 1) == kFxMultidyn && typeOf (norm, 2) == kFxSmacheratr &&
+                   typeOf (norm, 3) == kFxEmpty,
+               "the rack: %d %d %d %d", typeOf (norm, 0), typeOf (norm, 1), typeOf (norm, 2), typeOf (norm, 3));
+        CHECK (norm[onId] == 0.0 && norm[slotParam (2, kSlotOn)] == 1.0, "the old one off, the slot on");
+        CHECK (std::fabs (satValue (norm, 2, smacheratr::kDrive) - 9.0) < 1e-6 && satValue (norm, 2, smacheratr::kPreLimit) == 0.0 &&
+                   std::fabs (satValue (norm, 2, smacheratr::kDryWet) - 0.6) < 1e-6 && satValue (norm, 2, smacheratr::kMidSide) == 1.0 &&
+                   std::fabs (satValue (norm, 2, smacheratr::kOutput) + 4.0) < 1e-6 &&
+                   std::fabs (satValue (norm, 2, smacheratr::kClarityFreq) - 900.0) < 1e-3,
+               "its settings: drive %f, pre-limit %f, mix %f, m/s %f, output %f, clarity %f", satValue (norm, 2, smacheratr::kDrive),
+               satValue (norm, 2, smacheratr::kPreLimit), satValue (norm, 2, smacheratr::kDryWet), satValue (norm, 2, smacheratr::kMidSide),
+               satValue (norm, 2, smacheratr::kOutput), satValue (norm, 2, smacheratr::kClarityFreq));
+        // the colour filters were off after the rack (Smacheratr's own default is on)
+        CHECK (satValue (norm, 2, smacheratr::kColorOn) == 0.0, "colour off, as it was");
+        // and it sounds the same: the old saturator after the rack against the slot
+        auto s = sine (220.0, 1.0);
+        std::array<double, kNumParams> before {};
+        std::array<bool, kNumParams> beforeHas {};
+        oldState (before, beforeHas);
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (isTailParam (id))
+                before[id] = norm[id];
+        before[onId] = 1.0;
+        before[slotParam (0, kSlotType)] = norm[slotParam (0, kSlotType)];
+        auto render = [&] (const std::array<double, kNumParams>& v) {
+            std::unique_ptr<Engine> e (makeEngine (s));
+            for (uint32_t id = 0; id < kNumParams; ++id)
+                if (isRackParam (id) || isTailParam (id))
+                    e->setParam (id, toPlain (id, v[id]));
+            for (uint32_t j = 0; j < kSlotBlockAll; ++j) // Para with its defaults in the first slot
+                e->setParam (slotBlockParam (0, j), j < para::kNumParams ? para::paramTable ().defaultNormalized (j) : 0.0);
+            e->setParam (slotParam (1, kSlotType), (double)kFxEmpty); // (no Multidyn: it would make the two differ in time)
+            e->reset (); // (the settings from the start, not glided into)
+            e->noteOn (57, 1.0f);
+            return std::make_pair (run (*e, 24000), e->latency ());
+        };
+        std::array<double, kNumParams> after = norm;
+        const auto [a, la] = render (before);
+        const auto [b, lb] = render (after);
+        double diff = 0.0;
+        for (size_t i = 0; i < a.l.size (); ++i)
+            diff = std::max (diff, (double)std::fabs (a.l[i] - b.l[i]));
+        CHECK (la == lb && diff < 1e-4 && rms (a.l, 0, a.l.size ()) > 0.01, "the same sound in the rack: latency %d / %d, difference %g",
+               la, lb, diff);
+    }
+    {
+        // off: nothing added, the rack as it was
+        oldState (norm, has);
+        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxWidr);
+        norm[onId] = 0.0;
+        moveEndSaturatorIntoRack (norm, has);
+        CHECK (typeOf (norm, 0) == kFxWidr && typeOf (norm, 1) == kFxEmpty && norm[onId] == 0.0, "off: nothing added");
+    }
+    {
+        // a state without the rack's parameters (before 0.6, its fixed effects not on) and without the
+        // saturator's switch (it played on): the rack is empty but for the saturator, in the first slot
+        oldState (norm, has);
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (isRackParam (id) || id == onId)
+                has[id] = false;
+        moveEndSaturatorIntoRack (norm, has);
+        CHECK (typeOf (norm, 0) == kFxSmacheratr && typeOf (norm, 1) == kFxEmpty && norm[onId] == 0.0 && has[slotParam (5, kSlotType)],
+               "no rack in the state: %d %d", typeOf (norm, 0), typeOf (norm, 1));
+    }
+    {
+        // a gap in the rack: after the last effect, not in the gap
+        oldState (norm, has);
+        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+        norm[slotParam (3, kSlotType)] = toNormalized (slotParam (3, kSlotType), kFxWubr);
+        norm[onId] = 1.0;
+        moveEndSaturatorIntoRack (norm, has);
+        CHECK (typeOf (norm, 1) == kFxEmpty && typeOf (norm, 4) == kFxSmacheratr, "after the last effect: %d %d", typeOf (norm, 1),
+               typeOf (norm, 4));
+    }
+    {
+        // the last slot used: no room, the old saturator stays on (it keeps running after the rack)
+        oldState (norm, has);
+        norm[slotParam (kRackSlots - 1, kSlotType)] = toNormalized (slotParam (kRackSlots - 1, kSlotType), kFxMsEq);
+        norm[onId] = 1.0;
+        moveEndSaturatorIntoRack (norm, has);
+        CHECK (norm[onId] == 1.0 && typeOf (norm, 0) == kFxEmpty, "no room: it stays after the rack");
+        std::unique_ptr<Engine> e (makeEngine (sine (220.0, 0.5)));
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (isRackParam (id) || isTailParam (id))
+                e->setParam (id, toPlain (id, norm[id]));
+        CHECK (e->latency () > 0, "and it runs (its latency): %d", e->latency ());
+        e->setParam (onId, 0.0);
+        CHECK (e->latency () == 0, "off: nothing after the rack, no latency: %d", e->latency ());
+    }
 }
 
 TEST (effects_fuzz)

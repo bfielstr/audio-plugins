@@ -99,6 +99,21 @@ int main (int argc, char** argv)
         out.clear ();
         rig.render (0.1, out, nullptr, tone (400.0, 0.25));
 
+        // the drive: on (Post, +18 dB), a 110 Hz tone gets its third harmonic; the latency stays
+        const uint32 lat0 = rig.processor->getLatencySamples ();
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (110.0, 0.4));
+        const double h3Off = toneDb (out, 330.0, 12000, 24000);
+        rig.param (kDriveOn, 1.0);
+        rig.param (kDrive, toNormalized (kDrive, 18.0));
+        rig.param (kDrivePos, toNormalized (kDrivePos, kDrivePost));
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (110.0, 0.4));
+        const double h3On = toneDb (out, 330.0, 12000, 24000);
+        CHECK (h3On > -40.0 && h3On > h3Off + 20.0, "drive: third harmonic %.1f dB (off %.1f)", h3On, h3Off);
+        CHECK (rig.processor->getLatencySamples () == lat0, "the drive keeps the latency: %u vs %u",
+               (unsigned)rig.processor->getLatencySamples (), (unsigned)lat0);
+
         // editor: screenshot while audio is flowing, then gestures
         {
             EditorWindow win (rig.controller);

@@ -26,6 +26,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -417,6 +418,37 @@ int main (int argc, char** argv)
             rig.start ();
         }
 
+        // States from 0.8 (version 8): the saturator after the rack, on there, goes into the rack after the
+        // last effect with its settings (and is off after the rack); the M/S EQ's slope was one of three
+        {
+            using smempler::kSlotType;
+            auto v8 = baseState (wav);
+            auto put = [&] (uint32_t id, double plain) { v8.norm[id] = smempler::toNormalized (id, plain); };
+            for (int s = 0; s < smempler::kRackSlots; ++s)
+                put (smempler::slotParam (s, kSlotType), smempler::kFxEmpty);
+            put (smempler::slotParam (0, kSlotType), smempler::kFxPara);
+            put (smempler::slotParam (1, kSlotType), smempler::kFxMsEq);
+            v8.norm[smempler::slotBlockParam (1, smempler::mseq::kSlope)] = 0.5; // 12 dB of 6 / 12 / 24
+            v8.norm[smempler::kTailBase + pk::kTailOn] = 1.0;
+            put (smempler::kTailBase + pk::kTailDrive, 6.0);
+            MemoryStream raw;
+            CHECK (smempler::writeState (&raw, v8), "write a state");
+            const int32 eight = 8; // (the version, after the magic number)
+            std::memcpy (raw.getData () + 4, &eight, sizeof (eight));
+            raw.seek (0, IBStream::kIBSeekSet, nullptr);
+            smempler::PluginState b8;
+            CHECK (smempler::readState (&raw, b8), "read a version 8 state");
+            auto typeIn = [&] (int s) {
+                return (int)std::lround (smempler::toPlain (smempler::slotParam (s, kSlotType), b8.norm[smempler::slotParam (s, kSlotType)]));
+            };
+            CHECK (typeIn (0) == smempler::kFxPara && typeIn (1) == smempler::kFxMsEq && typeIn (2) == smempler::kFxSmacheratr &&
+                       typeIn (3) == smempler::kFxEmpty && b8.norm[smempler::kTailBase + pk::kTailOn] == 0.0,
+                   "version 8: the end saturator in the third slot: %d %d %d %d", typeIn (0), typeIn (1), typeIn (2), typeIn (3));
+            const double slope = smempler::mseq::paramTable ().toPlain (smempler::mseq::kSlope, b8.norm[smempler::slotBlockParam (1, smempler::mseq::kSlope)]);
+            const double drive = smacheratr::paramTable ().toPlain (smacheratr::kDrive, b8.norm[smempler::slotBlockParam (2, smacheratr::kDrive)]);
+            CHECK (std::lround (slope) == smempler::MsEq::k12 && std::fabs (drive - 6.0) < 1e-6, "slope %f (12 dB), drive %f", slope, drive);
+        }
+
         // Missing sample: loads without crashing, path is preserved
         auto missing = baseState ("/nonexistent/folder/gone.wav");
         rig.stop ();
@@ -462,8 +494,6 @@ int main (int argc, char** argv)
         const uint32_t wubrExt = (uint32_t)smempler::fxBlockOf (smempler::kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
         CHECK (wubrExt >= smempler::kSlotBlock && wubrExt < smempler::kSlotBlockAll, "band 2's point 3 level is in the extension: %u", wubrExt);
         rig.param (smempler::slotBlockParam (kKinds - 1, wubrExt), 0.75);
-        rig.param (smempler::kTailBase + pk::kTailOn, 1.0);
-        rig.param (smempler::kTailBase + pk::kTailDrive, smempler::toNormalized (smempler::kTailBase + pk::kTailDrive, 12.0));
         auto typeOf = [&] (int slot) {
             return (int)std::lround (smempler::toPlain (slotParam (slot, smempler::kSlotType),
                                                         rig.controller->getParamNormalized (slotParam (slot, smempler::kSlotType))));
@@ -484,18 +514,17 @@ int main (int argc, char** argv)
                 rig.note (60, 0.0f);
             };
             const double tabY = smempler::Editor::kFxTabTop + 10, ctlY = smempler::Editor::kFxCtlTop + 10;
-            // one tab per slot in chain order, then the end saturator's tab at the right of the row
-            const char* names[kKinds + 1] = {"para", "multidyn", "ms", "smacheratr", "widr", "wubr", "end"};
-            for (int t = 0; t < kKinds + 1; ++t)
+            // one tab per slot in chain order (no saturator after the rack any more: a slot does that)
+            const char* names[kKinds] = {"para", "multidyn", "ms", "smacheratr", "widr", "wubr"};
+            auto tabX = [] (int pos) { return 8 + pos * smempler::Editor::kFxTabWidth + 40; };
+            for (int t = 0; t < kKinds; ++t)
             {
-                const double x = t < kKinds ? 8 + t * smempler::Editor::kFxTabWidth + 40 : 8 + 838 - 60;
-                fx.click (x, tabY);
+                fx.click (tabX (t), tabY);
                 settle ();
                 CHECK (fx.savePng (outDir + "/ui_fx_" + names[t] + ".png"), "fx %s snapshot", names[t]);
                 // every parameter of the effect has a control on its rack page, unless it is listed as
                 // deliberately not shown (so the rack keeps up when an effect gains a parameter); the
                 // editor reports its pages to the file in SMEMPLER_RACK_PAGE_REPORT
-                if (t < kKinds)
                 {
                     std::set<uint32_t> shown;
                     int reported = -1;
@@ -524,14 +553,25 @@ int main (int argc, char** argv)
                     }
                 }
             }
-            // select the second slot and move it earlier: Multidyn first, then Para
-            fx.click (8 + 1 * smempler::Editor::kFxTabWidth + 40, tabY);
+            // drag the second slot's tab onto the first: Multidyn first, then Para (the moved slot is selected)
+            fx.drag (tabX (1), tabY, tabX (0), tabY);
             pump (0.1);
-            fx.click (8 + 208 + 13, ctlY); // <
+            CHECK (typeOf (0) == smempler::kFxMultidyn && typeOf (1) == smempler::kFxPara, "dragged: %d %d", typeOf (0), typeOf (1));
+            // a drag of less than a few pixels is a click: nothing moves
+            fx.drag (tabX (2), tabY, tabX (2) + 2, tabY);
             pump (0.1);
-            CHECK (typeOf (0) == smempler::kFxMultidyn && typeOf (1) == smempler::kFxPara, "moved: %d %d", typeOf (0), typeOf (1));
-            // remove it: Para first again, the rest move up
-            fx.click (8 + 272 + 34, ctlY); // Remove (the moved slot is selected)
+            CHECK (typeOf (1) == smempler::kFxPara && typeOf (2) == smempler::kFxMsEq, "a click does not move: %d %d", typeOf (1), typeOf (2));
+            // and back: drag Multidyn two places right (Para, M/S EQ, Multidyn), then one left again
+            fx.drag (tabX (0), tabY, tabX (2), tabY);
+            pump (0.1);
+            CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMsEq && typeOf (2) == smempler::kFxMultidyn,
+                   "dragged right: %d %d %d", typeOf (0), typeOf (1), typeOf (2));
+            fx.drag (tabX (2), tabY, tabX (1), tabY);
+            pump (0.1);
+            CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMultidyn && typeOf (2) == smempler::kFxMsEq,
+                   "dragged left: %d %d %d", typeOf (0), typeOf (1), typeOf (2));
+            // remove it (the moved slot is selected): Para, then the rest move up
+            fx.click (8 + 208 + 34, ctlY); // Remove
             pump (0.1);
             CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMsEq && typeOf (4) == smempler::kFxWubr &&
                        typeOf (5) == smempler::kFxEmpty,
@@ -545,7 +585,6 @@ int main (int argc, char** argv)
         }
         for (int s = 0; s < smempler::kRackSlots; ++s)
             rig.param (slotParam (s, smempler::kSlotType), 0.0);
-        rig.param (smempler::kTailBase + pk::kTailOn, 0.0);
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 

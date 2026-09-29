@@ -161,9 +161,10 @@ public:
         bend = bipolar;
         rack.setPitchBend (bipolar);
     }
-    // After the sampler: the effects rack, then the Smacheratr at the very end. The latency is
-    // theirs (it changes when an effect with latency is loaded into the rack or taken out).
-    int latency () const { return rack.latency () + tail.latency (); }
+    // After the sampler: the effects rack (and the old saturator after it, only in an old project
+    // whose rack had no room for it). The latency is theirs (it changes when an effect with latency is
+    // loaded into the rack or taken out).
+    int latency () const { return rack.latency () + (tail.isOn () ? tail.latency () : 0); }
     // Destinations for the editor's displays (may be null).
     void setFxMeters (RackMeters* rm, smacheratr::Meters* tailMeters)
     {
@@ -215,7 +216,7 @@ private:
     double globalLfoPhase = 0.0;
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
-    // the effects rack and the saturator at the very end
+    // the effects rack and the old saturator after it (before 0.9; off unless an old project needs it)
     Rack rack;
     smacheratr::Tail tail;
 };

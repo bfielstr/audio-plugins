@@ -23,7 +23,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 6: Clarity's second band in the rack
 // 7: one Clarity button (a band works while its Range is above 0), in the rack and the end saturator
 // 8: Wubr in the rack: the slot type's choice has one more entry
-constexpr int32 kVersion = 8;
+// 9: no saturator after the rack (a new Smempler has a Smacheratr slot instead; an old project's goes
+//    into the rack), and the M/S EQ's side high-pass has ten slopes (6 / 12 / 24 dB before)
+constexpr int32 kVersion = 9;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -117,6 +119,15 @@ bool readState (IBStream* stream, PluginState& st)
             if (st.has[typeId])
                 st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeWubr - 1)));
         }
+    // the M/S EQ's slope was stored over its three choices (6, 12, 24 dB): the same slope on the longer
+    // list (before the old fixed M/S EQ moves into the rack, which converts its own)
+    if (version < 9)
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType), slopeId = slotBlockParam (slot, mseq::kSlope);
+            if (st.has[typeId] && st.has[slopeId] && std::lround (toPlain (typeId, st.norm[typeId])) == kFxMsEq)
+                st.norm[slopeId] = mseq::slopeFromThreeChoices (st.norm[slopeId]);
+        }
     migrateToRack (st);
     if (version < 2)
         for (int slot = 0; slot < kRackSlots; ++slot)
@@ -202,6 +213,8 @@ bool readState (IBStream* stream, PluginState& st)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
+    if (version < 9)
+        moveEndSaturatorIntoRack (st.norm, st.has); // (the rack is what the state has; its saturator after it, into it)
     return true;
 }
 
@@ -257,7 +270,10 @@ void migrateToRack (PluginState& st)
     {
         const auto& t = mseq::paramTable ();
         const uint32_t ids[mseq::kNumParams] = {kMsSideHp, kMsSlope, kMsSideGain, kMsMidGain};
-        put (kFxMsEq, t, [&] (uint32_t j) { return old (ids[j], t, j); });
+        put (kFxMsEq, t, [&] (uint32_t j) {
+            // (the old slope has its three choices still)
+            return j == mseq::kSlope && st.has[kMsSlope] ? mseq::slopeFromThreeChoices (st.norm[kMsSlope]) : old (ids[j], t, j);
+        });
         st.norm[kMsOn] = 0.0;
     }
 }

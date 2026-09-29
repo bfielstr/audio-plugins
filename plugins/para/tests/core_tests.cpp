@@ -411,6 +411,234 @@ TEST (dry_wet_and_output)
     CHECK (std::fabs (gainAt (*e, 400.0) + 6.0) < 0.05, "output: %f", gainAt (*e, 400.0));
 }
 
+// Where the biggest sample of the left channel is.
+static size_t peakAt (const std::vector<float>& x)
+{
+    size_t k = 0;
+    for (size_t i = 1; i < x.size (); ++i)
+        if (std::fabs (x[i]) > std::fabs (x[k]))
+            k = i;
+    return k;
+}
+
+TEST (drive_params)
+{
+    const auto& t = paramTable ();
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
+    CHECK (kDriveOn == kTailExtBase + 17 && kNumParams == kDriveOn + 3, "the drive's IDs follow the end saturator's block");
+    // off, 0 dB and Pre are normalized 0, so a value never stored (a rack slot from before) is the default
+    for (uint32_t id : {kDriveOn, kDrive, kDrivePos})
+        CHECK (t.defaultNormalized (id) == 0.0, "%s: default %f", t.info (id).name, t.defaultNormalized (id));
+    CHECK (t.toText (kDrivePos, kDrivePost) == "Post", "%s", t.toText (kDrivePos, kDrivePost).c_str ());
+}
+
+TEST (drive_latency_is_the_same_everywhere)
+{
+    // an impulse through the dry path comes out at latency (), with the drive off or on (at 0 dB and
+    // below the curve's knee it is linear), Pre or Post: the delay never moves
+    Engine probe;
+    probe.prepare (kSr, 512);
+    const int lat = probe.latency ();
+    CHECK (lat > 0, "the oversampled drive has a latency: %d", lat);
+    for (double sr : {44100.0, 96000.0})
+    {
+        Engine a, b;
+        a.prepare (sr, 512);
+        b.prepare (sr, 512);
+        b.setParam (kDriveOn, 1.0);
+        b.setParam (kDrivePos, kDrivePost);
+        CHECK (a.latency () == b.latency (), "%.0f Hz: %d vs %d", sr, a.latency (), b.latency ());
+    }
+    for (int on = 0; on < 2; ++on)
+        for (int pos : {kDrivePre, kDrivePost})
+        {
+            auto e = engine ();
+            e->setParam (kDryWet, 0.0);
+            e->setParam (kDriveOn, on);
+            e->setParam (kDrivePos, pos);
+            e->reset ();
+            CHECK (e->latency () == lat, "latency %d", e->latency ());
+            Sig in;
+            in.l.assign (4096, 0.0f);
+            in.l[100] = 0.1f;
+            in.r = in.l;
+            auto out = run (*e, in);
+            const size_t k = peakAt (out.l);
+            CHECK (k == (size_t)(100 + lat), "on %d, %s: the impulse at %zu, expected %d", on, pos ? "Post" : "Pre", k, 100 + lat);
+            if (!on)
+                CHECK (out.l[k] == 0.1f, "off: exactly the input, delayed (%.9f)", out.l[k]);
+        }
+    // the same with blocks larger than the prepared size (the engine splits them)
+    auto e = engine (), f = engine ();
+    for (auto* x : {e.get (), f.get ()})
+    {
+        x->setParam (kDriveOn, 1.0);
+        x->setParam (kDrive, 12.0);
+        x->reset ();
+    }
+    auto in = tones ({{110.0, -6.0}, {3000.0, -12.0}}, 0.3);
+    auto small = run (*e, in, 512), large = run (*f, in, 2000);
+    double d = 0.0;
+    for (size_t i = 0; i < small.l.size (); ++i)
+        d = std::max (d, (double)std::fabs (small.l[i] - large.l[i]));
+    CHECK (d < 1e-6, "blocks of 2000 after prepare (512): %g", d);
+}
+
+TEST (drive_off_leaves_the_sound)
+{
+    // off, the drive only delays: with the filters set (static), Pre and Post come out the same, and
+    // the gains the other tests measure are unchanged (Pre and Post, off, against the defaults: Pre).
+    // The very same run was checked against Para from before the drive: bit-exact, latency () later.
+    auto pre = engine (), post = engine ();
+    for (auto* x : {pre.get (), post.get ()})
+    {
+        x->setParam (kHpFreq, 800.0);
+        x->setParam (kLpFreq, 200.0);
+        x->setParam (kHpRes, 0.6);
+        x->setParam (kDryWet, 0.7);
+        x->reset ();
+    }
+    post->setParam (kDrivePos, kDrivePost);
+    post->reset ();
+    auto in = tones ({{55.0, -6.0}, {440.0, -12.0}, {3000.0, -18.0}}, 0.5);
+    auto a = run (*pre, in), b = run (*post, in, 333);
+    double d = 0.0;
+    for (size_t i = 0; i < a.l.size (); ++i)
+        d = std::max (d, (double)std::fabs (a.l[i] - b.l[i]));
+    CHECK (d < 1e-6, "off: Pre and Post differ by %g", d);
+    CHECK (std::fabs (gainAt (*post, 400.0) - gainAt (*pre, 400.0)) < 1e-3, "notch: %f vs %f", gainAt (*post, 400.0), gainAt (*pre, 400.0));
+    // Drive on at 0 dB with a quiet signal (below the curve's knee): the same as off, but for the
+    // oversampling filters' ripple
+    auto on = engine (), off = engine ();
+    on->setParam (kDriveOn, 1.0);
+    on->reset ();
+    auto quiet = tones ({{220.0, -30.0}, {2000.0, -36.0}}, 0.3);
+    auto x = run (*on, quiet), y = run (*off, quiet);
+    d = 0.0;
+    for (size_t i = 4800; i < x.l.size (); ++i)
+        d = std::max (d, (double)std::fabs (x.l[i] - y.l[i]));
+    CHECK (d < 1e-3 * 0.03, "on at 0 dB, below the knee: %g off", d);
+}
+
+TEST (drive_adds_harmonics)
+{
+    // the filters meeting at 1 kHz sum flat; a 100 Hz sine at -6 dB through the drive at +12 dB gets
+    // the Analog curve's odd harmonics (it is symmetric: no even ones)
+    auto h3 = [] (bool on, double db, double& h2) {
+        auto e = engine ();
+        e->setParam (kHpFreq, 1000.0);
+        e->setParam (kLpFreq, 1000.0);
+        e->setParam (kDriveOn, on ? 1.0 : 0.0);
+        e->setParam (kDrive, db);
+        e->reset ();
+        auto out = run (*e, tones ({{100.0, -6.0}}, 0.5));
+        h2 = toneDb (out.l, 200.0, 12000, 24000);
+        return toneDb (out.l, 300.0, 12000, 24000);
+    };
+    double even = 0.0;
+    const double off = h3 (false, 12.0, even), on = h3 (true, 12.0, even);
+    CHECK (off < -80.0, "off: no third harmonic (%f dB)", off);
+    CHECK (on > -30.0, "on, +12 dB: third harmonic at %f dB", on);
+    CHECK (even < on - 40.0, "no even harmonics: %f dB", even);
+    CHECK (h3 (true, 24.0, even) > on, "more drive, more harmonics: %f vs %f", h3 (true, 24.0, even), on);
+    // the level stays bounded: the curve tops out at 1
+    auto e = engine ();
+    e->setParam (kHpFreq, 1000.0);
+    e->setParam (kLpFreq, 1000.0);
+    e->setParam (kDriveOn, 1.0);
+    e->setParam (kDrive, 36.0);
+    e->setParam (kDrivePos, kDrivePost);
+    auto out = run (*e, tones ({{100.0, 0.0}}, 0.3));
+    CHECK (std::fabs (out.l[peakAt (out.l)]) < 1.1f, "peak %f", out.l[peakAt (out.l)]);
+}
+
+TEST (drive_pre_and_post)
+{
+    // only the low-pass, at 500 Hz, and a 200 Hz sine driven hard. Pre: the harmonics are made before
+    // the low-pass, which takes the ones above 500 Hz away. Post: they are made after it and stay.
+    auto level = [] (int pos, double f) {
+        auto e = engine ();
+        e->setParam (kHpGain, kGainMinDb);
+        e->setParam (kLpFreq, 500.0);
+        e->setParam (kDriveOn, 1.0);
+        e->setParam (kDrive, 18.0);
+        e->setParam (kDrivePos, pos);
+        e->reset ();
+        auto out = run (*e, tones ({{200.0, -6.0}}, 0.5));
+        return toneDb (out.l, f, 12000, 24000);
+    };
+    for (double f : {1000.0, 1400.0, 1800.0}) // the 5th, 7th and 9th harmonics
+    {
+        const double pre = level (kDrivePre, f), post = level (kDrivePost, f);
+        CHECK (post > -45.0, "Post: %.0f Hz stays (%f dB)", f, post);
+        CHECK (pre < post - 20.0, "Pre: %.0f Hz filtered away (%f vs %f dB)", f, pre, post);
+    }
+    CHECK (std::fabs (level (kDrivePre, 200.0) - level (kDrivePost, 200.0)) < 3.0, "the fundamental: %f vs %f",
+           level (kDrivePre, 200.0), level (kDrivePost, 200.0));
+}
+
+TEST (drive_switches_without_clicks)
+{
+    // moving the drive between Pre and Post (it fades out and back in) and switching it on and off (a
+    // crossfade) never jump: a 200 Hz sine's steps stay those of the sine
+    auto e = engine ();
+    e->setParam (kHpFreq, 1000.0);
+    e->setParam (kLpFreq, 1000.0);
+    e->setParam (kDrive, 12.0);
+    e->reset ();
+    auto in = tones ({{200.0, -6.0}}, 2.0);
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 256, ++k)
+    {
+        if (k % 40 == 10)
+            e->setParam (kDriveOn, e->param (kDriveOn) < 0.5 ? 1.0 : 0.0);
+        if (k % 40 == 30)
+            e->setParam (kDrivePos, e->param (kDrivePos) < 0.5 ? kDrivePost : kDrivePre);
+        e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 256);
+    }
+    auto largestStep = [] (const std::vector<float>& x, size_t from) {
+        double step = 0.0;
+        for (size_t i = from + 1; i < x.size (); ++i)
+            step = std::max (step, (double)std::fabs (x[i] - x[i - 1]));
+        return step;
+    };
+    // the largest step of the sine left alone, driven (steeper) or not
+    double steady = 0.0;
+    for (int pos : {kDrivePre, kDrivePost})
+    {
+        auto s = engine ();
+        s->setParam (kHpFreq, 1000.0);
+        s->setParam (kLpFreq, 1000.0);
+        s->setParam (kDrive, 12.0);
+        s->setParam (kDriveOn, 1.0);
+        s->setParam (kDrivePos, pos);
+        s->reset ();
+        steady = std::max (steady, largestStep (run (*s, tones ({{200.0, -6.0}}, 0.2)).l, 4800));
+    }
+    const double step = largestStep (out.l, 4800);
+    CHECK (step < 1.1 * steady, "largest step %f (the sine's, driven: %f)", step, steady);
+    // after a move it is back at full level
+    const double settled = toneDb (out.l, 200.0, (size_t)(256 * 38), (size_t)(256 * 40));
+    CHECK (settled > -8.0, "back after the move: %f dB", settled);
+}
+
+TEST (bypassed_is_the_latency)
+{
+    // where Para is built in without its end saturator (Smempler's rack), switching it off leaves the
+    // delay its latency stands for
+    Engine e (false);
+    e.prepare (kSr, 512);
+    CHECK (e.latency () > 0, "the drive's delay: %d", e.latency ());
+    std::vector<float> l (1024, 0.0f), r (1024, 0.0f);
+    l[10] = r[10] = 0.5f;
+    e.processBypassed (l.data (), r.data (), 300);
+    e.processBypassed (l.data () + 300, r.data () + 300, 724);
+    CHECK (peakAt (l) == (size_t)(10 + e.latency ()) && l[peakAt (l)] == 0.5f, "at %zu", peakAt (l));
+}
+
 TEST (fuzz_and_automation)
 {
     uint32_t seed = 5;
@@ -468,6 +696,14 @@ TEST (performance)
     const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
     std::printf ("    CPU: %.2f%% of one core (stereo, 24 dB)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
+    // with the drive on (4x oversampled)
+    e->setParam (kDriveOn, 1.0);
+    e->setParam (kDrive, 12.0);
+    const auto t1 = std::chrono::steady_clock::now ();
+    run (*e, in);
+    const double secs1 = std::chrono::duration<double> (std::chrono::steady_clock::now () - t1).count ();
+    std::printf ("    CPU: %.2f%% of one core with the drive on\n", 100.0 * secs1 / 10.0);
+    CHECK (secs1 / 10.0 < 0.05, "too slow with the drive");
 }
 
 int main (int argc, char** argv)

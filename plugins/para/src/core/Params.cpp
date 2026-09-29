@@ -41,6 +41,11 @@ const ParamTable& paramTable ()
         v.push_back (real (kDipStart, "Vocal Dip Start", "Dip", 20.0, 1000.0, 80.0, Curve::Log, Disp::Hz));
         v.push_back (real (kLpFloor, "Low-Pass Floor", "Floor", 20.0, 500.0, 40.0, Curve::Log, Disp::Hz));
         smacheratr::addTailExtParams (v, kTailExtBase);
+        // off, 0 dB and Pre are all normalized 0: where the values were never stored (Smempler's rack
+        // slots from before) they read as the defaults
+        v.push_back (toggle (kDriveOn, "Drive", "Drive", false));
+        v.push_back (real (kDrive, "Drive Amount", "Drive", 0.0, 36.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (choice (kDrivePos, "Drive Position", "Drive Pos", {"Pre", "Post"}, kDrivePre));
         return v;
     }());
     return t;

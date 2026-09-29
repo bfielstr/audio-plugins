@@ -2,7 +2,7 @@
 // live mid and side level bars on the right.
 //   drag the handle sideways   side high-pass frequency
 //   drag the handle up / down  side gain
-//   mouse wheel                the slope (6 / 12 / 24 dB), while holding the handle or with Shift
+//   mouse wheel                the slope (6 .. 96 dB, Brickwall), while holding the handle or with Shift
 //   double-click               reset both
 #pragma once
 

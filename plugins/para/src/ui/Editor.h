@@ -12,7 +12,7 @@ class Controller;
 class FilterView;
 
 // The display on top and the controls in titled sections below it, as in Live's devices:
-// HIGH-PASS, LOW-PASS and SPLIT on the first row, TRACKING and OUTPUT on the second.
+// HIGH-PASS, LOW-PASS and SPLIT on the first row, OUTPUT (movement and the drive too) on the second.
 class Editor : public pk::EditorBase
 {
 public:
@@ -35,6 +35,7 @@ private:
     Controller* ctl;
     FilterView* view = nullptr;
     pk::ParamView* lpResKnob = nullptr;
+    pk::ParamView* driveViews[2] = {nullptr, nullptr}; // Pre/Post and Amount: dimmed while the drive is off
 };
 
 } // namespace para

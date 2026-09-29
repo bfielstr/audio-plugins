@@ -20,7 +20,9 @@ inline const char* forParam (uint32_t id)
             return "The mid/side EQ after the effects: a high-pass on the side signal makes the low end mono below "
                    "its cutoff.";
         case kMsSideHp: return "Below this frequency the side signal is removed, so the low end is mono.";
-        case kMsSlope: return "How steeply the sides are tapered: 6, 12 or 24 dB per octave.";
+        case kMsSlope:
+            return "How steeply the sides are tapered below the cutoff: 6 to 96 dB per octave, or Brickwall (a very steep "
+                   "cut: the side is gone just below the cutoff).";
         case kMsSideGain: return "Level of the side signal (the stereo width).";
         case kMsMidGain: return "Level of the mid signal.";
         case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default).";

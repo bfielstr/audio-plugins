@@ -1,4 +1,6 @@
-// Para parameters. IDs are persisted in projects: only ever append.
+// Para parameters. IDs are persisted in projects: only ever append. The end saturator's extended
+// block (kTailExtBase) was the last; a new Para parameter goes in the block after it (and from then on
+// the extended block stays as it is).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -38,14 +40,20 @@ enum ParamId : uint32_t
     kDipStart,   // Hz: Vocal, the low-pass leading - where the high-pass starts to rise and fade
     kLpFloor,    // Hz: the low-pass never goes below this (keeps the sub)
     kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    // --- after the end saturator's block (which stays as it is from here on) ---
+    kDriveOn = kTailExtBase + 17, // the drive in Para's own path (Smacheratr's Analog curve, see Engine.h)
+    kDrive,                       // dB into the curve
+    kDrivePos,                    // Pre (before the filters) / Post (after them)
+    kNumParams
 };
+static_assert (pk::kTailExtFields <= kDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 
 // The IDs a plug-in hosting Para (Smempler) reserves for it; the ones after are mapped one by one.
 constexpr uint32_t kHostedParams = kTailBase + pk::kTailFields;
 
 enum Slope { kSlope12 = 0, kSlope18, kSlope24 };
 enum Movement { kFree = 0, kVocal };
+enum DrivePos { kDrivePre = 0, kDrivePost };
 
 constexpr double kGainMinDb = -70.0; // the bottom of the filter gains is -inf
 inline double filterGain (double db) { return db <= kGainMinDb + 0.01 ? 0.0 : std::pow (10.0, db / 20.0); }

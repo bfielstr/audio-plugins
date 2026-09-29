@@ -18,10 +18,21 @@ ParamArray defaultParams ()
     return p;
 }
 
-void Engine::prepare (double sampleRate, int maxBlock)
+void Engine::prepare (double sampleRate, int maxBlockSize)
 {
     sr = sampleRate;
+    maxBlock = std::max (1, maxBlockSize);
     tail.prepare (sr, maxBlock);
+    drive.prepare (sr, maxBlock);
+    for (int c = 0; c < 2; ++c)
+    {
+        src[c].assign ((size_t)maxBlock, 0.0f);
+        mixed[c].assign ((size_t)maxBlock, 0.0f);
+        bypassDelay[c].assign ((size_t)latency (), 0.0f);
+    }
+    gOut.assign ((size_t)maxBlock, 0.0f);
+    scopeIn.assign ((size_t)maxBlock, 0.0f);
+    duckStep = (float)(1.0 / (0.003 * sr)); // 3 ms fades around moving the drive
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         tail.setParam (f, p[kTailBase + f]);
     for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
@@ -45,6 +56,14 @@ void Engine::reset ()
     env = 0.0;
     envRising = false;
     tail.reset ();
+    drive.set (p[kDriveOn] >= 0.5, p[kDrive]);
+    drive.reset ();
+    drivePost = p[kDrivePos] >= 0.5;
+    duck = 1.0f;
+    duckHold = 0;
+    for (auto& d : bypassDelay)
+        std::fill (d.begin (), d.end (), 0.0f);
+    bypassPos = 0;
     prevHpBase = p[kHpFreq]; // the leader of Vocal movement is kept
     prevLpBase = p[kLpFreq];
     hpMul = lpMul = hpMulT = lpMulT = 1.0f;
@@ -82,7 +101,40 @@ void Engine::noteOff (int)
     // the last note keeps being tracked, so a released note leaves the filters where they are
 }
 
+void Engine::processBypassed (float* l, float* r, int n)
+{
+    const int len = (int)bypassDelay[0].size ();
+    if (len <= 0)
+        return;
+    float* ch[2] = {l, r};
+    for (int c = 0; c < 2; ++c)
+    {
+        int p = bypassPos;
+        for (int i = 0; i < n; ++i)
+        {
+            const float d = bypassDelay[c][(size_t)p];
+            bypassDelay[c][(size_t)p] = ch[c][i];
+            ch[c][i] = d;
+            if (++p >= len)
+                p = 0;
+        }
+    }
+    bypassPos = (bypassPos + n) % len;
+}
+
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
+{
+    if (src[0].empty ())
+        prepare (sr, maxBlock); // never prepared (hosts always do): the drive's buffers are needed
+    // the drive works on whole blocks of at most the prepared size
+    for (int pos = 0; pos < n; pos += maxBlock)
+    {
+        const int m = std::min (maxBlock, n - pos);
+        processBlock (xl + pos, xr + pos, yl + pos, yr + pos, m);
+    }
+}
+
+void Engine::processBlock (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
     const int slope = std::clamp ((int)std::lround (p[kSlope]), (int)kSlope12, (int)kSlope24);
     const double hpBase = p[kHpFreq], lpBase = p[kLpFreq];
@@ -110,6 +162,29 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         liquidSlow = lead;
     }
     double envPeak = 0.0;
+
+    // the drive: moving it waits for the output to have faded out; it restarts from silence in its
+    // new place, and the output stays silent until the stage has filled again (and the filters have
+    // settled after the jump in time), then fades back in
+    drive.set (p[kDriveOn] >= 0.5, p[kDrive]);
+    const bool wantPost = std::lround (p[kDrivePos]) == kDrivePost;
+    if (wantPost != drivePost && duck <= 0.0f)
+    {
+        drivePost = wantPost;
+        drive.reset ();
+        duckHold = drive.latency () + (int)std::lround (0.002 * sr);
+    }
+    const bool moving = wantPost != drivePost;
+    // the input is copied, as the output may be the same buffer; Pre drives it before the filters
+    std::copy (xl, xl + n, src[0].data ());
+    std::copy (xr, xr + n, src[1].data ());
+    if (meters) // the spectrum's input is what came in, before the drive
+        for (int i = 0; i < n; ++i)
+            scopeIn[(size_t)i] = 0.5f * (xl[i] + xr[i]);
+    float* const ins2[2] = {src[0].data (), src[1].data ()};
+    float* const mix2[2] = {mixed[0].data (), mixed[1].data ()};
+    if (!drivePost)
+        drive.process (ins2, n);
 
     for (int i = 0; i < n; ++i)
     {
@@ -156,7 +231,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         hpG += (hpGT - hpG) * smooth;
         lpG += (lpGT - lpG) * smooth;
 
-        const float ins[2] = {xl[i], xr[i]};
+        const float ins[2] = {src[0][(size_t)i], src[1][(size_t)i]};
         float* outs[2] = {yl, yr};
         for (int c = 0; c < 2; ++c)
         {
@@ -188,11 +263,39 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 // inverted at 12 dB; the fourth-order pair is back in phase
                 wet = slope == kSlope24 ? hpG * hpMul * h + lpG * lpMul * l : lpG * lpMul * l - hpG * hpMul * h;
             }
-            outs[c][i] = (float)((x * (1.0 - mix) + wet * mix) * out);
+            const double y = x * (1.0 - mix) + wet * mix;
+            if (drivePost)
+                mixed[c][(size_t)i] = (float)y; // Output comes after the drive
+            else
+                outs[c][i] = (float)(y * out);
         }
-        if (meters)
-            meters->scope.push (0.5f * (ins[0] + ins[1]), 0.5f * (outs[0][i] + outs[1][i]));
+        gOut[(size_t)i] = out;
     }
+    if (drivePost)
+    {
+        drive.process (mix2, n);
+        for (int c = 0; c < 2; ++c)
+        {
+            float* o = c == 0 ? yl : yr;
+            for (int i = 0; i < n; ++i)
+                o[i] = mixed[c][(size_t)i] * gOut[(size_t)i];
+        }
+    }
+    if (moving || duck < 1.0f || duckHold > 0)
+        for (int i = 0; i < n; ++i)
+        {
+            if (moving)
+                duck = std::max (0.0f, duck - duckStep);
+            else if (duckHold > 0)
+                --duckHold;
+            else
+                duck = std::min (1.0f, duck + duckStep);
+            yl[i] *= duck;
+            yr[i] *= duck;
+        }
+    if (meters)
+        for (int i = 0; i < n; ++i)
+            meters->scope.push (scopeIn[(size_t)i], 0.5f * (yl[i] + yr[i]));
     if (hasTail)
         tail.process (yl, yr, n);
     if (meters)

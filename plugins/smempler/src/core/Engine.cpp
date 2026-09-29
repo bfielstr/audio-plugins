@@ -516,8 +516,11 @@ void Engine::prepare (double sampleRate, int)
         v.prepare (sr);
     rack.prepare (sr, 512);
     tail.prepare (sr, 512);
+    // the effects as the parameters have them (a new Smempler: Smacheratr in the first slot)
     for (uint32_t id = 0; id < kNumParams; ++id)
-        if (isTailParam (id))
+        if (isRackParam (id))
+            rack.setParam (id, p[id]);
+        else if (isTailParam (id))
             tail.setParam (tailField (id), p[id]);
     reset ();
 }
@@ -557,7 +560,14 @@ void Engine::setParam (uint32_t id, double plain)
     if (isRackParam (id))
         rack.setParam (id, plain);
     else if (isTailParam (id))
+    {
+        // the old saturator after the rack runs only while it is on (an old project whose rack was
+        // full); switched on, it starts from silence
+        const bool was = tail.isOn ();
         tail.setParam (tailField (id), plain);
+        if (!was && tail.isOn ())
+            tail.reset ();
+    }
 }
 
 void Engine::setSustain (bool onOff)
@@ -899,7 +909,8 @@ void Engine::renderEffects (float* L, float* R, int n, const HostInfo& host)
 {
     rack.setTransport (host.bpm > 0.0 ? host.bpm : 120.0, host.ppq, host.playing && host.ppqValid);
     rack.process (L, R, n);
-    tail.process (L, R, n);
+    if (tail.isOn ())
+        tail.process (L, R, n);
 }
 
 int Engine::activeVoices () const

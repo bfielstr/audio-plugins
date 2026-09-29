@@ -142,6 +142,9 @@ tresult PLUGIN_API Controller::initialize (FUnknown* context)
     parameters.addParameter (STR16 ("Pitch Bend"), nullptr, 0, 0.5, hidden, kMidiPitchBend);
     parameters.addParameter (STR16 ("Sustain Pedal"), nullptr, 1, 0.0, hidden, kMidiSustain);
     parameters.addParameter (STR16 ("Mod Wheel"), nullptr, 0, 0.0, hidden, kMidiModWheel);
+    // a new Smempler's first slot has an effect: its parameters take its names from the start
+    for (int s = 0; s < kRackSlots; ++s)
+        retitleSlot (s);
     return kResultOk;
 }
 

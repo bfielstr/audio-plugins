@@ -24,25 +24,38 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | Sample stays at its original pitch on C3 (MIDI 60) | ✓ |
 
 **The effects rack** (at the bottom): after the sampler, up to 8 effects in any order, and the same
-effect as many times as you like. **+** adds one at the end of the chain; the tabs show the chain
-left to right; for the selected one, **On**, **<** / **>** to move it earlier or later, and
+effect as many times as you like. A new Smempler starts with **smacheratr** in the first slot (on,
+with Smacheratr's own defaults: Drive 0 dB, Pre-Limit on); it is a slot like any other, so it can be
+moved, switched off or removed. **+** adds an effect at the end of the chain; the tabs show the chain
+left to right: click a tab to show that effect, **drag a tab sideways** to move the effect (an orange
+bar shows where it will land; the effects in between move over). For the selected one, **On** and
 **Remove** (the ones after it move up). Each has its own display and controls:
 
 - **para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement and the Notch);
   its envelope is triggered by the notes played here, and its display shows the live spectrum.
 - **multidyn**: the multiband dynamics, with its lanes and band fields.
-- **m/s eq**: a high-pass on the side signal (6 / 12 / **24** dB per octave, default 150 Hz) tapers
-  the sides so the low end is mono below the cutoff, plus side and mid levels; live meters.
+- **m/s eq**: a high-pass on the side signal (default 150 Hz) tapers the sides so the low end is mono
+  below the cutoff, plus side and mid levels; live meters. Its slope: 6, 12, **24** (default), 36, 48,
+  60, 72, 84 or 96 dB per octave (Butterworth above 6 dB, -3 dB at the cutoff), or **Brickwall** (a
+  16th-order Chebyshev: flat to the cutoff within 0.05 dB, about -40 dB a tenth below it, -70 dB at
+  0.8 x). The mouse wheel on the display's handle (while holding it, or with Shift) steps through them.
+  The mid is never filtered, so the mono sum is untouched.
 - **smacheratr**: the full saturator (pre-limiter, Clarity, Mid/Side, colour, post clip).
 - **widr**: the stereo widener with its left and right voices (it works alone here: the group
   awareness needs its own plug-in instances).
 
-**end: smacheratr** (the tab on the right) is the saturator at the very end, after the rack (off,
-Drive 0 dB). Every control is an automatable parameter (the host shows a slot's values in the
-units of the effect loaded there), and the latency of the effects in the rack is reported to the
-host, which is told when it changes. The **OUTPUT** scope on the right shows the final output
-(click it to change the time span). Projects from 0.5 keep their Para, Multidyn and M/S EQ: they
-load into the first slots.
+Every control is an automatable parameter (the host shows a slot's values in the units of the effect
+loaded there), and the latency of the effects in the rack is reported to the host, which is told when
+it changes. The **OUTPUT** scope on the right shows the final output (click it to change the time
+span). Projects from 0.5 keep their Para, Multidyn and M/S EQ: they load into the first slots.
+
+Before 0.9 a fixed **end: smacheratr** saturator sat after the rack. Projects saved with it on load
+with a smacheratr slot at the end of their chain instead (the first free slot after the last effect,
+with the same settings); projects with it off get nothing added. If such a project's rack is full,
+the old saturator keeps running after the rack as before, and the rack's control line shows **old
+end saturator**: once the last slot is free, click it to move the saturator into the rack. (Its
+parameters stay in the host's list, named "Old End Saturator ...", so old automation still loads.)
+The M/S EQ slopes of older projects (6 / 12 / 24 dB) stay what they were.
 
 **Root Note** (Global panel): the note on which the sample plays at its own pitch (C3 by default).
 **Voices** defaults to 1.

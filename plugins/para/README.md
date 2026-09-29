@@ -23,6 +23,13 @@ quadrature Butterworth pair at 18 dB).
     resonant high-pass swept down fades the low-pass out.
   - **Liquid** (switch): Vocal, plus Split swinging with the sweep: the filter you move overshoots
     the way it moves and flows back when it stops, for liquid, techy Reese movement.
+- **Drive** (in OUTPUT): a drive in Para's own path, apart from the saturator at the end:
+  Smacheratr's Analog curve, 4x oversampled. **On**, **Amount** (0 to +36 dB into the curve) and
+  where it sits: **Pre** (the default) drives the input before the filters, so they shape what it
+  adds (a low-pass takes the top harmonics away); **Post** drives what comes out of them (after
+  Dry/Wet, before Output), so its harmonics stay. The drive delays the sound by the same small
+  amount on or off, Pre or Post (37 samples at 48 kHz), so the latency never changes; moving it
+  between Pre and Post fades the sound out and back in for a moment (about 10 ms).
 - **SMACHERATR** (end of the chain): the optional saturator every plug-in here has (off, Drive 0 dB).
 
 The display shows the high-pass (orange), the low-pass (blue) and what you hear (white), over live

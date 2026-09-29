@@ -22,9 +22,10 @@
 #include "pluginkit/ParamTable.h"
 
 #include <array>
-#include <vector>
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <vector>
 
 namespace smempler {
 
@@ -32,6 +33,9 @@ namespace smempler {
 namespace mseq {
 enum ParamId : uint32_t { kSideHp = 0, kSlope, kSideGain, kMidGain, kNumParams };
 const pk::ParamTable& paramTable ();
+// A slope stored over the three choices of states before version 9 (normalized: 6, 12, 24 dB), as a
+// value of the slope now (MsEq::Slope).
+double slopeFromThreeChoices (double oldNorm);
 } // namespace mseq
 
 const char* fxName (int type); // "para", ...; "" for Empty
@@ -54,6 +58,21 @@ struct RackHidden
     const char* why;
 };
 const std::vector<RackHidden>& rackHiddenParams (int type);
+
+// The saturator after the rack before 0.9 (Smempler's kTailBase and kTailExtBase parameters, now "Old
+// End") as a Smacheratr slot with the same settings: set (Smempler ID, normalized value) is called for
+// the slot's Type, On and every block position; norm reads the old saturator's values (normalized, by
+// Smempler ID). Old projects that had it on get it in the rack this way when they load (StateIO.cpp).
+void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm, const std::function<void (uint32_t, double)>& set);
+// Where the old end saturator goes: the first empty slot after the last used one (the end of the
+// chain), or -1 when the last slot is used. typeOf gives a slot's effect.
+int slotAfterChain (const std::function<int (int)>& typeOf);
+// A state from before 0.9 (version 9), as normalized values and whether the state had them: its rack
+// is what it was (the slots it does not have are empty, not a new Smempler's Smacheratr), and its
+// saturator after the rack, if it was on (states without it played it on), goes to the end of the
+// chain (slotAfterChain) with the same settings and is switched off. With no room there (the last slot
+// is used) the old saturator stays on and keeps running after the rack, as before.
+void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
 // What the rack's effects show in the editor, per slot.
 struct RackMeters

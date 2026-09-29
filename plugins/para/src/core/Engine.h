@@ -15,8 +15,13 @@
 // movement (this used to be a separate Liquid mode).
 // Floor: the low-pass never goes below Low-Pass Floor (40 Hz by default), whatever Split, the
 // envelope or the swing do, so the sub stays.
+// Drive: Smacheratr's Analog curve (DriveStage, oversampled), Pre: on the input, before the filters
+// (and the dry/wet); Post: on what comes out of them (after the dry/wet, before Output). Either way
+// it delays the sound by the same amount, on or off, so Para's latency never changes. Moving it
+// between Pre and Post fades the output out and back in (the stage's delay moves with it).
 #pragma once
 
+#include "Drive.h"
 #include "Params.h"
 #include "Svf.h"
 
@@ -25,6 +30,7 @@
 
 #include <array>
 #include <atomic>
+#include <vector>
 
 namespace para {
 
@@ -101,11 +107,13 @@ public:
         p[id] = plain;
         if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
-        else if (id >= kTailExtBase)
+        else if (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields)
             tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
     }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return hasTail ? tail.latency () : 0; }
+    // Depends on the sample rate only: the drive's delay, whether it is on and wherever it is, and
+    // the end-of-chain Smacheratr's.
+    int latency () const { return drive.latency () + (hasTail ? tail.latency () : 0); }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     void noteOn (int note);
@@ -115,6 +123,9 @@ public:
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
+    // Switched off where Para is built into another plug-in: only the delay latency () stands for,
+    // so switching Para off does not move the sound in time. In place.
+    void processBypassed (float* l, float* r, int n);
 
     void setMeters (Meters* m)
     {
@@ -128,8 +139,11 @@ private:
     double targetOffset () const;
     double lpRes () const { return p[kResLink] >= 0.5 ? p[kHpRes] : p[kLpRes]; }
 
+    void processBlock (const float* inL, const float* inR, float* outL, float* outR, int n);
+
     ParamArray p = defaultParams ();
     double sr = 48000.0;
+    int maxBlock = 512;
     Svf hp[2][2], lp[2][2]; // [channel][stage]
     OnePole hp1[2], lp1[2];  // the first-order section of 18 dB
     double hpG1 = 0.0, lpG1 = 0.0;
@@ -151,6 +165,15 @@ private:
     double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
     smacheratr::Tail tail;
+    // the drive, where it is (kDrivePos) and the fade that covers moving it: out to silence, held
+    // while the stage fills again, back in
+    DriveStage drive;
+    bool drivePost = false;
+    float duck = 1.0f, duckStep = 0.0f;
+    int duckHold = 0;
+    std::vector<float> src[2], mixed[2], gOut, scopeIn; // the input (process may be in place), the dry/wet sum (Post)
+    std::vector<float> bypassDelay[2];
+    int bypassPos = 0;
 };
 
 } // namespace para

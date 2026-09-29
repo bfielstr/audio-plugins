@@ -1,5 +1,7 @@
 #include "Rack.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -14,12 +16,20 @@ const pk::ParamTable& paramTable ()
     static const ParamTable t ([] {
         std::vector<ParamInfo> v;
         v.push_back (real (kSideHp, "Side High-Pass", "Side HP", 20.0, 2000.0, 150.0, Curve::Log, Disp::Hz));
-        v.push_back (choice (kSlope, "Side High-Pass Slope", "Slope", {"6 dB", "12 dB", "24 dB"}, 2));
+        // (3 choices, 6 / 12 / 24 dB, in states before version 9: StateIO.cpp converts them)
+        v.push_back (choice (kSlope, "Side High-Pass Slope", "Slope",
+                             {"6 dB", "12 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"}, MsEq::k24));
         v.push_back (real (kSideGain, "Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kMidGain, "Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         return v;
     }());
     return t;
+}
+
+double slopeFromThreeChoices (double oldNorm)
+{
+    const double index = std::round (std::clamp (oldNorm, 0.0, 1.0) * 2.0); // 6, 12, 24 dB: the first three
+    return paramTable ().toNormalized (kSlope, index);
 }
 } // namespace mseq
 
@@ -93,25 +103,25 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kTranspose, para::kTranspose, "unused since Para stopped tracking notes"},
         {para::kPbRange, para::kPbRange, "unused since Para stopped tracking notes"},
         {para::kRoot, para::kRoot, "unused since Para stopped tracking notes"},
-        {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
-        {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
+        {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
         {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
         {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
     };
     static const std::vector<RackHidden> multidynHidden {
         {multidyn::kScOn, multidyn::kScListen, "the side-chain: Smempler has no side-chain input"},
         {multidyn::kMode, multidyn::kMode, "unused: Multidyn always works in its character mode"},
-        {multidyn::kSatOn, multidyn::kSatPreLimitThreshold, "its own end-of-chain saturator: the rack has one at the end"},
-        {multidyn::kSatExtBase, multidyn::kSatExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {multidyn::kSatOn, multidyn::kSatPreLimitThreshold, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
+        {multidyn::kSatExtBase, multidyn::kSatExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> widrHidden {
         {widr::kRole, widr::kGroup, "Mix Aware: between Widr plug-ins on different tracks, not inside Smempler"},
-        {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
-        {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
+        {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> wubrHidden {
-        {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
-        {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
+        {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smempler a Smacheratr slot does that"},
         // each band's points and their count: drawn in the shape display (a ShapeView, not a control per value)
         {wubr::bandParam (0, wubr::kPointCount), wubr::bandParam (0, wubr::kPointCount), "the shape display adds and removes points"},
         {wubr::pointParam (0, 0, wubr::kPtX), wubr::pointParam (0, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
@@ -197,6 +207,65 @@ const pk::ParamTable& fxTable (int type)
         case kFxWubr: return wubr::paramTable ();
         default: return empty;
     }
+}
+
+void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm, const std::function<void (uint32_t, double)>& set)
+{
+    // Smacheratr's block positions are its own IDs; each one is a field of the old saturator (its On is
+    // the slot's). The values go through their plain values, so the two tables need not agree on ranges.
+    const auto& st = smacheratr::paramTable ();
+    static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's parameters sit in a slot's block");
+    set (slotParam (slot, kSlotType), toNormalized (slotParam (slot, kSlotType), (double)kFxSmacheratr));
+    set (slotParam (slot, kSlotOn), 1.0);
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+    {
+        double v = 0.0;
+        if (j < st.size ())
+        {
+            const int f = smacheratr::tailFieldOf (j);
+            const uint32_t id = f < 0 ? 0 : (f < (int)pk::kTailFields ? kTailBase + (uint32_t)f : kTailExtBase + (uint32_t)(f - pk::kTailFields));
+            v = f < 0 ? st.defaultNormalized (j) : st.toNormalized (j, toPlain (id, norm (id)));
+        }
+        set (slotBlockParam (slot, j), v);
+    }
+}
+
+int slotAfterChain (const std::function<int (int)>& typeOf)
+{
+    int last = -1;
+    for (int s = 0; s < kRackSlots; ++s)
+        if (typeOf (s) != kFxEmpty)
+            last = s;
+    return last + 1 < kRackSlots ? last + 1 : -1;
+}
+
+void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
+{
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        if (isRackParam (id) && !has[id])
+        {
+            norm[id] = rackField (id).field == kSlotOn ? 1.0 : 0.0; // an empty slot
+            has[id] = true;
+        }
+    const uint32_t onId = kTailBase + pk::kTailOn;
+    const bool on = has[onId] ? norm[onId] >= 0.5 : true;
+    has[onId] = true;
+    norm[onId] = on ? 1.0 : 0.0;
+    if (!on)
+        return;
+    const int slot = slotAfterChain ([&] (int s) {
+        const uint32_t typeId = slotParam (s, kSlotType);
+        return (int)std::lround (toPlain (typeId, norm[typeId]));
+    });
+    if (slot < 0)
+        return;
+    endSaturatorToSlot (
+        slot, [&] (uint32_t id) { return has[id] ? norm[id] : defaultNormalized (id); },
+        [&] (uint32_t id, double v) {
+            norm[id] = v;
+            has[id] = true;
+        });
+    norm[onId] = 0.0;
 }
 
 Rack::Rack ()
@@ -325,6 +394,8 @@ int Rack::latency () const
             l += s->multidyn.latency ();
         else if (s->type == kFxSmacheratr)
             l += s->sat.latency ();
+        else if (s->type == kFxPara)
+            l += s->para.latency (); // its drive's oversampling, on or off
     return l;
 }
 
@@ -372,6 +443,8 @@ void Rack::process (float* L, float* R, int n)
             case kFxPara:
                 if (s.on)
                     s.para.process (L, R, L, R, n);
+                else
+                    s.para.processBypassed (L, R, n); // off: its latency's delay only
                 break;
             case kFxMultidyn: s.multidyn.process (L, R, nullptr, nullptr, L, R, n); break; // bypassed: delay only
             case kFxMsEq:

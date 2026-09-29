@@ -42,6 +42,14 @@ inline const char* forParam (uint32_t id)
                    "only the resonance (Alt-drag moves the gain alone).";
         case kHpGain: return "Level of the high-pass filter's output, down to -inf (only the low-pass is heard).";
         case kLpGain: return "Level of the low-pass filter's output, down to -inf (only the high-pass is heard).";
+        case kDriveOn:
+            return "Drive: Smacheratr's Analog curve (4x oversampled) in Para's own path, apart from the saturator "
+                   "at the end. Off, the sound passes untouched.";
+        case kDrive: return "How hard the drive pushes into the curve (0 dB: only peaks above -6 dBFS bend).";
+        case kDrivePos:
+            return "Pre: the drive goes in before the filters, so they shape the harmonics it makes (a low-pass takes the "
+                   "top ones away). Post: after the filters (and Dry/Wet, before Output), so its harmonics stay. Switching "
+                   "fades the sound out and back in for a moment.";
         default: return nullptr;
     }
 }

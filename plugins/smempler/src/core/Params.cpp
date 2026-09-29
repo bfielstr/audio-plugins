@@ -36,6 +36,14 @@ const double kPreserveBeats[] = {0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125};
 
 using P = ParamInfo;
 
+// A new Smempler's rack: Smacheratr in the first slot with its own defaults, the other slots empty. A
+// slot's block is stored normalized, and Smacheratr's block positions are its own IDs.
+double slotDefault (int slot, uint32_t j)
+{
+    const auto& st = smacheratr::paramTable ();
+    return slot == 0 && j < st.size () ? st.defaultNormalized (j) : 0.0;
+}
+
 std::vector<ParamInfo> buildTable ()
 {
     std::vector<ParamInfo> t;
@@ -196,8 +204,15 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kMsSideGain, "Old Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (fl (kMsMidGain, "Old Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
-    pk::addTailParams (t, kTailBase, true); // on by default in Smempler (Drive 0 dB)
-    // (its other controls are appended at kTailExtBase, after the rack)
+    // the old saturator after the rack (before 0.9; a Smacheratr slot does its job now, and old projects
+    // get one when they load): off, not in the editor (its other controls are at kTailExtBase)
+    auto markOld = [&] (size_t from) {
+        for (size_t i = from; i < t.size (); ++i)
+            t[i].name = keep (std::string ("Old End ") + t[i].name);
+    };
+    const size_t tailAt = t.size ();
+    pk::addTailParams (t, kTailBase, false);
+    markOld (tailAt);
     add (toggle (kParaTransposeLock, "Old Para Transpose Lock", "Lock", false));
     add (toggle (kParaDragGain, "Old Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Old Para Liquid", "Liquid", false));
@@ -209,27 +224,30 @@ std::vector<ParamInfo> buildTable ()
     }
     add (toggle (kParaNotch, "Old Para Liquid Notch", "Notch", false));
     // the effects rack: per slot a Type, an On and a block of values (normalized; each effect reads
-    // them through its own table, and the controller shows them that way)
+    // them through its own table, and the controller shows them that way). A new Smempler starts with
+    // Smacheratr in the first slot, with its own defaults (kDefaultSlotType, slotDefault).
     for (int s = 0; s < kRackSlots; ++s)
     {
         const std::string fx = "FX " + std::to_string (s + 1);
         add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr", "wubr"},
-                     kFxEmpty));
+                     s == 0 ? kDefaultSlotType : kFxEmpty));
         add (toggle ((ParamId)slotParam (s, kSlotOn), keep (fx + " On"), keep (fx + " On"), true));
         for (uint32_t j = 0; j < kSlotBlock; ++j)
         {
             const std::string n = fx + " " + std::to_string (j + 1);
-            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, slotDefault (s, j), Curve::Linear, Disp::Percent));
         }
     }
-    // the rest of the end-of-chain Smacheratr
+    // the rest of the old end-of-chain Smacheratr
+    const size_t tailExtAt = t.size ();
     smacheratr::addTailExtParams (t, kTailExtBase);
+    markOld (tailExtAt);
     // the slots' extensions
     for (int s = 0; s < kRackSlots; ++s)
         for (uint32_t j = kSlotBlock; j < kSlotBlockAll; ++j)
         {
             const std::string n = "FX " + std::to_string (s + 1) + " " + std::to_string (j + 1);
-            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, slotDefault (s, j), Curve::Linear, Disp::Percent));
         }
     return t;
 }
