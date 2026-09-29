@@ -22,19 +22,20 @@ inline const char* forParam (uint32_t id)
         case kDryWet: return "Balance between the dry input and the filtered signal.";
         case kOutput: return "Output level.";
         case kMovement:
-            return "Free: the filters move independently. Vocal: the filter you moved last leads; when it "
-                   "crosses the other, the other is pushed along and fades out (to -inf Fade semitones past), so one "
-                   "filter sweeps alone. A low-pass swept up takes the high-pass with it, a resonant high-pass "
-                   "swept down fades the low-pass out.";
-        case kNotch:
-            return "With Liquid: a notch after the two filters that follows the low-pass, zigzagging up to 7 semitones "
-                   "either side of it as the low-pass moves. It leaves the sub alone (nothing below ~180 Hz).";
+            return "Free: the filters move independently. Vocal: the filter you moved last leads. A low-pass swept up "
+                   "past Dip takes the high-pass up with it and fades it out (to -inf Fade semitones past Dip), so the "
+                   "low-pass ends up sweeping alone; a high-pass swept down past the low-pass fades the low-pass out. "
+                   "The filter you move also overshoots the way it moves and flows back when it stops: liquid, techy "
+                   "Reese movement.";
+        case kDipStart:
+            return "Vocal: where the dip starts. Once the low-pass rises past this, the high-pass rises with it and "
+                   "fades out over Fade.";
         case kFade:
-            return "Vocal and Liquid: how far past the crossing the pushed filter takes to fade to -inf (an octave by "
-                   "default, -3 dB half way). Shorter dives faster.";
-        case kLiquid:
-            return "Vocal movement plus Split swinging with the sweep: the filter you move overshoots the way it "
-                   "moves and flows back when it stops. Liquid, techy Reese movement.";
+            return "Vocal: how far past Dip the high-pass takes to fade to -inf (an octave by default, -3 dB half way). "
+                   "Shorter dives faster.";
+        case kLpFloor:
+            return "The low-pass never goes below this, whatever Split, the envelope or the movement do, so the sub "
+                   "stays.";
         case kResLink: return "Link the resonances: the low-pass uses the high-pass resonance, so one control sets both.";
         case kDragGain:
             return "On: dragging a handle in the display up or down moves its gain along with its resonance. Off: "

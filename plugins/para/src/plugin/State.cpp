@@ -50,6 +50,12 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // Liquid used to be a toggle on top of Vocal; it is what Vocal does now
+    if (st.has[kLiquid] && st.norm[kLiquid] >= 0.5)
+    {
+        st.norm[kMovement] = toNormalized (kMovement, kVocal);
+        st.has[kMovement] = true;
+    }
     return true;
 }
 

@@ -33,9 +33,11 @@ const ParamTable& paramTable ()
         v.push_back (choice (kMovement, "Movement", "Movement", {"Free", "Vocal"}, kFree));
         pk::addTailParams (v, kTailBase);
         v.push_back (toggle (kDragGain, "Drag Gain", "Drag Gain", false));
-        v.push_back (toggle (kLiquid, "Liquid", "Liquid", false));
+        v.push_back (toggle (kLiquid, "Liquid (unused)", "Liquid", false));
         v.push_back (real (kFade, "Vocal Fade", "Fade", 1.0, 36.0, 12.0, Curve::Log, Disp::Semis));
-        v.push_back (toggle (kNotch, "Liquid Notch", "Notch", false));
+        v.push_back (toggle (kNotch, "Notch (unused)", "Notch", false));
+        v.push_back (real (kDipStart, "Vocal Dip Start", "Dip", 20.0, 1000.0, 80.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kLpFloor, "Low-Pass Floor", "Floor", 20.0, 500.0, 40.0, Curve::Log, Disp::Hz));
         return v;
     }());
     return t;

@@ -19,6 +19,10 @@
 #import <Cocoa/Cocoa.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <sstream>
+#include <set>
+#include <fstream>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -457,6 +461,9 @@ int main (int argc, char** argv)
             return (int)std::lround (smempler::toPlain (slotParam (slot, smempler::kSlotType),
                                                         rig.controller->getParamNormalized (slotParam (slot, smempler::kSlotType))));
         };
+        const std::string rackReport = outDir + "/rack_pages.txt";
+        std::remove (rackReport.c_str ());
+        setenv ("SMEMPLER_RACK_PAGE_REPORT", rackReport.c_str (), 1);
         {
             EditorWindow fx (rig.controller);
             CHECK (fx.ok (), "fx editor");
@@ -478,22 +485,36 @@ int main (int argc, char** argv)
                 settle ();
                 CHECK (fx.savePng (outDir + "/ui_fx_" + names[t] + ".png"), "fx %s snapshot", names[t]);
                 // every parameter of the effect has a control on its rack page, unless it is listed as
-                // deliberately not shown (so the rack keeps up when an effect gains a parameter)
+                // deliberately not shown (so the rack keeps up when an effect gains a parameter); the
+                // editor reports its pages to the file in SMEMPLER_RACK_PAGE_REPORT
                 if (t < 5)
-                    if (auto* ed = dynamic_cast<smempler::Editor*> (fx.view ()))
+                {
+                    std::set<uint32_t> shown;
+                    int reported = -1;
+                    std::ifstream rep (rackReport);
+                    for (std::string line; std::getline (rep, line);)
                     {
-                        const auto& table = smempler::fxTable (kinds[t]);
-                        const auto& hidden = smempler::rackHiddenParams (kinds[t]);
-                        for (uint32_t id = 0; id < table.size (); ++id)
-                        {
-                            const bool listed = std::any_of (hidden.begin (), hidden.end (),
-                                                             [id] (const smempler::RackHidden& h) { return id >= h.first && id <= h.last; });
-                            CHECK (listed || ed->rackPage ().count (id) == 1, "rack %s: \"%s\" (%u) has no control on the page",
-                                   names[t], table.info (id).name, id);
-                        }
+                        std::istringstream ls (line);
+                        int type = -1;
+                        ls >> type;
+                        if (type != kinds[t])
+                            continue;
+                        reported = type;
+                        shown.clear ();
+                        for (uint32_t id; ls >> id;)
+                            shown.insert (id);
                     }
-                    else
-                        CHECK (false, "the editor is a smempler::Editor");
+                    CHECK (reported == kinds[t], "rack %s: the page was reported", names[t]);
+                    const auto& table = smempler::fxTable (kinds[t]);
+                    const auto& hidden = smempler::rackHiddenParams (kinds[t]);
+                    for (uint32_t id = 0; id < table.size (); ++id)
+                    {
+                        const bool listed = std::any_of (hidden.begin (), hidden.end (),
+                                                         [id] (const smempler::RackHidden& h) { return id >= h.first && id <= h.last; });
+                        CHECK (listed || shown.count (id) == 1, "rack %s: \"%s\" (%u) has no control on the page", names[t],
+                               table.info (id).name, id);
+                    }
+                }
             }
             // select the second slot and move it earlier: Multidyn first, then Para
             fx.click (8 + 1 * smempler::Editor::kFxTabWidth + 40, tabY);

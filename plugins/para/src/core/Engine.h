@@ -5,15 +5,16 @@
 // triggered by MIDI notes adds to Split. The cutoffs do not follow the notes (they used to: Key,
 // Transpose, Bend and Root are left unused).
 // Movement: Free keeps the filters independent. Vocal couples them: the filter that moved last
-// leads, and when it crosses the other (the low-pass above the high-pass), the other is pushed
-// along to the leader's cutoff and fades out, from the crossing to -inf Fade semitones past it
-// (an octave by default, equal-power: -3 dB half way), so one filter sweeps alone instead of the
-// two summing. With Notch on, Liquid also runs a notch after the sum that follows the low-pass,
-// zigzagging up to 7 semitones either side of it as the low-pass moves (still when it stops); it
-// fades out towards 180 Hz, so the sub is untouched. Liquid is Vocal with Split swinging along with
-// the sweep: the leader overshoots in the direction it moves (and the other filter the other way)
-// by as far as it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the
-// liquid, techy movement.
+// leads. A low-pass leading takes the high-pass with it once it rises past Dip Start (80 Hz by
+// default): the high-pass rises as far as the low-pass has gone past Dip Start (and never sits below
+// it) and fades out, to -inf Fade semitones past Dip Start (an octave by default, equal-power: -3 dB
+// half way), so the low-pass ends up sweeping alone. A high-pass leading pushes the low-pass down
+// once it crosses it, fading it from the crossing the same way. Split also swings with the sweep:
+// the leader overshoots in the direction it moves (and the other filter the other way) by as far as
+// it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the liquid, techy
+// movement (this used to be a separate Liquid mode).
+// Floor: the low-pass never goes below Low-Pass Floor (40 Hz by default), whatever Split, the
+// envelope or the swing do, so the sub stays.
 #pragma once
 
 #include "Params.h"
@@ -39,7 +40,6 @@ struct Meters
     std::atomic<float> hpMul {1.0f}, lpMul {1.0f};   // Vocal: the fade of the pushed filter
     std::atomic<bool> leaderLp {true};               // Vocal: the low-pass leads (it moved last)
     std::atomic<uint32_t> blocks {0};                // counts processed blocks: the editor sees audio running
-    std::atomic<float> notchHz {1000.0f}, notchCut {0.0f}; // Liquid's notch: where, and how deep (0 .. 1)
     std::atomic<float> offset {0.0f};                // semitones the tracked note moves both cutoffs
     std::atomic<float> env {0.0f};                   // envelope level 0 .. 1
     std::atomic<int> note {-1};                      // the note being tracked, -1 = none
@@ -58,25 +58,32 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
     return lpBase * std::pow (2.0, (offsetSemis - 0.5 * splitSemis) / 12.0);
 }
 
-// Vocal movement, shared with the display: once the leader crosses the follower (the low-pass above
-// the high-pass), the follower sits at the leader's cutoff and fades, from 0 dB at the crossing to
-// -inf fadeSemis past it along an equal-power curve (-3 dB half way).
-inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, double fadeSemis, float& hpMul, float& lpMul)
+// Vocal movement, shared with the display (see the top of this file). The low-pass leading: past
+// dipHz the high-pass rises with it and fades, from 0 dB at dipHz to -inf fadeSemis past it (or from
+// the crossing, if the high-pass is set below dipHz), along an equal-power curve (-3 dB half way).
+// The high-pass leading: once it crosses the low-pass, the low-pass sits at its cutoff and fades
+// from the crossing the same way.
+inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, double fadeSemis, double dipHz, float& hpMul,
+                       float& lpMul)
 {
     hpMul = lpMul = 1.0f;
-    const double over = 12.0 * std::log2 (lpHz / hpHz);
-    if (over <= 0.0)
-        return;
-    const float fade = (float)std::cos (0.5 * M_PI * std::fmin (1.0, over / std::fmax (0.5, fadeSemis)));
+    const double cross = 12.0 * std::log2 (lpHz / hpHz);
+    auto fadeAt = [&] (double over) {
+        return (float)std::cos (0.5 * M_PI * std::fmin (1.0, over / std::fmax (0.5, fadeSemis)));
+    };
     if (leaderLp)
     {
-        hpHz = lpHz;
-        hpMul = fade;
+        const double past = 12.0 * std::log2 (lpHz / std::fmax (1.0, dipHz));
+        const double over = std::fmax (past, cross);
+        if (over <= 0.0)
+            return;
+        hpHz = std::fmax (hpHz * std::pow (2.0, std::fmax (0.0, past) / 12.0), lpHz);
+        hpMul = fadeAt (over);
     }
-    else
+    else if (cross > 0.0)
     {
         lpHz = hpHz;
-        lpMul = fade;
+        lpMul = fadeAt (cross);
     }
 }
 
@@ -135,13 +142,9 @@ private:
     // Vocal movement
     bool leaderLp = true;
     // Liquid: where the leader is (semitones) and where it was ~150 ms ago
+    // Vocal's swing: where the leader has been lately (a ~150 ms follower)
     double liquidSlow = 0.0, liquidA = 0.0;
     bool liquidLeaderLp = true;
-    // Liquid's notch: a band cut after the sum, and where it is in its zigzag
-    Svf notch[2];
-    SvfCoeffs notchC;
-    double zigPhase = 0.0, lastLpSemis = -1.0, notchHz = 1000.0;
-    float notchCut = 0.0f, notchCutT = 0.0f;
     double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
     smacheratr::Tail tail;

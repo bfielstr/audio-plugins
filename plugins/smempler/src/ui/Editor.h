@@ -20,6 +20,7 @@ class DynDisplay;
 }
 namespace smacheratr {
 class ShaperView;
+class ColorView;
 }
 namespace widr {
 class GonioView;
@@ -64,12 +65,8 @@ public:
     void moveFx (int slot, int dir);
     void showMenu (VSTGUI::CPoint where);
 
-public:
-    // the effect parameters (its own IDs) that have a control on the current rack page (tests)
-    const std::set<uint32_t>& rackPage () const { return rackPageParams; }
-
 private:
-    std::set<uint32_t> rackPageParams;
+    std::set<uint32_t> rackPageParams; // the effect parameters with a control on the current rack page
     void updateVisibility ();
     void updateMdLayout ();
     void rebuildRack ();   // the tabs and the selected slot's controls and panel
@@ -115,6 +112,7 @@ private:
     para::FilterView* fxFilterView = nullptr;
     multidyn::DynDisplay* fxDynDisplay = nullptr;
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
+    smacheratr::ColorView* fxColorView = nullptr;
     smacheratr::ShaperView* endShaperView = nullptr;
     widr::GonioView* fxGonio = nullptr;
     MsView* msView = nullptr;

@@ -32,9 +32,11 @@ enum ParamId : uint32_t
     kMovement,   // Free / Vocal (see Engine.h)
     kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
     kDragGain = kTailBase + pk::kTailFields, // editor: dragging a handle up/down moves its gain with the resonance
-    kLiquid,     // Vocal movement, plus Split swinging with the leader's sweep (see Engine.h)
-    kFade,       // semitones: how far past the crossing Vocal / Liquid take the follower to -inf
-    kNotch,      // Liquid: a notch after the sum that zigzags around the low-pass as it moves
+    kLiquid,     // unused: Vocal movement is what Liquid was (see Engine.h)
+    kFade,       // semitones: how far past where the dip starts Vocal takes the follower to -inf
+    kNotch,      // unused (Liquid's notch is gone)
+    kDipStart,   // Hz: Vocal, the low-pass leading - where the high-pass starts to rise and fade
+    kLpFloor,    // Hz: the low-pass never goes below this (keeps the sub)
 
     kNumParams
 };

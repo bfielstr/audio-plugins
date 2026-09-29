@@ -99,9 +99,9 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Knob (knobRect (72, 22), this, kOutput, nullptr, true));
     outP->addView (new Label (CRect (150, 24, 290, 38), "Movement", 10.5, false, 1));
     bind (outP, new Segmented (CRect (150, 42, 290, 62), this, kMovement, {"Free", "Vocal"}));
-    bind (outP, new Toggle (CRect (296, 42, 358, 62), this, kLiquid, "Liquid"));
-    bind (outP, new Toggle (CRect (296, 68, 358, 88), this, kNotch, "Notch"));
-    bind (outP, new Knob (knobRect (372, 22), this, kFade));
+    bind (outP, new Knob (knobRect (300, 22), this, kDipStart));
+    bind (outP, new Knob (knobRect (362, 22), this, kFade));
+    bind (outP, new Knob (knobRect (440, 22), this, kLpFloor));
 
     addTailPanel (root, CRect (8, 518, 752, 598), kTailBase);
 

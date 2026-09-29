@@ -90,7 +90,16 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (232, 346, 68, 78), this, kDryWet));
 
     // right: the colour curve and its controls
-    color = new ColorView (CRect (kColorLeft, kColorTop, kColorLeft + kColorViewWidth, kColorTop + kColorViewHeight), this, ctl);
+    color = new ColorView (
+        CRect (kColorLeft, kColorTop, kColorLeft + kColorViewWidth, kColorTop + kColorViewHeight), this,
+        [c = ctl] () {
+            auto* s = c->getShared ();
+            return s ? s->sampleRate.load (std::memory_order_relaxed) : 48000.0;
+        },
+        [c = ctl] () -> const Meters* {
+            auto* s = c->getShared ();
+            return s ? &s->meters : nullptr;
+        });
     color->setTooltipText (help::kColorDisplay);
     root->addView (color);
     const uint32_t colorIds[3] = {kColorHi, kColorFreq, kColorWidth};
@@ -128,6 +137,8 @@ void Editor::idle ()
 {
     if (shaper)
         shaper->idle ();
+    if (color)
+        color->idle ();
     if (status)
         if (auto* s = ctl->getShared ())
         {

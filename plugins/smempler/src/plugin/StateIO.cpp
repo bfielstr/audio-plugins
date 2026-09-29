@@ -15,7 +15,9 @@ using namespace Steinberg;
 namespace {
 constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 2: Multidyn's RMS Window and Soften in its rack slots (they read 0 in a version 1 state)
-constexpr int32 kVersion = 2;
+// 3: Smacheratr's Clarity Frequency / Width and Para's Dip Start / Low-Pass Floor in the rack; Para's
+//    Liquid is its Vocal movement
+constexpr int32 kVersion = 3;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -116,6 +118,34 @@ bool readState (IBStream* stream, PluginState& st)
                 st.has[slotBlockParam (slot, j)] = true;
             }
         }
+    if (version < 3)
+    {
+        // parameters that came after version 2 read 0 in the slot: they get their defaults
+        struct Added
+        {
+            int type;
+            uint32_t id;
+        };
+        const Added added[] = {{kFxSmacheratr, smacheratr::kClarityFreq}, {kFxSmacheratr, smacheratr::kClarityWidth},
+                               {kFxPara, para::kDipStart},             {kFxPara, para::kLpFloor}};
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (!st.has[typeId])
+                continue;
+            const int type = (int)std::lround (toPlain (typeId, st.norm[typeId]));
+            for (const Added& a : added)
+                if (a.type == type)
+                {
+                    const auto j = (uint32_t)fxBlockOf (type, a.id);
+                    if (st.norm[slotBlockParam (slot, j)] == 0.0)
+                        st.norm[slotBlockParam (slot, j)] = fxBlockTable (type).defaultNormalized (j);
+                    st.has[slotBlockParam (slot, j)] = true;
+                }
+            if (type == kFxPara && st.norm[slotBlockParam (slot, para::kLiquid)] >= 0.5)
+                st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
+        }
+    }
     return true;
 }
 
@@ -143,6 +173,8 @@ void migrateToRack (PluginState& st)
     {
         const auto& t = para::paramTable ();
         put (kFxPara, t, [&] (uint32_t j) {
+            if (j == para::kMovement && st.has[kParaLiquid] && st.norm[kParaLiquid] >= 0.5)
+                return para::toNormalized (para::kMovement, para::kVocal); // Liquid is Vocal movement now
             if (j < para::kHostedParams)
                 return old (paraParam (j), t, j);
             switch (j)

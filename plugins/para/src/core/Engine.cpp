@@ -49,11 +49,6 @@ void Engine::reset ()
     offset = targetOffset ();
     split = p[kSplit];
     liquidLeaderLp = leaderLp;
-    for (auto& s : notch)
-        s.reset ();
-    zigPhase = 0.0;
-    lastLpSemis = -1.0;
-    notchCut = notchCutT = 0.0f;
     liquidSlow = 12.0 * std::log2 (std::max (1.0, leaderLp ? p[kLpFreq] : p[kHpFreq]));
     mix = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
@@ -96,16 +91,16 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0), outT = dbToGain (p[kOutput]);
     const float hpGT = (float)filterGain (p[kHpGain]), lpGT = (float)filterGain (p[kLpGain]);
     const double offsetT = targetOffset ();
-    // Vocal movement: the filter whose cutoff moved last leads (Liquid is Vocal as well)
-    const bool liquid = p[kLiquid] >= 0.5;
-    const bool vocal = liquid || std::lround (p[kMovement]) == kVocal;
+    // Vocal movement: the filter whose cutoff moved last leads, and Split swings with its sweep
+    const bool vocal = std::lround (p[kMovement]) == kVocal;
+    const double lpFloor = std::max (1.0, p[kLpFloor]);
     if (p[kLpFreq] != prevLpBase)
         leaderLp = true;
     else if (p[kHpFreq] != prevHpBase)
         leaderLp = false;
     prevLpBase = p[kLpFreq];
     prevHpBase = p[kHpFreq];
-    // Liquid: the leader's position; a new leader starts from rest
+    // the swing: the leader's position; a new leader starts from rest
     const double lead = 12.0 * std::log2 (std::max (1.0, leaderLp ? p[kLpFreq] : p[kHpFreq]));
     if (leaderLp != liquidLeaderLp)
     {
@@ -133,38 +128,20 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         // where the cutoffs are heading, glided
         offset += (offsetT - offset) * semiSmooth;
         liquidSlow += (lead - liquidSlow) * liquidA;
-        // Liquid: Split swings with the sweep so the leader overshoots the way it moves (a positive
+        // Vocal: Split swings with the sweep so the leader overshoots the way it moves (a positive
         // Split raises the high-pass and lowers the low-pass)
-        const double swing = liquid ? std::clamp ((lead - liquidSlow) * (leaderLp ? -2.0 : 2.0), -36.0, 36.0) : 0.0;
+        const double swing = vocal ? std::clamp ((lead - liquidSlow) * (leaderLp ? -2.0 : 2.0), -36.0, 36.0) : 0.0;
         split += (p[kSplit] + envAmount * env + swing - split) * semiSmooth;
         if (i % kCoeffInterval == 0)
         {
-            double hz = hpCutoff (hpBase, offset, split), lz = lpCutoff (lpBase, offset, split);
+            double hz = hpCutoff (hpBase, offset, split), lz = std::max (lpFloor, lpCutoff (lpBase, offset, split));
             rawHp = hz;
             rawLp = lz;
             hpMulT = lpMulT = 1.0f;
             if (vocal) // crossed: the follower sits at the leader's cutoff and fades out
-                vocalPush (hz, lz, leaderLp, p[kFade], hpMulT, lpMulT);
+                vocalPush (hz, lz, leaderLp, p[kFade], p[kDipStart], hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;
-            // Liquid's notch: around the low-pass, zigzagging as the low-pass moves (the zigzag advances
-            // one cycle per 5 semitones of travel), never down in the sub
-            notchCutT = 0.0f;
-            if (liquid && p[kNotch] >= 0.5)
-            {
-                const double lpSemis = 12.0 * std::log2 (std::max (1.0, lz));
-                if (lastLpSemis >= 0.0)
-                    zigPhase = std::fmod (zigPhase + std::fabs (lpSemis - lastLpSemis) / 5.0, 1000.0);
-                lastLpSemis = lpSemis;
-                const double f = zigPhase - std::floor (zigPhase);
-                const double tri = f < 0.25 ? 4.0 * f : (f < 0.75 ? 2.0 - 4.0 * f : 4.0 * f - 4.0);
-                notchHz = std::clamp (lz * std::pow (2.0, 7.0 * tri / 12.0), 20.0, 0.45 * sr);
-                const double depth = std::clamp (2.0 * std::log2 (notchHz / 180.0), 0.0, 1.0); // none below 180 Hz
-                notchCutT = (float)(depth * (1.0 - std::pow (10.0, -18.0 / 20.0)));             // -18 dB deep
-                notchC.set (notchHz, 2.0, sr);
-            }
-            else
-                lastLpSemis = -1.0;
             hpC.set (hz, qHp, sr);
             lpC.set (lz, qLp, sr);
             hpG1 = onePoleG (hz, sr);
@@ -176,7 +153,6 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         lpMul += (lpMulT - lpMul) * smooth;
         hpG += (hpGT - hpG) * smooth;
         lpG += (lpGT - lpG) * smooth;
-        notchCut += (notchCutT - notchCut) * smooth;
 
         const float ins[2] = {xl[i], xr[i]};
         float* outs[2] = {yl, yr};
@@ -210,13 +186,6 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 // inverted at 12 dB; the fourth-order pair is back in phase
                 wet = slope == kSlope24 ? hpG * hpMul * h + lpG * lpMul * l : lpG * lpMul * l - hpG * hpMul * h;
             }
-            if (notchCut > 1e-4f)
-            {
-                // a band cut: the input minus part of its (unity-peak) band-pass
-                double nl, nh;
-                notch[c].tick (notchC, wet, nl, nh);
-                wet -= notchCut * (wet - nl - nh);
-            }
             outs[c][i] = (float)((x * (1.0 - mix) + wet * mix) * out);
         }
         if (meters)
@@ -236,8 +205,6 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->hpShift.store ((float)(12.0 * std::log2 (rawHp / std::max (1.0, p[kHpFreq]))), std::memory_order_relaxed);
         meters->lpShift.store ((float)(12.0 * std::log2 (rawLp / std::max (1.0, p[kLpFreq]))), std::memory_order_relaxed);
         meters->leaderLp.store (leaderLp, std::memory_order_relaxed);
-        meters->notchHz.store ((float)notchHz, std::memory_order_relaxed);
-        meters->notchCut.store (notchCut, std::memory_order_relaxed);
         meters->blocks.fetch_add (1, std::memory_order_relaxed);
         meters->env.store ((float)envPeak, std::memory_order_relaxed);
         meters->note.store (lastNote, std::memory_order_relaxed);

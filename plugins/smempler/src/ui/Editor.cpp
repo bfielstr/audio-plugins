@@ -22,6 +22,7 @@
 #include "widr/src/ui/GonioView.h"
 #include "widr/src/ui/Help.h"
 #include "smacheratr/src/ui/Help.h"
+#include "smacheratr/src/ui/ColorView.h"
 #include "smacheratr/src/ui/ShaperView.h"
 
 #include "vstgui/lib/cfileselector.h"
@@ -32,6 +33,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <type_traits>
 
@@ -682,6 +684,7 @@ void Editor::buildBody ()
     fxFilterView = nullptr;
     fxDynDisplay = nullptr;
     fxShaperView = nullptr;
+    fxColorView = nullptr;
     fxGonio = nullptr;
     msView = nullptr;
     mdLayoutHost = nullptr;
@@ -730,9 +733,9 @@ void Editor::buildBody ()
             const char* names[12] = {"HP", "HP Res", "HP Gain", "LP", "LP Res", "LP Gain", "Split", "Env", "Attack", "Decay", "Dry/Wet", "Output"};
             for (int i = 0; i < 12; ++i)
                 add (new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), h, ids[i], names[i], i == 6 || i == 7 || i == 11), tip (ids[i]));
-            add (new Toggle (CRect (480, 172, 550, 190), h, kLiquid, "Liquid"), tip (kLiquid));
-            add (new Toggle (CRect (480, 196, 550, 214), h, kNotch, "Notch"), tip (kNotch));
-            add (new Knob (knobRect (560, 164), h, kFade, "Fade"), tip (kFade));
+            add (new Knob (knobRect (480, 164), h, kDipStart, "Dip"), tip (kDipStart));
+            add (new Knob (knobRect (538, 164), h, kFade, "Fade"), tip (kFade));
+            add (new Knob (knobRect (596, 164), h, kLpFloor, "Floor"), tip (kLpFloor));
             break;
         }
         case kFxMultidyn:
@@ -807,26 +810,35 @@ void Editor::buildBody ()
         {
             using namespace smacheratr;
             auto tip = [] (uint32_t id) { return smacheratr::help::forParam (id); };
-            fxShaperView = new ShaperView (CRect (8, 8, 330, 226), h, [this, s] () -> const smacheratr::Meters* {
+            fxShaperView = new ShaperView (CRect (8, 8, 230, 226), h, [this, s] () -> const smacheratr::Meters* {
                 auto* b = ctl->getBridge ();
                 return b ? &b->rack.sat[(size_t)s] : nullptr;
             });
             add (fxShaperView, smacheratr::help::kShaperDisplay);
-            add (new Toggle (CRect (340, 8, 420, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
-            add (new NumberBox (CRect (424, 8, 494, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
-            add (new Toggle (CRect (500, 8, 570, 26), h, kClarity, "Clarity"), tip (kClarity));
-            add (new Toggle (CRect (576, 8, 626, 26), h, kMidSide, "M/S"), tip (kMidSide));
-            add (new Choice (CRect (632, 8, 740, 26), h, kPostClip), tip (kPostClip));
-            add (new Toggle (CRect (746, 8, 830, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
-            const uint32_t ids[5] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi};
-            for (int i = 0; i < 5; ++i)
-                add (new Knob (knobRect (340 + i * 64, 36), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
-            add (new Toggle (CRect (340, 116, 400, 134), h, kColorOn, "Color"), tip (kColorOn));
-            add (new Knob (knobRect (404, 110), h, kColorFreq), tip (kColorFreq));
-            add (new Knob (knobRect (468, 110), h, kColorWidth), tip (kColorWidth));
-            add (new Knob (knobRect (548, 110), h, kClarityFreq, "Clarity Hz"), tip (kClarityFreq));
-            add (new Knob (knobRect (612, 110), h, kClarityWidth, "Clarity W"), tip (kClarityWidth));
-            add (new Toggle (CRect (690, 116, 770, 134), h, kDcFilter, "DC Filter"), tip (kDcFilter));
+            // the colour curve and Clarity's band, as in Smacheratr
+            fxColorView = new ColorView (
+                CRect (236, 34, 526, 226), h,
+                [this] () {
+                    auto* b = ctl->getBridge ();
+                    return b ? b->sampleRate.load (std::memory_order_relaxed) : 48000.0;
+                },
+                [this, s] () -> const smacheratr::Meters* {
+                    auto* b = ctl->getBridge ();
+                    return b ? &b->rack.sat[(size_t)s] : nullptr;
+                });
+            add (fxColorView, smacheratr::help::kColorDisplay);
+            add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
+            add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
+            add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Clarity"), tip (kClarity));
+            add (new Toggle (CRect (436, 8, 478, 26), h, kMidSide, "M/S"), tip (kMidSide));
+            add (new Choice (CRect (482, 8, 580, 26), h, kPostClip), tip (kPostClip));
+            add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
+            add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
+            add (new Toggle (CRect (716, 8, 770, 26), h, kColorOn, "Color"), tip (kColorOn));
+            const uint32_t ids[9] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth, kClarityFreq, kClarityWidth};
+            const char* names[9] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W"};
+            for (int i = 0; i < 9; ++i)
+                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), tip (ids[i]));
             break;
         }
         case kFxWidr:
@@ -855,6 +867,17 @@ void Editor::buildBody ()
         }
         default: break;
     }
+    // for the host test (which loads the plug-in as a module and cannot look inside the editor): the
+    // effect and the parameters with a control on its page, one line per page built
+    if (const char* report = std::getenv ("SMEMPLER_RACK_PAGE_REPORT"))
+        if (std::FILE* f = std::fopen (report, "a"))
+        {
+            std::fprintf (f, "%d", type);
+            for (uint32_t id : rackPageParams)
+                std::fprintf (f, " %u", id);
+            std::fprintf (f, "\n");
+            std::fclose (f);
+        }
     fxBody->invalid ();
 }
 
@@ -944,6 +967,8 @@ void Editor::idle ()
         endShaperView->idle ();
     if (fxShaperView)
         fxShaperView->idle ();
+    if (fxColorView)
+        fxColorView->idle ();
     if (envDisplay)
         envDisplay->tick ();
     if (nameLabel)

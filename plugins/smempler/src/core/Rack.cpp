@@ -68,6 +68,8 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kPbRange, para::kPbRange, "unused since Para stopped tracking notes"},
         {para::kRoot, para::kRoot, "unused since Para stopped tracking notes"},
         {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
+        {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
     };
     static const std::vector<RackHidden> multidynHidden {
         {multidyn::kScOn, multidyn::kScListen, "the side-chain: Smempler has no side-chain input"},

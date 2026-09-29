@@ -301,16 +301,16 @@ TEST (meters_for_the_display)
     run (*e, tones ({{440.0, -12.0}}, 0.1));
     double hz = 822.0, lz = 900.0;
     float hm, lm;
-    vocalPush (hz, lz, m.leaderLp.load (), 12.0, hm, lm);
+    vocalPush (hz, lz, m.leaderLp.load (), 12.0, 80.0, hm, lm);
     CHECK (m.leaderLp.load () && std::fabs (hz - m.hpHz.load ()) < 1.0 && std::fabs (hm - m.hpMul.load ()) < 0.01,
            "vocal push: %f vs %f, fade %f vs %f", hz, m.hpHz.load (), hm, m.hpMul.load ());
 }
 
-TEST (vocal_fades_from_the_crossing)
+TEST (vocal_dip_starts_at_dip_start)
 {
-    // the high-pass at 300 Hz (the default), the low-pass swept up to 700 Hz (14.7 semitones past it,
-    // more than the default Fade of an octave): in Vocal the high-pass is gone, so nothing is left
-    // at 8 kHz; in Free it still passes
+    // the high-pass at 300 Hz (the default), the low-pass swept up to 200 Hz (more than an octave past
+    // the 80 Hz Dip Start, more than the default Fade): in Vocal the high-pass is gone, so nothing is
+    // left at 8 kHz; in Free it still passes
     for (int mode : {kFree, kVocal})
     {
         auto e = engine ();
@@ -318,88 +318,88 @@ TEST (vocal_fades_from_the_crossing)
         std::vector<float> l (480, 0.0f), r (480, 0.0f);
         for (int k = 0; k <= 20; ++k)
         {
-            e->setParam (kLpFreq, 100.0 * std::pow (700.0 / 100.0, k / 20.0));
+            e->setParam (kLpFreq, 60.0 * std::pow (200.0 / 60.0, k / 20.0));
             e->process (l.data (), r.data (), l.data (), r.data (), 480);
         }
+        for (int k = 0; k < 100; ++k) // the swing settles
+            e->process (l.data (), r.data (), l.data (), r.data (), 480);
         const double top = gainAt (*e, 8000.0);
         if (mode == kVocal)
             CHECK (top < -40.0, "vocal: no high band left at 8 kHz: %f dB", top);
         else
             CHECK (top > -1.0, "free: the high-pass passes 8 kHz: %f dB", top);
     }
-    // the fade starts at the crossing and dives over Fade: up to 300 Hz the high band is untouched,
-    // 3 semitones past it (357 Hz) it is on its way down, and with Fade at 3 it is gone there
-    auto topAt = [] (double lp, double fade) {
+    // the dip starts at Dip Start and dives over Fade: below 80 Hz the high band is untouched, half an
+    // octave past it (113 Hz) it is 3 dB down, with Fade at 3 it is gone a minor third past (95 Hz);
+    // the high-pass rises along with the low-pass
+    auto at = [] (double lp, double fade, double dip, double& hpHz) {
+        Meters m;
         auto e = engine ();
+        e->setMeters (&m);
         e->setParam (kMovement, kVocal);
         e->setParam (kFade, fade);
+        e->setParam (kDipStart, dip);
         e->setParam (kLpFreq, lp);
-        return gainAt (*e, 8000.0);
+        const double g = gainAt (*e, 8000.0);
+        hpHz = m.hpHz.load ();
+        return g;
     };
-    CHECK (topAt (290.0, 12.0) > -0.5, "below the crossing: untouched (%f dB)", topAt (290.0, 12.0));
-    const double half = topAt (424.0, 12.0);
+    double hz = 0.0;
+    CHECK (at (75.0, 12.0, 80.0, hz) > -0.5 && std::fabs (hz - 300.0) < 1.0, "below Dip: untouched (%f dB, HP %.0f Hz)",
+           at (75.0, 12.0, 80.0, hz), hz);
+    const double half = at (113.1, 12.0, 80.0, hz);
     CHECK (half < -1.5 && half > -5.0, "half way, equal-power: %f dB (-3 expected)", half);
-    CHECK (topAt (357.0, 3.0) < -40.0, "Fade 3: gone a minor third past (%f dB)", topAt (357.0, 3.0));
+    CHECK (std::fabs (12.0 * std::log2 (hz / 300.0) - 6.0) < 0.2, "the high-pass rose with it: %.0f Hz", hz);
+    CHECK (at (95.1, 3.0, 80.0, hz) < -40.0, "Fade 3: gone a minor third past Dip (%f dB)", at (95.1, 3.0, 80.0, hz));
+    CHECK (at (113.1, 12.0, 200.0, hz) > -0.5, "Dip Start at 200 Hz: not yet (%f dB)", at (113.1, 12.0, 200.0, hz));
+    CHECK (std::fabs (paramTable ().info (kDipStart).def - 80.0) < 1e-9, "80 Hz by default");
 }
 
-TEST (liquid_overshoots_and_flows_back)
+TEST (vocal_overshoots_and_flows_back)
 {
-    // the same sweep of the low-pass in Vocal and in Liquid: Liquid runs ahead while it moves and
-    // settles on the same cutoff after it stops
-    Meters mv, ml;
-    auto ev = engine (), el = engine ();
+    // the same sweep of the low-pass in Free and in Vocal: Vocal runs ahead while it moves (Split swings
+    // with the sweep) and settles on the same cutoff after it stops
+    Meters mf, mv;
+    auto ef = engine (), ev = engine ();
+    ef->setMeters (&mf);
     ev->setMeters (&mv);
-    el->setMeters (&ml);
     ev->setParam (kMovement, kVocal);
-    el->setParam (kLiquid, 1.0);
     std::vector<float> l (480, 0.0f), r (480, 0.0f);
     for (int k = 0; k <= 20; ++k) // 185 Hz to 1.5 kHz in 0.2 s
     {
         const double f = 185.0 * std::pow (1500.0 / 185.0, k / 20.0);
+        ef->setParam (kLpFreq, f);
         ev->setParam (kLpFreq, f);
-        el->setParam (kLpFreq, f);
+        ef->process (l.data (), r.data (), l.data (), r.data (), 480);
         ev->process (l.data (), r.data (), l.data (), r.data (), 480);
-        el->process (l.data (), r.data (), l.data (), r.data (), 480);
     }
-    const double ahead = 12.0 * std::log2 (ml.lpHz.load () / mv.lpHz.load ());
-    CHECK (ahead > 2.0, "Liquid runs ahead of the sweep: %.1f semitones", ahead);
+    const double ahead = 12.0 * std::log2 (mv.lpHz.load () / mf.lpHz.load ());
+    CHECK (ahead > 2.0, "Vocal runs ahead of the sweep: %.1f semitones", ahead);
     for (int k = 0; k < 150; ++k) // 1.5 s at rest
     {
+        ef->process (l.data (), r.data (), l.data (), r.data (), 480);
         ev->process (l.data (), r.data (), l.data (), r.data (), 480);
-        el->process (l.data (), r.data (), l.data (), r.data (), 480);
     }
-    const double settled = 12.0 * std::log2 (ml.lpHz.load () / mv.lpHz.load ());
-    CHECK (std::fabs (settled) < 0.2, "and settles where Vocal does: %.2f semitones", settled);
+    const double settled = 12.0 * std::log2 (mv.lpHz.load () / mf.lpHz.load ());
+    CHECK (std::fabs (settled) < 0.2, "and settles where Free does: %.2f semitones", settled);
 }
 
-TEST (liquid_notch)
+TEST (low_pass_floor_keeps_the_sub)
 {
-    // the low-pass at 1 kHz leading, the high-pass pushed out: the notch cuts at the low-pass
-    // (still, it has not moved) and leaves the sub alone
-    auto make = [] (bool notchOn) {
+    // Split +36 takes the low-pass down 18 semitones from 100 Hz (to 35 Hz): the floor holds it at 40 Hz
+    auto lpAt = [] (double floorHz) {
+        Meters m;
         auto e = engine ();
-        e->setParam (kLiquid, 1.0);
-        e->setParam (kNotch, notchOn ? 1.0 : 0.0);
-        e->setParam (kLpFreq, 1000.0);
-        return e;
+        e->setMeters (&m);
+        e->setParam (kLpFreq, 100.0);
+        e->setParam (kSplit, 36.0);
+        e->setParam (kLpFloor, floorHz);
+        run (*e, tones ({{440.0, -12.0}}, 0.1));
+        return (double)m.lpHz.load ();
     };
-    auto off = make (false), on = make (true);
-    const double at = gainAt (*on, 1000.0) - gainAt (*off, 1000.0), sub = gainAt (*on, 50.0) - gainAt (*off, 50.0);
-    CHECK (at < -10.0, "the notch at the low-pass: %.1f dB", at);
-    CHECK (std::fabs (sub) < 0.5, "the sub is untouched: %.2f dB", sub);
-    // sweeping the low-pass, the notch zigzags around it
-    Meters m;
-    auto e = make (true);
-    e->setMeters (&m);
-    std::vector<float> l (480, 0.0f), r (480, 0.0f);
-    double most = 0.0;
-    for (int k = 0; k <= 40; ++k)
-    {
-        e->setParam (kLpFreq, 400.0 * std::pow (4000.0 / 400.0, k / 40.0));
-        e->process (l.data (), r.data (), l.data (), r.data (), 480);
-        most = std::max (most, std::fabs (12.0 * std::log2 (m.notchHz.load () / m.lpHz.load ())));
-    }
-    CHECK (most > 3.0, "the notch zigzags around the low-pass: up to %.1f semitones", most);
+    CHECK (std::fabs (lpAt (40.0) - 40.0) < 0.5, "held at the 40 Hz floor: %.1f Hz", lpAt (40.0));
+    CHECK (std::fabs (lpAt (20.0) - 35.4) < 0.5, "a lower floor lets it go: %.1f Hz", lpAt (20.0));
+    CHECK (std::fabs (paramTable ().info (kLpFloor).def - 40.0) < 1e-9, "40 Hz by default");
 }
 
 TEST (dry_wet_and_output)
