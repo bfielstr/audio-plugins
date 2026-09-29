@@ -132,7 +132,13 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
             rig.param (kClarity, 1.0);
             rig.param (kClarity2, 1.0);
+            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2) >= 0.5, "both Clarity bands on from the host");
             CHECK (win.savePng (outDir + "/ui_smacheratr_clarity_host.png"), "clarity screenshot, both bands (set by the host)");
+            {
+                // a window opened with both bands on: its first picture is drawn from scratch
+                EditorWindow both (rig.controller);
+                CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_clarity_both.png"), "both bands, fresh window");
+            }
             rig.param (kClarity, 0.0);
             rig.param (kClarity2, 0.0);
 
