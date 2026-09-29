@@ -30,10 +30,12 @@ inline const char* forParam (uint32_t id)
         case kHiQuality: return "Runs the curve 4x oversampled to reduce aliasing (a little more CPU).";
         case kDcFilter: return "Removes DC offset from the input before the curve.";
         case kClarity:
-            return "A low-mid compressor that keeps a hard-pushed drive from going muddy: when the low mids (around "
-                   "320 Hz) hit the curve hard they are turned down before it (up to 8 dB, only when pushed) and after "
-                   "it by half as much, and the lows go into the curve 4 dB down and are lifted back after it, so the "
-                   "bass drives it less but keeps its level. The display shows the cut (top right) while it is on.";
+            return "A compressor on one band of the low mids, so a hard-pushed drive does not go muddy: when the band "
+                   "hits the curve hard it is turned down before it (up to 8 dB, only when pushed) and after it by half "
+                   "as much. The band slopes 12 dB/oct below and 6 dB/oct above; set it with Freq and Width, or drag its "
+                   "handle in the frequency display (wheel: width). The drive display shows the cut (top right).";
+        case kClarityFreq: return "Clarity: the centre of the band it compresses (20 to 500 Hz).";
+        case kClarityWidth: return "Clarity: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
         case kMidSide:
             return "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound "
                    "stays wide when you push the drive (Menu).";

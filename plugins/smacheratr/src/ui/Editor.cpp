@@ -51,6 +51,7 @@ void Editor::onClose ()
     status = nullptr;
     thresholdView = nullptr;
     colorViews.clear ();
+    clarityViews.clear ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -69,9 +70,11 @@ void Editor::buildUI (CFrame* f)
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
     // left: the device as Live shows it, with the pre-limiter in front of the curve
-    bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 86, 62), this, kPreLimit, "Pre-Limit"));
-    thresholdView = bind (root, new NumberBox (CRect (kShaperLeft + 92, 42, kShaperLeft + 172, 60), this, kPreLimitThreshold));
-    bind (root, new Toggle (CRect (kShaperLeft + 186, 40, kShaperLeft + 272, 62), this, kClarity, "Clarity"));
+    bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 76, 62), this, kPreLimit, "Pre-Limit"));
+    thresholdView = bind (root, new NumberBox (CRect (kShaperLeft + 80, 42, kShaperLeft + 140, 60), this, kPreLimitThreshold));
+    bind (root, new Toggle (CRect (kShaperLeft + 150, 40, kShaperLeft + 210, 62), this, kClarity, "Clarity"));
+    clarityViews.push_back (bind (root, new NumberBox (CRect (kShaperLeft + 214, 42, kShaperLeft + 258, 60), this, kClarityFreq)));
+    clarityViews.push_back (bind (root, new NumberBox (CRect (kShaperLeft + 262, 42, kShaperLeft + 300, 60), this, kClarityWidth)));
     shaper = new ShaperView (CRect (kShaperLeft, kShaperTop, kShaperLeft + kShaperWidth, kShaperTop + kShaperHeight), this,
                              [c = ctl] () -> const Meters* {
                                  auto* s = c->getShared ();
@@ -106,6 +109,8 @@ void Editor::updateLooks ()
     const bool on = plainValue (kColorOn) >= 0.5;
     for (auto* v : colorViews)
         v->setEnabledLook (on);
+    for (auto* v : clarityViews)
+        v->setEnabledLook (plainValue (kClarity) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -115,7 +120,7 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn)
+    if (id == kPreLimit || id == kColorOn || id == kClarity)
         updateLooks ();
 }
 

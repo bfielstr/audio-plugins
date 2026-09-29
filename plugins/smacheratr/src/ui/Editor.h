@@ -38,6 +38,7 @@ private:
     pk::Label* status = nullptr;
     pk::ParamView* thresholdView = nullptr;
     std::vector<pk::ParamView*> colorViews;
+    std::vector<pk::ParamView*> clarityViews; // dimmed while Clarity is off
 };
 
 } // namespace smacheratr

@@ -1,5 +1,6 @@
 #include "Engine.h"
 
+#include "ClarityBand.h"
 #include "Color.h"
 
 #include <algorithm>
@@ -22,11 +23,10 @@ ParamArray defaultParams ()
 
 void Engine::Channel::reset ()
 {
-    lmSense.reset ();
-    lmCut.reset ();
-    lmCutPost.reset ();
-    clarityPre.reset ();
-    clarityPost.reset ();
+    bandHp.reset ();
+    bandLp.reset ();
+    postHp.reset ();
+    postLp.reset ();
     dc.reset ();
     preLo.reset ();
     preHi.reset ();
@@ -45,12 +45,7 @@ void Engine::prepare (double sampleRate, int mb)
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
     lmAtk = 1.0 - std::exp (-1.0 / (0.015 * sr));
     lmRel = 1.0 - std::exp (-1.0 / (0.15 * sr));
-    for (auto& c : chan)
-    {
-        c.lmSense.c = bandPass (sr, 320.0, 0.8);
-        c.clarityPre.c = lowShelf (sr, 150.0, -4.0);
-        c.clarityPost.c = lowShelf (sr, 150.0, 4.0);
-    }
+    bandFreq = bandWidth = -1.0; // Clarity's band is designed for this rate on the next block
     // the limiter's gain (in dB) reaches its target within the look-ahead and releases in 50 ms
     limAtk = (float)std::exp (-5.0 / look);
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
@@ -71,7 +66,7 @@ void Engine::prepare (double sampleRate, int mb)
         dry[c].assign ((size_t)maxBlock, 0.0f);
         pre[c].assign ((size_t)maxBlock, 0.0f);
     }
-    for (auto* v : {&wet, &gDrive, &gOut, &gMix, &msMid, &msSide})
+    for (auto* v : {&wet, &gDrive, &gOut, &gMix, &msMid, &msSide, &gPost})
         v->assign ((size_t)maxBlock, 0.0f);
     osBuf.assign ((size_t)maxBlock * 4, 0.0f);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -228,42 +223,55 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
-    // Clarity, when the drive pushes the low mids (around 320 Hz) past -18 dBFS into the curve, they are
-    // turned down before it (3 dB for every 5 over, at most 8 dB), so they do not pile up into mud,
-    // and after it by half as much (the curve squashes the cut before it back up);
-    // and the lows go into the curve 4 dB down and are lifted back after it, so the bass drives the
-    // curve less (less intermodulation) but keeps its level.
+    // Clarity, a compressor on one band of the low mids (ClarityBand.h: 12 dB/oct below, 6 dB/oct
+    // above, around Clarity Frequency): when the drive pushes the band past -18 dBFS into the curve,
+    // it is turned down before the curve (3 dB for every 5 over, at most 8 dB), so the low mids do
+    // not pile up into mud and intermodulate, and after it by half as much (the curve squashes the
+    // cut before it back up).
     const bool clarity = p[kClarity] >= 0.5;
     if (clarity != clarityWas)
     {
         clarityWas = clarity;
         lmEnv = 0.0;
         lmCutDb = 0.0f;
+        gBandPre = gBandPost = 1.0f;
         for (auto& c : chan)
         {
-            c.lmSense.reset ();
-            c.lmCut.reset ();
-            c.lmCutPost.reset ();
-            c.clarityPre.reset ();
-            c.clarityPost.reset ();
+            c.bandHp.reset ();
+            c.bandLp.reset ();
+            c.postHp.reset ();
+            c.postLp.reset ();
         }
     }
     if (clarity)
     {
         const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv));
         lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, 8.0);
-        const BiquadCoeffs cut = peak (sr, 320.0, -lmCutDb, 0.8), cutPost = peak (sr, 320.0, -0.5 * lmCutDb, 0.8);
-        for (auto& c : chan)
+        if (p[kClarityFreq] != bandFreq || p[kClarityWidth] != bandWidth)
         {
-            c.lmCut.c = cut;
-            c.lmCutPost.c = cutPost;
+            bandFreq = p[kClarityFreq];
+            bandWidth = p[kClarityWidth];
+            const ClarityBand b = clarityBand (sr, bandFreq, bandWidth);
+            for (auto& c : chan)
+            {
+                c.bandHp.c = c.postHp.c = b.hp;
+                c.bandLp.c = c.postLp.c = b.lp;
+            }
+            bandNorm = (float)b.norm;
         }
     }
 
     // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
     float inPk = 0.0f, outPk = 0.0f;
+    const float gPreTarget = dbToGain (-lmCutDb), gPostTarget = dbToGain (-0.5 * lmCutDb);
     for (int i = 0; i < n; ++i)
     {
+        if (clarity)
+        {
+            gBandPre += (gPreTarget - gBandPre) * smooth;
+            gBandPost += (gPostTarget - gBandPost) * smooth;
+            gPost[(size_t)i] = gBandPost;
+        }
         float v[2] = {xl[i], xr[i]};
         for (int c = 0; c < 2; ++c)
         {
@@ -294,9 +302,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
             if (clarity)
             {
-                const double band = chan[c].lmSense.process (d);
+                const double band = chan[c].bandLp.process (chan[c].bandHp.process (d)) * bandNorm;
                 lmPower = std::max (lmPower, 2.0 * band * band); // a sine's peak level
-                d = (float)chan[c].clarityPre.process (chan[c].lmCut.process (d));
+                d = (float)(d + (gBandPre - 1.0f) * band);
             }
             pre[c][(size_t)i] = d;
             inPk = std::max (inPk, std::fabs (d));
@@ -321,7 +329,11 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
         if (clarity)
             for (int i = 0; i < n; ++i)
-                wet[(size_t)i] = (float)ch.lmCutPost.process (ch.clarityPost.process (wet[(size_t)i]));
+            {
+                const float w = wet[(size_t)i];
+                const double band = ch.postLp.process (ch.postHp.process (w)) * bandNorm;
+                wet[(size_t)i] = (float)(w + (gPost[(size_t)i] - 1.0f) * band);
+            }
         for (int i = 0; i < n; ++i)
         {
             const float w = wet[(size_t)i], m = gMix[(size_t)i];

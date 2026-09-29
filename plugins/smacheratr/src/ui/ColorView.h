@@ -32,9 +32,10 @@ public:
     double yOfDb (double db) const;
     VSTGUI::CPoint loHandle () const;
     VSTGUI::CPoint hiHandle () const;
+    VSTGUI::CPoint clarityHandle () const; // the top of Clarity's band (when Clarity is on)
 
 private:
-    enum class Drag { None, Lo, Hi };
+    enum class Drag { None, Lo, Hi, Clarity };
     Drag hit (const VSTGUI::CPoint& p) const;
     double sampleRate () const;
 
@@ -42,7 +43,7 @@ private:
     Controller* controller;
     Drag drag = Drag::None;
     VSTGUI::CPoint down;
-    double startLo = 0.0, startHi = 0.0, startFreq = 0.0;
+    double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0;
     bool movedH = false, movedV = false;
 };
 

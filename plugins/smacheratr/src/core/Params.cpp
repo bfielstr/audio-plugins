@@ -26,6 +26,8 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kDcFilter, "Pre-DC Filter", "DC Filter", false));
         v.push_back (toggle (kMidSide, "Mid/Side", "M/S", false));
         v.push_back (toggle (kClarity, "Clarity", "Clarity", false));
+        v.push_back (real (kClarityFreq, "Clarity Frequency", "Freq", 20.0, 500.0, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kClarityWidth, "Clarity Width", "Width", 0.5, 4.0, 2.0, Curve::Linear, Disp::Number));
         return v;
     }());
     return t;

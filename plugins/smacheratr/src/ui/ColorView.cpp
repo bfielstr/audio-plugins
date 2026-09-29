@@ -1,5 +1,6 @@
 #include "ColorView.h"
 
+#include "ClarityBand.h"
 #include "Color.h"
 #include "plugin/Controller.h"
 
@@ -28,6 +29,8 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 constexpr double kHandleRadius = 5.0;
+constexpr double kBandHeight = 70.0; // Clarity's band, drawn up from the bottom
+const CColor kClarityColor (120, 210, 140);
 } // namespace
 
 ColorView::ColorView (const CRect& r, pk::ParamHost* h, Controller* c) : CView (r), host (h), controller (c) {}
@@ -56,6 +59,13 @@ CPoint ColorView::loHandle () const { return CPoint (xOfHz (kColorLowHz * 0.5), 
 CPoint ColorView::hiHandle () const
 {
     return CPoint (xOfHz (host->plainValue (kColorFreq)), yOfDb (colorDb (host->plainValue (kColorHi))));
+}
+
+CPoint ColorView::clarityHandle () const
+{
+    const double f = host->plainValue (kClarityFreq);
+    const double db = clarityBandDb (clarityBand (sampleRate (), f, host->plainValue (kClarityWidth)), f, sampleRate ());
+    return CPoint (xOfHz (f), getViewSize ().bottom - 18.0 - std::max (0.0, 1.0 + db / 24.0) * kBandHeight);
 }
 
 void ColorView::draw (CDrawContext* ctx)
@@ -109,6 +119,39 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 
+    // Clarity's band: the low mids it compresses
+    const bool clarity = host->plainValue (kClarity) >= 0.5;
+    if (clarity)
+    {
+        const ClarityBand band = clarityBand (sr, host->plainValue (kClarityFreq), host->plainValue (kClarityWidth));
+        const double base = all.bottom - 18.0;
+        if (auto bp = owned (ctx->createGraphicsPath ()))
+        {
+            bp->beginSubpath (CPoint (all.left, base));
+            for (int i = 0; i <= steps; ++i)
+            {
+                const double hz = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / steps);
+                const double db = clarityBandDb (band, hz, sr);
+                bp->addLine (CPoint (xOfHz (hz), base - std::max (0.0, 1.0 + db / 24.0) * kBandHeight));
+            }
+            bp->addLine (CPoint (all.right, base));
+            bp->closeSubpath ();
+            ctx->setFillColor (CColor (120, 210, 140, 36));
+            ctx->drawGraphicsPath (bp, CDrawContext::kPathFilled);
+            ctx->setLineWidth (1.4);
+            ctx->setFrameColor (kClarityColor);
+            ctx->drawGraphicsPath (bp, CDrawContext::kPathStroked);
+        }
+        const CPoint h = clarityHandle ();
+        text (ctx, "Clarity " + host->valueText (kClarityFreq), CRect (h.x - 60, h.y - 20, h.x + 60, h.y - 8), kClarityColor, 9.5);
+        const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
+        ctx->setFillColor (theme::kTextBright);
+        ctx->drawEllipse (hr, kDrawFilled);
+        ctx->setLineWidth (1.5);
+        ctx->setFrameColor (kClarityColor);
+        ctx->drawEllipse (hr, kDrawStroked);
+    }
+
     // handles
     for (const CPoint& h : {loHandle (), hiHandle ()})
     {
@@ -138,6 +181,8 @@ ColorView::Drag ColorView::hit (const CPoint& p) const
         return Drag::Hi;
     if (near (loHandle ()))
         return Drag::Lo;
+    if (host->plainValue (kClarity) >= 0.5 && near (clarityHandle ()))
+        return Drag::Clarity;
     return Drag::None;
 }
 
@@ -151,7 +196,12 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
         return;
     if (e.clickCount == 2 || right)
     {
-        if (drag == Drag::Lo)
+        if (drag == Drag::Clarity)
+        {
+            host->setOnce (kClarityFreq, host->table ().defaultNormalized (kClarityFreq));
+            host->setOnce (kClarityWidth, host->table ().defaultNormalized (kClarityWidth));
+        }
+        else if (drag == Drag::Lo)
             host->setOnce (kColorLo, host->table ().defaultNormalized (kColorLo));
         else
         {
@@ -168,8 +218,11 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     startLo = host->plainValue (kColorLo);
     startHi = host->plainValue (kColorHi);
     startFreq = host->plainValue (kColorFreq);
+    startClarity = host->plainValue (kClarityFreq);
     movedH = movedV = false;
-    if (drag == Drag::Lo)
+    if (drag == Drag::Clarity)
+        host->beginEdit (kClarityFreq);
+    else if (drag == Drag::Lo)
         host->beginEdit (kColorLo);
     else
     {
@@ -185,7 +238,7 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
     {
         const Drag h = hit (e.mousePosition);
         if (auto* f = getFrame ())
-            f->setCursor (h == Drag::Hi ? kCursorSizeAll : h == Drag::Lo ? kCursorVSize : kCursorDefault);
+            f->setCursor (h == Drag::Hi ? kCursorSizeAll : h == Drag::Lo ? kCursorVSize : h == Drag::Clarity ? kCursorHSize : kCursorDefault);
         return;
     }
     const CRect r = getViewSize ();
@@ -193,7 +246,9 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     const double amountPerPixel = 2.0 / (r.getHeight () - 24.0); // +-100 % over the plot
     auto setPlain = [this] (uint32_t id, double v) { host->setNorm (id, host->table ().toNormalized (id, v)); };
-    if (drag == Drag::Lo)
+    if (drag == Drag::Clarity)
+        setPlain (kClarityFreq, startClarity * std::pow (kMaxHz / kMinHz, dx / r.getWidth ()));
+    else if (drag == Drag::Lo)
         setPlain (kColorLo, startLo - dy * amountPerPixel);
     else
     {
@@ -218,7 +273,9 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag == Drag::None)
         return;
-    if (drag == Drag::Lo)
+    if (drag == Drag::Clarity)
+        host->endEdit (kClarityFreq);
+    else if (drag == Drag::Lo)
         host->endEdit (kColorLo);
     else
     {
@@ -235,10 +292,13 @@ void ColorView::onMouseWheelEvent (MouseWheelEvent& e)
     const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition) != Drag::None);
     if (!active)
         return;
-    const double dn = pk::wheelStep (e, host->table (), kColorWidth);
+    // Clarity's band: wheel up widens it
+    const bool band = drag == Drag::Clarity || (drag == Drag::None && hit (e.mousePosition) == Drag::Clarity);
+    const uint32_t id = band ? kClarityWidth : kColorWidth;
+    const double dn = pk::wheelStep (e, host->table (), id);
     if (dn == 0.0)
         return;
-    host->setOnce (kColorWidth, std::clamp (host->norm (kColorWidth) - dn, 0.0, 1.0));
+    host->setOnce (id, std::clamp (host->norm (id) + (band ? dn : -dn), 0.0, 1.0));
     invalid ();
     e.consumed = true;
 }

@@ -1,5 +1,6 @@
 // Headless tests for the Smacheratr DSP. Run: ./smacheratr_tests [filter]
 #include "Color.h"
+#include "ClarityBand.h"
 #include "Engine.h"
 #include "Params.h"
 #include "Shaper.h"
@@ -433,6 +434,38 @@ TEST (clarity_keeps_the_low_mids_clean)
     }
     CHECK (std::fabs (measure (-12.0, true, 320.0) - measure (-12.0, false, 320.0)) < 0.5, "gentle: untouched (%.2f vs %.2f dB)",
            measure (-12.0, true, 320.0), measure (-12.0, false, 320.0));
+}
+
+TEST (clarity_band_shape_and_moves)
+{
+    // the band: 0 dB at its peak, 12 dB/oct below its low edge, 6 dB/oct above its high edge
+    const ClarityBand band = clarityBand (48000.0, 250.0, 2.0);
+    double peak = -100.0;
+    for (double hz = 50.0; hz < 2000.0; hz *= 1.02)
+        peak = std::max (peak, clarityBandDb (band, hz, 48000.0));
+    CHECK (std::fabs (peak) < 0.1, "peak %.2f dB", peak);
+    const double lowSlope = clarityBandDb (band, band.lowHz / 4, 48000.0) - clarityBandDb (band, band.lowHz / 8, 48000.0);
+    const double highSlope = clarityBandDb (band, band.highHz * 4, 48000.0) - clarityBandDb (band, band.highHz * 8, 48000.0);
+    CHECK (std::fabs (lowSlope - 12.0) < 1.0 && std::fabs (highSlope - 6.0) < 1.0, "slopes %.1f / %.1f dB per octave", lowSlope,
+           highSlope);
+    CHECK (std::fabs (band.lowHz - 125.0) < 0.5 && std::fabs (band.highHz - 500.0) < 0.5, "2 octaves around 250 Hz: %.0f - %.0f Hz",
+           band.lowHz, band.highHz);
+
+    // moved down to 60 Hz, Clarity leaves a 320 Hz note alone and takes the 80 Hz bass down instead
+    auto in = tones ({{80.0, -8.0}, {320.0, -12.0}}, 1.0);
+    auto measure = [&] (bool clarity, double center, double f) {
+        auto e = engine ();
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, clarity ? 1.0 : 0.0);
+        e->setParam (kClarityFreq, center);
+        e->setParam (kClarityWidth, 1.0);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 24000, 48000);
+    };
+    const double bassCut = measure (false, 60.0, 80.0) - measure (true, 60.0, 80.0);
+    const double noteCut = measure (false, 60.0, 320.0) - measure (true, 60.0, 320.0);
+    std::printf ("    band at 60 Hz: 80 Hz down %.1f dB, 320 Hz down %.1f dB\n", bassCut, noteCut);
+    CHECK (bassCut > 2.0 && bassCut > noteCut + 1.5, "the band follows its centre: %.1f vs %.1f dB", bassCut, noteCut);
 }
 
 TEST (fuzz_and_automation)

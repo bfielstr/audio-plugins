@@ -822,6 +822,8 @@ void Editor::buildBody ()
             add (new Toggle (CRect (340, 116, 400, 134), h, kColorOn, "Color"), tip (kColorOn));
             add (new Knob (knobRect (404, 110), h, kColorFreq), tip (kColorFreq));
             add (new Knob (knobRect (468, 110), h, kColorWidth), tip (kColorWidth));
+            add (new Knob (knobRect (548, 110), h, kClarityFreq, "Clarity Hz"), tip (kClarityFreq));
+            add (new Knob (knobRect (612, 110), h, kClarityWidth, "Clarity W"), tip (kClarityWidth));
             break;
         }
         case kFxWidr:
