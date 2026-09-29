@@ -71,6 +71,12 @@ private:
     Map idOf;
 };
 
+// The mouse wheel on a filter handle changes the filter's intensity (resonance, Q or slope) in every
+// display of the suite: while the handle is held, or with Shift over it. The change of the
+// parameter's normalized value for one wheel event: one step for a stepped parameter, 2 % per
+// notch otherwise; 0 when the event has no vertical movement.
+double wheelStep (const VSTGUI::MouseWheelEvent& e, const ParamTable& table, uint32_t id);
+
 // A view bound to one parameter.
 class ParamView : public VSTGUI::CView
 {

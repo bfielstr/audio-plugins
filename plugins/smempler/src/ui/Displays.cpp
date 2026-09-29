@@ -186,6 +186,24 @@ void FilterDisplay::onMouseUpEvent (MouseUpEvent& e)
     e.consumed = true;
 }
 
+void FilterDisplay::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    if (showEnv || (!dragging && !e.modifiers.has (ModifierKey::Shift)))
+        return;
+    const double dn = pk::wheelStep (e, host->table (), kFilterRes);
+    if (dn == 0.0)
+        return;
+    if (dragging)
+    {
+        resN = std::clamp (resN + dn, 0.0, 1.0);
+        host->setNorm (kFilterRes, resN);
+    }
+    else
+        host->setOnce (kFilterRes, std::clamp (host->norm (kFilterRes) + dn, 0.0, 1.0));
+    invalid ();
+    e.consumed = true;
+}
+
 //==============================================================================
 EnvelopeDisplay::EnvelopeDisplay (const CRect& r, ParamHost* h, int w) : CView (r), host (h), which (w) {}
 

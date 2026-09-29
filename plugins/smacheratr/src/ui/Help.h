@@ -40,6 +40,6 @@ constexpr const char* kShaperDisplay =
 
 constexpr const char* kColorDisplay =
     "The colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
-    "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Shift: fine.";
+    "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. Shift: fine.";
 
 } // namespace smacheratr::help

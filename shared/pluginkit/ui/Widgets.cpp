@@ -143,6 +143,17 @@ void Knob::onMouseCancelEvent (MouseCancelEvent& e)
     e.consumed = true;
 }
 
+double wheelStep (const MouseWheelEvent& e, const ParamTable& table, uint32_t id)
+{
+    const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
+    if (d == 0.0)
+        return 0.0;
+    const int steps = table.info (id).stepCount ();
+    if (steps > 0)
+        return (d > 0 ? 1.0 : -1.0) / steps;
+    return 0.02 * std::clamp (d, -3.0, 3.0);
+}
+
 void Knob::onMouseWheelEvent (MouseWheelEvent& e)
 {
     const int steps = host->table ().info (param).stepCount ();

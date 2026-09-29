@@ -171,6 +171,20 @@ void MsView::onMouseMoveEvent (MouseMoveEvent& e)
     e.consumed = true;
 }
 
+void MsView::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    const CPoint h = handle ();
+    const bool over = std::hypot (e.mousePosition.x - h.x, e.mousePosition.y - h.y) <= 14.0;
+    if (!dragging && !(over && e.modifiers.has (ModifierKey::Shift)))
+        return;
+    const double dn = pk::wheelStep (e, host->table (), kMsSlope);
+    if (dn == 0.0)
+        return;
+    host->setOnce (kMsSlope, std::clamp (host->norm (kMsSlope) + dn, 0.0, 1.0));
+    invalid ();
+    e.consumed = true;
+}
+
 void MsView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (!dragging)

@@ -18,6 +18,7 @@ public:
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override; // resonance, while held or with Shift
 
 private:
     VSTGUI::CRect toggleRect (int i) const;

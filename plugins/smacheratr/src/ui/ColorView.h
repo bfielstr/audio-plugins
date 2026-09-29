@@ -26,6 +26,7 @@ public:
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
     void onMouseExitEvent (VSTGUI::MouseExitEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override; // Width: up narrows (held, or Shift)
 
     double xOfHz (double hz) const;
     double yOfDb (double db) const;

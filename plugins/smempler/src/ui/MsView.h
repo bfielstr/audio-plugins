@@ -2,6 +2,7 @@
 // live mid and side level bars on the right.
 //   drag the handle sideways   side high-pass frequency
 //   drag the handle up / down  side gain
+//   mouse wheel                the slope (6 / 12 / 24 dB), while holding the handle or with Shift
 //   double-click               reset both
 #pragma once
 
@@ -26,6 +27,7 @@ public:
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle ();
 
     VSTGUI::CRect plot () const;

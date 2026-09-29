@@ -228,6 +228,20 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
     e.consumed = true;
 }
 
+void ColorView::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    // the colour filter's intensity is its width: wheel up narrows it (a sharper, stronger band)
+    const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition) != Drag::None);
+    if (!active)
+        return;
+    const double dn = pk::wheelStep (e, host->table (), kColorWidth);
+    if (dn == 0.0)
+        return;
+    host->setOnce (kColorWidth, std::clamp (host->norm (kColorWidth) - dn, 0.0, 1.0));
+    invalid ();
+    e.consumed = true;
+}
+
 void ColorView::onMouseExitEvent (MouseExitEvent& e)
 {
     if (auto* f = getFrame ())
