@@ -98,6 +98,8 @@ int main (int argc, char** argv)
         // state round trip
         rig.param (kSlope, toNormalized (kSlope, kSlope48));
         rig.param (xoverParam (1), toNormalized (xoverParam (1), 2500.0));
+        out.clear ();
+        rig.render (0.05, out, nullptr, tone (346.0, 0.1)); // (the processor takes the changes in its next block)
         MemoryStream saved;
         CHECK (rig.component->getState (&saved) == kResultOk, "getState");
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
