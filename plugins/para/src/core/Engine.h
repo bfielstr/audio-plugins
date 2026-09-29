@@ -101,6 +101,8 @@ public:
         p[id] = plain;
         if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
+        else if (id >= kTailExtBase)
+            tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
     }
     double param (uint32_t id) const { return p[id]; }
     int latency () const { return hasTail ? tail.latency () : 0; }

@@ -318,7 +318,7 @@ TEST (rack_block_mapping)
         }
     for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
     {
-        const bool sat = id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold;
+        const bool sat = (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) || id >= multidyn::kSatExtBase;
         CHECK ((fxBlockOf (kFxMultidyn, id) < 0) == sat, "multidyn %u", id);
     }
     const auto& t = fxBlockTable (kFxMultidyn);
@@ -465,7 +465,7 @@ TEST (effects_fuzz)
     for (int iter = 0; iter < 30; ++iter)
     {
         std::unique_ptr<Engine> e (makeEngine (s));
-        for (uint32_t id = kRackBase; id < kNumParams; ++id)
+        for (uint32_t id = kRackBase; id < kTailExtBase; ++id)
             e->setParam (id, toPlain (id, r01 ()));
         for (int slot = 0; slot < kRackSlots; ++slot) // every kind of effect somewhere
             e->setParam (slotParam (slot, kSlotType), (double)(1 + (slot + iter) % (kNumFxTypes - 1)));
@@ -474,7 +474,7 @@ TEST (effects_fuzz)
         for (int step = 0; step < 6; ++step)
         {
             e->noteOn (36 + (int)(r01 () * 48), 1.0f);
-            const uint32_t id = kRackBase + (uint32_t)(r01 () * (kNumParams - kRackBase - 1));
+            const uint32_t id = kRackBase + (uint32_t)(r01 () * (kTailExtBase - kRackBase - 1));
             e->setParam (id, toPlain (id, r01 ()));
             auto o = run (*e, 2000);
             for (float v : o.l)

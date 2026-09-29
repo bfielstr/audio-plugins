@@ -46,7 +46,9 @@ public:
     void setParam (uint32_t id, double plain)
     {
         p[id] = plain;
-        if (id >= kTailBase)
+        if (id >= kTailExtBase)
+            tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
+        else if (id >= kTailBase)
             tail.setParam (id - kTailBase, plain);
     }
     double param (uint32_t id) const { return p[id]; }

@@ -285,7 +285,7 @@ void Editor::buildUI (CFrame* f)
     bind (time, new Toggle (CRect (14, 150, 176, 172), this, kFollowTempo, "Follow Tempo"));
 
     // OUTPUT
-    addTailPanel (root, CRect (8, 600, 972, 678), kTailBase);
+    addTailPanel (root, CRect (8, 600, 972, 678), kTailBase, kTailExtBase);
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
     bind (out, new Knob (CRect (24, 28, 104, 128), this, kGain, nullptr, true));

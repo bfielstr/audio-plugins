@@ -103,7 +103,7 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Knob (knobRect (362, 22), this, kFade));
     bind (outP, new Knob (knobRect (440, 22), this, kLpFloor));
 
-    addTailPanel (root, CRect (8, 518, 752, 598), kTailBase);
+    addTailPanel (root, CRect (8, 518, 752, 598), kTailBase, kTailExtBase);
 
     applyParamTooltips (&help::forParam);
     updateLooks ();

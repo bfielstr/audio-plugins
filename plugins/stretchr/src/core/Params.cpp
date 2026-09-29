@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <vector>
 
 namespace stretchr {
@@ -29,6 +31,7 @@ const ParamTable& paramTable ()
         pk::addTailParams (v, kTailBase);
         v.push_back (choice (kTrigger, "Trigger", "Trigger", {"On Play", "Timeline"}, kOnPlay));
         v.push_back (choice (kStereo, "Stereo", "Stereo", {"Wide", "Same"}, kStereoWide));
+        smacheratr::addTailExtParams (v, kTailExtBase);
         return v;
     }());
     return t;

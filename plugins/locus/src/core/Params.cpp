@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <vector>
 
 namespace locus {
@@ -20,6 +22,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kSolo, "Solo Focus Range", "Solo", false));
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         pk::addTailParams (v, kTailBase);
+        smacheratr::addTailExtParams (v, kTailExtBase);
         return v;
     }());
     return t;

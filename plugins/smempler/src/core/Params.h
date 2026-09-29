@@ -138,13 +138,21 @@ enum ParamId : uint32_t
     // --- added in 0.6: the effects rack (Rack.h); the fixed Para / Multidyn / M/S EQ above are
     // no longer used (old projects are moved into the rack when they load) ---
     kRackBase,
+    // --- added in 0.7: the rest of the end-of-chain Smacheratr (smacheratr/src/core/TailExt.h) ---
+    kTailExtBase = kRackBase + kRackSlots * kSlotSize,
 
-    kNumParams = kRackBase + kRackSlots * kSlotSize
+    kNumParams = kTailExtBase + pk::kTailExtFields
 };
 
 constexpr uint32_t slotParam (int slot, uint32_t field) { return kRackBase + (uint32_t)slot * kSlotSize + field; }
 constexpr uint32_t slotBlockParam (int slot, uint32_t id) { return slotParam (slot, kSlotParams + id); }
-constexpr bool isRackParam (uint32_t id) { return id >= kRackBase && id < kNumParams; }
+constexpr bool isRackParam (uint32_t id) { return id >= kRackBase && id < kTailExtBase; }
+// the end-of-chain Smacheratr's parameters (both blocks), and their field in smacheratr::Tail
+constexpr bool isTailParam (uint32_t id)
+{
+    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
+}
+constexpr uint32_t tailField (uint32_t id) { return id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase) : id - kTailBase; }
 
 constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
 

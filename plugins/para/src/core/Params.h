@@ -37,8 +37,8 @@ enum ParamId : uint32_t
     kNotch,      // unused (Liquid's notch is gone)
     kDipStart,   // Hz: Vocal, the low-pass leading - where the high-pass starts to rise and fade
     kLpFloor,    // Hz: the low-pass never goes below this (keeps the sub)
-
-    kNumParams
+    kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
+    kNumParams = kTailExtBase + pk::kTailExtFields
 };
 
 // The IDs a plug-in hosting Para (Smempler) reserves for it; the ones after are mapped one by one.

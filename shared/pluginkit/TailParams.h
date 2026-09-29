@@ -23,4 +23,23 @@ enum TailField : uint32_t
 
 void addTailParams (std::vector<ParamInfo>& table, uint32_t base, bool onByDefault = false);
 
+// The rest of Smacheratr's controls, a second block each plug-in appends to its IDs (the parameters
+// themselves: smacheratr/src/core/TailExt.h, addTailExtParams).
+enum TailExtField : uint32_t
+{
+    kTailExtOutput = 0,
+    kTailExtColorOn,
+    kTailExtColorLo,
+    kTailExtColorHi,
+    kTailExtColorFreq,
+    kTailExtColorWidth,
+    kTailExtHiQuality,
+    kTailExtDcFilter,
+    kTailExtMidSide,
+    kTailExtClarity,
+    kTailExtClarityFreq,
+    kTailExtClarityWidth,
+    kTailExtFields
+};
+
 } // namespace pk

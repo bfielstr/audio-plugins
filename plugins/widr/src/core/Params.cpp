@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <vector>
 
 namespace widr {
@@ -31,6 +33,7 @@ const ParamTable& paramTable ()
         v.push_back (percent (kContrast, "Contrast", "Contrast", 0.5));
         v.push_back (real (kDryLevel, "Dry Level", "Dry", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
         v.push_back (real (kWetLevel, "Wet Level", "Wet", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
+        smacheratr::addTailExtParams (v, kTailExtBase, true); // Mid/Side on: it keeps the width when pushed
         return v;
     }());
     return t;

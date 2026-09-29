@@ -68,8 +68,9 @@ tresult PLUGIN_API Processor::canProcessSampleSize (int32 s) { return s == kSamp
 
 void Processor::syncTail ()
 {
-    for (uint32_t f = 0; f < pk::kTailFields; ++f)
-        tail.setParam (f, toPlain (kTailBase + f, normMirror[kTailBase + f].load ()));
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        if (isTailParam (id))
+            tail.setParam (tailField (id), toPlain (id, normMirror[id].load ()));
 }
 
 tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
@@ -112,8 +113,8 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             {
                 const uint32_t id = q->getParameterId ();
                 normMirror[id].store (v);
-                if (id >= kTailBase && id < kTailBase + pk::kTailFields)
-                    tail.setParam (id - kTailBase, toPlain (id, v));
+                if (isTailParam (id))
+                    tail.setParam (tailField (id), toPlain (id, v));
                 else
                     session->setParam (id, toPlain (id, v), false);
             }
@@ -221,7 +222,7 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         normMirror[id].store (st.norm[id]);
-        if (id < kTailBase || id >= kTailBase + pk::kTailFields)
+        if (!isTailParam (id))
             session->setParam (id, toPlain (id, st.norm[id]));
     }
     session->setClip (st.hasClip ? std::move (st.clip) : Clip {}, false);

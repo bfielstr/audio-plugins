@@ -516,8 +516,9 @@ void Engine::prepare (double sampleRate, int)
         v.prepare (sr);
     rack.prepare (sr, 512);
     tail.prepare (sr, 512);
-    for (uint32_t f = 0; f < pk::kTailFields; ++f)
-        tail.setParam (f, p[kTailBase + f]);
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        if (isTailParam (id))
+            tail.setParam (tailField (id), p[id]);
     reset ();
 }
 
@@ -555,8 +556,8 @@ void Engine::setParam (uint32_t id, double plain)
     p[id] = plain;
     if (isRackParam (id))
         rack.setParam (id, plain);
-    else if (id >= kTailBase && id < kTailBase + pk::kTailFields)
-        tail.setParam (id - kTailBase, plain);
+    else if (isTailParam (id))
+        tail.setParam (tailField (id), plain);
 }
 
 void Engine::setSustain (bool onOff)

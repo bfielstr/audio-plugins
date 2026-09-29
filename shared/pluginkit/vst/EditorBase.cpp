@@ -101,23 +101,43 @@ void EditorBase::setTooltipsEnabled (bool on)
     }
 }
 
-Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_t base, const char* title)
+Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_t base, uint32_t extBase, const char* title)
 {
     auto* p = new Panel (r, title);
     parent->addView (p);
-    const double y = r.getHeight () - 72.0; // knobs at the bottom, the other controls centred on them
+    // two rows of switches and values under the title, the knobs to the right of them
+    const double y = r.getHeight () - 72.0, rowA = y + 22, rowB = y + 48;
     auto tip = [] (CView* v, const char* t) { v->setTooltipText (t); };
-    tip (bind (p, new Toggle (CRect (10, y + 28, 56, y + 48), this, base + kTailOn, "On")),
+    auto row = [] (double x0, double x1, double top) { return CRect (x0, top, x1, top + 18); };
+    tip (bind (p, new Toggle (row (10, 50, rowA), this, base + kTailOn, "On")),
          "Smacheratr (the Analog curve) at the very end of this plug-in: off, the sound passes untouched.");
-    tip (bind (p, new Toggle (CRect (64, y + 28, 144, y + 48), this, base + kTailPreLimit, "Pre-Limit")),
+    tip (bind (p, new Toggle (row (54, 124, rowA), this, base + kTailPreLimit, "Pre-Limit")),
          "A look-ahead limiter before the drive, so transients do not push further into the curve than the rest.");
-    tip (bind (p, new NumberBox (CRect (150, y + 29, 216, y + 47), this, base + kTailThreshold)),
+    tip (bind (p, new NumberBox (row (128, 184, rowA), this, base + kTailThreshold)),
          "Level the pre-limiter holds the signal to, before the drive.");
-    tip (bind (p, new Knob (CRect (228, y + 4, 284, y + 68), this, base + kTailDrive, nullptr, true)),
-         "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
-    tip (bind (p, new Choice (CRect (298, y + 28, 408, y + 48), this, base + kTailPostClip)),
+    tip (bind (p, new Choice (row (190, 290, rowA), this, base + kTailPostClip)),
          "Clip the output at 0 dB after the curve (Soft: the Analog curve again, Hard: a digital clip).");
-    tip (bind (p, new Knob (CRect (420, y + 4, 476, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
+    tip (bind (p, new Toggle (row (296, 338, rowA), this, extBase + kTailExtMidSide, "M/S")),
+         "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound stays wide.");
+    tip (bind (p, new Toggle (row (342, 388, rowA), this, extBase + kTailExtHiQuality, "Hi-Q")),
+         "Run the curve 4x oversampled to reduce aliasing (a little more CPU).");
+    tip (bind (p, new Toggle (row (392, 460, rowA), this, extBase + kTailExtDcFilter, "DC Filter")),
+         "Remove DC offset before the curve.");
+    tip (bind (p, new Toggle (row (10, 70, rowB), this, extBase + kTailExtClarity, "Clarity")),
+         "A compressor on one band of the low mids, so a hard-pushed drive does not go muddy (12 dB/oct below, 6 dB/oct "
+         "above).");
+    tip (bind (p, new NumberBox (row (74, 128, rowB), this, extBase + kTailExtClarityFreq)), "Clarity: the centre of its band.");
+    tip (bind (p, new NumberBox (row (132, 184, rowB), this, extBase + kTailExtClarityWidth)), "Clarity: the band's width in octaves.");
+    tip (bind (p, new Toggle (row (190, 246, rowB), this, extBase + kTailExtColorOn, "Color")),
+         "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
+    tip (bind (p, new NumberBox (row (250, 300, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
+    tip (bind (p, new NumberBox (row (304, 354, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
+    tip (bind (p, new NumberBox (row (358, 414, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
+    tip (bind (p, new NumberBox (row (418, 460, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
+    tip (bind (p, new Knob (CRect (470, y + 4, 526, y + 68), this, base + kTailDrive, nullptr, true)),
+         "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
+    tip (bind (p, new Knob (CRect (534, y + 4, 590, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
+    tip (bind (p, new Knob (CRect (598, y + 4, 654, y + 68), this, extBase + kTailExtOutput)), "Output level of the saturator.");
     return p;
 }
 

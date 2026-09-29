@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <vector>
 
 namespace para {
@@ -38,6 +40,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kNotch, "Notch (unused)", "Notch", false));
         v.push_back (real (kDipStart, "Vocal Dip Start", "Dip", 20.0, 1000.0, 80.0, Curve::Log, Disp::Hz));
         v.push_back (real (kLpFloor, "Low-Pass Floor", "Floor", 20.0, 500.0, 40.0, Curve::Log, Disp::Hz));
+        smacheratr::addTailExtParams (v, kTailExtBase);
         return v;
     }());
     return t;

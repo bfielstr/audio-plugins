@@ -24,6 +24,8 @@ void Engine::prepare (double sampleRate, int maxBlock)
     tail.prepare (sr, maxBlock);
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         tail.setParam (f, p[kTailBase + f]);
+    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
+        tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     semiSmooth = (float)(1.0 - std::exp (-1.0 / (0.005 * sr))); // 5 ms glide of the cutoffs
     liquidA = 1.0 - std::exp (-1.0 / (0.15 * sr));

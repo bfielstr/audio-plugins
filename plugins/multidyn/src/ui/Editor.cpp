@@ -164,7 +164,7 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
     // the end-of-chain Smacheratr, after the Output gain
-    addTailPanel (root, CRect (8, 424, 912, 502), kSatOn);
+    addTailPanel (root, CRect (8, 424, 912, 502), kSatOn, kSatExtBase);
 
     applyParamTooltips (&help::forParam);
     updateLayout ();

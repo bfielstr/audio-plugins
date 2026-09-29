@@ -31,8 +31,8 @@ enum ParamId : uint32_t
     kContrast = kTailBase + pk::kTailFields, // 0 .. 1: mid / side contrast (scaled by the Character)
     kDryLevel,   // dB (bottom = -inf): the input, in parallel with...
     kWetLevel,   // dB (bottom = -inf): ...what Widr adds (the voices and the reverb)
-
-    kNumParams
+    kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
+    kNumParams = kTailExtBase + pk::kTailExtFields
 };
 
 enum Character { kTight = 0, kWide, kEpic, kSurround, kNumCharacters };

@@ -27,8 +27,9 @@ static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams 
                    kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
-static_assert (multidyn::kNumParams == kSlotBlock + 2 && multidyn::kRmsWindow == kSlotBlock &&
-                   multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1,
+static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields && multidyn::kRmsWindow == kSlotBlock &&
+                   multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
+                   multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
 
 int64_t fxIdAt (int type, uint32_t j)
@@ -53,8 +54,8 @@ int64_t fxBlockOf (int type, uint32_t id)
             return multidyn::kSatOn;
         if (id == multidyn::kSoften)
             return multidyn::kSatPreLimit;
-        if (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold)
-            return -1;
+        if ((id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) || id >= multidyn::kSatExtBase)
+            return -1; // its own saturator is not in the rack
     }
     return id < fxBlockTable (type).size () ? (int64_t)id : -1;
 }
@@ -68,6 +69,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kPbRange, para::kPbRange, "unused since Para stopped tracking notes"},
         {para::kRoot, para::kRoot, "unused since Para stopped tracking notes"},
         {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
         {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
         {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
     };
@@ -75,10 +77,12 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {multidyn::kScOn, multidyn::kScListen, "the side-chain: Smempler has no side-chain input"},
         {multidyn::kMode, multidyn::kMode, "unused: Multidyn always works in its character mode"},
         {multidyn::kSatOn, multidyn::kSatPreLimitThreshold, "its own end-of-chain saturator: the rack has one at the end"},
+        {multidyn::kSatExtBase, multidyn::kSatExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
     };
     static const std::vector<RackHidden> widrHidden {
         {widr::kRole, widr::kGroup, "Mix Aware: between Widr plug-ins on different tracks, not inside Smempler"},
         {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
     };
     switch (type)
     {

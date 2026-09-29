@@ -110,7 +110,7 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new pk::HSlider (CRect (12, 8, 364, 32), this, kDryLevel, "Dry"));
     bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
 
-    addTailPanel (root, CRect (8, 604, 752, 682), kTailBase);
+    addTailPanel (root, CRect (8, 604, 752, 682), kTailBase, kTailExtBase);
 
     applyParamTooltips (&help::forParam);
     idle ();

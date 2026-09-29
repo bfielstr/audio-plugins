@@ -22,6 +22,7 @@
 #include "widr/src/ui/GonioView.h"
 #include "widr/src/ui/Help.h"
 #include "smacheratr/src/ui/Help.h"
+#include "smacheratr/src/core/TailExt.h"
 #include "smacheratr/src/ui/ColorView.h"
 #include "smacheratr/src/ui/ShaperView.h"
 
@@ -98,15 +99,10 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
 {
     // the saturator at the very end: Smacheratr's display on the tail's parameters
     satHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) -> int64_t {
-        switch (id)
-        {
-            case smacheratr::kDrive: return kTailBase + pk::kTailDrive;
-            case smacheratr::kPreLimit: return kTailBase + pk::kTailPreLimit;
-            case smacheratr::kPreLimitThreshold: return kTailBase + pk::kTailThreshold;
-            case smacheratr::kPostClip: return kTailBase + pk::kTailPostClip;
-            case smacheratr::kDryWet: return kTailBase + pk::kTailMix;
-            default: return -1;
-        }
+        const int f = smacheratr::tailFieldOf (id);
+        if (f < 0)
+            return -1;
+        return f < (int)pk::kTailFields ? (int64_t)(kTailBase + f) : (int64_t)(kTailExtBase + (f - pk::kTailFields));
     });
 }
 
@@ -116,6 +112,7 @@ void Editor::onClose ()
     fxFilterView = nullptr;
     fxDynDisplay = nullptr;
     fxShaperView = endShaperView = nullptr;
+    endColorView = nullptr;
     fxGonio = nullptr;
     msView = nullptr;
     mdLayoutHost = nullptr;
@@ -366,14 +363,45 @@ void Editor::buildUI (CFrame* f)
         // the saturator at the very end (built once: its controls are bound)
         fxEndBody = new Group (CRect (0, 0, 838, 234));
         fxp->addView (fxEndBody);
-        endShaperView = new smacheratr::ShaperView (CRect (8, 8, 330, 226), satHost.get (), [this] () -> const smacheratr::Meters* {
+        auto satMeters = [this] () -> const smacheratr::Meters* {
             auto* b = ctl->getBridge ();
             return b ? &b->satMeters : nullptr;
-        });
+        };
+        endShaperView = new smacheratr::ShaperView (CRect (8, 8, 230, 226), satHost.get (), satMeters);
         endShaperView->setTooltipText (smacheratr::help::kShaperDisplay);
         fxEndBody->addView (endShaperView);
-        addTailPanel (fxEndBody, CRect (340, 8, 830, 90), kTailBase, "smacheratr  (the very end)");
-        auto* n3 = new Label (CRect (340, 100, 830, 114), "after the rack, just before the output", 9.5);
+        endColorView = new smacheratr::ColorView (
+            CRect (236, 34, 526, 226), satHost.get (),
+            [this] () {
+                auto* b = ctl->getBridge ();
+                return b ? b->sampleRate.load (std::memory_order_relaxed) : 48000.0;
+            },
+            satMeters);
+        endColorView->setTooltipText (smacheratr::help::kColorDisplay);
+        fxEndBody->addView (endColorView);
+        {
+            using namespace smacheratr;
+            auto* h = satHost.get ();
+            auto add = [&] (CView* v, uint32_t id) {
+                v->setTooltipText (smacheratr::help::forParam (id));
+                fxEndBody->addView (v);
+            };
+            bind (fxEndBody, new Toggle (CRect (236, 8, 280, 26), this, kTailBase + pk::kTailOn, "On"))
+                ->setTooltipText ("Smacheratr at the very end, after the rack: off, the sound passes untouched.");
+            add (new Toggle (CRect (284, 8, 350, 26), h, kPreLimit, "Pre-Limit"), kPreLimit);
+            add (new NumberBox (CRect (354, 8, 406, 26), h, kPreLimitThreshold), kPreLimitThreshold);
+            add (new Toggle (CRect (410, 8, 468, 26), h, kClarity, "Clarity"), kClarity);
+            add (new Toggle (CRect (472, 8, 512, 26), h, kMidSide, "M/S"), kMidSide);
+            add (new Choice (CRect (516, 8, 608, 26), h, kPostClip), kPostClip);
+            add (new Toggle (CRect (612, 8, 658, 26), h, kHiQuality, "Hi-Q"), kHiQuality);
+            add (new Toggle (CRect (662, 8, 730, 26), h, kDcFilter, "DC Filter"), kDcFilter);
+            add (new Toggle (CRect (734, 8, 786, 26), h, kColorOn, "Color"), kColorOn);
+            const uint32_t ids[9] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth, kClarityFreq, kClarityWidth};
+            const char* names[9] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W"};
+            for (int i = 0; i < 9; ++i)
+                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), ids[i]);
+        }
+        auto* n3 = new Label (CRect (534, 190, 830, 204), "after the rack, just before the output", 9.5);
         n3->setDim (true);
         fxEndBody->addView (n3);
     }
@@ -439,8 +467,8 @@ void Editor::paramChanged (uint32_t id)
                 updateMdLayout ();
         }
     }
-    if (id >= kTailBase && id < kTailBase + pk::kTailFields && endShaperView)
-        endShaperView->invalid ();
+    if (isTailParam (id) && fxEndBody)
+        fxEndBody->invalid (); // the end tab's controls read the values when they draw
     switch (id)
     {
         case kMode:
@@ -969,6 +997,8 @@ void Editor::idle ()
         fxShaperView->idle ();
     if (fxColorView)
         fxColorView->idle ();
+    if (endColorView && fxEndBody && fxEndBody->isVisible ())
+        endColorView->idle ();
     if (envDisplay)
         envDisplay->tick ();
     if (nameLabel)

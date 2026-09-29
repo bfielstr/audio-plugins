@@ -37,8 +37,8 @@ enum ParamId : uint32_t
     kSatPreLimitThreshold,      // dB
     kRmsWindow,                 // ms, the RMS detector's window (Character: 2.5 times as long)
     kSoften,                    // the top band: softens what upward compression lifts as its thresholds close in
-
-    kNumParams
+    kSatExtBase,                // the rest of the built-in Smacheratr: pk::kTailExtFields entries
+    kNumParams = kSatExtBase + pk::kTailExtFields
 };
 
 constexpr int kMaxBands = 4;

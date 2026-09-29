@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <vector>
 
 namespace multidyn {
@@ -65,6 +67,7 @@ std::vector<ParamInfo> buildTable ()
     pk::addTailParams (t, kSatOn);
     t.push_back (real (kRmsWindow, "RMS Window", "RMS", 5.0, 300.0, 50.0, Curve::Log, Disp::Ms));
     t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
+    smacheratr::addTailExtParams (t, kSatExtBase);
     return t;
 }
 

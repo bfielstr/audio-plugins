@@ -72,7 +72,7 @@ Engine::Engine (bool withTail) : hasTail (withTail)
     gYieldCur.fill (1.0f);
     voice[0].seed = 0x1234567u;
     voice[1].seed = 0x89abcdeu;
-    tail.setMidSide (true); // saturating mid and side apart keeps the width when pushed
+    tail.setMidSide (true); // until the parameters arrive: Mid/Side (the default) keeps the width when pushed
 }
 
 void Engine::prepare (double sampleRate, int maxBlockSize)
@@ -104,6 +104,8 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
     tail.prepare (sr, maxBlock);
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         tail.setParam (f, p[kTailBase + f]);
+    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
+        tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
     if (meters)
         meters->sampleRate.store ((float)sr);
     xHz = airDb = beyondAmt = srcHpHz = srcLpHz = -1.0;

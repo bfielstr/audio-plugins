@@ -2,6 +2,7 @@
 #include "Color.h"
 #include "ClarityBand.h"
 #include "Engine.h"
+#include "Tail.h"
 #include "Params.h"
 #include "Shaper.h"
 
@@ -466,6 +467,39 @@ TEST (clarity_band_shape_and_moves)
     const double noteCut = measure (false, 60.0, 320.0) - measure (true, 60.0, 320.0);
     std::printf ("    band at 60 Hz: 80 Hz down %.1f dB, 320 Hz down %.1f dB\n", bassCut, noteCut);
     CHECK (bassCut > 2.0 && bassCut > noteCut + 1.5, "the band follows its centre: %.1f vs %.1f dB", bassCut, noteCut);
+}
+
+TEST (tail_has_every_control)
+{
+    // the saturator at the end of the other plug-ins: its extended fields reach Smacheratr (here Clarity
+    // on a hard-driven bass and low-mid note turns the low mids down)
+    auto in = tones ({{80.0, -8.0}, {320.0, -12.0}}, 1.0);
+    auto render = [&] (bool clarity) {
+        Tail t;
+        t.prepare (48000.0, 512);
+        t.setParam (pk::kTailOn, 1.0);
+        t.setParam (pk::kTailMix, 1.0);
+        t.setParam (pk::kTailDrive, 14.0);
+        t.setParam (pk::kTailFields + pk::kTailExtClarity, clarity ? 1.0 : 0.0);
+        Sig out = in;
+        for (size_t pos = 0; pos < out.l.size (); pos += 512)
+        {
+            const int n = (int)std::min<size_t> (512, out.l.size () - pos);
+            t.process (out.l.data () + pos, out.r.data () + pos, n);
+        }
+        return toneDb (out.l, 320.0, 24000, 48000);
+    };
+    const double off = render (false), on = render (true);
+    CHECK (on < off - 3.0, "Clarity through the tail: %.1f vs %.1f dB", on, off);
+    // the parameters match Smacheratr's, with Saturator in front of the names
+    std::vector<pk::ParamInfo> v;
+    addTailExtParams (v, 100);
+    CHECK (v.size () == pk::kTailExtFields && v[pk::kTailExtClarityFreq].id == 100 + pk::kTailExtClarityFreq &&
+               std::string (v[pk::kTailExtClarityFreq].name) == "Saturator Clarity Frequency" &&
+               v[pk::kTailExtClarityFreq].def == 250.0 && v[pk::kTailExtColorOn].def == 0.0,
+           "extended tail parameters");
+    CHECK (tailFieldOf (kClarityWidth) == (int)(pk::kTailFields + pk::kTailExtClarityWidth) && tailFieldOf (kDryWet) == pk::kTailMix,
+           "Smacheratr IDs to tail fields");
 }
 
 TEST (fuzz_and_automation)

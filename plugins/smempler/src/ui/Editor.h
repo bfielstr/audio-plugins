@@ -113,6 +113,7 @@ private:
     multidyn::DynDisplay* fxDynDisplay = nullptr;
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
     smacheratr::ColorView* fxColorView = nullptr;
+    smacheratr::ColorView* endColorView = nullptr; // the end tab's
     smacheratr::ShaperView* endShaperView = nullptr;
     widr::GonioView* fxGonio = nullptr;
     MsView* msView = nullptr;

@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -195,6 +197,7 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kMsMidGain, "Old Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
     pk::addTailParams (t, kTailBase, true); // on by default in Smempler (Drive 0 dB)
+    // (its other controls are appended at kTailExtBase, after the rack)
     add (toggle (kParaTransposeLock, "Old Para Transpose Lock", "Lock", false));
     add (toggle (kParaDragGain, "Old Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Old Para Liquid", "Liquid", false));
@@ -219,6 +222,8 @@ std::vector<ParamInfo> buildTable ()
             add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
         }
     }
+    // the rest of the end-of-chain Smacheratr
+    smacheratr::addTailExtParams (t, kTailExtBase);
     return t;
 }
 

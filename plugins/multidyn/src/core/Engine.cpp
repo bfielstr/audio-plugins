@@ -96,6 +96,8 @@ void Engine::syncSaturator ()
 {
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         sat.setParam (f, p[kSatOn + f]);
+    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
+        sat.setParam (pk::kTailFields + f, p[kSatExtBase + f]);
 }
 
 int Engine::bandCount () const { return std::clamp ((int)std::lround (p[kBands]) + 1, 1, kMaxBands); }

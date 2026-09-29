@@ -4,6 +4,7 @@
 #pragma once
 
 #include "Engine.h"
+#include "TailExt.h"
 
 #include "pluginkit/TailParams.h"
 
@@ -29,9 +30,15 @@ public:
     // saturate mid and side apart (see smacheratr::kMidSide)
     void setMidSide (bool ms) { eng.setParam (kMidSide, ms ? 1.0 : 0.0); }
 
-    // the plain value of one of the tail's fields (pk::TailField)
+    // the plain value of one of the tail's fields (a pk::TailField, or pk::kTailFields + a pk::TailExtField)
     void setParam (uint32_t field, double v)
     {
+        if (field >= pk::kTailFields)
+        {
+            if (field < pk::kTailFields + pk::kTailExtFields)
+                eng.setParam (kTailExtIds[field - pk::kTailFields], v);
+            return;
+        }
         switch (field)
         {
             case pk::kTailOn: on = v >= 0.5; break;
