@@ -9,9 +9,9 @@ phase turns around each one; that turn is part of the sound (there is no linear-
   heard even when muted; with several soloed, all of them are).
 - **Crossovers**: three, at 120 Hz, 1 kHz and 6 kHz by default. Each stays at least 1/6 octave from its
   neighbours; one set past them pushes the ones above it up. Moving one glides it there (no clicks).
-- **Slope**: 12, 24 (default) or 48 dB/oct (Linkwitz-Riley 2, 4, 8). Every slope adds back to a flat
+- **Slope**: 12 to 96 dB/oct in 12 dB steps, 24 by default (Linkwitz-Riley 2 to 16). Every slope adds back to a flat
   level with all bands at 0 dB; each turns the phase its own way: 12 gently (and parts the bands softly,
-  so a band's lift spills a little into its neighbours), 48 the most (and the cleanest split). Changing
+  so a band's lift spills a little into its neighbours), 96 the most (and the cleanest split). Changing
   it fades out and back in over a few milliseconds.
 - **Output**, then the end-of-chain **Smacheratr** with all its controls and displays (off by default,
   Pre-Limit on).

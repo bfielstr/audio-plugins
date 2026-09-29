@@ -50,7 +50,7 @@ private:
     static bool firstPath (DragEventData d, std::string& out)
     {
         for (const auto& p : pk::droppedPaths (d.drag))
-            if (smempler::isSupportedAudioFile (p))
+            if (smemplr::isSupportedAudioFile (p))
             {
                 out = p;
                 return true;

@@ -33,7 +33,7 @@ struct ParamHost
 };
 
 // A ParamHost that shows another plug-in's parameter table on this plug-in's parameters (the
-// built-in effects in Smempler): ids go through `map`; ids it does not map (< 0) read as their
+// built-in effects in Smemplr): ids go through `map`; ids it does not map (< 0) read as their
 // defaults and ignore edits. Normalized values pass through unchanged, so both tables must give
 // the parameters the same ranges.
 class MappedParamHost : public ParamHost

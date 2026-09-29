@@ -1,5 +1,5 @@
 #!/bin/sh
-# Downloads the latest release and installs the VST3 plug-ins (Smempler, Multidyn, Locus, Stretchr,
+# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
 # Smacheratr, Para, Widr, Wubr, Detonatr, Levlr)
 # for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
@@ -119,11 +119,11 @@ version_of() {
 mkdir -p "$dest"
 # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
 # Removed only when this release no longer ships it under that name.
-for old in Simplr Lowfocus Smatcheratr Perrera; do
+for old in Simplr Lowfocus Smatcheratr Perrera Smempler; do
     if [ ! -d "$tmp/x/$old.vst3" ]; then
         for dir in "$dest" "$root"; do
             if [ -d "$dir/$old.vst3" ] && is_ours "$dir/$old.vst3"; then
-                echo "Removing $dir/$old.vst3 (renamed in 0.5.0)"
+                echo "Removing $dir/$old.vst3 (renamed)"
                 rm -rf "$dir/$old.vst3"
             fi
         done

@@ -49,7 +49,7 @@ bool writeWav (const std::string& path, const Rendered& r, std::string& error)
     h.insert (h.end (), {'d', 'a', 't', 'a'});
     put32 (h, (uint32_t)dataBytes);
 
-    std::ofstream f (smempler::pathFromUtf8 (path), std::ios::binary | std::ios::trunc);
+    std::ofstream f (smemplr::pathFromUtf8 (path), std::ios::binary | std::ios::trunc);
     if (!f)
     {
         error = "Could not create " + path;

@@ -25,6 +25,9 @@ struct Entry
 //   macOS    ~/Library/Audio/Presets/bfielstr/<plugin>
 //   Linux    ~/.vst3/presets/bfielstr/<plugin>
 std::string userFolder (const char* pluginName);
+// The same, for a plug-in that was renamed: the first time its folder is made, the presets saved under
+// its former name are copied into it (the old folder is left as it is).
+std::string userFolder (const char* pluginName, const char* formerName);
 std::vector<Entry> list (const std::string& folder); // sorted by name
 std::string nameOf (const std::string& path);        // file name without the extension
 std::string withExtension (const std::string& path); // adds .vstpreset if missing

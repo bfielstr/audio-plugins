@@ -627,7 +627,7 @@ TEST (drive_switches_without_clicks)
 
 TEST (bypassed_is_the_latency)
 {
-    // where Para is built in without its end saturator (Smempler's rack), switching it off leaves the
+    // where Para is built in without its end saturator (Smemplr's rack), switching it off leaves the
     // delay its latency stands for
     Engine e (false);
     e.prepare (kSr, 512);

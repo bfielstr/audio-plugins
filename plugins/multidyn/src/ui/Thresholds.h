@@ -1,6 +1,6 @@
 // A band's Below threshold never goes above its Above threshold: when an edit moves one past the
 // other, the other is pushed along with it, so neither can be dragged past the other. Applied to
-// every edit made in the editor (the display, the value fields), in Multidyn and in Smempler.
+// every edit made in the editor (the display, the value fields), in Multidyn and in Smemplr.
 #pragma once
 
 #include "../core/Params.h"

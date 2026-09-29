@@ -1,11 +1,11 @@
-# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, any order, any number) and an output scope | Ableton Live's Simpler |
+| [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, any order, any number) and an output scope | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
@@ -16,11 +16,11 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Detonatr**](plugins/detonatr/README.md) | Explosion / impact designer: denoise and dereverb, tuned resonators and vocoded recordings of household items with a disperser, Multidyn, a spike-and-drop transient shaper and Smacheratr, in any order | a sound designer's RX, vocoder, disperser, multiband, transient and saturator chain |
 | [**Levlr**](plugins/levlr/README.md) | The spectrum in four touching bands with a level each: movable minimum-phase Linkwitz-Riley crossovers (12/24/48 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
 
-![Smempler](docs/smempler/ui_slicing.png)
+![Smemplr](docs/smemplr/ui_slicing.png)
 
 Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB).
 
-In every plug-in (and in the effects inside Smempler) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
+In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 
 The plug-ins were called Simplr and Lowfocus until 0.5.0; projects keep loading (the plug-in IDs are unchanged).
 
@@ -83,10 +83,10 @@ publishes a release and then runs the installers against it.
 ## Layout
 
 ```
-plugins/smempler     sampler                 src/core (DSP) · src/plugin (VST3) · src/ui · tests
+plugins/smemplr     sampler                 src/core (DSP) · src/plugin (VST3) · src/ui · tests
 plugins/multidyn   multiband dynamics      same structure
 plugins/locus   low-end focus           same structure
-plugins/stretchr   pitch/time editor       same structure (reuses Smempler's warp engines)
+plugins/stretchr   pitch/time editor       same structure (reuses Smemplr's warp engines)
 plugins/smacheratr saturator              same structure
 plugins/para    parallel filters        same structure
 plugins/widr    stereo width            same structure

@@ -48,7 +48,7 @@ enum ParamId : uint32_t
 };
 static_assert (pk::kTailExtFields <= kDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 
-// The IDs a plug-in hosting Para (Smempler) reserves for it; the ones after are mapped one by one.
+// The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.
 constexpr uint32_t kHostedParams = kTailBase + pk::kTailFields;
 
 enum Slope { kSlope12 = 0, kSlope18, kSlope24 };

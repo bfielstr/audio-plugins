@@ -1,4 +1,4 @@
-# Downloads the latest release and installs the VST3 plug-ins (Smempler, Multidyn, Locus, Stretchr,
+# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
 # Smacheratr, Para, Widr, Wubr, Detonatr, Levlr) on Windows,
 # into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
 # left at the top of the VST3 folder by older installers are removed (only if they are ours).
@@ -43,7 +43,7 @@ function Get-Version ($bundle) {
 }
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$tmp = Join-Path ([IO.Path]::GetTempPath()) ("smempler-" + [guid]::NewGuid())
+$tmp = Join-Path ([IO.Path]::GetTempPath()) ("smemplr-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     Write-Host "Downloading $asset ($version) from github.com/$repo"
@@ -73,12 +73,12 @@ try {
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
     # Removed only when this release no longer ships it under that name.
-    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr', 'Perrera') {
+    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr', 'Perrera', 'Smempler') {
         if (Test-Path (Join-Path $x "$old.vst3")) { continue }
         foreach ($dir in $dest, $root) {
             $oldBundle = Join-Path $dir "$old.vst3"
             if ((Test-Path $oldBundle) -and (Test-Ours $oldBundle)) {
-                Write-Host "Removing $oldBundle (renamed in 0.5.0)"
+                Write-Host "Removing $oldBundle (renamed)"
                 Remove-Item -Recurse -Force $oldBundle
             }
         }

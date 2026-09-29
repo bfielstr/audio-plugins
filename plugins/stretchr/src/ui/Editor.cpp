@@ -120,7 +120,7 @@ std::filesystem::path rendersFolder ()
 #else
     const char* home = std::getenv ("HOME");
 #endif
-    std::filesystem::path base = home && *home ? smempler::pathFromUtf8 (home) : std::filesystem::temp_directory_path ();
+    std::filesystem::path base = home && *home ? smemplr::pathFromUtf8 (home) : std::filesystem::temp_directory_path ();
     return base / "Music" / "Stretchr Renders";
 }
 
@@ -411,7 +411,7 @@ void Editor::loadFile (const std::string& path)
     if (!s)
         return;
     std::string err;
-    auto data = SampleData::load (path, smempler::SampleOps {}, err);
+    auto data = SampleData::load (path, smemplr::SampleOps {}, err);
     if (!data)
     {
         lastError = "Could not load: " + err;
@@ -467,7 +467,7 @@ std::string Editor::renderToFile (std::string& error)
         return {};
     }
     std::error_code ec;
-    if (r->request == exportedKey && std::filesystem::exists (smempler::pathFromUtf8 (exportedPath), ec))
+    if (r->request == exportedKey && std::filesystem::exists (smemplr::pathFromUtf8 (exportedPath), ec))
         return exportedPath;
     const auto dir = rendersFolder ();
     std::filesystem::create_directories (dir, ec);
@@ -475,7 +475,7 @@ std::string Editor::renderToFile (std::string& error)
     char stamp[32];
     std::strftime (stamp, sizeof (stamp), "%Y%m%d-%H%M%S", std::localtime (&now));
     const std::string name = safeName (s->clip ().name) + " stretched " + stamp + ".wav";
-    const std::string path = smempler::utf8FromPath (dir / smempler::pathFromUtf8 (name));
+    const std::string path = smemplr::utf8FromPath (dir / smemplr::pathFromUtf8 (name));
     if (!writeWav (path, *r, error))
         return {};
     exportedKey = r->request;

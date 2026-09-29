@@ -23,7 +23,7 @@ struct Crash
 {
     HMODULE module = nullptr;
     uintptr_t begin = 0, end = 0; // this module's code and data
-    std::wstring name;            // the module's file name without extension, e.g. "Smempler"
+    std::wstring name;            // the module's file name without extension, e.g. "Smemplr"
     std::filesystem::path folder;
     PVOID handler = nullptr;
     std::atomic<bool> written {false};

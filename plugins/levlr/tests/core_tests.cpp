@@ -48,7 +48,8 @@ struct Reg
     static void name ()
 
 constexpr double kSr = 48000.0;
-static const char* kSlopeNames[kNumSlopes] = {"12 dB/oct", "24 dB/oct", "48 dB/oct"};
+static const char* kSlopeNames[kNumSlopes] = {"12 dB/oct", "24 dB/oct", "36 dB/oct", "48 dB/oct",
+                                              "60 dB/oct", "72 dB/oct", "84 dB/oct", "96 dB/oct"};
 
 // The crossover alone (no end saturator), with `set` applied before it starts (so nothing glides).
 static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr)

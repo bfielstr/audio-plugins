@@ -42,4 +42,4 @@ settings (envelope, glide, Vocal), so edits show at once; the handles glow with 
 envelope and the ENV meter shows it.
 
 The cutoffs do not follow the notes; MIDI notes only trigger the Split envelope (route MIDI to
-the plug-in for that). Para is also built into Smempler.
+the plug-in for that). Para is also built into Smemplr.

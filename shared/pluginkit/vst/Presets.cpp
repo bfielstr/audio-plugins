@@ -37,7 +37,9 @@ bool readAll (IBStream* s, TSize offset, TSize size, std::vector<char>& out)
 }
 } // namespace
 
-std::string userFolder (const char* pluginName)
+namespace {
+// <presets>/bfielstr: where the suite's preset folders are
+fs::path suiteFolder ()
 {
     fs::path base;
 #if defined(_WIN32)
@@ -50,10 +52,29 @@ std::string userFolder (const char* pluginName)
 #else
     base = fs::path (envOr ("HOME", "")) / ".vst3" / "presets";
 #endif
-    const fs::path folder = base / "bfielstr" / pluginName;
+    return base / "bfielstr";
+}
+} // namespace
+
+std::string userFolder (const char* pluginName)
+{
+    const fs::path folder = suiteFolder () / pluginName;
     std::error_code ec;
     fs::create_directories (folder, ec);
     return fs::is_directory (folder, ec) ? folder.string () : std::string ();
+}
+
+std::string userFolder (const char* pluginName, const char* formerName)
+{
+    if (!formerName || !*formerName)
+        return userFolder (pluginName);
+    std::error_code ec;
+    const fs::path base = suiteFolder ();
+    const bool fresh = !fs::exists (base / pluginName, ec);
+    const std::string folder = userFolder (pluginName);
+    if (fresh && !folder.empty () && fs::is_directory (base / formerName, ec))
+        fs::copy (base / formerName, folder, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
+    return folder;
 }
 
 std::vector<Entry> list (const std::string& folder)

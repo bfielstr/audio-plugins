@@ -1,12 +1,12 @@
 // Tests for the Clean stage of Detonatr. Run: ./detonatr_clean_tests [filter]
 //
-// Levels are read off long Hann-windowed spectra (Smempler's FFT) of the input and the output over
+// Levels are read off long Hann-windowed spectra (Smemplr's FFT) of the input and the output over
 // the same stretch of time, so the numbers printed are "what the stage did" per region.
 #include "Clean.h"
 
 #include "Harness.h"
 
-#include "smempler/src/core/Fft.h"
+#include "smemplr/src/core/Fft.h"
 
 #include <algorithm>
 #include <chrono>
@@ -47,10 +47,10 @@ double db (double powerRatio) { return 10.0 * std::log10 (std::max (powerRatio, 
 // Power spectrum (both channels added) of x[start, start + n), n a power of two, Hann windowed.
 std::vector<double> spectrum (const Stereo& x, int start, int n)
 {
-    smempler::Fft fft (n);
+    smemplr::Fft fft (n);
     std::vector<double> p ((size_t)fft.bins (), 0.0);
     std::vector<float> w ((size_t)n);
-    std::vector<smempler::Fft::cf> X ((size_t)fft.bins ());
+    std::vector<smemplr::Fft::cf> X ((size_t)fft.bins ());
     for (const Buf* ch : {&x.l, &x.r})
     {
         for (int i = 0; i < n; ++i)

@@ -21,6 +21,7 @@ namespace levlr {
 
 using namespace VSTGUI;
 using pk::ActionButton;
+using pk::Choice;
 using pk::Knob;
 using pk::Label;
 using pk::NumberBox;
@@ -152,7 +153,7 @@ void Editor::buildUI (CFrame* f)
         root->addView (new Label (CRect (x, kRowTop + 44, x + 62, kRowTop + 56), between[k], 9.5, false, 1));
     }
     root->addView (new Label (CRect (cx, kRowTop + 62, cx + 40, kRowTop + 80), "Slope", 10.5, false));
-    bind (root, new Segmented (CRect (cx + 42, kRowTop + 60, cx + 194, kRowTop + 82), this, kSlope, {"12 dB", "24 dB", "48 dB"}));
+    bind (root, new Choice (CRect (cx + 42, kRowTop + 61, cx + 194, kRowTop + 81), this, kSlope));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 16), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls

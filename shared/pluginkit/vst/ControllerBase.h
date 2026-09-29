@@ -56,7 +56,7 @@ public:
 
     // Presets. The processor's state travels in messages, so saving and loading work from the
     // editor without any help from the host. Subclasses call setPresetInfo() in their constructor.
-    void setPresetInfo (const Steinberg::FUID& processorClassId, const char* pluginName);
+    void setPresetInfo (const Steinberg::FUID& processorClassId, const char* pluginName, const char* formerName = nullptr);
     std::string presetFolder () const;
     const std::string& presetName () const { return presetTitle; }
     bool savePreset (const std::string& path); // the processor answers synchronously in-process
@@ -74,7 +74,7 @@ protected:
     EditorBase* editor = nullptr;
     const ParamTable& tableRef;
     Steinberg::FUID presetClassId;
-    std::string presetPlugin, presetTitle;
+    std::string presetPlugin, presetTitle, presetFormer; // presetFormer: the name its presets were saved under before a rename
     std::string pendingSavePath;
     bool lastSaveOk = false;
 };

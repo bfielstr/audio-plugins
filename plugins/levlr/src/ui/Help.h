@@ -10,7 +10,7 @@ inline const char* forParam (uint32_t id)
     {
         case kSlope:
             return "How steeply the bands part at each crossover (Linkwitz-Riley). Each slope turns the phase its own way "
-                   "around the crossovers: 12 gently, 48 the most. At any slope, bands at 0 dB add back to a flat level. "
+                   "around the crossovers: 12 gently, 96 the most. At any slope, bands at 0 dB add back to a flat level. "
                    "The mouse wheel on a crossover in the display steps it too.";
         case kOutput: return "Output level, before the Smacheratr at the end (so it also sets how hard the bands drive it).";
         case kXover:

@@ -40,4 +40,4 @@ you push the drive (Widr's built-in saturator always works this way).
 Latency: about 1.7 ms (83 samples at 48 kHz: the pre-limiter's 1 ms look-ahead plus the
 oversampling), the same whatever the settings, and reported to the host.
 
-Smacheratr is also built into Multidyn (after its Output) and into Smempler.
+Smacheratr is also built into Multidyn (after its Output) and into Smemplr.

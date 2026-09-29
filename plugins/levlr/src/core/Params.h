@@ -28,7 +28,7 @@ enum BandField : uint32_t
 
 enum ParamId : uint32_t
 {
-    kSlope = 0, // the crossovers' Linkwitz-Riley slope (Slope: 12 / 24 / 48 dB/oct)
+    kSlope = 0, // the crossovers' Linkwitz-Riley slope (Slope: 12 .. 96 dB/oct in 12 dB steps)
     kOutput,    // dB, before the Smacheratr at the end
     kXover,     // kCrossovers x Hz: band k's top edge is kXover + k
     kTailBase = kXover + kCrossovers,               // the Smacheratr at the end of the chain: pk::kTailFields entries

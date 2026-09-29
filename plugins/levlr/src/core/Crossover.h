@@ -1,14 +1,15 @@
-// Levlr's crossovers: Linkwitz-Riley splits at 12, 24 or 48 dB/oct, built from Multidyn's trapezoidal
-// SVF sections (multidyn/src/core/Crossover.h; the 24 dB/oct split here is its Lr4Split). Each split's
-// two outputs add up to an all-pass of the input, and so does a matching all-pass (Allpass) at the
-// same corner, so a tree of splits whose lower bands go through the all-passes of the splits above
-// them sums to an all-pass: flat in level, shifted in phase. That phase shift is the sound: Levlr has
-// no linear-phase mode.
-//   12 dB/oct (LR2): one section with Q 0.5; low = its low-pass, high = its high-pass turned over (the
-//                    two only sum flat with one of them inverted); the sum is a first-order all-pass.
-//   24 dB/oct (LR4): two Butterworth sections (Q 0.707) per side; the sum is a second-order all-pass.
-//   48 dB/oct (LR8): two 4th-order Butterworths per side (sections of Q 0.54 and 1.31); the sum is the
-//                    fourth-order all-pass B4(-s)/B4(s).
+// Levlr's crossovers: Linkwitz-Riley splits from 12 to 96 dB/oct (LR2 .. LR16, in 12 dB steps), built
+// from Multidyn's trapezoidal SVF sections (multidyn/src/core/Crossover.h; the 24 dB/oct split here is its
+// Lr4Split). A split of order 2N is a Butterworth of order N squared on each side: its two outputs add up
+// to the all-pass BN(-s)/BN(s) of the input, and so does a matching all-pass (LrAllpass) at the same
+// corner, so a tree of splits whose lower bands go through the all-passes of the splits above them sums
+// to an all-pass: flat in level, shifted in phase. That phase shift is the sound (the steeper, the more
+// it turns): Levlr has no linear-phase mode.
+//   Each side: N second-order sections. A Butterworth pair of poles (damping 2 sin ((2i-1) pi / 2N)) is
+//   squared, so each appears twice; with N odd, the squared first-order pole is one section of Q 0.5.
+//   The high side is turned over when N is odd (LR2, LR6, ...): only then do the two sides sum flat.
+//   The all-pass: one section per pole pair (s^2 - k s + 1) / (s^2 + k s + 1), and with N odd the
+//   first-order (1 - s) / (1 + s) (the low-pass minus the high-pass of a Q 0.5 section).
 // The first section is shared by both sides (an SVF gives its low- and high-pass from the same state).
 #pragma once
 
@@ -19,26 +20,43 @@
 
 namespace levlr {
 
-enum Slope { kSlope12 = 0, kSlope24, kSlope48, kNumSlopes };
+enum Slope { kSlope12 = 0, kSlope24, kSlope36, kSlope48, kSlope60, kSlope72, kSlope84, kSlope96, kNumSlopes };
+constexpr int kMaxSections = 8; // per side, at 96 dB/oct
 
 struct SlopeDef
 {
-    int sections;       // SVF sections per side (the first one shared)
-    float k[4];         // each section's damping (1/Q)
-    float hiSign;       // the high side's polarity (LR2 is inverted so the sum is flat)
-    int apSections;     // the all-pass's SVF sections
-    float apK[2];       // and their damping
-    bool firstOrderAp;  // LR2: the all-pass is (1-s)/(1+s), the low-pass minus the high-pass of a Q 0.5 section
+    int sections = 0;          // SVF sections per side (the first one shared)
+    float k[kMaxSections] {};  // each section's damping (1/Q)
+    float hiSign = 1.0f;       // the high side's polarity (turned over for odd N, so the sum is flat)
+    int apSections = 0;        // the all-pass's SVF sections
+    float apK[kMaxSections / 2] {}; // and their damping
+    bool firstOrderAp = false; // odd N: apK[0] is the first-order all-pass (a Q 0.5 section's low minus high)
 };
+
+inline SlopeDef makeSlope (int n) // n: the Butterworth order (the slope is 12 n dB/oct)
+{
+    SlopeDef d;
+    d.hiSign = (n % 2) ? -1.0f : 1.0f;
+    if (n % 2)
+    {
+        d.k[d.sections++] = 2.0f;
+        d.apK[d.apSections++] = 2.0f;
+        d.firstOrderAp = true;
+    }
+    for (int i = 1; i <= n / 2; ++i)
+    {
+        const float k = (float)(2.0 * std::sin ((2 * i - 1) * M_PI / (2.0 * n)));
+        d.k[d.sections++] = k;
+        d.k[d.sections++] = k;
+        d.apK[d.apSections++] = k;
+    }
+    return d;
+}
 
 inline const SlopeDef& slopeDef (int slope)
 {
-    static constexpr float kA = 1.847759065f, kB = 0.765366865f; // 2 cos (pi/8), 2 cos (3 pi/8): Butterworth 4
-    static const SlopeDef defs[kNumSlopes] = {
-        {1, {2.0f, 0, 0, 0}, -1.0f, 1, {2.0f, 0}, true},
-        {2, {1.41421356f, 1.41421356f, 0, 0}, 1.0f, 1, {1.41421356f, 0}, false},
-        {4, {kA, kB, kA, kB}, 1.0f, 2, {kA, kB}, false},
-    };
+    static const SlopeDef defs[kNumSlopes] = {makeSlope (1), makeSlope (2), makeSlope (3), makeSlope (4),
+                                              makeSlope (5), makeSlope (6), makeSlope (7), makeSlope (8)};
     return defs[slope < 0 ? 0 : (slope >= kNumSlopes ? kNumSlopes - 1 : slope)];
 }
 
@@ -61,7 +79,7 @@ inline void tune (multidyn::Svf2& s, float g, float k)
 
 struct LrSplit
 {
-    multidyn::Svf2 first, lo[3], hi[3];
+    multidyn::Svf2 first, lo[kMaxSections - 1], hi[kMaxSections - 1];
     int slope = kSlope24;
 
     void setup (float g, int sl)
@@ -78,7 +96,7 @@ struct LrSplit
     void reset ()
     {
         first.reset ();
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < kMaxSections - 1; ++i)
         {
             lo[i].reset ();
             hi[i].reset ();
@@ -102,7 +120,7 @@ struct LrSplit
 // The all-pass a split's two outputs add up to.
 struct LrAllpass
 {
-    multidyn::Svf2 s[2];
+    multidyn::Svf2 s[kMaxSections / 2];
     int slope = kSlope24;
 
     void setup (float g, int sl)
@@ -114,19 +132,21 @@ struct LrAllpass
     }
     void reset ()
     {
-        s[0].reset ();
-        s[1].reset ();
+        for (auto& x : s)
+            x.reset ();
     }
     inline float tick (float x, int c)
     {
         const SlopeDef& d = slopeDef (slope);
         float l, b, h;
+        int i = 0;
         if (d.firstOrderAp)
         {
             s[0].tick (x, c, l, b, h);
-            return l - h;
+            x = l - h;
+            i = 1;
         }
-        for (int i = 0; i < d.apSections; ++i)
+        for (; i < d.apSections; ++i)
         {
             s[i].tick (x, c, l, b, h);
             x = x - 2.0f * s[i].k * b;
@@ -155,11 +175,14 @@ inline SplitResponse splitResponse (double fc, int slope, double f, double sr)
         hp *= s * s / den;
     }
     std::complex<double> ap (1.0, 0.0);
+    int i0 = 0;
     if (d.firstOrderAp)
+    {
         ap = (1.0 - s) / (1.0 + s);
-    else
-        for (int i = 0; i < d.apSections; ++i)
-            ap *= (s * s - (double)d.apK[i] * s + 1.0) / (s * s + (double)d.apK[i] * s + 1.0);
+        i0 = 1;
+    }
+    for (int i = i0; i < d.apSections; ++i)
+        ap *= (s * s - (double)d.apK[i] * s + 1.0) / (s * s + (double)d.apK[i] * s + 1.0);
     return {lp, (double)d.hiSign * hp, ap};
 }
 

@@ -9,7 +9,7 @@
 //   Clarity band edge, sideways   its width
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Clarity's width
 //   double-click or right-click a handle      reset its parameters
-// Used by Smacheratr and, through a pk::MappedParamHost, by the Smacheratr in Smempler's rack; the
+// Used by Smacheratr and, through a pk::MappedParamHost, by the Smacheratr in Smemplr's rack; the
 // sample rate and the levels come from functions so it does not depend on a controller.
 #pragma once
 

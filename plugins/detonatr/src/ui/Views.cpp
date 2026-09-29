@@ -3,7 +3,7 @@
 #include "pluginkit/ui/DropFiles.h"
 #include "pluginkit/ui/Theme.h"
 
-#include "smempler/src/core/SampleData.h" // isSupportedAudioFile
+#include "smemplr/src/core/SampleData.h" // isSupportedAudioFile
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cgraphicspath.h"
@@ -373,7 +373,7 @@ private:
     static bool firstPath (DragEventData d, std::string& out)
     {
         for (const auto& p : pk::droppedPaths (d.drag))
-            if (smempler::isSupportedAudioFile (p))
+            if (smemplr::isSupportedAudioFile (p))
             {
                 out = p;
                 return true;

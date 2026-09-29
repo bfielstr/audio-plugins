@@ -140,15 +140,16 @@ void ControllerBase::markDirty ()
 }
 
 //------------------------------------------------------------------------------------------------
-void ControllerBase::setPresetInfo (const FUID& processorClassId, const char* pluginName)
+void ControllerBase::setPresetInfo (const FUID& processorClassId, const char* pluginName, const char* formerName)
 {
     presetClassId = processorClassId;
     presetPlugin = pluginName ? pluginName : "";
+    presetFormer = formerName ? formerName : "";
 }
 
 std::string ControllerBase::presetFolder () const
 {
-    return presetPlugin.empty () ? std::string () : presets::userFolder (presetPlugin.c_str ());
+    return presetPlugin.empty () ? std::string () : presets::userFolder (presetPlugin.c_str (), presetFormer.c_str ());
 }
 
 bool ControllerBase::savePreset (const std::string& path)

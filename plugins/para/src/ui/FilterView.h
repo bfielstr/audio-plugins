@@ -12,7 +12,7 @@
 // current settings; without, it shows the settings with the last tracked note. Vocal movement is
 // applied here, from the filter moved last, so it follows every edit at once: the pushed filter's
 // handle sits at the leader's cutoff and sinks and dims as it fades.
-// Used by Para and, through a pk::MappedParamHost, inside Smempler; the levels come from a
+// Used by Para and, through a pk::MappedParamHost, inside Smemplr; the levels come from a
 // function so it does not depend on a controller.
 #pragma once
 

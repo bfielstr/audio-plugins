@@ -59,8 +59,8 @@ pk_add_plugin(Detonatr
         ${CMAKE_SOURCE_DIR}/plugins/multidyn/src/ui/DynDisplay.cpp
 )
 target_include_directories(Detonatr PRIVATE src src/core src/plugin)
-# smempler_core: the suite's audio file decoder (the recordings)
-target_link_libraries(Detonatr PRIVATE detonatr_core smempler_core smacheratr_ui)
+# smemplr_core: the suite's audio file decoder (the recordings)
+target_link_libraries(Detonatr PRIVATE detonatr_core smemplr_core smacheratr_ui)
 
 pk_add_host_test(detonatr_hosttest
     PLUGIN Detonatr

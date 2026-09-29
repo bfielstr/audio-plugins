@@ -73,7 +73,7 @@ public:
     // withTail: the end-of-chain Smacheratr (off where Multidyn is built into another plug-in)
     explicit Engine (bool withTail = true) : hasTail (withTail) {}
     int latency () const { return look + (hasTail ? sat.latency () : 0); } // constant for a sample rate
-    // Bypassed, the dry signal passes with the same latency (for the built-in use in Smempler).
+    // Bypassed, the dry signal passes with the same latency (for the built-in use in Smemplr).
     void setBypass (bool b) { bypass = b; }
     // Levels of the built-in saturator for an editor (may be null).
     void setSatMeters (smacheratr::Meters* m) { sat.setMeters (m); }

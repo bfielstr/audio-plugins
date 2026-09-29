@@ -3,7 +3,7 @@
 //   drag up / down     set Drive
 //   double-click       reset Drive
 // Used by Smacheratr and, through a pk::MappedParamHost, by the saturators built into Multidyn and
-// Smempler; the levels come from a function so it does not depend on a controller.
+// Smemplr; the levels come from a function so it does not depend on a controller.
 #pragma once
 
 #include "../core/Engine.h"

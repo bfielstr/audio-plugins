@@ -1,8 +1,11 @@
 #include "State.h"
 
+#include "Crossover.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace levlr {
 
@@ -10,7 +13,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x4C45564C; // 'LEVL'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2; // 2: Slope has eight choices (12 .. 96 dB/oct) instead of three
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +53,13 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // version 1's Slope was 12 / 24 / 48 dB/oct: the same slope among the eight
+    if (version < 2 && st.has[kSlope])
+    {
+        static const int kOld[3] = {kSlope12, kSlope24, kSlope48};
+        const int old = std::clamp ((int)std::lround (st.norm[kSlope] * 2.0), 0, 2);
+        st.norm[kSlope] = toNormalized (kSlope, kOld[old]);
     }
     return true;
 }

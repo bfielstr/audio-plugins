@@ -1,6 +1,6 @@
 #include "Bridge.h"
 
-#include "smempler/src/core/SampleData.h" // the suite's audio file decoder
+#include "smemplr/src/core/SampleData.h" // the suite's audio file decoder
 
 #include <algorithm>
 #include <filesystem>
@@ -14,7 +14,7 @@ bool Bridge::loadCarrier (int slot, const std::string& path, std::string& error)
     std::vector<float> l, r;
     int channels = 0;
     double rate = 48000.0;
-    if (!smempler::decodeAudioFile (path, l, r, channels, rate, error))
+    if (!smemplr::decodeAudioFile (path, l, r, channels, rate, error))
         return false;
     if (l.empty () || rate <= 0.0)
     {
@@ -30,7 +30,7 @@ bool Bridge::loadCarrier (int slot, const std::string& path, std::string& error)
         c->ch[1] = c->ch[0];
     c->frames = (int)frames;
     c->sampleRate = rate;
-    setCarrier (slot, c, smempler::utf8FromPath (smempler::pathFromUtf8 (path).filename ()));
+    setCarrier (slot, c, smemplr::utf8FromPath (smemplr::pathFromUtf8 (path).filename ()));
     return true;
 }
 
