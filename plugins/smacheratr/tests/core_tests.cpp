@@ -145,7 +145,7 @@ TEST (params)
     CHECK (t.toText (kColorLo, -0.5) == "-50 %", "%s", t.toText (kColorLo, -0.5).c_str ());
     CHECK (std::fabs (colorDb (-0.5) + 12.0) < 1e-9, "amount -> dB");
     CHECK (t.info (kDrive).def == 0.0 && t.info (kColorOn).def == 1.0, "defaults: Drive 0 dB, Color on");
-    CHECK (t.info (kPreLimit).def == 0.0 && t.info (kPreLimitThreshold).def == -6.0, "pre-limit off, at -6 dB");
+    CHECK (t.info (kPreLimit).def == 1.0 && t.info (kPreLimitThreshold).def == -6.0, "pre-limit on, at -6 dB");
 }
 
 TEST (analog_curve)
@@ -362,6 +362,7 @@ TEST (dry_wet_and_dc_filter)
     CHECK (delayedError (out.l, in.l, (size_t)e->latency (), 4800) < 1e-6, "dry");
     e = engine (false);
     e->setParam (kDrive, -12.0); // stays linear: the offset passes
+    e->setParam (kPreLimit, 0.0);  // (the pre-limiter would hold the offset tone down)
     out = run (*e, in);
     CHECK (std::fabs (meanOf (out.l, 24000, 48000) - 0.1) < 0.01, "offset passes without the filter: %f", meanOf (out.l, 24000, 48000));
     e->setParam (kDcFilter, 1.0);

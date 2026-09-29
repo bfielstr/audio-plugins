@@ -11,7 +11,7 @@ then a smooth knee into clipping at 0 dB. **Drive** (-36 ... +36 dB, default 14 
 signal reaches into it. The display shows the curve with the driven signal's current reach
 highlighted, so you can see when the saturation starts. Drag it up or down to set Drive.
 
-**Pre-Limit** (optional, off by default) is a look-ahead limiter in front of the drive: the input is
+**Pre-Limit** (on by default) is a look-ahead limiter in front of the drive: the input is
 held at its **threshold** (default -6 dB), and the drive is applied after it. A transient then cannot
 push further into the curve than the rest of the sound, so it is not squared off; the display shows
 the furthest the driven signal can go as blue lines.

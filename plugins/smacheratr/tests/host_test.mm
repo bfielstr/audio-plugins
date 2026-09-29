@@ -107,6 +107,7 @@ int main (int argc, char** argv)
         rig.param (kColorOn, toNormalized (kColorOn, 1.0));
         rig.param (kColorLo, toNormalized (kColorLo, -0.3));
         rig.param (kColorHi, toNormalized (kColorHi, 0.25));
+        rig.param (kPreLimit, 0.0); // (on by default: the click below turns it back on)
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");

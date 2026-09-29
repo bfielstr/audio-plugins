@@ -12,7 +12,7 @@ const ParamTable& paramTable ()
     static const ParamTable t ([] {
         std::vector<ParamInfo> v;
         v.push_back (real (kDrive, "Drive", "Drive", -36.0, 36.0, 0.0, Curve::Linear, Disp::Db));
-        v.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", false));
+        v.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", true));
         v.push_back (real (kPreLimitThreshold, "Pre-Limit Threshold", "Limit", -30.0, 0.0, -6.0, Curve::Linear, Disp::Db));
         v.push_back (choice (kPostClip, "Post Clip Mode", "Post Clip", {"No Clip", "Soft Clip", "Hard Clip"}, kPostOff));
         v.push_back (toggle (kColorOn, "Color", "Color", true));
