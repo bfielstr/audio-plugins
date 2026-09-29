@@ -125,15 +125,19 @@ void ShaperView::draw (CDrawContext* ctx)
     else
         std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
-    // Clarity at work: how far the low mids are turned down before the curve
-    if (host->plainValue (kClarity) >= 0.5)
+    // Clarity at work: how far each band is turned down before the curve (band 2 in blue, under band 1)
+    int rowsShown = 0;
+    for (int k = 0; k < kClarityBands; ++k)
     {
-        const CColor c (120, 210, 140);
-        const double range = std::max (1.0, host->plainValue (kClarityRange));
-        const double cut = std::clamp (-(double)shownClarity, 0.0, range);
-        std::snprintf (buf, sizeof (buf), "Clarity %.1f dB", -cut);
-        text (ctx, buf, CRect (all.right - 120, all.top + 4, all.right - 6, all.top + 18), c, 9.5, kRightText, true);
-        const CRect bar (all.right - 86, all.top + 21, all.right - 6, all.top + 25);
+        if (host->plainValue (kClarityOnIds[k]) < 0.5)
+            continue;
+        const CColor c = k == 0 ? CColor (120, 210, 140) : CColor (130, 170, 255);
+        const double range = std::max (1.0, host->plainValue (kClarityRangeIds[k]));
+        const double cut = std::clamp (-(double)(k == 0 ? shownClarity : shownClarity2), 0.0, range);
+        std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Clarity" : "Clarity 2", -cut);
+        const double top = all.top + 4 + 24 * rowsShown++;
+        text (ctx, buf, CRect (all.right - 130, top, all.right - 6, top + 14), c, 9.5, kRightText, true);
+        const CRect bar (all.right - 86, top + 17, all.right - 6, top + 21);
         ctx->setFillColor (CColor (255, 255, 255, 20));
         ctx->drawRect (bar, kDrawFilled);
         ctx->setFillColor (c);
@@ -208,6 +212,7 @@ void ShaperView::idle ()
     ease (shownIn, m->inPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
     ease (shownOut, m->outPeak.load (std::memory_order_relaxed), 0.7f, 0.12f);
     ease (shownClarity, m->clarityDb.load (std::memory_order_relaxed), 0.3f, 0.3f);
+    ease (shownClarity2, m->clarity2Db.load (std::memory_order_relaxed), 0.3f, 0.3f);
     if (shownIn < 1e-4f)
         shownIn = 0.0f;
     invalid ();

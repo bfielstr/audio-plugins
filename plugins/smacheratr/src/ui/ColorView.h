@@ -4,8 +4,8 @@
 //   left handle, up / down        Amt Lo
 //   right handle, up / down       Amt Hi
 //   right handle, sideways        Freq
-//   Clarity handle, sideways      Clarity Frequency
-//   Clarity band edge, sideways   Clarity Width
+//   Clarity handle, sideways      a Clarity band's frequency (band 2 is drawn blue)
+//   Clarity band edge, sideways   its width
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Clarity's width
 //   double-click or right-click a handle      reset its parameters
 // Used by Smacheratr and, through a pk::MappedParamHost, by the Smacheratr in Smempler's rack; the
@@ -43,23 +43,24 @@ public:
     double yOfDb (double db) const;
     VSTGUI::CPoint loHandle () const;
     VSTGUI::CPoint hiHandle () const;
-    VSTGUI::CPoint clarityHandle () const; // on the 0 dB line at Clarity's centre (when Clarity is on)
-    double clarityEdgeX (bool high) const; // Clarity's band edges
+    VSTGUI::CPoint clarityHandle (int band) const; // on the 0 dB line at a Clarity band's centre
+    double clarityEdgeX (int band, bool high) const; // its edges
 
 private:
     enum class Drag { None, Lo, Hi, Clarity, ClarityLow, ClarityHigh };
-    Drag hit (const VSTGUI::CPoint& p) const;
+    Drag hit (const VSTGUI::CPoint& p, int* band = nullptr) const; // band: which Clarity band was hit
     double sampleRate () const;
-    bool clarityOn () const;
+    bool clarityOn (int band) const;
 
     pk::ParamHost* host;
     RateSource rate;
     MeterSource meters;
     Drag drag = Drag::None;
     VSTGUI::CPoint down;
+    int dragBand = 0; // the Clarity band being dragged
     double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0;
     bool movedH = false, movedV = false;
-    float shownCut = 0.0f; // Clarity's cut (dB, 0 or less), eased
+    float shownCut[kClarityBands] = {0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
 };
 
 } // namespace smacheratr

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../core/Params.h"
+
 #include "pluginkit/vst/EditorBase.h"
 
 #include <vector>
@@ -17,10 +19,13 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    static constexpr double kHeight = 440.0;
+    static constexpr double kHeight = 520.0;
     // layout (also used by the host test)
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
     static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 290.0;
+    // the CLARITY panel at the bottom: a band's On toggle at kClarityBandLeft[band] + 12, kClarityTop + 30
+    static constexpr double kClarityTop = 432.0;
+    static constexpr double kClarityBandLeft[2] = {8.0, 380.0};
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -38,7 +43,7 @@ private:
     pk::Label* status = nullptr;
     pk::ParamView* thresholdView = nullptr;
     std::vector<pk::ParamView*> colorViews;
-    std::vector<pk::ParamView*> clarityViews; // dimmed while Clarity is off
+    std::vector<pk::ParamView*> clarityViews[kClarityBands]; // dimmed while their band is off
 };
 
 } // namespace smacheratr

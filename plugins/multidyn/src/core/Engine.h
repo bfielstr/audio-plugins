@@ -21,6 +21,12 @@
 // catches up (and being squared by whatever follows). Every band
 // runs through the look-ahead delay whether the limiter is on or not, so the latency (1 ms) never
 // changes.
+// Transient guard: upward compression never lifts the signal past the Below threshold, and the
+// level it checks that against is also measured 1 ms ahead (the look-ahead every band runs through)
+// and fast (a 3 ms RMS, or the peak hold with the Peak detector): a hit after a quiet passage takes
+// the upward boost down just before it arrives, instead of going out with the quiet passage's boost
+// until the slower detector catches up; the boost comes back at the band's Release. On steady
+// material the fast and slow levels agree, so it changes nothing there.
 // Soften (the top band only, where upward compression lifts hiss and air the most): as the band's
 // Below threshold closes in on its Above threshold (fully at 6 dB apart or closer, not at all 18 dB
 // apart) the part of the signal that upward compression adds is low-passed (12 dB/oct, from 8 kHz
@@ -92,6 +98,9 @@ private:
         float inGain = 1.0f, outGain = 1.0f; // smoothed linear gains
         float meterIn = 0.0f, meterOut = 0.0f;
         float limGain = 1.0f, limPeak = 0.0f; // pre-limiter gain and its held input peak
+        // the transient guard: the band's level 1 ms ahead, measured fast, and the most upward gain
+        // it allows (dB; very large until it has measured)
+        float guardMs = 0.0f, guardPeak = 0.0f, guardDb = 1000.0f;
         float delay[2][kMaxLookahead] {};    // look-ahead delay
         int delayPos = 0;
     };
@@ -112,6 +121,7 @@ private:
     float outGain = 1.0f, scGain = 1.0f;
     float peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
+    float guardC = 0.0f; // the transient guard's 3 ms RMS
     smacheratr::Tail sat;
     bool hasTail = true;
     bool bypass = false;

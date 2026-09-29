@@ -401,8 +401,13 @@ void Editor::buildUI (CFrame* f)
             const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
             for (int i = 0; i < 10; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), ids[i]);
+            // Clarity's second band, under the knobs
+            add (new Toggle (CRect (534, 194, 604, 212), h, kClarity2, "Clarity 2"), kClarity2);
+            add (new NumberBox (CRect (608, 194, 664, 212), h, kClarity2Freq), kClarity2Freq);
+            add (new NumberBox (CRect (668, 194, 708, 212), h, kClarity2Width), kClarity2Width);
+            add (new NumberBox (CRect (712, 194, 764, 212), h, kClarity2Range), kClarity2Range);
         }
-        auto* n3 = new Label (CRect (534, 190, 830, 204), "after the rack, just before the output", 9.5);
+        auto* n3 = new Label (CRect (534, 214, 830, 228), "after the rack, just before the output", 9.5);
         n3->setDim (true);
         fxEndBody->addView (n3);
     }
@@ -869,6 +874,11 @@ void Editor::buildBody ()
             const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
             for (int i = 0; i < 10; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), tip (ids[i]));
+            // Clarity's second band, under the knobs
+            add (new Toggle (CRect (534, 194, 604, 212), h, kClarity2, "Clarity 2"), tip (kClarity2));
+            add (new NumberBox (CRect (608, 194, 664, 212), h, kClarity2Freq), tip (kClarity2Freq));
+            add (new NumberBox (CRect (668, 194, 708, 212), h, kClarity2Width), tip (kClarity2Width));
+            add (new NumberBox (CRect (712, 194, 764, 212), h, kClarity2Range), tip (kClarity2Range));
             break;
         }
         case kFxWidr:

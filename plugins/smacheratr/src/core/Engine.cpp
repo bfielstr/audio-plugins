@@ -23,10 +23,13 @@ ParamArray defaultParams ()
 
 void Engine::Channel::reset ()
 {
-    bandHp.reset ();
-    bandLp.reset ();
-    postHp.reset ();
-    postLp.reset ();
+    for (int k = 0; k < kClarityBands; ++k)
+    {
+        bandHp[k].reset ();
+        bandLp[k].reset ();
+        postHp[k].reset ();
+        postLp[k].reset ();
+    }
     dc.reset ();
     preLo.reset ();
     preHi.reset ();
@@ -45,7 +48,8 @@ void Engine::prepare (double sampleRate, int mb)
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
     lmAtk = 1.0 - std::exp (-1.0 / (0.015 * sr));
     lmRel = 1.0 - std::exp (-1.0 / (0.15 * sr));
-    bandFreq = bandWidth = -1.0; // Clarity's band is designed for this rate on the next block
+    for (int k = 0; k < kClarityBands; ++k)
+        bandFreq[k] = bandWidth[k] = -1.0; // Clarity's bands are designed for this rate on the next block
     // the limiter's gain (in dB) reaches its target within the look-ahead and releases in 50 ms
     limAtk = (float)std::exp (-5.0 / look);
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
@@ -66,7 +70,7 @@ void Engine::prepare (double sampleRate, int mb)
         dry[c].assign ((size_t)maxBlock, 0.0f);
         pre[c].assign ((size_t)maxBlock, 0.0f);
     }
-    for (auto* v : {&wet, &gDrive, &gOut, &gMix, &msMid, &msSide, &gPost})
+    for (auto* v : {&wet, &gDrive, &gOut, &gMix, &msMid, &msSide, &gPost[0], &gPost[1]})
         v->assign ((size_t)maxBlock, 0.0f);
     osBuf.assign ((size_t)maxBlock * 4, 0.0f);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -163,6 +167,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 meters->inPeak.store (0.0f, std::memory_order_relaxed);
                 meters->outPeak.store (0.0f, std::memory_order_relaxed);
                 meters->clarityDb.store (0.0f, std::memory_order_relaxed);
+                meters->clarity2Db.store (0.0f, std::memory_order_relaxed);
             }
         }
         return;
@@ -223,55 +228,64 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
-    // Clarity, a compressor on one band of the low mids (ClarityBand.h: 12 dB/oct below, 6 dB/oct
-    // above, around Clarity Frequency): when the drive pushes the band past -18 dBFS into the curve,
-    // it is turned down before the curve (3 dB for every 5 over, at most Clarity Range), so the low mids do
-    // not pile up into mud and intermodulate, and after it by half as much (the curve squashes the
-    // cut before it back up).
-    const bool clarity = p[kClarity] >= 0.5;
-    if (clarity != clarityWas)
+    // Clarity, a compressor on up to two bands (ClarityBand.h: 12 dB/oct below, 6 dB/oct above,
+    // around each band's frequency): when the drive pushes a band past -18 dBFS into the curve, it is
+    // turned down before the curve (3 dB for every 5 over, at most the band's Range), so it does not
+    // pile up into mud and intermodulate, and after it by half as much (the curve squashes the cut
+    // before it back up). The bands work one after the other, each measuring its own band.
+    bool clarity[kClarityBands];
+    for (int k = 0; k < kClarityBands; ++k)
     {
-        clarityWas = clarity;
-        lmEnv = 0.0;
-        lmCutDb = 0.0f;
-        gBandPre = gBandPost = 1.0f;
-        for (auto& c : chan)
+        clarity[k] = p[kClarityOnIds[k]] >= 0.5;
+        if (clarity[k] != clarityWas[k])
         {
-            c.bandHp.reset ();
-            c.bandLp.reset ();
-            c.postHp.reset ();
-            c.postLp.reset ();
-        }
-    }
-    if (clarity)
-    {
-        const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv));
-        lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, std::clamp (p[kClarityRange], 0.0, 24.0));
-        if (p[kClarityFreq] != bandFreq || p[kClarityWidth] != bandWidth)
-        {
-            bandFreq = p[kClarityFreq];
-            bandWidth = p[kClarityWidth];
-            const ClarityBand b = clarityBand (sr, bandFreq, bandWidth);
+            clarityWas[k] = clarity[k];
+            lmEnv[k] = 0.0;
+            lmCutDb[k] = 0.0f;
+            gBandPre[k] = gBandPost[k] = 1.0f;
             for (auto& c : chan)
             {
-                c.bandHp.c = c.postHp.c = b.hp;
-                c.bandLp.c = c.postLp.c = b.lp;
+                c.bandHp[k].reset ();
+                c.bandLp[k].reset ();
+                c.postHp[k].reset ();
+                c.postLp[k].reset ();
             }
-            bandNorm = (float)b.norm;
+        }
+        if (!clarity[k])
+            continue;
+        const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv[k]));
+        lmCutDb[k] = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, std::clamp (p[kClarityRangeIds[k]], 0.0, 24.0));
+        if (p[kClarityFreqIds[k]] != bandFreq[k] || p[kClarityWidthIds[k]] != bandWidth[k])
+        {
+            bandFreq[k] = p[kClarityFreqIds[k]];
+            bandWidth[k] = p[kClarityWidthIds[k]];
+            const ClarityBand b = clarityBand (sr, bandFreq[k], bandWidth[k]);
+            for (auto& c : chan)
+            {
+                c.bandHp[k].c = c.postHp[k].c = b.hp;
+                c.bandLp[k].c = c.postLp[k].c = b.lp;
+            }
+            bandNorm[k] = (float)b.norm;
         }
     }
 
     // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
     float inPk = 0.0f, outPk = 0.0f;
-    const float gPreTarget = dbToGain (-lmCutDb), gPostTarget = dbToGain (-0.5 * lmCutDb);
+    float gPreTarget[kClarityBands], gPostTarget[kClarityBands];
+    for (int k = 0; k < kClarityBands; ++k)
+    {
+        gPreTarget[k] = dbToGain (-lmCutDb[k]);
+        gPostTarget[k] = dbToGain (-0.5 * lmCutDb[k]);
+    }
     for (int i = 0; i < n; ++i)
     {
-        if (clarity)
-        {
-            gBandPre += (gPreTarget - gBandPre) * smooth;
-            gBandPost += (gPostTarget - gBandPost) * smooth;
-            gPost[(size_t)i] = gBandPost;
-        }
+        for (int k = 0; k < kClarityBands; ++k)
+            if (clarity[k])
+            {
+                gBandPre[k] += (gPreTarget[k] - gBandPre[k]) * smooth;
+                gBandPost[k] += (gPostTarget[k] - gBandPost[k]) * smooth;
+                gPost[k][(size_t)i] = gBandPost[k];
+            }
         float v[2] = {xl[i], xr[i]};
         for (int c = 0; c < 2; ++c)
         {
@@ -296,21 +310,23 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         else
             limGainDb = 0.0f;
-        double lmPower = 0.0;
+        double lmPower[kClarityBands] = {0.0, 0.0};
         for (int c = 0; c < 2; ++c)
         {
             float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
-            if (clarity)
-            {
-                const double band = chan[c].bandLp.process (chan[c].bandHp.process (d)) * bandNorm;
-                lmPower = std::max (lmPower, 2.0 * band * band); // a sine's peak level
-                d = (float)(d + (gBandPre - 1.0f) * band);
-            }
+            for (int k = 0; k < kClarityBands; ++k)
+                if (clarity[k])
+                {
+                    const double band = chan[c].bandLp[k].process (chan[c].bandHp[k].process (d)) * bandNorm[k];
+                    lmPower[k] = std::max (lmPower[k], 2.0 * band * band); // a sine's peak level
+                    d = (float)(d + (gBandPre[k] - 1.0f) * band);
+                }
             pre[c][(size_t)i] = d;
             inPk = std::max (inPk, std::fabs (d));
         }
-        if (clarity)
-            lmEnv += (lmPower - lmEnv) * (lmPower > lmEnv ? lmAtk : lmRel);
+        for (int k = 0; k < kClarityBands; ++k)
+            if (clarity[k])
+                lmEnv[k] += (lmPower[k] - lmEnv[k]) * (lmPower[k] > lmEnv[k] ? lmAtk : lmRel);
     }
 
     float* outs[2] = {yl, yr};
@@ -327,13 +343,14 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         else
             for (int i = 0; i < n; ++i)
                 wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
-        if (clarity)
-            for (int i = 0; i < n; ++i)
-            {
-                const float w = wet[(size_t)i];
-                const double band = ch.postLp.process (ch.postHp.process (w)) * bandNorm;
-                wet[(size_t)i] = (float)(w + (gPost[(size_t)i] - 1.0f) * band);
-            }
+        for (int k = 0; k < kClarityBands; ++k)
+            if (clarity[k])
+                for (int i = 0; i < n; ++i)
+                {
+                    const float w = wet[(size_t)i];
+                    const double band = ch.postLp[k].process (ch.postHp[k].process (w)) * bandNorm[k];
+                    wet[(size_t)i] = (float)(w + (gPost[k][(size_t)i] - 1.0f) * band);
+                }
         for (int i = 0; i < n; ++i)
         {
             const float w = wet[(size_t)i], m = gMix[(size_t)i];
@@ -345,7 +362,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     {
         meters->inPeak.store (inPk, std::memory_order_relaxed);
         meters->outPeak.store (outPk, std::memory_order_relaxed);
-        meters->clarityDb.store (clarity ? -lmCutDb : 0.0f, std::memory_order_relaxed);
+        meters->clarityDb.store (clarity[0] ? -lmCutDb[0] : 0.0f, std::memory_order_relaxed);
+        meters->clarity2Db.store (clarity[1] ? -lmCutDb[1] : 0.0f, std::memory_order_relaxed);
     }
 }
 

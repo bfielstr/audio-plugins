@@ -30,7 +30,8 @@ struct Meters
 {
     std::atomic<float> inPeak {0.0f};
     std::atomic<float> outPeak {0.0f};
-    std::atomic<float> clarityDb {0.0f}; // Clarity's low-mid cut before the curve (dB, 0 or less)
+    std::atomic<float> clarityDb {0.0f};  // Clarity's cut before the curve (dB, 0 or less)
+    std::atomic<float> clarity2Db {0.0f}; // its second band's
 };
 
 class Engine
@@ -79,7 +80,7 @@ private:
     struct Channel
     {
         Biquad dc, preLo, preHi, postLo, postHi;
-        Biquad bandHp, bandLp, postHp, postLp; // Clarity's band, before and after the curve
+        Biquad bandHp[kClarityBands], bandLp[kClarityBands], postHp[kClarityBands], postLp[kClarityBands]; // Clarity's bands, before and after the curve
         Oversampler os;
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
@@ -95,12 +96,12 @@ private:
     bool inMs = false;
     // Clarity: the level of its band going into the curve (mean square, both channels), the cut it
     // asks for, the band in use and the (smoothed) gains of the band before and after the curve
-    double lmEnv = 0.0, lmAtk = 0.0, lmRel = 0.0;
-    float lmCutDb = 0.0f;
-    double bandFreq = -1.0, bandWidth = -1.0;
-    float bandNorm = 1.0f, gBandPre = 1.0f, gBandPost = 1.0f;
-    std::vector<float> gPost;
-    bool clarityWas = false;
+    double lmEnv[kClarityBands] {}, lmAtk = 0.0, lmRel = 0.0;
+    float lmCutDb[kClarityBands] {};
+    double bandFreq[kClarityBands] = {-1.0, -1.0}, bandWidth[kClarityBands] = {-1.0, -1.0};
+    float bandNorm[kClarityBands] = {1.0f, 1.0f}, gBandPre[kClarityBands] = {1.0f, 1.0f}, gBandPost[kClarityBands] = {1.0f, 1.0f};
+    std::vector<float> gPost[kClarityBands];
+    bool clarityWas[kClarityBands] = {false, false};
     float drive = 1.0f, out = 1.0f, mix = 1.0f, smooth = 0.0f;
     // pre-limiter: the input peaks inside the look-ahead window and the gain (dB), smoothed in dB
     std::vector<float> lookPeaks;

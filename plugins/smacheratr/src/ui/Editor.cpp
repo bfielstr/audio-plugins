@@ -51,7 +51,8 @@ void Editor::onClose ()
     status = nullptr;
     thresholdView = nullptr;
     colorViews.clear ();
-    clarityViews.clear ();
+    for (auto& v : clarityViews)
+        v.clear ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -72,9 +73,6 @@ void Editor::buildUI (CFrame* f)
     // left: the device as Live shows it, with the pre-limiter in front of the curve
     bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 76, 62), this, kPreLimit, "Pre-Limit"));
     thresholdView = bind (root, new NumberBox (CRect (kShaperLeft + 80, 42, kShaperLeft + 140, 60), this, kPreLimitThreshold));
-    bind (root, new Toggle (CRect (kShaperLeft + 150, 40, kShaperLeft + 210, 62), this, kClarity, "Clarity"));
-    clarityViews.push_back (bind (root, new NumberBox (CRect (kShaperLeft + 214, 42, kShaperLeft + 258, 60), this, kClarityFreq)));
-    clarityViews.push_back (bind (root, new NumberBox (CRect (kShaperLeft + 262, 42, kShaperLeft + 300, 60), this, kClarityWidth)));
     shaper = new ShaperView (CRect (kShaperLeft, kShaperTop, kShaperLeft + kShaperWidth, kShaperTop + kShaperHeight), this,
                              [c = ctl] () -> const Meters* {
                                  auto* s = c->getShared ();
@@ -85,7 +83,6 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Choice (CRect (8, 266, 112, 288), this, kPostClip));
     bind (root, new Toggle (CRect (120, 266, 176, 288), this, kColorOn, "Color"));
     colorViews.push_back (bind (root, new Knob (knobRect (184, 262), this, kColorLo)));
-    clarityViews.push_back (bind (root, new Knob (knobRect (248, 262), this, kClarityRange, "Clarity")));
     bind (root, new Knob (knobRect (24, 346, 68, 78), this, kDrive, nullptr, true));
     bind (root, new Knob (knobRect (128, 346, 68, 78), this, kOutput));
     bind (root, new Knob (knobRect (232, 346, 68, 78), this, kDryWet));
@@ -107,6 +104,18 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 3; ++i)
         colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
+    // bottom: Clarity's two bands, each On, Frequency, Width and Range
+    auto* cp = new pk::Panel (CRect (8, kClarityTop, 752, kClarityTop + 80), "CLARITY");
+    root->addView (cp);
+    for (int k = 0; k < kClarityBands; ++k)
+    {
+        const double x = kClarityBandLeft[k];
+        bind (cp, new Toggle (CRect (x + 4, 30, x + 76, 50), this, kClarityOnIds[k], k == 0 ? "Band 1" : "Band 2"));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 84, 10), this, kClarityFreqIds[k], "Freq")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 146, 10), this, kClarityWidthIds[k], "Width")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 208, 10), this, kClarityRangeIds[k], "Range")));
+    }
+
     applyParamTooltips (&help::forParam);
     updateLooks ();
     idle ();
@@ -119,8 +128,9 @@ void Editor::updateLooks ()
     const bool on = plainValue (kColorOn) >= 0.5;
     for (auto* v : colorViews)
         v->setEnabledLook (on);
-    for (auto* v : clarityViews)
-        v->setEnabledLook (plainValue (kClarity) >= 0.5);
+    for (int k = 0; k < kClarityBands; ++k)
+        for (auto* v : clarityViews[k])
+            v->setEnabledLook (plainValue (kClarityOnIds[k]) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -130,7 +140,7 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity)
+    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarity2)
         updateLooks ();
 }
 

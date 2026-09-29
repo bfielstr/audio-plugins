@@ -29,11 +29,22 @@ enum ParamId : uint32_t
     kClarityFreq,  // Hz, the centre of Clarity's band (ClarityBand.h); 20 Hz - 20 kHz (20 - 500 Hz before); 20 Hz - 20 kHz (20 - 500 Hz before)
     kClarityWidth, // octaves between the band's edges
     kClarityRange, // dB: the most Clarity turns its band down (before the curve; half as much after)
+    kClarity2,      // Clarity's second band (off by default), with its own frequency, width and range
+    kClarity2Freq,  // Hz
+    kClarity2Width, // octaves
+    kClarity2Range, // dB
 
     kNumParams
 };
 
 enum PostClipMode { kPostOff = 0, kPostSoft, kPostHard };
+
+// Clarity's bands: their On, Frequency, Width and Range parameters
+constexpr int kClarityBands = 2;
+inline constexpr uint32_t kClarityOnIds[kClarityBands] = {kClarity, kClarity2};
+inline constexpr uint32_t kClarityFreqIds[kClarityBands] = {kClarityFreq, kClarity2Freq};
+inline constexpr uint32_t kClarityWidthIds[kClarityBands] = {kClarityWidth, kClarity2Width};
+inline constexpr uint32_t kClarityRangeIds[kClarityBands] = {kClarityRange, kClarity2Range};
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

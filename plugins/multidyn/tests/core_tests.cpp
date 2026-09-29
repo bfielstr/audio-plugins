@@ -414,6 +414,41 @@ TEST (upward_compression_does_not_explode_after_silence)
     CHECK (pk < -5.5, "burst after silence peaks at %.2f dB (input -6)", pk);
 }
 
+TEST (transient_guard_after_a_quiet_passage)
+{
+    // the preset (heavy upward compression): a quiet pad, then a drum-like hit. The hit's first
+    // milliseconds used to go out with the pad's boost (about 5 dB over the rest of the hit); the
+    // guard sees it coming through the look-ahead, so it starts where it goes on
+    Engine e;
+    e.prepare (kSr, 512);
+    e.setParam (kSatOn, 0.0);
+    const size_t n = (size_t)(kSr * 2.0), hitAt = (size_t)kSr;
+    Sig in;
+    in.l.resize (n);
+    uint32_t seed = 1;
+    for (size_t i = 0; i < n; ++i)
+    {
+        double x = 0.003 * std::sin (2.0 * M_PI * 220.0 * i / kSr); // -50 dB pad
+        if (i >= hitAt)
+        {
+            const double t = (i - hitAt) / kSr;
+            seed = seed * 1664525u + 1013904223u;
+            const double noise = ((seed >> 8) & 0xFFFF) / 32768.0 - 1.0;
+            x += std::exp (-t / 0.08) * (0.3 * std::sin (2.0 * M_PI * 180.0 * t) + 0.2 * noise);
+        }
+        in.l[i] = (float)x;
+    }
+    in.r = in.l;
+    auto out = run (e, in);
+    const size_t ms = (size_t)(kSr / 1000);
+    const double first = peakDb (out.l, hitAt, hitAt + 5 * ms), after = peakDb (out.l, hitAt + 20 * ms, hitAt + 40 * ms);
+    std::printf ("    hit: first 5 ms %.1f dB, 20-40 ms %.1f dB\n", first, after);
+    CHECK (first < after + 1.0, "no spike at the start of the hit: %.1f vs %.1f dB", first, after);
+    // and the quiet pad before it is still lifted as much as ever
+    const double pad = rmsDb (out.l, hitAt - 200 * ms, hitAt - 10 * ms);
+    CHECK (pad > -35.0, "the pad is lifted: %.1f dB rms", pad);
+}
+
 TEST (preset_defaults)
 {
     // A fresh engine is the four-band upward-compression preset (OTT pushed further).

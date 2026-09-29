@@ -170,7 +170,7 @@ void Editor::buildUI (CFrame* f)
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kSatOn, kSatExtBase,
                                                                [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
                                                                [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 894, 24 + smacheratr::TailDisplays::kHeight - 22));
+    tailDisplays->add (tailPanel, CRect (10, 24, 894, 24 + smacheratr::TailDisplays::kHeight - 48)); // above the three rows of controls
 
     applyParamTooltips (&help::forParam);
     updateLayout ();

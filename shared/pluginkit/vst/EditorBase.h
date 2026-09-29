@@ -64,7 +64,7 @@ protected:
         return view;
     }
     // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`, the
-    // extended fields at `extBase`): every Smacheratr control. Needs about 660 x 78.
+    // extended fields at `extBase`): every Smacheratr control, in three rows. Needs about 660 x 104.
     Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase,
                          const char* title = "smacheratr  (end of the chain)");
     // Sets tooltips on every bound parameter view from a help lookup.

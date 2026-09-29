@@ -106,7 +106,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     auto* p = new Panel (r, title);
     parent->addView (p);
     // two rows of switches and values under the title, the knobs to the right of them
-    const double y = r.getHeight () - 72.0, rowA = y + 22, rowB = y + 48;
+    const double y = r.getHeight () - 72.0, rowA = y + 22, rowB = y + 48, rowC = y - 4; // row C: Clarity's second band
     auto tip = [] (CView* v, const char* t) { v->setTooltipText (t); };
     auto row = [] (double x0, double x1, double top) { return CRect (x0, top, x1, top + 18); };
     tip (bind (p, new Toggle (row (10, 50, rowA), this, base + kTailOn, "On")),
@@ -130,6 +130,12 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     tip (bind (p, new NumberBox (row (120, 156, rowB), this, extBase + kTailExtClarityWidth)), "Clarity: the band's width in octaves.");
     tip (bind (p, new NumberBox (row (160, 206, rowB), this, extBase + kTailExtClarityRange)),
          "Clarity: the most it turns its band down (8 dB by default, 0 to 24).");
+    tip (bind (p, new Toggle (row (10, 64, rowC), this, extBase + kTailExtClarity2, "Clarity 2")),
+         "Clarity's second band (blue in the display), with its own frequency, width and range.");
+    tip (bind (p, new NumberBox (row (68, 116, rowC), this, extBase + kTailExtClarity2Freq)), "Clarity band 2: the centre of its band.");
+    tip (bind (p, new NumberBox (row (120, 156, rowC), this, extBase + kTailExtClarity2Width)), "Clarity band 2: its width in octaves.");
+    tip (bind (p, new NumberBox (row (160, 206, rowC), this, extBase + kTailExtClarity2Range)),
+         "Clarity band 2: the most it turns its band down (8 dB by default, 0 to 24).");
     tip (bind (p, new Toggle (row (212, 258, rowB), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
     tip (bind (p, new NumberBox (row (262, 304, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");

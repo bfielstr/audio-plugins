@@ -516,6 +516,36 @@ TEST (clarity_full_range)
            at (false, 4000.0));
 }
 
+TEST (clarity_second_band)
+{
+    // a low-mid and a harsh upper tone, driven hard: band 1 at 250 Hz and band 2 at 3 kHz each take
+    // their own tone down; band 2 alone leaves the low mids and reports its own cut
+    auto in = tones ({{250.0, -6.0}, {3000.0, -6.0}}, 0.5);
+    auto run2 = [&] (bool b1, bool b2, Meters* m) {
+        auto e = engine ();
+        if (m)
+            e->setMeters (m);
+        e->setParam (kDrive, 18.0);
+        e->setParam (kClarity, b1 ? 1.0 : 0.0);
+        e->setParam (kClarityWidth, 1.0);
+        e->setParam (kClarity2, b2 ? 1.0 : 0.0);
+        e->setParam (kClarity2Freq, 3000.0);
+        e->setParam (kClarity2Width, 1.0);
+        return run (*e, in);
+    };
+    const auto none = run2 (false, false, nullptr), both = run2 (true, true, nullptr);
+    Meters m2;
+    const auto only2 = run2 (false, true, &m2);
+    auto db = [] (const Sig& s, double f) { return toneDb (s.l, f, 12000, 24000); };
+    std::printf ("    250 Hz: %.1f -> %.1f dB, 3 kHz: %.1f -> %.1f dB (band 2 alone: %.1f / %.1f)\n", db (none, 250.0),
+                 db (both, 250.0), db (none, 3000.0), db (both, 3000.0), db (only2, 250.0), db (only2, 3000.0));
+    CHECK (db (both, 250.0) < db (none, 250.0) - 2.0 && db (both, 3000.0) < db (none, 3000.0) - 2.0, "both bands cut");
+    CHECK (db (only2, 3000.0) < db (none, 3000.0) - 2.0 && db (only2, 250.0) > db (none, 250.0) - 1.0,
+           "band 2 alone: its own band only");
+    CHECK (m2.clarity2Db.load () < -1.0 && m2.clarityDb.load () == 0.0f, "band 2's meter: %.1f dB", m2.clarity2Db.load ());
+    CHECK (!paramTable ().info (kClarity2).def && paramTable ().info (kClarity2Freq).def == 3000.0, "off by default, at 3 kHz");
+}
+
 TEST (tail_has_every_control)
 {
     // the saturator at the end of the other plug-ins: its extended fields reach Smacheratr (here Clarity

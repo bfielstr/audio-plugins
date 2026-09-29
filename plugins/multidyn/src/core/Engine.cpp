@@ -58,6 +58,7 @@ void Engine::prepare (double sampleRate, int)
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLookahead);
     limAtk = (float)std::exp (-4.0 / look);
     limPeakDecay = (float)std::exp (-1.0 / (2.0 * look)); // the input peak is held about twice the look-ahead
+    guardC = (float)std::exp (-1.0 / (0.003 * sr));
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
     sat.prepare (sr, 512);
     for (auto& d : bypassDelay)
@@ -326,8 +327,29 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                     float aDb = (float)(aboveGainDb (eA, ta[b], ra[b], knee, kDb) * amount);
                     float bDb = (float)(belowGainDb (eB, tb[b], rb[b], knee, kDb) * amount);
                     // Upward compression never lifts the signal past the Below threshold, even while
-                    // its envelope is still releasing (e.g. a loud hit right after silence).
-                    const float room = std::max (0.0f, (float)tb[b] - lev);
+                    // its envelope is still releasing (e.g. a loud hit right after silence), and the
+                    // transient guard sees the hit coming (see Engine.h)
+                    const float gl = band[b][0] * st.inGain * (1.0f - scMix) + scBand[b][0] * scMix;
+                    const float gr = band[b][1] * st.inGain * (1.0f - scMix) + scBand[b][1] * scMix;
+                    float fast;
+                    if (rms)
+                    {
+                        st.guardMs = guardC * st.guardMs + (1.0f - guardC) * 0.5f * (gl * gl + gr * gr);
+                        fast = std::sqrt (st.guardMs);
+                    }
+                    else
+                    {
+                        st.guardPeak = std::max (std::max (std::fabs (gl), std::fabs (gr)), st.guardPeak * peakC);
+                        fast = st.guardPeak;
+                    }
+                    const float guardRoom = std::max (0.0f, (float)tb[b] - std::max (-120.0f, gainToDb (fast)));
+                    if (st.guardDb > 500.0f)
+                        st.guardDb = guardRoom;
+                    else if (guardRoom < st.guardDb) // down within the look-ahead, back up at the Release
+                        st.guardDb = guardRoom + limAtk * (st.guardDb - guardRoom);
+                    else
+                        st.guardDb = guardRoom + rel[b] * (st.guardDb - guardRoom);
+                    const float room = std::min (std::max (0.0f, (float)tb[b] - lev), st.guardDb);
                     if (bDb > 0.0f)
                         bDb = std::min (bDb, room);
                     if (softened)

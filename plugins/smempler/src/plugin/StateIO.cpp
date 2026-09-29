@@ -19,7 +19,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //    Liquid is its Vocal movement
 // 4: Smacheratr's Clarity Range in the rack
 // 5: Clarity Frequency 20 Hz - 20 kHz (20 - 500 Hz before), in the rack and the end saturator
-constexpr int32 kVersion = 5;
+// 6: Clarity's second band in the rack
+constexpr int32 kVersion = 6;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -135,7 +136,7 @@ bool readState (IBStream* stream, PluginState& st)
                 st.norm[fId] = smacheratr::clarityFreqFromNarrowRange (st.norm[fId]);
         }
     }
-    if (version < 4)
+    if (version < 6)
     {
         // parameters that came after the state's version read 0 in the slot: they get their defaults
         struct Added
@@ -145,7 +146,9 @@ bool readState (IBStream* stream, PluginState& st)
         };
         const Added added[] = {{3, kFxSmacheratr, smacheratr::kClarityFreq}, {3, kFxSmacheratr, smacheratr::kClarityWidth},
                                {3, kFxPara, para::kDipStart},             {3, kFxPara, para::kLpFloor},
-                               {4, kFxSmacheratr, smacheratr::kClarityRange}};
+                               {4, kFxSmacheratr, smacheratr::kClarityRange},
+                               {6, kFxSmacheratr, smacheratr::kClarity2Freq},    {6, kFxSmacheratr, smacheratr::kClarity2Width},
+                               {6, kFxSmacheratr, smacheratr::kClarity2Range}};
         for (int slot = 0; slot < kRackSlots; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
