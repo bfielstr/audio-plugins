@@ -6,8 +6,11 @@
 // leaves them where they are set, and Transpose, pitch bend and Key tracking all count.
 // Movement: Free keeps the filters independent. Vocal couples them: the filter that moved last
 // leads, and when it crosses the other (the low-pass above the high-pass), the other is pushed
-// along to the leader's cutoff and fades out, to -inf once they are an octave past each other,
-// so one filter sweeps alone instead of the two summing.
+// along to the leader's cutoff and fades out, to -inf a minor third past it (kVocalFadeSemis), so
+// one filter sweeps alone instead of the two summing. Liquid is Vocal with Split swinging along with
+// the sweep: the leader overshoots in the direction it moves (and the other filter the other way)
+// by as far as it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the
+// liquid, techy movement.
 #pragma once
 
 #include "Params.h"
@@ -52,14 +55,15 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
 }
 
 // Vocal movement, shared with the display: once the low-pass is above the high-pass, the follower
-// sits at the leader's cutoff and fades out, to -inf an octave past.
+// sits at the leader's cutoff and fades out, to -inf kVocalFadeSemis past (-12 dB half way).
+constexpr double kVocalFadeSemis = 3.0;
 inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, float& hpMul, float& lpMul)
 {
     hpMul = lpMul = 1.0f;
     const double over = 12.0 * std::log2 (lpHz / hpHz);
     if (over <= 0.0)
         return;
-    const float keep = 1.0f - (float)std::fmin (1.0, over / 12.0);
+    const float keep = 1.0f - (float)std::fmin (1.0, over / kVocalFadeSemis);
     if (leaderLp)
     {
         hpHz = lpHz;
@@ -126,6 +130,9 @@ private:
     bool hasTail = true;
     // Vocal movement
     bool leaderLp = true;
+    // Liquid: where the leader is (semitones) and where it was ~150 ms ago
+    double liquidSlow = 0.0, liquidA = 0.0;
+    bool liquidLeaderLp = true;
     double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
     smacheratr::Tail tail;

@@ -26,6 +26,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
         tail.setParam (f, p[kTailBase + f]);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     semiSmooth = (float)(1.0 - std::exp (-1.0 / (0.005 * sr))); // 5 ms glide of the cutoffs
+    liquidA = 1.0 - std::exp (-1.0 / (0.15 * sr));
     if (meters)
         meters->sampleRate.store ((float)sr);
     reset ();
@@ -47,6 +48,8 @@ void Engine::reset ()
     hpMul = lpMul = hpMulT = lpMulT = 1.0f;
     offset = targetOffset ();
     split = p[kSplit];
+    liquidLeaderLp = leaderLp;
+    liquidSlow = 12.0 * std::log2 (std::max (1.0, leaderLp ? p[kLpFreq] : p[kHpFreq]));
     mix = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
     hpG = (float)filterGain (p[kHpGain]);
@@ -93,14 +96,22 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0), outT = dbToGain (p[kOutput]);
     const float hpGT = (float)filterGain (p[kHpGain]), lpGT = (float)filterGain (p[kLpGain]);
     const double offsetT = targetOffset ();
-    // Vocal movement: the filter whose cutoff moved last leads
-    const bool vocal = std::lround (p[kMovement]) == kVocal;
+    // Vocal movement: the filter whose cutoff moved last leads (Liquid is Vocal as well)
+    const bool liquid = p[kLiquid] >= 0.5;
+    const bool vocal = liquid || std::lround (p[kMovement]) == kVocal;
     if (p[kLpFreq] != prevLpBase)
         leaderLp = true;
     else if (p[kHpFreq] != prevHpBase)
         leaderLp = false;
     prevLpBase = p[kLpFreq];
     prevHpBase = p[kHpFreq];
+    // Liquid: the leader's position; a new leader starts from rest
+    const double lead = 12.0 * std::log2 (std::max (1.0, leaderLp ? p[kLpFreq] : p[kHpFreq]));
+    if (leaderLp != liquidLeaderLp)
+    {
+        liquidLeaderLp = leaderLp;
+        liquidSlow = lead;
+    }
     double envPeak = 0.0;
 
     for (int i = 0; i < n; ++i)
@@ -121,14 +132,18 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
         // where the cutoffs are heading, glided
         offset += (offsetT - offset) * semiSmooth;
-        split += (p[kSplit] + envAmount * env - split) * semiSmooth;
+        liquidSlow += (lead - liquidSlow) * liquidA;
+        // Liquid: Split swings with the sweep so the leader overshoots the way it moves (a positive
+        // Split raises the high-pass and lowers the low-pass)
+        const double swing = liquid ? std::clamp ((lead - liquidSlow) * (leaderLp ? -2.0 : 2.0), -36.0, 36.0) : 0.0;
+        split += (p[kSplit] + envAmount * env + swing - split) * semiSmooth;
         if (i % kCoeffInterval == 0)
         {
             double hz = hpCutoff (hpBase, offset, split), lz = lpCutoff (lpBase, offset, split);
             rawHp = hz;
             rawLp = lz;
             hpMulT = lpMulT = 1.0f;
-            if (vocal) // crossed: the follower sits at the leader's cutoff and fades over an octave
+            if (vocal) // crossed: the follower sits at the leader's cutoff and fades out
                 vocalPush (hz, lz, leaderLp, hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;

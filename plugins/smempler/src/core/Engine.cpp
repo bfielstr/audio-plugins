@@ -894,6 +894,7 @@ void Engine::renderEffects (float* L, float* R, int n)
     fxPara.setParam (para::kTranspose, paraTransposeOf (p));
     fxPara.setParam (para::kPbRange, p[kPbRange]);
     fxPara.setParam (para::kRoot, p[kRootKey]); // Para tracks around the sampler's root note
+    fxPara.setParam (para::kLiquid, p[kParaLiquid]);
     if (on (p[kFxParaOn]))
         fxPara.process (L, R, L, R, n);
     fxMultidyn.setBypass (!on (p[kFxMdOn]));

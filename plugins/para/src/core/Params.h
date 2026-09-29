@@ -32,6 +32,7 @@ enum ParamId : uint32_t
     kMovement,   // Free / Vocal (see Engine.h)
     kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
     kDragGain = kTailBase + pk::kTailFields, // editor: dragging a handle up/down moves its gain with the resonance
+    kLiquid,     // Vocal movement, plus Split swinging with the leader's sweep (see Engine.h)
 
     kNumParams
 };

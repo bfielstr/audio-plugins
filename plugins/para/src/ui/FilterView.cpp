@@ -126,7 +126,7 @@ void FilterView::effective (double& hp, double& lp, float& hpMul, float& lpMul) 
     }
     // Vocal: the follower goes to the leader's cutoff and fades, as the engine does it
     hpMul = lpMul = 1.0f;
-    if (std::lround (host->plainValue (kMovement)) == kVocal)
+    if (std::lround (host->plainValue (kMovement)) == kVocal || host->plainValue (kLiquid) >= 0.5)
         vocalPush (hp, lp, leaderLp, hpMul, lpMul);
 }
 
@@ -479,6 +479,28 @@ void FilterView::onMouseUpEvent (MouseUpEvent& e)
     host->endEdit (resId (drag == Drag::Hp));
     host->endEdit (drag == Drag::Hp ? kHpGain : kLpGain);
     drag = Drag::None;
+    e.consumed = true;
+}
+
+void FilterView::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    // the resonance of the handle held (or under the pointer with Shift)
+    const Drag target = drag != Drag::None ? drag : (e.modifiers.has (ModifierKey::Shift) ? hit (e.mousePosition) : Drag::None);
+    if (target == Drag::None)
+        return;
+    const uint32_t rId = resId (target == Drag::Hp);
+    const double dn = pk::wheelStep (e, host->table (), rId);
+    if (dn == 0.0)
+        return;
+    const double v = std::clamp (host->norm (rId) + dn, 0.0, 1.0);
+    if (drag != Drag::None)
+    {
+        startRes = std::clamp (startRes + dn, 0.0, 1.0); // the drag goes on from here
+        host->setNorm (rId, v);
+    }
+    else
+        host->setOnce (rId, v);
+    invalid ();
     e.consumed = true;
 }
 

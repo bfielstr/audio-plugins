@@ -36,6 +36,8 @@ inline const char* forParam (uint32_t id)
         return nullptr; // the saturator panel has its own tips
     if (id == kParaDragGain)
         return para::help::forParam (para::kDragGain);
+    if (id == kParaLiquid)
+        return para::help::forParam (para::kLiquid);
     if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         return para::help::forParam (id - kFxParaBase);
     if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
@@ -161,8 +163,8 @@ constexpr const char* kEnvelope =
     "(up to 6); double-click a square breakpoint to remove it. Shift + drag a segment to bend its curve. Every point "
     "and curve is an automatable parameter.";
 constexpr const char* kFilterDisplay =
-    "Filter response. Drag left/right for cutoff and up/down for resonance (Shift for fine). Env shows the filter "
-    "envelope.";
+    "Filter response. Drag left/right for cutoff and up/down for resonance (Shift for fine); the mouse wheel while "
+    "dragging (or with Shift) also sets the resonance. Env shows the filter envelope.";
 constexpr const char* kHelpButton = "Show or hide these help tooltips.";
 constexpr const char* kLoad = "Load a sample (WAV, AIFF, FLAC or MP3). You can also drop a file on the waveform.";
 constexpr const char* kPrevNext = "Load the previous / next audio file in the same folder.";

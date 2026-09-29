@@ -320,6 +320,58 @@ TEST (meters_for_the_display)
            "vocal push: %f vs %f, fade %f vs %f", hz, m.hpHz.load (), hm, m.hpMul.load ());
 }
 
+TEST (vocal_fades_out_within_a_minor_third)
+{
+    // the high-pass at 822 Hz, the low-pass swept up to 1 kHz (3.4 semitones past it): in Vocal the
+    // high-pass is gone, so nothing is left at 8 kHz; in Free it still passes
+    for (int mode : {kFree, kVocal})
+    {
+        auto e = engine ();
+        e->setParam (kMovement, mode);
+        std::vector<float> l (480, 0.0f), r (480, 0.0f);
+        for (int k = 0; k <= 20; ++k)
+        {
+            e->setParam (kLpFreq, 185.0 * std::pow (1000.0 / 185.0, k / 20.0));
+            e->process (l.data (), r.data (), l.data (), r.data (), 480);
+        }
+        const double top = gainAt (*e, 8000.0);
+        if (mode == kVocal)
+            CHECK (top < -40.0, "vocal: no high band left at 8 kHz: %f dB", top);
+        else
+            CHECK (top > -1.0, "free: the high-pass passes 8 kHz: %f dB", top);
+    }
+}
+
+TEST (liquid_overshoots_and_flows_back)
+{
+    // the same sweep of the low-pass in Vocal and in Liquid: Liquid runs ahead while it moves and
+    // settles on the same cutoff after it stops
+    Meters mv, ml;
+    auto ev = engine (), el = engine ();
+    ev->setMeters (&mv);
+    el->setMeters (&ml);
+    ev->setParam (kMovement, kVocal);
+    el->setParam (kLiquid, 1.0);
+    std::vector<float> l (480, 0.0f), r (480, 0.0f);
+    for (int k = 0; k <= 20; ++k) // 185 Hz to 1.5 kHz in 0.2 s
+    {
+        const double f = 185.0 * std::pow (1500.0 / 185.0, k / 20.0);
+        ev->setParam (kLpFreq, f);
+        el->setParam (kLpFreq, f);
+        ev->process (l.data (), r.data (), l.data (), r.data (), 480);
+        el->process (l.data (), r.data (), l.data (), r.data (), 480);
+    }
+    const double ahead = 12.0 * std::log2 (ml.lpHz.load () / mv.lpHz.load ());
+    CHECK (ahead > 2.0, "Liquid runs ahead of the sweep: %.1f semitones", ahead);
+    for (int k = 0; k < 150; ++k) // 1.5 s at rest
+    {
+        ev->process (l.data (), r.data (), l.data (), r.data (), 480);
+        el->process (l.data (), r.data (), l.data (), r.data (), 480);
+    }
+    const double settled = 12.0 * std::log2 (ml.lpHz.load () / mv.lpHz.load ());
+    CHECK (std::fabs (settled) < 0.2, "and settles where Vocal does: %.2f semitones", settled);
+}
+
 TEST (dry_wet_and_output)
 {
     auto e = engine ();

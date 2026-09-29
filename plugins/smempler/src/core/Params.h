@@ -120,6 +120,7 @@ enum ParamId : uint32_t
     kTailBase,   // the Smacheratr at the very end: pk::kTailFields entries
     kParaTransposeLock = kTailBase + pk::kTailFields, // Para's Transpose ignores the sampler's
     kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
+    kParaLiquid,        // Para's Liquid movement
 
     kNumParams
 };

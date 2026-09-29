@@ -6,6 +6,7 @@
 //   drag a handle sideways   cutoff
 //   drag a handle up / down  resonance, and the gain too with Drag Gain on
 //   Alt + drag up / down      gain only (to the bottom: -inf)
+//   mouse wheel               resonance, while holding a handle or with Shift over it
 //   double-click a handle    reset it
 // With audio running the display adds what the engine does (tracking, envelope, glide) to the
 // current settings; without, it shows the settings with the last tracked note. Vocal movement is
@@ -42,6 +43,7 @@ public:
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
     void onMouseExitEvent (VSTGUI::MouseExitEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle ();
 
     double xOfHz (double hz) const;

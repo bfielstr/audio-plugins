@@ -199,6 +199,7 @@ std::vector<ParamInfo> buildTable ()
     pk::addTailParams (t, kTailBase);
     add (toggle (kParaTransposeLock, "Para Transpose Lock", "Lock", false));
     add (toggle (kParaDragGain, "Para Drag Gain", "Drag Gain", false));
+    add (toggle (kParaLiquid, "Para Liquid", "Liquid", false));
     return t;
 }
 

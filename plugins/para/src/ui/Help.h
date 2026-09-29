@@ -29,9 +29,12 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Output level.";
         case kMovement:
             return "Free: the filters move independently. Vocal: the filter you moved last leads; when it "
-                   "crosses the other, the other is pushed along and fades out (-inf an octave past), so one "
+                   "crosses the other, the other is pushed along and fades out (-inf a minor third past), so one "
                    "filter sweeps alone. A low-pass swept up takes the high-pass with it, a resonant high-pass "
                    "swept down fades the low-pass out.";
+        case kLiquid:
+            return "Vocal movement plus Split swinging with the sweep: the filter you move overshoots the way it "
+                   "moves and flows back when it stops. Liquid, techy Reese movement.";
         case kResLink: return "Link the resonances: the low-pass uses the high-pass resonance, so one control sets both.";
         case kDragGain:
             return "On: dragging a handle in the display up or down moves its gain along with its resonance. Off: "
@@ -46,7 +49,8 @@ constexpr const char* kDisplay =
     "Orange: the high-pass, blue: the low-pass, white: what you hear (their sum). Behind them the live spectrum of "
     "the input (grey) and the output (light). Drag a handle sideways for its cutoff and up/down for its resonance "
     "(with Drag Gain on, the gain moves too); Alt-drag for the gain alone (to the bottom: -inf); double-click resets "
-    "it. Shift: fine. A handle sits as high as its resonant peak; the handles follow the tracked note and glow with "
+    "it. Mouse wheel: resonance (while holding a handle, or with Shift over it). Shift: fine. A handle sits as high "
+    "as its resonant peak; the handles follow the tracked note and glow with "
     "the envelope.";
 
 } // namespace para::help

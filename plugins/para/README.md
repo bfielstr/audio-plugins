@@ -23,8 +23,10 @@ quadrature Butterworth pair at 18 dB).
 - **OUTPUT**: **Dry/Wet**, **Output** and **Movement**:
   - *Free*: the filters move independently.
   - *Vocal*: the filter you moved last leads. When it crosses the other, the other is pushed along
-    to its cutoff and fades out (to -inf an octave past), so one filter sweeps alone: a low-pass
+    to its cutoff and fades out (to -inf a minor third past), so one filter sweeps alone: a low-pass
     swept up takes the high-pass with it, a resonant high-pass swept down fades the low-pass out.
+  - **Liquid** (switch): Vocal, plus Split swinging with the sweep: the filter you move overshoots
+    the way it moves and flows back when it stops, for liquid, techy Reese movement.
 - **SMACHERATR** (end of the chain): the optional saturator every plug-in here has (off, Drive 0 dB).
 
 The display shows the high-pass (orange), the low-pass (blue) and what you hear (white), over live

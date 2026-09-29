@@ -91,6 +91,8 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
     paraHost = std::make_unique<pk::MappedParamHost> (this, para::paramTable (), [] (uint32_t id) -> int64_t {
         if (id == para::kDragGain)
             return (int64_t)kParaDragGain;
+        if (id == para::kLiquid)
+            return (int64_t)kParaLiquid;
         return id < para::kTailBase ? (int64_t)paraParam (id) : -1;
     });
     mdHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (),
@@ -393,6 +395,7 @@ void Editor::buildUI (CFrame* f)
         g->addView (new Label (CRect (480, 168, 550, 180), "Transpose", 9.5, false, 1));
         bind (g, new NumberBox (CRect (480, 184, 550, 202), this, paraParam (para::kTranspose)));
         bind (g, new Toggle (CRect (554, 184, 598, 202), this, kParaTransposeLock, "Lock"));
+        bind (g, new Toggle (CRect (664, 160, 734, 178), this, kParaLiquid, "Liquid"));
         bind (g, new Knob (knobRect (602, 164), this, paraParam (para::kOutput), nullptr, true));
         auto* n1 = new Label (CRect (664, 184, 834, 202), "root and bend follow the sampler", 9.5);
         n1->setDim (true);
@@ -450,7 +453,8 @@ void Editor::buildUI (CFrame* f)
             sd = b ? b->msSide.load () : 0.0f;
         });
         msView->setTooltipText ("Blue: the mid level. Orange: the side high-pass and level. Drag the handle sideways for the "
-                                "cutoff, up/down for the side level; double-click resets. Right: live mid and side levels.");
+                                "cutoff, up/down for the side level, the mouse wheel for the slope (while holding the "
+                                "handle, or with Shift); double-click resets. Right: live mid and side levels.");
         g->addView (msView);
         bind (g, new Toggle (CRect (480, 8, 524, 26), this, kMsOn, "On"));
         g->addView (new Label (CRect (532, 8, 572, 26), "Slope", 10.5, false, 2));

@@ -32,6 +32,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kMovement, "Movement", "Movement", {"Free", "Vocal"}, kFree));
         pk::addTailParams (v, kTailBase);
         v.push_back (toggle (kDragGain, "Drag Gain", "Drag Gain", false));
+        v.push_back (toggle (kLiquid, "Liquid", "Liquid", false));
         return v;
     }());
     return t;
