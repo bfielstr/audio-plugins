@@ -916,7 +916,7 @@ void Editor::buildBody ()
                 {
                     auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
                     kn->setTooltipText (smacheratr::help::forParam (bandIds[i]));
-                    g->addView (kn);
+                    add (kn, nullptr); // (recorded for the rack page check)
                     rackBandViews[k].push_back (kn);
                 }
                 auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
