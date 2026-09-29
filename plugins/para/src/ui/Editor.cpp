@@ -19,7 +19,6 @@ using namespace VSTGUI;
 using pk::ActionButton;
 using pk::Knob;
 using pk::Label;
-using pk::NumberBox;
 using pk::Panel;
 using pk::Segmented;
 using pk::Toggle;
@@ -94,17 +93,8 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 4; ++i)
         bind (spP, new Knob (knobRect (116 + i * 62, 22), this, splitIds[i], splitNames[i], i < 2));
 
-    // second row: tracking and output
-    auto* tkP = section (CRect (8, 410, 378, 512), "TRACKING");
-    bind (tkP, new Knob (knobRect (8, 22), this, kKey));
-    const uint32_t boxIds[3] = {kTranspose, kPbRange, kRoot};
-    const char* boxNames[3] = {"Transpose", "Bend", "Root"};
-    for (int i = 0; i < 3; ++i)
-    {
-        tkP->addView (new Label (CRect (80 + i * 94, 32, 166 + i * 94, 46), boxNames[i], 10.0, false, 1));
-        bind (tkP, new NumberBox (CRect (84 + i * 94, 50, 162 + i * 94, 68), this, boxIds[i]));
-    }
-    auto* outP = section (CRect (384, 410, 752, 512), "OUTPUT");
+    // second row: movement and output
+    auto* outP = section (CRect (8, 410, 752, 512), "OUTPUT");
     bind (outP, new Knob (knobRect (10, 22), this, kDryWet));
     bind (outP, new Knob (knobRect (72, 22), this, kOutput, nullptr, true));
     outP->addView (new Label (CRect (150, 24, 290, 38), "Movement", 10.5, false, 1));

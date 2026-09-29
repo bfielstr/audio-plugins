@@ -8,9 +8,9 @@ inline const char* forParam (uint32_t id)
 {
     switch (id)
     {
-        case kHpFreq: return "High-pass cutoff at the root note. With key tracking it follows the played note from here.";
+        case kHpFreq: return "High-pass cutoff.";
         case kHpRes: return "High-pass resonance. At 0 the two filters can meet without a bump.";
-        case kLpFreq: return "Low-pass cutoff at the root note.";
+        case kLpFreq: return "Low-pass cutoff.";
         case kLpRes: return "Low-pass resonance.";
         case kSlope: return "12, 18 or 24 dB per octave for both filters.";
         case kSplit:
@@ -19,17 +19,11 @@ inline const char* forParam (uint32_t id)
         case kEnvAmount: return "Semitones of Split the envelope adds at its peak, on every note. Negative pulls them together.";
         case kEnvAttack: return "Time the envelope takes to reach its peak after a note.";
         case kEnvDecay: return "Time the envelope takes to fall back.";
-        case kKey:
-            return "How much both cutoffs follow the played note: 100 % keeps the filters on the same harmonics of "
-                   "every note. Transpose and pitch bend count, and the root note is where the cutoffs sit as set.";
-        case kTranspose: return "Added to every played note before tracking.";
-        case kPbRange: return "Pitch bend range in semitones, applied to the tracked note.";
-        case kRoot: return "The MIDI note at which the cutoffs sit at their set frequencies (60 = C3).";
         case kDryWet: return "Balance between the dry input and the filtered signal.";
         case kOutput: return "Output level.";
         case kMovement:
             return "Free: the filters move independently. Vocal: the filter you moved last leads; when it "
-                   "crosses the other, the other is pushed along and fades out (-inf a minor third past), so one "
+                   "comes within a minor third of the other, the other fades (to -inf a minor third past it, pushed along), so one "
                    "filter sweeps alone. A low-pass swept up takes the high-pass with it, a resonant high-pass "
                    "swept down fades the low-pass out.";
         case kLiquid:

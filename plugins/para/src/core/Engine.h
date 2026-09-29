@@ -1,13 +1,13 @@
 // Para: a high-pass and a low-pass filter in parallel (their outputs are summed, with the
 // polarity that makes two filters meeting at one cutoff sum flat), so with the
 // high-pass above the low-pass there is a notch between them and with the two meeting there is
-// nothing. Split moves them apart or together around their set frequencies, an envelope
-// triggered by MIDI notes adds to Split, and both cutoffs follow the played note: the root note
-// leaves them where they are set, and Transpose, pitch bend and Key tracking all count.
+// nothing. Split moves them apart or together around their set frequencies and an envelope
+// triggered by MIDI notes adds to Split. The cutoffs do not follow the notes (they used to: Key,
+// Transpose, Bend and Root are left unused).
 // Movement: Free keeps the filters independent. Vocal couples them: the filter that moved last
 // leads, and when it crosses the other (the low-pass above the high-pass), the other is pushed
-// along to the leader's cutoff and fades out, to -inf a minor third past it (kVocalFadeSemis), so
-// one filter sweeps alone instead of the two summing. Liquid is Vocal with Split swinging along with
+// along to the leader's cutoff; the other fades out from a minor third before the crossing to -inf
+// a minor third past it (kVocalFadeSemis), so one filter sweeps alone instead of the two summing. Liquid is Vocal with Split swinging along with
 // the sweep: the leader overshoots in the direction it moves (and the other filter the other way)
 // by as far as it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the
 // liquid, techy movement.
@@ -54,24 +54,27 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
     return lpBase * std::pow (2.0, (offsetSemis - 0.5 * splitSemis) / 12.0);
 }
 
-// Vocal movement, shared with the display: once the low-pass is above the high-pass, the follower
-// sits at the leader's cutoff and fades out, to -inf kVocalFadeSemis past (-12 dB half way).
+// Vocal movement, shared with the display: the follower starts fading when the leader comes within
+// kVocalFadeSemis of it and is at -inf kVocalFadeSemis past it (the crossing itself is -12 dB);
+// once crossed it sits at the leader's cutoff.
 constexpr double kVocalFadeSemis = 3.0;
 inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, float& hpMul, float& lpMul)
 {
     hpMul = lpMul = 1.0f;
-    const double over = 12.0 * std::log2 (lpHz / hpHz);
-    if (over <= 0.0)
+    const double over = 12.0 * std::log2 (lpHz / hpHz); // > 0: crossed
+    if (over <= -kVocalFadeSemis)
         return;
-    const float keep = 1.0f - (float)std::fmin (1.0, over / kVocalFadeSemis);
+    const float keep = 1.0f - (float)std::fmin (1.0, (over + kVocalFadeSemis) / (2.0 * kVocalFadeSemis));
     if (leaderLp)
     {
-        hpHz = lpHz;
+        if (over > 0.0)
+            hpHz = lpHz;
         hpMul = keep * keep;
     }
     else
     {
-        lpHz = hpHz;
+        if (over > 0.0)
+            lpHz = hpHz;
         lpMul = keep * keep;
     }
 }

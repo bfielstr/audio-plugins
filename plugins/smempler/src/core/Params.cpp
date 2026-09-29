@@ -177,8 +177,6 @@ std::vector<ParamInfo> buildTable ()
         ParamInfo pi = para::paramTable ().info (i);
         pi.id = paraParam (i);
         pi.name = keep (std::string ("Para ") + pi.name);
-        if (i == para::kTranspose)
-            pi.def = kParaTransposeDefault;
         add (pi);
     }
     add (toggle (kFxMdOn, "Multidyn On", "Multidyn", false));
@@ -197,7 +195,7 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kMsMidGain, "Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
     pk::addTailParams (t, kTailBase);
-    add (toggle (kParaTransposeLock, "Para Transpose Lock", "Lock", false));
+    add (toggle (kParaTransposeLock, "Para Transpose Lock (unused)", "Lock", false));
     add (toggle (kParaDragGain, "Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Para Liquid", "Liquid", false));
     return t;

@@ -66,13 +66,8 @@ void Engine::reset ()
     lpG1 = onePoleG (lpCutoff (p[kLpFreq], offset, split), sr);
 }
 
-double Engine::targetOffset () const
-{
-    if (lastNote < 0)
-        return 0.0;
-    const double played = lastNote + p[kTranspose] + bend * p[kPbRange];
-    return (played - p[kRoot]) * std::clamp (p[kKey], 0.0, 1.0);
-}
+// The cutoffs do not follow the notes any more (the notes only trigger the envelope).
+double Engine::targetOffset () const { return 0.0; }
 
 void Engine::noteOn (int note)
 {

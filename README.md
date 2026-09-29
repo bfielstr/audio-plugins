@@ -10,7 +10,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
 | [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, an optional pre-limiter before the drive, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
-| [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf that track MIDI (root, transpose, bend, key), a split envelope and a Vocal movement mode | a morphing EQ, Live-styled |
+| [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf, a MIDI-triggered split envelope, and Vocal / Liquid movement | a morphing EQ, Live-styled |
 | [**Widr**](plugins/widr/README.md) | Trailer-style stereo width (Haas, decorrelation, micro pitch, early reflections, a side-only reverb) that keeps the mono fold; the Widrs of a session share the stereo field by role | cinematic trailer mixing |
 
 ![Smempler](docs/smempler/ui_slicing.png)

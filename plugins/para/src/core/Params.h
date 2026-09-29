@@ -20,10 +20,10 @@ enum ParamId : uint32_t
     kEnvAmount,  // semitones of Split added by the envelope at its peak
     kEnvAttack,  // ms
     kEnvDecay,   // ms
-    kKey,        // 0 .. 1: how much both cutoffs follow the played note
-    kTranspose,  // semitones
-    kPbRange,    // semitones
-    kRoot,       // MIDI note where the cutoffs sit at their set frequencies
+    kKey,        // unused since 0.6 (Para no longer tracks notes)
+    kTranspose,  // unused
+    kPbRange,    // unused
+    kRoot,       // unused
     kDryWet,
     kOutput,     // dB
     kHpGain,     // dB, level of the high-pass (minimum = -inf)

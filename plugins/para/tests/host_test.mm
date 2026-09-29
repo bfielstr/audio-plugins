@@ -65,27 +65,25 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus");
 
         State st = baseState ();
+        st.norm[kHpFreq] = toNormalized (kHpFreq, 800.0);
+        st.norm[kLpFreq] = toNormalized (kLpFreq, 200.0);
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
         CHECK (rig.processor->getLatencySamples () > 0, "the end-of-chain saturator's latency is reported");
 
-        // the notch between the defaults (high-pass 800, low-pass 200) at 400 Hz
+        // the notch between a high-pass at 800 Hz and a low-pass at 200 Hz, at 400 Hz
         std::vector<float> out;
         rig.render (1.0, out, nullptr, tone (400.0, 0.25));
         const size_t a = 24000, b = 48000;
         const double notch = toneDb (out, 400.0, a, b) + 12.0;
         CHECK (notch < -8.0, "notch %.1f dB", notch);
 
-        // a note an octave up moves the notch up an octave: 400 Hz passes, 800 Hz is notched
+        // notes do not move the filters: an octave up, 400 Hz is still notched
         rig.note (72, 1.0f);
         out.clear ();
-        rig.render (1.0, out, nullptr, tone (800.0, 0.25));
-        const double notchUp = toneDb (out, 800.0, a, b) + 12.0;
-        CHECK (std::fabs (notchUp - notch) < 1.0, "tracked notch %.1f dB (root %.1f)", notchUp, notch);
-        // the low-pass is at 400 Hz now, so two octaves below it passes
-        out.clear ();
-        rig.render (1.0, out, nullptr, tone (100.0, 0.25));
-        CHECK (toneDb (out, 100.0, a, b) + 12.0 > -2.0, "100 Hz passes with the note up: %.1f", toneDb (out, 100.0, a, b) + 12.0);
+        rig.render (1.0, out, nullptr, tone (400.0, 0.25));
+        const double notchUp = toneDb (out, 400.0, a, b) + 12.0;
+        CHECK (std::fabs (notchUp - notch) < 1.0, "the notch stays: %.1f dB (before %.1f)", notchUp, notch);
 
         // state round trip
         rig.param (kSplit, toNormalized (kSplit, 7.0));
@@ -112,14 +110,14 @@ int main (int argc, char** argv)
                 pump (0.03);
             }
             CHECK (win.savePng (outDir + "/ui_para.png"), "screenshot");
-            // the high-pass handle sits at its (tracked) cutoff: an octave up from 800 Hz
+            // the high-pass handle sits at its cutoff
             auto xOfHz = [] (double hz) {
                 return Editor::kViewLeft + std::log (hz / 20.0) / std::log (1000.0) * (Editor::kViewRight - Editor::kViewLeft);
             };
             auto yOfDb = [] (double db) {
                 return Editor::kViewTop + (18.0 - db) / 54.0 * (Editor::kViewBottom - Editor::kViewTop - 16.0);
             };
-            const double hx = xOfHz (2.0 * plainOf (rig, kHpFreq)), hy = yOfDb (0.0);
+            const double hx = xOfHz (plainOf (rig, kHpFreq)), hy = yOfDb (0.0);
             const double f0 = plainOf (rig, kHpFreq);
             win.drag (hx, hy, hx + 40, hy);
             CHECK (plainOf (rig, kHpFreq) > f0 * 1.3, "drag raises the high-pass: %.0f -> %.0f", f0, plainOf (rig, kHpFreq));
@@ -129,7 +127,7 @@ int main (int argc, char** argv)
                 return yOfDb (plainOf (rig, kHpGain) + 20.0 * std::log10 (std::max (1.0, q * q)));
             };
             // up / down: the resonance, the gain stays
-            const double hx2 = xOfHz (plainOf (rig, kHpFreq) * 2.0);
+            const double hx2 = xOfHz (plainOf (rig, kHpFreq));
             win.drag (hx2, handleY (), hx2, handleY () - 30);
             CHECK (plainOf (rig, kHpRes) > 0.15, "drag up raises the high-pass resonance: %.2f", plainOf (rig, kHpRes));
             CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the gain stays: %.1f dB", plainOf (rig, kHpGain));
@@ -141,8 +139,8 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kHpGain) > 3.0 && plainOf (rig, kHpRes) > res1, "Drag Gain: gain %.1f dB, resonance %.2f",
                    plainOf (rig, kHpGain), plainOf (rig, kHpRes));
             CHECK (win.savePng (outDir + "/ui_para_drag.png"), "drag screenshot");
-            win.click (xOfHz (plainOf (rig, kHpFreq) * 2.0), handleY (), 2);
-            CHECK (std::fabs (plainOf (rig, kHpFreq) - 822.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6 &&
+            win.click (xOfHz (plainOf (rig, kHpFreq)), handleY (), 2);
+            CHECK (std::fabs (plainOf (rig, kHpFreq) - 300.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6 &&
                        plainOf (rig, kHpRes) < 1e-6,
                    "double-click resets");
             // Vocal: the low-pass swept above the high-pass pushes it along and fades it

@@ -25,9 +25,8 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 
 **After the sampler** (tabs at the bottom, in chain order), each with its own display:
 
-- **Para**: the parallel high-pass / low-pass, tracking the notes played here around the sampler's
-  **Root Note**, with its own Transpose (+48 by default, four octaves above the played note) added to the
-  sampler's Transpose, or on its own with **Lock** on, and the sampler's pitch bend range.
+- **Para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement); its envelope
+  is triggered by the notes played here.
   Its display shows the live spectrum, so you can see it working.
 - **Multidyn**: the multiband dynamics, with its lanes and band fields.
 - **M/S EQ**: a high-pass on the side signal (6 / 12 / **24** dB per octave, default 150 Hz) tapers

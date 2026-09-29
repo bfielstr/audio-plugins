@@ -126,8 +126,8 @@ TEST (params)
     CHECK (t.fromText (kRoot, "c-2", parsed) && parsed == 0.0, "parse C-2: %f", parsed);
     CHECK (std::fabs (resonanceToQ (0.0) - 0.5) < 1e-9 && std::fabs (resonanceToQ (1.0) - 10.0) < 1e-9, "Q range");
     CHECK (std::fabs (resonanceToQ (0.0, kSlope24) - M_SQRT1_2) < 1e-9 && resonanceToQ (0.0, kSlope18) == 1.0, "base Q");
-    CHECK (std::fabs (t.info (kHpFreq).def - 822.0) < 1e-9 && std::fabs (t.info (kLpFreq).def - 185.0) < 1e-9 &&
-               t.info (kSlope).def == (double)kSlope24, "defaults: HP 822 Hz, LP 185 Hz, 24 dB");
+    CHECK (std::fabs (t.info (kHpFreq).def - 300.0) < 1e-9 && std::fabs (t.info (kLpFreq).def - 100.0) < 1e-9 &&
+               t.info (kSlope).def == (double)kSlope24, "defaults: HP 300 Hz, LP 100 Hz, 24 dB");
     CHECK (t.info (kDragGain).def == 0.0 && kHostedParams == kTailBase + pk::kTailFields, "Drag Gain off, after the hosted IDs");
 }
 
@@ -147,8 +147,10 @@ TEST (filters_meeting_sum_flat)
 
 TEST (notch_between_the_filters)
 {
-    // the defaults: high-pass at 800 Hz above a low-pass at 200 Hz leave a notch around 400 Hz
+    // a high-pass at 800 Hz above a low-pass at 200 Hz leaves a notch around 400 Hz
     auto e = engine ();
+    e->setParam (kHpFreq, 800.0);
+    e->setParam (kLpFreq, 200.0);
     CHECK (gainAt (*e, 400.0) < -8.0, "notch: %f dB", gainAt (*e, 400.0));
     CHECK (std::fabs (gainAt (*e, 40.0)) < 0.5 && std::fabs (gainAt (*e, 8000.0)) < 0.5, "outside: %f / %f",
            gainAt (*e, 40.0), gainAt (*e, 8000.0));
@@ -170,44 +172,22 @@ TEST (notch_between_the_filters)
     CHECK (gainAt (*e, 400.0) < d12 - 6.0, "wider: %f", gainAt (*e, 400.0));
 }
 
-TEST (key_tracking_transpose_and_bend)
+TEST (notes_do_not_move_the_filters)
 {
-    // an octave up moves both cutoffs an octave up: the response at 2f for note 72 equals the
-    // response at f for the root
-    auto e = engine ();
-    auto shifted = [&] (double f) {
-        e->noteOn (72);
-        const double up = gainAt (*e, 2.0 * f);
-        e->noteOn (60);
-        const double root = gainAt (*e, f);
-        return std::fabs (up - root);
-    };
-    for (double f : {300.0, 400.0, 600.0})
-        CHECK (shifted (f) < 0.3, "octave tracking at %.0f Hz: %f dB apart", f, shifted (f));
-    // no note: the cutoffs stay put
-    auto fresh = engine ();
-    CHECK (std::fabs (gainAt (*fresh, 400.0) - gainAt (*e, 400.0)) < 0.3, "root == no note");
-    // half key tracking: an octave up moves them half an octave
-    e->setParam (kKey, 0.5);
-    e->noteOn (72);
-    const double half = gainAt (*e, 400.0 * std::sqrt (2.0));
-    e->noteOn (60);
-    CHECK (std::fabs (half - gainAt (*e, 400.0)) < 0.3, "half tracking: %f", half);
-    e->setParam (kKey, 1.0);
-    // Transpose +12 at the root is the same as playing an octave up
+    // the notes only trigger the envelope: whatever the note, transpose, bend or root, the cutoffs stay
+    auto e = engine (), fresh = engine ();
+    for (auto* x : {e.get (), fresh.get ()})
+    {
+        x->setParam (kHpFreq, 800.0);
+        x->setParam (kLpFreq, 200.0);
+    }
     e->setParam (kTranspose, 12.0);
-    e->noteOn (60);
-    CHECK (std::fabs (gainAt (*e, 800.0) - gainAt (*fresh, 400.0)) < 0.3, "transpose: %f", gainAt (*e, 800.0));
-    e->setParam (kTranspose, 0.0);
-    // pitch bend: full bend with a 12 semitone range is an octave
     e->setParam (kPbRange, 12.0);
+    e->setParam (kRoot, 48.0);
     e->setPitchBend (1.0f);
-    CHECK (std::fabs (gainAt (*e, 800.0) - gainAt (*fresh, 400.0)) < 0.3, "bend: %f", gainAt (*e, 800.0));
-    e->setPitchBend (0.0f);
-    // a different root note moves the reference
-    e->setParam (kRoot, 72.0);
-    e->noteOn (72);
-    CHECK (std::fabs (gainAt (*e, 400.0) - gainAt (*fresh, 400.0)) < 0.3, "root 72: %f", gainAt (*e, 400.0));
+    e->noteOn (84);
+    for (double f : {100.0, 400.0, 1600.0})
+        CHECK (std::fabs (gainAt (*e, f) - gainAt (*fresh, f)) < 0.3, "%.0f Hz: %f vs %f dB", f, gainAt (*e, f), gainAt (*fresh, f));
 }
 
 TEST (envelope_splits_on_note_on)
@@ -235,6 +215,8 @@ TEST (filter_gains_down_to_minus_inf)
 {
     // with the high-pass at -inf only the low-pass is heard, and the other way round
     auto e = engine ();
+    e->setParam (kHpFreq, 822.0);
+    e->setParam (kLpFreq, 185.0);
     e->setParam (kHpGain, kGainMinDb);
     CHECK (gainAt (*e, 5000.0) < -40.0 && std::fabs (gainAt (*e, 60.0)) < 0.5, "HP -inf: %f / %f", gainAt (*e, 5000.0), gainAt (*e, 60.0));
     e->setParam (kHpGain, 0.0);
@@ -249,6 +231,8 @@ TEST (linked_resonance)
 {
     // linked, the low-pass takes the high-pass resonance
     auto e = engine ();
+    e->setParam (kHpFreq, 822.0);
+    e->setParam (kLpFreq, 185.0);
     e->setParam (kSlope, kSlope12);
     const double flat = gainAt (*e, 185.0);
     e->setParam (kHpRes, 0.8);
@@ -298,22 +282,24 @@ TEST (vocal_movement)
 
 TEST (meters_for_the_display)
 {
-    // the engine reports how far it moved the filters from their settings, so the display can add
-    // that to the settings (and show edits before the next block)
+    // the engine reports how far it moves the filters from their settings (here Split: +6 moves the
+    // high-pass up 3 semitones and the low-pass down 3), so the display can add that to the settings
     Meters m;
     auto e = engine ();
     e->setMeters (&m);
-    e->noteOn (72); // an octave above the root, key 100 %
+    e->setParam (kHpFreq, 822.0);
+    e->setParam (kSplit, 6.0);
     run (*e, tones ({{440.0, -12.0}}, 0.1));
     CHECK (m.blocks.load () > 0, "blocks counted");
-    CHECK (std::fabs (m.hpShift.load () - 12.0) < 0.05 && std::fabs (m.lpShift.load () - 12.0) < 0.05, "shift %f / %f",
+    CHECK (std::fabs (m.hpShift.load () - 3.0) < 0.05 && std::fabs (m.lpShift.load () + 3.0) < 0.05, "shift %f / %f",
            m.hpShift.load (), m.lpShift.load ());
     CHECK (std::fabs (822.0 * std::pow (2.0, m.hpShift.load () / 12.0) - m.hpHz.load ()) < 1.0, "shift matches the cutoff");
     // Vocal: the low-pass swept above the high-pass pushes it; the display's push is the engine's
+    e->setParam (kSplit, 0.0);
     e->setParam (kMovement, kVocal);
-    e->setParam (kLpFreq, 2000.0);
+    e->setParam (kLpFreq, 900.0);
     run (*e, tones ({{440.0, -12.0}}, 0.1));
-    double hz = hpCutoff (822.0, 12.0, 0.0), lz = lpCutoff (2000.0, 12.0, 0.0);
+    double hz = 822.0, lz = 900.0;
     float hm, lm;
     vocalPush (hz, lz, m.leaderLp.load (), hm, lm);
     CHECK (m.leaderLp.load () && std::fabs (hz - m.hpHz.load ()) < 1.0 && std::fabs (hm - m.hpMul.load ()) < 0.01,
@@ -322,8 +308,8 @@ TEST (meters_for_the_display)
 
 TEST (vocal_fades_out_within_a_minor_third)
 {
-    // the high-pass at 822 Hz, the low-pass swept up to 1 kHz (3.4 semitones past it): in Vocal the
-    // high-pass is gone, so nothing is left at 8 kHz; in Free it still passes
+    // the high-pass at 300 Hz (the default), the low-pass swept up to 400 Hz (5 semitones past it): in
+    // Vocal the high-pass is gone, so nothing is left at 8 kHz; in Free it still passes
     for (int mode : {kFree, kVocal})
     {
         auto e = engine ();
@@ -331,7 +317,7 @@ TEST (vocal_fades_out_within_a_minor_third)
         std::vector<float> l (480, 0.0f), r (480, 0.0f);
         for (int k = 0; k <= 20; ++k)
         {
-            e->setParam (kLpFreq, 185.0 * std::pow (1000.0 / 185.0, k / 20.0));
+            e->setParam (kLpFreq, 100.0 * std::pow (400.0 / 100.0, k / 20.0));
             e->process (l.data (), r.data (), l.data (), r.data (), 480);
         }
         const double top = gainAt (*e, 8000.0);
@@ -339,6 +325,19 @@ TEST (vocal_fades_out_within_a_minor_third)
             CHECK (top < -40.0, "vocal: no high band left at 8 kHz: %f dB", top);
         else
             CHECK (top > -1.0, "free: the high-pass passes 8 kHz: %f dB", top);
+    }
+    // the fade starts before the crossing: at 270 Hz (1.8 semitones below the high-pass) the high
+    // band is already down; at 230 Hz (4.6 below) it is not
+    for (double lp : {230.0, 270.0})
+    {
+        auto e = engine ();
+        e->setParam (kMovement, kVocal);
+        e->setParam (kLpFreq, lp);
+        const double top = gainAt (*e, 8000.0);
+        if (lp < 250.0)
+            CHECK (top > -0.5, "LP %.0f Hz: the high band is untouched: %f dB", lp, top);
+        else
+            CHECK (top < -2.0, "LP %.0f Hz: the high band is fading: %f dB", lp, top);
     }
 }
 

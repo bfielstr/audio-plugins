@@ -34,14 +34,6 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 
-std::string noteName (int note)
-{
-    static const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    char buf[16];
-    std::snprintf (buf, sizeof (buf), "%s%d", names[note % 12], note / 12 - 2);
-    return buf;
-}
-
 // in-place radix-2 FFT
 void fft (std::vector<std::complex<float>>& a)
 {
@@ -372,10 +364,7 @@ void FilterView::draw (CDrawContext* ctx)
     std::snprintf (buf, sizeof (buf), "HP %s   LP %s   Split %s", host->valueText (kHpFreq).c_str (),
                    host->valueText (kLpFreq).c_str (), host->valueText (kSplit).c_str ());
     text (ctx, buf, CRect (all.left + 36, all.top + 4, all.right - 90, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
-    if (shownNote >= 0)
-        std::snprintf (buf, sizeof (buf), "tracking %s   now HP %.0f Hz / LP %.0f Hz", noteName (shownNote).c_str (), hp, lp);
-    else
-        std::snprintf (buf, sizeof (buf), "no note yet: the filters sit at their set frequencies");
+    std::snprintf (buf, sizeof (buf), "now HP %.0f Hz / LP %.0f Hz", hp, lp);
     text (ctx, buf, CRect (all.left + 36, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
     const CRect envBar (all.right - 84, all.top + 7, all.right - 8, all.top + 15);
     text (ctx, "ENV", CRect (envBar.left - 28, all.top + 4, envBar.left - 4, all.top + 18), theme::kTextDim, 9.0, kRightText);

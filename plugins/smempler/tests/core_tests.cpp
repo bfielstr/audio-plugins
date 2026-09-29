@@ -237,7 +237,7 @@ TEST (fft_roundtrip)
 
 TEST (built_in_effects)
 {
-    // a 440 Hz sample; Para's notch between its filters lands on it, and follows the note
+    // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     CHECK (e->latency () > 0, "the effects report their latency: %d", e->latency ());
@@ -245,27 +245,18 @@ TEST (built_in_effects)
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
     e->setParam (kFxParaOn, 1.0);
-    e->setParam (paraParam (para::kHpFreq), 880.0);
-    e->setParam (paraParam (para::kLpFreq), 220.0);
-    e->setParam (paraParam (para::kTranspose), 0.0); // the filters on the played note, not four octaves up
+    e->setParam (paraParam (para::kHpFreq), 700.0);
+    e->setParam (paraParam (para::kLpFreq), 275.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
     const double notched = rms (o.l, 12000, 24000);
     CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
-    // an octave up: the sample plays 880 Hz and the notch tracks up with it
+    // an octave up the sample plays 880 Hz: the notch stays at 440, so it passes
     e->reset ();
     e->noteOn (72, 1.0f);
     o = run (*e, 24000);
-    CHECK (rms (o.l, 12000, 24000) < dry * 0.4, "the notch follows the note: %f", rms (o.l, 12000, 24000));
-    // without key tracking the filters stay put: with the pair two octaves down, 880 Hz passes
-    e->setParam (paraParam (para::kKey), 0.0);
-    e->setParam (paraParam (para::kHpFreq), 220.0);
-    e->setParam (paraParam (para::kLpFreq), 55.0);
-    e->reset ();
-    e->noteOn (72, 1.0f);
-    o = run (*e, 24000);
-    CHECK (rms (o.l, 12000, 24000) > dry * 0.7, "without key tracking 880 Hz passes: %f vs %f", rms (o.l, 12000, 24000), dry);
+    CHECK (rms (o.l, 12000, 24000) > dry * 0.7, "880 Hz passes (no tracking): %f vs %f", rms (o.l, 12000, 24000), dry);
     // Multidyn on: its preset lifts a quiet sample
     e->setParam (kFxParaOn, 0.0);
     e->setParam (kFxMdOn, 1.0);
@@ -286,17 +277,6 @@ TEST (defaults_one_voice_and_root_note)
     const auto& t = paramTable ();
     CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
     CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
-    CHECK (t.info (paraParam (para::kTranspose)).def == 48.0 && t.info (kParaTransposeLock).def == 0.0,
-           "Para Transpose +48, unlocked");
-    {
-        ParamArray p {};
-        for (uint32_t i = 0; i < kNumParams; ++i)
-            p[i] = t.info (i).def;
-        p[kTranspose] = -12.0;
-        CHECK (paraTransposeOf (p) == 36.0, "unlocked: follows the sampler's Transpose");
-        p[kParaTransposeLock] = 1.0;
-        CHECK (paraTransposeOf (p) == 48.0, "locked: stays at its own value");
-    }
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
     // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
     auto s = sine (440.0, 1.0);
