@@ -12,8 +12,13 @@ inline const char* forParam (uint32_t id)
             return "How much width Widr adds. 0 %: bypass. 100 %: the image fills the speakers. 200 %: past them. "
                    "It only adds side signal, so the mono fold keeps the mid.";
         case kCharacter:
-            return "The blend of the width generators. Tight: mostly decorrelation, no audible delay. Wide: a balanced "
-                   "mix. Epic: long Haas and strong reflections. Surround: the edge of a big room, and more Space.";
+            return "How the width is made. Tight: clean decorrelation, no delay or room. Wide: a Haas pair up front. "
+                   "Epic: big reflections, a detuned spread and the strongest contrast. Surround: the reverb and a "
+                   "large room lead.";
+        case kContrast:
+            return "Keeps the centre and the sides apart: the added width ducks under the hits in the mid and blooms "
+                   "between them, and gives way where the mid is strong (a voice) while filling where it is thin. "
+                   "Each Character has its own amount; this scales it.";
         case kSize: return "The Haas delay and the spacing of the early reflections: small to large.";
         case kSpace: return "A short stereo reverb, added to the sides only: it reads as width, not distance.";
         case kDecay: return "How long the Space reverb rings.";

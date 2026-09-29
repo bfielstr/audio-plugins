@@ -28,6 +28,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kMonoCheck, "Mono Check", "Mono", false));
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         pk::addTailParams (v, kTailBase);
+        v.push_back (percent (kContrast, "Contrast", "Contrast", 0.5));
         return v;
     }());
     return t;

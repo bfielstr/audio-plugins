@@ -244,8 +244,109 @@ TEST (widens_a_mono_source)
         e->reset ();
         auto out = run (*e, in);
         const double side = energy (sum (out, -1.0f), 48000, in.l.size ()), mid = energy (sum (out, 1.0f), 48000, in.l.size ());
-        CHECK (side > mid * 0.05 && side < mid * 1.5, "Character %d: side / mid %f", c, side / mid);
+        CHECK (side > mid * 0.05 && side < mid * 2.0, "Character %d: side / mid %f", c, side / mid);
     }
+}
+
+TEST (characters_sound_different)
+{
+    // every pair of Characters differs clearly in at least one of: side level, how long the side
+    // rings after the source stops (room and reverb), and how the side is spread over the spectrum
+    auto in = pink (2.0, false);
+    in.l.resize (in.l.size () + 48000, 0.0f);
+    in.r.resize (in.l.size (), 0.0f);
+    struct Profile
+    {
+        double level, ring;
+        std::array<double, kBands> spectrum;
+    };
+    std::array<Profile, kNumCharacters> prof {};
+    for (int c = 0; c < kNumCharacters; ++c)
+    {
+        auto e = engine ();
+        e->setParam (kCharacter, c);
+        e->reset ();
+        auto out = run (*e, in);
+        auto side = sum (out, -1.0f), mid = sum (out, 1.0f);
+        prof[(size_t)c].level = 10.0 * std::log10 (energy (side, 48000, 96000) / energy (mid, 48000, 96000));
+        prof[(size_t)c].ring = 10.0 * std::log10 (std::max (1e-20, energy (side, 96000 + 2400, 96000 + 14400)) / energy (side, 48000, 96000));
+        prof[(size_t)c].spectrum = bandDb (side, 48000, 96000);
+        std::printf ("    Character %d: side %.1f dB, ring %.1f dB\n", c, prof[(size_t)c].level, prof[(size_t)c].ring);
+    }
+    for (int a = 0; a < kNumCharacters; ++a)
+        for (int b = a + 1; b < kNumCharacters; ++b)
+        {
+            double shape = 0.0;
+            const double offset = prof[(size_t)a].level - prof[(size_t)b].level;
+            for (int k = 0; k < kBands; ++k)
+                if (bandHz (k) >= 200.0 && bandHz (k) <= 12000.0)
+                    shape = std::max (shape, std::fabs (prof[(size_t)a].spectrum[(size_t)k] - prof[(size_t)b].spectrum[(size_t)k] - offset));
+            const bool differ = std::fabs (offset) > 1.5 || std::fabs (prof[(size_t)a].ring - prof[(size_t)b].ring) > 4.0 || shape > 3.0;
+            CHECK (differ, "Characters %d and %d: level %.1f dB, ring %.1f dB, shape %.1f dB apart", a, b, offset,
+                   prof[(size_t)a].ring - prof[(size_t)b].ring, shape);
+        }
+}
+
+TEST (contrast_keeps_hits_in_the_centre)
+{
+    // short noise bursts in the mid every 300 ms: with contrast the added side ducks under the
+    // bursts and comes back after them
+    Sig in;
+    const size_t n = 48000 * 4;
+    in.l.assign (n, 0.0f);
+    gSeed = 5;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const size_t ph = i % 14400;
+        const float bed = 0.02f * white ();
+        in.l[i] = bed + (ph < 1200 ? 0.8f * white () * (1.0f - (float)ph / 1200.0f) : 0.0f);
+    }
+    in.r = in.l;
+    auto hitVsGap = [&] (double contrast) {
+        auto e = engine ();
+        e->setParam (kCharacter, kWide);
+        e->setParam (kSpace, 0.0);
+        e->setParam (kContrast, contrast);
+        e->setParam (kGuard, 0.0);
+        e->reset ();
+        auto out = run (*e, in);
+        const size_t lat = (size_t)e->latency ();
+        auto side = sum (out, -1.0f), mid = sum (out, 1.0f);
+        double sHit = 0, mHit = 0, sGap = 0, mGap = 0;
+        for (size_t i = 48000; i + lat < n; ++i)
+        {
+            const size_t ph = i % 14400, j = i + lat;
+            if (ph < 1200)
+            {
+                sHit += (double)side[j] * side[j];
+                mHit += (double)mid[j] * mid[j];
+            }
+            else if (ph > 4800 && ph < 12000)
+            {
+                sGap += (double)side[j] * side[j];
+                mGap += (double)mid[j] * mid[j];
+            }
+        }
+        // side relative to mid during the hits, minus the same in the gaps
+        return 10.0 * std::log10 ((sHit / mHit) / (sGap / mGap));
+    };
+    const double flat = hitVsGap (0.0), contrasted = hitVsGap (1.0);
+    CHECK (contrasted < flat - 4.0, "the hits stay narrower than the gaps: %.1f dB (no contrast %.1f dB)", contrasted, flat);
+    // spectral contrast: a strong 1 kHz tone in the mid makes the side give way there
+    auto tone = pink (3.0, false, 0.05f);
+    for (size_t i = 0; i < tone.l.size (); ++i)
+        tone.l[i] = tone.r[i] = tone.l[i] + (float)(0.3 * std::sin (2.0 * M_PI * 1000.0 * (double)i / kSr));
+    auto e = engine ();
+    e->setParam (kContrast, 1.0);
+    e->setParam (kGuard, 0.0);
+    e->reset ();
+    run (*e, tone);
+    int k1 = 0;
+    for (int k = 0; k < kBands; ++k)
+        if (std::fabs (std::log2 (bandHz (k) / 1000.0)) < std::fabs (std::log2 (bandHz (k1) / 1000.0)))
+            k1 = k;
+    CHECK (e->bandGain (k1) < 0.6f * e->bandGain (k1 + 5), "the side gives way where the mid is strong: %.2f vs %.2f",
+           e->bandGain (k1), e->bandGain (k1 + 5));
 }
 
 TEST (mono_below_is_mono)

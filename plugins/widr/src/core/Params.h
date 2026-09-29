@@ -27,8 +27,9 @@ enum ParamId : uint32_t
     kMonoCheck,  // listen in mono
     kOutput,     // dB
     kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
+    kContrast = kTailBase + pk::kTailFields, // 0 .. 1: mid / side contrast (scaled by the Character)
 
-    kNumParams = kTailBase + pk::kTailFields
+    kNumParams
 };
 
 enum Character { kTight = 0, kWide, kEpic, kSurround, kNumCharacters };

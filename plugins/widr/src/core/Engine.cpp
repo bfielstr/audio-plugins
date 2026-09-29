@@ -7,20 +7,26 @@ namespace widr {
 
 namespace {
 
-// The blend of the four generators per Character (normalised to the same power), the Haas delay
-// at Size 50 %, the micro pitch spread, the number of early reflections and the reverb send.
+// Per Character: the blend of the four generators (normalised, then scaled by `level`), the Haas
+// delay at Size 50 %, the micro pitch spread, the early reflections (taps, spacing), the reverb send
+// and how much contrast is baked in. They are meant to sound clearly different.
 struct CharacterMix
 {
     float haas, decor, pitch, er;
     double haasMs, cents;
     int taps;
-    float reverb;
+    double erSpacing;
+    float reverb, level, contrast;
 };
 constexpr CharacterMix kCharacters[kNumCharacters] = {
-    {0.35f, 0.85f, 0.10f, 0.25f, 0.6, 4.0, 8, 0.8f},   // Tight: mostly decorrelation, a hint of Haas
-    {0.50f, 0.60f, 0.25f, 0.40f, 7.0, 6.0, 16, 1.0f},  // Wide
-    {0.55f, 0.45f, 0.35f, 0.60f, 14.0, 9.0, 16, 1.1f}, // Epic: long Haas, strong reflections
-    {0.40f, 0.50f, 0.30f, 0.70f, 22.0, 7.0, 16, 1.4f}, // Surround: the room edge and more Space
+    // Tight: decorrelation only, no audible delay or room; a clean, close widening
+    {0.10f, 1.00f, 0.00f, 0.00f, 0.4, 0.0, 8, 0.6, 0.3f, 0.80f, 0.6f},
+    // Wide: a Haas pair up front, some decorrelation: the classic wide
+    {1.00f, 0.35f, 0.15f, 0.20f, 11.0, 5.0, 16, 1.0, 0.7f, 1.00f, 1.0f},
+    // Epic: big reflections, a detuned spread, long Haas, a louder side and the strongest contrast
+    {0.55f, 0.30f, 0.65f, 0.95f, 17.0, 12.0, 16, 1.3, 1.4f, 1.35f, 1.7f},
+    // Surround: the reverb and a large room lead, the source seems to sit inside it
+    {0.25f, 0.50f, 0.25f, 0.70f, 24.0, 7.0, 16, 1.7, 2.6f, 1.20f, 1.2f},
 };
 // Side level of the generators at Width 100 % relative to the mid: about -3 dB.
 constexpr float kSideScale = 0.7f;
@@ -74,6 +80,10 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
     window.resize (kFft);
     for (int i = 0; i < kFft; ++i)
         window[(size_t)i] = 0.5f - 0.5f * (float)std::cos (2.0 * M_PI * i / kFft);
+    envFastA = (float)(1.0 - std::exp (-1.0 / (0.005 * sr)));
+    envSlowA = (float)(1.0 - std::exp (-1.0 / (0.3 * sr)));
+    duckAtt = (float)(1.0 - std::exp (-1.0 / (0.001 * sr)));
+    duckRel = (float)(1.0 - std::exp (-1.0 / (0.12 * sr)));
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     slow = (float)(1.0 - std::exp (-1.0 / (0.08 * sr)));
     tail.prepare (sr, maxBlock);
@@ -114,6 +124,9 @@ void Engine::reset ()
     pubSide.fill (0.0f);
     sLR = sLL = sRR = 0.0;
     corr = 1.0f;
+    envFast = envSlow = 0.0;
+    duck = duckT = 1.0f;
+    duckCount = 0;
     tail.reset ();
     // settle the smoothed controls on the current settings
     blockSetup ();
@@ -135,9 +148,13 @@ void Engine::blockSetup ()
     // the blend, normalised to the same power whatever the Character (the pitch spread is quieter
     // than the others as a side signal, so it counts for less)
     const float norm = std::sqrt (c.haas * c.haas + c.decor * c.decor + 0.5f * c.pitch * c.pitch + c.er * c.er);
-    genT = {c.haas / norm * kSideScale, c.decor / norm * kSideScale, c.pitch / norm * kSideScale, c.er / norm * kSideScale};
+    const float gain = kSideScale * c.level / norm;
+    genT = {c.haas * gain, c.decor * gain, c.pitch * gain, c.er * gain};
     haasDT = std::clamp (c.haasMs * (0.5 + size), 0.1, 25.0) * 0.001 * sr;
-    erScaleT = (0.4 + 1.6 * size) * 0.001 * sr; // ms -> samples, 0.4x to 2x the pattern
+    // ms -> samples: the pattern at 0.4x to 2x by Size, times the Character's spacing (at most 150 ms)
+    erScaleT = std::min ((0.4 + 1.6 * size) * c.erSpacing, 150.0 / 68.0) * 0.001 * sr;
+    level = c.level;
+    contrast = (float)(std::clamp (p[kContrast], 0.0, 1.0) * c.contrast);
     erTaps = c.taps;
     // the reflections fade with time; their total power is 1 whatever the tap count
     float erPower = 0.0f;
@@ -205,21 +222,41 @@ void Engine::analyse ()
     const double c0 = -1.0 + 1.2 * guard;
     const double ratio = (1.0 - c0) / std::max (1e-6, 1.0 + c0);
     const float ag = (float)(1.0 - std::exp (-(double)kHop / (0.2 * sr))); // 200 ms: nothing pumps
+    // spectral contrast: the side gives way where the mid stands out from its neighbouring bands and
+    // fills where it is thin (-9 .. +6 dB at full contrast)
+    std::array<float, kBands> gContrast;
+    gContrast.fill (1.0f);
+    if (contrast > 0.0f)
+        for (int k = 0; k < kBands; ++k)
+        {
+            double sum = 0.0;
+            int n = 0;
+            for (int j = std::max (0, k - 3); j <= std::min (kBands - 1, k + 3); ++j)
+                if (bandHz (j) < 0.45 * sr)
+                {
+                    sum += eM[(size_t)j];
+                    ++n;
+                }
+            const double hood = sum / std::max (1, n);
+            if (hood > 1e-14 && eM[(size_t)k] > 1e-16)
+                gContrast[(size_t)k] = (float)std::clamp (std::pow (eM[(size_t)k] / hood, -0.35 * contrast), 0.35, 2.0);
+        }
     bool flat = true;
     for (int k = 0; k < kBands; ++k)
     {
         const size_t i = (size_t)k;
-        float gGuard = 1.0f;
+        // Mono Guard: the most this band's generated side may be scaled by (up to 2x, for the contrast)
+        float gGuard = 2.0f;
         if (guard > 0.0 && eG[i] > 1e-12f)
         {
             const double g2 = (ratio * eM[i] - eS[i]) / eG[i];
-            gGuard = (float)std::sqrt (std::clamp (g2, 0.0, 1.0));
+            gGuard = (float)std::sqrt (std::clamp (g2, 0.0, 4.0));
         }
-        const float target = gGuard * std::clamp (mix.yield[i], 0.0f, 1.0f);
+        const float target = std::min (gGuard, gContrast[i]) * std::clamp (mix.yield[i], 0.0f, 1.0f);
         gCur[i] += (target - gCur[i]) * ag;
         gYieldCur[i] += (mix.yield[i] - gYieldCur[i]) * ag;
         pubSide[i] = eG[i] * gCur[i] * gCur[i];
-        float db = 20.0f * std::log10 (std::max (gCur[i], 0.0316f)); // -30 dB at most
+        float db = std::min (6.0f, 20.0f * std::log10 (std::max (gCur[i], 0.0316f))); // -30 .. +6 dB
         if (bandHz (k) >= 0.45 * sr)
             db = 0.0f;
         if (std::fabs (db - bankDb[i]) > 0.05f)
@@ -341,8 +378,23 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
                 er += kErSign[t] * erGain[(size_t)t] * erLine.at (kErMs[t] * erScale);
             er = erDamp.lp (erDampA, er);
             float g = width * (gen[0] * haas + gen[1] * d + gen[2] * pitch + gen[3] * er);
-            g += space * reverbSend * reverb.tick (0.5f * m + s);
-            g *= mirror;
+            g += space * reverbSend * level * reverb.tick (0.5f * m + s);
+            // temporal contrast: a transient in the mid (its short-term level above its long-term one)
+            // ducks the generated side, which blooms back in the gaps
+            envFast += ((double)m * m - envFast) * envFastA;
+            envSlow += ((double)m * m - envSlow) * envSlowA;
+            if (++duckCount >= 16)
+            {
+                duckCount = 0;
+                duckT = 1.0f;
+                if (contrast > 0.0f && envSlow > 1e-12)
+                {
+                    const double ratioDb = 10.0 * std::log10 (std::max (1e-6, envFast / envSlow));
+                    duckT = (float)std::clamp (std::pow (10.0, -0.9 * contrast * ratioDb / 20.0), 0.18, 1.6);
+                }
+            }
+            duck += (duckT - duck) * (duckT < duck ? duckAtt : duckRel);
+            g *= duck * mirror;
 
             ringM[(size_t)ringPos] = m;
             ringS[(size_t)ringPos] = s;

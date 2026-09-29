@@ -80,10 +80,11 @@ void Editor::buildUI (CFrame* f)
     wp->addView (new Label (CRect (14, 24, 254, 38), "Character", 10.5, false, 1));
     bind (wp, new Segmented (CRect (14, 42, 254, 66), this, kCharacter, {"Tight", "Wide", "Epic", "Surround"}));
     bind (wp, new Knob (CRect (270, 18, 350, 118), this, widr::kWidth)); // (Editor::kWidth is the window)
-    bind (wp, new Knob (knobAt (380, 30), this, kAir));
-    bind (wp, new Knob (knobAt (460, 30), this, kBeyond));
-    bind (wp, new Knob (knobAt (540, 30), this, kMonoBelow));
-    bind (wp, new Knob (knobAt (620, 30), this, kGuard));
+    bind (wp, new Knob (knobAt (372, 30), this, kContrast));
+    bind (wp, new Knob (knobAt (442, 30), this, kAir));
+    bind (wp, new Knob (knobAt (512, 30), this, kBeyond));
+    bind (wp, new Knob (knobAt (582, 30), this, kMonoBelow));
+    bind (wp, new Knob (knobAt (652, 30), this, kGuard));
 
     auto* sp = new Panel (CRect (8, 440, 376, 548), "SPACE");
     root->addView (sp);

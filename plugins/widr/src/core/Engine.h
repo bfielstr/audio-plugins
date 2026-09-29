@@ -10,14 +10,18 @@
 //      Size, low-passed by Damping). Character sets their blend (normalised to the same power);
 //      Width scales it.
 //   3. Space: a short FDN reverb fed mostly from the side; its output is side as well.
-//   4. The generated side goes through a graphic EQ of 24 third-octave bands (Bands.h) whose gains
-//      come from the Mono Guard (a floor under the correlation of every band) and from the
-//      negotiation with the other Widrs of the group (Mix.h).
-//   5. Air (a high shelf) and Beyond (a lift around 4 kHz) on the side.
-//   6. Mono Below: the side is high-passed by a Linkwitz-Riley 8th-order filter and the mid goes
+//   4. Contrast keeps the centre and the sides apart: in time, the generated side ducks under the
+//      mid's transients and blooms between them (hits stay dry and centred, tails go wide); across
+//      the spectrum, it backs off where the mid is strong for its neighbourhood (a voice's
+//      presence) and fills where the mid is thin. The Character sets how much, Contrast scales it.
+//   5. The generated side goes through a graphic EQ of 24 third-octave bands (Bands.h) whose gains
+//      come from the spectral contrast, the Mono Guard (a ceiling on the side of every band, a floor
+//      under its correlation) and the negotiation with the other Widrs of the group (Mix.h).
+//   6. Air (a high shelf) and Beyond (a lift around 4 kHz) on the side.
+//   7. Mono Below: the side is high-passed by a Linkwitz-Riley 8th-order filter and the mid goes
 //      through the matching all-pass (the same crossover's low-pass plus high-pass), so the low end
 //      is mono and mid and side stay in phase above it.
-//   7. Output, then the Smacheratr tail.
+//   8. Output, then the Smacheratr tail.
 // Width 0 bypasses everything but Output and Mono Check: bit-exact at 0 dB (the tail only delays).
 #pragma once
 
@@ -82,7 +86,7 @@ public:
         if (id >= kNumParams)
             return;
         p[id] = plain;
-        if (id >= kTailBase)
+        if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
     }
     double param (uint32_t id) const { return p[id]; }
@@ -157,6 +161,11 @@ private:
     std::array<float, 4> gen {}, genT {};
     double haasD = 1.0, haasDT = 1.0, erScale = 1.0, erScaleT = 1.0;
     int erTaps = 16;
+    float level = 1.0f, contrast = 0.0f; // the Character's side level; contrast amount (Character x Contrast)
+    // temporal contrast: fast and slow mean square of the mid, and the gain on the generated side
+    double envFast = 0.0, envSlow = 0.0;
+    float duck = 1.0f, duckT = 1.0f, duckAtt = 0.0f, duckRel = 0.0f, envFastA = 0.0f, envSlowA = 0.0f;
+    int duckCount = 0;
     std::array<float, 16> erGain {};
     float reverbSend = 1.0f, mirror = 1.0f;
     bool bypassed = false;

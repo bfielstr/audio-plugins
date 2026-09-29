@@ -21,8 +21,14 @@ to mono gives back the input's mid: nothing cancels, whatever the settings.
   - a **micro pitch spread**: a few cents down on the left and up on the right, slowly drifting;
   - **early reflections**: 8 or 16 taps from a fixed stereo pattern, the edge of a large room.
 
-  *Tight* is mostly decorrelation, *Wide* a balanced mix, *Epic* long Haas and strong reflections,
-  *Surround* the room edge and more Space. The blends are balanced to the same level.
+  The Characters are built to sound clearly different: *Tight* is clean decorrelation only (no delay,
+  no room); *Wide* puts a Haas pair up front; *Epic* has big reflections, a detuned spread, a louder
+  side and the strongest contrast; *Surround* lets the reverb and a large room lead.
+- **Contrast** keeps the centre and the sides apart, the trailer trick. In time, the added width
+  ducks under the hits in the mid and blooms between them, so drums and consonants stay dry and
+  centred while the tails go wide. Across the spectrum, it gives way where the mid is strong for
+  its neighbourhood (a voice's presence) and fills where the mid is thin. Each Character bakes in
+  its own amount; Contrast scales it (default 50 %).
 - **SPACE**: **Size** (the Haas delay and the spacing of the reflections), **Space** (a short FDN
   reverb, fed mostly from the side and added to the side only, so it reads as width rather than
   distance), **Decay**, **Pre-Delay** and **Damping**.
