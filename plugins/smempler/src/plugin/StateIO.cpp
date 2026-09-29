@@ -20,7 +20,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 4: Smacheratr's Clarity Range in the rack
 // 5: Clarity Frequency 20 Hz - 20 kHz (20 - 500 Hz before), in the rack and the end saturator
 // 6: Clarity's second band in the rack
-constexpr int32 kVersion = 6;
+// 7: one Clarity button (a band works while its Range is above 0), in the rack and the end saturator
+constexpr int32 kVersion = 7;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -121,6 +122,30 @@ bool readState (IBStream* stream, PluginState& st)
                 st.has[slotBlockParam (slot, j)] = true;
             }
         }
+    if (version < 7)
+    {
+        // one Clarity button: states from before, made to mean the same (a slot or block that never
+        // had band 2 reads it as off: its Range becomes 0)
+        auto convert = [&] (uint32_t i1, uint32_t r1i, uint32_t i2, uint32_t r2i, double r1Default) {
+            double on1 = st.has[i1] ? st.norm[i1] : 0.0, on2 = st.has[i2] && version >= 6 ? st.norm[i2] : 0.0;
+            double r1 = st.has[r1i] && st.norm[r1i] > 0.0 ? st.norm[r1i] : r1Default, r2 = st.norm[r2i];
+            smacheratr::clarityToOneButton (on1, r1, on2, r2);
+            st.norm[i1] = on1;
+            st.norm[r1i] = r1;
+            st.norm[r2i] = r2;
+            st.has[i1] = st.has[r1i] = st.has[r2i] = true;
+        };
+        const double r1Default = smacheratr::defaultNormalized (smacheratr::kClarityRange);
+        convert (kTailExtBase + pk::kTailExtClarity, kTailExtBase + pk::kTailExtClarityRange, kTailExtBase + pk::kTailExtClarity2,
+                 kTailExtBase + pk::kTailExtClarity2Range, r1Default);
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (st.has[typeId] && std::lround (toPlain (typeId, st.norm[typeId])) == kFxSmacheratr)
+                convert (slotBlockParam (slot, smacheratr::kClarity), slotBlockParam (slot, smacheratr::kClarityRange),
+                         slotBlockParam (slot, smacheratr::kClarity2), slotBlockParam (slot, smacheratr::kClarity2Range), r1Default);
+        }
+    }
     if (version < 5)
     {
         // Clarity Frequency's range grew: values saved before, in the new range (the rack's Smacheratrs

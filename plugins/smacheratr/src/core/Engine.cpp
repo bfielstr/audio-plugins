@@ -228,7 +228,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
-    // Clarity, a compressor on up to two bands (ClarityBand.h: 12 dB/oct below, 6 dB/oct above,
+    // Clarity, a compressor on up to two bands (one button; a band works while its Range is above 0) (ClarityBand.h: 12 dB/oct below, 6 dB/oct above,
     // around each band's frequency): when the drive pushes a band past -18 dBFS into the curve, it is
     // turned down before the curve (3 dB for every 5 over, at most the band's Range), so it does not
     // pile up into mud and intermodulate, and after it by half as much (the curve squashes the cut
@@ -236,7 +236,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     bool clarity[kClarityBands];
     for (int k = 0; k < kClarityBands; ++k)
     {
-        clarity[k] = p[kClarityOnIds[k]] >= 0.5;
+        clarity[k] = clarityBandOn (p[kClarity], p[kClarityRangeIds[k]]);
         if (clarity[k] != clarityWas[k])
         {
             clarityWas[k] = clarity[k];

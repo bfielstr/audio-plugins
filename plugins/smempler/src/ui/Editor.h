@@ -114,6 +114,10 @@ private:
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
     smacheratr::ColorView* fxColorView = nullptr;
     smacheratr::ColorView* endColorView = nullptr; // the end tab's
+    // Clarity's band selector on the Smacheratr pages (the rack's, the end tab's): the band shown
+    int clarityBand = 0;
+    std::vector<VSTGUI::CView*> rackBandViews[2], endBandViews[2], rackBandButtons, endBandButtons;
+    void showClarityBand (int band);
     smacheratr::ShaperView* endShaperView = nullptr;
     widr::GonioView* fxGonio = nullptr;
     MsView* msView = nullptr;

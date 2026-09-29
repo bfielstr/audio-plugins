@@ -23,9 +23,8 @@ public:
     // layout (also used by the host test)
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
     static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 290.0;
-    // the CLARITY panel at the bottom: a band's On toggle at kClarityBandLeft[band] + 12, kClarityTop + 30
-    static constexpr double kClarityTop = 432.0;
-    static constexpr double kClarityBandLeft[2] = {8.0, 380.0};
+    // the CLARITY panel at the bottom: the Clarity button at (kClarityButtonX, kClarityTop + 40)
+    static constexpr double kClarityTop = 432.0, kClarityButtonX = 56.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -43,7 +42,10 @@ private:
     pk::Label* status = nullptr;
     pk::ParamView* thresholdView = nullptr;
     std::vector<pk::ParamView*> colorViews;
-    std::vector<pk::ParamView*> clarityViews[kClarityBands]; // dimmed while their band is off
+    std::vector<pk::ParamView*> clarityViews[kClarityBands]; // each band's knobs (one band shown)
+    std::vector<VSTGUI::CView*> clarityBandButtons;
+    int clarityBand = 0; // the band shown
+    void showClarityBand (int band);
 };
 
 } // namespace smacheratr

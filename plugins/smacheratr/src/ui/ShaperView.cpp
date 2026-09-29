@@ -129,7 +129,7 @@ void ShaperView::draw (CDrawContext* ctx)
     int rowsShown = 0;
     for (int k = 0; k < kClarityBands; ++k)
     {
-        if (host->plainValue (kClarityOnIds[k]) < 0.5)
+        if (!clarityBandOn (host->plainValue (kClarity), host->plainValue (kClarityRangeIds[k])))
             continue;
         const CColor c = k == 0 ? CColor (120, 210, 140) : CColor (130, 170, 255);
         const double range = std::max (1.0, host->plainValue (kClarityRangeIds[k]));

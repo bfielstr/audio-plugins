@@ -64,9 +64,16 @@ protected:
         return view;
     }
     // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`, the
-    // extended fields at `extBase`): every Smacheratr control, in three rows. Needs about 660 x 104.
+    // extended fields at `extBase`): every Smacheratr control, in two rows and three knobs. Clarity has
+    // one button and a band selector; the selected band's Frequency, Width and Range are shown.
+    // Needs about 680 x 78.
     Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase,
                          const char* title = "smacheratr  (end of the chain)");
+public:
+    // Shows Clarity band `band`'s controls in the tail panel (the display calls it when a band is picked).
+    void showTailBand (int band);
+
+protected:
     // Sets tooltips on every bound parameter view from a help lookup.
     void applyParamTooltips (const char* (*helpFor) (uint32_t));
     // Called before the frame is released.
@@ -76,6 +83,8 @@ protected:
     const double baseWidth, baseHeight;
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
+    int tailBand = 0;                                              // Clarity band shown in the tail panel
+    std::vector<VSTGUI::CView*> tailBandViews[2], tailBandButtons; // its controls, per band; the selector
 };
 
 } // namespace pk

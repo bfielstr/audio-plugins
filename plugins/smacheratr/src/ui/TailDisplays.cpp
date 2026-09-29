@@ -29,6 +29,10 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
     parent->addView (shaper);
     color = new ColorView (CRect (area.left + w + 8, area.top, area.right, area.bottom), host.get (), rate, meters);
     color->setTooltipText (help::kColorDisplay);
+    color->onBandPicked = [this] (int k) {
+        if (bandPicked)
+            bandPicked (k);
+    };
     parent->addView (color);
 }
 
@@ -54,6 +58,8 @@ void TailDisplays::paramChanged (uint32_t id)
     if (color)
         color->invalid ();
 }
+
+void TailDisplays::onBandPicked (std::function<void (int)> f) { bandPicked = std::move (f); }
 
 void TailDisplays::closed ()
 {

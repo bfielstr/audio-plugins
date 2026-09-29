@@ -378,6 +378,7 @@ void Editor::buildUI (CFrame* f)
             },
             satMeters);
         endColorView->setTooltipText (smacheratr::help::kColorDisplay);
+        endColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
         fxEndBody->addView (endColorView);
         {
             using namespace smacheratr;
@@ -396,16 +397,31 @@ void Editor::buildUI (CFrame* f)
             add (new Toggle (CRect (612, 8, 658, 26), h, kHiQuality, "Hi-Q"), kHiQuality);
             add (new Toggle (CRect (662, 8, 730, 26), h, kDcFilter, "DC Filter"), kDcFilter);
             add (new Toggle (CRect (734, 8, 786, 26), h, kColorOn, "Color"), kColorOn);
-            const uint32_t ids[10] = {kDrive,     kOutput,     kDryWet,      kColorLo,      kColorHi,
-                                      kColorFreq, kColorWidth, kClarityFreq, kClarityWidth, kClarityRange};
-            const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
-            for (int i = 0; i < 10; ++i)
-                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), ids[i]);
-            // Clarity's second band, under the knobs
-            add (new Toggle (CRect (534, 194, 604, 212), h, kClarity2, "Clarity 2"), kClarity2);
-            add (new NumberBox (CRect (608, 194, 664, 212), h, kClarity2Freq), kClarity2Freq);
-            add (new NumberBox (CRect (668, 194, 708, 212), h, kClarity2Width), kClarity2Width);
-            add (new NumberBox (CRect (712, 194, 764, 212), h, kClarity2Range), kClarity2Range);
+            const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
+            for (int i = 0; i < 7; ++i)
+                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), ids[i]);
+            // Clarity: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
+            endBandButtons.clear ();
+            for (int k = 0; k < kClarityBands; ++k)
+            {
+                endBandViews[k].clear ();
+                const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
+                const char* bandNames[3] = {"Clarity Hz", "Clarity W", "Clarity dB"};
+                for (int i = 0; i < 3; ++i)
+                {
+                    auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
+                    kn->setTooltipText (smacheratr::help::forParam (bandIds[i]));
+                    fxEndBody->addView (kn);
+                    endBandViews[k].push_back (kn);
+                }
+                auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
+                                             [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
+                bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
+                                           : "Show Clarity's second band (blue: it works once its Range is above 0 dB).");
+                fxEndBody->addView (bt);
+                endBandButtons.push_back (bt);
+            }
+            showClarityBand (clarityBand);
         }
         auto* n3 = new Label (CRect (534, 214, 830, 228), "after the rack, just before the output", 9.5);
         n3->setDim (true);
@@ -431,6 +447,19 @@ void Editor::buildUI (CFrame* f)
     rebuildRack ();
     lastName.clear ();
     idle ();
+}
+
+void Editor::showClarityBand (int band)
+{
+    clarityBand = band == 1 ? 1 : 0;
+    for (auto* views : {rackBandViews, endBandViews})
+        for (int k = 0; k < smacheratr::kClarityBands; ++k)
+            for (auto* v : views[k])
+                v->setVisible (k == clarityBand);
+    for (auto* b : rackBandButtons)
+        b->invalid ();
+    for (auto* b : endBandButtons)
+        b->invalid ();
 }
 
 // --- updates ----------------------------------------------------------------------
@@ -719,6 +748,9 @@ void Editor::buildBody ()
     fxDynDisplay = nullptr;
     fxShaperView = nullptr;
     fxColorView = nullptr;
+    for (auto& v : rackBandViews)
+        v.clear ();
+    rackBandButtons.clear ();
     fxGonio = nullptr;
     msView = nullptr;
     mdLayoutHost = nullptr;
@@ -861,6 +893,7 @@ void Editor::buildBody ()
                     return b ? &b->rack.sat[(size_t)s] : nullptr;
                 });
             add (fxColorView, smacheratr::help::kColorDisplay);
+            fxColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
             add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
             add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
             add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Clarity"), tip (kClarity));
@@ -869,16 +902,31 @@ void Editor::buildBody ()
             add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
             add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
             add (new Toggle (CRect (716, 8, 770, 26), h, kColorOn, "Color"), tip (kColorOn));
-            const uint32_t ids[10] = {kDrive,     kOutput,     kDryWet,      kColorLo,      kColorHi,
-                                      kColorFreq, kColorWidth, kClarityFreq, kClarityWidth, kClarityRange};
-            const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
-            for (int i = 0; i < 10; ++i)
-                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), tip (ids[i]));
-            // Clarity's second band, under the knobs
-            add (new Toggle (CRect (534, 194, 604, 212), h, kClarity2, "Clarity 2"), tip (kClarity2));
-            add (new NumberBox (CRect (608, 194, 664, 212), h, kClarity2Freq), tip (kClarity2Freq));
-            add (new NumberBox (CRect (668, 194, 708, 212), h, kClarity2Width), tip (kClarity2Width));
-            add (new NumberBox (CRect (712, 194, 764, 212), h, kClarity2Range), tip (kClarity2Range));
+            const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
+            for (int i = 0; i < 7; ++i)
+                add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
+            // Clarity: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
+            rackBandButtons.clear ();
+            for (int k = 0; k < kClarityBands; ++k)
+            {
+                rackBandViews[k].clear ();
+                const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
+                const char* bandNames[3] = {"Clarity Hz", "Clarity W", "Clarity dB"};
+                for (int i = 0; i < 3; ++i)
+                {
+                    auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
+                    kn->setTooltipText (smacheratr::help::forParam (bandIds[i]));
+                    g->addView (kn);
+                    rackBandViews[k].push_back (kn);
+                }
+                auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
+                                             [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
+                bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
+                                           : "Show Clarity's second band (blue: it works once its Range is above 0 dB).");
+                g->addView (bt);
+                rackBandButtons.push_back (bt);
+            }
+            showClarityBand (clarityBand);
             break;
         }
         case kFxWidr:

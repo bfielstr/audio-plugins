@@ -291,7 +291,8 @@ void Editor::buildUI (CFrame* f)
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase,
                                                                [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
                                                                [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 954, 24 + smacheratr::TailDisplays::kHeight - 48)); // above the three rows of controls
+    tailDisplays->add (tailPanel, CRect (10, 24, 954, 24 + smacheratr::TailDisplays::kHeight - 22));
+    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
     bind (out, new Knob (CRect (24, 28, 104, 128), this, kGain, nullptr, true));

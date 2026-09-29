@@ -25,9 +25,11 @@ public:
     void idle ();
     void paramChanged (uint32_t id); // redraws when a tail parameter changes
     void closed ();                  // the editor closed: its views are gone
+    void onBandPicked (std::function<void (int)> f); // a Clarity band grabbed in the display
 
     // Extra height the tail panel needs for the displays.
     static constexpr double kHeight = 170.0;
+    std::function<void (int)> bandPicked;
 
 private:
     bool isTailParam (uint32_t id) const;

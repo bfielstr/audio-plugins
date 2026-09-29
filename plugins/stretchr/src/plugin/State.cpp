@@ -15,8 +15,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 3; // 2: the Algorithm choice has 8 entries (Alien)
+constexpr int32 kVersion = 4; // 2: the Algorithm choice has 8 entries (Alien)
                                // 3: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+                               // 4: one Clarity button in the end saturator
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -72,6 +73,19 @@ bool readState (IBStream* stream, State& st, bool withClip)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // one Clarity button: a state from before, made to mean the same
+    if (version < 4)
+    {
+        const uint32_t i1 = kTailExtBase + pk::kTailExtClarity, r1i = kTailExtBase + pk::kTailExtClarityRange,
+                       i2 = kTailExtBase + pk::kTailExtClarity2, r2i = kTailExtBase + pk::kTailExtClarity2Range;
+        double on1 = st.has[i1] ? st.norm[i1] : 0.0, on2 = st.has[i2] ? st.norm[i2] : 0.0;
+        double r1 = st.has[r1i] ? st.norm[r1i] : smacheratr::defaultNormalized (smacheratr::kClarityRange), r2 = st.norm[r2i];
+        smacheratr::clarityToOneButton (on1, r1, on2, r2);
+        st.norm[i1] = on1;
+        st.norm[r1i] = r1;
+        st.norm[r2i] = r2;
+        st.has[i1] = st.has[r1i] = st.has[r2i] = true;
     }
     // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
     if (version < 3 && st.has[kTailExtBase + pk::kTailExtClarityFreq])

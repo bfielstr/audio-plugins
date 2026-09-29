@@ -124,15 +124,15 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
             // Clarity: its band appears in the colour display
-            const double clarityX = Editor::kClarityBandLeft[0] + 8 + 40, clarityY = Editor::kClarityTop + 40;
+            const double clarityX = Editor::kClarityButtonX, clarityY = Editor::kClarityTop + 40;
             win.click (clarityX, clarityY);
             CHECK (plainOf (rig, kClarity) >= 0.5, "Clarity switched on from the editor");
             CHECK (win.savePng (outDir + "/ui_smacheratr_clarity.png"), "clarity screenshot");
             win.click (clarityX, clarityY);
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
             rig.param (kClarity, 1.0);
-            rig.param (kClarity2, 1.0);
-            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2) >= 0.5, "both Clarity bands on from the host");
+            rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
+            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2Range) > 7.9, "both Clarity bands on from the host");
             CHECK (win.savePng (outDir + "/ui_smacheratr_clarity_host.png"), "clarity screenshot, both bands (set by the host)");
             {
                 // a window opened with both bands on: its first picture is drawn from scratch
@@ -140,7 +140,7 @@ int main (int argc, char** argv)
                 CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_clarity_both.png"), "both bands, fresh window");
             }
             rig.param (kClarity, 0.0);
-            rig.param (kClarity2, 0.0);
+            rig.param (kClarity2Range, 0.0);
 
             // shaper display: drag down lowers Drive, double-click resets it
             const double sx = Editor::kShaperLeft + Editor::kShaperWidth / 2, sy = Editor::kShaperTop + Editor::kShaperHeight / 2;

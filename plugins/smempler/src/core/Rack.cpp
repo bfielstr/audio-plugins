@@ -84,8 +84,12 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
         {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
     };
+    static const std::vector<RackHidden> smacheratrHidden {
+        {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Clarity button (a band works while its Range is above 0)"},
+    };
     switch (type)
     {
+        case kFxSmacheratr: return smacheratrHidden;
         case kFxPara: return paraHidden;
         case kFxMultidyn: return multidynHidden;
         case kFxWidr: return widrHidden;

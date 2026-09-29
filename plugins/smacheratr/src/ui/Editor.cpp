@@ -53,6 +53,7 @@ void Editor::onClose ()
     colorViews.clear ();
     for (auto& v : clarityViews)
         v.clear ();
+    clarityBandButtons.clear ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -104,21 +105,39 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 3; ++i)
         colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
-    // bottom: Clarity's two bands, each On, Frequency, Width and Range
+    // bottom: Clarity (one button), a band selector and the selected band's Frequency, Width and Range
     auto* cp = new pk::Panel (CRect (8, kClarityTop, 752, kClarityTop + 80), "CLARITY");
     root->addView (cp);
+    bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Clarity"));
+    clarityBandButtons.clear ();
     for (int k = 0; k < kClarityBands; ++k)
     {
-        const double x = kClarityBandLeft[k];
-        bind (cp, new Toggle (CRect (x + 4, 30, x + 76, 50), this, kClarityOnIds[k], k == 0 ? "Band 1" : "Band 2"));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 84, 10), this, kClarityFreqIds[k], "Freq")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 146, 10), this, kClarityWidthIds[k], "Width")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (x + 208, 10), this, kClarityRangeIds[k], "Range")));
+        auto* bt = new ActionButton (CRect (96 + k * 68, 30, 160 + k * 68, 50), k == 0 ? "Band 1" : "Band 2",
+                                     [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
+        bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
+                                   : "Show Clarity's second band (blue in the display; it works once its Range is above 0 dB).");
+        cp->addView (bt);
+        clarityBandButtons.push_back (bt);
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (250, 10), this, kClarityFreqIds[k], "Freq")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (312, 10), this, kClarityWidthIds[k], "Width")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (374, 10), this, kClarityRangeIds[k], "Range")));
     }
+    color->onBandPicked = [this] (int k) { showClarityBand (k); };
+    showClarityBand (clarityBand);
 
     applyParamTooltips (&help::forParam);
     updateLooks ();
     idle ();
+}
+
+void Editor::showClarityBand (int band)
+{
+    clarityBand = band == 1 ? 1 : 0;
+    for (int k = 0; k < kClarityBands; ++k)
+        for (auto* v : clarityViews[k])
+            v->setVisible (k == clarityBand);
+    for (auto* b : clarityBandButtons)
+        b->invalid ();
 }
 
 void Editor::updateLooks ()
@@ -130,7 +149,7 @@ void Editor::updateLooks ()
         v->setEnabledLook (on);
     for (int k = 0; k < kClarityBands; ++k)
         for (auto* v : clarityViews[k])
-            v->setEnabledLook (plainValue (kClarityOnIds[k]) >= 0.5);
+            v->setEnabledLook (plainValue (kClarity) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -140,7 +159,7 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarity2)
+    if (id == kPreLimit || id == kColorOn || id == kClarity)
         updateLooks ();
 }
 

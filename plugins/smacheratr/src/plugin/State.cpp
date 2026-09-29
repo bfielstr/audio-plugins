@@ -10,8 +10,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 3; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 4; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +51,18 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // one Clarity button: a state from before, made to mean the same
+    if (version < kClarityOneButton)
+    {
+        double on1 = st.has[kClarity] ? st.norm[kClarity] : 0.0, on2 = st.has[kClarity2] ? st.norm[kClarity2] : 0.0;
+        double r1 = st.has[kClarityRange] ? st.norm[kClarityRange] : smacheratr::defaultNormalized (smacheratr::kClarityRange);
+        double r2 = st.norm[kClarity2Range];
+        smacheratr::clarityToOneButton (on1, r1, on2, r2);
+        st.norm[kClarity] = on1;
+        st.norm[kClarityRange] = r1;
+        st.norm[kClarity2Range] = r2;
+        st.has[kClarity] = st.has[kClarityRange] = st.has[kClarity2Range] = true;
     }
     // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
     if (version < kClarityFullRange)

@@ -52,7 +52,12 @@ double ColorView::sampleRate () const
     return r > 1000.0 ? r : 48000.0;
 }
 
-bool ColorView::clarityOn (int band) const { return host->plainValue (kClarityOnIds[band]) >= 0.5; }
+bool ColorView::clarityShown (int) const { return host->plainValue (kClarity) >= 0.5; }
+
+bool ColorView::clarityOn (int band) const
+{
+    return clarityBandOn (host->plainValue (kClarity), host->plainValue (kClarityRangeIds[band]));
+}
 
 void ColorView::idle ()
 {
@@ -91,7 +96,10 @@ CPoint ColorView::hiHandle () const
     return CPoint (xOfHz (host->plainValue (kColorFreq)), yOfDb (colorDb (host->plainValue (kColorHi))));
 }
 
-CPoint ColorView::clarityHandle (int band) const { return CPoint (xOfHz (host->plainValue (kClarityFreqIds[band])), yOfDb (0.0)); }
+CPoint ColorView::clarityHandle (int band) const
+{
+    return CPoint (xOfHz (host->plainValue (kClarityFreqIds[band])), yOfDb (-host->plainValue (kClarityRangeIds[band])));
+}
 
 double ColorView::clarityEdgeX (int band, bool high) const
 {
@@ -177,7 +185,20 @@ void ColorView::draw (CDrawContext* ctx)
     for (int k = 0; k < kClarityBands; ++k)
     {
         if (!clarity[k])
+        {
+            // Clarity on, this band's Range at 0: a dim handle to pull down
+            if (clarityShown (k))
+            {
+                const CPoint h = clarityHandle (k);
+                const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
+                ctx->setFillColor (clarityColor (k, 70));
+                ctx->drawEllipse (hr, kDrawFilled);
+                ctx->setLineWidth (1.2);
+                ctx->setFrameColor (clarityColor (k, 150));
+                ctx->drawEllipse (hr, kDrawStroked);
+            }
             continue;
+        }
         const ClarityBand& band = bands[k];
         auto gainPath = [&] (double cutDb, bool closed) {
             auto gp = owned (ctx->createGraphicsPath ());
@@ -273,14 +294,14 @@ ColorView::Drag ColorView::hit (const CPoint& p, int* band) const
     // the second band is drawn on top, so it is found first
     for (int k = kClarityBands - 1; k >= 0; --k)
     {
-        if (!clarityOn (k))
+        if (!clarityShown (k))
             continue;
         Drag d = Drag::None;
         if (near (clarityHandle (k)))
             d = Drag::Clarity;
-        else if (std::fabs (p.x - clarityEdgeX (k, false)) <= 4.0)
+        else if (clarityOn (k) && std::fabs (p.x - clarityEdgeX (k, false)) <= 4.0)
             d = Drag::ClarityLow;
-        else if (std::fabs (p.x - clarityEdgeX (k, true)) <= 4.0)
+        else if (clarityOn (k) && std::fabs (p.x - clarityEdgeX (k, true)) <= 4.0)
             d = Drag::ClarityHigh;
         if (d != Drag::None)
         {
@@ -301,12 +322,16 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     if (drag == Drag::None)
         return;
     const uint32_t cFreq = kClarityFreqIds[dragBand], cWidth = kClarityWidthIds[dragBand];
+    if ((drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh) && onBandPicked)
+        onBandPicked (dragBand);
     if (e.clickCount == 2 || right)
     {
         if (drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
         {
             host->setOnce (cFreq, host->table ().defaultNormalized (cFreq));
             host->setOnce (cWidth, host->table ().defaultNormalized (cWidth));
+            if (drag == Drag::Clarity)
+                host->setOnce (kClarityRangeIds[dragBand], host->table ().defaultNormalized (kClarityRangeIds[dragBand]));
         }
         else if (drag == Drag::Lo)
             host->setOnce (kColorLo, host->table ().defaultNormalized (kColorLo));
@@ -326,9 +351,13 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     startHi = host->plainValue (kColorHi);
     startFreq = host->plainValue (kColorFreq);
     startClarity = host->plainValue (cFreq);
+    startRange = host->plainValue (kClarityRangeIds[dragBand]);
     movedH = movedV = false;
     if (drag == Drag::Clarity)
+    {
         host->beginEdit (cFreq);
+        host->beginEdit (kClarityRangeIds[dragBand]);
+    }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
         host->beginEdit (cWidth);
     else if (drag == Drag::Lo)
@@ -347,7 +376,7 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
     {
         const Drag h = hit (e.mousePosition);
         if (auto* f = getFrame ())
-            f->setCursor (h == Drag::Hi ? kCursorSizeAll
+            f->setCursor (h == Drag::Hi || h == Drag::Clarity ? kCursorSizeAll
                           : h == Drag::Lo ? kCursorVSize
                           : h != Drag::None ? kCursorHSize
                                             : kCursorDefault);
@@ -359,7 +388,12 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
     const double amountPerPixel = 2.0 / (r.getHeight () - 24.0); // +-100 % over the plot
     auto setPlain = [this] (uint32_t id, double v) { host->setNorm (id, host->table ().toNormalized (id, v)); };
     if (drag == Drag::Clarity)
+    {
+        // sideways the frequency, down the Range (the handle follows the depth of the cut)
         setPlain (kClarityFreqIds[dragBand], startClarity * std::pow (kMaxHz / kMinHz, dx / r.getWidth ()));
+        const double dbPerPixel = kMaxDb / (r.getHeight () * 0.5 - 12.0);
+        setPlain (kClarityRangeIds[dragBand], std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
+    }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
     {
         // the edge follows the mouse; the band stays centred, so the width is twice the distance
@@ -392,7 +426,10 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
     if (drag == Drag::None)
         return;
     if (drag == Drag::Clarity)
+    {
         host->endEdit (kClarityFreqIds[dragBand]);
+        host->endEdit (kClarityRangeIds[dragBand]);
+    }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
         host->endEdit (kClarityWidthIds[dragBand]);
     else if (drag == Drag::Lo)

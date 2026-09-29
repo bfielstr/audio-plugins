@@ -106,7 +106,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     auto* p = new Panel (r, title);
     parent->addView (p);
     // two rows of switches and values under the title, the knobs to the right of them
-    const double y = r.getHeight () - 72.0, rowA = y + 22, rowB = y + 48, rowC = y - 4; // row C: Clarity's second band
+    const double y = r.getHeight () - 72.0, rowA = y + 22, rowB = y + 48;
     auto tip = [] (CView* v, const char* t) { v->setTooltipText (t); };
     auto row = [] (double x0, double x1, double top) { return CRect (x0, top, x1, top + 18); };
     tip (bind (p, new Toggle (row (10, 50, rowA), this, base + kTailOn, "On")),
@@ -123,30 +123,54 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
          "Run the curve 4x oversampled to reduce aliasing (a little more CPU).");
     tip (bind (p, new Toggle (row (392, 460, rowA), this, extBase + kTailExtDcFilter, "DC Filter")),
          "Remove DC offset before the curve.");
+    // Clarity: one button, a band selector and the selected band's controls (both bands' are made;
+    // the other band's are hidden)
     tip (bind (p, new Toggle (row (10, 64, rowB), this, extBase + kTailExtClarity, "Clarity")),
-         "A compressor on one band of the low mids, so a hard-pushed drive does not go muddy (12 dB/oct below, 6 dB/oct "
-         "above).");
-    tip (bind (p, new NumberBox (row (68, 116, rowB), this, extBase + kTailExtClarityFreq)), "Clarity: the centre of its band.");
-    tip (bind (p, new NumberBox (row (120, 156, rowB), this, extBase + kTailExtClarityWidth)), "Clarity: the band's width in octaves.");
-    tip (bind (p, new NumberBox (row (160, 206, rowB), this, extBase + kTailExtClarityRange)),
-         "Clarity: the most it turns its band down (8 dB by default, 0 to 24).");
-    tip (bind (p, new Toggle (row (10, 64, rowC), this, extBase + kTailExtClarity2, "Clarity 2")),
-         "Clarity's second band (blue in the display), with its own frequency, width and range.");
-    tip (bind (p, new NumberBox (row (68, 116, rowC), this, extBase + kTailExtClarity2Freq)), "Clarity band 2: the centre of its band.");
-    tip (bind (p, new NumberBox (row (120, 156, rowC), this, extBase + kTailExtClarity2Width)), "Clarity band 2: its width in octaves.");
-    tip (bind (p, new NumberBox (row (160, 206, rowC), this, extBase + kTailExtClarity2Range)),
-         "Clarity band 2: the most it turns its band down (8 dB by default, 0 to 24).");
-    tip (bind (p, new Toggle (row (212, 258, rowB), this, extBase + kTailExtColorOn, "Color")),
+         "A compressor on up to two bands, so a hard-pushed drive does not go muddy or harsh (12 dB/oct below, 6 dB/oct "
+         "above each band). A band works while its Range is above 0 dB.");
+    for (auto& v : tailBandViews)
+        v.clear ();
+    tailBandButtons.clear ();
+    for (int k = 0; k < 2; ++k)
+    {
+        auto* bt = new ActionButton (row (68 + k * 20, 86 + k * 20, rowB), k == 0 ? "1" : "2", [this, k] { showTailBand (k); },
+                                     [this, k] { return tailBand == k; });
+        bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)." : "Show Clarity's second band (blue in the display).");
+        p->addView (bt);
+        tailBandButtons.push_back (bt);
+        const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
+        const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
+        const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
+        CView* views[3] = {bind (p, new NumberBox (row (110, 160, rowB), this, f)), bind (p, new NumberBox (row (164, 198, rowB), this, w)),
+                           bind (p, new NumberBox (row (202, 248, rowB), this, g))};
+        tip (views[0], "Clarity: the centre of this band.");
+        tip (views[1], "Clarity: this band's width in octaves.");
+        tip (views[2], "Clarity: the most this band is turned down; at 0 dB the band does nothing.");
+        for (auto* v : views)
+            tailBandViews[k].push_back (v);
+    }
+    showTailBand (tailBand);
+    tip (bind (p, new Toggle (row (254, 300, rowB), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
-    tip (bind (p, new NumberBox (row (262, 304, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
-    tip (bind (p, new NumberBox (row (308, 350, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
-    tip (bind (p, new NumberBox (row (354, 414, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
-    tip (bind (p, new NumberBox (row (418, 460, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
-    tip (bind (p, new Knob (CRect (470, y + 4, 526, y + 68), this, base + kTailDrive, nullptr, true)),
+    tip (bind (p, new NumberBox (row (304, 342, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
+    tip (bind (p, new NumberBox (row (346, 384, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
+    tip (bind (p, new NumberBox (row (388, 440, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
+    tip (bind (p, new NumberBox (row (444, 480, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
+    tip (bind (p, new Knob (CRect (490, y + 4, 546, y + 68), this, base + kTailDrive, nullptr, true)),
          "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
-    tip (bind (p, new Knob (CRect (534, y + 4, 590, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
-    tip (bind (p, new Knob (CRect (598, y + 4, 654, y + 68), this, extBase + kTailExtOutput)), "Output level of the saturator.");
+    tip (bind (p, new Knob (CRect (552, y + 4, 608, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
+    tip (bind (p, new Knob (CRect (614, y + 4, 670, y + 68), this, extBase + kTailExtOutput)), "Output level of the saturator.");
     return p;
+}
+
+void EditorBase::showTailBand (int band)
+{
+    tailBand = band == 1 ? 1 : 0;
+    for (int k = 0; k < 2; ++k)
+        for (auto* v : tailBandViews[k])
+            v->setVisible (k == tailBand);
+    for (auto* b : tailBandButtons)
+        b->invalid ();
 }
 
 void EditorBase::applyParamTooltips (const char* (*helpFor) (uint32_t))

@@ -5,6 +5,7 @@
 //   right handle, up / down       Amt Hi
 //   right handle, sideways        Freq
 //   Clarity handle, sideways      a Clarity band's frequency (band 2 is drawn blue)
+//   Clarity handle, up / down     its Range: the handle sits at the most it cuts, drag down for more
 //   Clarity band edge, sideways   its width
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Clarity's width
 //   double-click or right-click a handle      reset its parameters
@@ -38,19 +39,21 @@ public:
     void onMouseExitEvent (VSTGUI::MouseExitEvent& e) override;
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle (); // follows Clarity's cut
+    std::function<void (int)> onBandPicked; // a Clarity band's handle or edge was grabbed
 
     double xOfHz (double hz) const;
     double yOfDb (double db) const;
     VSTGUI::CPoint loHandle () const;
     VSTGUI::CPoint hiHandle () const;
-    VSTGUI::CPoint clarityHandle (int band) const; // on the 0 dB line at a Clarity band's centre
+    VSTGUI::CPoint clarityHandle (int band) const; // at a Clarity band's centre, as deep as its Range
     double clarityEdgeX (int band, bool high) const; // its edges
 
 private:
     enum class Drag { None, Lo, Hi, Clarity, ClarityLow, ClarityHigh };
     Drag hit (const VSTGUI::CPoint& p, int* band = nullptr) const; // band: which Clarity band was hit
     double sampleRate () const;
-    bool clarityOn (int band) const;
+    bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0)
+    bool clarityShown (int band) const; // its handle is there to grab (Clarity on)
 
     pk::ParamHost* host;
     RateSource rate;
@@ -58,7 +61,7 @@ private:
     Drag drag = Drag::None;
     VSTGUI::CPoint down;
     int dragBand = 0; // the Clarity band being dragged
-    double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0;
+    double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0, startRange = 0.0;
     bool movedH = false, movedV = false;
     float shownCut[kClarityBands] = {0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
 };

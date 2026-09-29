@@ -36,12 +36,11 @@ inline const char* forParam (uint32_t id)
                    "handle in the frequency display (wheel: width). The drive display shows the cut (top right).";
         case kClarityFreq: return "Clarity: the centre of the band it compresses (20 to 500 Hz).";
         case kClarityWidth: return "Clarity: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
-        case kClarity2:
-            return "Clarity's second band (blue in the display): its own frequency, width and range, compressed the "
-                   "same way. Use it for a second muddy or harsh spot.";
         case kClarity2Freq: return "Clarity band 2: the centre of its band.";
         case kClarity2Width: return "Clarity band 2: the band's width in octaves.";
-        case kClarity2Range: return "Clarity band 2: the most it turns its band down (8 dB by default, 0 to 24).";
+        case kClarity2Range:
+            return "Clarity band 2 (blue in the display): the most it turns its band down. At 0 dB (the default) the band "
+                   "does nothing; give it a range to use it on a second muddy or harsh spot.";
         case kClarityRange:
             return "Clarity: the most it turns its band down before the curve (after it, half as much). 8 dB by default, "
                    "0 to 24 dB.";

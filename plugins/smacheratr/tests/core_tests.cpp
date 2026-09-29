@@ -519,16 +519,17 @@ TEST (clarity_full_range)
 TEST (clarity_second_band)
 {
     // a low-mid and a harsh upper tone, driven hard: band 1 at 250 Hz and band 2 at 3 kHz each take
-    // their own tone down; band 2 alone leaves the low mids and reports its own cut
+    // their own tone down; band 2 alone (band 1's Range at 0) leaves the low mids and reports its own cut
     auto in = tones ({{250.0, -6.0}, {3000.0, -6.0}}, 0.5);
     auto run2 = [&] (bool b1, bool b2, Meters* m) {
         auto e = engine ();
         if (m)
             e->setMeters (m);
         e->setParam (kDrive, 18.0);
-        e->setParam (kClarity, b1 ? 1.0 : 0.0);
+        e->setParam (kClarity, b1 || b2 ? 1.0 : 0.0); // one button; a band works while its Range is above 0
+        e->setParam (kClarityRange, b1 ? 8.0 : 0.0);
         e->setParam (kClarityWidth, 1.0);
-        e->setParam (kClarity2, b2 ? 1.0 : 0.0);
+        e->setParam (kClarity2Range, b2 ? 8.0 : 0.0);
         e->setParam (kClarity2Freq, 3000.0);
         e->setParam (kClarity2Width, 1.0);
         return run (*e, in);
@@ -543,7 +544,17 @@ TEST (clarity_second_band)
     CHECK (db (only2, 3000.0) < db (none, 3000.0) - 2.0 && db (only2, 250.0) > db (none, 250.0) - 1.0,
            "band 2 alone: its own band only");
     CHECK (m2.clarity2Db.load () < -1.0 && m2.clarityDb.load () == 0.0f, "band 2's meter: %.1f dB", m2.clarity2Db.load ());
-    CHECK (!paramTable ().info (kClarity2).def && paramTable ().info (kClarity2Freq).def == 3000.0, "off by default, at 3 kHz");
+    CHECK (paramTable ().info (kClarity2Range).def == 0.0 && paramTable ().info (kClarity2Freq).def == 3000.0,
+           "band 2 does nothing by default (Range 0), at 3 kHz");
+    // states from before one Clarity button mean the same
+    {
+        double on1 = 0.0, r1 = 1.0 / 3.0, r2 = 1.0 / 3.0;
+        clarityToOneButton (on1, r1, 1.0, r2); // band 2 was on on its own
+        CHECK (on1 == 1.0 && r1 == 0.0 && r2 == 1.0 / 3.0, "band 2 alone: Clarity on, band 1's Range 0");
+        on1 = 1.0, r1 = 1.0 / 3.0, r2 = 1.0 / 3.0;
+        clarityToOneButton (on1, r1, 0.0, r2); // band 2 was off
+        CHECK (on1 == 1.0 && r1 == 1.0 / 3.0 && r2 == 0.0, "band 2 off: its Range 0");
+    }
 }
 
 TEST (tail_has_every_control)

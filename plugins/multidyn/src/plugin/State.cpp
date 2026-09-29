@@ -12,8 +12,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x4d44594e; // 'MDYN'
-constexpr int32 kVersion = 2;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 3;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
+constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -52,6 +53,18 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // one Clarity button: a state from before, made to mean the same
+    if (version < kClarityOneButton)
+    {
+        double on1 = st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarity)] ? st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarity)] : 0.0, on2 = st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarity2)] ? st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarity2)] : 0.0;
+        double r1 = st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarityRange)] ? st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarityRange)] : smacheratr::defaultNormalized (smacheratr::kClarityRange);
+        double r2 = st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarity2Range)];
+        smacheratr::clarityToOneButton (on1, r1, on2, r2);
+        st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarity)] = on1;
+        st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarityRange)] = r1;
+        st.norm[(uint32_t)(kSatExtBase + pk::kTailExtClarity2Range)] = r2;
+        st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarity)] = st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarityRange)] = st.has[(uint32_t)(kSatExtBase + pk::kTailExtClarity2Range)] = true;
     }
     // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
     if (version < kClarityFullRange)
