@@ -40,6 +40,7 @@ private:
     pk::Label* summary[2] = {nullptr, nullptr};
     pk::ActionButton* modeButtons[2] = {nullptr, nullptr};
     pk::ActionButton* captureBtn = nullptr;
+    VSTGUI::CView* alienGrain = nullptr; // Alien's grain size (the Window parameter)
     VSTGUI::CViewContainer* windowGroup = nullptr;
     VSTGUI::CViewContainer* transientsGroup = nullptr;
     VSTGUI::CViewContainer* smearGroup = nullptr;

@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include <cmath>
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -11,7 +13,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2; // 2: the Algorithm choice has 8 entries (Alien)
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -67,6 +69,12 @@ bool readState (IBStream* stream, State& st, bool withClip)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    if (version < 2 && st.has[kAlgorithm])
+    {
+        // the choice was stored over 7 entries: keep the same algorithm on the longer list
+        const double index = std::round (st.norm[kAlgorithm] * (kAlgorithmsBefore06 - 1));
+        st.norm[kAlgorithm] = toNormalized (kAlgorithm, index);
     }
     st.hasClip = false;
     st.clip = {};

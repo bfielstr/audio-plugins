@@ -52,7 +52,7 @@ struct Reg
     static void name ()
 
 constexpr double kSr = 48000.0;
-static const char* kAlgoNames[] = {"Windowed", "Balanced", "Polyphonic", "Soloist", "Beats", "Extreme", "Tape"};
+static const char* kAlgoNames[] = {"Windowed", "Balanced", "Polyphonic", "Soloist", "Beats", "Extreme", "Tape", "Alien"};
 
 static Clip clipFrom (std::vector<float> l, std::vector<float> r = {}, double sr = kSr)
 {
@@ -180,6 +180,37 @@ static double peakFreq (const std::vector<float>& x, size_t a, double sr = kSr)
     const double den = y0 - 2 * y1 + y2;
     const double off = std::fabs (den) > 1e-12 ? 0.5 * (y0 - y2) / den : 0.0;
     return (best + off) * sr / N;
+}
+
+// The spectral peak of the power averaged over overlapping frames of [a, b): for granular output,
+// whose single frames are speckled by the grains' random phases.
+static double averagedPeakFreq (const std::vector<float>& x, size_t a, size_t b, double sr = kSr)
+{
+    const int N = 16384;
+    smempler::Fft fft (N);
+    std::vector<float> buf (N, 0.0f);
+    std::vector<smempler::Fft::cf> spec (N / 2 + 1);
+    std::vector<double> pw (N / 2 + 1, 0.0);
+    for (size_t pos = a; pos + N <= b; pos += N / 4)
+    {
+        for (int i = 0; i < N; ++i)
+            buf[(size_t)i] = x[pos + (size_t)i] * (0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N));
+        fft.forward (buf.data (), spec.data ());
+        for (int k = 0; k <= N / 2; ++k)
+            pw[(size_t)k] += std::norm (spec[(size_t)k]);
+    }
+    int best = 1;
+    for (int k = 1; k < N / 2; ++k)
+        if (pw[(size_t)k] > pw[(size_t)best])
+            best = k;
+    // the centre of mass of the peak (+-3 bins)
+    double num = 0.0, den = 0.0;
+    for (int k = std::max (1, best - 3); k <= std::min (N / 2, best + 3); ++k)
+    {
+        num += k * pw[(size_t)k];
+        den += pw[(size_t)k];
+    }
+    return num / den * sr / N;
 }
 
 // Amplitude-weighted mean frequency (spectral centroid) over [a, a + 8192).
@@ -342,16 +373,19 @@ TEST (pitch_shift_is_accurate)
             RenderSettings s = algo (a);
             s.semis = semis;
             s.speed = 0.8;
+            if (a == kAlien)
+                s.windowMs = 200.0; // a grain's spectrum is as wide as 1 / its length: long grains to measure
             Rendered out;
             render (c, s, out);
             const double expect = 220.0 * std::pow (2.0, semis / 12.0);
             const size_t mid = out.l.size () / 2;
             // plain overlap-add modulates the waveform, so measure its spectral peak instead of periodicity
-            const bool spectral = a == kExtreme || a == kWindowed;
-            const double f = spectral ? peakFreq (out.l, mid - 8192) : pitchOf (out.l, mid - 6000, mid + 6000);
+            const bool spectral = a == kExtreme || a == kWindowed || a == kAlien;
+            const double f = a == kAlien ? averagedPeakFreq (out.l, out.l.size () / 8, 7 * out.l.size () / 8)
+                             : spectral ? peakFreq (out.l, mid - 8192) : pitchOf (out.l, mid - 6000, mid + 6000);
             // Unaligned grains step the phase every hop, which can move a pure tone by up to half
             // the hop rate (hop = window / 2 = 30 ms): the known price of Simple Windowed.
-            const double tolHz = a == kWindowed ? 0.5 / 0.030 + 1.0 : expect * (a == kExtreme ? 0.02 : 0.01);
+            const double tolHz = a == kWindowed ? 0.5 / 0.030 + 1.0 : expect * (a == kExtreme || a == kAlien ? 0.02 : 0.01);
             CHECK (std::fabs (f - expect) < tolHz, "%s %+.0f st: %.2f Hz, expected %.2f", kAlgoNames[a], semis, f,
                    expect);
         }
@@ -459,7 +493,7 @@ TEST (transients_land_where_the_time_map_puts_them)
     const double e1 = 0.8 / speed, e2 = 1.68 / speed;
     for (int a = 0; a < kNumAlgorithms; ++a)
     {
-        if (a == kExtreme)
+        if (a == kExtreme || a == kAlien) // they smear a click by design
             continue;
         RenderSettings s = algo (a);
         s.speed = speed;
@@ -524,6 +558,35 @@ TEST (extreme_stretches_far)
                                             rms (c.audio->ch[0], 0, (size_t)c.audio->length));
     CHECK (std::fabs (level) < 3.0, "level %.2f dB", level);
     std::printf ("    20 s of Extreme output rendered in %.2f s\n", secs);
+}
+
+TEST (stereo_wide_or_same)
+{
+    // Extreme and Alien: Wide gives left and right their own smear / cloud (unrelated); Same plays one
+    // on both
+    Clip c = clipFrom (sine (330.0, 2.0));
+    for (int a : {kExtreme, kAlien})
+        for (int mode : {kStereoWide, kStereoSame})
+        {
+            RenderSettings s = algo (a);
+            s.stereo = mode;
+            s.speed = 0.5;
+            Rendered out;
+            render (c, s, out);
+            const size_t n = out.l.size ();
+            double lr = 0.0, ll = 0.0, rr = 0.0;
+            for (size_t i = n / 4; i < 3 * n / 4; ++i)
+            {
+                lr += (double)out.l[i] * out.r[i];
+                ll += (double)out.l[i] * out.l[i];
+                rr += (double)out.r[i] * out.r[i];
+            }
+            const double corr = lr / std::sqrt (std::max (1e-30, ll * rr));
+            if (mode == kStereoSame)
+                CHECK (corr > 0.999, "%s Same: one channel on both (%f)", kAlgoNames[a], corr);
+            else
+                CHECK (corr < 0.6, "%s Wide: left and right apart (%f)", kAlgoNames[a], corr);
+        }
 }
 
 TEST (silence_stays_silent_and_edges_fade)

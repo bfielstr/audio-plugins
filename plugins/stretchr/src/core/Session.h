@@ -62,6 +62,7 @@ public:
     std::atomic<double> hostBpm {120.0};
     std::atomic<double> transport {0.0}; // seconds
     std::atomic<bool> playing {false};
+    std::atomic<double> playOffset {-1.0}; // On Play: seconds since playback started (else -1)
     void processBegin ();
     void processEnd () { inProcess.store (false, std::memory_order_release); }
 

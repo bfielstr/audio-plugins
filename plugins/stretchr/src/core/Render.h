@@ -23,12 +23,13 @@ struct RenderSettings
     int transients = kMixed;
     double smearMs = 500.0;
     double gainDb = 0.0;
+    int stereo = kStereoWide; // Extreme and Alien
 
     bool operator== (const RenderSettings& o) const
     {
         return algorithm == o.algorithm && semis == o.semis && formantSemis == o.formantSemis &&
                preserveFormants == o.preserveFormants && speed == o.speed && windowMs == o.windowMs &&
-               transients == o.transients && smearMs == o.smearMs && gainDb == o.gainDb;
+               transients == o.transients && smearMs == o.smearMs && gainDb == o.gainDb && stereo == o.stereo;
     }
     bool operator!= (const RenderSettings& o) const { return !(*this == o); }
 };

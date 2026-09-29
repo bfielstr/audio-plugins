@@ -24,8 +24,10 @@ enum ParamId : uint32_t
     kGain,             // dB
     kOutside,          // what the input does outside the clip: Thru / Mute
     kTailBase,         // the Smacheratr at the end of the chain: pk::kTailFields entries (not render settings)
+    kTrigger = kTailBase + pk::kTailFields, // On Play: the clip starts when the host starts; Timeline: where it is
+    kStereo,           // Extreme and Alien: Wide (left and right apart) / Same (one channel, duplicated)
 
-    kNumParams = kTailBase + pk::kTailFields
+    kNumParams
 };
 
 enum Algorithm
@@ -37,8 +39,13 @@ enum Algorithm
     kBeats,        // transient-bounded segments
     kExtreme,      // spectral smearing for very long stretches
     kTape,         // varispeed: pitch follows speed
+    kAlien,        // a granular cloud: scattered, sometimes reversed, slightly detuned grains
     kNumAlgorithms
 };
+constexpr int kAlgorithmsBefore06 = 7; // older projects stored the choice over 7 entries
+
+enum Trigger { kOnPlay = 0, kTimeline };
+enum StereoMode { kStereoWide = 0, kStereoSame };
 
 enum Transients { kCrisp = 0, kMixed, kSmooth };
 enum Outside { kThru = 0, kMute };

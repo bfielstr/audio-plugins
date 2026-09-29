@@ -256,7 +256,10 @@ void Editor::buildUI (CFrame* f)
     bind (transientsGroup, new Segmented (CRect (40, 48, 268, 72), this, kTransients, {"Crisp", "Mixed", "Smooth"}));
     smearGroup = new pk::Group (CRect (0, 86, 308, 204));
     algo->addView (smearGroup);
-    bind (smearGroup, new Knob (CRect (114, 8, 194, 108), this, kSmear));
+    bind (smearGroup, new Knob (CRect (40, 8, 120, 108), this, kSmear));
+    alienGrain = bind (smearGroup, new Knob (CRect (128, 8, 208, 108), this, kWindow));
+    smearGroup->addView (new Label (CRect (214, 30, 300, 44), "Stereo", 10.5, false, 1));
+    bind (smearGroup, new Segmented (CRect (214, 48, 300, 70), this, kStereo, {"Wide", "Same"}));
     noneGroup = new pk::Group (CRect (0, 86, 308, 204));
     algo->addView (noneGroup);
     auto* none = new Label (CRect (12, 44, 296, 60), "No extra settings for this algorithm", 10.5, false, 1);
@@ -288,6 +291,8 @@ void Editor::buildUI (CFrame* f)
     bind (out, new Knob (CRect (24, 28, 104, 128), this, kGain, nullptr, true));
     out->addView (new Label (CRect (8, 134, 120, 148), "Outside Clip", 10.5, false, 1));
     bind (out, new Segmented (CRect (12, 150, 116, 172), this, kOutside, {"Thru", "Mute"}));
+    out->addView (new Label (CRect (8, 100, 120, 114), "Trigger", 10.5, false, 1));
+    bind (out, new Segmented (CRect (12, 114, 116, 132), this, kTrigger, {"Play", "Timeline"}));
 
     applyParamTooltips (&help::forParam);
     if (s)
@@ -312,7 +317,9 @@ void Editor::updateAlgorithmControls ()
     const int a = (int)std::lround (plainValue (kAlgorithm));
     windowGroup->setVisible (a == kWindowed || a == kBalanced);
     transientsGroup->setVisible (a == kPolyphonic);
-    smearGroup->setVisible (a == kExtreme);
+    smearGroup->setVisible (a == kExtreme || a == kAlien);
+    if (alienGrain)
+        alienGrain->setVisible (a == kAlien); // Alien's grain size
     noneGroup->setVisible (a == kSoloist || a == kBeats || a == kTape);
     const std::string text = help::algorithmSummary (a);
     const auto nl = text.find ('\n');

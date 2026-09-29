@@ -433,7 +433,8 @@ void ClipView::draw (CDrawContext* ctx)
     // playhead
     if (s && s->playing.load ())
     {
-        const double t = s->transport.load () - c.start;
+        const double off = s->playOffset.load ();
+        const double t = off >= 0.0 ? off : s->transport.load () - c.start;
         const double x = timeToX (t);
         if (t >= 0.0 && t <= outLen && x >= p.left && x <= p.right)
         {
@@ -736,7 +737,8 @@ void ClipView::idle ()
     const bool playing = s->playing.load ();
     if (playing || playing != wasPlaying)
     {
-        const double x = timeToX (s->transport.load () - s->clipStart ());
+        const double off = s->playOffset.load ();
+        const double x = timeToX (off >= 0.0 ? off : s->transport.load () - s->clipStart ());
         if (std::fabs (x - lastPlayX) >= 1.0 || playing != wasPlaying)
             dirty = true;
         lastPlayX = x;

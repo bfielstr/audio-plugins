@@ -39,6 +39,8 @@ private:
     std::array<std::atomic<double>, kNumParams> normMirror;
     RenderedPtr cur, prev;
     uint32_t renderGen = 0;
+    bool wasPlaying = false;
+    long long playAnchor = 0; // project sample where playback last started
     int fade = 0;
     static constexpr int kFade = 1024;
 };

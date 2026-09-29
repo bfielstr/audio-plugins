@@ -23,10 +23,18 @@ inline const char* forParam (uint32_t id)
         case kSpeed: return "Playback speed of the whole clip: 50 % is twice as long. Stretch markers work on top of this.";
         case kFollowTempo: return "Set the speed from the host tempo divided by Source Tempo, so the clip follows the song.";
         case kSourceBpm: return "The tempo the clip was recorded at (used by Follow Tempo).";
-        case kWindow: return "Grain length of Simple Windowed and Balanced. Short for drums, long for sustained sounds.";
+        case kWindow: return "Grain length of Simple Windowed, Balanced and Alien. Short for drums, long for sustained sounds.";
         case kTransients:
             return "Polyphonic frame size. Crisp keeps attacks sharp, Smooth favours sustained tones and bass.";
-        case kSmear: return "Extreme: analysis window. Longer windows give smoother, more washed-out stretches.";
+        case kSmear:
+            return "Extreme: analysis window, longer is smoother and more washed out. Alien: how far the grains scatter in "
+                   "time (a quarter of it either way).";
+        case kStereo:
+            return "Extreme and Alien. Wide: left and right are smeared (or scattered) apart, for a wide sound. Same: one "
+                   "channel, duplicated.";
+        case kTrigger:
+            return "Play: the clip starts the moment the host starts playing, from wherever the playhead is. Timeline: it "
+                   "plays where it sits on the timeline.";
         case kGain: return "Level of the rendered clip.";
         case kOutside:
             return "What happens to the track's audio outside the clip while the transport plays: pass it through or "
@@ -46,6 +54,7 @@ inline const char* algorithmSummary (int a)
         case kBeats: return "Slices at transients. Keeps drums tight;\ntails loop when slowed down.";
         case kExtreme: return "Spectral smearing for huge stretches\n(down to 5 % speed): turns anything into a pad.";
         case kTape: return "Varispeed: pitch follows Speed, like a tape\nrunning fast or slow.";
+        case kAlien: return "A granular cloud: scattered, sometimes reversed,\nslightly detuned grains. Alien textures.";
         default: return "";
     }
 }

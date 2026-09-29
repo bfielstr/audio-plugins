@@ -112,7 +112,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             {
                 const uint32_t id = q->getParameterId ();
                 normMirror[id].store (v);
-                if (id >= kTailBase)
+                if (id >= kTailBase && id < kTailBase + pk::kTailFields)
                     tail.setParam (id - kTailBase, toPlain (id, v));
                 else
                     session->setParam (id, toPlain (id, v), false);
@@ -136,6 +136,12 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             session->hostBpm.store (ctx->tempo, std::memory_order_relaxed);
     }
     session->playing.store (playing, std::memory_order_relaxed);
+    // On Play: the clip starts the moment the host starts playing (from wherever the playhead is)
+    if (playing && !wasPlaying)
+        playAnchor = pos;
+    wasPlaying = playing;
+    const bool onPlay = std::lround (session->param (kTrigger)) == kOnPlay;
+    session->playOffset.store (onPlay ? (double)(pos - playAnchor) / sr : -1.0, std::memory_order_relaxed);
 
     const float* inL = data.inputs[0].channelBuffers32[0];
     const float* inR = data.inputs[0].channelBuffers32[1];
@@ -159,7 +165,8 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
 
     const bool clipOn = playing && !capturing && hasClip && cur;
     const bool muteOutside = hasClip && session->param (kOutside) >= 0.5;
-    const long long startS = (long long)std::llround (session->clipStart () * sr);
+    // where the clip starts: at the moment playback started (On Play) or where it sits (Timeline)
+    const long long startS = onPlay ? playAnchor : (long long)std::llround (session->clipStart () * sr);
     const long long len = cur ? cur->length () : 0;
     const long long span = cur ? std::max (len, (long long)std::llround (cur->srcSeconds * sr)) : 0;
     const Rendered* p = fade > 0 && prev ? prev.get () : nullptr;
@@ -214,7 +221,7 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         normMirror[id].store (st.norm[id]);
-        if (id < kTailBase)
+        if (id < kTailBase || id >= kTailBase + pk::kTailFields)
             session->setParam (id, toPlain (id, st.norm[id]));
     }
     session->setClip (st.hasClip ? std::move (st.clip) : Clip {}, false);

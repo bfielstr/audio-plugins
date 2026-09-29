@@ -26,6 +26,7 @@ RenderSettings settingsFromParams (const double* p, double hostBpm)
     s.transients = std::clamp ((int)std::lround (p[kTransients]), 0, 2);
     s.smearMs = p[kSmear];
     s.gainDb = p[kGain];
+    s.stereo = std::clamp ((int)std::lround (p[kStereo]), 0, 1);
     return s;
 }
 
@@ -200,16 +201,29 @@ bool renderExtreme (const Clip& c, const RenderSettings& s, const TimeMap& map, 
         seed ^= seed << 5;
         return (float)(seed >> 8) * (1.0f / 16777216.0f);
     };
+    // Stereo: Wide gives each channel its own random phases, and the right one reads a little
+    // later, so the two smears are unrelated (wide); Same smears the mix of the channels once and
+    // plays it on both
+    const bool wide = s.stereo == kStereoWide;
+    const bool twoChannels = stereo || wide;
+    std::vector<float> mono;
+    if (!wide && stereo)
+    {
+        mono.resize ((size_t)a.length);
+        for (int i = 0; i < a.length; ++i)
+            mono[(size_t)i] = 0.5f * (a.data (0)[i] + a.data (1)[i]);
+    }
     for (long long cpos = 0; cpos - N / 2 < total; cpos += H)
     {
         const double vs = map.srcAt ((double)std::min (cpos, total) / sr) * sr;
         const double ratio = std::pow (2.0, semisAt (c, s, vs / sr) / 12.0);
-        for (int k = 0; k < bins; ++k)
-            phase[(size_t)k] = 2.0f * (float)M_PI * rnd ();
-        for (int ch = 0; ch < (stereo ? 2 : 1); ++ch)
+        for (int ch = 0; ch < (wide ? 2 : 1); ++ch)
         {
-            const float* d = a.data (ch);
-            const long long start = (long long)std::llround (vs) - N / 2;
+            if (ch == 0 || wide)
+                for (int k = 0; k < bins; ++k)
+                    phase[(size_t)k] = 2.0f * (float)M_PI * rnd ();
+            const float* d = !wide && stereo ? mono.data () : a.data (stereo ? ch : 0);
+            const long long start = (long long)std::llround (vs) - N / 2 + (ch == 1 ? H / 2 : 0);
             for (int i = 0; i < N; ++i)
             {
                 const long long idx = start + i;
@@ -242,7 +256,70 @@ bool renderExtreme (const Clip& c, const RenderSettings& s, const TimeMap& map, 
         if (!tick ((double)cpos / (double)total))
             return false;
     }
-    if (!stereo)
+    if (!twoChannels || !wide)
+        std::memcpy (R, L, sizeof (float) * (size_t)total);
+    return true;
+}
+
+//------------------------------------------------------------------------------
+// Alien: a granular cloud. Grains (Window long, Hann-shaped, four overlapping) are taken around
+// the stretched read position, scattered in time by up to Smear / 4 either way, a quarter of them
+// reversed and each detuned by up to 12 cents, so the sound breaks into an unfamiliar, shimmering
+// texture. Stereo: Wide runs an independent cloud per channel; Same one cloud (of the mix), on both.
+bool renderAlien (const Clip& c, const RenderSettings& s, const TimeMap& map, float* L, float* R, long long total,
+                  Ticker& tick)
+{
+    const SampleData& a = *c.audio;
+    const double sr = a.sampleRate;
+    const bool stereo = a.numChannels > 1, wide = s.stereo == kStereoWide;
+    const int grain = std::clamp ((int)std::lround (s.windowMs * 0.001 * sr), 64, (int)(0.5 * sr));
+    const int hop = std::max (1, grain / 4);
+    const double scatter = s.smearMs * 0.001 * sr * 0.25;
+    std::vector<float> win ((size_t)grain);
+    for (int i = 0; i < grain; ++i)
+        win[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / grain);
+    // four Hann grains overlap; unrelated grains add in power: scale back to the input's level
+    const float g = (float)(1.0 / std::sqrt (4.0 * 0.375));
+    std::vector<float> mono;
+    const float* src[2] = {a.data (0), stereo ? a.data (1) : a.data (0)};
+    if (!wide && stereo)
+    {
+        mono.resize ((size_t)a.length);
+        for (int i = 0; i < a.length; ++i)
+            mono[(size_t)i] = 0.5f * (a.data (0)[i] + a.data (1)[i]);
+        src[0] = src[1] = mono.data ();
+    }
+    const int channels = wide ? 2 : 1;
+    for (int ch = 0; ch < channels; ++ch)
+    {
+        uint32_t seed = ch == 0 ? 0x2545F491u : 0x9E3779B9u;
+        auto rnd = [&seed] {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            return (double)(seed >> 8) * (1.0 / 16777216.0);
+        };
+        float* out = ch == 0 ? L : R;
+        const float* d = src[ch];
+        for (long long gpos = -grain; gpos < total; gpos += hop)
+        {
+            const double centre = map.srcAt ((double)std::clamp (gpos + grain / 2, 0LL, total) / sr) * sr;
+            const double at = centre + (2.0 * rnd () - 1.0) * scatter;
+            const double cents = (2.0 * rnd () - 1.0) * 12.0;
+            const double rate = std::pow (2.0, (semisAt (c, s, centre / sr) + cents / 100.0) / 12.0) * (rnd () < 0.25 ? -1.0 : 1.0);
+            const double start = at - rate * grain / 2.0;
+            for (int i = 0; i < grain; ++i)
+            {
+                const long long o = gpos + i;
+                if (o < 0 || o >= total)
+                    continue;
+                out[o] += readLinear (d, a.length, start + rate * i) * win[(size_t)i] * g;
+            }
+            if (ch == channels - 1 && !tick ((double)gpos / (double)total))
+                return false;
+        }
+    }
+    if (!wide)
         std::memcpy (R, L, sizeof (float) * (size_t)total);
     return true;
 }
@@ -456,6 +533,7 @@ bool renderClip (const Clip& clip, const RenderSettings& s, double outRate, Rend
         case kSoloist: ok = renderPsola (clip, s, map, cache, L.data (), R.data (), total, tick); break;
         case kExtreme: ok = renderExtreme (clip, s, map, L.data (), R.data (), total, tick); break;
         case kTape: ok = renderTape (clip, map, L.data (), R.data (), total, tick); break;
+        case kAlien: ok = renderAlien (clip, s, map, L.data (), R.data (), total, tick); break;
         case kPolyphonic:
         default:
         {

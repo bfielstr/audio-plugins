@@ -12,7 +12,7 @@ const ParamTable& paramTable ()
     static const ParamTable t ([] {
         std::vector<ParamInfo> v;
         v.push_back (choice (kAlgorithm, "Algorithm", "Algo",
-                             {"Simple Windowed", "Balanced", "Polyphonic", "Soloist", "Beats", "Extreme", "Tape"},
+                             {"Simple Windowed", "Balanced", "Polyphonic", "Soloist", "Beats", "Extreme", "Tape", "Alien"},
                              kPolyphonic));
         v.push_back (integer (kPitch, "Pitch", "Pitch", -24.0, 24.0, 0.0, Disp::Semis));
         v.push_back (integer (kFine, "Fine", "Fine", -100.0, 100.0, 0.0, Disp::Cents));
@@ -27,6 +27,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kGain, "Gain", "Gain", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (choice (kOutside, "Outside Clip", "Outside", {"Thru", "Mute"}, kThru));
         pk::addTailParams (v, kTailBase);
+        v.push_back (choice (kTrigger, "Trigger", "Trigger", {"On Play", "Timeline"}, kOnPlay));
+        v.push_back (choice (kStereo, "Stereo", "Stereo", {"Wide", "Same"}, kStereoWide));
         return v;
     }());
     return t;

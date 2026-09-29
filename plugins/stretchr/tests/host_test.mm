@@ -100,6 +100,9 @@ int main (int argc, char** argv)
         const size_t lat = rig.processor->getLatencySamples ();
         CHECK (lat > 0 && lat < 200, "latency %zu", lat);
 
+        // the clip where it sits on the timeline (On Play is tested further down)
+        setParam (rig, kTrigger, (double)kTimeline);
+
         // --- no clip: transparent ------------------------------------------------------
         std::vector<float> out, outR;
         playFrom (rig, 0);
@@ -138,6 +141,21 @@ int main (int argc, char** argv)
         CHECK (std::fabs (pClip - 220.0) < 1.5, "inside the clip: captured tone %.1f Hz", pClip);
         CHECK (std::fabs (pAfter - 523.0) < 3.0, "after the clip: input %.1f Hz", pAfter);
         CHECK (std::fabs (outR[80000] / out[80000] - 0.8) < 0.02 || std::fabs (out[80000]) < 0.05, "stereo kept");
+
+        // --- On Play: the clip starts the moment playback starts, wherever the playhead is ----
+        setParam (rig, kTrigger, (double)kOnPlay);
+        stopTransport (rig);
+        {
+            std::vector<float> stopped;
+            rig.render (0.05, stopped, nullptr, tone (523.0, 0.25)); // the processor sees the stop
+        }
+        playFrom (rig, 5 * 48000); // far past where the clip sits
+        out.clear ();
+        rig.render (1.0, out, nullptr, tone (523.0, 0.25));
+        CHECK (std::fabs (pitchOf (out, 12000, 36000) - 220.0) < 1.5, "On Play: the clip plays at once: %.1f Hz",
+               pitchOf (out, 12000, 36000));
+        setParam (rig, kTrigger, (double)kTimeline);
+        stopTransport (rig);
 
         // --- pitch +12 and 50 % speed (params from the host) ----------------------------
         setParam (rig, kPitch, 12.0);
