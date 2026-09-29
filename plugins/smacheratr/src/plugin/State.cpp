@@ -10,7 +10,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 2; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 3; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +51,11 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
+    if (version < kClarityFullRange)
+        for (uint32_t id : {kClarityFreq})
+            if (st.has[id])
+                st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
     return true;
 }
 

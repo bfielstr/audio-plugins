@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/Params.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -10,7 +12,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x4c464f43; // 'LFOC'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kClarityFullRange = 2;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +53,11 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
+    if (version < kClarityFullRange)
+        for (uint32_t id : {(uint32_t)(kTailExtBase + pk::kTailExtClarityFreq)})
+            if (st.has[id])
+                st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
     return true;
 }
 

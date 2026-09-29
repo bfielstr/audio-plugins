@@ -489,6 +489,33 @@ TEST (clarity_range_limits_the_cut)
     CHECK (paramTable ().info (kClarityRange).def == 8.0 && paramTable ().info (kClarityRange).max == 24.0, "8 dB by default, up to 24");
 }
 
+TEST (clarity_full_range)
+{
+    // Clarity Frequency covers 20 Hz - 20 kHz; a value saved with the old 20 - 500 Hz range keeps its Hz
+    const auto& t = paramTable ();
+    CHECK (t.info (kClarityFreq).min == 20.0 && t.info (kClarityFreq).max == 20000.0 && t.info (kClarityFreq).def == 250.0,
+           "20 Hz - 20 kHz, 250 Hz by default");
+    for (double hz : {20.0, 80.0, 250.0, 500.0})
+    {
+        const double oldNorm = std::log (hz / 20.0) / std::log (25.0);
+        const double now = toPlain (kClarityFreq, clarityFreqFromNarrowRange (oldNorm));
+        CHECK (std::fabs (now - hz) < 0.01 * hz, "%.0f Hz saved before -> %.1f Hz", hz, now);
+    }
+    // the band works up high too
+    auto in = tones ({{4000.0, -6.0}, {200.0, -12.0}}, 0.5);
+    auto at = [&] (bool clarity, double f) {
+        auto e = engine ();
+        e->setParam (kDrive, 18.0);
+        e->setParam (kClarity, clarity ? 1.0 : 0.0);
+        e->setParam (kClarityFreq, 4000.0);
+        e->setParam (kClarityWidth, 1.0);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 12000, 24000);
+    };
+    CHECK (at (true, 4000.0) < at (false, 4000.0) - 2.0, "a 4 kHz band comes down: %.1f vs %.1f dB", at (true, 4000.0),
+           at (false, 4000.0));
+}
+
 TEST (tail_has_every_control)
 {
     // the saturator at the end of the other plug-ins: its extended fields reach Smacheratr (here Clarity

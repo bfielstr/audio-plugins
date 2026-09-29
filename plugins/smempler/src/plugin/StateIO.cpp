@@ -18,7 +18,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 3: Smacheratr's Clarity Frequency / Width and Para's Dip Start / Low-Pass Floor in the rack; Para's
 //    Liquid is its Vocal movement
 // 4: Smacheratr's Clarity Range in the rack
-constexpr int32 kVersion = 4;
+// 5: Clarity Frequency 20 Hz - 20 kHz (20 - 500 Hz before), in the rack and the end saturator
+constexpr int32 kVersion = 5;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -119,6 +120,21 @@ bool readState (IBStream* stream, PluginState& st)
                 st.has[slotBlockParam (slot, j)] = true;
             }
         }
+    if (version < 5)
+    {
+        // Clarity Frequency's range grew: values saved before, in the new range (the rack's Smacheratrs
+        // below; a slot migrated just now gets the default, already in the new range)
+        const uint32_t endId = kTailExtBase + pk::kTailExtClarityFreq;
+        if (st.has[endId])
+            st.norm[endId] = smacheratr::clarityFreqFromNarrowRange (st.norm[endId]);
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            const uint32_t fId = slotBlockParam (slot, smacheratr::kClarityFreq);
+            if (st.has[typeId] && std::lround (toPlain (typeId, st.norm[typeId])) == kFxSmacheratr)
+                st.norm[fId] = smacheratr::clarityFreqFromNarrowRange (st.norm[fId]);
+        }
+    }
     if (version < 4)
     {
         // parameters that came after the state's version read 0 in the slot: they get their defaults

@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/Params.h"
+
 #include <cmath>
 
 #include "base/source/fstreamer.h"
@@ -13,7 +15,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 2; // 2: the Algorithm choice has 8 entries (Alien)
+constexpr int32 kVersion = 3; // 2: the Algorithm choice has 8 entries (Alien)
+                               // 3: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -70,6 +73,9 @@ bool readState (IBStream* stream, State& st, bool withClip)
             st.has[id] = true;
         }
     }
+    // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
+    if (version < 3 && st.has[kTailExtBase + pk::kTailExtClarityFreq])
+        st.norm[kTailExtBase + pk::kTailExtClarityFreq] = smacheratr::clarityFreqFromNarrowRange (st.norm[kTailExtBase + pk::kTailExtClarityFreq]);
     if (version < 2 && st.has[kAlgorithm])
     {
         // the choice was stored over 7 entries: keep the same algorithm on the longer list
