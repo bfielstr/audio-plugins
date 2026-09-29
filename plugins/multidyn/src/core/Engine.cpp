@@ -49,12 +49,9 @@ double belowGainDb (double x, double thresh, double ratio, bool softKnee, double
 void Engine::prepare (double sampleRate, int)
 {
     sr = sampleRate;
-    // Level detection. Peak: instant attack, 30 ms release (holds the peak between cycles, so
-    // the gain doesn't collapse at zero crossings). RMS: the RMS Window (see process). Character:
-    // 60 ms peak release.
-    peakCoef = (float)std::exp (-1.0 / (0.030 * sr));
+    // Level detection. Peak: instant attack, 60 ms release (holds the peak between cycles, so
+    // the gain doesn't collapse at zero crossings). RMS: the RMS Window (see process).
     peakCoefC = (float)std::exp (-1.0 / (0.060 * sr));
-    liftA = (float)(1.0 - std::exp (-2.0 * M_PI * std::min (7000.0, 0.4 * sr) / sr)); // Soften's low-pass
     meterFall = (float)std::exp (-1.0 / (0.300 * sr));    // meter decay
     smooth = (float)(1.0 - std::exp (-1.0 / (0.010 * sr))); // parameter smoothing
     // pre-limiter: the gain reaches most of its reduction over the look-ahead, releases in 50 ms
@@ -171,12 +168,11 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     }
     updateFilters (false);
     const int nBands = bandCount ();
-    const bool character = std::lround (p[kMode]) == kCharacter;
     const bool softKnee = on (p[kSoftKnee]);
-    const double kneeDb = character ? kCharacterKneeDb : kKneeDb;
+    const double kneeDb = kCharacterKneeDb;
     const bool rms = std::lround (p[kDetector]) == kRms;
-    const double rmsWindowMs = std::clamp (p[kRmsWindow], 1.0, 1000.0) * (character ? 2.5 : 1.0);
-    const float rmsC = (float)std::exp (-1.0 / (rmsWindowMs * 0.001 * sr)), peakC = character ? peakCoefC : peakCoef;
+    const double rmsWindowMs = std::clamp (p[kRmsWindow], 1.0, 1000.0);
+    const float rmsC = (float)std::exp (-1.0 / (rmsWindowMs * 0.001 * sr)), peakC = peakCoefC;
     const bool preLimit = on (p[kPreLimit]);
     const double ceilingOffset = p[kPreLimitCeiling]; // dB above each band's Above threshold
     const double amount = std::clamp (p[kAmount], 0.0, 1.0);
@@ -208,7 +204,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         const double releaseMs = std::max (0.1, p[bandParam (b, kRelease)] * timeScale / 3.0);
         atk[b] = (float)std::exp (-1.0 / (attackMs * 0.001 * sr));
         rel[b] = (float)std::exp (-1.0 / (releaseMs * 0.001 * sr));
-        relSlow[b] = (float)std::exp (-1.0 / (3.0 * releaseMs * 0.001 * sr)); // Character, deep gain changes
+        relSlow[b] = (float)std::exp (-1.0 / (3.0 * releaseMs * 0.001 * sr)); // deep gain changes
         ta[b] = p[bandParam (b, kAboveThresh)];
         ceiling[b] = dbToGain (ta[b] + ceilingOffset);
         ra[b] = p[bandParam (b, kAboveRatio)];
@@ -225,7 +221,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         std::clamp (p[kSoften], 0.0, 1.0) * std::clamp ((18.0 - (ta[top] - tb[top])) / 12.0, 0.0, 1.0);
     const float gainSmooth = soften > 1e-3 ? (float)(1.0 - std::exp (-1.0 / (soften * 0.010 * sr))) : 1.0f;
     const double topKneeDb = (softKnee ? kneeDb : 0.0) + (softKnee ? 12.0 : 18.0) * soften;
-    const float liftBlend = (float)soften;
+    const float liftBlend = (float)soften, liftKeep = (float)(1.0 - 0.5 * soften);
+    const float liftA = (float)(1.0 - std::exp (-2.0 * M_PI * std::min (8000.0 * std::pow (3500.0 / 8000.0, soften), 0.4 * sr) / sr));
 
     for (int i = 0; i < n; ++i)
     {
@@ -308,27 +305,19 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                         level = st.peak;
                     }
                     const float lev = std::max (-120.0f, gainToDb (level));
-                    // Character: the release slows down the deeper the current gain change
-                    float relA = rel[b], relB = rel[b];
-                    if (character)
-                    {
-                        const float deep = std::min (1.0f, std::fabs (st.aboveDb + st.belowDb) / 12.0f);
-                        relA = relB = rel[b] + (relSlow[b] - rel[b]) * deep;
-                    }
+                    // the release slows down the deeper the current gain change
+                    const float deep = std::min (1.0f, std::fabs (st.aboveDb + st.belowDb) / 12.0f);
+                    const float relA = rel[b] + (relSlow[b] - rel[b]) * deep, relB = relA;
                     // Level-domain envelopes feed the static curves (so the audible timing
                     // depends on how far the level is past a threshold, as in the original):
                     // Above reacts with Attack to rising levels, Below with Attack to falling ones.
                     st.envAbove = lev + (lev > st.envAbove ? atk[b] : relA) * (st.envAbove - lev);
                     st.envBelow = lev + (lev < st.envBelow ? atk[b] : relB) * (st.envBelow - lev);
-                    float eA = st.envAbove, eB = st.envBelow;
-                    if (character)
-                    {
-                        // a second stage rounds the onset of the gain change
-                        st.envAbove2 = eA + (eA > st.envAbove2 ? atk[b] : relA) * (st.envAbove2 - eA);
-                        st.envBelow2 = eB + (eB < st.envBelow2 ? atk[b] : relB) * (st.envBelow2 - eB);
-                        eA = st.envAbove2;
-                        eB = st.envBelow2;
-                    }
+                    // a second stage rounds the onset of the gain change
+                    const float eA1 = st.envAbove, eB1 = st.envBelow;
+                    st.envAbove2 = eA1 + (eA1 > st.envAbove2 ? atk[b] : relA) * (st.envAbove2 - eA1);
+                    st.envBelow2 = eB1 + (eB1 < st.envBelow2 ? atk[b] : relB) * (st.envBelow2 - eB1);
+                    const float eA = st.envAbove2, eB = st.envBelow2;
                     const bool softened = b == top && soften > 1e-3;
                     const bool knee = softened ? topKneeDb > 0.01 : softKnee;
                     const double kDb = softened ? topKneeDb : kneeDb;
@@ -364,7 +353,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                             float* lp = st.liftLp[c];
                             lp[0] += (lift - lp[0]) * liftA;
                             lp[1] += (lp[0] - lp[1]) * liftA;
-                            *ch[c] = *ch[c] * gBase + lift + (lp[1] - lift) * liftBlend;
+                            *ch[c] = *ch[c] * gBase + lift + (lp[1] * liftKeep - lift) * liftBlend;
                         }
                         g = 1.0f; // applied above
                     }

@@ -12,10 +12,6 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Overall output level.";
         case kAmount: return "Scales all compression and expansion. At 0% every ratio behaves like 1:1 (no effect).";
         case kTime: return "Scales every Attack and Release time together, keeping their proportions.";
-        case kMode:
-            return "Base: the plain device. Character: slower, smoother detection (50 ms RMS window, a rounded "
-                   "onset), a wider knee and a release that slows down the deeper the gain change - a character "
-                   "compressor rather than a peak grabber.";
         case kPreLimit:
             return "A 1 ms look-ahead limiter on each band's driven input, with its ceiling relative to the band's "
                    "Above threshold: a transient pushed hard into the thresholds is held where the compressor will "
@@ -34,11 +30,12 @@ inline const char* forParam (uint32_t id)
         case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
         case kRmsWindow:
             return "RMS detector: how long a stretch of audio the level is averaged over. Short follows the audio closely, "
-                   "long is smoother and lets transients through. Character mode uses 2.5 times this (50 ms at the default).";
+                   "long is smoother and lets transients through. 50 ms by default.";
         case kSoften:
             return "Keeps a squashed top band from sounding noisy and grainy. The closer the top band's Below threshold is "
                    "to its Above threshold, the more the hiss and air that upward compression lifts is softened (a low-pass "
-                   "on the lifted part only), and the gain changes are rounded off. Fully at work 6 dB apart or closer "
+                   "that reaches down to 3.5 kHz, and up to 6 dB less of it, on the lifted part only), and the gain "
+                   "changes are rounded off. Fully at work 6 dB apart or closer "
                    "(the defaults), nothing happens 18 dB or more apart.";
         case kBands: return "Number of frequency bands (1 = a single full-range processor).";
         case kXover1: return "Crossover between bands 1 and 2.";

@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <set>
 #include <vector>
 
 namespace para {
@@ -63,7 +64,12 @@ public:
     void moveFx (int slot, int dir);
     void showMenu (VSTGUI::CPoint where);
 
+public:
+    // the effect parameters (its own IDs) that have a control on the current rack page (tests)
+    const std::set<uint32_t>& rackPage () const { return rackPageParams; }
+
 private:
+    std::set<uint32_t> rackPageParams;
     void updateVisibility ();
     void updateMdLayout ();
     void rebuildRack ();   // the tabs and the selected slot's controls and panel

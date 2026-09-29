@@ -34,8 +34,8 @@ std::vector<ParamInfo> buildTable ()
         double below, belowRatio, above, aboveRatio, attack, release;
     };
     const BandDefaults defs[kMaxBands] = {
-        {-40.8, kRatioInf, -33.8, 66.7, 47.8, 282.0},      // band 1 (low)
-        {-41.8, kRatioInf, -30.2, 66.7, 22.4, 282.0},      // band 2
+        {-40.8, kRatioInf, -35.5, 66.7, 47.8, 282.0},      // band 1 (low)
+        {-40.8, kRatioInf, -35.5, 66.7, 22.4, 282.0},      // band 2
         {-40.8, kRatioInf, -35.5, kRatioInf, 13.5, 132.0}, // band 3
         {-40.8, 4.17, -35.5, kRatioInf, 13.5, 132.0},      // band 4 (high)
     };
@@ -55,7 +55,7 @@ std::vector<ParamInfo> buildTable ()
         t.push_back (real (id (kAttack), keep (n + " Attack"), "Attack", 0.1, 1000.0, d.attack, Curve::Log, Disp::Ms));
         t.push_back (real (id (kRelease), keep (n + " Release"), "Release", 1.0, 3000.0, d.release, Curve::Log, Disp::Ms));
     }
-    t.push_back (choice (kMode, "Mode", "Mode", {"Base", "Character"}, kCharacter));
+    t.push_back (choice (kMode, "Mode (unused)", "Mode", {"Base", "Character"}, kCharacter));
     t.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", false));
     t.push_back (real (kPreLimitCeiling, "Pre-Limit Above Threshold", "Ceiling", -12.0, 24.0, 0.0, Curve::Linear, Disp::Db));
     // the end-of-chain Smacheratr (off, Drive 0 dB): its fields line up with kSatOn ... kSatPreLimitThreshold
@@ -63,7 +63,7 @@ std::vector<ParamInfo> buildTable ()
                    kSatPostClip == kSatOn + pk::kTailPostClip && kSatMix == kSatOn + pk::kTailMix &&
                    kSatPreLimitThreshold == kSatOn + pk::kTailThreshold);
     pk::addTailParams (t, kSatOn);
-    t.push_back (real (kRmsWindow, "RMS Window", "RMS", 5.0, 300.0, 20.0, Curve::Log, Disp::Ms));
+    t.push_back (real (kRmsWindow, "RMS Window", "RMS", 5.0, 300.0, 50.0, Curve::Log, Disp::Ms));
     t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
     return t;
 }

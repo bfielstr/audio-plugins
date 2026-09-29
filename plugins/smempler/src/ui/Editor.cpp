@@ -702,9 +702,12 @@ void Editor::buildBody ()
     pk::MappedParamHost* h = hostFor (s);
     auto* g = fxBody;
     const CRect none (0, 0, 0, 0);
+    rackPageParams.clear ();
     auto add = [&] (CView* v, const char* tip) {
         if (tip)
             v->setTooltipText (tip);
+        if (auto* pv = dynamic_cast<pk::ParamView*> (v))
+            rackPageParams.insert (pv->paramId ());
         g->addView (v);
         return v;
     };
@@ -758,7 +761,6 @@ void Editor::buildBody ()
                     mdBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)),
                                          tip (bandParam (b, fields[i])));
             }
-            add (new Segmented (CRect (608, 8, 830, 26), h, kMode, {"Base", "Character"}), tip (kMode));
             add (new Segmented (CRect (608, 32, 716, 50), h, kBands, {"1", "2", "3", "4"}), tip (kBands));
             add (new Toggle (CRect (722, 32, 830, 50), h, kSoftKnee, "Soft Knee"), tip (kSoftKnee));
             add (new Segmented (CRect (608, 56, 700, 74), h, kDetector, {"Peak", "RMS"}), tip (kDetector));
@@ -824,6 +826,7 @@ void Editor::buildBody ()
             add (new Knob (knobRect (468, 110), h, kColorWidth), tip (kColorWidth));
             add (new Knob (knobRect (548, 110), h, kClarityFreq, "Clarity Hz"), tip (kClarityFreq));
             add (new Knob (knobRect (612, 110), h, kClarityWidth, "Clarity W"), tip (kClarityWidth));
+            add (new Toggle (CRect (690, 116, 770, 134), h, kDcFilter, "DC Filter"), tip (kDcFilter));
             break;
         }
         case kFxWidr:

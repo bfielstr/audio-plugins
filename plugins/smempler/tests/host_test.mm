@@ -477,6 +477,23 @@ int main (int argc, char** argv)
                 fx.click (x, tabY);
                 settle ();
                 CHECK (fx.savePng (outDir + "/ui_fx_" + names[t] + ".png"), "fx %s snapshot", names[t]);
+                // every parameter of the effect has a control on its rack page, unless it is listed as
+                // deliberately not shown (so the rack keeps up when an effect gains a parameter)
+                if (t < 5)
+                    if (auto* ed = dynamic_cast<smempler::Editor*> (fx.view ()))
+                    {
+                        const auto& table = smempler::fxTable (kinds[t]);
+                        const auto& hidden = smempler::rackHiddenParams (kinds[t]);
+                        for (uint32_t id = 0; id < table.size (); ++id)
+                        {
+                            const bool listed = std::any_of (hidden.begin (), hidden.end (),
+                                                             [id] (const smempler::RackHidden& h) { return id >= h.first && id <= h.last; });
+                            CHECK (listed || ed->rackPage ().count (id) == 1, "rack %s: \"%s\" (%u) has no control on the page",
+                                   names[t], table.info (id).name, id);
+                        }
+                    }
+                    else
+                        CHECK (false, "the editor is a smempler::Editor");
             }
             // select the second slot and move it earlier: Multidyn first, then Para
             fx.click (8 + 1 * smempler::Editor::kFxTabWidth + 40, tabY);

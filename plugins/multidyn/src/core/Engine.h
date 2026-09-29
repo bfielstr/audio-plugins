@@ -9,9 +9,10 @@
 // Each computer is driven by its own level envelope: Above uses Attack when the level rises and
 // Release when it falls, Below the other way round.
 //
-// Modes: Base is the plain device. Character detects more slowly (a 50 ms RMS window, a
-// two-stage envelope), has a wider knee and a release that slows down the deeper the gain change,
-// so it moves like a character compressor rather than grabbing peaks.
+// Character: detection is smooth (the RMS Window, 50 ms by default, or a peak hold with a 60 ms
+// release; a two-stage envelope), the knee is wide and the release slows down the deeper the gain
+// change, so it moves like a character compressor rather than grabbing peaks. (There used to be a
+// plainer Base mode; kMode is kept only because IDs are persisted.)
 // Gains: the preset's gain staging is baked in (kBakedInputDb and friends), so every gain control
 // reads 0 dB at the default and trims around it.
 // Pre-Limit (off by default): a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
@@ -20,12 +21,12 @@
 // catches up (and being squared by whatever follows). Every band
 // runs through the look-ahead delay whether the limiter is on or not, so the latency (1 ms) never
 // changes.
-// RMS Window: the RMS detector's mean-square time (Character: 2.5 times as long, 50 ms by default).
 // Soften (the top band only, where upward compression lifts hiss and air the most): as the band's
-// Below threshold closes in on its Above threshold (fully at 6 dB apart or closer, not at all 18 dB apart)
-// the part of the signal that upward compression adds is low-passed (12 dB/oct at 7 kHz), the gain
-// changes are rounded off (up to 10 ms) and the knee widens (up to 12 dB more), so a squashed top
-// band stops sounding grainy; what the band had before the lift passes untouched.
+// Below threshold closes in on its Above threshold (fully at 6 dB apart or closer, not at all 18 dB
+// apart) the part of the signal that upward compression adds is low-passed (12 dB/oct, from 8 kHz
+// down to 3.5 kHz as Soften goes up) and turned down (up to 6 dB), the gain changes are rounded off
+// (up to 10 ms) and the knee widens (up to 12 dB more), so a squashed top band stops sounding
+// noisy and grainy; what the band had before the lift passes untouched.
 // Saturator: a built-in Smacheratr after the Output gain (the usual chain), always in the path
 // with its dry/wet at zero when off, so its oversampling latency is constant too.
 #pragma once
@@ -109,7 +110,7 @@ private:
     BandState bands[kNumBands];
     BandMeter meters[kNumBands];
     float outGain = 1.0f, scGain = 1.0f;
-    float peakCoef = 0.0f, peakCoefC = 0.0f, liftA = 0.0f;
+    float peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
     smacheratr::Tail sat;
     bool hasTail = true;

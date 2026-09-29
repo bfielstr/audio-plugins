@@ -147,10 +147,12 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
 
     // bottom row
-    bind (root, new Segmented (CRect (8, 352, 128, 372), this, kMode, {"Base", "Character"}));
-    bind (root, new Toggle (CRect (136, 352, 218, 372), this, kSoftKnee, "Soft Knee"));
-    bind (root, new Segmented (CRect (226, 352, 292, 372), this, kDetector, {"Peak", "RMS"}));
-    rmsWindowBox = bind (root, new NumberBox (CRect (296, 353, 344, 371), this, kRmsWindow));
+    bind (root, new Toggle (CRect (8, 352, 96, 372), this, kSoftKnee, "Soft Knee"));
+    bind (root, new Segmented (CRect (104, 352, 184, 372), this, kDetector, {"Peak", "RMS"}));
+    auto* rl = new Label (CRect (190, 354, 250, 370), "Window", 9.5, true, 2);
+    rl->setDim (true);
+    root->addView (rl);
+    rmsWindowBox = bind (root, new NumberBox (CRect (254, 353, 314, 371), this, kRmsWindow));
     auto* sp = new Panel (CRect (350, 344, 640, 416), "SIDECHAIN");
     root->addView (sp);
     bind (sp, new Toggle (CRect (12, 30, 66, 50), this, kScOn, "On"));

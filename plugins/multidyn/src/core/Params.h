@@ -26,7 +26,7 @@ enum ParamId : uint32_t
     kScListen,
     kBandBase, // kMaxBands x kBandBlock, see bandParam(); band 0 is the lowest
 
-    kMode = kBandBase + 4 * 10, // Base / Character (appended after the bands: IDs are persisted)
+    kMode = kBandBase + 4 * 10, // unused: Multidyn always works as the former Character mode (IDs are persisted)
     kPreLimit,                  // look-ahead limiter on each band's driven input
     kPreLimitCeiling,           // dB relative to the band's Above threshold
     kSatOn,                     // the built-in Smacheratr after Output

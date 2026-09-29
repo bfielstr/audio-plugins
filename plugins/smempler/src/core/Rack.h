@@ -21,6 +21,7 @@
 #include "pluginkit/ParamTable.h"
 
 #include <array>
+#include <vector>
 #include <atomic>
 #include <memory>
 
@@ -42,6 +43,16 @@ const pk::ParamTable& fxTable (int type); // the effect's own table, by its own 
 const pk::ParamTable& fxBlockTable (int type);
 int64_t fxIdAt (int type, uint32_t block);
 int64_t fxBlockOf (int type, uint32_t id);
+
+// The effect parameters that its rack page deliberately does not show, and why. Every other parameter
+// of the effect must have a control on the page (the host test checks it), so an effect that gains a
+// parameter gets it in Smempler too.
+struct RackHidden
+{
+    uint32_t first, last; // a range of the effect's own IDs
+    const char* why;
+};
+const std::vector<RackHidden>& rackHiddenParams (int type);
 
 // What the rack's effects show in the editor, per slot.
 struct RackMeters

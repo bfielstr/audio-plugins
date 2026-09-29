@@ -368,16 +368,19 @@ TEST (attack_and_release_timing)
         run (eng, chunk, nullptr, 480);
         g.push_back (eng.meter (kOnly).gainDb);
     }
-    // Attack 50 ms = time to cover ~95 % of a level change (time constant 16.7 ms). The level
-    // envelope rising from -40 to -6 dB only crosses the -20 dB threshold after ~15 ms, so there
-    // is no reduction at 10 ms, most of it by 30 ms and essentially all of it by 50 ms - the
-    // gain follows the transfer curve rather than the attack time literally.
+    // Attack 50 ms = time to cover ~95 % of a level change (time constant 16.7 ms), through two
+    // envelope stages (a rounded onset): the level only reaches the -20 dB threshold after a while,
+    // so there is no reduction at 10 ms; it builds up, is mostly there by 100 ms and settles at
+    // -12.6 dB - the gain follows the transfer curve rather than the attack time literally.
+    std::printf ("    gain every 10 ms: %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f %.1f\n", g[0], g[1], g[2], g[3], g[4], g[5],
+                 g[6], g[7], g[8], g[9]);
     CHECK (std::fabs (g[0]) < 0.3, "no reduction before the envelope reaches the threshold: %f", g[0]);
-    const double at30 = g[2] / -12.6;
-    CHECK (at30 > 0.45 && at30 < 0.75, "most of the reduction at 30 ms: %f", at30);
-    CHECK (g[4] / -12.6 > 0.85, "nearly all of it at 50 ms: %f", g[4] / -12.6);
+    for (int i = 1; i < 10; ++i)
+        CHECK (g[(size_t)i] <= g[(size_t)i - 1] + 0.01, "the reduction only builds up: %f then %f", g[(size_t)i - 1], g[(size_t)i]);
+    CHECK (g[4] / -12.6 > 0.2 && g[4] / -12.6 < 0.9, "part of it at 50 ms: %f", g[4] / -12.6);
+    CHECK (g[9] / -12.6 > 0.8, "most of it at 100 ms: %f", g[9] / -12.6);
     CHECK (std::fabs (g.back () + 12.6) < 0.8, "settles at -12.6: %f", g.back ());
-    const double at100 = at30;
+    const double at50 = g[4] / -12.6;
     // Time 200 % slows everything down
     auto e2 = engine ();
     e2->setParam (bandParam (kOnly, kAboveThresh), -20.0);
@@ -386,10 +389,10 @@ TEST (attack_and_release_timing)
     e2->setParam (kTime, 2.0);
     run (*e2, quiet);
     Sig chunk;
-    chunk.l.assign (loud.l.begin (), loud.l.begin () + 1440);
+    chunk.l.assign (loud.l.begin (), loud.l.begin () + 2400);
     chunk.r = chunk.l;
     run (*e2, chunk, nullptr, 480);
-    CHECK (e2->meter (kOnly).gainDb / -12.6 < at100 * 0.5, "Time 200%% slows the attack: %f at 30 ms", e2->meter (kOnly).gainDb);
+    CHECK (e2->meter (kOnly).gainDb / -12.6 < at50 * 0.6, "Time 200%% slows the attack: %f at 50 ms", e2->meter (kOnly).gainDb);
 }
 
 TEST (upward_compression_does_not_explode_after_silence)
@@ -428,6 +431,9 @@ TEST (preset_defaults)
     CHECK (e.param (bandParam (0, kBandOutput)) == 0.0 && e.param (bandParam (1, kBandInput)) == 0.0 && e.param (kOutput) == 0.0 &&
                std::fabs (e.param (bandParam (2, kAttack)) - 13.5) < 1e-9 && kBakedOutputDb[0] == 24.0 && kBakedMasterDb == -7.0,
            "gains and times");
+    for (int b = 0; b < kMaxBands; ++b)
+        CHECK (std::fabs (e.param (bandParam (b, kBelowThresh)) + 40.8) < 1e-9 && std::fabs (e.param (bandParam (b, kAboveThresh)) + 35.5) < 1e-9,
+               "band %d thresholds: Below -40.8, Above -35.5 dB", b + 1);
     // It squashes dynamics hard: a 44 dB level difference at 1 kHz comes out within ~15 dB.
     auto level = [] (double inDb) {
         Engine x;
@@ -471,10 +477,10 @@ TEST (pre_limiter_rounds_transients)
     CHECK (std::fabs (peakDb (out.l, 4800, 24000)) < 0.1, "off: untouched %f", peakDb (out.l, 4800, 24000));
 }
 
-TEST (character_mode_is_slower_and_smoother)
+TEST (compression_eases_in)
 {
-    // a -6 dB tone after 0.5 s of -40 dB: Character eases into the compression (50 ms RMS window,
-    // rounded onset) and lands at the same amount of gain reduction
+    // a -6 dB tone after 0.5 s of -40 dB: the compression eases in (50 ms RMS window, rounded onset);
+    // the unused Mode parameter changes nothing
     auto levelAfter = [] (int mode, double secs) {
         auto e = engine ();
         e->setParam (kMode, mode);
@@ -492,11 +498,11 @@ TEST (character_mode_is_slower_and_smoother)
         const size_t start = (size_t)((0.5 + secs) * kSr) + 48;
         return peakDb (out.l, start, start + 480);
     };
-    const double baseEarly = levelAfter (kBase, 0.01), charEarly = levelAfter (kCharacter, 0.01);
-    CHECK (charEarly > baseEarly + 1.0, "Character eases in: %f vs Base %f", charEarly, baseEarly);
-    const double baseLate = levelAfter (kBase, 0.4), charLate = levelAfter (kCharacter, 0.4);
-    CHECK (std::fabs (charLate - baseLate) < 1.5, "same steady state: %f vs %f", charLate, baseLate);
-    CHECK (baseLate < -6.0 - 15.0, "compressing: %f", baseLate);
+    const double early = levelAfter (kCharacter, 0.01), late = levelAfter (kCharacter, 0.4);
+    CHECK (early > late + 6.0, "eases in: %f early, %f later", early, late);
+    CHECK (late < -6.0 - 15.0, "compressing: %f", late);
+    CHECK (std::fabs (levelAfter (kBase, 0.01) - early) < 1e-6 && std::fabs (levelAfter (kBase, 0.4) - late) < 1e-6,
+           "Mode is unused");
 }
 
 TEST (built_in_saturator)
@@ -572,7 +578,7 @@ TEST (rms_window_sets_the_detector_speed)
     CHECK (fast < slow - 3.0, "a short window compresses sooner: %.1f vs %.1f dB", fast, slow);
     const double fastLate = gainAfter (5.0, 400.0), slowLate = gainAfter (200.0, 400.0);
     CHECK (std::fabs (fastLate - slowLate) < 1.5, "both settle to the same gain: %.1f vs %.1f dB", fastLate, slowLate);
-    CHECK (paramTable ().info (kRmsWindow).def == 20.0, "20 ms by default");
+    CHECK (paramTable ().info (kRmsWindow).def == 50.0, "50 ms by default");
 }
 
 TEST (soften_tames_the_lifted_top_band)
@@ -597,7 +603,8 @@ TEST (soften_tames_the_lifted_top_band)
     const double loOff = measure (0.0, 3500.0), loOn = measure (1.0, 3500.0);
     std::printf ("    14 kHz: %.1f -> %.1f dB, 3.5 kHz: %.1f -> %.1f dB\n", hiOff, hiOn, loOff, loOn);
     CHECK (hiOn < hiOff - 6.0, "the lifted air is softened: %.1f vs %.1f dB", hiOn, hiOff);
-    CHECK (loOn > loOff - 3.0, "the top band's body stays: %.1f vs %.1f dB", loOn, loOff);
+    CHECK (hiOn < hiOff - 12.0, "strongly at 100 %%: %.1f vs %.1f dB", hiOn, hiOff);
+    CHECK (loOn > loOff - 4.5, "the top band's body mostly stays: %.1f vs %.1f dB", loOn, loOff);
     // far-apart thresholds: Soften does nothing
     auto apart = [] (double soften) {
         Engine e;

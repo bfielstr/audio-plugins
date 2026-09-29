@@ -322,7 +322,7 @@ TEST (rack_block_mapping)
         CHECK ((fxBlockOf (kFxMultidyn, id) < 0) == sat, "multidyn %u", id);
     }
     const auto& t = fxBlockTable (kFxMultidyn);
-    CHECK (t.info (multidyn::kSatOn).def == 20.0 && t.info (multidyn::kSatPreLimit).def == 0.5, "RMS Window, Soften defaults");
+    CHECK (t.info (multidyn::kSatOn).def == 50.0 && t.info (multidyn::kSatPreLimit).def == 0.5, "RMS Window, Soften defaults");
     // and the rack's Multidyn runs with them
     auto e = std::make_unique<Engine> ();
     e->prepare (48000.0, 256);

@@ -129,6 +129,9 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_smacheratr_clarity.png"), "clarity screenshot");
             win.click (Editor::kShaperLeft + 180, 51);
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
+            rig.param (kClarity, 1.0);
+            CHECK (win.savePng (outDir + "/ui_smacheratr_clarity_host.png"), "clarity screenshot (set by the host)");
+            rig.param (kClarity, 0.0);
 
             // shaper display: drag down lowers Drive, double-click resets it
             const double sx = Editor::kShaperLeft + Editor::kShaperWidth / 2, sy = Editor::kShaperTop + Editor::kShaperHeight / 2;
