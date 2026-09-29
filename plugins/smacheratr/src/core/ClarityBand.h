@@ -47,6 +47,20 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct)
     return b;
 }
 
+// The band at another centre, keeping a peak scaling worked out before (the shape of the band on a
+// log axis does not change with its centre, away from Nyquist): cheap enough to retune often.
+inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, double norm)
+{
+    ClarityBand b;
+    const double half = std::pow (2.0, 0.5 * std::clamp (widthOct, 0.1, 8.0));
+    b.lowHz = std::clamp (centerHz / half, 5.0, 0.3 * sr);
+    b.highHz = std::clamp (centerHz * half, b.lowHz * 1.01, 0.45 * sr);
+    b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
+    b.lp = lowPass1 (sr, b.highHz);
+    b.norm = norm;
+    return b;
+}
+
 // the band's level at hz, dB (0 at its peak)
 inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
 {

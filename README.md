@@ -1,4 +1,4 @@
-# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr
+# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -12,6 +12,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, an optional pre-limiter before the drive, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 | [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf, a MIDI-triggered split envelope, and Vocal / Liquid movement | a morphing EQ, Live-styled |
 | [**Widr**](plugins/widr/README.md) | Trailer-style stereo width (Haas, decorrelation, micro pitch, early reflections, a side-only reverb) that keeps the mono fold; the Widrs of a session share the stereo field by role | cinematic trailer mixing |
+| [**Wubr**](plugins/wubr/README.md) | Two bell bands whose gain and/or centre you draw LFO shapes for (synced or free), or run as envelopes triggered by MIDI or transients with a hold point; Smacheratr at the end | LFO Tool / ShaperBox-style wubs |
 
 ![Smempler](docs/smempler/ui_slicing.png)
 
@@ -87,6 +88,7 @@ plugins/stretchr   pitch/time editor       same structure (reuses Smempler's war
 plugins/smacheratr saturator              same structure
 plugins/para    parallel filters        same structure
 plugins/widr    stereo width            same structure
+plugins/wubr    drawn band LFOs         same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
