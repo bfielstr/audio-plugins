@@ -9,37 +9,44 @@ field instead of stacking width in the same place. Install instructions are in t
 
 ## What it does
 
-Widr only ever **adds side signal** (L − R). The mid (L + R) passes untouched, so folding the output
-to mono gives back the input's mid: nothing cancels, whatever the settings.
+Width that is only a side signal (L − R) is heard as a diffuse, phasey wall around the whole sound.
+The separation in film mixes comes from **different material on each side of a dry centre**, so
+Widr builds two **voices** from the mid, one on the left and one on the right, each played a little
+differently, like a double-tracked part, and a little later than the centre, so the centre keeps
+its place in front. The two voices are unrelated to each other, so folding to mono only adds a
+little energy and nothing cancels.
 
-- **Width** (0–200 %): how much width is added. 0 % is a bypass (bit-exact), 100 % fills the
-  speakers, 200 % reaches past them.
-- **Character** sets the blend of four width generators, each made from the mid:
-  - a **Haas pair**: the mid, band-limited and delayed (0.1–25 ms), added to one channel and
-    subtracted from the other, so the combs are complementary and the centre stays put;
-  - a **decorrelator**: a cascade of all-passes, width without audible delay or tone change;
-  - a **micro pitch spread**: a few cents down on the left and up on the right, slowly drifting;
-  - **early reflections**: 8 or 16 taps from a fixed stereo pattern, the edge of a large room.
+- **Width** (0–200 %): how loud the voices are. 0 % is a bypass (bit-exact), 100 % a clear left,
+  centre and right, 200 % voices as loud as the centre.
+- **Character** sets how each voice is made, from four generators with a different setting on
+  each side:
+  - a **second take**: the mid, band-limited and delayed (1–40 ms, the right side later than the
+    left), wandering a little in time and pitch the way a second performance would;
+  - a **decorrelator**: its own chain of all-passes per side, width without audible delay;
+  - a **micro pitch shift**: a few cents down on the left and up on the right, slowly drifting;
+  - **early reflections**: each side its own taps from a fixed pattern, the edge of a large room.
 
-  The Characters are built to sound clearly different: *Tight* is clean decorrelation only (no delay,
-  no room); *Wide* puts a Haas pair up front; *Epic* has big reflections, a detuned spread, a louder
-  side and the strongest contrast; *Surround* lets the reverb and a large room lead.
-- **Contrast** keeps the centre and the sides apart, the trailer trick. In time, the added width
-  ducks under the hits in the mid and blooms between them, so drums and consonants stay dry and
+  *Tight* is decorrelated voices right beside the centre (no delay, no room); *Wide* is a second
+  take 12 and 16 ms late on each side; *Epic* is later, detuned, wandering takes with big
+  reflections, louder voices and the strongest contrast; *Surround* lets the room and the reverb
+  lead, with the voices far out and late.
+- **Contrast** keeps the centre and the sides apart, the trailer trick. In time, the voices duck
+  under the hits in the mid and bloom between them, so drums and consonants stay dry and
   centred while the tails go wide. Across the spectrum, it gives way where the mid is strong for
   its neighbourhood (a voice's presence) and fills where the mid is thin. Each Character bakes in
   its own amount; Contrast scales it (default 50 %).
-- **SPACE**: **Size** (the Haas delay and the spacing of the reflections), **Space** (a short FDN
-  reverb, fed mostly from the side and added to the side only, so it reads as width rather than
-  distance), **Decay**, **Pre-Delay** and **Damping**.
+- **SPACE**: **Size** (the voices' delays and the spacing of the reflections), **Space** (a short
+  FDN reverb, fed band-limited, with its own left and right outputs going to the voices),
+  **Decay**, **Pre-Delay** and **Damping** (which also sets how dark the voices are; 5.5 kHz by
+  default).
 - **Air** lifts the side above ~6 kHz; **Beyond** lifts it around 4 kHz, which dips it in the far
   speaker so images seem to reach past the speakers.
 - **Mono Below** (default 150 Hz): below it the output is mono. The side goes through an 8th-order
   Linkwitz-Riley high-pass and the mid through the matching all-pass, so the low end is centred and
   mid and side stay in phase above it (more than 80 dB of side rejection two octaves down).
-- **Mono Guard**: in 24 third-octave bands Widr measures the mid and side; where the side gets
-  close to the mid, the added width in that band backs off (a floor under each band's
-  correlation). 0 % sets no limit.
+- **Mono Guard**: in 24 third-octave bands Widr measures the mid, the side and what the voices add
+  to each; per band it keeps the mono fold from gaining more than about 1.2 dB (at 100 %) and the
+  side from getting too close to the mid. 0 % sets no limit.
 - **Mono Check** listens to L + R; **Output** sets the level.
 
 ## Mix awareness
@@ -70,7 +77,8 @@ double-click to reset them, Shift for fine steps. The strip under it shows the w
 (blue where it gives way to the group). On the right: a **goniometer** of the output (mono is a
 vertical line) and a **correlation** meter (+1 mono, 0 unrelated, below 0 it cancels in mono).
 
-**Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB).
+**Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB). Here
+it saturates the mid and the side apart, so pushing it does not narrow the image.
 
 Latency: about 1.8 ms (85 samples at 48 kHz, the saturator's, constant whether it is on or off),
 reported to the host for automatic compensation.

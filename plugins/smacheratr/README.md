@@ -28,7 +28,9 @@ while the mids and highs saturate. **Amt Hi** does the same around **Freq** with
 up/down for Amt Hi or sideways for Freq.
 
 **Menu**: **Hi-Quality** runs the curve 4x oversampled (two linear-phase half-band stages) to keep
-aliasing down; **Pre-DC Filter** removes DC offset before the curve.
+aliasing down; **Pre-DC Filter** removes DC offset before the curve; **Mid/Side** saturates the mid
+and the side apart, so the side is driven by its own, lower level and a wide sound stays wide when
+you push the drive (Widr's built-in saturator always works this way).
 
 Latency: about 1.7 ms (83 samples at 48 kHz: the pre-limiter's 1 ms look-ahead plus the
 oversampling), the same whatever the settings, and reported to the host.

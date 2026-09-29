@@ -414,21 +414,39 @@ TEST (mono_fold_keeps_the_spectrum)
     }
 }
 
-TEST (guard_keeps_the_correlation)
+TEST (voices_are_separate_and_the_guard_holds_the_mono_fold)
 {
+    // the two voices are unrelated, so even at 200 % the output never goes out of phase (it never
+    // cancels in mono); unguarded the mono fold gains energy, Guard 100 % holds that to ~1.2 dB a band
     auto in = pink (4.0, false);
-    auto corrWith = [&] (double guard) {
+    const auto want = bandDb (sum (in, 1.0f), 0, in.l.size () - 8192);
+    auto run2 = [&] (double guard, double& corr, double& worstGain) {
         auto e = engine ();
         e->setParam (kCharacter, kEpic);
         e->setParam (kWidth, 2.0);
         e->setParam (kSpace, 0.6);
         e->setParam (kGuard, guard);
         e->reset ();
-        return correlation (run (*e, in), 96000, in.l.size ());
+        auto out = run (*e, in);
+        corr = correlation (out, 96000, in.l.size ());
+        const size_t lat = (size_t)e->latency ();
+        std::vector<float> mono = sum (out, 1.0f);
+        mono.erase (mono.begin (), mono.begin () + (long)lat);
+        mono.resize (in.l.size (), 0.0f);
+        const auto got = bandDb (mono, 48000, in.l.size () - 8192);
+        const auto ref = bandDb (sum (in, 1.0f), 48000, in.l.size () - 8192);
+        worstGain = -100.0;
+        for (int k = 0; k < kBands; ++k)
+            if (bandHz (k) >= 200.0 && bandHz (k) <= 12000.0)
+                worstGain = std::max (worstGain, got[(size_t)k] - ref[(size_t)k]);
     };
-    const double free = corrWith (0.0), guarded = corrWith (1.0);
-    CHECK (free < 0.0, "unguarded 200 %% goes past decorrelated: %f", free);
-    CHECK (guarded > 0.1 && guarded > free + 0.2, "Guard 100 %% keeps the correlation up: %f (free %f)", guarded, free);
+    (void)want;
+    double cFree, gFree, cGuard, gGuard;
+    run2 (0.0, cFree, gFree);
+    run2 (1.0, cGuard, gGuard);
+    CHECK (cFree > 0.0, "unguarded 200 %% stays in phase: correlation %f", cFree);
+    CHECK (gFree > 1.5, "unguarded, the mono fold gains energy: %.2f dB", gFree);
+    CHECK (gGuard <= 1.5, "Guard 100 %% holds it: %.2f dB", gGuard);
 }
 
 TEST (space_rings_and_mono_check)

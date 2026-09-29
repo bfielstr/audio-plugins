@@ -22,6 +22,7 @@ enum ParamId : uint32_t
     kDryWet,
     kHiQuality, // 4x oversampling around the shaper
     kDcFilter,  // high-pass at the input
+    kMidSide,   // saturate the mid and the side apart (keeps the width when pushed)
 
     kNumParams
 };

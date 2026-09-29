@@ -89,7 +89,8 @@ private:
     double sr = 48000.0;
     int maxBlock = 512, look = 48;
     Channel chan[2];
-    std::vector<float> dry[2], pre[2], wet, osBuf, gDrive, gOut, gMix;
+    std::vector<float> dry[2], pre[2], wet, osBuf, gDrive, gOut, gMix, msMid, msSide;
+    bool inMs = false;
     float drive = 1.0f, out = 1.0f, mix = 1.0f, smooth = 0.0f;
     // pre-limiter: the input peaks inside the look-ahead window and the gain (dB), smoothed in dB
     std::vector<float> lookPeaks;

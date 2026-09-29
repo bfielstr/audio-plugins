@@ -29,6 +29,9 @@ inline const char* forParam (uint32_t id)
         case kDryWet: return "Balance between the dry input and the saturated signal. Use 100 % on a return track.";
         case kHiQuality: return "Runs the curve 4x oversampled to reduce aliasing (a little more CPU).";
         case kDcFilter: return "Removes DC offset from the input before the curve.";
+        case kMidSide:
+            return "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound "
+                   "stays wide when you push the drive (Menu).";
         default: return nullptr;
     }
 }

@@ -58,7 +58,7 @@ void Engine::prepare (double sampleRate, int mb)
         dry[c].assign ((size_t)maxBlock, 0.0f);
         pre[c].assign ((size_t)maxBlock, 0.0f);
     }
-    for (auto* v : {&wet, &gDrive, &gOut, &gMix})
+    for (auto* v : {&wet, &gDrive, &gOut, &gMix, &msMid, &msSide})
         v->assign ((size_t)maxBlock, 0.0f);
     osBuf.assign ((size_t)maxBlock * 4, 0.0f);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -155,6 +155,27 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 meters->inPeak.store (0.0f, std::memory_order_relaxed);
                 meters->outPeak.store (0.0f, std::memory_order_relaxed);
             }
+        }
+        return;
+    }
+    if (!inMs && p[kMidSide] >= 0.5)
+    {
+        // Mid/Side: the mid and the side go through the curve as two channels, so the side is driven
+        // by its own (lower) level and keeps its size next to a mid that is being squashed; back to
+        // left / right after (the dry path makes the same round trip, so the mix is unchanged)
+        for (int i = 0; i < n; ++i)
+        {
+            msMid[(size_t)i] = 0.5f * (xl[i] + xr[i]);
+            msSide[(size_t)i] = 0.5f * (xl[i] - xr[i]);
+        }
+        inMs = true;
+        process (msMid.data (), msSide.data (), yl, yr, n);
+        inMs = false;
+        for (int i = 0; i < n; ++i)
+        {
+            const float m = yl[i], s = yr[i];
+            yl[i] = m + s;
+            yr[i] = m - s;
         }
         return;
     }

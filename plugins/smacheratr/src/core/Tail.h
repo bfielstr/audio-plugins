@@ -26,6 +26,8 @@ public:
     int latency () const { return eng.latency (); }
     void setMeters (Meters* m) { eng.setMeters (m); }
     bool isOn () const { return on; }
+    // saturate mid and side apart (see smacheratr::kMidSide)
+    void setMidSide (bool ms) { eng.setParam (kMidSide, ms ? 1.0 : 0.0); }
 
     // the plain value of one of the tail's fields (pk::TailField)
     void setParam (uint32_t field, double v)

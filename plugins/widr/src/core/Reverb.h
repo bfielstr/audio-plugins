@@ -1,6 +1,6 @@
 // Widr's Space: a compact feedback delay network (8 lines, Hadamard feedback, damping in the loop)
-// behind a pre-delay. The engine adds its output to the side signal only, so it reads as width,
-// not distance, and adds nothing to the mono fold.
+// behind a pre-delay, with two unrelated outputs (two orthogonal sign patterns over the lines)
+// for the left and the right voice.
 #pragma once
 
 #include "Dsp.h"
@@ -49,17 +49,18 @@ public:
         dampA = OnePole::coeff (dampHz, sr);
     }
 
-    // One sample in, the side contribution out.
-    inline float tick (float in)
+    // One sample in, the left and right outputs out.
+    inline void tick (float in, float& outL, float& outR)
     {
         pre.push (in);
         const float x = pre.tap (preSamples) * 0.35f;
         std::array<float, kLines> y;
-        float out = 0.0f;
+        float oL = 0.0f, oR = 0.0f;
         for (int i = 0; i < kLines; ++i)
         {
             const float v = lines[(size_t)i].tap (len[(size_t)i]);
-            out += kOutSign[i] * v;
+            oL += kOutL[i] * v;
+            oR += kOutR[i] * v;
             // high damping (low-pass at Damping) and low damping (the lows below ~120 Hz decay fast)
             float d = damp[(size_t)i].lp (dampA, v);
             d -= lowState[(size_t)i].lp (lowCut, d);
@@ -68,7 +69,8 @@ public:
         hadamard (y);
         for (int i = 0; i < kLines; ++i)
             lines[(size_t)i].push (x * kInSign[i] + g[(size_t)i] * y[(size_t)i]);
-        return out * 0.35355339f; // 1/sqrt(8)
+        outL = oL * 0.35355339f; // 1/sqrt(8)
+        outR = oR * 0.35355339f;
     }
 
 private:
@@ -87,7 +89,8 @@ private:
     }
 
     static constexpr float kInSign[kLines] = {1, -1, 1, 1, -1, 1, -1, -1};
-    static constexpr float kOutSign[kLines] = {1, 1, -1, 1, -1, -1, 1, -1};
+    static constexpr float kOutL[kLines] = {1, 1, -1, 1, -1, -1, 1, -1};
+    static constexpr float kOutR[kLines] = {1, -1, 1, 1, 1, -1, -1, -1}; // orthogonal to kOutL
 
     double sr = 48000.0;
     std::array<DelayLine, kLines> lines;

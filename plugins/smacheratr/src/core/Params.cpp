@@ -24,6 +24,7 @@ const ParamTable& paramTable ()
         v.push_back (percent (kDryWet, "Dry/Wet", "Dry/Wet", 1.0));
         v.push_back (toggle (kHiQuality, "Hi-Quality", "Hi-Q", true));
         v.push_back (toggle (kDcFilter, "Pre-DC Filter", "DC Filter", false));
+        v.push_back (toggle (kMidSide, "Mid/Side", "M/S", false));
         return v;
     }());
     return t;

@@ -368,6 +368,37 @@ TEST (dry_wet_and_dc_filter)
     CHECK (std::fabs (meanOf (out.l, 24000, 48000)) < 0.01, "DC filter removes it: %f", meanOf (out.l, 24000, 48000));
 }
 
+TEST (mid_side_keeps_the_width_when_driven)
+{
+    // a loud mid (220 Hz) and a quiet side (3.3 kHz, opposite in the two channels), driven hard: left /
+    // right saturation squashes the side along with the mid, mid / side saturation keeps it
+    const size_t n = 48000;
+    Sig in;
+    in.l.resize (n);
+    in.r.resize (n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        const double t = (double)i / kSr, m = 0.7 * std::sin (2.0 * M_PI * 220.0 * t), s = 0.12 * std::sin (2.0 * M_PI * 3300.0 * t);
+        in.l[i] = (float)(m + s);
+        in.r[i] = (float)(m - s);
+    }
+    auto sideToMid = [&] (bool ms) {
+        auto e = engine ();
+        e->setParam (kDrive, 24.0);
+        e->setParam (kMidSide, ms ? 1.0 : 0.0);
+        auto out = run (*e, in);
+        std::vector<float> mid (n), side (n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            mid[i] = 0.5f * (out.l[i] + out.r[i]);
+            side[i] = 0.5f * (out.l[i] - out.r[i]);
+        }
+        return toneDb (side, 3300.0, 24000, n) - toneDb (mid, 220.0, 24000, n);
+    };
+    const double lr = sideToMid (false), ms = sideToMid (true);
+    CHECK (ms > lr + 3.0, "Mid/Side keeps the side: %.1f dB vs %.1f dB (left / right)", ms, lr);
+}
+
 TEST (fuzz_and_automation)
 {
     uint32_t seed = 11;

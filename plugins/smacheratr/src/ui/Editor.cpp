@@ -126,9 +126,9 @@ void Editor::idle ()
         if (auto* s = ctl->getShared ())
         {
             char buf[96];
-            std::snprintf (buf, sizeof (buf), "%s, latency %d samples",
+            std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples",
                            plainValue (kHiQuality) >= 0.5 ? "Hi-Quality: 4x oversampling" : "Hi-Quality off",
-                           s->latency.load ());
+                           plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", s->latency.load ());
             status->setText (buf);
         }
 }
@@ -148,6 +148,8 @@ void Editor::showMenu (CPoint where)
     menu->addSeparator ();
     menu->addEntry ("Hi-Quality (4x oversampling)", -1, plainValue (kHiQuality) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     menu->addEntry ("Pre-DC Filter", -1, plainValue (kDcFilter) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
+    menu->addEntry ("Mid/Side (saturate mid and side apart)", -1,
+                    plainValue (kMidSide) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     menu->popup (frame, where, [this, sizes, menu] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (r >= 0 && r < (int32_t)sizes.size ())
@@ -156,6 +158,8 @@ void Editor::showMenu (CPoint where)
             ctl->setPlainFromUI (kHiQuality, plainValue (kHiQuality) >= 0.5 ? 0.0 : 1.0);
         else if (r == (int32_t)sizes.size () + 2)
             ctl->setPlainFromUI (kDcFilter, plainValue (kDcFilter) >= 0.5 ? 0.0 : 1.0);
+        else if (r == (int32_t)sizes.size () + 3)
+            ctl->setPlainFromUI (kMidSide, plainValue (kMidSide) >= 0.5 ? 0.0 : 1.0);
     });
 }
 
