@@ -26,6 +26,7 @@ enum ParamId : uint32_t
     kClarity,   // keep the low mids from going muddy when the drive is pushed (see Engine.h)
     kClarityFreq,  // Hz, the centre of Clarity's band (ClarityBand.h)
     kClarityWidth, // octaves between the band's edges
+    kClarityRange, // dB: the most Clarity turns its band down (before the curve; half as much after)
 
     kNumParams
 };

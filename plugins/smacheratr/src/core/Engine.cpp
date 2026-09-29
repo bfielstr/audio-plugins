@@ -225,7 +225,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
     // Clarity, a compressor on one band of the low mids (ClarityBand.h: 12 dB/oct below, 6 dB/oct
     // above, around Clarity Frequency): when the drive pushes the band past -18 dBFS into the curve,
-    // it is turned down before the curve (3 dB for every 5 over, at most 8 dB), so the low mids do
+    // it is turned down before the curve (3 dB for every 5 over, at most Clarity Range), so the low mids do
     // not pile up into mud and intermodulate, and after it by half as much (the curve squashes the
     // cut before it back up).
     const bool clarity = p[kClarity] >= 0.5;
@@ -246,7 +246,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     if (clarity)
     {
         const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv));
-        lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, 8.0);
+        lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, std::clamp (p[kClarityRange], 0.0, 24.0));
         if (p[kClarityFreq] != bandFreq || p[kClarityWidth] != bandWidth)
         {
             bandFreq = p[kClarityFreq];

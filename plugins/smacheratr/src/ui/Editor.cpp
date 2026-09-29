@@ -85,6 +85,7 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Choice (CRect (8, 266, 112, 288), this, kPostClip));
     bind (root, new Toggle (CRect (120, 266, 176, 288), this, kColorOn, "Color"));
     colorViews.push_back (bind (root, new Knob (knobRect (184, 262), this, kColorLo)));
+    clarityViews.push_back (bind (root, new Knob (knobRect (248, 262), this, kClarityRange, "Clarity")));
     bind (root, new Knob (knobRect (24, 346, 68, 78), this, kDrive, nullptr, true));
     bind (root, new Knob (knobRect (128, 346, 68, 78), this, kOutput));
     bind (root, new Knob (knobRect (232, 346, 68, 78), this, kDryWet));

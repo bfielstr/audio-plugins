@@ -469,6 +469,26 @@ TEST (clarity_band_shape_and_moves)
     CHECK (bassCut > 2.0 && bassCut > noteCut + 1.5, "the band follows its centre: %.1f vs %.1f dB", bassCut, noteCut);
 }
 
+TEST (clarity_range_limits_the_cut)
+{
+    // a band pushed far over: Range caps the cut (0 dB: none), 8 dB by default
+    auto in = tones ({{80.0, -2.0}, {250.0, -2.0}}, 0.5);
+    auto cutWith = [&] (double range) {
+        Meters m;
+        auto e = engine ();
+        e->setMeters (&m);
+        e->setParam (kDrive, 24.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, range);
+        run (*e, in);
+        return (double)m.clarityDb.load ();
+    };
+    CHECK (std::fabs (cutWith (0.0)) < 1e-6, "Range 0: no cut (%.2f dB)", cutWith (0.0));
+    CHECK (std::fabs (cutWith (8.0) + 8.0) < 0.01, "held at 8 dB: %.2f", cutWith (8.0));
+    CHECK (cutWith (24.0) < -12.0 && cutWith (24.0) >= -24.0, "Range 24 lets it go further: %.2f", cutWith (24.0));
+    CHECK (paramTable ().info (kClarityRange).def == 8.0 && paramTable ().info (kClarityRange).max == 24.0, "8 dB by default, up to 24");
+}
+
 TEST (tail_has_every_control)
 {
     // the saturator at the end of the other plug-ins: its extended fields reach Smacheratr (here Clarity

@@ -39,6 +39,7 @@ enum TailExtField : uint32_t
     kTailExtClarity,
     kTailExtClarityFreq,
     kTailExtClarityWidth,
+    kTailExtClarityRange,
     kTailExtFields
 };
 

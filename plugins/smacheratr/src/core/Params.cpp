@@ -28,6 +28,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kClarity, "Clarity", "Clarity", false));
         v.push_back (real (kClarityFreq, "Clarity Frequency", "Freq", 20.0, 500.0, 250.0, Curve::Log, Disp::Hz));
         v.push_back (real (kClarityWidth, "Clarity Width", "Width", 0.5, 4.0, 2.0, Curve::Linear, Disp::Number));
+        v.push_back (real (kClarityRange, "Clarity Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
         return v;
     }());
     return t;

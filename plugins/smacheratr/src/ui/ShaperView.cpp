@@ -129,14 +129,15 @@ void ShaperView::draw (CDrawContext* ctx)
     if (host->plainValue (kClarity) >= 0.5)
     {
         const CColor c (120, 210, 140);
-        const double cut = std::clamp (-(double)shownClarity, 0.0, 8.0);
+        const double range = std::max (1.0, host->plainValue (kClarityRange));
+        const double cut = std::clamp (-(double)shownClarity, 0.0, range);
         std::snprintf (buf, sizeof (buf), "Clarity %.1f dB", -cut);
         text (ctx, buf, CRect (all.right - 120, all.top + 4, all.right - 6, all.top + 18), c, 9.5, kRightText, true);
         const CRect bar (all.right - 86, all.top + 21, all.right - 6, all.top + 25);
         ctx->setFillColor (CColor (255, 255, 255, 20));
         ctx->drawRect (bar, kDrawFilled);
         ctx->setFillColor (c);
-        ctx->drawRect (CRect (bar.right - bar.getWidth () * cut / 8.0, bar.top, bar.right, bar.bottom), kDrawFilled);
+        ctx->drawRect (CRect (bar.right - bar.getWidth () * cut / range, bar.top, bar.right, bar.bottom), kDrawFilled);
     }
     if (shownIn > 1e-4f)
     {

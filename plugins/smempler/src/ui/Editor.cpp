@@ -396,9 +396,10 @@ void Editor::buildUI (CFrame* f)
             add (new Toggle (CRect (612, 8, 658, 26), h, kHiQuality, "Hi-Q"), kHiQuality);
             add (new Toggle (CRect (662, 8, 730, 26), h, kDcFilter, "DC Filter"), kDcFilter);
             add (new Toggle (CRect (734, 8, 786, 26), h, kColorOn, "Color"), kColorOn);
-            const uint32_t ids[9] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth, kClarityFreq, kClarityWidth};
-            const char* names[9] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W"};
-            for (int i = 0; i < 9; ++i)
+            const uint32_t ids[10] = {kDrive,     kOutput,     kDryWet,      kColorLo,      kColorHi,
+                                      kColorFreq, kColorWidth, kClarityFreq, kClarityWidth, kClarityRange};
+            const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
+            for (int i = 0; i < 10; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), ids[i]);
         }
         auto* n3 = new Label (CRect (534, 190, 830, 204), "after the rack, just before the output", 9.5);
@@ -863,9 +864,10 @@ void Editor::buildBody ()
             add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
             add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
             add (new Toggle (CRect (716, 8, 770, 26), h, kColorOn, "Color"), tip (kColorOn));
-            const uint32_t ids[9] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth, kClarityFreq, kClarityWidth};
-            const char* names[9] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W"};
-            for (int i = 0; i < 9; ++i)
+            const uint32_t ids[10] = {kDrive,     kOutput,     kDryWet,      kColorLo,      kColorHi,
+                                      kColorFreq, kColorWidth, kClarityFreq, kClarityWidth, kClarityRange};
+            const char* names[10] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "Clarity Hz", "Clarity W", "Clarity dB"};
+            for (int i = 0; i < 10; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], names[i], i == 3 || i == 4), tip (ids[i]));
             break;
         }

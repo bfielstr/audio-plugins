@@ -28,7 +28,6 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 constexpr double kHandleRadius = 5.0;
-constexpr double kMaxClarityCutDb = 8.0; // the most Clarity cuts (Engine.cpp)
 const CColor kClarityColor (120, 210, 140);
 // Clarity's gain at a frequency for a cut (dB) at the band's peak: the band scaled by its response
 double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb)
@@ -184,7 +183,7 @@ void ColorView::draw (CDrawContext* ctx)
             }
             return gp;
         };
-        if (auto range = gainPath (-kMaxClarityCutDb, false))
+        if (auto range = gainPath (-host->plainValue (kClarityRange), false))
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (CColor (120, 210, 140, 110));

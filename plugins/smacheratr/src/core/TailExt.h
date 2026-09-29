@@ -16,8 +16,9 @@ namespace smacheratr {
 
 inline constexpr uint32_t kTailExtIds[pk::kTailExtFields] = {kOutput,    kColorOn,   kColorLo, kColorHi,
                                                             kColorFreq, kColorWidth, kHiQuality, kDcFilter,
-                                                            kMidSide,   kClarity,    kClarityFreq, kClarityWidth};
-static_assert (pk::kTailExtFields == 12, "one Smacheratr parameter per extended tail field");
+                                                            kMidSide,   kClarity,    kClarityFreq, kClarityWidth,
+                                                            kClarityRange};
+static_assert (pk::kTailExtFields == 13, "one Smacheratr parameter per extended tail field");
 
 inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool midSide = false)
 {

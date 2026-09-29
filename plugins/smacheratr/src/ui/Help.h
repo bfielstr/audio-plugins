@@ -31,11 +31,14 @@ inline const char* forParam (uint32_t id)
         case kDcFilter: return "Removes DC offset from the input before the curve.";
         case kClarity:
             return "A compressor on one band of the low mids, so a hard-pushed drive does not go muddy: when the band "
-                   "hits the curve hard it is turned down before it (up to 8 dB, only when pushed) and after it by half "
+                   "hits the curve hard it is turned down before it (up to Range, 8 dB by default, only when pushed) and after it by half "
                    "as much. The band slopes 12 dB/oct below and 6 dB/oct above; set it with Freq and Width, or drag its "
                    "handle in the frequency display (wheel: width). The drive display shows the cut (top right).";
         case kClarityFreq: return "Clarity: the centre of the band it compresses (20 to 500 Hz).";
         case kClarityWidth: return "Clarity: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
+        case kClarityRange:
+            return "Clarity: the most it turns its band down before the curve (after it, half as much). 8 dB by default, "
+                   "0 to 24 dB.";
         case kMidSide:
             return "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound "
                    "stays wide when you push the drive (Menu).";

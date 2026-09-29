@@ -123,16 +123,18 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
          "Run the curve 4x oversampled to reduce aliasing (a little more CPU).");
     tip (bind (p, new Toggle (row (392, 460, rowA), this, extBase + kTailExtDcFilter, "DC Filter")),
          "Remove DC offset before the curve.");
-    tip (bind (p, new Toggle (row (10, 70, rowB), this, extBase + kTailExtClarity, "Clarity")),
+    tip (bind (p, new Toggle (row (10, 64, rowB), this, extBase + kTailExtClarity, "Clarity")),
          "A compressor on one band of the low mids, so a hard-pushed drive does not go muddy (12 dB/oct below, 6 dB/oct "
          "above).");
-    tip (bind (p, new NumberBox (row (74, 128, rowB), this, extBase + kTailExtClarityFreq)), "Clarity: the centre of its band.");
-    tip (bind (p, new NumberBox (row (132, 184, rowB), this, extBase + kTailExtClarityWidth)), "Clarity: the band's width in octaves.");
-    tip (bind (p, new Toggle (row (190, 246, rowB), this, extBase + kTailExtColorOn, "Color")),
+    tip (bind (p, new NumberBox (row (68, 116, rowB), this, extBase + kTailExtClarityFreq)), "Clarity: the centre of its band.");
+    tip (bind (p, new NumberBox (row (120, 156, rowB), this, extBase + kTailExtClarityWidth)), "Clarity: the band's width in octaves.");
+    tip (bind (p, new NumberBox (row (160, 206, rowB), this, extBase + kTailExtClarityRange)),
+         "Clarity: the most it turns its band down (8 dB by default, 0 to 24).");
+    tip (bind (p, new Toggle (row (212, 258, rowB), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
-    tip (bind (p, new NumberBox (row (250, 300, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
-    tip (bind (p, new NumberBox (row (304, 354, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
-    tip (bind (p, new NumberBox (row (358, 414, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
+    tip (bind (p, new NumberBox (row (262, 304, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
+    tip (bind (p, new NumberBox (row (308, 350, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
+    tip (bind (p, new NumberBox (row (354, 414, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
     tip (bind (p, new NumberBox (row (418, 460, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
     tip (bind (p, new Knob (CRect (470, y + 4, 526, y + 68), this, base + kTailDrive, nullptr, true)),
          "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");

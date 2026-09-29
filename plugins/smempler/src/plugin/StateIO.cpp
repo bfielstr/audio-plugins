@@ -17,7 +17,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 2: Multidyn's RMS Window and Soften in its rack slots (they read 0 in a version 1 state)
 // 3: Smacheratr's Clarity Frequency / Width and Para's Dip Start / Low-Pass Floor in the rack; Para's
 //    Liquid is its Vocal movement
-constexpr int32 kVersion = 3;
+// 4: Smacheratr's Clarity Range in the rack
+constexpr int32 kVersion = 4;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -118,16 +119,17 @@ bool readState (IBStream* stream, PluginState& st)
                 st.has[slotBlockParam (slot, j)] = true;
             }
         }
-    if (version < 3)
+    if (version < 4)
     {
-        // parameters that came after version 2 read 0 in the slot: they get their defaults
+        // parameters that came after the state's version read 0 in the slot: they get their defaults
         struct Added
         {
-            int type;
+            int since, type;
             uint32_t id;
         };
-        const Added added[] = {{kFxSmacheratr, smacheratr::kClarityFreq}, {kFxSmacheratr, smacheratr::kClarityWidth},
-                               {kFxPara, para::kDipStart},             {kFxPara, para::kLpFloor}};
+        const Added added[] = {{3, kFxSmacheratr, smacheratr::kClarityFreq}, {3, kFxSmacheratr, smacheratr::kClarityWidth},
+                               {3, kFxPara, para::kDipStart},             {3, kFxPara, para::kLpFloor},
+                               {4, kFxSmacheratr, smacheratr::kClarityRange}};
         for (int slot = 0; slot < kRackSlots; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
@@ -135,14 +137,14 @@ bool readState (IBStream* stream, PluginState& st)
                 continue;
             const int type = (int)std::lround (toPlain (typeId, st.norm[typeId]));
             for (const Added& a : added)
-                if (a.type == type)
+                if (a.type == type && version < a.since)
                 {
                     const auto j = (uint32_t)fxBlockOf (type, a.id);
                     if (st.norm[slotBlockParam (slot, j)] == 0.0)
                         st.norm[slotBlockParam (slot, j)] = fxBlockTable (type).defaultNormalized (j);
                     st.has[slotBlockParam (slot, j)] = true;
                 }
-            if (type == kFxPara && st.norm[slotBlockParam (slot, para::kLiquid)] >= 0.5)
+            if (version < 3 && type == kFxPara && st.norm[slotBlockParam (slot, para::kLiquid)] >= 0.5)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
