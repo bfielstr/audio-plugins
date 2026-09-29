@@ -28,7 +28,8 @@ ParamArray defaultParams ();
 struct Meters
 {
     std::atomic<float> hpHz {800.0f}, lpHz {200.0f}; // effective cutoffs, tracking and envelope included
-    std::atomic<float> hpShift {0.0f}, lpShift {0.0f}; // semitones from the set cutoffs to the effective ones
+    std::atomic<float> hpShift {0.0f}, lpShift {0.0f}; // semitones the tracking, envelope and glide move the set
+                                                        // cutoffs (before Vocal pushes one: the display does that)
     std::atomic<float> hpMul {1.0f}, lpMul {1.0f};   // Vocal: the fade of the pushed filter
     std::atomic<bool> leaderLp {true};               // Vocal: the low-pass leads (it moved last)
     std::atomic<uint32_t> blocks {0};                // counts processed blocks: the editor sees audio running
@@ -125,7 +126,7 @@ private:
     bool hasTail = true;
     // Vocal movement
     bool leaderLp = true;
-    double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0;
+    double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
     smacheratr::Tail tail;
 };

@@ -145,6 +145,16 @@ int main (int argc, char** argv)
             CHECK (std::fabs (plainOf (rig, kHpFreq) - 822.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6 &&
                        plainOf (rig, kHpRes) < 1e-6,
                    "double-click resets");
+            // Vocal: the low-pass swept above the high-pass pushes it along and fades it
+            rig.param (kMovement, toNormalized (kMovement, kVocal));
+            rig.param (kLpFreq, toNormalized (kLpFreq, 1200.0));
+            for (int i = 0; i < 10; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, tone (110.0, 0.4));
+                pump (0.03);
+            }
+            CHECK (win.savePng (outDir + "/ui_para_vocal.png"), "vocal screenshot");
         }
         rig.stop ();
         return finish ("para host test");

@@ -7,8 +7,10 @@
 //   drag a handle up / down  resonance, and the gain too with Drag Gain on
 //   Alt + drag up / down      gain only (to the bottom: -inf)
 //   double-click a handle    reset it
-// With audio running the display adds what the engine does (tracking, envelope, glide, Vocal) to
-// the current settings; without, it shows the settings with the last tracked note.
+// With audio running the display adds what the engine does (tracking, envelope, glide) to the
+// current settings; without, it shows the settings with the last tracked note. Vocal movement is
+// applied here, from the filter moved last, so it follows every edit at once: the pushed filter's
+// handle sits at the leader's cutoff and sinks and dims as it fades.
 // Used by Para and, through a pk::MappedParamHost, inside Smempler; the levels come from a
 // function so it does not depend on a controller.
 #pragma once
@@ -67,6 +69,10 @@ private:
     float shownOffset = 0.0f, shownEnv = 0.0f, shownHpShift = 0.0f, shownLpShift = 0.0f, shownHpMul = 1.0f,
           shownLpMul = 1.0f;
     bool shownLeaderLp = true;
+    // Vocal: which filter leads (the one whose frequency moved last), tracked from the settings
+    void trackLeader ();
+    bool leaderLp = true, leaderKnown = false;
+    double seenHp = -1.0, seenLp = -1.0;
     bool live () const; // audio running: the engine's movement is added to the settings
     uint32_t lastBlocks = 0;
     int idleSinceBlock = 1 << 20; // idle calls since the block count last moved

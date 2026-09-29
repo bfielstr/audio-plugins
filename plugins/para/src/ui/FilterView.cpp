@@ -112,21 +112,22 @@ void FilterView::effective (double& hp, double& lp, float& hpMul, float& lpMul) 
     const double hpBase = host->plainValue (kHpFreq), lpBase = host->plainValue (kLpFreq);
     if (live ())
     {
-        // the current settings moved as far as the engine moves them (tracking, envelope, glide,
-        // Vocal), so edits show at once and so does everything the notes do
+        // the current settings moved as far as the engine moves them (tracking, envelope, glide),
+        // so edits show at once and so does everything the notes do
         hp = hpBase * std::pow (2.0, shownHpShift / 12.0);
         lp = lpBase * std::pow (2.0, shownLpShift / 12.0);
-        hpMul = shownHpMul;
-        lpMul = shownLpMul;
-        return;
     }
-    // no audio: the settings at the last tracked note, pushed as the engine would push them
-    const double split = host->plainValue (kSplit);
-    hp = hpCutoff (hpBase, shownOffset, split);
-    lp = lpCutoff (lpBase, shownOffset, split);
+    else
+    {
+        // no audio: the settings at the last tracked note
+        const double split = host->plainValue (kSplit);
+        hp = hpCutoff (hpBase, shownOffset, split);
+        lp = lpCutoff (lpBase, shownOffset, split);
+    }
+    // Vocal: the follower goes to the leader's cutoff and fades, as the engine does it
     hpMul = lpMul = 1.0f;
     if (std::lround (host->plainValue (kMovement)) == kVocal)
-        vocalPush (hp, lp, shownLeaderLp, hpMul, lpMul);
+        vocalPush (hp, lp, leaderLp, hpMul, lpMul);
 }
 
 void FilterView::cutoffs (double& hp, double& lp) const
@@ -148,18 +149,35 @@ double FilterView::handleDb (bool hpSide) const
     return std::max (kMinDb + 1.0, gainDb + 20.0 * std::log10 (std::max (1.0, peak)));
 }
 
+// a handle sinks with its Vocal fade (to the bottom at -inf)
 CPoint FilterView::hpHandle () const
 {
     double hp, lp;
-    cutoffs (hp, lp);
-    return CPoint (xOfHz (hp), yOfDb (handleDb (true)));
+    float hm, lm;
+    effective (hp, lp, hm, lm);
+    return CPoint (xOfHz (hp), yOfDb (std::max (kMinDb + 1.0, handleDb (true) + 20.0 * std::log10 (std::max (1e-4f, hm)))));
 }
 
 CPoint FilterView::lpHandle () const
 {
     double hp, lp;
-    cutoffs (hp, lp);
-    return CPoint (xOfHz (lp), yOfDb (handleDb (false)));
+    float hm, lm;
+    effective (hp, lp, hm, lm);
+    return CPoint (xOfHz (lp), yOfDb (std::max (kMinDb + 1.0, handleDb (false) + 20.0 * std::log10 (std::max (1e-4f, lm)))));
+}
+
+void FilterView::trackLeader ()
+{
+    const double h = host->plainValue (kHpFreq), l = host->plainValue (kLpFreq);
+    if (seenHp >= 0.0)
+    {
+        if (l != seenLp)
+            leaderLp = true;
+        else if (h != seenHp)
+            leaderLp = false;
+    }
+    seenHp = h;
+    seenLp = l;
 }
 
 double FilterView::specAt (const std::vector<float>& spec, double f0, double f1) const
@@ -182,6 +200,7 @@ double FilterView::specAt (const std::vector<float>& spec, double f0, double f1)
 
 void FilterView::draw (CDrawContext* ctx)
 {
+    trackLeader ();
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kWaveBg);
     ctx->drawRect (all, kDrawFilled);
@@ -312,8 +331,28 @@ void FilterView::draw (CDrawContext* ctx)
     // handles, with a halo that grows with the envelope
     for (int k = 0; k < 2; ++k)
     {
+        const float mul = k == 0 ? hpMul : lpMul;
+        if (mul < 0.99f)
+        {
+            // pushed by Vocal: a line up to the leader and how far it has faded
+            const CPoint h = k == 0 ? hpHandle () : lpHandle (), lead = k == 0 ? lpHandle () : hpHandle ();
+            ctx->setLineWidth (1.0);
+            ctx->setFrameColor (CColor (200, 200, 200, 90));
+            ctx->drawLine (lead, h);
+            char fade[40];
+            if (mul < 1e-3f)
+                std::snprintf (fade, sizeof (fade), "%s pushed: -inf", k == 0 ? "HP" : "LP");
+            else
+                std::snprintf (fade, sizeof (fade), "%s pushed: %.0f dB", k == 0 ? "HP" : "LP", 20.0 * std::log10 (mul));
+            text (ctx, fade, CRect (h.x + 10, h.y - 7, h.x + 130, h.y + 7), k == 0 ? kHpColor : kLpColor, 9.5, kLeftText);
+        }
+    }
+    for (int k = 0; k < 2; ++k)
+    {
         const CPoint h = k == 0 ? hpHandle () : lpHandle ();
-        const CColor c = k == 0 ? kHpColor : kLpColor;
+        const float fadeMul = k == 0 ? hpMul : lpMul;
+        const CColor base = k == 0 ? kHpColor : kLpColor;
+        const CColor c (base.red, base.green, base.blue, (uint8_t)(70.0f + 185.0f * std::sqrt (std::clamp (fadeMul, 0.0f, 1.0f))));
         if (shownEnv > 0.01f)
         {
             const double rr = kHandleRadius + 10.0 * shownEnv;
@@ -490,6 +529,12 @@ void FilterView::idle ()
     const float hpShift = m->hpShift.load (std::memory_order_relaxed), lpShift = m->lpShift.load (std::memory_order_relaxed);
     const float hpMul = m->hpMul.load (std::memory_order_relaxed), lpMul = m->lpMul.load (std::memory_order_relaxed);
     const bool leader = m->leaderLp.load (std::memory_order_relaxed);
+    if (!leaderKnown)
+    {
+        leaderLp = leader; // the engine's view when the editor opens; then edits decide
+        leaderKnown = true;
+    }
+    trackLeader ();
     if (std::fabs (hpShift - shownHpShift) > 0.01f || std::fabs (lpShift - shownLpShift) > 0.01f ||
         std::fabs (hpMul - shownHpMul) > 0.005f || std::fabs (lpMul - shownLpMul) > 0.005f || leader != shownLeaderLp)
     {
