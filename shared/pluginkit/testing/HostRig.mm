@@ -252,7 +252,16 @@ bool EditorWindow::savePng (const std::string& file)
     pump (0.2);
     NSWindow* win = (__bridge NSWindow*)window;
     NSView* content = [win contentView];
-    [content display];
+    // the plug-in's view redraws only what changed, and the window may keep more than one buffer:
+    // redraw all of it, twice, so the picture is never an older buffer's partly stale one
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        [content setNeedsDisplay:YES];
+        for (NSView* v in [content subviews])
+            [v setNeedsDisplay:YES];
+        [content display];
+        pump (0.05);
+    }
     NSBitmapImageRep* rep = [content bitmapImageRepForCachingDisplayInRect:[content bounds]];
     [content cacheDisplayInRect:[content bounds] toBitmapImageRep:rep];
     NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
