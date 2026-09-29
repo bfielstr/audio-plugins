@@ -139,7 +139,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             rawLp = lz;
             hpMulT = lpMulT = 1.0f;
             if (vocal) // crossed: the follower sits at the leader's cutoff and fades out
-                vocalPush (hz, lz, leaderLp, hpMulT, lpMulT);
+                vocalPush (hz, lz, leaderLp, p[kFade], hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;
             hpC.set (hz, qHp, sr);

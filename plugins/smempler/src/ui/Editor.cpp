@@ -93,6 +93,8 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
             return (int64_t)kParaDragGain;
         if (id == para::kLiquid)
             return (int64_t)kParaLiquid;
+        if (id == para::kFade)
+            return (int64_t)kParaFade;
         return id < para::kTailBase ? (int64_t)paraParam (id) : -1;
     });
     mdHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (),
@@ -394,6 +396,7 @@ void Editor::buildUI (CFrame* f)
             bind (g, new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), this, paraParam (ids[i]), names[i],
                                i == 6 || i == 7 || i == 11));
         bind (g, new Toggle (CRect (480, 172, 550, 190), this, kParaLiquid, "Liquid"));
+        bind (g, new Knob (knobRect (560, 164), this, kParaFade, "Fade"));
     }
     {
         // Multidyn: its display, the band fields beside the lanes, its global controls on the right

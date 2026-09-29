@@ -119,7 +119,7 @@ void FilterView::effective (double& hp, double& lp, float& hpMul, float& lpMul) 
     // Vocal: the follower goes to the leader's cutoff and fades, as the engine does it
     hpMul = lpMul = 1.0f;
     if (std::lround (host->plainValue (kMovement)) == kVocal || host->plainValue (kLiquid) >= 0.5)
-        vocalPush (hp, lp, leaderLp, hpMul, lpMul);
+        vocalPush (hp, lp, leaderLp, host->plainValue (kFade), hpMul, lpMul);
 }
 
 void FilterView::cutoffs (double& hp, double& lp) const

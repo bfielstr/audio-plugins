@@ -890,6 +890,7 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
 void Engine::renderEffects (float* L, float* R, int n)
 {
     fxPara.setParam (para::kLiquid, p[kParaLiquid]);
+    fxPara.setParam (para::kFade, p[kParaFade]);
     if (on (p[kFxParaOn]))
         fxPara.process (L, R, L, R, n);
     fxMultidyn.setBypass (!on (p[kFxMdOn]));

@@ -34,6 +34,7 @@ const ParamTable& paramTable ()
         pk::addTailParams (v, kTailBase);
         v.push_back (toggle (kDragGain, "Drag Gain", "Drag Gain", false));
         v.push_back (toggle (kLiquid, "Liquid", "Liquid", false));
+        v.push_back (real (kFade, "Vocal Fade", "Fade", 1.0, 36.0, 12.0, Curve::Log, Disp::Semis));
         return v;
     }());
     return t;

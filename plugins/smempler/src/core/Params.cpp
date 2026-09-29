@@ -198,6 +198,12 @@ std::vector<ParamInfo> buildTable ()
     add (toggle (kParaTransposeLock, "Para Transpose Lock (unused)", "Lock", false));
     add (toggle (kParaDragGain, "Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Para Liquid", "Liquid", false));
+    {
+        ParamInfo pi = para::paramTable ().info (para::kFade);
+        pi.id = kParaFade;
+        pi.name = "Para Vocal Fade";
+        add (pi);
+    }
     return t;
 }
 

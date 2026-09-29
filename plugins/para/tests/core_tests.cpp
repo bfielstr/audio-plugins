@@ -301,15 +301,16 @@ TEST (meters_for_the_display)
     run (*e, tones ({{440.0, -12.0}}, 0.1));
     double hz = 822.0, lz = 900.0;
     float hm, lm;
-    vocalPush (hz, lz, m.leaderLp.load (), hm, lm);
+    vocalPush (hz, lz, m.leaderLp.load (), 12.0, hm, lm);
     CHECK (m.leaderLp.load () && std::fabs (hz - m.hpHz.load ()) < 1.0 && std::fabs (hm - m.hpMul.load ()) < 0.01,
            "vocal push: %f vs %f, fade %f vs %f", hz, m.hpHz.load (), hm, m.hpMul.load ());
 }
 
-TEST (vocal_fades_out_within_a_minor_third)
+TEST (vocal_fades_from_the_crossing)
 {
-    // the high-pass at 300 Hz (the default), the low-pass swept up to 400 Hz (5 semitones past it): in
-    // Vocal the high-pass is gone, so nothing is left at 8 kHz; in Free it still passes
+    // the high-pass at 300 Hz (the default), the low-pass swept up to 700 Hz (14.7 semitones past it,
+    // more than the default Fade of an octave): in Vocal the high-pass is gone, so nothing is left
+    // at 8 kHz; in Free it still passes
     for (int mode : {kFree, kVocal})
     {
         auto e = engine ();
@@ -317,7 +318,7 @@ TEST (vocal_fades_out_within_a_minor_third)
         std::vector<float> l (480, 0.0f), r (480, 0.0f);
         for (int k = 0; k <= 20; ++k)
         {
-            e->setParam (kLpFreq, 100.0 * std::pow (400.0 / 100.0, k / 20.0));
+            e->setParam (kLpFreq, 100.0 * std::pow (700.0 / 100.0, k / 20.0));
             e->process (l.data (), r.data (), l.data (), r.data (), 480);
         }
         const double top = gainAt (*e, 8000.0);
@@ -326,19 +327,19 @@ TEST (vocal_fades_out_within_a_minor_third)
         else
             CHECK (top > -1.0, "free: the high-pass passes 8 kHz: %f dB", top);
     }
-    // the fade starts before the crossing: at 270 Hz (1.8 semitones below the high-pass) the high
-    // band is already down; at 230 Hz (4.6 below) it is not
-    for (double lp : {230.0, 270.0})
-    {
+    // the fade starts at the crossing and dives over Fade: up to 300 Hz the high band is untouched,
+    // 3 semitones past it (357 Hz) it is on its way down, and with Fade at 3 it is gone there
+    auto topAt = [] (double lp, double fade) {
         auto e = engine ();
         e->setParam (kMovement, kVocal);
+        e->setParam (kFade, fade);
         e->setParam (kLpFreq, lp);
-        const double top = gainAt (*e, 8000.0);
-        if (lp < 250.0)
-            CHECK (top > -0.5, "LP %.0f Hz: the high band is untouched: %f dB", lp, top);
-        else
-            CHECK (top < -2.0, "LP %.0f Hz: the high band is fading: %f dB", lp, top);
-    }
+        return gainAt (*e, 8000.0);
+    };
+    CHECK (topAt (290.0, 12.0) > -0.5, "below the crossing: untouched (%f dB)", topAt (290.0, 12.0));
+    const double quarter = topAt (357.0, 12.0);
+    CHECK (quarter < -1.5 && quarter > -6.0, "a quarter of the way: %f dB (-2.5 expected)", quarter);
+    CHECK (topAt (357.0, 3.0) < -40.0, "Fade 3: gone a minor third past (%f dB)", topAt (357.0, 3.0));
 }
 
 TEST (liquid_overshoots_and_flows_back)

@@ -33,6 +33,8 @@ inline const char* forParam (uint32_t id)
         return para::help::forParam (para::kDragGain);
     if (id == kParaLiquid)
         return para::help::forParam (para::kLiquid);
+    if (id == kParaFade)
+        return para::help::forParam (para::kFade);
     if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         return para::help::forParam (id - kFxParaBase);
     if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)

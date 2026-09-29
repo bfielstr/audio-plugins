@@ -6,8 +6,8 @@
 // Transpose, Bend and Root are left unused).
 // Movement: Free keeps the filters independent. Vocal couples them: the filter that moved last
 // leads, and when it crosses the other (the low-pass above the high-pass), the other is pushed
-// along to the leader's cutoff; the other fades out from a minor third before the crossing to -inf
-// a minor third past it (kVocalFadeSemis), so one filter sweeps alone instead of the two summing. Liquid is Vocal with Split swinging along with
+// along to the leader's cutoff and fades out, from the crossing to -inf Fade semitones past it
+// (an octave by default), so one filter sweeps alone instead of the two summing. Liquid is Vocal with Split swinging along with
 // the sweep: the leader overshoots in the direction it moves (and the other filter the other way)
 // by as far as it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the
 // liquid, techy movement.
@@ -54,27 +54,24 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
     return lpBase * std::pow (2.0, (offsetSemis - 0.5 * splitSemis) / 12.0);
 }
 
-// Vocal movement, shared with the display: the follower starts fading when the leader comes within
-// kVocalFadeSemis of it and is at -inf kVocalFadeSemis past it (the crossing itself is -12 dB);
-// once crossed it sits at the leader's cutoff.
-constexpr double kVocalFadeSemis = 3.0;
-inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, float& hpMul, float& lpMul)
+// Vocal movement, shared with the display: once the leader crosses the follower (the low-pass above
+// the high-pass), the follower sits at the leader's cutoff and fades, from 0 dB at the crossing to
+// -inf fadeSemis past it (-12 dB half way).
+inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, double fadeSemis, float& hpMul, float& lpMul)
 {
     hpMul = lpMul = 1.0f;
-    const double over = 12.0 * std::log2 (lpHz / hpHz); // > 0: crossed
-    if (over <= -kVocalFadeSemis)
+    const double over = 12.0 * std::log2 (lpHz / hpHz);
+    if (over <= 0.0)
         return;
-    const float keep = 1.0f - (float)std::fmin (1.0, (over + kVocalFadeSemis) / (2.0 * kVocalFadeSemis));
+    const float keep = 1.0f - (float)std::fmin (1.0, over / std::fmax (0.5, fadeSemis));
     if (leaderLp)
     {
-        if (over > 0.0)
-            hpHz = lpHz;
+        hpHz = lpHz;
         hpMul = keep * keep;
     }
     else
     {
-        if (over > 0.0)
-            lpHz = hpHz;
+        lpHz = hpHz;
         lpMul = keep * keep;
     }
 }

@@ -17,10 +17,10 @@ quadrature Butterworth pair at 18 dB).
   envelope), and the envelope triggered by every MIDI note (**Env** amount, **Attack**, **Decay**).
 - **OUTPUT**: **Dry/Wet**, **Output** and **Movement**:
   - *Free*: the filters move independently.
-  - *Vocal*: the filter you moved last leads. The other fades as it comes within a minor third
-    (with the high-pass at 300 Hz, from a low-pass of about 250 Hz), is pushed along once crossed and
-    is at -inf a minor third past, so one filter sweeps alone: a low-pass swept up takes the high-pass
-    with it, a resonant high-pass swept down fades the low-pass out.
+  - *Vocal*: the filter you moved last leads. When it crosses the other, the other is pushed along
+    and fades out, from 0 dB at the crossing to -inf **Fade** semitones past it (an octave by
+    default), so one filter sweeps alone: a low-pass swept up takes the high-pass with it, a
+    resonant high-pass swept down fades the low-pass out.
   - **Liquid** (switch): Vocal, plus Split swinging with the sweep: the filter you move overshoots
     the way it moves and flows back when it stops, for liquid, techy Reese movement.
 - **SMACHERATR** (end of the chain): the optional saturator every plug-in here has (off, Drive 0 dB).
