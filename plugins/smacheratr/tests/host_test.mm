@@ -123,6 +123,13 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kPreLimit) >= 0.5, "pre-limit switched on from the editor");
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
+            // Clarity: its band appears in the colour display
+            win.click (Editor::kShaperLeft + 180, 51);
+            CHECK (plainOf (rig, kClarity) >= 0.5, "Clarity switched on from the editor");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_clarity.png"), "clarity screenshot");
+            win.click (Editor::kShaperLeft + 180, 51);
+            CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
+
             // shaper display: drag down lowers Drive, double-click resets it
             const double sx = Editor::kShaperLeft + Editor::kShaperWidth / 2, sy = Editor::kShaperTop + Editor::kShaperHeight / 2;
             const double d0 = plainOf (rig, kDrive);

@@ -773,10 +773,10 @@ void Editor::buildBody ()
             add (new Knob (knobRect (664, 122), h, kTime), tip (kTime));
             add (new Knob (knobRect (720, 122), h, kOutput, nullptr, true), tip (kOutput));
             add (new Knob (knobRect (776, 122), h, kSoften), tip (kSoften));
-            auto* rl = new Label (CRect (608, 198, 660, 214), "RMS window", 9.5, true, 0);
+            auto* rl = new Label (CRect (608, 198, 680, 214), "RMS window", 9.5, true, 0);
             rl->setDim (true);
             g->addView (rl);
-            add (new NumberBox (CRect (664, 196, 720, 214), h, kRmsWindow), tip (kRmsWindow));
+            add (new NumberBox (CRect (684, 196, 740, 214), h, kRmsWindow), tip (kRmsWindow));
             mdLayoutHost = h;
             updateMdLayout ();
             break;
