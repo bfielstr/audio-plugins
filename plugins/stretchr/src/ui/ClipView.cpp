@@ -3,6 +3,7 @@
 #include "Session.h"
 #include "plugin/Controller.h"
 
+#include "pluginkit/ui/DropFiles.h"
 #include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cdrawcontext.h"
@@ -45,22 +46,21 @@ public:
     }
 
 private:
+    // the first audio file in the drop, whichever way the host hands it over (see pk::droppedPaths)
     static bool firstPath (DragEventData d, std::string& out)
     {
-        if (!d.drag || d.drag->getCount () == 0)
-            return false;
-        const void* buffer = nullptr;
-        IDataPackage::Type type;
-        const uint32_t size = d.drag->getData (0, buffer, type);
-        if (type != IDataPackage::kFilePath || !buffer || size == 0)
-            return false;
-        out.assign (static_cast<const char*> (buffer), strnlen (static_cast<const char*> (buffer), size));
-        return true;
+        for (const auto& p : pk::droppedPaths (d.drag))
+            if (smempler::isSupportedAudioFile (p))
+            {
+                out = p;
+                return true;
+            }
+        return false;
     }
     static bool acceptable (DragEventData d)
     {
         std::string p;
-        return firstPath (d, p) && smempler::isSupportedAudioFile (p);
+        return firstPath (d, p);
     }
     ClipView* view;
 };

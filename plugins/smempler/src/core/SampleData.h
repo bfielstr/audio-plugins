@@ -72,7 +72,8 @@ using SamplePtr = std::shared_ptr<const SampleData>;
 bool decodeAudioFile (const std::string& path, std::vector<float>& left, std::vector<float>& right,
                       int& numChannels, double& sampleRate, std::string& error);
 
-bool isSupportedAudioFile (const std::string& path);
+bool isSupportedAudioFile (const std::string& path); // by extension, or by content
+std::string sniffAudioFormat (const std::string& path);  // "wav", "flac", "mp3" or "" from the first bytes
 
 // UTF-8 <-> std::filesystem::path, portable across C++20 (char8_t) and Windows wide paths.
 std::filesystem::path pathFromUtf8 (const std::string& s);

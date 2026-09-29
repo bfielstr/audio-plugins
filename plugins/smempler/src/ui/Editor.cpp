@@ -10,6 +10,7 @@
 #include "WaveformView.h"
 #include "plugin/Controller.h"
 
+#include "pluginkit/SampleFiles.h"
 #include "pluginkit/ui/ScopeView.h"
 #include "pluginkit/vst/PresetBar.h"
 
@@ -974,8 +975,11 @@ void Editor::idle ()
 }
 
 // --- sample actions ---------------------------------------------------------------
-void Editor::loadFile (const std::string& path)
+void Editor::loadFile (const std::string& dropped)
 {
+    // a host's temporary file (a rendered or recorded clip dragged in) is copied somewhere lasting
+    // first: the project refers to the sample by its path
+    const std::string path = pk::keepIfTemporary (dropped);
     if (!ctl->loadSample (path, true))
     {
         if (nameLabel)

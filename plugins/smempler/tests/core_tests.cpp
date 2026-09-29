@@ -8,6 +8,7 @@
 #include "Slices.h"
 
 #include "dr_wav.h"
+#include "pluginkit/SampleFiles.h"
 
 #include <chrono>
 #include <cmath>
@@ -1166,6 +1167,35 @@ TEST (file_decode_and_ops)
     fs::copy_file (pathFromUtf8 (wav), pathFromUtf8 (uni), cec);
     auto u = SampleData::load (uni, {}, err);
     CHECK (!cec && u && u->length == 1000, "unicode path load: %s", err.c_str ());
+    // a host's temporary file with no (or an odd) extension: the content says what it is
+    for (const char* name : {"/clip.tmp", "/clip"})
+    {
+        const std::string odd = dir + name;
+        std::error_code oec;
+        fs::copy_file (pathFromUtf8 (wav), pathFromUtf8 (odd), oec);
+        CHECK (!oec && isSupportedAudioFile (odd) && sniffAudioFormat (odd) == "wav", "sniff %s", name);
+        auto o = SampleData::load (odd, {}, err);
+        CHECK (o && o->length == 1000 && o->numChannels == 2, "load %s: %s", name, err.c_str ());
+    }
+    {
+        const std::string txt = dir + "/notes.txt";
+        std::FILE* f = std::fopen (txt.c_str (), "wb");
+        if (f)
+        {
+            std::fputs ("not audio at all", f);
+            std::fclose (f);
+        }
+        CHECK (!isSupportedAudioFile (txt), "text file is not audio");
+    }
+    // a temporary file is kept (copied once, then reused); a lasting file is left where it is
+    {
+        CHECK (pk::isTemporaryFile (wav), "the temp folder counts as temporary");
+        const fs::path keep = tmp / "kept";
+        const std::string k1 = pk::keepIfTemporary (wav, keep), k2 = pk::keepIfTemporary (wav, keep);
+        CHECK (k1 != wav && fs::exists (pathFromUtf8 (k1)) && k1 == k2, "kept copy %s", k1.c_str ());
+        const std::string lasting = (pk::samplesFolder () / "x.wav").string ();
+        CHECK (!pk::isTemporaryFile (lasting), "documents is not temporary: %s", lasting.c_str ());
+    }
     auto bad = SampleData::load (std::string (dir) + "/missing.wav", {}, err);
     CHECK (!bad && !err.empty (), "missing file should fail cleanly");
     std::error_code ec;

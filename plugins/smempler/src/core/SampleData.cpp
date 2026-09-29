@@ -1,5 +1,7 @@
 #include "SampleData.h"
 
+#include <cstring>
+
 #include "Fft.h"
 
 #include <algorithm>
@@ -64,16 +66,43 @@ std::string utf8FromPath (const std::filesystem::path& p)
     return std::string (u.begin (), u.end ());
 }
 
+// The format from the file's first bytes (hosts' temporary files do not always have an extension):
+// "wav" (RIFF / RF64 / W64 and AIFF, all read by dr_wav), "flac", "mp3", or "" when unknown.
+std::string sniffAudioFormat (const std::string& path)
+{
+    unsigned char h[12] = {};
+    std::ifstream in (pathFromUtf8 (path), std::ios::binary);
+    if (!in || !in.read (reinterpret_cast<char*> (h), sizeof (h)))
+        return {};
+    auto is = [&] (int at, const char* tag) { return std::memcmp (h + at, tag, std::strlen (tag)) == 0; };
+    if ((is (0, "RIFF") || is (0, "RF64")) && is (8, "WAVE"))
+        return "wav";
+    if (is (0, "riff")) // Sony Wave64
+        return "wav";
+    if (is (0, "FORM") && (is (8, "AIFF") || is (8, "AIFC")))
+        return "wav";
+    if (is (0, "fLaC"))
+        return "flac";
+    if (is (0, "ID3") || (h[0] == 0xFF && (h[1] & 0xE0) == 0xE0))
+        return "mp3";
+    return {};
+}
+
 bool isSupportedAudioFile (const std::string& path)
 {
     auto e = extensionOf (path);
-    return e == "wav" || e == "wave" || e == "aif" || e == "aiff" || e == "aifc" || e == "flac" || e == "mp3";
+    if (e == "wav" || e == "wave" || e == "aif" || e == "aiff" || e == "aifc" || e == "flac" || e == "mp3")
+        return true;
+    return !sniffAudioFormat (path).empty ();
 }
 
 bool decodeAudioFile (const std::string& path, std::vector<float>& left, std::vector<float>& right,
                       int& numChannels, double& sampleRate, std::string& error)
 {
-    const auto ext = extensionOf (path);
+    // the content decides; the extension only when the content is not recognised
+    std::string ext = sniffAudioFormat (path);
+    if (ext.empty ())
+        ext = extensionOf (path);
     unsigned channels = 0, rate = 0;
     uint64_t frames = 0;
     float* pcm = nullptr;

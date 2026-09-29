@@ -156,7 +156,8 @@ constexpr const char* kWaveform =
     "click the green loop bar to switch looping on or off, drag it to move the loop, drag its edges to resize. "
     "Slicing: double-click to add or remove a slice, drag to move, Alt-click to toggle manual/auto. Click the "
     "waveform to audition. Scroll or drag the ruler to pan; Cmd/Alt + scroll or drag the ruler vertically to zoom. "
-    "Drop an audio file here to load it. Right-click for the sample menu.";
+    "Drop an audio file here to load it, from a file browser or straight from a DAW (a clip dragged out of REAPER or "
+    "Live; a temporary file is copied to Documents/bfielstr/Samples first). Right-click for the sample menu.";
 constexpr const char* kEnvelope =
     "Envelope. Drag a point to move it. Double-click between the peak and the sustain point to add a breakpoint "
     "(up to 6); double-click a square breakpoint to remove it. Shift + drag a segment to bend its curve. Every point "
