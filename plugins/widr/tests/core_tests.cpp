@@ -200,7 +200,7 @@ TEST (params)
     CHECK (t.toText (kWidth, 1.0) == "100 %" && t.toText (kDecay, 1200.0) == "1.20 s", "%s / %s",
            t.toText (kWidth, 1.0).c_str (), t.toText (kDecay, 1200.0).c_str ());
     CHECK (t.info (kCharacter).def == (double)kWide && t.info (kRole).def == (double)kSupport, "Wide, Support");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
+    CHECK (t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0 && t.info ((uint32_t)kTailBase + pk::kTailDrive).def == 0.0, "saturator off, 0 dB");
 }
 
 TEST (width_zero_is_bit_exact)

@@ -41,8 +41,19 @@ public:
     // geometry, public for the tests
     VSTGUI::CPoint listener () const;
     double radiusFor (double space) const;
-    static double angleFor (double width); // half-angle in degrees
-    static double widthFor (double halfAngleDeg);
+    // the arc's half-angle in degrees: 100 % spans the speakers (+-30), beyond it goes past them
+    // (+-80 at 200 %)
+    static double angleFor (double width)
+    {
+        width = width < 0.0 ? 0.0 : (width > 2.0 ? 2.0 : width);
+        const double a = width <= 1.0 ? 30.0 * width : 30.0 + 50.0 * (width - 1.0);
+        return a < 1.5 ? 1.5 : a;
+    }
+    static double widthFor (double a)
+    {
+        a = a < 0.0 ? 0.0 : (a > 80.0 ? 80.0 : a);
+        return a <= 30.0 ? a / 30.0 : 1.0 + (a - 30.0) / 50.0;
+    }
     VSTGUI::CPoint arcEnd (bool right) const; // this instance's arc ends
 
     // the group as the editor sees it

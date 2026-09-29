@@ -64,19 +64,6 @@ double StageView::radiusFor (double space) const
     return rMin + std::clamp (space, 0.0, 1.0) * (rMax - rMin);
 }
 
-// 100 % spans the speakers (+-30 degrees); beyond, the image goes past them (+-80 at 200 %).
-double StageView::angleFor (double width)
-{
-    width = std::clamp (width, 0.0, 2.0);
-    return std::max (1.5, width <= 1.0 ? 30.0 * width : 30.0 + 50.0 * (width - 1.0));
-}
-
-double StageView::widthFor (double a)
-{
-    a = std::clamp (a, 0.0, 80.0);
-    return a <= 30.0 ? a / 30.0 : 1.0 + (a - 30.0) / 50.0;
-}
-
 CPoint StageView::arcEnd (bool right) const
 {
     const CPoint c = listener ();
