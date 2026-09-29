@@ -68,6 +68,8 @@ public:
 
 protected:
     void refreshEditor ();
+    // The VST3 parameter registered for a table entry (a TableParameter unless overridden).
+    virtual Steinberg::Vst::Parameter* makeParameter (uint32_t id);
 
     EditorBase* editor = nullptr;
     const ParamTable& tableRef;

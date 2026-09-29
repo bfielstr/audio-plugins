@@ -47,7 +47,7 @@ void Editor::buildUI (CFrame* f)
 {
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
-    root->addView (new Label (CRect (12, 6, 200, 28), "LOCUS", 14.0, true));
+    root->addView (new Label (CRect (12, 6, 200, 28), "locus", 14.0, true));
     latencyLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     latencyLabel->setDim (true);

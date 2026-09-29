@@ -11,9 +11,9 @@ using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (para::kProcessorUID), PClassInfo::kManyInstances, kVstAudioEffectClass,
-            "Para", 0, PlugType::kFxFilter, FULL_VERSION_STR, kVstVersionString, para::Processor::createInstance)
+            "para", 0, PlugType::kFxFilter, FULL_VERSION_STR, kVstVersionString, para::Processor::createInstance)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (para::kControllerUID), PClassInfo::kManyInstances, kVstComponentControllerClass,
-            "Para Controller", 0, "", FULL_VERSION_STR, kVstVersionString, para::Controller::createInstance)
+            "para Controller", 0, "", FULL_VERSION_STR, kVstVersionString, para::Controller::createInstance)
 
 END_FACTORY

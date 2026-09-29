@@ -6,6 +6,7 @@
 #include "Params.h"
 #include "UiKit.h"
 #include "MsView.h"
+#include "Rack.h"
 #include "WaveformView.h"
 #include "plugin/Controller.h"
 
@@ -15,6 +16,10 @@
 #include "multidyn/src/ui/DynDisplay.h"
 #include "multidyn/src/ui/Thresholds.h"
 #include "para/src/ui/FilterView.h"
+#include "para/src/ui/Help.h"
+#include "multidyn/src/ui/Help.h"
+#include "widr/src/ui/GonioView.h"
+#include "widr/src/ui/Help.h"
 #include "smacheratr/src/ui/Help.h"
 #include "smacheratr/src/ui/ShaperView.h"
 
@@ -88,20 +93,7 @@ void revealInFileBrowser (const std::string& path)
 
 Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
 {
-    // the effects' own displays edit this plug-in's parameters through these
-    paraHost = std::make_unique<pk::MappedParamHost> (this, para::paramTable (), [] (uint32_t id) -> int64_t {
-        if (id == para::kDragGain)
-            return (int64_t)kParaDragGain;
-        if (id == para::kLiquid)
-            return (int64_t)kParaLiquid;
-        if (id == para::kFade)
-            return (int64_t)kParaFade;
-        if (id == para::kNotch)
-            return (int64_t)kParaNotch;
-        return id < para::kTailBase ? (int64_t)paraParam (id) : -1;
-    });
-    mdHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (),
-                                                   [] (uint32_t id) -> int64_t { return (int64_t)multidynParam (id); });
+    // the saturator at the very end: Smacheratr's display on the tail's parameters
     satHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) -> int64_t {
         switch (id)
         {
@@ -117,13 +109,13 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
 
 void Editor::onClose ()
 {
-    for (auto& t : fxTabs)
-        t = nullptr;
-    fxTabButtons.clear ();
+    fxRow = fxCtl = fxBody = fxEndBody = nullptr;
     fxFilterView = nullptr;
     fxDynDisplay = nullptr;
-    fxShaperView = nullptr;
+    fxShaperView = endShaperView = nullptr;
+    fxGonio = nullptr;
     msView = nullptr;
+    mdLayoutHost = nullptr;
     scope = nullptr;
     for (int b = 0; b < 4; ++b)
     {
@@ -357,132 +349,33 @@ void Editor::buildUI (CFrame* f)
 
     // hover help for every parameter control
 
-    // ---- after the sampler: Para, Multidyn, M/S EQ, Smacheratr (tabs), and the output scope ----
-    const char* fxNames[kFxTabs] = {"PARA", "MULTIDYN", "M/S EQ", "SMACHERATR"};
-    fxTabButtons.clear ();
-    for (int i = 0; i < kFxTabs; ++i)
-    {
-        auto* b = new ActionButton (CRect (8 + i * kFxTabWidth, kFxTabTop, 4 + (i + 1) * kFxTabWidth, kFxTabTop + 20), fxNames[i],
-                                    [this, i] { setFxTab (i); }, [this, i] { return fxTab == i; });
-        root->addView (b);
-        fxTabButtons.push_back (b);
-    }
-    auto* fxNote = new Label (CRect (8 + kFxTabs * kFxTabWidth + 8, kFxTabTop, 846, kFxTabTop + 20), "after the sampler, in this order", 10.0);
-    fxNote->setDim (true);
-    root->addView (fxNote);
-    auto* fxp = new Panel (CRect (8, 746, 846, 980));
+    // ---- after the sampler: the effects rack (the slots in chain order, "+" to add one, the saturator
+    // at the very end on the right), and the output scope ----
+    fxRow = new Group (CRect (8, kFxTabTop, 846, kFxTabTop + 20));
+    root->addView (fxRow);
+    fxCtl = new Group (CRect (8, kFxCtlTop, 846, kFxCtlTop + 20));
+    root->addView (fxCtl);
+    auto* fxp = new Panel (CRect (8, kFxPanelTop, 846, kFxPanelTop + 234));
     root->addView (fxp);
-    for (int i = 0; i < kFxTabs; ++i)
+    fxBody = new Group (CRect (0, 0, 838, 234));
+    fxp->addView (fxBody);
     {
-        fxTabs[i] = new Group (CRect (0, 0, 838, 234));
-        fxp->addView (fxTabs[i]);
-    }
-    const CRect none (0, 0, 0, 0);
-    {
-        // Para: its own display, tracking the notes played here
-        auto* g = fxTabs[0];
-        fxFilterView = new para::FilterView (CRect (8, 8, 470, 226), paraHost.get (), [this] () -> para::Meters* {
-            auto* b = ctl->getBridge ();
-            return b ? &b->paraMeters : nullptr;
-        });
-        fxFilterView->setTooltipText (para::help::kDisplay);
-        g->addView (fxFilterView);
-        bind (g, new Toggle (CRect (380, 30, 462, 48), this, kParaDragGain, "Drag Gain"));
-        bind (g, new Toggle (CRect (480, 8, 524, 26), this, kFxParaOn, "On"));
-        bind (g, new Segmented (CRect (530, 8, 620, 26), this, paraParam (para::kSlope), {"12", "18", "24"}));
-        bind (g, new Segmented (CRect (626, 8, 726, 26), this, paraParam (para::kMovement), {"Free", "Vocal"}));
-        bind (g, new Toggle (CRect (732, 8, 830, 26), this, paraParam (para::kResLink), "Link Res"));
-        const uint32_t ids[12] = {para::kHpFreq, para::kHpRes, para::kHpGain, para::kLpFreq, para::kLpRes, para::kLpGain,
-                                  para::kSplit, para::kEnvAmount, para::kEnvAttack, para::kEnvDecay, para::kDryWet, para::kOutput};
-        const char* names[12] = {"HP", "HP Res", "HP Gain", "LP", "LP Res", "LP Gain", "Split", "Env", "Attack", "Decay", "Dry/Wet", "Output"};
-        for (int i = 0; i < 12; ++i)
-            bind (g, new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), this, paraParam (ids[i]), names[i],
-                               i == 6 || i == 7 || i == 11));
-        bind (g, new Toggle (CRect (480, 172, 550, 190), this, kParaLiquid, "Liquid"));
-        bind (g, new Toggle (CRect (480, 196, 550, 214), this, kParaNotch, "Notch"));
-        bind (g, new Knob (knobRect (560, 164), this, kParaFade, "Fade"));
-    }
-    {
-        // Multidyn: its display, the band fields beside the lanes, its global controls on the right
-        auto* g = fxTabs[1];
-        fxDynDisplay = new multidyn::DynDisplay (CRect (112, 8, 600, 226), mdHost.get (), [this] () -> multidyn::Meters* {
-            auto* b = ctl->getBridge ();
-            return b ? &b->mdMeters : nullptr;
-        });
-        fxDynDisplay->setTooltipText (multidyn::help::kDisplay);
-        g->addView (fxDynDisplay);
-        auto* io = new Label (CRect (8, 8, 108, 22), "In / Out", 9.5, true, 1);
-        io->setDim (true);
-        g->addView (io);
-        const CColor below (255, 170, 60), above (110, 165, 255);
-        const int fields[6] = {multidyn::kBelowThresh, multidyn::kBelowRatio, multidyn::kAboveThresh, multidyn::kAboveRatio,
-                               multidyn::kAttack, multidyn::kRelease};
-        for (int b = 0; b < 4; ++b)
-        {
-            mdNames[b] = new Label (none, "", 10.0, true, 0);
-            g->addView (mdNames[b]);
-            mdOn[b] = bind (g, new Toggle (none, this, multidynParam (multidyn::bandParam (b, multidyn::kBandActive)), "On"));
-            mdSolo[b] = bind (g, new Toggle (none, this, multidynParam (multidyn::bandParam (b, multidyn::kBandSolo)), "S"));
-            mdIn[b] = bind (g, new NumberBox (none, this, multidynParam (multidyn::bandParam (b, multidyn::kBandInput))));
-            mdOut[b] = bind (g, new NumberBox (none, this, multidynParam (multidyn::bandParam (b, multidyn::kBandOutput))));
-            for (int i = 0; i < 6; ++i)
-                mdBoxes[b][i] = bind (g, new NumberBox (none, this, multidynParam (multidyn::bandParam (b, fields[i])),
-                                                        i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)));
-        }
-        bind (g, new Toggle (CRect (608, 8, 650, 26), this, kFxMdOn, "On"));
-        bind (g, new Segmented (CRect (656, 8, 830, 26), this, multidynParam (multidyn::kMode), {"Base", "Character"}));
-        bind (g, new Segmented (CRect (608, 32, 716, 50), this, multidynParam (multidyn::kBands), {"1", "2", "3", "4"}));
-        bind (g, new Toggle (CRect (722, 32, 830, 50), this, multidynParam (multidyn::kSoftKnee), "Soft Knee"));
-        bind (g, new Segmented (CRect (608, 56, 700, 74), this, multidynParam (multidyn::kDetector), {"Peak", "RMS"}));
-        bind (g, new Toggle (CRect (706, 56, 776, 74), this, multidynParam (multidyn::kPreLimit), "Pre-Lim"));
-        bind (g, new NumberBox (CRect (780, 56, 830, 74), this, multidynParam (multidyn::kPreLimitCeiling)));
-        auto* sp = new Label (CRect (608, 80, 830, 92), "Splits", 9.5, true, 1);
-        sp->setDim (true);
-        g->addView (sp);
-        for (int x = 0; x < 3; ++x)
-            bind (g, new NumberBox (CRect (608 + x * 74, 94, 676 + x * 74, 112), this, multidynParam ((uint32_t)(multidyn::kXover1 + x))));
-        bind (g, new Knob (knobRect (608, 122), this, multidynParam (multidyn::kAmount)));
-        bind (g, new Knob (knobRect (672, 122), this, multidynParam (multidyn::kTime)));
-        bind (g, new Knob (knobRect (736, 122), this, multidynParam (multidyn::kOutput), nullptr, true));
-    }
-    {
-        // M/S EQ: taper the sides with a high-pass
-        auto* g = fxTabs[2];
-        msView = new MsView (CRect (8, 8, 470, 226), this, [this] (float& m, float& sd) {
-            auto* b = ctl->getBridge ();
-            m = b ? b->msMid.load () : 0.0f;
-            sd = b ? b->msSide.load () : 0.0f;
-        });
-        msView->setTooltipText ("Blue: the mid level. Orange: the side high-pass and level. Drag the handle sideways for the "
-                                "cutoff, up/down for the side level, the mouse wheel for the slope (while holding the "
-                                "handle, or with Shift); double-click resets. Right: live mid and side levels.");
-        g->addView (msView);
-        bind (g, new Toggle (CRect (480, 8, 524, 26), this, kMsOn, "On"));
-        g->addView (new Label (CRect (532, 8, 572, 26), "Slope", 10.5, false, 2));
-        bind (g, new Segmented (CRect (578, 8, 698, 26), this, kMsSlope, {"6", "12", "24"}));
-        bind (g, new Knob (knobRect (480, 34), this, kMsSideHp));
-        bind (g, new Knob (knobRect (540, 34), this, kMsSideGain));
-        bind (g, new Knob (knobRect (600, 34), this, kMsMidGain));
-        auto* n2 = new Label (CRect (480, 108, 834, 122), "below the side high-pass the low end is mono", 9.5);
-        n2->setDim (true);
-        g->addView (n2);
-    }
-    {
-        // Smacheratr at the very end
-        auto* g = fxTabs[3];
-        fxShaperView = new smacheratr::ShaperView (CRect (8, 8, 330, 226), satHost.get (), [this] () -> const smacheratr::Meters* {
+        // the saturator at the very end (built once: its controls are bound)
+        fxEndBody = new Group (CRect (0, 0, 838, 234));
+        fxp->addView (fxEndBody);
+        endShaperView = new smacheratr::ShaperView (CRect (8, 8, 330, 226), satHost.get (), [this] () -> const smacheratr::Meters* {
             auto* b = ctl->getBridge ();
             return b ? &b->satMeters : nullptr;
         });
-        fxShaperView->setTooltipText (smacheratr::help::kShaperDisplay);
-        g->addView (fxShaperView);
-        addTailPanel (g, CRect (340, 8, 830, 90), kTailBase, "SMACHERATR  (the very end)");
-        auto* n3 = new Label (CRect (340, 100, 830, 114), "after the M/S EQ, just before the output", 9.5);
+        endShaperView->setTooltipText (smacheratr::help::kShaperDisplay);
+        fxEndBody->addView (endShaperView);
+        addTailPanel (fxEndBody, CRect (340, 8, 830, 90), kTailBase, "smacheratr  (the very end)");
+        auto* n3 = new Label (CRect (340, 100, 830, 114), "after the rack, just before the output", 9.5);
         n3->setDim (true);
-        g->addView (n3);
+        fxEndBody->addView (n3);
     }
     scope = new pk::ScopeView (
-        CRect (852, kFxTabTop, 1102, 980),
+        CRect (852, kFxTabTop, 1102, kFxPanelTop + 234),
         [this] (float* l, float* r, int n) {
             auto* b = ctl->getBridge ();
             return b ? b->outScope.read (l, r, n) : 0;
@@ -498,8 +391,7 @@ void Editor::buildUI (CFrame* f)
     applyParamTooltips (&help::forParam);
 
     updateVisibility ();
-    updateMdLayout ();
-    setFxTab (fxTab);
+    rebuildRack ();
     lastName.clear ();
     idle ();
 }
@@ -508,8 +400,14 @@ void Editor::buildUI (CFrame* f)
 void Editor::setNorm (uint32_t id, double v)
 {
     pk::EditorBase::setNorm (id, v);
-    if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams && mdHost)
-        multidyn::pushThresholds (*mdHost, id - kFxMdBase, v);
+    if (isRackParam (id))
+    {
+        const int slot = (int)((id - kRackBase) / kSlotSize);
+        const uint32_t field = (id - kRackBase) % kSlotSize;
+        if (field >= kSlotParams && ctl->slotType (slot) == kFxMultidyn)
+            if (auto* h = hostFor (slot))
+                multidyn::pushThresholds (*h, field - kSlotParams, v);
+    }
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -521,11 +419,24 @@ void Editor::paramChanged (uint32_t id)
         filterDisplay->invalid ();
     if (envDisplay)
         envDisplay->invalid ();
-    for (VSTGUI::CView* v : {(VSTGUI::CView*)fxFilterView, (VSTGUI::CView*)fxDynDisplay, (VSTGUI::CView*)fxShaperView, (VSTGUI::CView*)msView})
-        if (v)
-            v->invalid ();
-    if (id == multidynParam (multidyn::kBands))
-        updateMdLayout ();
+    if (isRackParam (id))
+    {
+        const int slot = (int)((id - kRackBase) / kSlotSize);
+        const uint32_t field = (id - kRackBase) % kSlotSize;
+        if (field == kSlotType)
+            rackDirty = true; // rebuilt in idle (a button may be what changed it)
+        else if (slot == fxTab)
+        {
+            if (fxBody)
+                fxBody->invalid ();
+            if (fxCtl)
+                fxCtl->invalid ();
+            if (field == kSlotParams + multidyn::kBands && ctl->slotType (slot) == kFxMultidyn)
+                updateMdLayout ();
+        }
+    }
+    if (id >= kTailBase && id < kTailBase + pk::kTailFields && endShaperView)
+        endShaperView->invalid ();
     switch (id)
     {
         case kMode:
@@ -562,7 +473,9 @@ void Editor::updateMdLayout ()
         }
     };
     const double dispL = 112, dispR = 600, dispT = 8, dispB = 226;
-    const int n = std::clamp ((int)std::lround (plainValue (multidynParam (multidyn::kBands))) + 1, 1, multidyn::kMaxBands);
+    if (!mdLayoutHost)
+        return;
+    const int n = std::clamp ((int)std::lround (mdLayoutHost->plainValue (multidyn::kBands)) + 1, 1, multidyn::kMaxBands);
     const double top = dispT + multidyn::DynDisplay::kHeader;
     const double laneH = (dispB - dispT - multidyn::DynDisplay::kHeader - multidyn::DynDisplay::kScaleHeight) / n;
     const double belowX = dispL + 4, aboveX = dispR - multidyn::DynDisplay::kRightCol + 4, timeX = aboveX + 80;
@@ -599,12 +512,338 @@ void Editor::updateMdLayout ()
 
 void Editor::setFxTab (int t)
 {
-    fxTab = std::clamp (t, 0, kFxTabs - 1);
-    for (int i = 0; i < kFxTabs; ++i)
-        if (fxTabs[i])
-            fxTabs[i]->setVisible (i == fxTab);
-    for (auto* b : fxTabButtons)
-        b->invalid ();
+    // rebuilt on the next idle: the tab button that asked may be one of the views rebuilt
+    fxTab = std::clamp (t, 0, (int)kFxEnd);
+    rackDirty = true;
+}
+
+pk::MappedParamHost* Editor::hostFor (int slot)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return nullptr;
+    const int type = ctl->slotType (slot);
+    auto& h = slotHosts[(size_t)slot];
+    if (!h || slotHostType[(size_t)slot] != type)
+    {
+        const uint32_t n = (uint32_t)fxTable (type).size ();
+        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, n] (uint32_t id) -> int64_t {
+            return id < n ? (int64_t)slotBlockParam (slot, id) : -1;
+        });
+        slotHostType[(size_t)slot] = type;
+    }
+    return h.get ();
+}
+
+void Editor::copySlot (int from, int to)
+{
+    for (uint32_t f = 0; f < kSlotSize; ++f)
+        setOnce (slotParam (to, f), norm (slotParam (from, f)));
+}
+
+void Editor::addFx (int type)
+{
+    int slot = -1;
+    for (int s = 0; s < kRackSlots && slot < 0; ++s)
+        if (ctl->slotType (s) == kFxEmpty)
+            slot = s;
+    if (slot < 0 || type <= kFxEmpty || type >= kNumFxTypes)
+        return;
+    // the effect with its own defaults, on
+    const auto& t = fxTable (type);
+    setOnce (slotParam (slot, kSlotType), paramTable ().toNormalized (slotParam (slot, kSlotType), (double)type));
+    setOnce (slotParam (slot, kSlotOn), 1.0);
+    for (uint32_t j = 0; j < kSlotBlock; ++j)
+        setOnce (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
+    fxTab = slot;
+    rackDirty = true;
+}
+
+void Editor::removeFx (int slot)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return;
+    // the ones after it move up, so the chain stays in order without gaps
+    for (int s = slot; s + 1 < kRackSlots; ++s)
+        copySlot (s + 1, s);
+    setOnce (slotParam (kRackSlots - 1, kSlotType), 0.0);
+    setOnce (slotParam (kRackSlots - 1, kSlotOn), 1.0);
+    for (uint32_t j = 0; j < kSlotBlock; ++j)
+        setOnce (slotBlockParam (kRackSlots - 1, j), 0.0);
+    fxTab = ctl->slotType (slot) != kFxEmpty ? slot : std::max (0, slot - 1);
+    if (ctl->slotType (fxTab) == kFxEmpty)
+        fxTab = kFxEnd;
+    rackDirty = true;
+}
+
+void Editor::moveFx (int slot, int dir)
+{
+    const int other = slot + dir;
+    if (slot < 0 || slot >= kRackSlots || other < 0 || other >= kRackSlots || ctl->slotType (other) == kFxEmpty)
+        return;
+    // swap the two slots, every value
+    std::array<double, kSlotSize> keepA;
+    for (uint32_t f = 0; f < kSlotSize; ++f)
+        keepA[f] = norm (slotParam (slot, f));
+    copySlot (other, slot);
+    for (uint32_t f = 0; f < kSlotSize; ++f)
+        setOnce (slotParam (other, f), keepA[f]);
+    fxTab = other;
+    rackDirty = true;
+}
+
+void Editor::showAddMenu (CPoint where)
+{
+    if (!frame)
+        return;
+    auto menu = makeOwned<COptionMenu> ();
+    for (int t = kFxPara; t < kNumFxTypes; ++t)
+        menu->addEntry (fxName (t));
+    menu->popup (frame, where, [this, menu] (COptionMenu* m) {
+        const int32_t r = m->getLastResult ();
+        if (r >= 0)
+            addFx (kFxPara + r);
+    });
+}
+
+void Editor::rebuildRack ()
+{
+    rackDirty = false;
+    if (!fxRow || !fxCtl)
+        return;
+    fxRow->removeAll ();
+    fxCtl->removeAll ();
+    int firstEmpty = -1;
+    for (int s = 0; s < kRackSlots; ++s)
+    {
+        shownTypes[(size_t)s] = ctl->slotType (s);
+        if (shownTypes[(size_t)s] == kFxEmpty && firstEmpty < 0)
+            firstEmpty = s;
+    }
+    if (fxTab < kFxEnd && shownTypes[(size_t)fxTab] == kFxEmpty)
+        fxTab = kFxEnd;
+    // the slots, in chain order
+    double x = 0.0;
+    for (int s = 0; s < kRackSlots; ++s)
+    {
+        if (shownTypes[(size_t)s] == kFxEmpty)
+            continue;
+        char buf[32];
+        std::snprintf (buf, sizeof (buf), "%d  %s", s + 1, fxName (shownTypes[(size_t)s]));
+        fxRow->addView (new ActionButton (CRect (x, 0, x + kFxTabWidth - 4, 20), buf, [this, s] { setFxTab (s); },
+                                          [this, s] { return fxTab == s; }));
+        x += kFxTabWidth;
+    }
+    if (firstEmpty >= 0)
+    {
+        auto* add = new ActionButton (CRect (x, 0, x + 26, 20), "+", [this, x] { showAddMenu (CPoint (8 + x, kFxTabTop + 20)); });
+        add->setTooltipText ("Add an effect to the end of the rack (after the sampler; the rack runs left to right).");
+        fxRow->addView (add);
+    }
+    fxRow->addView (new ActionButton (CRect (838 - 132, 0, 838, 20), "end: smacheratr", [this] { setFxTab (kFxEnd); },
+                                      [this] { return fxTab == kFxEnd; }));
+    // the selected slot's controls
+    if (fxTab < kFxEnd)
+    {
+        const int s = fxTab;
+        char buf[48];
+        std::snprintf (buf, sizeof (buf), "slot %d: %s", s + 1, fxName (shownTypes[(size_t)s]));
+        fxCtl->addView (new Label (CRect (0, 1, 150, 19), buf, 10.5, true, 0));
+        auto* onT = new Toggle (CRect (156, 1, 200, 19), this, slotParam (s, kSlotOn), "On");
+        onT->setTooltipText ("Switch this effect off (it keeps its place, and its latency).");
+        fxCtl->addView (onT);
+        auto* left = new ActionButton (CRect (208, 0, 234, 20), "<", [this, s] { moveFx (s, -1); });
+        left->setTooltipText ("Move it earlier in the chain.");
+        fxCtl->addView (left);
+        auto* right = new ActionButton (CRect (238, 0, 264, 20), ">", [this, s] { moveFx (s, +1); });
+        right->setTooltipText ("Move it later in the chain.");
+        fxCtl->addView (right);
+        auto* rm = new ActionButton (CRect (272, 0, 340, 20), "Remove", [this, s] { removeFx (s); });
+        rm->setTooltipText ("Take this effect out of the rack.");
+        fxCtl->addView (rm);
+    }
+    auto* note = new Label (CRect (fxTab < kFxEnd ? 350 : 0, 1, 838, 19),
+                            fxTab < kFxEnd ? "the rack runs left to right after the sampler; right click resets a control"
+                                           : "the saturator at the very end, after the rack",
+                            9.5);
+    note->setDim (true);
+    fxCtl->addView (note);
+    buildBody ();
+    if (frame)
+        frame->invalid ();
+}
+
+void Editor::buildBody ()
+{
+    if (!fxBody)
+        return;
+    fxBody->removeAll ();
+    fxFilterView = nullptr;
+    fxDynDisplay = nullptr;
+    fxShaperView = nullptr;
+    fxGonio = nullptr;
+    msView = nullptr;
+    mdLayoutHost = nullptr;
+    for (int b = 0; b < 4; ++b)
+    {
+        mdNames[b] = nullptr;
+        mdOn[b] = mdSolo[b] = mdIn[b] = mdOut[b] = nullptr;
+        for (auto& v : mdBoxes[b])
+            v = nullptr;
+    }
+    const bool end = fxTab >= kFxEnd;
+    fxEndBody->setVisible (end);
+    fxBody->setVisible (!end);
+    if (end)
+        return;
+    const int s = fxTab;
+    const int type = ctl->slotType (s);
+    pk::MappedParamHost* h = hostFor (s);
+    auto* g = fxBody;
+    const CRect none (0, 0, 0, 0);
+    auto add = [&] (CView* v, const char* tip) {
+        if (tip)
+            v->setTooltipText (tip);
+        g->addView (v);
+        return v;
+    };
+    switch (type)
+    {
+        case kFxPara:
+        {
+            using namespace para;
+            auto tip = [] (uint32_t id) { return para::help::forParam (id); };
+            fxFilterView = new FilterView (CRect (8, 8, 470, 226), h, [this, s] () -> para::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.para[(size_t)s] : nullptr;
+            });
+            add (fxFilterView, para::help::kDisplay);
+            add (new Toggle (CRect (380, 30, 462, 48), h, kDragGain, "Drag Gain"), tip (kDragGain));
+            add (new Segmented (CRect (480, 8, 570, 26), h, kSlope, {"12", "18", "24"}), tip (kSlope));
+            add (new Segmented (CRect (576, 8, 676, 26), h, kMovement, {"Free", "Vocal"}), tip (kMovement));
+            add (new Toggle (CRect (682, 8, 780, 26), h, kResLink, "Link Res"), tip (kResLink));
+            const uint32_t ids[12] = {kHpFreq, kHpRes, kHpGain, kLpFreq, kLpRes, kLpGain, kSplit, kEnvAmount, kEnvAttack, kEnvDecay, kDryWet, kOutput};
+            const char* names[12] = {"HP", "HP Res", "HP Gain", "LP", "LP Res", "LP Gain", "Split", "Env", "Attack", "Decay", "Dry/Wet", "Output"};
+            for (int i = 0; i < 12; ++i)
+                add (new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), h, ids[i], names[i], i == 6 || i == 7 || i == 11), tip (ids[i]));
+            add (new Toggle (CRect (480, 172, 550, 190), h, kLiquid, "Liquid"), tip (kLiquid));
+            add (new Toggle (CRect (480, 196, 550, 214), h, kNotch, "Notch"), tip (kNotch));
+            add (new Knob (knobRect (560, 164), h, kFade, "Fade"), tip (kFade));
+            break;
+        }
+        case kFxMultidyn:
+        {
+            using namespace multidyn;
+            auto tip = [] (uint32_t id) { return multidyn::help::forParam (id); };
+            fxDynDisplay = new DynDisplay (CRect (112, 8, 600, 226), h, [this, s] () -> multidyn::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.multidyn[(size_t)s] : nullptr;
+            });
+            add (fxDynDisplay, multidyn::help::kDisplay);
+            auto* io = new Label (CRect (8, 8, 108, 22), "In / Out", 9.5, true, 1);
+            io->setDim (true);
+            g->addView (io);
+            const CColor below (255, 170, 60), above (110, 165, 255);
+            const int fields[6] = {kBelowThresh, kBelowRatio, kAboveThresh, kAboveRatio, kAttack, kRelease};
+            for (int b = 0; b < 4; ++b)
+            {
+                mdNames[b] = new Label (none, "", 10.0, true, 0);
+                g->addView (mdNames[b]);
+                mdOn[b] = add (new Toggle (none, h, bandParam (b, kBandActive), "On"), tip (bandParam (b, kBandActive)));
+                mdSolo[b] = add (new Toggle (none, h, bandParam (b, kBandSolo), "S"), tip (bandParam (b, kBandSolo)));
+                mdIn[b] = add (new NumberBox (none, h, bandParam (b, kBandInput)), tip (bandParam (b, kBandInput)));
+                mdOut[b] = add (new NumberBox (none, h, bandParam (b, kBandOutput)), tip (bandParam (b, kBandOutput)));
+                for (int i = 0; i < 6; ++i)
+                    mdBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)),
+                                         tip (bandParam (b, fields[i])));
+            }
+            add (new Segmented (CRect (608, 8, 830, 26), h, kMode, {"Base", "Character"}), tip (kMode));
+            add (new Segmented (CRect (608, 32, 716, 50), h, kBands, {"1", "2", "3", "4"}), tip (kBands));
+            add (new Toggle (CRect (722, 32, 830, 50), h, kSoftKnee, "Soft Knee"), tip (kSoftKnee));
+            add (new Segmented (CRect (608, 56, 700, 74), h, kDetector, {"Peak", "RMS"}), tip (kDetector));
+            add (new Toggle (CRect (706, 56, 776, 74), h, kPreLimit, "Pre-Lim"), tip (kPreLimit));
+            add (new NumberBox (CRect (780, 56, 830, 74), h, kPreLimitCeiling), tip (kPreLimitCeiling));
+            auto* sp = new Label (CRect (608, 80, 830, 92), "Splits", 9.5, true, 1);
+            sp->setDim (true);
+            g->addView (sp);
+            for (int x = 0; x < 3; ++x)
+                add (new NumberBox (CRect (608 + x * 74, 94, 676 + x * 74, 112), h, (uint32_t)(kXover1 + x)), tip ((uint32_t)(kXover1 + x)));
+            add (new Knob (knobRect (608, 122), h, kAmount), tip (kAmount));
+            add (new Knob (knobRect (672, 122), h, kTime), tip (kTime));
+            add (new Knob (knobRect (736, 122), h, kOutput, nullptr, true), tip (kOutput));
+            mdLayoutHost = h;
+            updateMdLayout ();
+            break;
+        }
+        case kFxMsEq:
+        {
+            msView = new MsView (CRect (8, 8, 470, 226), h, [this, s] (float& m, float& sd) {
+                auto* b = ctl->getBridge ();
+                m = b ? b->rack.msMid[(size_t)s].load () : 0.0f;
+                sd = b ? b->rack.msSide[(size_t)s].load () : 0.0f;
+            });
+            add (msView, "Blue: the mid level. Orange: the side high-pass and level. Drag the handle sideways for the cutoff, "
+                         "up/down for the side level, the mouse wheel for the slope (while holding the handle, or with Shift); "
+                         "double-click or right click resets. Right: live mid and side levels.");
+            g->addView (new Label (CRect (480, 8, 520, 26), "Slope", 10.5, false, 2));
+            add (new Segmented (CRect (526, 8, 646, 26), h, mseq::kSlope, {"6", "12", "24"}), help::forParam (kMsSlope));
+            add (new Knob (knobRect (480, 34), h, mseq::kSideHp), help::forParam (kMsSideHp));
+            add (new Knob (knobRect (540, 34), h, mseq::kSideGain), help::forParam (kMsSideGain));
+            add (new Knob (knobRect (600, 34), h, mseq::kMidGain), help::forParam (kMsMidGain));
+            auto* n2 = new Label (CRect (480, 108, 834, 122), "below the side high-pass the low end is mono", 9.5);
+            n2->setDim (true);
+            g->addView (n2);
+            break;
+        }
+        case kFxSmacheratr:
+        {
+            using namespace smacheratr;
+            auto tip = [] (uint32_t id) { return smacheratr::help::forParam (id); };
+            fxShaperView = new ShaperView (CRect (8, 8, 330, 226), h, [this, s] () -> const smacheratr::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.sat[(size_t)s] : nullptr;
+            });
+            add (fxShaperView, smacheratr::help::kShaperDisplay);
+            add (new Toggle (CRect (340, 8, 420, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
+            add (new NumberBox (CRect (424, 8, 494, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
+            add (new Toggle (CRect (500, 8, 570, 26), h, kClarity, "Clarity"), tip (kClarity));
+            add (new Toggle (CRect (576, 8, 626, 26), h, kMidSide, "M/S"), tip (kMidSide));
+            add (new Choice (CRect (632, 8, 740, 26), h, kPostClip), tip (kPostClip));
+            add (new Toggle (CRect (746, 8, 830, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
+            const uint32_t ids[5] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi};
+            for (int i = 0; i < 5; ++i)
+                add (new Knob (knobRect (340 + i * 64, 36), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
+            add (new Toggle (CRect (340, 116, 400, 134), h, kColorOn, "Color"), tip (kColorOn));
+            add (new Knob (knobRect (404, 110), h, kColorFreq), tip (kColorFreq));
+            add (new Knob (knobRect (468, 110), h, kColorWidth), tip (kColorWidth));
+            break;
+        }
+        case kFxWidr:
+        {
+            using namespace widr;
+            auto tip = [] (uint32_t id) { return widr::help::forParam (id); };
+            fxGonio = new GonioView (CRect (8, 8, 188, 226), [this, s] () -> widr::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.widr[(size_t)s] : nullptr;
+            });
+            add (fxGonio, widr::help::kGonio);
+            add (new Segmented (CRect (196, 8, 436, 26), h, kCharacter, {"Tight", "Wide", "Epic", "Surround"}), tip (kCharacter));
+            add (new Toggle (CRect (444, 8, 530, 26), h, kMonoCheck, "Mono Check"), tip (kMonoCheck));
+            const uint32_t row1[7] = {widr::kWidth, kContrast, kAir, kBeyond, kMonoBelow, kGuard, kOutput};
+            for (int i = 0; i < 7; ++i)
+                add (new Knob (knobRect (196 + i * 62, 32), h, row1[i], nullptr, i == 6), tip (row1[i]));
+            const uint32_t row2[5] = {kSize, kSpace, kDecay, kPreDelay, kDamping};
+            for (int i = 0; i < 5; ++i)
+                add (new Knob (knobRect (196 + i * 62, 100), h, row2[i]), tip (row2[i]));
+            add (new pk::HSlider (CRect (196, 172, 506, 192), h, kDryLevel, "Dry"), tip (kDryLevel));
+            add (new pk::HSlider (CRect (196, 198, 506, 218), h, kWetLevel, "Wet"), tip (kWetLevel));
+            auto* n = new Label (CRect (520, 172, 834, 218), "here Widr works alone (the group awareness needs its own plug-in)", 9.5);
+            n->setDim (true);
+            g->addView (n);
+            break;
+        }
+        default: break;
+    }
+    fxBody->invalid ();
 }
 
 void Editor::setEnvTab (int t)
@@ -671,13 +910,27 @@ void Editor::idle ()
         waveform->idle ();
     if (scope)
         scope->idle ();
-    if (fxTab == 0 && fxFilterView)
+    if (rackDirty)
+        rebuildRack ();
+    else
+        for (int s = 0; s < kRackSlots; ++s)
+            if (ctl->slotType (s) != shownTypes[(size_t)s])
+            {
+                rebuildRack (); // a preset or the host changed the rack
+                break;
+            }
+    ctl->checkLatency ();
+    if (fxFilterView)
         fxFilterView->idle ();
-    if (fxTab == 1 && fxDynDisplay)
+    if (fxDynDisplay)
         fxDynDisplay->idle ();
-    if (fxTab == 2 && msView)
+    if (msView)
         msView->idle ();
-    if (fxTab == 3 && fxShaperView)
+    if (fxGonio)
+        fxGonio->idle ();
+    if (fxTab == kFxEnd && endShaperView)
+        endShaperView->idle ();
+    if (fxShaperView)
         fxShaperView->idle ();
     if (envDisplay)
         envDisplay->tick ();

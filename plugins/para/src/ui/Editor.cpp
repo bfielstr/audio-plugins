@@ -53,7 +53,7 @@ void Editor::buildUI (CFrame* f)
 {
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
-    root->addView (new Label (CRect (12, 6, 200, 28), "PARA", 14.0, true));
+    root->addView (new Label (CRect (12, 6, 200, 28), "para", 14.0, true));
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });

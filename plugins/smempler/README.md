@@ -23,20 +23,26 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | Sustain pedal (CC64) | ✓ |
 | Sample stays at its original pitch on C3 (MIDI 60) | ✓ |
 
-**After the sampler** (tabs at the bottom, in chain order), each with its own display:
+**The effects rack** (at the bottom): after the sampler, up to 8 effects in any order, and the same
+effect as many times as you like. **+** adds one at the end of the chain; the tabs show the chain
+left to right; for the selected one, **On**, **<** / **>** to move it earlier or later, and
+**Remove** (the ones after it move up). Each has its own display and controls:
 
-- **Para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement); its envelope
-  is triggered by the notes played here.
-  Its display shows the live spectrum, so you can see it working.
-- **Multidyn**: the multiband dynamics, with its lanes and band fields.
-- **M/S EQ**: a high-pass on the side signal (6 / 12 / **24** dB per octave, default 150 Hz) tapers
-  the sides so the low end is mono below the cutoff, plus side and mid levels; live mid and side
-  meters.
-- **Smacheratr**: the Analog curve at the very end, with its optional pre-limiter (off, Drive 0 dB).
+- **para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement and the Notch);
+  its envelope is triggered by the notes played here, and its display shows the live spectrum.
+- **multidyn**: the multiband dynamics, with its lanes and band fields.
+- **m/s eq**: a high-pass on the side signal (6 / 12 / **24** dB per octave, default 150 Hz) tapers
+  the sides so the low end is mono below the cutoff, plus side and mid levels; live meters.
+- **smacheratr**: the full saturator (pre-limiter, Clarity, Mid/Side, colour, post clip).
+- **widr**: the stereo widener with its left and right voices (it works alone here: the group
+  awareness needs its own plug-in instances).
 
-All are off by default; every control is an automatable parameter and the latency they add is
-reported to the host. The **OUTPUT** scope on the right shows the final output (click it to change
-the time span), so you can see what comes out, including squared-off peaks.
+**end: smacheratr** (the tab on the right) is the saturator at the very end, after the rack (off,
+Drive 0 dB). Every control is an automatable parameter (the host shows a slot's values in the
+units of the effect loaded there), and the latency of the effects in the rack is reported to the
+host, which is told when it changes. The **OUTPUT** scope on the right shows the final output
+(click it to change the time span). Projects from 0.5 keep their Para, Multidyn and M/S EQ: they
+load into the first slots.
 
 **Root Note** (Global panel): the note on which the sample plays at its own pitch (C3 by default).
 **Voices** defaults to 1.

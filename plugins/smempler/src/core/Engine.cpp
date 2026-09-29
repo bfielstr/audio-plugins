@@ -514,9 +514,7 @@ void Engine::prepare (double sampleRate, int)
     sr = sampleRate;
     for (auto& v : voices)
         v.prepare (sr);
-    fxPara.prepare (sr, 512);
-    fxMultidyn.prepare (sr, 512);
-    ms.prepare (sr);
+    rack.prepare (sr, 512);
     tail.prepare (sr, 512);
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         tail.setParam (f, p[kTailBase + f]);
@@ -525,9 +523,7 @@ void Engine::prepare (double sampleRate, int)
 
 void Engine::reset ()
 {
-    fxPara.reset ();
-    fxMultidyn.reset ();
-    ms.reset ();
+    rack.reset ();
     tail.reset ();
     for (auto& v : voices)
         v.hardStop ();
@@ -557,11 +553,9 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
-        fxPara.setParam (id - kFxParaBase, plain);
-    else if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)
-        fxMultidyn.setParam (id - kFxMdBase, plain);
-    else if (id >= kTailBase)
+    if (isRackParam (id))
+        rack.setParam (id, plain);
+    else if (id >= kTailBase && id < kTailBase + pk::kTailFields)
         tail.setParam (id - kTailBase, plain);
 }
 
@@ -663,7 +657,7 @@ void Engine::noteOn (int note, float velocity)
         noteOff (note);
         return;
     }
-    fxPara.noteOn (note); // the built-in Para tracks the sampler's notes
+    rack.noteOn (note); // Para's envelope follows the sampler's notes
     if (!smp)
         return;
     updateSlices ();
@@ -889,17 +883,7 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
 
 void Engine::renderEffects (float* L, float* R, int n)
 {
-    fxPara.setParam (para::kLiquid, p[kParaLiquid]);
-    fxPara.setParam (para::kFade, p[kParaFade]);
-    fxPara.setParam (para::kNotch, p[kParaNotch]);
-    if (on (p[kFxParaOn]))
-        fxPara.process (L, R, L, R, n);
-    fxMultidyn.setBypass (!on (p[kFxMdOn]));
-    fxMultidyn.process (L, R, nullptr, nullptr, L, R, n);
-    if (on (p[kMsOn]))
-        ms.process (L, R, n, p[kMsSideHp], idx (p[kMsSlope]), p[kMsSideGain], p[kMsMidGain]);
-    else
-        ms.measure (L, R, n);
+    rack.process (L, R, n);
     tail.process (L, R, n);
 }
 

@@ -1,5 +1,7 @@
 #include "MsView.h"
 
+#include "../core/Rack.h"
+
 #include "../core/MsEq.h"
 
 #include "pluginkit/ui/Theme.h"
@@ -51,12 +53,12 @@ double MsView::yOfDb (double db) const
     return r.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * r.getHeight ();
 }
 
-CPoint MsView::handle () const { return CPoint (xOfHz (host->plainValue (kMsSideHp)), yOfDb (host->plainValue (kMsSideGain))); }
+CPoint MsView::handle () const { return CPoint (xOfHz (host->plainValue (mseq::kSideHp)), yOfDb (host->plainValue (mseq::kSideGain))); }
 
 void MsView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize (), pr = plot ();
-    const bool on = host->plainValue (kMsOn) >= 0.5;
+    const bool on = true; // (the rack slot has its own On)
     ctx->setFillColor (theme::kWaveBg);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
@@ -80,9 +82,9 @@ void MsView::draw (CDrawContext* ctx)
 
     // mid: flat at its gain; side: the high-pass plus its gain
     const uint8_t alpha = on ? 255 : 110;
-    const double midDb = host->plainValue (kMsMidGain), sideDb = host->plainValue (kMsSideGain);
-    const double hz = host->plainValue (kMsSideHp);
-    const int slope = (int)std::lround (host->plainValue (kMsSlope));
+    const double midDb = host->plainValue (mseq::kMidGain), sideDb = host->plainValue (mseq::kSideGain);
+    const double hz = host->plainValue (mseq::kSideHp);
+    const int slope = (int)std::lround (host->plainValue (mseq::kSlope));
     ctx->setLineWidth (2.0);
     ctx->setFrameColor (CColor (kMidColor.red, kMidColor.green, kMidColor.blue, alpha));
     ctx->drawLine (CPoint (pr.left, yOfDb (midDb)), CPoint (pr.right, yOfDb (midDb)));
@@ -128,7 +130,7 @@ void MsView::draw (CDrawContext* ctx)
 
     char buf[96];
     std::snprintf (buf, sizeof (buf), "%s   Side HP %s  Side %s  Mid %s", on ? "MID / SIDE" : "MID / SIDE (off)",
-                   host->valueText (kMsSideHp).c_str (), host->valueText (kMsSideGain).c_str (), host->valueText (kMsMidGain).c_str ());
+                   host->valueText (mseq::kSideHp).c_str (), host->valueText (mseq::kSideGain).c_str (), host->valueText (mseq::kMidGain).c_str ());
     text (ctx, buf, CRect (pr.left + 6, pr.top + 4, pr.right - 6, pr.top + 18), on ? theme::kTextBright : theme::kTextDim, 10.0,
           kLeftText, true);
     ctx->setLineWidth (1.0);
@@ -142,8 +144,8 @@ void MsView::onMouseDownEvent (MouseDownEvent& e)
         return;
     if (e.clickCount == 2 || right)
     {
-        host->setOnce (kMsSideHp, host->table ().defaultNormalized (kMsSideHp));
-        host->setOnce (kMsSideGain, host->table ().defaultNormalized (kMsSideGain));
+        host->setOnce (mseq::kSideHp, host->table ().defaultNormalized (mseq::kSideHp));
+        host->setOnce (mseq::kSideGain, host->table ().defaultNormalized (mseq::kSideGain));
         invalid ();
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);
@@ -151,10 +153,10 @@ void MsView::onMouseDownEvent (MouseDownEvent& e)
     }
     dragging = true;
     down = e.mousePosition;
-    startHz = host->plainValue (kMsSideHp);
-    startDb = host->plainValue (kMsSideGain);
-    host->beginEdit (kMsSideHp);
-    host->beginEdit (kMsSideGain);
+    startHz = host->plainValue (mseq::kSideHp);
+    startDb = host->plainValue (mseq::kSideGain);
+    host->beginEdit (mseq::kSideHp);
+    host->beginEdit (mseq::kSideGain);
     e.consumed = true;
 }
 
@@ -165,9 +167,9 @@ void MsView::onMouseMoveEvent (MouseMoveEvent& e)
     const CRect pr = plot ();
     const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
-    host->setNorm (kMsSideHp, host->table ().toNormalized (kMsSideHp, startHz * std::pow (kMaxHz / kMinHz, dx / pr.getWidth ())));
-    host->setNorm (kMsSideGain,
-                   host->table ().toNormalized (kMsSideGain, startDb - dy * (kMaxDb - kMinDb) / pr.getHeight ()));
+    host->setNorm (mseq::kSideHp, host->table ().toNormalized (mseq::kSideHp, startHz * std::pow (kMaxHz / kMinHz, dx / pr.getWidth ())));
+    host->setNorm (mseq::kSideGain,
+                   host->table ().toNormalized (mseq::kSideGain, startDb - dy * (kMaxDb - kMinDb) / pr.getHeight ()));
     invalid ();
     e.consumed = true;
 }
@@ -178,10 +180,10 @@ void MsView::onMouseWheelEvent (MouseWheelEvent& e)
     const bool over = std::hypot (e.mousePosition.x - h.x, e.mousePosition.y - h.y) <= 14.0;
     if (!dragging && !(over && e.modifiers.has (ModifierKey::Shift)))
         return;
-    const double dn = pk::wheelStep (e, host->table (), kMsSlope);
+    const double dn = pk::wheelStep (e, host->table (), mseq::kSlope);
     if (dn == 0.0)
         return;
-    host->setOnce (kMsSlope, std::clamp (host->norm (kMsSlope) + dn, 0.0, 1.0));
+    host->setOnce (mseq::kSlope, std::clamp (host->norm (mseq::kSlope) + dn, 0.0, 1.0));
     invalid ();
     e.consumed = true;
 }
@@ -191,8 +193,8 @@ void MsView::onMouseUpEvent (MouseUpEvent& e)
     if (!dragging)
         return;
     dragging = false;
-    host->endEdit (kMsSideHp);
-    host->endEdit (kMsSideGain);
+    host->endEdit (mseq::kSideHp);
+    host->endEdit (mseq::kSideGain);
     e.consumed = true;
 }
 

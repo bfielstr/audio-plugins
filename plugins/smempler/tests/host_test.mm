@@ -5,6 +5,7 @@
 // usage: smempler_hosttest <path/to/Smempler.vst3> <output dir for screenshots>
 
 #include "Params.h"
+#include "Rack.h"
 #include "plugin/StateIO.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
@@ -438,18 +439,28 @@ int main (int argc, char** argv)
         rig.render (0.3, out);
         CHECK (snapshot (rig, outDir + "/ui_classic.png"), "classic snapshot");
 
-        // the effects strip with audio flowing: every effect on, one screenshot per tab
-        for (uint32_t id : {(uint32_t)smempler::kFxParaOn, (uint32_t)smempler::kFxMdOn, (uint32_t)smempler::kMsOn,
-                            (uint32_t)(smempler::kTailBase + pk::kTailOn)})
-            rig.param (id, 1.0);
+        // the effects rack with audio flowing: every kind of effect in a slot, one screenshot per tab
+        using smempler::slotParam;
+        auto loadFx = [&] (int slot, int type) {
+            rig.param (slotParam (slot, smempler::kSlotType), smempler::toNormalized (slotParam (slot, smempler::kSlotType), type));
+            rig.param (slotParam (slot, smempler::kSlotOn), 1.0);
+            const auto& t = smempler::fxTable (type);
+            for (uint32_t j = 0; j < smempler::kSlotBlock; ++j)
+                rig.param (smempler::slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
+        };
+        const int kinds[5] = {smempler::kFxPara, smempler::kFxMultidyn, smempler::kFxMsEq, smempler::kFxSmacheratr, smempler::kFxWidr};
+        for (int s = 0; s < 5; ++s)
+            loadFx (s, kinds[s]);
+        rig.param (smempler::kTailBase + pk::kTailOn, 1.0);
         rig.param (smempler::kTailBase + pk::kTailDrive, smempler::toNormalized (smempler::kTailBase + pk::kTailDrive, 12.0));
+        auto typeOf = [&] (int slot) {
+            return (int)std::lround (smempler::toPlain (slotParam (slot, smempler::kSlotType),
+                                                        rig.controller->getParamNormalized (slotParam (slot, smempler::kSlotType))));
+        };
         {
             EditorWindow fx (rig.controller);
             CHECK (fx.ok (), "fx editor");
-            const char* tabs[smempler::Editor::kFxTabs] = {"para", "multidyn", "ms", "smacheratr"};
-            for (int t = 0; t < smempler::Editor::kFxTabs; ++t)
-            {
-                fx.click (8 + t * smempler::Editor::kFxTabWidth + 50, smempler::Editor::kFxTabTop + 10);
+            auto settle = [&] {
                 rig.note (60, 1.0f);
                 for (int i = 0; i < 12; ++i)
                 {
@@ -457,12 +468,33 @@ int main (int argc, char** argv)
                     pump (0.03);
                 }
                 rig.note (60, 0.0f);
-                CHECK (fx.savePng (outDir + "/ui_fx_" + tabs[t] + ".png"), "fx %s snapshot", tabs[t]);
+            };
+            const double tabY = smempler::Editor::kFxTabTop + 10, ctlY = smempler::Editor::kFxCtlTop + 10;
+            const char* names[6] = {"para", "multidyn", "ms", "smacheratr", "widr", "end"};
+            for (int t = 0; t < 6; ++t)
+            {
+                const double x = t < 5 ? 8 + t * smempler::Editor::kFxTabWidth + 40 : 8 + 838 - 60;
+                fx.click (x, tabY);
+                settle ();
+                CHECK (fx.savePng (outDir + "/ui_fx_" + names[t] + ".png"), "fx %s snapshot", names[t]);
             }
+            // select the second slot and move it earlier: Multidyn first, then Para
+            fx.click (8 + 1 * smempler::Editor::kFxTabWidth + 40, tabY);
+            pump (0.1);
+            fx.click (8 + 208 + 13, ctlY); // <
+            pump (0.1);
+            CHECK (typeOf (0) == smempler::kFxMultidyn && typeOf (1) == smempler::kFxPara, "moved: %d %d", typeOf (0), typeOf (1));
+            // remove it: Para first again, the rest move up
+            fx.click (8 + 272 + 34, ctlY); // Remove (the moved slot is selected)
+            pump (0.1);
+            CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMsEq && typeOf (4) == smempler::kFxEmpty,
+                   "removed: %d %d %d", typeOf (0), typeOf (1), typeOf (4));
+            settle ();
+            CHECK (fx.savePng (outDir + "/ui_fx_after_remove.png"), "after remove snapshot");
         }
-        for (uint32_t id : {(uint32_t)smempler::kFxParaOn, (uint32_t)smempler::kFxMdOn, (uint32_t)smempler::kMsOn,
-                            (uint32_t)(smempler::kTailBase + pk::kTailOn)})
-            rig.param (id, 0.0);
+        for (int s = 0; s < smempler::kRackSlots; ++s)
+            rig.param (slotParam (s, smempler::kSlotType), 0.0);
+        rig.param (smempler::kTailBase + pk::kTailOn, 0.0);
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 
@@ -534,8 +566,8 @@ int main (int argc, char** argv)
             ViewRect r (0, 0, 1665, 900);
             CHECK (v->canResize () == kResultTrue, "resizable");
             v->checkSizeConstraint (&r);
-            // the editor keeps its aspect ratio (1110 x 904 with the effects strip)
-            CHECK (std::abs (r.getWidth () * 988 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
+            // the editor keeps its aspect ratio (1110 x 1012 with the effects rack)
+            CHECK (std::abs (r.getWidth () * 1012 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
                    r.getHeight ());
             v->release ();
         }

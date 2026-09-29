@@ -57,7 +57,7 @@ void Editor::buildUI (CFrame* f)
 {
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
-    root->addView (new Label (CRect (12, 6, 200, 28), "WIDR", 14.0, true));
+    root->addView (new Label (CRect (12, 6, 200, 28), "widr", 14.0, true));
     statusLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
     statusLabel->setDim (true);
     root->addView (statusLabel);
@@ -71,7 +71,10 @@ void Editor::buildUI (CFrame* f)
     stage = new StageView (CRect (kStageLeft, kStageTop, kStageRight, kStageBottom), this, ctl);
     stage->setTooltipText (help::kStage);
     root->addView (stage);
-    gonio = new GonioView (CRect (568, 40, 752, 300), ctl);
+    gonio = new GonioView (CRect (568, 40, 752, 300), [c = ctl] () -> Meters* {
+        auto* s = c->getShared ();
+        return s ? &s->meters : nullptr;
+    });
     gonio->setTooltipText (help::kGonio);
     root->addView (gonio);
 

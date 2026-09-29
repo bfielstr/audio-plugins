@@ -11,10 +11,10 @@ using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (locus::kProcessorUID), PClassInfo::kManyInstances, kVstAudioEffectClass,
-            "Locus", 0, PlugType::kFxDynamics, FULL_VERSION_STR, kVstVersionString,
+            "locus", 0, PlugType::kFxDynamics, FULL_VERSION_STR, kVstVersionString,
             locus::Processor::createInstance)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (locus::kControllerUID), PClassInfo::kManyInstances, kVstComponentControllerClass,
-            "Locus Controller", 0, "", FULL_VERSION_STR, kVstVersionString, locus::Controller::createInstance)
+            "locus Controller", 0, "", FULL_VERSION_STR, kVstVersionString, locus::Controller::createInstance)
 
 END_FACTORY

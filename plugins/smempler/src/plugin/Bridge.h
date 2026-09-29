@@ -10,8 +10,8 @@
 #include "pluginkit/RtShared.h"
 #include "pluginkit/ScopeBuffer.h"
 
-#include "multidyn/src/plugin/Meters.h"
-#include "para/src/core/Engine.h"
+#include "Rack.h"
+
 #include "smacheratr/src/core/Engine.h"
 
 #include <array>
@@ -78,10 +78,9 @@ public:
     std::atomic<uint32_t> changeCounter {0}; // bumps whenever sample/edits change
 
     // the effects' displays and the output scope (audio thread -> editor)
-    para::Meters paraMeters;
-    multidyn::Meters mdMeters;
-    smacheratr::Meters satMeters;
-    std::atomic<float> msMid {0.0f}, msSide {0.0f};
+    RackMeters rack;
+    smacheratr::Meters satMeters; // the saturator at the very end
+    std::atomic<int> latency {0};  // what the processor reports; the editor tells the host when it changes
     static constexpr int kScopeSize = 65536;
     pk::ScopeBuffer<kScopeSize> outScope; // the final output
     std::atomic<double> sampleRate {48000.0};

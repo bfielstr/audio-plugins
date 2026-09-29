@@ -1,6 +1,5 @@
 #include "GonioView.h"
 
-#include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
 
@@ -26,7 +25,7 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
 }
 } // namespace
 
-GonioView::GonioView (const CRect& rect, Controller* c) : CView (rect), controller (c)
+GonioView::GonioView (const CRect& rect, MeterSource m) : CView (rect), meters (std::move (m))
 {
     l.resize (kPoints);
     r.resize (kPoints);
@@ -91,15 +90,15 @@ void GonioView::draw (CDrawContext* ctx)
 
 void GonioView::idle ()
 {
-    auto* s = controller->getShared ();
-    if (!s)
+    Meters* m = meters ? meters () : nullptr;
+    if (!m)
         return;
-    count = s->meters.scope.read (l.data (), r.data (), kPoints);
+    count = m->scope.read (l.data (), r.data (), kPoints);
     float peak = 0.0f;
     for (int i = 0; i < count; ++i)
         peak = std::max ({peak, std::fabs (l[(size_t)i]), std::fabs (r[(size_t)i])});
     level += (std::max (peak * 0.4f, 1e-4f) - level) * (peak * 0.4f > level ? 0.5f : 0.05f);
-    correlation = s->meters.correlation.load (std::memory_order_relaxed);
+    correlation = m->correlation.load (std::memory_order_relaxed);
     invalid ();
 }
 

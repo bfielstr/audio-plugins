@@ -14,6 +14,16 @@
 
 namespace smempler {
 
+// The effects rack after the sampler: kRackSlots slots, each Empty or one of the suite's effects, in
+// any order (the same effect may sit in several). A slot is a Type, an On and a block of kSlotBlock
+// parameters that the slot's effect reads through its own table (Rack.h: fxTable), so the IDs stay
+// the same whatever is loaded where.
+enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kNumFxTypes };
+constexpr int kRackSlots = 8;
+constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn)
+enum SlotField : uint32_t { kSlotType = 0, kSlotOn, kSlotParams };
+constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
+
 enum ParamId : uint32_t
 {
     // Sample / playback modes
@@ -123,9 +133,16 @@ enum ParamId : uint32_t
     kParaLiquid,        // Para's Liquid movement
     kParaFade,          // Para's Vocal fade range
     kParaNotch,         // Para's Liquid notch
+    // --- added in 0.6: the effects rack (Rack.h); the fixed Para / Multidyn / M/S EQ above are
+    // no longer used (old projects are moved into the rack when they load) ---
+    kRackBase,
 
-    kNumParams
+    kNumParams = kRackBase + kRackSlots * kSlotSize
 };
+
+constexpr uint32_t slotParam (int slot, uint32_t field) { return kRackBase + (uint32_t)slot * kSlotSize + field; }
+constexpr uint32_t slotBlockParam (int slot, uint32_t id) { return slotParam (slot, kSlotParams + id); }
+constexpr bool isRackParam (uint32_t id) { return id >= kRackBase && id < kNumParams; }
 
 constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
 
@@ -153,6 +170,7 @@ enum MidiParamId : uint32_t
     kMidiSustain = 1001,
     kMidiModWheel = 1002,
 };
+static_assert (kNumParams <= kMidiPitchBend, "the parameters run into the hidden MIDI ones");
 
 using pk::Curve;
 using pk::Disp;

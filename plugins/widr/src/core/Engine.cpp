@@ -66,7 +66,7 @@ void Engine::Voice::reset ()
     driftCount = 0;
 }
 
-Engine::Engine ()
+Engine::Engine (bool withTail) : hasTail (withTail)
 {
     gCur.fill (1.0f);
     gYieldCur.fill (1.0f);
@@ -499,7 +499,8 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
     corr = sLL * sRR > 1e-14 ? (float)std::clamp (sLR / std::sqrt (sLL * sRR), -1.0, 1.0) : 1.0f;
     if (meters)
         meters->correlation.store (corr, std::memory_order_relaxed);
-    tail.process (outL, outR, n);
+    if (hasTail)
+        tail.process (outL, outR, n);
 }
 
 } // namespace widr

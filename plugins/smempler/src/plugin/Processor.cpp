@@ -23,7 +23,7 @@ Processor::Processor ()
 {
     setControllerClass (kControllerUID);
     bridge = new Bridge ();
-    engine.setFxMeters (&bridge->paraMeters, &bridge->satMeters);
+    engine.setFxMeters (&bridge->rack, &bridge->satMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
 }
@@ -251,15 +251,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     // the output scope and the effects' displays
     for (int i = 0; i < n; ++i)
         bridge->outScope.push (L[i], R[i]);
-    for (int b = 0; b < multidyn::kNumBands; ++b)
-    {
-        const auto& m = engine.fxMultidynMeter (b);
-        bridge->mdMeters.inputDb[(size_t)b].store (m.inputDb, std::memory_order_relaxed);
-        bridge->mdMeters.outputDb[(size_t)b].store (m.outputDb, std::memory_order_relaxed);
-        bridge->mdMeters.gainDb[(size_t)b].store (m.gainDb, std::memory_order_relaxed);
-    }
-    bridge->msMid.store (engine.msMidPeak (), std::memory_order_relaxed);
-    bridge->msSide.store (engine.msSidePeak (), std::memory_order_relaxed);
+    bridge->latency.store (engine.latency (), std::memory_order_relaxed);
 
     // silent only when it really is (the effects have tails)
     bool silent = true;

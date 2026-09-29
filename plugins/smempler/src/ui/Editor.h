@@ -1,9 +1,11 @@
 #pragma once
 
+#include "Params.h"
 #include "UiKit.h"
 
 #include "pluginkit/vst/EditorBase.h"
 
+#include <array>
 #include <map>
 #include <memory>
 #include <string>
@@ -17,6 +19,9 @@ class DynDisplay;
 }
 namespace smacheratr {
 class ShaperView;
+}
+namespace widr {
+class GonioView;
 }
 namespace pk {
 class ScopeView;
@@ -36,10 +41,11 @@ public:
     // every edit from the editor: Multidyn's thresholds of a band cannot cross
     void setNorm (uint32_t id, double v) override;
     static constexpr double kWidth = 1110.0;
-    static constexpr double kHeight = 988.0;
-    // the effects strip at the bottom (also used by the host test)
-    static constexpr int kFxTabs = 4; // Para, Multidyn, M/S EQ, Smacheratr
-    static constexpr double kFxTabTop = 722.0, kFxTabWidth = 104.0;
+    static constexpr double kHeight = 1012.0;
+    // the effects rack at the bottom (also used by the host test): the slots' tabs in chain order,
+    // "+", and the saturator at the very end on the right; the selected slot's controls; its panel
+    static constexpr double kFxTabTop = 722.0, kFxTabWidth = 96.0, kFxCtlTop = 746.0, kFxPanelTop = 770.0;
+    static constexpr int kFxEnd = kRackSlots; // setFxTab: the saturator at the very end
 
     explicit Editor (Controller* c);
 
@@ -50,12 +56,20 @@ public:
 
     // exposed for tests
     void setEnvTab (int t);
-    void setFxTab (int t);
+    void setFxTab (int t); // a slot, or kFxEnd
+    // the rack, as the user edits it (tests use these too)
+    void addFx (int type);
+    void removeFx (int slot);
+    void moveFx (int slot, int dir);
     void showMenu (VSTGUI::CPoint where);
 
 private:
     void updateVisibility ();
     void updateMdLayout ();
+    void rebuildRack ();   // the tabs and the selected slot's controls and panel
+    void buildBody ();     // the selected slot's panel
+    void showAddMenu (VSTGUI::CPoint where);
+    void copySlot (int from, int to);
     void browseForSample ();
     void stepSample (int dir);
     void loadFile (const std::string& path);
@@ -80,17 +94,25 @@ private:
     VSTGUI::CView *lfoRateHz = nullptr, *lfoRateSync = nullptr;
     VSTGUI::CViewContainer* envTabs[3] {};
     VSTGUI::CView *ampLoopTime = nullptr, *ampLoopRate = nullptr;
-    std::vector<VSTGUI::CView*> tabButtons, fxTabButtons;
-    int envTab = 0, fxTab = 0;
+    std::vector<VSTGUI::CView*> tabButtons;
+    int envTab = 0, fxTab = kFxEnd;
     std::string lastName;
 
-    // the effects strip: the plug-ins' own displays on this plug-in's parameters
-    std::unique_ptr<pk::MappedParamHost> paraHost, mdHost, satHost;
-    VSTGUI::CViewContainer* fxTabs[kFxTabs] {};
+    // the effects rack: the plug-ins' own displays on this plug-in's parameters, through a host per
+    // slot that maps the effect's IDs onto the slot's block (rebuilt when the slot's effect changes)
+    std::array<std::unique_ptr<pk::MappedParamHost>, kRackSlots> slotHosts;
+    std::array<int, kRackSlots> slotHostType {}, shownTypes {};
+    std::unique_ptr<pk::MappedParamHost> satHost; // the saturator at the very end
+    pk::MappedParamHost* hostFor (int slot);
+    bool rackDirty = false;
+    VSTGUI::CViewContainer *fxRow = nullptr, *fxCtl = nullptr, *fxBody = nullptr, *fxEndBody = nullptr;
     para::FilterView* fxFilterView = nullptr;
     multidyn::DynDisplay* fxDynDisplay = nullptr;
-    smacheratr::ShaperView* fxShaperView = nullptr;
+    smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
+    smacheratr::ShaperView* endShaperView = nullptr;
+    widr::GonioView* fxGonio = nullptr;
     MsView* msView = nullptr;
+    pk::ParamHost* mdLayoutHost = nullptr;
     pk::ScopeView* scope = nullptr;
     Label* mdNames[4] {};
     VSTGUI::CView *mdOn[4] {}, *mdSolo[4] {}, *mdIn[4] {}, *mdOut[4] {}, *mdBoxes[4][6] {};

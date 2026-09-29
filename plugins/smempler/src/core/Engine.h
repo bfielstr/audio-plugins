@@ -5,14 +5,12 @@
 #include "Envelope.h"
 #include "Filter.h"
 #include "Lfo.h"
-#include "MsEq.h"
 #include "Params.h"
+#include "Rack.h"
 #include "SampleData.h"
 #include "Slices.h"
 #include "Warp.h"
 
-#include "multidyn/src/core/Engine.h"
-#include "para/src/core/Engine.h"
 #include "smacheratr/src/core/Tail.h"
 
 #include <algorithm>
@@ -160,20 +158,18 @@ public:
     void setPitchBend (float bipolar)
     {
         bend = bipolar;
-        fxPara.setPitchBend (bipolar);
+        rack.setPitchBend (bipolar);
     }
-    // After the sampler: Para, Multidyn, the mid/side EQ and the Smacheratr at the very end. The
-    // latency is theirs (Multidyn's look-ahead and the saturator's) and constant.
-    int latency () const { return fxMultidyn.latency () + tail.latency (); }
+    // After the sampler: the effects rack, then the Smacheratr at the very end. The latency is
+    // theirs (it changes when an effect with latency is loaded into the rack or taken out).
+    int latency () const { return rack.latency () + tail.latency (); }
     // Destinations for the editor's displays (may be null).
-    void setFxMeters (para::Meters* pm, smacheratr::Meters* sm)
+    void setFxMeters (RackMeters* rm, smacheratr::Meters* tailMeters)
     {
-        fxPara.setMeters (pm);
-        tail.setMeters (sm);
+        rack.setMeters (rm);
+        tail.setMeters (tailMeters);
     }
-    const multidyn::BandMeter& fxMultidynMeter (int band) const { return fxMultidyn.meter (band); }
-    float msMidPeak () const { return ms.midPeak; }
-    float msSidePeak () const { return ms.sidePeak; }
+    int rackType (int slot) const { return rack.type (slot); }
     void setSustain (bool on);
     void noteOn (int note, float velocity);
     void noteOff (int note);
@@ -217,10 +213,8 @@ private:
     double globalLfoPhase = 0.0;
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
-    // built in without their own end-of-chain saturators (Smempler has one at the very end)
-    para::Engine fxPara {false};
-    multidyn::Engine fxMultidyn {false};
-    MsEq ms;
+    // the effects rack and the saturator at the very end
+    Rack rack;
     smacheratr::Tail tail;
 };
 

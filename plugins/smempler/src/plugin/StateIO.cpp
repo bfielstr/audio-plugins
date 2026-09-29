@@ -1,5 +1,9 @@
 #include "StateIO.h"
 
+#include "Rack.h"
+
+#include <functional>
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -96,7 +100,60 @@ bool readState (IBStream* stream, PluginState& st)
         st.norm[kLoopFadePower] = st.constantPowerFade ? 1.0 : 0.0;
         st.has[kLoopFadePower] = true;
     }
+    migrateToRack (st);
     return true;
+}
+
+// 0.5 had a fixed Para -> Multidyn -> M/S EQ after the sampler; 0.6 has the rack. An old state (no
+// rack in it) gets its effects that were on, in that order, in the first slots.
+void migrateToRack (PluginState& st)
+{
+    if (st.has[slotParam (0, kSlotType)])
+        return;
+    int slot = 0;
+    auto legacyOn = [&] (uint32_t id) { return st.has[id] && st.norm[id] >= 0.5; };
+    auto put = [&] (int type, const pk::ParamTable& t, const std::function<double (uint32_t)>& value) {
+        auto set = [&] (uint32_t id, double v) {
+            st.norm[id] = v;
+            st.has[id] = true;
+        };
+        set (slotParam (slot, kSlotType), toNormalized (slotParam (slot, kSlotType), (double)type));
+        set (slotParam (slot, kSlotOn), 1.0);
+        for (uint32_t j = 0; j < t.size (); ++j)
+            set (slotBlockParam (slot, j), value (j));
+        ++slot;
+    };
+    auto old = [&] (uint32_t id, const pk::ParamTable& t, uint32_t j) { return st.has[id] ? st.norm[id] : t.defaultNormalized (j); };
+    if (legacyOn (kFxParaOn))
+    {
+        const auto& t = para::paramTable ();
+        put (kFxPara, t, [&] (uint32_t j) {
+            if (j < para::kHostedParams)
+                return old (paraParam (j), t, j);
+            switch (j)
+            {
+                case para::kDragGain: return old (kParaDragGain, t, j);
+                case para::kLiquid: return old (kParaLiquid, t, j);
+                case para::kFade: return old (kParaFade, t, j);
+                case para::kNotch: return old (kParaNotch, t, j);
+                default: return t.defaultNormalized (j);
+            }
+        });
+        st.norm[kFxParaOn] = 0.0;
+    }
+    if (legacyOn (kFxMdOn))
+    {
+        const auto& t = multidyn::paramTable ();
+        put (kFxMultidyn, t, [&] (uint32_t j) { return old (multidynParam (j), t, j); });
+        st.norm[kFxMdOn] = 0.0;
+    }
+    if (legacyOn (kMsOn))
+    {
+        const auto& t = mseq::paramTable ();
+        const uint32_t ids[mseq::kNumParams] = {kMsSideHp, kMsSlope, kMsSideGain, kMsMidGain};
+        put (kFxMsEq, t, [&] (uint32_t j) { return old (ids[j], t, j); });
+        st.norm[kMsOn] = 0.0;
+    }
 }
 
 } // namespace smempler

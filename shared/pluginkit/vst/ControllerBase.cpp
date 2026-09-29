@@ -56,9 +56,11 @@ tresult PLUGIN_API ControllerBase::initialize (FUnknown* context)
     if (r != kResultOk)
         return r;
     for (uint32_t id = 0; id < tableRef.size (); ++id)
-        parameters.addParameter (new TableParameter (tableRef, id));
+        parameters.addParameter (makeParameter (id));
     return kResultOk;
 }
+
+Parameter* ControllerBase::makeParameter (uint32_t id) { return new TableParameter (tableRef, id); }
 
 tresult PLUGIN_API ControllerBase::setParamNormalized (ParamID tag, ParamValue value)
 {

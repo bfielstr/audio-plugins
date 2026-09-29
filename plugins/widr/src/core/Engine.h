@@ -80,7 +80,8 @@ struct MixOutcome
 class Engine
 {
 public:
-    Engine ();
+    // withTail: the end-of-chain Smacheratr (off where Widr is built into another plug-in)
+    explicit Engine (bool withTail = true);
     void prepare (double sampleRate, int maxBlock);
     void reset ();
     void setParam (uint32_t id, double plain)
@@ -92,7 +93,7 @@ public:
             tail.setParam (id - kTailBase, plain);
     }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return hasTail ? tail.latency () : 0; }
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -201,6 +202,7 @@ private:
     float corr = 1.0f;
 
     smacheratr::Tail tail;
+    bool hasTail = true;
 };
 
 } // namespace widr

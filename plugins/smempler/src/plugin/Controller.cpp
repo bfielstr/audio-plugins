@@ -1,4 +1,5 @@
 #include "Controller.h"
+#include "Rack.h"
 
 #include "Cids.h"
 #include "StateIO.h"
@@ -36,6 +37,101 @@ int guessWarpBeats (const SampleData& s)
 }
 
 } // namespace
+
+namespace {
+// A value in a rack slot's block: shown and typed in the units of the slot's current effect.
+class SlotParameter : public pk::TableParameter
+{
+public:
+    SlotParameter (const pk::ParamTable& t, uint32_t id, Controller* c, int s, uint32_t j)
+        : pk::TableParameter (t, id), ctl (c), slot (s), index (j)
+    {
+    }
+    void toString (ParamValue n, String128 string) const override
+    {
+        const auto& t = fxTable (ctl->slotType (slot));
+        if (index >= t.size ())
+        {
+            pk::TableParameter::toString (n, string);
+            return;
+        }
+        StringConvert::convert (t.toText (index, t.toPlain (index, n)), string);
+    }
+    bool fromString (const TChar* string, ParamValue& n) const override
+    {
+        const auto& t = fxTable (ctl->slotType (slot));
+        if (index >= t.size ())
+            return pk::TableParameter::fromString (string, n);
+        double v;
+        if (!t.fromText (index, StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (string))), v))
+            return false;
+        n = t.toNormalized (index, v);
+        return true;
+    }
+
+private:
+    Controller* ctl;
+    int slot;
+    uint32_t index;
+};
+} // namespace
+
+Parameter* Controller::makeParameter (uint32_t id)
+{
+    if (isRackParam (id))
+    {
+        const uint32_t rel = id - kRackBase, field = rel % kSlotSize;
+        if (field >= kSlotParams)
+            return new SlotParameter (tableRef, id, this, (int)(rel / kSlotSize), field - kSlotParams);
+    }
+    return pk::ControllerBase::makeParameter (id);
+}
+
+int Controller::slotType (int slot)
+{
+    return std::clamp ((int)std::lround (plain (slotParam (slot, kSlotType))), 0, kNumFxTypes - 1);
+}
+
+void Controller::retitleSlot (int slot)
+{
+    const int type = slotType (slot);
+    if (titledType[(size_t)slot] == type)
+        return;
+    titledType[(size_t)slot] = type;
+    const auto& t = fxTable (type);
+    for (uint32_t j = 0; j < kSlotBlock; ++j)
+        if (auto* prm = parameters.getParameter (slotBlockParam (slot, j)))
+        {
+            const std::string name = "FX " + std::to_string (slot + 1) + " " +
+                                     (j < t.size () ? std::string (fxName (type)) + " " + t.info (j).name : std::to_string (j + 1));
+            StringConvert::convert (name, prm->getInfo ().title);
+        }
+    if (componentHandler)
+        componentHandler->restartComponent (kParamTitlesChanged);
+}
+
+tresult PLUGIN_API Controller::setParamNormalized (ParamID tag, ParamValue value)
+{
+    const tresult r = pk::ControllerBase::setParamNormalized (tag, value);
+    if (isRackParam (tag) && (tag - kRackBase) % kSlotSize == kSlotType)
+        retitleSlot ((int)((tag - kRackBase) / kSlotSize));
+    return r;
+}
+
+void Controller::checkLatency ()
+{
+    if (!bridge)
+        return;
+    const int l = bridge->latency.load (std::memory_order_relaxed);
+    if (reportedLatency < 0)
+        reportedLatency = l; // what the host asked for at activation
+    else if (l != reportedLatency)
+    {
+        reportedLatency = l;
+        if (componentHandler)
+            componentHandler->restartComponent (kLatencyChanged);
+    }
+}
 
 tresult PLUGIN_API Controller::initialize (FUnknown* context)
 {

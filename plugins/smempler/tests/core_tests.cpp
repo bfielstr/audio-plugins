@@ -3,6 +3,7 @@
 #include "Fft.h"
 #include "Filter.h"
 #include "Params.h"
+#include "Rack.h"
 #include "SampleData.h"
 #include "Slices.h"
 
@@ -235,41 +236,111 @@ TEST (fft_roundtrip)
     }
 }
 
-TEST (built_in_effects)
+static double toneAmp (const std::vector<float>& x, double f, size_t a, size_t b);
+
+// Loads an effect into a rack slot with its own defaults, on; sets one of its values (plain).
+static void loadFx (Engine& e, int slot, int type)
+{
+    e.setParam (slotParam (slot, kSlotType), (double)type);
+    e.setParam (slotParam (slot, kSlotOn), 1.0);
+    const auto& t = fxTable (type);
+    for (uint32_t j = 0; j < kSlotBlock; ++j)
+        e.setParam (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
+}
+static void setFx (Engine& e, int slot, uint32_t id, double plain)
+{
+    e.setParam (slotBlockParam (slot, id), fxTable (e.rackType (slot)).toNormalized (id, plain));
+}
+
+TEST (rack_effects)
 {
     // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
-    CHECK (e->latency () > 0, "the effects report their latency: %d", e->latency ());
+    const int base = e->latency ();
+    CHECK (base > 0, "the saturator at the very end reports its latency: %d", base);
     e->noteOn (60, 1.0f);
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
-    e->setParam (kFxParaOn, 1.0);
-    e->setParam (paraParam (para::kHpFreq), 700.0);
-    e->setParam (paraParam (para::kLpFreq), 275.0);
+    loadFx (*e, 0, kFxPara);
+    setFx (*e, 0, para::kHpFreq, 700.0);
+    setFx (*e, 0, para::kLpFreq, 275.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
     const double notched = rms (o.l, 12000, 24000);
     CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
-    // an octave up the sample plays 880 Hz: the notch stays at 440, so it passes
+    // the same effect twice: two notches are deeper than one
+    loadFx (*e, 1, kFxPara);
+    setFx (*e, 1, para::kHpFreq, 700.0);
+    setFx (*e, 1, para::kLpFreq, 275.0);
     e->reset ();
-    e->noteOn (72, 1.0f);
+    e->noteOn (60, 1.0f);
     o = run (*e, 24000);
-    CHECK (rms (o.l, 12000, 24000) > dry * 0.7, "880 Hz passes (no tracking): %f vs %f", rms (o.l, 12000, 24000), dry);
-    // Multidyn on: its preset lifts a quiet sample
-    e->setParam (kFxParaOn, 0.0);
-    e->setParam (kFxMdOn, 1.0);
+    CHECK (rms (o.l, 12000, 24000) < notched * 0.5, "two Paras: %f vs %f", rms (o.l, 12000, 24000), notched);
+    // off: the slot passes the sound
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    e->setParam (slotParam (1, kSlotOn), 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 24000);
+    CHECK (std::fabs (rms (o.l, 12000, 24000) / dry - 1.0) < 0.02, "both off: untouched (%f vs %f)", rms (o.l, 12000, 24000), dry);
+    // Multidyn in the first slot instead: its preset lifts a quiet sample, and its latency counts
+    e->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
+    loadFx (*e, 0, kFxMultidyn);
+    CHECK (e->latency () > base, "Multidyn's look-ahead is reported: %d", e->latency ());
     e->setParam (kGain, -30.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     const double lifted = rms (o.l, 24000, 48000);
-    e->setParam (kFxMdOn, 0.0);
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    CHECK (e->latency () == base, "taken out: back to %d (%d)", base, e->latency ());
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
+}
+
+TEST (rack_order_and_widr)
+{
+    auto s = sine (440.0, 1.0);
+    // Smacheratr driven hard, then Para's notch, or the other way round: the harmonics the saturator
+    // makes after the notch are not notched, so the two orders sound different
+    auto render = [&] (bool satFirst) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        loadFx (*e, satFirst ? 0 : 1, kFxSmacheratr);
+        setFx (*e, satFirst ? 0 : 1, smacheratr::kDrive, 24.0);
+        loadFx (*e, satFirst ? 1 : 0, kFxPara);
+        setFx (*e, satFirst ? 1 : 0, para::kHpFreq, 1600.0);
+        setFx (*e, satFirst ? 1 : 0, para::kLpFreq, 700.0);
+        e->noteOn (60, 1.0f);
+        return run (*e, 24000);
+    };
+    const auto a = render (true), b = render (false);
+    CHECK (std::fabs (toneAmp (a.l, 1320.0, 12000, 24000) - toneAmp (b.l, 1320.0, 12000, 24000)) >
+               0.3 * std::max (toneAmp (a.l, 1320.0, 12000, 24000), toneAmp (b.l, 1320.0, 12000, 24000)),
+           "the order matters: 3rd harmonic %f vs %f", toneAmp (a.l, 1320.0, 12000, 24000), toneAmp (b.l, 1320.0, 12000, 24000));
+    // Widr in the rack widens a mono sample; off, it is mono again
+    std::unique_ptr<Engine> e (makeEngine (s));
+    loadFx (*e, 0, kFxWidr);
+    e->noteOn (60, 1.0f);
+    auto o = run (*e, 36000);
+    double sideE = 0.0, midE = 0.0;
+    for (size_t i = 12000; i < o.l.size (); ++i)
+    {
+        sideE += 0.25 * (o.l[i] - o.r[i]) * (o.l[i] - o.r[i]);
+        midE += 0.25 * (o.l[i] + o.r[i]) * (o.l[i] + o.r[i]);
+    }
+    CHECK (sideE > 0.02 * midE, "Widr widens it: side %f of the mid", sideE / midE);
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 36000);
+    double side2 = 0.0;
+    for (size_t i = 12000; i < o.l.size (); ++i)
+        side2 += 0.25 * (o.l[i] - o.r[i]) * (o.l[i] - o.r[i]);
+    CHECK (side2 < 1e-9 * midE + 1e-12, "off: mono again (%g)", side2);
 }
 
 TEST (defaults_one_voice_and_root_note)
@@ -322,10 +393,11 @@ TEST (mid_side_eq_tapers_the_sides)
     auto measure = [&] (bool msOn, int slope, double sideDb) {
         std::unique_ptr<Engine> e (makeEngine (smp));
         e->setParam (kFilterOn, 0.0);
-        e->setParam (kMsOn, msOn ? 1.0 : 0.0);
-        e->setParam (kMsSideHp, 300.0);
-        e->setParam (kMsSlope, slope);
-        e->setParam (kMsSideGain, sideDb);
+        loadFx (*e, 0, kFxMsEq);
+        e->setParam (slotParam (0, kSlotOn), msOn ? 1.0 : 0.0);
+        setFx (*e, 0, mseq::kSideHp, 300.0);
+        setFx (*e, 0, mseq::kSlope, slope);
+        setFx (*e, 0, mseq::kSideGain, sideDb);
         e->noteOn (60, 1.0f);
         auto o = run (*e, 36000);
         std::vector<float> mid (o.l.size ()), side (o.l.size ());
@@ -363,15 +435,16 @@ TEST (effects_fuzz)
     for (int iter = 0; iter < 30; ++iter)
     {
         std::unique_ptr<Engine> e (makeEngine (s));
-        for (uint32_t id = kFxParaOn; id < kNumParams; ++id)
+        for (uint32_t id = kRackBase; id < kNumParams; ++id)
             e->setParam (id, toPlain (id, r01 ()));
-        for (uint32_t id : {(uint32_t)kFxParaOn, (uint32_t)kFxMdOn, (uint32_t)kMsOn, (uint32_t)(kTailBase + pk::kTailOn)})
-            e->setParam (id, 1.0);
+        for (int slot = 0; slot < kRackSlots; ++slot) // every kind of effect somewhere
+            e->setParam (slotParam (slot, kSlotType), (double)(1 + (slot + iter) % (kNumFxTypes - 1)));
+        e->setParam (kTailBase + pk::kTailOn, 1.0);
         bool finite = true;
         for (int step = 0; step < 6; ++step)
         {
             e->noteOn (36 + (int)(r01 () * 48), 1.0f);
-            const uint32_t id = kFxParaOn + (uint32_t)(r01 () * (kNumParams - kFxParaOn - 1));
+            const uint32_t id = kRackBase + (uint32_t)(r01 () * (kNumParams - kRackBase - 1));
             e->setParam (id, toPlain (id, r01 ()));
             auto o = run (*e, 2000);
             for (float v : o.l)
@@ -1123,8 +1196,9 @@ TEST (fuzz_random_params_with_sample)
             if (r01 () < 0.6f)
                 e->setParam (id, toPlain (id, r01 ()));
         e->setParam (kVolume, 0.0);
-        for (uint32_t id : {(uint32_t)kFxParaOn, (uint32_t)kFxMdOn, (uint32_t)kMsOn, (uint32_t)(kTailBase + pk::kTailOn)})
-            e->setParam (id, 0.0);
+        e->setParam (kTailBase + pk::kTailOn, 0.0);
+        for (int slot = 0; slot < kRackSlots; ++slot)
+            e->setParam (slotParam (slot, kSlotType), (double)kFxEmpty);
         HostInfo h;
         h.bpm = 40.0 + 200.0 * r01 ();
         h.playing = r01 () < 0.5f;

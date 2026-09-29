@@ -161,7 +161,7 @@ void Editor::buildUI (CFrame* f)
 {
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
-    root->addView (new Label (CRect (12, 6, 140, 28), "STRETCHR", 14.0, true));
+    root->addView (new Label (CRect (12, 6, 140, 28), "stretchr", 14.0, true));
     status = new Label (CRect (140, 6, 620, 28), "", 10.5);
     root->addView (new pk::PresetBar (CRect (630, 6, 840, 28), ctl));
     status->setDim (true);

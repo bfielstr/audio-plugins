@@ -170,41 +170,55 @@ std::vector<ParamInfo> buildTable ()
                      0.0, Curve::Linear, Disp::Curve));
         }
     }
-    // the built-in effects: their own tables, offset and prefixed (both off by default)
-    add (toggle (kFxParaOn, "Para On", "Para", false));
+    // the fixed effects of 0.5 (kept so old projects load; they move into the rack)
+    add (toggle (kFxParaOn, "Old Para On", "Para", false));
     for (uint32_t i = 0; i < para::kHostedParams; ++i)
     {
         ParamInfo pi = para::paramTable ().info (i);
         pi.id = paraParam (i);
-        pi.name = keep (std::string ("Para ") + pi.name);
+        pi.name = keep (std::string ("Old Para ") + pi.name);
         add (pi);
     }
-    add (toggle (kFxMdOn, "Multidyn On", "Multidyn", false));
+    add (toggle (kFxMdOn, "Old Multidyn On", "Multidyn", false));
     for (uint32_t i = 0; i < multidyn::kNumParams; ++i)
     {
         ParamInfo pi = multidyn::paramTable ().info (i);
         pi.id = multidynParam (i);
-        pi.name = keep (std::string ("Multidyn ") + pi.name);
+        pi.name = keep (std::string ("Old Multidyn ") + pi.name);
         add (pi);
     }
     // after the effects: the mid/side EQ, the root note, the end-of-chain Smacheratr
-    add (toggle (kMsOn, "M/S EQ On", "M/S", false));
-    add (fl (kMsSideHp, "Side High-Pass", "Side HP", 20.0, 2000.0, 150.0, Curve::Log, Disp::Hz));
-    add (choice (kMsSlope, "Side High-Pass Slope", "Slope", {"6 dB", "12 dB", "24 dB"}, 2));
-    add (fl (kMsSideGain, "Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
-    add (fl (kMsMidGain, "Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+    add (toggle (kMsOn, "Old M/S EQ On", "M/S", false));
+    add (fl (kMsSideHp, "Old Side High-Pass", "Side HP", 20.0, 2000.0, 150.0, Curve::Log, Disp::Hz));
+    add (choice (kMsSlope, "Old Side High-Pass Slope", "Slope", {"6 dB", "12 dB", "24 dB"}, 2));
+    add (fl (kMsSideGain, "Old Side Gain", "Side", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+    add (fl (kMsMidGain, "Old Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
     pk::addTailParams (t, kTailBase);
-    add (toggle (kParaTransposeLock, "Para Transpose Lock (unused)", "Lock", false));
-    add (toggle (kParaDragGain, "Para Drag Gain", "Drag Gain", false));
-    add (toggle (kParaLiquid, "Para Liquid", "Liquid", false));
+    add (toggle (kParaTransposeLock, "Old Para Transpose Lock", "Lock", false));
+    add (toggle (kParaDragGain, "Old Para Drag Gain", "Drag Gain", false));
+    add (toggle (kParaLiquid, "Old Para Liquid", "Liquid", false));
     {
         ParamInfo pi = para::paramTable ().info (para::kFade);
         pi.id = kParaFade;
-        pi.name = "Para Vocal Fade";
+        pi.name = "Old Para Vocal Fade";
         add (pi);
     }
-    add (toggle (kParaNotch, "Para Liquid Notch", "Notch", false));
+    add (toggle (kParaNotch, "Old Para Liquid Notch", "Notch", false));
+    // the effects rack: per slot a Type, an On and a block of values (normalized; each effect reads
+    // them through its own table, and the controller shows them that way)
+    for (int s = 0; s < kRackSlots; ++s)
+    {
+        const std::string fx = "FX " + std::to_string (s + 1);
+        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr"},
+                     kFxEmpty));
+        add (toggle ((ParamId)slotParam (s, kSlotOn), keep (fx + " On"), keep (fx + " On"), true));
+        for (uint32_t j = 0; j < kSlotBlock; ++j)
+        {
+            const std::string n = fx + " " + std::to_string (j + 1);
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+        }
+    }
     return t;
 }
 

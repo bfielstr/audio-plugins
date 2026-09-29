@@ -5,7 +5,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; Para, Multidyn, an M/S EQ and Smacheratr built in, with an output scope | Ableton Live's Simpler |
+| [**Smempler**](plugins/smempler/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, any order, any number) and an output scope | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |

@@ -11,10 +11,10 @@ using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (stretchr::kProcessorUID), PClassInfo::kManyInstances, kVstAudioEffectClass,
-            "Stretchr", 0, PlugType::kFxPitchShift, FULL_VERSION_STR, kVstVersionString,
+            "stretchr", 0, PlugType::kFxPitchShift, FULL_VERSION_STR, kVstVersionString,
             stretchr::Processor::createInstance)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (stretchr::kControllerUID), PClassInfo::kManyInstances, kVstComponentControllerClass,
-            "Stretchr Controller", 0, "", FULL_VERSION_STR, kVstVersionString, stretchr::Controller::createInstance)
+            "stretchr Controller", 0, "", FULL_VERSION_STR, kVstVersionString, stretchr::Controller::createInstance)
 
 END_FACTORY

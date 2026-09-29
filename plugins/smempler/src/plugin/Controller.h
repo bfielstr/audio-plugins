@@ -34,6 +34,14 @@ public:
                                                                Steinberg::Vst::ParamID& id) override;
 
 
+    // The rack: a slot's current effect; when it changes, the slot's parameters take the effect's
+    // names (the host is told), and values show in the effect's units.
+    Steinberg::tresult PLUGIN_API setParamNormalized (Steinberg::Vst::ParamID tag, Steinberg::Vst::ParamValue value) override;
+    int slotType (int slot);
+    // Tells the host when the latency changed (effects with latency loaded into the rack or taken
+    // out); the editor calls it while open.
+    void checkLatency ();
+
     // --- helpers for the editor -------------------------------------------------
     Bridge* getBridge () const { return bridge; }
     std::string sampleDisplayName ();
@@ -50,8 +58,15 @@ public:
     END_DEFINE_INTERFACES (pk::ControllerBase)
     REFCOUNT_METHODS (pk::ControllerBase)
 
+protected:
+    Steinberg::Vst::Parameter* makeParameter (uint32_t id) override;
+
 private:
+    void retitleSlot (int slot);
+
     Bridge* bridge = nullptr;
+    int reportedLatency = -1;
+    std::array<int, kRackSlots> titledType {};
     std::string pendingPath; // from setComponentState when no bridge is connected
 };
 

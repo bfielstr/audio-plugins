@@ -11,10 +11,10 @@ using namespace Steinberg::Vst;
 BEGIN_FACTORY_DEF (stringCompanyName, stringCompanyWeb, stringCompanyEmail)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (multidyn::kProcessorUID), PClassInfo::kManyInstances, kVstAudioEffectClass,
-            "Multidyn", 0, PlugType::kFxDynamics, FULL_VERSION_STR, kVstVersionString,
+            "multidyn", 0, PlugType::kFxDynamics, FULL_VERSION_STR, kVstVersionString,
             multidyn::Processor::createInstance)
 
 DEF_CLASS2 (INLINE_UID_FROM_FUID (multidyn::kControllerUID), PClassInfo::kManyInstances, kVstComponentControllerClass,
-            "Multidyn Controller", 0, "", FULL_VERSION_STR, kVstVersionString, multidyn::Controller::createInstance)
+            "multidyn Controller", 0, "", FULL_VERSION_STR, kVstVersionString, multidyn::Controller::createInstance)
 
 END_FACTORY

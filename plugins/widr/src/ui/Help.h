@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Params.h"
+#include "../core/Params.h"
 
 namespace widr::help {
 

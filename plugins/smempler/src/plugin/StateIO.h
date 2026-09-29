@@ -24,5 +24,7 @@ struct PluginState
 
 bool writeState (Steinberg::IBStream* stream, const PluginState& s);
 bool readState (Steinberg::IBStream* stream, PluginState& s);
+// Moves the fixed effects of an old state into the rack (readState does it).
+void migrateToRack (PluginState& s);
 
 } // namespace smempler
