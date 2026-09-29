@@ -172,6 +172,7 @@ private:
 
     // smoothed controls
     float wet = 0.0f, width = 0.0f, space = 0.0f, outGain = 1.0f, smooth = 0.0f, slow = 0.0f;
+    float dryLevel = 1.0f, wetLevel = 1.0f; // the parallel Dry / Wet levels
     std::array<float, 4> gen {}, genT {};
     double erScale = 1.0, erScaleT = 1.0, driftDepth = 0.0;
     int erTaps = 16;

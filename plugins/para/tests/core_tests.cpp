@@ -337,8 +337,8 @@ TEST (vocal_fades_from_the_crossing)
         return gainAt (*e, 8000.0);
     };
     CHECK (topAt (290.0, 12.0) > -0.5, "below the crossing: untouched (%f dB)", topAt (290.0, 12.0));
-    const double quarter = topAt (357.0, 12.0);
-    CHECK (quarter < -1.5 && quarter > -6.0, "a quarter of the way: %f dB (-2.5 expected)", quarter);
+    const double half = topAt (424.0, 12.0);
+    CHECK (half < -1.5 && half > -5.0, "half way, equal-power: %f dB (-3 expected)", half);
     CHECK (topAt (357.0, 3.0) < -40.0, "Fade 3: gone a minor third past (%f dB)", topAt (357.0, 3.0));
 }
 
@@ -370,6 +370,36 @@ TEST (liquid_overshoots_and_flows_back)
     }
     const double settled = 12.0 * std::log2 (ml.lpHz.load () / mv.lpHz.load ());
     CHECK (std::fabs (settled) < 0.2, "and settles where Vocal does: %.2f semitones", settled);
+}
+
+TEST (liquid_notch)
+{
+    // the low-pass at 1 kHz leading, the high-pass pushed out: the notch cuts at the low-pass
+    // (still, it has not moved) and leaves the sub alone
+    auto make = [] (bool notchOn) {
+        auto e = engine ();
+        e->setParam (kLiquid, 1.0);
+        e->setParam (kNotch, notchOn ? 1.0 : 0.0);
+        e->setParam (kLpFreq, 1000.0);
+        return e;
+    };
+    auto off = make (false), on = make (true);
+    const double at = gainAt (*on, 1000.0) - gainAt (*off, 1000.0), sub = gainAt (*on, 50.0) - gainAt (*off, 50.0);
+    CHECK (at < -10.0, "the notch at the low-pass: %.1f dB", at);
+    CHECK (std::fabs (sub) < 0.5, "the sub is untouched: %.2f dB", sub);
+    // sweeping the low-pass, the notch zigzags around it
+    Meters m;
+    auto e = make (true);
+    e->setMeters (&m);
+    std::vector<float> l (480, 0.0f), r (480, 0.0f);
+    double most = 0.0;
+    for (int k = 0; k <= 40; ++k)
+    {
+        e->setParam (kLpFreq, 400.0 * std::pow (4000.0 / 400.0, k / 40.0));
+        e->process (l.data (), r.data (), l.data (), r.data (), 480);
+        most = std::max (most, std::fabs (12.0 * std::log2 (m.notchHz.load () / m.lpHz.load ())));
+    }
+    CHECK (most > 3.0, "the notch zigzags around the low-pass: up to %.1f semitones", most);
 }
 
 TEST (dry_wet_and_output)

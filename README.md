@@ -17,6 +17,8 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB).
 
+In every plug-in (and in the effects inside Smempler) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
+
 The plug-ins were called Simplr and Lowfocus until 0.5.0; projects keep loading (the plug-in IDs are unchanged).
 
 ## Install

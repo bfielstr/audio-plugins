@@ -176,12 +176,23 @@ SpectrumView::Drag SpectrumView::hit (const CPoint& p) const
 
 void SpectrumView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
     drag = hit (e.mousePosition);
     if (drag == Drag::None)
         return;
-    if (e.clickCount == 2 && drag == Drag::Range)
+    if (right && drag != Drag::Range)
+    {
+        const uint32_t id = drag == Drag::Low ? kLowFreq : kHighFreq;
+        host->setOnce (id, host->table ().defaultNormalized (id));
+        drag = Drag::None;
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
+    if ((e.clickCount == 2 || right) && drag == Drag::Range)
     {
         host->setOnce (kContrast, host->table ().defaultNormalized (kContrast));
         drag = Drag::None;

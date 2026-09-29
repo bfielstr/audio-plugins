@@ -93,6 +93,10 @@ public:
     }
 
 protected:
+    // A right click resets the parameter to its default (its neutral value) in every control of the
+    // suite. Call first in onMouseDownEvent; true when it handled the event.
+    bool resetOnRightClick (VSTGUI::MouseDownEvent& e);
+
     ParamHost* host;
     uint32_t param;
     bool enabledLook = true;

@@ -146,6 +146,8 @@ void Engine::reset ()
     space = (float)p[kSpace];
     wet = p[kWidth] > 1e-6 ? 1.0f : 0.0f;
     outGain = dbToGain (p[kOutput]);
+    dryLevel = (float)levelGain (p[kDryLevel]);
+    wetLevel = (float)levelGain (p[kWetLevel]);
     mirror = mix.mirror;
     bypassed = false;
 }
@@ -329,6 +331,7 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
     const float wetT = p[kWidth] > 1e-6 ? 1.0f : 0.0f;
     const float widthT = (float)(p[kWidth] * mix.roleScale), spaceT = (float)p[kSpace];
     const float outT = dbToGain (p[kOutput]);
+    const float dryT = (float)levelGain (p[kDryLevel]), wetLevelT = (float)levelGain (p[kWetLevel]);
     const bool monoCheck = p[kMonoCheck] >= 0.5;
     const float ac = (float)(1.0 - std::exp (-1.0 / (0.3 * sr)));
     const double driftA = 1.0 - std::exp (-1.0 / (0.2 * sr));
@@ -368,9 +371,10 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
         bypassed = true;
         for (int i = 0; i < n; ++i)
         {
+            dryLevel += (dryT - dryLevel) * smooth;
             const float l = inL[i], r = inR[i];
             capture (0.5f * (l + r), 0.5f * (l - r), 0.0f, 0.0f);
-            finish (i, l, r);
+            finish (i, l * dryLevel, r * dryLevel); // exact at 0 dB
         }
     }
     else
@@ -396,6 +400,8 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
                 gen[g] += (genT[g] - gen[g]) * smooth;
             erScale += (erScaleT - erScale) * slow;
             mirror += (mix.mirror - mirror) * slow;
+            dryLevel += (dryT - dryLevel) * smooth;
+            wetLevel += (wetLevelT - wetLevel) * smooth;
 
             const float l = inL[i], r = inR[i];
             const float m = 0.5f * (l + r), s = 0.5f * (l - r);
@@ -465,7 +471,10 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
                     vl = (float)voice[0].bank[(size_t)k].tick (bankC[(size_t)k], vl);
                     vr = (float)voice[1].bank[(size_t)k].tick (bankC[(size_t)k], vr);
                 }
-            double mid = m + 0.5 * ((double)vl + vr), side = s + 0.5 * ((double)vl - vr);
+            // Dry and Wet in parallel: the input and what Widr adds
+            vl *= wetLevel;
+            vr *= wetLevel;
+            double mid = m * dryLevel + 0.5 * ((double)vl + vr), side = s * dryLevel + 0.5 * ((double)vl - vr);
             side = airZ.tick (airC, side);
             side = beyondZ.tick (beyondC, side);
 
@@ -481,8 +490,8 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
             float L = (float)(mid + side), R = (float)(mid - side);
             if (wet < 1.0f)
             {
-                L = l + (L - l) * wet;
-                R = r + (R - r) * wet;
+                L = l * dryLevel + (L - l * dryLevel) * wet;
+                R = r * dryLevel + (R - r * dryLevel) * wet;
             }
             finish (i, L, R);
         }

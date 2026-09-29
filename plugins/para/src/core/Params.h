@@ -34,6 +34,7 @@ enum ParamId : uint32_t
     kDragGain = kTailBase + pk::kTailFields, // editor: dragging a handle up/down moves its gain with the resonance
     kLiquid,     // Vocal movement, plus Split swinging with the leader's sweep (see Engine.h)
     kFade,       // semitones: how far past the crossing Vocal / Liquid take the follower to -inf
+    kNotch,      // Liquid: a notch after the sum that zigzags around the low-pass as it moves
 
     kNumParams
 };

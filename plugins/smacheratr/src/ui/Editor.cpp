@@ -71,6 +71,7 @@ void Editor::buildUI (CFrame* f)
     // left: the device as Live shows it, with the pre-limiter in front of the curve
     bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 86, 62), this, kPreLimit, "Pre-Limit"));
     thresholdView = bind (root, new NumberBox (CRect (kShaperLeft + 92, 42, kShaperLeft + 172, 60), this, kPreLimitThreshold));
+    bind (root, new Toggle (CRect (kShaperLeft + 186, 40, kShaperLeft + 272, 62), this, kClarity, "Clarity"));
     shaper = new ShaperView (CRect (kShaperLeft, kShaperTop, kShaperLeft + kShaperWidth, kShaperTop + kShaperHeight), this,
                              [c = ctl] () -> const Meters* {
                                  auto* s = c->getShared ();

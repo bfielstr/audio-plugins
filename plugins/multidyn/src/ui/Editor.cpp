@@ -1,5 +1,7 @@
 #include "Editor.h"
 
+#include "Thresholds.h"
+
 #include "DynDisplay.h"
 #include "Help.h"
 #include "plugin/Controller.h"
@@ -208,6 +210,12 @@ void Editor::updateLayout ()
     }
     if (frame)
         frame->invalid ();
+}
+
+void Editor::setNorm (uint32_t id, double v)
+{
+    pk::EditorBase::setNorm (id, v);
+    pushThresholds (*this, id, v);
 }
 
 void Editor::paramChanged (uint32_t id)

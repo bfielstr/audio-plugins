@@ -136,9 +136,10 @@ void ShaperView::draw (CDrawContext* ctx)
 
 void ShaperView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
-    if (e.clickCount == 2)
+    if (e.clickCount == 2 || right)
     {
         host->setOnce (kDrive, host->table ().defaultNormalized (kDrive));
         invalid ();

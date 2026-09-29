@@ -71,6 +71,7 @@ private:
     float shownOffset = 0.0f, shownEnv = 0.0f, shownHpShift = 0.0f, shownLpShift = 0.0f, shownHpMul = 1.0f,
           shownLpMul = 1.0f;
     bool shownLeaderLp = true;
+    float shownNotchHz = 1000.0f, shownNotchCut = 0.0f;
     // Vocal: which filter leads (the one whose frequency moved last), tracked from the settings
     void trackLeader ();
     bool leaderLp = true, leaderKnown = false;

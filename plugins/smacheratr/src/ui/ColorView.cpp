@@ -143,12 +143,13 @@ ColorView::Drag ColorView::hit (const CPoint& p) const
 
 void ColorView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
     drag = hit (e.mousePosition);
     if (drag == Drag::None)
         return;
-    if (e.clickCount == 2)
+    if (e.clickCount == 2 || right)
     {
         if (drag == Drag::Lo)
             host->setOnce (kColorLo, host->table ().defaultNormalized (kColorLo));

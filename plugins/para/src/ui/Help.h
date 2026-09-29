@@ -26,9 +26,12 @@ inline const char* forParam (uint32_t id)
                    "crosses the other, the other is pushed along and fades out (to -inf Fade semitones past), so one "
                    "filter sweeps alone. A low-pass swept up takes the high-pass with it, a resonant high-pass "
                    "swept down fades the low-pass out.";
+        case kNotch:
+            return "With Liquid: a notch after the two filters that follows the low-pass, zigzagging up to 7 semitones "
+                   "either side of it as the low-pass moves. It leaves the sub alone (nothing below ~180 Hz).";
         case kFade:
             return "Vocal and Liquid: how far past the crossing the pushed filter takes to fade to -inf (an octave by "
-                   "default). Shorter dives faster.";
+                   "default, -3 dB half way). Shorter dives faster.";
         case kLiquid:
             return "Vocal movement plus Split swinging with the sweep: the filter you move overshoots the way it "
                    "moves and flows back when it stops. Liquid, techy Reese movement.";

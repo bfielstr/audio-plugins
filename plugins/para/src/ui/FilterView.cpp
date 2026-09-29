@@ -266,6 +266,10 @@ void FilterView::draw (CDrawContext* ctx)
     const double hc = std::clamp (hp, 5.0, 0.49 * rate), lc = std::clamp (lp, 5.0, 0.49 * rate);
     auto warped = [&] (double f, double fc) { return fc * std::tan (M_PI * f / rate) / std::tan (M_PI * fc / rate); };
     const double hpGain = filterGain (host->plainValue (kHpGain)) * hpMul, lpGain = filterGain (host->plainValue (kLpGain)) * lpMul;
+    // Liquid's notch: where the engine has it (with audio), else on the low-pass
+    const bool notchOn = host->plainValue (kLiquid) >= 0.5 && host->plainValue (kNotch) >= 0.5;
+    const double notchFc = std::clamp (live () ? (double)shownNotchHz : lc, 5.0, 0.45 * rate);
+    const double notchCut = notchOn ? (live () ? (double)shownNotchCut : 0.874 * std::clamp (2.0 * std::log2 (notchFc / 180.0), 0.0, 1.0)) : 0.0;
     auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
@@ -291,8 +295,14 @@ void FilterView::draw (CDrawContext* ctx)
             }
             a *= hpGain;
             b *= lpGain;
-            // the sum uses the polarity the engine uses (inverted high-pass at 12 dB)
-            const std::complex<double> h = which == 0 ? a : (which == 1 ? b : (slope == kSlope12 ? b - a : a + b));
+            // the sum uses the polarity the engine uses (inverted high-pass at 12 dB), then Liquid's notch
+            std::complex<double> h = which == 0 ? a : (which == 1 ? b : (slope == kSlope12 ? b - a : a + b));
+            if (which == 2 && notchCut > 1e-4)
+            {
+                const double fw = warped (f, notchFc);
+                const std::complex<double> s (0.0, fw / notchFc);
+                h *= 1.0 - notchCut * (s / 2.0) / (s * s + s / 2.0 + 1.0);
+            }
             const CPoint pt (xOfHz (f), yOfDb (20.0 * std::log10 (std::max (1e-6, std::abs (h)))));
             lastX = pt.x;
             if (i == 0)
@@ -400,14 +410,15 @@ FilterView::Drag FilterView::hit (const CPoint& p) const
 
 void FilterView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
     drag = hit (e.mousePosition);
     if (drag == Drag::None)
         return;
     const uint32_t fId = drag == Drag::Hp ? kHpFreq : kLpFreq, rId = resId (drag == Drag::Hp);
     const uint32_t gId = drag == Drag::Hp ? kHpGain : kLpGain;
-    if (e.clickCount == 2)
+    if (e.clickCount == 2 || right)
     {
         host->setOnce (fId, host->table ().defaultNormalized (fId));
         host->setOnce (rId, host->table ().defaultNormalized (rId));
@@ -540,6 +551,13 @@ void FilterView::idle ()
     const float hpShift = m->hpShift.load (std::memory_order_relaxed), lpShift = m->lpShift.load (std::memory_order_relaxed);
     const float hpMul = m->hpMul.load (std::memory_order_relaxed), lpMul = m->lpMul.load (std::memory_order_relaxed);
     const bool leader = m->leaderLp.load (std::memory_order_relaxed);
+    const float nHz = m->notchHz.load (std::memory_order_relaxed), nCut = m->notchCut.load (std::memory_order_relaxed);
+    if (std::fabs (nHz - shownNotchHz) > 0.5f || std::fabs (nCut - shownNotchCut) > 0.005f)
+    {
+        shownNotchHz = nHz;
+        shownNotchCut = nCut;
+        changed = true;
+    }
     if (!leaderKnown)
     {
         leaderLp = leader; // the engine's view when the editor opens; then edits decide

@@ -247,6 +247,18 @@ int main (int argc, char** argv)
                 CHECK (std::fabs (plainOf (rig, bandParam (b, kBelowThresh)) - (below0[b] + 6.0)) < 0.4, "cmd drag band %d -> %.2f", b,
                        plainOf (rig, bandParam (b, kBelowThresh)));
 
+            // 3b. the thresholds cannot cross: dragging the above threshold 5 dB below the below
+            // threshold pushes the below threshold down with it
+            {
+                const uint32_t midBelow = bandParam (kMid, kBelowThresh);
+                const double above = plainOf (rig, midAbove), below = plainOf (rig, midBelow);
+                const double xa = xOf (above);
+                win.drag (xa, midY, xa - (above - below + 5.0) * pxPerDb, midY);
+                CHECK (std::fabs (plainOf (rig, midAbove) - (below - 5.0)) < 0.4 &&
+                           std::fabs (plainOf (rig, midBelow) - plainOf (rig, midAbove)) < 0.05,
+                       "above %.2f pushes below %.2f (was %.2f)", plainOf (rig, midAbove), plainOf (rig, midBelow), below);
+            }
+
             // 4. drag down inside the mid above block: quieter = higher ratio
             const uint32_t midRatio = bandParam (kMid, kAboveRatio);
             const double r0 = plainOf (rig, midRatio);

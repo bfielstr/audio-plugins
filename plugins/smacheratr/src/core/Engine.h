@@ -78,6 +78,7 @@ private:
     struct Channel
     {
         Biquad dc, preLo, preHi, postLo, postHi;
+        Biquad lmSense, lmCut, clarityPre, clarityPost; // Clarity
         Oversampler os;
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
@@ -91,6 +92,11 @@ private:
     Channel chan[2];
     std::vector<float> dry[2], pre[2], wet, osBuf, gDrive, gOut, gMix, msMid, msSide;
     bool inMs = false;
+    // Clarity: the level of the low mids going into the curve (mean square, both channels) and the
+    // cut it asks for
+    double lmEnv = 0.0, lmAtk = 0.0, lmRel = 0.0;
+    float lmCutDb = 0.0f;
+    bool clarityWas = false;
     float drive = 1.0f, out = 1.0f, mix = 1.0f, smooth = 0.0f;
     // pre-limiter: the input peaks inside the look-ahead window and the gain (dB), smoothed in dB
     std::vector<float> lookPeaks;

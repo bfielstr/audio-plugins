@@ -22,6 +22,10 @@ ParamArray defaultParams ()
 
 void Engine::Channel::reset ()
 {
+    lmSense.reset ();
+    lmCut.reset ();
+    clarityPre.reset ();
+    clarityPost.reset ();
     dc.reset ();
     preLo.reset ();
     preHi.reset ();
@@ -38,6 +42,14 @@ void Engine::prepare (double sampleRate, int mb)
     sr = sampleRate;
     maxBlock = std::max (1, mb);
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
+    lmAtk = 1.0 - std::exp (-1.0 / (0.015 * sr));
+    lmRel = 1.0 - std::exp (-1.0 / (0.15 * sr));
+    for (auto& c : chan)
+    {
+        c.lmSense.c = bandPass (sr, 320.0, 0.8);
+        c.clarityPre.c = lowShelf (sr, 150.0, -4.0);
+        c.clarityPost.c = lowShelf (sr, 150.0, 4.0);
+    }
     // the limiter's gain (in dB) reaches its target within the look-ahead and releases in 50 ms
     limAtk = (float)std::exp (-5.0 / look);
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
@@ -214,6 +226,33 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
+    // Clarity, when the drive pushes the low mids (around 320 Hz) past -18 dBFS into the curve, they are
+    // turned down before it (3 dB for every 5 over, at most 8 dB), so they do not pile up into mud;
+    // and the lows go into the curve 4 dB down and are lifted back after it, so the bass drives the
+    // curve less (less intermodulation) but keeps its level.
+    const bool clarity = p[kClarity] >= 0.5;
+    if (clarity != clarityWas)
+    {
+        clarityWas = clarity;
+        lmEnv = 0.0;
+        lmCutDb = 0.0f;
+        for (auto& c : chan)
+        {
+            c.lmSense.reset ();
+            c.lmCut.reset ();
+            c.clarityPre.reset ();
+            c.clarityPost.reset ();
+        }
+    }
+    if (clarity)
+    {
+        const double levelDb = 10.0 * std::log10 (std::max (1e-12, lmEnv));
+        lmCutDb = (float)std::clamp ((levelDb + 18.0) * 0.6, 0.0, 8.0);
+        const BiquadCoeffs cut = peak (sr, 320.0, -lmCutDb, 0.8);
+        for (auto& c : chan)
+            c.lmCut.c = cut;
+    }
+
     // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
     float inPk = 0.0f, outPk = 0.0f;
     for (int i = 0; i < n; ++i)
@@ -242,12 +281,21 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         else
             limGainDb = 0.0f;
+        double lmPower = 0.0;
         for (int c = 0; c < 2; ++c)
         {
-            const float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
+            float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
+            if (clarity)
+            {
+                const double band = chan[c].lmSense.process (d);
+                lmPower = std::max (lmPower, 2.0 * band * band); // a sine's peak level
+                d = (float)chan[c].clarityPre.process (chan[c].lmCut.process (d));
+            }
             pre[c][(size_t)i] = d;
             inPk = std::max (inPk, std::fabs (d));
         }
+        if (clarity)
+            lmEnv += (lmPower - lmEnv) * (lmPower > lmEnv ? lmAtk : lmRel);
     }
 
     float* outs[2] = {yl, yr};
@@ -264,6 +312,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         else
             for (int i = 0; i < n; ++i)
                 wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
+        if (clarity)
+            for (int i = 0; i < n; ++i)
+                wet[(size_t)i] = (float)ch.clarityPost.process (wet[(size_t)i]);
         for (int i = 0; i < n; ++i)
         {
             const float w = wet[(size_t)i], m = gMix[(size_t)i];

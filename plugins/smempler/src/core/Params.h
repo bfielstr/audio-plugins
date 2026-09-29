@@ -122,6 +122,7 @@ enum ParamId : uint32_t
     kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
     kParaLiquid,        // Para's Liquid movement
     kParaFade,          // Para's Vocal fade range
+    kParaNotch,         // Para's Liquid notch
 
     kNumParams
 };

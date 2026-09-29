@@ -204,6 +204,7 @@ std::vector<ParamInfo> buildTable ()
         pi.name = "Para Vocal Fade";
         add (pi);
     }
+    add (toggle (kParaNotch, "Para Liquid Notch", "Notch", false));
     return t;
 }
 

@@ -208,17 +208,19 @@ std::vector<uint32_t> DynDisplay::targetsFor (Hit hit, int band, const Modifiers
 
 void DynDisplay::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
     int band;
     const Hit hit = hitTest (e.mousePosition, band);
     if (hit == Hit::None)
         return;
     const auto ids = targetsFor (hit, band, e.modifiers);
-    if (e.clickCount == 2 && (hit == Hit::BelowBlock || hit == Hit::AboveBlock))
+    const bool block = hit == Hit::BelowBlock || hit == Hit::AboveBlock;
+    if ((e.clickCount == 2 && block) || right)
     {
-        for (auto id : ids)
-            host->setOnce (id, host->table ().toNormalized (id, 1.0)); // 1:1 = no processing
+        for (auto id : ids) // blocks to 1:1 (no processing), anything else to its default
+            host->setOnce (id, block ? host->table ().toNormalized (id, 1.0) : host->table ().defaultNormalized (id));
         invalid ();
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);

@@ -101,7 +101,13 @@ void Editor::buildUI (CFrame* f)
     bind (mp, new Toggle (CRect (184, 72, 282, 90), this, kMonoCheck, "Mono Check"));
     bind (mp, new Knob (knobAt (298, 28), this, kOutput, nullptr, true));
 
-    addTailPanel (root, CRect (8, 556, 752, 634), kTailBase);
+    // the parallel levels: the input and what Widr adds
+    auto* lp = new Panel (CRect (8, 556, 752, 596), "");
+    root->addView (lp);
+    bind (lp, new pk::HSlider (CRect (12, 8, 364, 32), this, kDryLevel, "Dry"));
+    bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
+
+    addTailPanel (root, CRect (8, 604, 752, 682), kTailBase);
 
     applyParamTooltips (&help::forParam);
     idle ();

@@ -29,6 +29,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         pk::addTailParams (v, kTailBase);
         v.push_back (percent (kContrast, "Contrast", "Contrast", 0.5));
+        v.push_back (real (kDryLevel, "Dry Level", "Dry", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
+        v.push_back (real (kWetLevel, "Wet Level", "Wet", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
         return v;
     }());
     return t;

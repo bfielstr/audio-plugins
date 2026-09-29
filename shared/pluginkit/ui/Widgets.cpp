@@ -90,6 +90,8 @@ void Knob::draw (CDrawContext* ctx)
 
 void Knob::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     if (e.clickCount == 2)
@@ -143,6 +145,17 @@ void Knob::onMouseCancelEvent (MouseCancelEvent& e)
     e.consumed = true;
 }
 
+bool ParamView::resetOnRightClick (MouseDownEvent& e)
+{
+    if (!e.buttonState.isRight ())
+        return false;
+    host->setOnce (param, host->table ().defaultNormalized (param));
+    invalid ();
+    e.consumed = true;
+    e.ignoreFollowUpMoveAndUpEvents (true);
+    return true;
+}
+
 double wheelStep (const MouseWheelEvent& e, const ParamTable& table, uint32_t id)
 {
     const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
@@ -187,6 +200,8 @@ void HSlider::draw (CDrawContext* ctx)
 
 void HSlider::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     if (e.clickCount == 2)
@@ -234,6 +249,8 @@ void NumberBox::draw (CDrawContext* ctx)
 
 void NumberBox::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     if (e.clickCount == 2)
@@ -309,6 +326,8 @@ void Toggle::draw (CDrawContext* ctx)
 
 void Toggle::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     host->setOnce (param, host->norm (param) >= 0.5 ? 0.0 : 1.0);
@@ -350,6 +369,8 @@ void Segmented::draw (CDrawContext* ctx)
 
 void Segmented::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     const CRect r = getViewSize ();
@@ -386,6 +407,8 @@ void Choice::draw (CDrawContext* ctx)
 
 void Choice::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (resetOnRightClick (e))
+        return;
     if (!e.buttonState.isLeft ())
         return;
     auto* frame = getFrame ();

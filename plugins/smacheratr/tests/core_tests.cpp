@@ -399,6 +399,32 @@ TEST (mid_side_keeps_the_width_when_driven)
     CHECK (ms > lr + 3.0, "Mid/Side keeps the side: %.1f dB vs %.1f dB (left / right)", ms, lr);
 }
 
+TEST (clarity_keeps_the_low_mids_clean)
+{
+    // a bass at 80 Hz and a note at 320 Hz, driven 14 dB: with Clarity the 320 Hz note is lower after
+    // the curve and there is less intermodulation between them; gently driven
+    // Clarity leaves it alone
+    auto in = tones ({{80.0, -8.0}, {320.0, -12.0}}, 1.0);
+    auto measure = [&] (double drive, bool clarity, double f) {
+        auto e = engine ();
+        e->setParam (kDrive, drive);
+        e->setParam (kClarity, clarity ? 1.0 : 0.0);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 24000, 48000);
+    };
+    CHECK (measure (14.0, true, 320.0) < measure (14.0, false, 320.0) - 2.0, "pushed: the low mids come down: %.1f vs %.1f dB",
+           measure (14.0, true, 320.0), measure (14.0, false, 320.0));
+    // the curve is symmetric, so its intermodulation is odd-order: 320 -+ 2 x 80 = 160 and 480 Hz
+    for (double f : {160.0, 480.0})
+    {
+        std::printf ("    %.0f Hz: %.1f dB with Clarity, %.1f dB without\n", f, measure (14.0, true, f), measure (14.0, false, f));
+        CHECK (measure (14.0, true, f) < measure (14.0, false, f) - 2.0, "less intermodulation at %.0f Hz: %.1f vs %.1f dB", f,
+               measure (14.0, true, f), measure (14.0, false, f));
+    }
+    CHECK (std::fabs (measure (-12.0, true, 320.0) - measure (-12.0, false, 320.0)) < 0.5, "gentle: untouched (%.2f vs %.2f dB)",
+           measure (-12.0, true, 320.0), measure (-12.0, false, 320.0));
+}
+
 TEST (fuzz_and_automation)
 {
     uint32_t seed = 11;

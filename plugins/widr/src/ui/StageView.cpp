@@ -221,12 +221,13 @@ StageView::Drag StageView::hit (const CPoint& p) const
 
 void StageView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft ())
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if (!e.buttonState.isLeft () && !right)
         return;
     drag = hit (e.mousePosition);
     if (drag == Drag::None)
         return;
-    if (e.clickCount == 2)
+    if (e.clickCount == 2 || right)
     {
         host->setOnce (kWidth, host->table ().defaultNormalized (kWidth));
         host->setOnce (kSpace, host->table ().defaultNormalized (kSpace));

@@ -47,6 +47,8 @@ little energy and nothing cancels.
 - **Mono Guard**: in 24 third-octave bands Widr measures the mid, the side and what the voices add
   to each; per band it keeps the mono fold from gaining more than about 1.2 dB (at 100 %) and the
   side from getting too close to the mid. 0 % sets no limit.
+- **Dry** and **Wet** (the sliders): the input and what Widr adds (the voices and the reverb), in
+  parallel, each from -inf to +6 dB.
 - **Mono Check** listens to L + R; **Output** sets the level.
 
 ## Mix awareness

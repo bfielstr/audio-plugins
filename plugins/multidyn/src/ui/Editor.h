@@ -25,6 +25,8 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     void idle () override;
     void paramChanged (uint32_t id) override;
+    // every edit from the editor: the thresholds of a band cannot cross (Thresholds.h)
+    void setNorm (uint32_t id, double v) override;
 
 private:
     void onClose () override;

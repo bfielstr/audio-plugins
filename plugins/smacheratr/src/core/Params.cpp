@@ -25,6 +25,7 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kHiQuality, "Hi-Quality", "Hi-Q", true));
         v.push_back (toggle (kDcFilter, "Pre-DC Filter", "DC Filter", false));
         v.push_back (toggle (kMidSide, "Mid/Side", "M/S", false));
+        v.push_back (toggle (kClarity, "Clarity", "Clarity", false));
         return v;
     }());
     return t;

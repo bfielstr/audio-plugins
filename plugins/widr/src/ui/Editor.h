@@ -12,7 +12,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    static constexpr double kHeight = 642.0;
+    static constexpr double kHeight = 690.0;
     // the stage display, for the tests
     static constexpr double kStageLeft = 8.0, kStageTop = 40.0, kStageRight = 560.0, kStageBottom = 300.0;
 

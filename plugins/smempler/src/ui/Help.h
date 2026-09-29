@@ -35,6 +35,8 @@ inline const char* forParam (uint32_t id)
         return para::help::forParam (para::kLiquid);
     if (id == kParaFade)
         return para::help::forParam (para::kFade);
+    if (id == kParaNotch)
+        return para::help::forParam (para::kNotch);
     if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
         return para::help::forParam (id - kFxParaBase);
     if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams)

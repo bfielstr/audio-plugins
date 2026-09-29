@@ -23,6 +23,7 @@ enum ParamId : uint32_t
     kHiQuality, // 4x oversampling around the shaper
     kDcFilter,  // high-pass at the input
     kMidSide,   // saturate the mid and the side apart (keeps the width when pushed)
+    kClarity,   // keep the low mids from going muddy when the drive is pushed (see Engine.h)
 
     kNumParams
 };

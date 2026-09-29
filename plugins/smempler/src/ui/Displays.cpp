@@ -139,6 +139,16 @@ void FilterDisplay::draw (CDrawContext* ctx)
 
 void FilterDisplay::onMouseDownEvent (MouseDownEvent& e)
 {
+    if (e.buttonState.isRight () && !showEnv)
+    {
+        // a right click resets the cutoff and the resonance
+        host->setOnce (kFilterFreq, host->table ().defaultNormalized (kFilterFreq));
+        host->setOnce (kFilterRes, host->table ().defaultNormalized (kFilterRes));
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
     if (!e.buttonState.isLeft ())
         return;
     for (int i = 0; i < 2; ++i)

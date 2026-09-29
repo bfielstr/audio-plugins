@@ -192,7 +192,7 @@ int main (int argc, char** argv)
             const double fine = plainOf (a, kSpace);
             CHECK (fine > sp0 && fine < sp0 + 54.0 / 180.0 + 0.3 * 54.0 / 180.0, "Shift is fine: %.2f", fine);
             win.click (cx, cy - 20, 2);
-            CHECK (std::fabs (plainOf (a, kWidth) - 1.0) < 1e-6 && std::fabs (plainOf (a, kSpace) - 0.2) < 1e-6,
+            CHECK (std::fabs (plainOf (a, kWidth) - 1.0) < 1e-6 && std::fabs (plainOf (a, kSpace) - toPlain (kSpace, defaultNormalized (kSpace))) < 1e-6,
                    "double-click resets Width and Space");
             for (int i = 0; i < 5; ++i) // let the editor redraw
             {

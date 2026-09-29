@@ -891,6 +891,7 @@ void Engine::renderEffects (float* L, float* R, int n)
 {
     fxPara.setParam (para::kLiquid, p[kParaLiquid]);
     fxPara.setParam (para::kFade, p[kParaFade]);
+    fxPara.setParam (para::kNotch, p[kParaNotch]);
     if (on (p[kFxParaOn]))
         fxPara.process (L, R, L, R, n);
     fxMultidyn.setBypass (!on (p[kFxMdOn]));

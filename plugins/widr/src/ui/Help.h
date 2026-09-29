@@ -15,6 +15,8 @@ inline const char* forParam (uint32_t id)
             return "How the voices are made. Tight: decorrelated, right beside the centre. Wide: a second take 12 and "
                    "16 ms late on each side. Epic: later, detuned, wandering takes, big reflections, the strongest "
                    "contrast. Surround: the room and the reverb lead.";
+        case kDryLevel: return "Level of the input, in parallel with what Widr adds (to the bottom: -inf).";
+        case kWetLevel: return "Level of what Widr adds (the voices and the reverb), in parallel with the input.";
         case kContrast:
             return "Keeps the centre and the sides apart: the added width ducks under the hits in the mid and blooms "
                    "between them, and gives way where the mid is strong (a voice) while filling where it is thin. "

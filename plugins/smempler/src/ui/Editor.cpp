@@ -13,6 +13,7 @@
 #include "pluginkit/vst/PresetBar.h"
 
 #include "multidyn/src/ui/DynDisplay.h"
+#include "multidyn/src/ui/Thresholds.h"
 #include "para/src/ui/FilterView.h"
 #include "smacheratr/src/ui/Help.h"
 #include "smacheratr/src/ui/ShaperView.h"
@@ -95,6 +96,8 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c)
             return (int64_t)kParaLiquid;
         if (id == para::kFade)
             return (int64_t)kParaFade;
+        if (id == para::kNotch)
+            return (int64_t)kParaNotch;
         return id < para::kTailBase ? (int64_t)paraParam (id) : -1;
     });
     mdHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (),
@@ -396,6 +399,7 @@ void Editor::buildUI (CFrame* f)
             bind (g, new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), this, paraParam (ids[i]), names[i],
                                i == 6 || i == 7 || i == 11));
         bind (g, new Toggle (CRect (480, 172, 550, 190), this, kParaLiquid, "Liquid"));
+        bind (g, new Toggle (CRect (480, 196, 550, 214), this, kParaNotch, "Notch"));
         bind (g, new Knob (knobRect (560, 164), this, kParaFade, "Fade"));
     }
     {
@@ -501,6 +505,13 @@ void Editor::buildUI (CFrame* f)
 }
 
 // --- updates ----------------------------------------------------------------------
+void Editor::setNorm (uint32_t id, double v)
+{
+    pk::EditorBase::setNorm (id, v);
+    if (id >= kFxMdBase && id < kFxMdBase + multidyn::kNumParams && mdHost)
+        multidyn::pushThresholds (*mdHost, id - kFxMdBase, v);
+}
+
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);

@@ -4,6 +4,7 @@
 #include "pluginkit/ParamTable.h"
 #include "pluginkit/TailParams.h"
 
+#include <cmath>
 #include <cstdint>
 
 namespace widr {
@@ -28,12 +29,17 @@ enum ParamId : uint32_t
     kOutput,     // dB
     kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
     kContrast = kTailBase + pk::kTailFields, // 0 .. 1: mid / side contrast (scaled by the Character)
+    kDryLevel,   // dB (bottom = -inf): the input, in parallel with...
+    kWetLevel,   // dB (bottom = -inf): ...what Widr adds (the voices and the reverb)
 
     kNumParams
 };
 
 enum Character { kTight = 0, kWide, kEpic, kSurround, kNumCharacters };
 enum Role { kAnchor = 0, kSupport, kWideRole, kAmbient, kNumRoles };
+
+constexpr double kLevelMinDb = -60.0; // the bottom of the Dry / Wet levels is -inf
+inline double levelGain (double db) { return db <= kLevelMinDb + 0.01 ? 0.0 : std::pow (10.0, db / 20.0); }
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

@@ -137,9 +137,10 @@ void MsView::draw (CDrawContext* ctx)
 
 void MsView::onMouseDownEvent (MouseDownEvent& e)
 {
-    if (!e.buttonState.isLeft () || !plot ().pointInside (e.mousePosition))
+    const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
+    if ((!e.buttonState.isLeft () && !right) || !plot ().pointInside (e.mousePosition))
         return;
-    if (e.clickCount == 2)
+    if (e.clickCount == 2 || right)
     {
         host->setOnce (kMsSideHp, host->table ().defaultNormalized (kMsSideHp));
         host->setOnce (kMsSideGain, host->table ().defaultNormalized (kMsSideGain));

@@ -481,6 +481,26 @@ TEST (space_rings_and_mono_check)
     CHECK (std::fabs (loud.l[20000 + lat] / in.l[20000] - dbToGain (6.0)) < 1e-4, "Output +6 dB");
 }
 
+TEST (dry_and_wet_levels)
+{
+    // a mono source: Wet at -inf leaves no side at all; Dry at -inf leaves only what Widr adds
+    auto in = pink (2.0, false);
+    auto e = engine ();
+    e->setParam (kWetLevel, kLevelMinDb);
+    e->reset ();
+    auto out = run (*e, in);
+    CHECK (energy (sum (out, -1.0f), 48000, in.l.size ()) < 1e-6 * energy (sum (out, 1.0f), 48000, in.l.size ()),
+           "Wet -inf: mono in, mono out");
+    auto full = engine ();
+    auto both = run (*full, in);
+    auto d = engine ();
+    d->setParam (kDryLevel, kLevelMinDb);
+    d->reset ();
+    auto wetOnly = run (*d, in);
+    const double eBoth = energy (sum (both, 1.0f), 48000, in.l.size ()), eWet = energy (sum (wetOnly, 1.0f), 48000, in.l.size ());
+    CHECK (eWet < 0.5 * eBoth && eWet > 1e-4 * eBoth, "Dry -inf: only the added voices (%.1f dB of the mix)", 10.0 * std::log10 (eWet / eBoth));
+}
+
 TEST (silence_after_a_burst)
 {
     // a loud burst, then a minute of silence: no NaN, no denormals, and it dies away

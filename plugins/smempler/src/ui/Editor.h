@@ -33,6 +33,8 @@ class MsView;
 class Editor : public pk::EditorBase
 {
 public:
+    // every edit from the editor: Multidyn's thresholds of a band cannot cross
+    void setNorm (uint32_t id, double v) override;
     static constexpr double kWidth = 1110.0;
     static constexpr double kHeight = 988.0;
     // the effects strip at the bottom (also used by the host test)

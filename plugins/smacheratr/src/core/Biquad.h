@@ -44,6 +44,21 @@ inline BiquadCoeffs peak (double sr, double hz, double gainDb, double q)
     return r;
 }
 
+// band-pass with 0 dB at the centre
+inline BiquadCoeffs bandPass (double sr, double hz, double q)
+{
+    const double w = 2.0 * M_PI * hz / sr, c = std::cos (w);
+    const double alpha = std::sin (w) / (2.0 * q);
+    const double a0 = 1.0 + alpha;
+    BiquadCoeffs r;
+    r.b0 = alpha / a0;
+    r.b1 = 0.0;
+    r.b2 = -alpha / a0;
+    r.a1 = -2.0 * c / a0;
+    r.a2 = (1.0 - alpha) / a0;
+    return r;
+}
+
 inline BiquadCoeffs highPass (double sr, double hz, double q)
 {
     const double w = 2.0 * M_PI * hz / sr, c = std::cos (w);

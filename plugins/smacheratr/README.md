@@ -27,6 +27,11 @@ while the mids and highs saturate. **Amt Hi** does the same around **Freq** with
 **Width**. The colour display shows the pre-curve EQ; drag the left handle for Amt Lo, the right handle
 up/down for Amt Hi or sideways for Freq.
 
+**Clarity** (above the curve) keeps a hard-pushed drive from going muddy: when the low mids (around
+320 Hz) hit the curve hard they are turned down before it (3 dB for every 5 dB over -18 dBFS, at
+most 8 dB, so it does nothing at gentle settings), and the lows go into the curve 4 dB down and are
+lifted back after it, so the bass drives the curve less (less intermodulation mud) but keeps its level.
+
 **Menu**: **Hi-Quality** runs the curve 4x oversampled (two linear-phase half-band stages) to keep
 aliasing down; **Pre-DC Filter** removes DC offset before the curve; **Mid/Side** saturates the mid
 and the side apart, so the side is driven by its own, lower level and a wide sound stays wide when
