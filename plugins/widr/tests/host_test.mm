@@ -194,6 +194,11 @@ int main (int argc, char** argv)
             win.click (cx, cy - 20, 2);
             CHECK (std::fabs (plainOf (a, kWidth) - 1.0) < 1e-6 && std::fabs (plainOf (a, kSpace) - 0.2) < 1e-6,
                    "double-click resets Width and Space");
+            for (int i = 0; i < 5; ++i) // let the editor redraw
+            {
+                a.render (0.03, al, &ar, na.fn ());
+                pump (0.03);
+            }
             CHECK (win.savePng (outDir + "/ui_widr_reset.png"), "screenshot 2");
         }
         a.stop ();
