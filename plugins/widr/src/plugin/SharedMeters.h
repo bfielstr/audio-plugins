@@ -12,6 +12,7 @@ struct SharedMeters
 {
     Meters meters;
     std::atomic<int> latency {0};
+    smacheratr::Meters tailMeters; // the saturator at the end of the chain
     void retain () { refs.fetch_add (1); }
     void release ()
     {

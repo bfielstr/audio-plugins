@@ -150,6 +150,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
+    tailDisplays.reset ();
     clipView = nullptr;
     status = summary[0] = summary[1] = nullptr;
     modeButtons[0] = modeButtons[1] = nullptr;
@@ -285,7 +286,12 @@ void Editor::buildUI (CFrame* f)
     bind (time, new Toggle (CRect (14, 150, 176, 172), this, kFollowTempo, "Follow Tempo"));
 
     // OUTPUT
-    addTailPanel (root, CRect (8, 600, 972, 678), kTailBase, kTailExtBase);
+    // the saturator at the end of the chain, with Smacheratr's displays above its controls
+    auto* tailPanel = addTailPanel (root, CRect (8, 600, 972, 678 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase,
+                                                               [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
+                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
+    tailDisplays->add (tailPanel, CRect (10, 24, 954, 24 + smacheratr::TailDisplays::kHeight - 22));
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
     bind (out, new Knob (CRect (24, 28, 104, 128), this, kGain, nullptr, true));
@@ -344,6 +350,8 @@ void Editor::updateAlgorithmControls ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
+    if (tailDisplays)
+        tailDisplays->paramChanged (id);
     if (id == kAlgorithm || id == kFollowTempo)
         updateAlgorithmControls ();
     if (clipView && (id == kSpeed || id == kFollowTempo || id == kSourceBpm))
@@ -352,6 +360,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
+    if (tailDisplays)
+        tailDisplays->idle ();
     Session* s = ctl->getSession ();
     if (!s)
         return;

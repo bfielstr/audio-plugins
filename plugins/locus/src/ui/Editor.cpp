@@ -41,7 +41,11 @@ public:
 
 Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
-void Editor::onClose () { spectrum = nullptr; }
+void Editor::onClose ()
+{
+    spectrum = nullptr;
+    tailDisplays.reset ();
+}
 
 void Editor::buildUI (CFrame* f)
 {
@@ -73,7 +77,12 @@ void Editor::buildUI (CFrame* f)
     bind (p, new Toggle (CRect (516, 50, 580, 70), this, kSolo, "Solo"));
     bind (p, new Knob (CRect (600, 30, 656, 94), this, kOutput, nullptr, true));
 
-    addTailPanel (root, CRect (8, 440, 752, 518), kTailBase, kTailExtBase);
+    // the saturator at the end of the chain, with Smacheratr's displays above its controls
+    auto* tailPanel = addTailPanel (root, CRect (8, 440, 752, 518 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase,
+                                                               [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tailDisplays->add (tailPanel, CRect (10, 24, 734, 24 + smacheratr::TailDisplays::kHeight - 22));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -82,12 +91,16 @@ void Editor::buildUI (CFrame* f)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
+    if (tailDisplays)
+        tailDisplays->paramChanged (id);
     if (spectrum)
         spectrum->invalid ();
 }
 
 void Editor::idle ()
 {
+    if (tailDisplays)
+        tailDisplays->idle ();
     if (spectrum)
         spectrum->idle ();
     if (latencyLabel)

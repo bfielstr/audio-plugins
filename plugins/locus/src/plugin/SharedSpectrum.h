@@ -11,6 +11,8 @@ struct SharedSpectrum
 {
     Spectrum spectrum;
     std::atomic<int> latency {0};
+    smacheratr::Meters tailMeters; // the saturator at the end of the chain
+    std::atomic<double> sampleRate {48000.0};
     void retain () { refs.fetch_add (1); }
     void release ()
     {

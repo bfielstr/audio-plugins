@@ -77,6 +77,7 @@ tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
 {
     session->hostRate.store (setup.sampleRate);
     tail.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
+    tail.setMeters (&session->tailMeters);
     syncTail ();
     return AudioEffect::setupProcessing (setup);
 }

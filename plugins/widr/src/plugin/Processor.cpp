@@ -19,6 +19,7 @@ Processor::Processor ()
     setControllerClass (kControllerUID);
     shared = new SharedMeters ();
     engine.setMeters (&shared->meters);
+    engine.setTailMeters (&shared->tailMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);

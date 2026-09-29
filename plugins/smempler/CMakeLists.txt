@@ -50,12 +50,10 @@ pk_add_plugin(Smempler
         # the other plug-ins' displays, shown in the effects strip
         ${CMAKE_SOURCE_DIR}/plugins/para/src/ui/FilterView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/multidyn/src/ui/DynDisplay.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/smacheratr/src/ui/ShaperView.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/smacheratr/src/ui/ColorView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/widr/src/ui/GonioView.cpp
 )
 target_include_directories(Smempler PRIVATE src src/core)
-target_link_libraries(Smempler PRIVATE smempler_core)
+target_link_libraries(Smempler PRIVATE smempler_core smacheratr_ui)
 
 pk_add_host_test(smempler_hosttest
     PLUGIN Smempler

@@ -71,6 +71,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
+    tailDisplays.reset ();
     display = nullptr;
     scStatus = nullptr;
     rmsWindowBox = nullptr;
@@ -164,7 +165,12 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
     // the end-of-chain Smacheratr, after the Output gain
-    addTailPanel (root, CRect (8, 424, 912, 502), kSatOn, kSatExtBase);
+    // the saturator at the end of the chain, with Smacheratr's displays above its controls
+    auto* tailPanel = addTailPanel (root, CRect (8, 424, 912, 502 + smacheratr::TailDisplays::kHeight), kSatOn, kSatExtBase);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kSatOn, kSatExtBase,
+                                                               [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
+                                                               [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
+    tailDisplays->add (tailPanel, CRect (10, 24, 894, 24 + smacheratr::TailDisplays::kHeight - 22));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
@@ -227,6 +233,8 @@ void Editor::setNorm (uint32_t id, double v)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
+    if (tailDisplays)
+        tailDisplays->paramChanged (id);
     if (display)
         display->invalid ();
     if (id == kBands)
@@ -237,6 +245,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
+    if (tailDisplays)
+        tailDisplays->idle ();
     if (display)
         display->idle ();
     if (scStatus)

@@ -40,7 +40,7 @@ pk_add_plugin(Widr
         src/ui/Editor.cpp
 )
 target_include_directories(Widr PRIVATE src)
-target_link_libraries(Widr PRIVATE widr_core)
+target_link_libraries(Widr PRIVATE widr_core smacheratr_ui)
 
 pk_add_host_test(widr_hosttest
     PLUGIN Widr

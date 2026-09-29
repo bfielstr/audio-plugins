@@ -41,7 +41,7 @@ pk_add_plugin(Stretchr
         src/ui/Editor.cpp
 )
 target_include_directories(Stretchr PRIVATE src)
-target_link_libraries(Stretchr PRIVATE stretchr_core)
+target_link_libraries(Stretchr PRIVATE stretchr_core smacheratr_ui)
 
 pk_add_host_test(stretchr_hosttest
     PLUGIN Stretchr

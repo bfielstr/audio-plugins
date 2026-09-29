@@ -37,7 +37,7 @@ pk_add_plugin(Para
         src/ui/Editor.cpp
 )
 target_include_directories(Para PRIVATE src)
-target_link_libraries(Para PRIVATE para_core)
+target_link_libraries(Para PRIVATE para_core smacheratr_ui)
 
 pk_add_host_test(para_hosttest
     PLUGIN Para

@@ -106,6 +106,7 @@ public:
     }
     double param (uint32_t id) const { return p[id]; }
     int latency () const { return hasTail ? tail.latency () : 0; }
+    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     void noteOn (int note);
     void noteOff (int note);

@@ -45,6 +45,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
+    tailDisplays.reset ();
     view = nullptr;
     lpResKnob = nullptr;
 }
@@ -103,7 +104,12 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Knob (knobRect (362, 22), this, kFade));
     bind (outP, new Knob (knobRect (440, 22), this, kLpFloor));
 
-    addTailPanel (root, CRect (8, 518, 752, 598), kTailBase, kTailExtBase);
+    // the saturator at the end of the chain, with Smacheratr's displays above its controls
+    auto* tailPanel = addTailPanel (root, CRect (8, 518, 752, 598 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase,
+                                                               [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tailDisplays->add (tailPanel, CRect (10, 24, 734, 24 + smacheratr::TailDisplays::kHeight - 22));
 
     applyParamTooltips (&help::forParam);
     updateLooks ();
@@ -119,6 +125,8 @@ void Editor::updateLooks ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
+    if (tailDisplays)
+        tailDisplays->paramChanged (id);
     if (view)
         view->invalid ();
     if (id == kResLink)
@@ -127,6 +135,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
+    if (tailDisplays)
+        tailDisplays->idle ();
     if (view)
         view->idle ();
 }

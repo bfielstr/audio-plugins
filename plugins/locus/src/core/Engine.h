@@ -53,6 +53,7 @@ public:
     }
     double param (uint32_t id) const { return p[id]; }
     int latency () const { return fftSize + tail.latency (); } // the STFT and the end-of-chain saturator
+    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);

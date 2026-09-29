@@ -19,6 +19,7 @@ Processor::Processor ()
     setControllerClass (kControllerUID);
     shared = new SharedSpectrum ();
     engine.setSpectrum (&shared->spectrum);
+    engine.setTailMeters (&shared->tailMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);
@@ -69,6 +70,7 @@ tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
     for (uint32_t id = 0; id < kNumParams; ++id)
         engine.setParam (id, toPlain (id, normMirror[id].load ()));
     shared->latency.store (engine.latency ());
+    shared->sampleRate.store (setup.sampleRate);
     return AudioEffect::setupProcessing (setup);
 }
 

@@ -4,6 +4,8 @@
 
 #include "../core/Params.h"
 
+#include "smacheratr/src/core/Engine.h"
+
 #include <array>
 #include <atomic>
 
@@ -15,6 +17,8 @@ struct Meters
     std::array<std::atomic<float>, kNumBands> outputDb {};
     std::array<std::atomic<float>, kNumBands> gainDb {};
     std::atomic<bool> sidechainConnected {false};
+    smacheratr::Meters satMeters;            // the saturator at the end of the chain
+    std::atomic<double> sampleRate {48000.0};
 
     Meters ()
     {

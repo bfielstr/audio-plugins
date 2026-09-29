@@ -37,7 +37,7 @@ pk_add_plugin(Locus
         src/ui/Editor.cpp
 )
 target_include_directories(Locus PRIVATE src)
-target_link_libraries(Locus PRIVATE locus_core)
+target_link_libraries(Locus PRIVATE locus_core smacheratr_ui)
 
 pk_add_host_test(locus_hosttest
     PLUGIN Locus

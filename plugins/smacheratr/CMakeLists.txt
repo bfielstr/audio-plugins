@@ -18,6 +18,19 @@ if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
 
+# Smacheratr's displays, also for the saturator at the end of the other plug-ins' chains
+add_library(smacheratr_ui STATIC
+    src/ui/ShaperView.h
+    src/ui/ShaperView.cpp
+    src/ui/ColorView.h
+    src/ui/ColorView.cpp
+    src/ui/TailDisplays.h
+    src/ui/TailDisplays.cpp
+)
+target_include_directories(smacheratr_ui PUBLIC ${CMAKE_SOURCE_DIR}/plugins)
+target_link_libraries(smacheratr_ui PUBLIC smacheratr_core pluginkit_vst)
+pk_dsp_settings(smacheratr_ui)
+
 pk_add_plugin(Smacheratr
     BUNDLE_ID com.bfielstr.vst3.smacheratr
     SOURCES
@@ -32,15 +45,11 @@ pk_add_plugin(Smacheratr
         src/plugin/Controller.cpp
         src/plugin/Entry.cpp
         src/ui/Help.h
-        src/ui/ShaperView.h
-        src/ui/ShaperView.cpp
-        src/ui/ColorView.h
-        src/ui/ColorView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )
 target_include_directories(Smacheratr PRIVATE src)
-target_link_libraries(Smacheratr PRIVATE smacheratr_core)
+target_link_libraries(Smacheratr PRIVATE smacheratr_core smacheratr_ui)
 
 pk_add_host_test(smacheratr_hosttest
     PLUGIN Smacheratr

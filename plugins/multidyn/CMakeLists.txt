@@ -37,7 +37,7 @@ pk_add_plugin(Multidyn
         src/ui/Editor.cpp
 )
 target_include_directories(Multidyn PRIVATE src)
-target_link_libraries(Multidyn PRIVATE multidyn_core)
+target_link_libraries(Multidyn PRIVATE multidyn_core smacheratr_ui)
 
 pk_add_host_test(multidyn_hosttest
     PLUGIN Multidyn

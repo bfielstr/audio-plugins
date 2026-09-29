@@ -1,5 +1,9 @@
 #pragma once
 
+#include "smacheratr/src/ui/TailDisplays.h"
+
+#include <memory>
+
 #include "pluginkit/vst/EditorBase.h"
 
 namespace para {
@@ -13,7 +17,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    static constexpr double kHeight = 606.0;
+    static constexpr double kHeight = 606.0 + 170.0; // the tail panel's displays (smacheratr::TailDisplays::kHeight)
     // layout (also used by the host test)
     static constexpr double kViewLeft = 8.0, kViewTop = 40.0, kViewRight = 752.0, kViewBottom = 290.0;
 
@@ -23,6 +27,7 @@ public:
     void paramChanged (uint32_t id) override;
 
 private:
+    std::unique_ptr<smacheratr::TailDisplays> tailDisplays;
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
     void updateLooks ();

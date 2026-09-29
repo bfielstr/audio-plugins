@@ -9,6 +9,7 @@
 #include "Render.h"
 
 #include "pluginkit/RtShared.h"
+#include "smacheratr/src/core/Engine.h"
 
 #include <array>
 #include <atomic>
@@ -59,6 +60,7 @@ public:
 
     // --- host (written by the audio thread) --------------------------------------------
     std::atomic<double> hostRate {0.0};
+    smacheratr::Meters tailMeters; // the saturator at the end of the chain (written by the processor)
     std::atomic<double> hostBpm {120.0};
     std::atomic<double> transport {0.0}; // seconds
     std::atomic<bool> playing {false};

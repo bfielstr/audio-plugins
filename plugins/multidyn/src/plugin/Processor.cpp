@@ -21,6 +21,7 @@ Processor::Processor ()
 {
     setControllerClass (kControllerUID);
     meters = new Meters ();
+    engine.setSatMeters (&meters->satMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
 }
@@ -70,6 +71,7 @@ tresult PLUGIN_API Processor::canProcessSampleSize (int32 s) { return s == kSamp
 tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
 {
     engine.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
+    meters->sampleRate.store (setup.sampleRate);
     for (uint32_t id = 0; id < kNumParams; ++id)
         engine.setParam (id, toPlain (id, normMirror[id].load ()));
     engine.reset ();

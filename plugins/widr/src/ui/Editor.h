@@ -1,5 +1,9 @@
 #pragma once
 
+#include "smacheratr/src/ui/TailDisplays.h"
+
+#include <memory>
+
 #include "pluginkit/vst/EditorBase.h"
 
 namespace widr {
@@ -12,7 +16,7 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    static constexpr double kHeight = 690.0;
+    static constexpr double kHeight = 690.0 + 170.0; // the tail panel's displays (smacheratr::TailDisplays::kHeight)
     // the stage display, for the tests
     static constexpr double kStageLeft = 8.0, kStageTop = 40.0, kStageRight = 560.0, kStageBottom = 300.0;
 
@@ -23,6 +27,7 @@ public:
     StageView* stageView () const { return stage; }
 
 private:
+    std::unique_ptr<smacheratr::TailDisplays> tailDisplays;
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
 
