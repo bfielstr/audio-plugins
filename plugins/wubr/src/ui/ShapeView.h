@@ -29,6 +29,7 @@ public:
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseCancelEvent (VSTGUI::MouseCancelEvent& e) override;
     void idle ();
 
     double xOf (double x) const;

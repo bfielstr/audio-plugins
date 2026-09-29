@@ -17,14 +17,20 @@ namespace smempler {
 // The effects rack after the sampler: kRackSlots slots, each Empty or one of the suite's effects, in
 // any order (the same effect may sit in several). A slot is a Type, an On and a block of kSlotBlock
 // parameters that the slot's effect reads through its own table (Rack.h: fxTable), so the IDs stay
-// the same whatever is loaded where.
-enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kNumFxTypes };
+// the same whatever is loaded where. An effect with more parameters than that (Wubr) uses the slot's
+// extension too: kSlotExt more positions per slot, in a block of their own after the end saturator's
+// (block positions kSlotBlock and up; slotBlockParam finds either).
+enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kFxWubr, kNumFxTypes };
+// the slot types before Wubr (states before version 8 stored the type over this many)
+constexpr int kFxTypesBeforeWubr = 6;
 constexpr int kRackSlots = 8;
 constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn, see fxBlockTable)
 // Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
 constexpr uint32_t kLegacyMdParams = 62;
 enum SlotField : uint32_t { kSlotType = 0, kSlotOn, kSlotParams };
 constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
+constexpr uint32_t kSlotExt = 24;                         // more block positions per slot (after the end saturator's block)
+constexpr uint32_t kSlotBlockAll = kSlotBlock + kSlotExt; // every block position of a slot
 
 enum ParamId : uint32_t
 {
@@ -140,13 +146,37 @@ enum ParamId : uint32_t
     kRackBase,
     // --- added in 0.7: the rest of the end-of-chain Smacheratr (smacheratr/src/core/TailExt.h) ---
     kTailExtBase = kRackBase + kRackSlots * kSlotSize,
+    // --- added in 0.8: the rack slots' extensions (the end saturator's block before it is full: its
+    // fields are fixed at 17; more would go after this) ---
+    kRackExtBase = kTailExtBase + 17,
 
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kNumParams = kRackExtBase + kRackSlots * kSlotExt
 };
+static_assert (pk::kTailExtFields == 17, "Smempler's end-saturator block is followed by the rack's extensions: add new "
+                                         "fields in a block after them");
 
 constexpr uint32_t slotParam (int slot, uint32_t field) { return kRackBase + (uint32_t)slot * kSlotSize + field; }
-constexpr uint32_t slotBlockParam (int slot, uint32_t id) { return slotParam (slot, kSlotParams + id); }
-constexpr bool isRackParam (uint32_t id) { return id >= kRackBase && id < kTailExtBase; }
+// the parameter of a slot's block position j (0 .. kSlotBlockAll - 1)
+constexpr uint32_t slotBlockParam (int slot, uint32_t j)
+{
+    return j < kSlotBlock ? slotParam (slot, kSlotParams + j) : kRackExtBase + (uint32_t)slot * kSlotExt + (j - kSlotBlock);
+}
+constexpr bool isRackParam (uint32_t id)
+{
+    return (id >= kRackBase && id < kTailExtBase) || (id >= kRackExtBase && id < kRackExtBase + kRackSlots * kSlotExt);
+}
+// A rack parameter's slot and field: kSlotType, kSlotOn, or kSlotParams + its block position.
+struct RackField
+{
+    int slot;
+    uint32_t field;
+};
+constexpr RackField rackField (uint32_t id)
+{
+    if (id >= kRackExtBase)
+        return {(int)((id - kRackExtBase) / kSlotExt), kSlotParams + kSlotBlock + (id - kRackExtBase) % kSlotExt};
+    return {(int)((id - kRackBase) / kSlotSize), (id - kRackBase) % kSlotSize};
+}
 // the end-of-chain Smacheratr's parameters (both blocks), and their field in smacheratr::Tail
 constexpr bool isTailParam (uint32_t id)
 {

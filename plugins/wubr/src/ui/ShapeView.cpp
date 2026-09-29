@@ -193,12 +193,12 @@ void ShapeView::removePoint (int i)
     if (i <= 0 || i >= s.n - 1 || s.n <= 2)
         return;
     auto once = [this] (uint32_t id, double v) { host->setOnce (id, host->table ().toNormalized (id, v)); };
+    if (s.hold >= i) // first, so the envelope never sees it on the wrong point
+        once (bandParam (band, kHold), std::max (1, s.hold)); // the hold moves with its point, or to the one before
     for (int j = i; j + 1 < s.n; ++j)
         for (uint32_t f : {kPtX, kPtY, kPtCurve})
             once (pointParam (band, j, f), host->plainValue (pointParam (band, j + 1, f)));
     once (bandParam (band, kPointCount), s.n - 1);
-    if (s.hold >= i)
-        once (bandParam (band, kHold), std::max (1, s.hold)); // the hold moves with its point, or to the one before
 }
 
 void ShapeView::onMouseDownEvent (MouseDownEvent& e)
@@ -209,6 +209,11 @@ void ShapeView::onMouseDownEvent (MouseDownEvent& e)
     const CRect r = getViewSize ();
     const double x = std::clamp ((e.mousePosition.x - r.left - kPad) / (r.getWidth () - 2 * kPad), 0.0, 1.0);
     const double y = std::clamp ((r.getCenter ().y - e.mousePosition.y) / (r.getHeight () * 0.5 - kPad - 8.0), -1.0, 1.0);
+    if (drag != Drag::None) // a drag the host never ended
+    {
+        MouseUpEvent up;
+        onMouseUpEvent (up);
+    }
     const int pt = pointAt (e.mousePosition);
     auto done = [&] {
         invalid ();
@@ -282,6 +287,13 @@ void ShapeView::onMouseMoveEvent (MouseMoveEvent& e)
         setPlain (pointParam (band, dragIndex, kPtCurve), std::clamp (startCurve + (rising ? dy : -dy), -1.0, 1.0));
     }
     invalid ();
+    e.consumed = true;
+}
+
+void ShapeView::onMouseCancelEvent (MouseCancelEvent& e)
+{
+    MouseUpEvent up;
+    onMouseUpEvent (up); // closes the edits of the drag
     e.consumed = true;
 }
 

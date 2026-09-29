@@ -11,7 +11,7 @@ add_library(smempler_core STATIC
 )
 # Other plug-ins reuse the warp engines as "smempler/src/core/Warp.h"; Smempler's own code includes src/core directly.
 target_include_directories(smempler_core PUBLIC ${CMAKE_SOURCE_DIR}/plugins ${CMAKE_SOURCE_DIR}/third_party/dr_libs PRIVATE src/core)
-target_link_libraries(smempler_core PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core) # the rack
+target_link_libraries(smempler_core PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core wubr_core) # the rack
 pk_dsp_settings(smempler_core)
 
 add_executable(smempler_tests tests/core_tests.cpp)
@@ -51,6 +51,8 @@ pk_add_plugin(Smempler
         ${CMAKE_SOURCE_DIR}/plugins/para/src/ui/FilterView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/multidyn/src/ui/DynDisplay.cpp
         ${CMAKE_SOURCE_DIR}/plugins/widr/src/ui/GonioView.cpp
+        ${CMAKE_SOURCE_DIR}/plugins/wubr/src/ui/BandView.cpp
+        ${CMAKE_SOURCE_DIR}/plugins/wubr/src/ui/ShapeView.cpp
 )
 target_include_directories(Smempler PRIVATE src src/core)
 target_link_libraries(Smempler PRIVATE smempler_core smacheratr_ui)

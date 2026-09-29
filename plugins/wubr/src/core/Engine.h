@@ -17,6 +17,7 @@
 
 #include <array>
 #include <atomic>
+#include <bitset>
 
 namespace wubr {
 
@@ -39,18 +40,22 @@ struct Meters
 class Engine
 {
 public:
+    // withTail: the end-of-chain Smacheratr (off where Wubr is built into another plug-in)
+    explicit Engine (bool withTail = true) : hasTail (withTail) {}
     void prepare (double sampleRate, int maxBlock);
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return hasTail ? tail.latency () : 0; }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
-    // the host's transport for the next block (tempo in BPM, the song position in quarter notes)
+    // the host's transport for the next block (tempo in BPM, the song position in quarter notes; the
+    // engine moves the position on itself as it plays, so a block split at notes stays in time)
     void setTransport (double bpm, double ppq, bool playing);
-    void noteOn ();
-    void noteOff ();
+    void noteOn (int note);
+    void noteOff (int note);
+    void allNotesOff ();
     void trigger (); // starts the envelopes (MIDI or a transient)
 
     // In place capable.
@@ -63,6 +68,7 @@ private:
         double phase = 0.0;    // LFO position (0..1)
         double envPos = 0.0;   // Envelope position (0..1)
         double freqNow = 1000.0, dbNow = 0.0; // smoothed centre (Hz) and gain (dB)
+        bool active = false;                  // filtering (an off band fades to 0 dB first)
         double shownPos = 0.0, shownValue = 0.0, shownDb = 0.0;
         Shape shape;
         bool shapeDirty = true;
@@ -74,15 +80,16 @@ private:
     double sr = 48000.0;
     Band bands[kBands];
     double bpm = 120.0, ppq = 0.0;
-    bool playing = false, wasPlaying = false;
-    int notesHeld = 0;
-    bool released = true; // Envelope: no note holds the shapes at their hold points
+    bool playing = false;
+    std::bitset<128> notesDown; // Envelope: the notes held (none: the shapes play on past their hold points)
+    int coeffCountdown = 0;     // samples to the next band retuning (kept across calls)
     // transient detection: fast and slow level followers (dB) and a short hold-off after a trigger
     double fastEnv = 0.0, slowEnv = 0.0, fastA = 0.0, fastR = 0.0, slowC = 0.0;
     int holdOff = 0;
     double smoothGain = 0.0, smoothFreq = 0.0;
     float mix = 1.0f, out = 1.0f;
     smacheratr::Tail tail;
+    bool hasTail = true;
     Meters* meters = nullptr;
 };
 

@@ -52,15 +52,15 @@ void Engine::reset ()
         }
         band.phase = 0.0;
         band.envPos = 1.0; // at rest, as if the envelope had run
-        band.freqNow = p[bandParam (b, kFreq)];
+        band.freqNow = std::clamp (p[bandParam (b, kFreq)], 20.0, 0.45 * sr);
         band.dbNow = 0.0;
+        band.active = false;
         band.shapeDirty = true;
     }
     fastEnv = slowEnv = 0.0;
     holdOff = 0;
-    notesHeld = 0;
-    released = true;
-    wasPlaying = false;
+    notesDown.reset ();
+    coeffCountdown = 0;
     mix = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     out = (float)dbToGain (p[kOutput]);
     tail.reset ();
@@ -84,20 +84,16 @@ void Engine::setTransport (double tempo, double songPpq, bool isPlaying)
     playing = isPlaying;
 }
 
-void Engine::noteOn ()
+void Engine::noteOn (int note)
 {
-    ++notesHeld;
-    released = false;
+    notesDown.set ((size_t)std::clamp (note, 0, 127));
     if (std::lround (p[kMode]) == kEnvelope && std::lround (p[kTrigger]) == kMidi)
         trigger ();
 }
 
-void Engine::noteOff ()
-{
-    notesHeld = std::max (0, notesHeld - 1);
-    if (notesHeld == 0)
-        released = true;
-}
+void Engine::noteOff (int note) { notesDown.reset ((size_t)std::clamp (note, 0, 127)); }
+
+void Engine::allNotesOff () { notesDown.reset (); }
 
 void Engine::trigger ()
 {
@@ -148,7 +144,6 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
             band.phase = cycles - std::floor (cycles);
         }
     }
-    wasPlaying = playing;
 
     for (int i = 0; i < n; ++i)
     {
@@ -169,6 +164,8 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
             }
         }
         double x[2] = {dryL, dryR};
+        const bool retune = coeffCountdown <= 0;
+        coeffCountdown = retune ? kCoeffEvery - 1 : coeffCountdown - 1;
         for (int b = 0; b < kBands; ++b)
         {
             Band& band = bands[b];
@@ -176,13 +173,11 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
             double pos;
             if (envMode)
             {
-                // runs to the hold point and stays (a held note, or always with transients); let go: to the end
-                const bool hold = transient || !released;
+                // runs to the hold point and stays (a held note, or always with transients; a hold point
+                // moved earlier takes it back); let go: to the end
+                const bool hold = transient || notesDown.any ();
                 const double stop = hold ? band.shape.holdX () : 1.0;
-                if (band.envPos < stop)
-                    band.envPos = std::min (stop, band.envPos + inc[b]);
-                else if (!hold)
-                    band.envPos = std::min (1.0, band.envPos + inc[b]);
+                band.envPos = band.envPos < stop ? std::min (stop, band.envPos + inc[b]) : (hold ? stop : band.envPos);
                 pos = band.envPos;
             }
             else
@@ -192,26 +187,50 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
                 pos = band.phase + offset[b];
                 pos -= std::floor (pos);
             }
-            if (!on[b])
-                continue;
-            if (i % kCoeffEvery == 0)
+            if (retune)
             {
                 const double y = band.shape.valueAt (pos);
-                const double gainDb = p[bandParam (b, kGain)] + (target[b] != kTargetFreq ? p[bandParam (b, kDepth)] * y : 0.0);
+                band.shownPos = pos;
+                band.shownValue = y;
+                // an off band fades to 0 dB, then stops filtering; turned on, it starts from 0 dB
+                double gainDb = 0.0;
                 double freq = p[bandParam (b, kFreq)];
-                if (target[b] != kTargetGain)
-                    freq *= std::pow (2.0, 0.5 * y * p[bandParam (b, kSweep)]);
+                if (on[b])
+                {
+                    gainDb = p[bandParam (b, kGain)] + (target[b] != kTargetFreq ? p[bandParam (b, kDepth)] * y : 0.0);
+                    if (target[b] != kTargetGain)
+                        freq *= std::pow (2.0, 0.5 * y * p[bandParam (b, kSweep)]);
+                }
                 freq = std::clamp (freq, 20.0, 0.45 * sr);
+                if (!band.active)
+                {
+                    if (!on[b])
+                    {
+                        band.freqNow = freq;
+                        continue;
+                    }
+                    band.active = true;
+                    band.freqNow = freq;
+                    band.dbNow = 0.0;
+                    for (auto& f : band.bell)
+                        f.reset ();
+                }
                 band.freqNow *= std::pow (freq / std::max (1.0, band.freqNow), smoothFreq);
+                band.freqNow = std::clamp (band.freqNow, 20.0, 0.45 * sr);
                 band.dbNow += (std::clamp (gainDb, -48.0, 36.0) - band.dbNow) * smoothFreq;
+                if (!on[b] && std::fabs (band.dbNow) < 0.01)
+                {
+                    band.active = false; // faded out
+                    continue;
+                }
                 const smacheratr::BiquadCoeffs c =
                     smacheratr::peak (sr, band.freqNow, band.dbNow, bellQ (p[bandParam (b, kWidth)]));
                 for (int ch = 0; ch < 2; ++ch)
                     band.bell[ch].c = c;
-                band.shownPos = pos;
-                band.shownValue = y;
                 band.shownDb = band.dbNow;
             }
+            if (!band.active)
+                continue;
             for (int ch = 0; ch < 2; ++ch)
                 x[ch] = band.bell[ch].process (x[ch]);
         }
@@ -220,7 +239,10 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
         outL[i] = (float)((dryL * (1.0f - mix) + x[0] * mix) * out);
         outR[i] = (float)((dryR * (1.0f - mix) + x[1] * mix) * out);
     }
-    tail.process (outL, outR, n);
+    if (hasTail)
+        tail.process (outL, outR, n);
+    if (playing)
+        ppq += n * bpm / 60.0 / sr; // the song moves on (a block split at notes stays in time)
 
     if (meters)
     {
@@ -228,7 +250,7 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
         {
             meters->pos[b].store ((float)bands[b].shownPos, std::memory_order_relaxed);
             meters->value[b].store ((float)bands[b].shownValue, std::memory_order_relaxed);
-            meters->gainDb[b].store (on[b] ? (float)bands[b].shownDb : 0.0f, std::memory_order_relaxed);
+            meters->gainDb[b].store (bands[b].active ? (float)bands[b].shownDb : 0.0f, std::memory_order_relaxed);
             meters->freqHz[b].store ((float)bands[b].freqNow, std::memory_order_relaxed);
         }
         meters->blocks.fetch_add (1, std::memory_order_relaxed);

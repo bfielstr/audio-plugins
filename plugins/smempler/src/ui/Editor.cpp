@@ -25,6 +25,9 @@
 #include "smacheratr/src/core/TailExt.h"
 #include "smacheratr/src/ui/ColorView.h"
 #include "smacheratr/src/ui/ShaperView.h"
+#include "wubr/src/ui/BandView.h"
+#include "wubr/src/ui/Help.h"
+#include "wubr/src/ui/ShapeView.h"
 
 #include "vstgui/lib/cfileselector.h"
 #include "vstgui/lib/cframe.h"
@@ -114,6 +117,16 @@ void Editor::onClose ()
     fxShaperView = endShaperView = nullptr;
     endColorView = nullptr;
     fxGonio = nullptr;
+    wubrBands = nullptr;
+    for (int b = 0; b < 2; ++b)
+    {
+        wubrShapes[b] = nullptr;
+        wubrSync[b] = wubrHz[b] = nullptr;
+        wubrBandViews[b].clear ();
+    }
+    wubrBandButtons.clear ();
+    wubrEnvViews.clear ();
+    wubrSensView = nullptr;
     msView = nullptr;
     mdLayoutHost = nullptr;
     scope = nullptr;
@@ -462,14 +475,53 @@ void Editor::showClarityBand (int band)
         b->invalid ();
 }
 
+void Editor::showWubrBand (int band)
+{
+    wubrBand = band == 1 ? 1 : 0;
+    for (int b = 0; b < wubr::kBands; ++b)
+        for (auto* v : wubrBandViews[b])
+            v->setVisible (b == wubrBand);
+    for (auto* v : wubrBandButtons)
+        v->invalid ();
+    if (wubrBands)
+    {
+        wubrBands->selected = wubrBand;
+        wubrBands->invalid ();
+    }
+    updateWubrLooks ();
+}
+
+void Editor::updateWubrLooks ()
+{
+    if (!wubrBands || fxTab >= kFxEnd || ctl->slotType (fxTab) != kFxWubr)
+        return;
+    auto* h = hostFor (fxTab);
+    if (!h)
+        return;
+    for (int b = 0; b < wubr::kBands; ++b)
+        if (wubrSync[b] && wubrHz[b])
+        {
+            const bool free = std::lround (h->plainValue (wubr::bandParam (b, wubr::kRateMode))) == wubr::kFree;
+            wubrSync[b]->setVisible (b == wubrBand && !free);
+            wubrHz[b]->setVisible (b == wubrBand && free);
+        }
+    const bool envelope = std::lround (h->plainValue (wubr::kMode)) == wubr::kEnvelope;
+    for (auto* v : wubrEnvViews)
+        v->setEnabledLook (envelope);
+    if (wubrSensView)
+        wubrSensView->setEnabledLook (envelope && std::lround (h->plainValue (wubr::kTrigger)) == wubr::kTransient);
+    if (fxBody)
+        fxBody->invalid ();
+}
+
 // --- updates ----------------------------------------------------------------------
 void Editor::setNorm (uint32_t id, double v)
 {
     pk::EditorBase::setNorm (id, v);
     if (isRackParam (id))
     {
-        const int slot = (int)((id - kRackBase) / kSlotSize);
-        const uint32_t field = (id - kRackBase) % kSlotSize;
+        const int slot = rackField (id).slot;
+        const uint32_t field = rackField (id).field;
         if (field >= kSlotParams && ctl->slotType (slot) == kFxMultidyn)
             if (auto* h = hostFor (slot))
                 if (const int64_t mdId = fxIdAt (kFxMultidyn, field - kSlotParams); mdId >= 0)
@@ -488,8 +540,8 @@ void Editor::paramChanged (uint32_t id)
         envDisplay->invalid ();
     if (isRackParam (id))
     {
-        const int slot = (int)((id - kRackBase) / kSlotSize);
-        const uint32_t field = (id - kRackBase) % kSlotSize;
+        const int slot = rackField (id).slot;
+        const uint32_t field = rackField (id).field;
         if (field == kSlotType)
             rackDirty = true; // rebuilt in idle (a button may be what changed it)
         else if (slot == fxTab)
@@ -500,6 +552,15 @@ void Editor::paramChanged (uint32_t id)
                 fxCtl->invalid ();
             if (field == kSlotParams + multidyn::kBands && ctl->slotType (slot) == kFxMultidyn)
                 updateMdLayout ();
+            if (field >= kSlotParams && ctl->slotType (slot) == kFxWubr)
+                if (const int64_t w = fxIdAt (kFxWubr, field - kSlotParams); w >= 0)
+                {
+                    const uint32_t wid = (uint32_t)w;
+                    const bool rateMode = wid >= wubr::kBandBase && wid < wubr::kTailExtBase
+                                          && (wid - wubr::kBandBase) % wubr::kBandBlock == wubr::kRateMode;
+                    if (wid == wubr::kMode || wid == wubr::kTrigger || rateMode)
+                        updateWubrLooks ();
+                }
         }
     }
     if (isTailParam (id) && fxEndBody)
@@ -601,10 +662,16 @@ pk::MappedParamHost* Editor::hostFor (int slot)
     return h.get ();
 }
 
+namespace {
+// every value of a slot: its Type, On, and every block position (the extension too)
+constexpr uint32_t kSlotValues = kSlotParams + kSlotBlockAll;
+uint32_t slotValueParam (int slot, uint32_t k) { return k < kSlotParams ? slotParam (slot, k) : slotBlockParam (slot, k - kSlotParams); }
+} // namespace
+
 void Editor::copySlot (int from, int to)
 {
-    for (uint32_t f = 0; f < kSlotSize; ++f)
-        setOnce (slotParam (to, f), norm (slotParam (from, f)));
+    for (uint32_t k = 0; k < kSlotValues; ++k)
+        setOnce (slotValueParam (to, k), norm (slotValueParam (from, k)));
 }
 
 void Editor::addFx (int type)
@@ -619,7 +686,7 @@ void Editor::addFx (int type)
     const auto& t = fxBlockTable (type);
     setOnce (slotParam (slot, kSlotType), paramTable ().toNormalized (slotParam (slot, kSlotType), (double)type));
     setOnce (slotParam (slot, kSlotOn), 1.0);
-    for (uint32_t j = 0; j < kSlotBlock; ++j)
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         setOnce (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
     fxTab = slot;
     rackDirty = true;
@@ -634,7 +701,7 @@ void Editor::removeFx (int slot)
         copySlot (s + 1, s);
     setOnce (slotParam (kRackSlots - 1, kSlotType), 0.0);
     setOnce (slotParam (kRackSlots - 1, kSlotOn), 1.0);
-    for (uint32_t j = 0; j < kSlotBlock; ++j)
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         setOnce (slotBlockParam (kRackSlots - 1, j), 0.0);
     fxTab = ctl->slotType (slot) != kFxEmpty ? slot : std::max (0, slot - 1);
     if (ctl->slotType (fxTab) == kFxEmpty)
@@ -648,12 +715,12 @@ void Editor::moveFx (int slot, int dir)
     if (slot < 0 || slot >= kRackSlots || other < 0 || other >= kRackSlots || ctl->slotType (other) == kFxEmpty)
         return;
     // swap the two slots, every value
-    std::array<double, kSlotSize> keepA;
-    for (uint32_t f = 0; f < kSlotSize; ++f)
-        keepA[f] = norm (slotParam (slot, f));
+    std::array<double, kSlotValues> keepA;
+    for (uint32_t k = 0; k < kSlotValues; ++k)
+        keepA[k] = norm (slotValueParam (slot, k));
     copySlot (other, slot);
-    for (uint32_t f = 0; f < kSlotSize; ++f)
-        setOnce (slotParam (other, f), keepA[f]);
+    for (uint32_t k = 0; k < kSlotValues; ++k)
+        setOnce (slotValueParam (other, k), keepA[k]);
     fxTab = other;
     rackDirty = true;
 }
@@ -751,6 +818,16 @@ void Editor::buildBody ()
     for (auto& v : rackBandViews)
         v.clear ();
     rackBandButtons.clear ();
+    wubrBands = nullptr;
+    for (int b = 0; b < 2; ++b)
+    {
+        wubrShapes[b] = nullptr;
+        wubrSync[b] = wubrHz[b] = nullptr;
+        wubrBandViews[b].clear ();
+    }
+    wubrBandButtons.clear ();
+    wubrEnvViews.clear ();
+    wubrSensView = nullptr;
     fxGonio = nullptr;
     msView = nullptr;
     mdLayoutHost = nullptr;
@@ -953,6 +1030,80 @@ void Editor::buildBody ()
             g->addView (n);
             break;
         }
+        case kFxWubr:
+        {
+            // Wubr's own IDs throughout (wubr::): unqualified kMode / kWidth / kOutput here are
+            // Smempler's parameters or the window's size
+            auto tip = [] (uint32_t id) { return wubr::help::forParam (id); };
+            auto metersOf = [this, s] () -> const wubr::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.wubr[(size_t)s] : nullptr;
+            };
+            wubrBands = new wubr::BandView (CRect (8, 32, 300, 226), h, metersOf);
+            add (wubrBands, wubr::help::kBandDisplay);
+            wubrBands->onBandPicked = [this] (int b) { showWubrBand (b); };
+            // the top row: the band selector, the selected band's On and Target; the mode, trigger
+            // and sensitivity (both bands); the selected band's Hold
+            for (int b = 0; b < wubr::kBands; ++b)
+            {
+                auto* bt = new ActionButton (CRect (8 + b * 60, 8, 64 + b * 60, 26), b == 0 ? "Band 1" : "Band 2",
+                                             [this, b] { showWubrBand (b); }, [this, b] { return wubrBand == b; });
+                bt->setTooltipText (b == 0 ? "Show band 1 (green)." : "Show band 2 (blue).");
+                g->addView (bt);
+                wubrBandButtons.push_back (bt);
+            }
+            add (new Segmented (CRect (360, 8, 474, 26), h, wubr::kMode, {"LFO", "Envelope"}), tip (wubr::kMode));
+            auto* trig = new Segmented (CRect (480, 8, 588, 26), h, wubr::kTrigger, {"MIDI", "Transient"});
+            add (trig, tip (wubr::kTrigger));
+            wubrEnvViews.push_back (trig);
+            g->addView (new Label (CRect (592, 10, 622, 24), "Sens", 10.5, false, 2));
+            wubrSensView = new NumberBox (CRect (626, 8, 676, 26), h, wubr::kSensitivity);
+            add (wubrSensView, tip (wubr::kSensitivity));
+            // per band (both are made; the selected one is shown): its row controls, shape and knobs
+            for (int b = 0; b < wubr::kBands; ++b)
+            {
+                auto& views = wubrBandViews[b];
+                auto band = [&] (CView* v, uint32_t id) {
+                    add (v, tip (id));
+                    views.push_back (v);
+                    return v;
+                };
+                band (new Toggle (CRect (130, 8, 172, 26), h, wubr::bandParam (b, wubr::kBandOn), "On"), wubr::bandParam (b, wubr::kBandOn));
+                band (new Segmented (CRect (178, 8, 346, 26), h, wubr::bandParam (b, wubr::kTarget), {"Gain", "Frequency", "Both"}),
+                      wubr::bandParam (b, wubr::kTarget));
+                auto* holdLabel = new Label (CRect (684, 10, 714, 24), "Hold", 10.5, false, 2);
+                g->addView (holdLabel);
+                views.push_back (holdLabel);
+                auto* hold = new NumberBox (CRect (718, 8, 768, 26), h, wubr::bandParam (b, wubr::kHold));
+                band (hold, wubr::bandParam (b, wubr::kHold));
+                wubrEnvViews.push_back (hold);
+                wubrShapes[b] = new wubr::ShapeView (CRect (306, 32, 520, 226), h, b, metersOf);
+                add (wubrShapes[b], wubr::help::kShapeDisplay);
+                views.push_back (wubrShapes[b]);
+                // knobs: the band, then its rate
+                const uint32_t fields[5] = {wubr::kFreq, wubr::kWidth, wubr::kGain, wubr::kDepth, wubr::kSweep};
+                for (int i = 0; i < 5; ++i)
+                {
+                    const uint32_t id = wubr::bandParam (b, fields[i]);
+                    band (new Knob (knobRect (528 + i * 58, 32), h, id, nullptr, i == 2 || i == 3), id);
+                }
+                band (new Segmented (CRect (528, 104, 640, 122), h, wubr::bandParam (b, wubr::kRateMode), {"Sync", "Free"}),
+                      wubr::bandParam (b, wubr::kRateMode));
+                // Sync or Hz, by the rate mode (updateWubrLooks shows one)
+                wubrSync[b] = add (new Choice (CRect (528, 128, 640, 146), h, wubr::bandParam (b, wubr::kSync)),
+                                   tip (wubr::bandParam (b, wubr::kSync)));
+                wubrHz[b] = add (new NumberBox (CRect (528, 128, 640, 146), h, wubr::bandParam (b, wubr::kRateHz)),
+                                 tip (wubr::bandParam (b, wubr::kRateHz)));
+                band (new Knob (knobRect (644, 100), h, wubr::bandParam (b, wubr::kPhase)), wubr::bandParam (b, wubr::kPhase));
+            }
+            add (new Knob (knobRect (702, 100), h, wubr::kDryWet), tip (wubr::kDryWet));
+            add (new Knob (knobRect (760, 100), h, wubr::kOutput), tip (wubr::kOutput));
+            auto* n = new Label (CRect (528, 180, 834, 194), "Envelope + MIDI: the sampler's notes start the shapes", 9.5);
+            n->setDim (true);
+            g->addView (n);
+            showWubrBand (wubrBand);
+            break;
+        }
         default: break;
     }
     // for the host test (which loads the plug-in as a module and cannot look inside the editor): the
@@ -1057,6 +1208,10 @@ void Editor::idle ()
         fxShaperView->idle ();
     if (fxColorView)
         fxColorView->idle ();
+    if (wubrBands)
+        wubrBands->idle ();
+    if (wubrShapes[wubrBand])
+        wubrShapes[wubrBand]->idle ();
     if (endColorView && fxEndBody && fxEndBody->isVisible ())
         endColorView->idle ();
     if (envDisplay)

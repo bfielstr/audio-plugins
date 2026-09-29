@@ -80,9 +80,9 @@ Parameter* Controller::makeParameter (uint32_t id)
 {
     if (isRackParam (id))
     {
-        const uint32_t rel = id - kRackBase, field = rel % kSlotSize;
-        if (field >= kSlotParams)
-            return new SlotParameter (tableRef, id, this, (int)(rel / kSlotSize), field - kSlotParams);
+        const RackField rf = rackField (id);
+        if (rf.field >= kSlotParams)
+            return new SlotParameter (tableRef, id, this, rf.slot, rf.field - kSlotParams);
     }
     return pk::ControllerBase::makeParameter (id);
 }
@@ -99,7 +99,7 @@ void Controller::retitleSlot (int slot)
         return;
     titledType[(size_t)slot] = type;
     const auto& t = fxBlockTable (type);
-    for (uint32_t j = 0; j < kSlotBlock; ++j)
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         if (auto* prm = parameters.getParameter (slotBlockParam (slot, j)))
         {
             const std::string name = "FX " + std::to_string (slot + 1) + " " +
@@ -113,8 +113,8 @@ void Controller::retitleSlot (int slot)
 tresult PLUGIN_API Controller::setParamNormalized (ParamID tag, ParamValue value)
 {
     const tresult r = pk::ControllerBase::setParamNormalized (tag, value);
-    if (isRackParam (tag) && (tag - kRackBase) % kSlotSize == kSlotType)
-        retitleSlot ((int)((tag - kRackBase) / kSlotSize));
+    if (isRackParam (tag) && rackField (tag).field == kSlotType)
+        retitleSlot (rackField (tag).slot);
     return r;
 }
 

@@ -449,12 +449,19 @@ int main (int argc, char** argv)
             rig.param (slotParam (slot, smempler::kSlotType), smempler::toNormalized (slotParam (slot, smempler::kSlotType), type));
             rig.param (slotParam (slot, smempler::kSlotOn), 1.0);
             const auto& t = smempler::fxBlockTable (type);
-            for (uint32_t j = 0; j < smempler::kSlotBlock; ++j)
+            for (uint32_t j = 0; j < smempler::kSlotBlockAll; ++j)
                 rig.param (smempler::slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
         };
-        const int kinds[5] = {smempler::kFxPara, smempler::kFxMultidyn, smempler::kFxMsEq, smempler::kFxSmacheratr, smempler::kFxWidr};
-        for (int s = 0; s < 5; ++s)
+        constexpr int kKinds = 6;
+        const int kinds[kKinds] = {smempler::kFxPara,       smempler::kFxMultidyn, smempler::kFxMsEq,
+                                   smempler::kFxSmacheratr, smempler::kFxWidr,     smempler::kFxWubr};
+        for (int s = 0; s < kKinds; ++s)
             loadFx (s, kinds[s]);
+        // Wubr (slot 6) with a value in the slot's extension (block positions from kSlotBlock on): band 2's
+        // third point's level; it must move with the slot when the editor moves the rack up
+        const uint32_t wubrExt = (uint32_t)smempler::fxBlockOf (smempler::kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
+        CHECK (wubrExt >= smempler::kSlotBlock && wubrExt < smempler::kSlotBlockAll, "band 2's point 3 level is in the extension: %u", wubrExt);
+        rig.param (smempler::slotBlockParam (kKinds - 1, wubrExt), 0.75);
         rig.param (smempler::kTailBase + pk::kTailOn, 1.0);
         rig.param (smempler::kTailBase + pk::kTailDrive, smempler::toNormalized (smempler::kTailBase + pk::kTailDrive, 12.0));
         auto typeOf = [&] (int slot) {
@@ -477,17 +484,18 @@ int main (int argc, char** argv)
                 rig.note (60, 0.0f);
             };
             const double tabY = smempler::Editor::kFxTabTop + 10, ctlY = smempler::Editor::kFxCtlTop + 10;
-            const char* names[6] = {"para", "multidyn", "ms", "smacheratr", "widr", "end"};
-            for (int t = 0; t < 6; ++t)
+            // one tab per slot in chain order, then the end saturator's tab at the right of the row
+            const char* names[kKinds + 1] = {"para", "multidyn", "ms", "smacheratr", "widr", "wubr", "end"};
+            for (int t = 0; t < kKinds + 1; ++t)
             {
-                const double x = t < 5 ? 8 + t * smempler::Editor::kFxTabWidth + 40 : 8 + 838 - 60;
+                const double x = t < kKinds ? 8 + t * smempler::Editor::kFxTabWidth + 40 : 8 + 838 - 60;
                 fx.click (x, tabY);
                 settle ();
                 CHECK (fx.savePng (outDir + "/ui_fx_" + names[t] + ".png"), "fx %s snapshot", names[t]);
                 // every parameter of the effect has a control on its rack page, unless it is listed as
                 // deliberately not shown (so the rack keeps up when an effect gains a parameter); the
                 // editor reports its pages to the file in SMEMPLER_RACK_PAGE_REPORT
-                if (t < 5)
+                if (t < kKinds)
                 {
                     std::set<uint32_t> shown;
                     int reported = -1;
@@ -525,8 +533,13 @@ int main (int argc, char** argv)
             // remove it: Para first again, the rest move up
             fx.click (8 + 272 + 34, ctlY); // Remove (the moved slot is selected)
             pump (0.1);
-            CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMsEq && typeOf (4) == smempler::kFxEmpty,
-                   "removed: %d %d %d", typeOf (0), typeOf (1), typeOf (4));
+            CHECK (typeOf (0) == smempler::kFxPara && typeOf (1) == smempler::kFxMsEq && typeOf (4) == smempler::kFxWubr &&
+                       typeOf (5) == smempler::kFxEmpty,
+                   "removed: %d %d %d %d", typeOf (0), typeOf (1), typeOf (4), typeOf (5));
+            // Wubr moved up a slot with its extension value, and the freed slot's extension is cleared
+            const double moved = rig.controller->getParamNormalized (smempler::slotBlockParam (kKinds - 2, wubrExt));
+            const double freed = rig.controller->getParamNormalized (smempler::slotBlockParam (kKinds - 1, wubrExt));
+            CHECK (std::fabs (moved - 0.75) < 1e-9 && freed == 0.0, "Wubr's extension moved with it: %f, left behind %f", moved, freed);
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_remove.png"), "after remove snapshot");
         }

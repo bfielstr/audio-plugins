@@ -1,5 +1,6 @@
-// Wubr parameters. IDs are persisted in projects: only ever append (the end saturator's extended
-// block comes last so it can grow).
+// Wubr parameters. IDs are persisted in projects: only ever append. The end saturator's extended
+// block comes last, so it can grow; a new Wubr parameter goes in a block after it (and from then on
+// the extended block stays as it is).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -9,11 +10,12 @@
 
 namespace wubr {
 
+static_assert (pk::kTailFields == 6, "Wubr's band IDs start after the six tail fields");
+
 constexpr int kBands = 2;
 constexpr int kMaxPoints = 8;
 
-// Each band: a Clarity-style band (12 dB/oct below, 6 dB/oct above its centre) whose gain and/or
-// centre a drawn shape moves, at its own rate.
+// Each band: a bell (Width octaves wide) whose gain and/or centre a drawn shape moves, at its own rate.
 enum BandField : uint32_t
 {
     kBandOn = 0,

@@ -194,6 +194,11 @@ void BandView::onMouseDownEvent (MouseDownEvent& e)
     const bool right = e.buttonState.isRight ();
     if (!e.buttonState.isLeft () && !right)
         return;
+    if (drag >= 0) // a drag the host never ended
+    {
+        MouseUpEvent up;
+        onMouseUpEvent (up);
+    }
     drag = hit (e.mousePosition);
     if (drag < 0)
         return;
@@ -233,6 +238,13 @@ void BandView::onMouseMoveEvent (MouseMoveEvent& e)
     setPlain (bandParam (drag, kFreq), startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ()));
     setPlain (bandParam (drag, kGain), std::clamp (startGain - dy * kMaxDb / (r.getHeight () * 0.5 - 12.0), -24.0, 24.0));
     invalid ();
+    e.consumed = true;
+}
+
+void BandView::onMouseCancelEvent (MouseCancelEvent& e)
+{
+    MouseUpEvent up;
+    onMouseUpEvent (up); // closes the edits of the drag
     e.consumed = true;
 }
 

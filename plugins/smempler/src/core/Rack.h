@@ -1,5 +1,5 @@
 // Smempler's effects rack: kRackSlots slots after the sampler (Params.h), each Empty or one of the
-// suite's effects (para, multidyn, m/s eq, smacheratr, widr), in any order; the same effect may sit
+// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr), in any order; the same effect may sit
 // in several slots. Every slot owns one engine of each kind, allocated up front, so loading or
 // moving an effect never allocates on the audio thread; only the slot's current kind runs.
 //
@@ -17,6 +17,7 @@
 #include "para/src/core/Engine.h"
 #include "smacheratr/src/core/Engine.h"
 #include "widr/src/core/Engine.h"
+#include "wubr/src/core/Engine.h"
 
 #include "pluginkit/ParamTable.h"
 
@@ -38,8 +39,8 @@ const char* fxName (int type); // "para", ...; "" for Empty
 const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
 // A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
 // added after the rack (RMS Window, Soften) sit where its saturator's are (not used in the rack):
-// the block has room for 62. fxBlockTable is the table by block position; fxIdAt and fxBlockOf
-// convert (-1: none).
+// the block has room for 62; and Wubr's (79, without its own saturator) run on into the slot's
+// extension. fxBlockTable is the table by block position; fxIdAt and fxBlockOf convert (-1: none).
 const pk::ParamTable& fxBlockTable (int type);
 int64_t fxIdAt (int type, uint32_t block);
 int64_t fxBlockOf (int type, uint32_t id);
@@ -62,6 +63,7 @@ struct RackMeters
     std::array<std::atomic<float>, kRackSlots> msMid {}, msSide {};
     std::array<smacheratr::Meters, kRackSlots> sat;
     std::array<widr::Meters, kRackSlots> widr;
+    std::array<wubr::Meters, kRackSlots> wubr;
 };
 
 class Rack
@@ -77,8 +79,12 @@ public:
     int latency () const;
     int type (int slot) const { return slots[(size_t)slot]->type; }
 
-    // Para's envelope follows the sampler's notes.
+    // Para's envelope follows the sampler's notes; Wubr's envelopes start with them.
     void noteOn (int note);
+    void noteOff (int note);
+    void allNotesOff ();
+    // the host's transport for the next block (Wubr's synced shapes follow the song)
+    void setTransport (double bpm, double ppq, bool playing);
     void setPitchBend (float bipolar);
 
     void setMeters (RackMeters* m);
@@ -88,12 +94,13 @@ private:
     {
         int type = kFxEmpty;
         bool on = true;
-        std::array<double, kSlotBlock> norm {};
+        std::array<double, kSlotBlockAll> norm {};
         para::Engine para {false};
         multidyn::Engine multidyn {false};
         MsEq ms;
         smacheratr::Engine sat;
         widr::Engine widr {false};
+        wubr::Engine wubr {false};
     };
     void apply (Slot& s, uint32_t j);      // one value to the slot's current effect
     void applyAll (Slot& s);               // every value (a new kind), and a clean start

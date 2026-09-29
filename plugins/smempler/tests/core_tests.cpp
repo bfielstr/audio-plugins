@@ -247,7 +247,7 @@ static void loadFx (Engine& e, int slot, int type)
     e.setParam (slotParam (slot, kSlotType), (double)type);
     e.setParam (slotParam (slot, kSlotOn), 1.0);
     const auto& t = fxBlockTable (type);
-    for (uint32_t j = 0; j < kSlotBlock; ++j)
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         e.setParam (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
 }
 static void setFx (Engine& e, int slot, uint32_t id, double plain)
@@ -310,7 +310,7 @@ TEST (rack_block_mapping)
     // every block position maps to one effect parameter and back; Multidyn's RMS Window and Soften
     // sit where its (unused) saturator's first two are
     for (int type = kFxPara; type < kNumFxTypes; ++type)
-        for (uint32_t j = 0; j < kSlotBlock; ++j)
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         {
             const int64_t id = fxIdAt (type, j);
             if (id >= 0)
@@ -371,6 +371,307 @@ TEST (rack_order_and_widr)
     for (size_t i = 12000; i < o.l.size (); ++i)
         side2 += 0.25 * (o.l[i] - o.r[i]) * (o.l[i] - o.r[i]);
     CHECK (side2 < 1e-9 * midE + 1e-12, "off: mono again (%g)", side2);
+}
+
+// --- Wubr in the rack -------------------------------------------------------
+// Level (dB rms) of x in windows of `win` samples.
+static std::vector<double> dbWindows (const std::vector<float>& x, size_t win)
+{
+    std::vector<double> d;
+    for (size_t s = 0; s + win <= x.size (); s += win)
+        d.push_back (20.0 * std::log10 (rms (x, s, s + win) + 1e-12));
+    return d;
+}
+// Level of a over ref (dB), window by window.
+static std::vector<double> dbOver (const std::vector<float>& a, const std::vector<float>& ref, size_t win)
+{
+    auto d = dbWindows (a, win);
+    const auto r = dbWindows (ref, win);
+    for (size_t i = 0; i < d.size () && i < r.size (); ++i)
+        d[i] -= r[i];
+    d.resize (std::min (d.size (), r.size ()));
+    return d;
+}
+static int peaksOver (const std::vector<double>& v, double thr)
+{
+    int n = 0;
+    for (size_t i = 1; i + 1 < v.size (); ++i)
+        if (v[i] > v[i - 1] && v[i] >= v[i + 1] && v[i] > thr)
+            ++n;
+    return n;
+}
+static double meanOf (const std::vector<double>& v, size_t a, size_t b)
+{
+    double s = 0.0;
+    for (size_t i = a; i < b; ++i)
+        s += v[i];
+    return b > a ? s / (double)(b - a) : 0.0;
+}
+constexpr size_t kWin = 1200; // 25 ms: 3 whole cycles of 120 Hz at 48 kHz
+
+TEST (rack_wubr_mapping)
+{
+    // Wubr's 79 parameters without its end saturator: 62 in the slot's block, 17 in its extension
+    const auto& t = fxBlockTable (kFxWubr);
+    const auto& wt = wubr::paramTable ();
+    CHECK (t.size () == 79 && t.size () <= kSlotBlockAll, "Wubr's block table: %u", (unsigned)t.size ());
+    int inExt = 0;
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+    {
+        const int64_t id = fxIdAt (kFxWubr, j);
+        if (j >= t.size ())
+        {
+            CHECK (id < 0, "position %u after Wubr's: %lld", j, (long long)id);
+            continue;
+        }
+        CHECK (id >= 0 && id < wubr::kNumParams && fxBlockOf (kFxWubr, (uint32_t)id) == (int64_t)j, "position %u -> id %lld", j,
+               (long long)id);
+        if (id < 0)
+            continue;
+        CHECK (!wubr::isTailParam ((uint32_t)id), "position %u is its end saturator's %lld", j, (long long)id);
+        const auto& a = t.info (j);
+        const auto& b = wt.info ((uint32_t)id);
+        CHECK (a.id == j && std::string (a.name) == std::string (b.name) && a.min == b.min && a.max == b.max && a.def == b.def,
+               "position %u reads as %s", j, std::string (b.name).c_str ());
+        for (int s = 0; s < kRackSlots; ++s)
+        {
+            const uint32_t pid = slotBlockParam (s, j);
+            const RackField rf = rackField (pid);
+            CHECK (pid < kNumParams && isRackParam (pid) && !isTailParam (pid) && rf.slot == s && rf.field == kSlotParams + j,
+                   "slot %d position %u: id %u -> slot %d field %u", s, j, pid, rf.slot, rf.field);
+            if (j >= kSlotBlock)
+                CHECK (pid >= kRackExtBase && pid < kRackExtBase + kRackSlots * kSlotExt, "slot %d position %u in the extension: %u", s, j, pid);
+            else
+                CHECK (pid >= kRackBase && pid < kTailExtBase, "slot %d position %u in the rack block: %u", s, j, pid);
+        }
+        inExt += j >= kSlotBlock ? 1 : 0;
+    }
+    CHECK (inExt == 17, "17 in the extension: %d", inExt);
+    // back: every Wubr ID has a position, except its end saturator's
+    for (uint32_t id = 0; id < wubr::kNumParams; ++id)
+        CHECK ((fxBlockOf (kFxWubr, id) < 0) == wubr::isTailParam (id), "wubr %u (%s): %lld", id, wt.info (id).name,
+               (long long)fxBlockOf (kFxWubr, id));
+    // the extension is where band 2's shape runs on: its third point's level is the first position there,
+    // its last point's curve the last
+    CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)) == (int64_t)kSlotBlock, "%lld",
+           (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)));
+    CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)) == 78, "%lld",
+           (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)));
+    // the end saturator's second block, between the rack and the extensions, is not the rack's
+    for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
+        CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
+    CHECK (kNumParams == kRackExtBase + kRackSlots * kSlotExt && kNumParams < kMidiPitchBend, "kNumParams %u", (unsigned)kNumParams);
+    // what the rack page does not show: Wubr's own IDs, and every one it does show has a block position
+    for (const auto& h : rackHiddenParams (kFxWubr))
+        CHECK (h.first <= h.last && h.last < wubr::kNumParams, "hidden %u..%u", h.first, h.last);
+    for (uint32_t id = 0; id < wubr::kNumParams; ++id)
+    {
+        bool hidden = false;
+        for (const auto& h : rackHiddenParams (kFxWubr))
+            hidden |= id >= h.first && id <= h.last;
+        CHECK (hidden || fxBlockOf (kFxWubr, id) >= 0, "wubr %u (%s) is shown but has no place in the slot", id, wt.info (id).name);
+        CHECK (!wubr::isTailParam (id) || hidden, "wubr %u: its end saturator is listed as hidden", id);
+    }
+}
+
+TEST (rack_wubr_moves_the_sound)
+{
+    // a 120 Hz sample through Wubr in slot 3: band 1's triangle (1/4, +-12 dB around 120 Hz) swings it,
+    // two cycles a second at 120 BPM and one at 60; switched off, the slot leaves it untouched
+    auto s = sine (120.0, 3.0);
+    auto render = [&] (int type, bool on, HostInfo host, const std::function<void (Engine&)>& setup) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kVolume, -20.0); // room for Wubr's +12 dB before the end saturator
+        if (type != kFxEmpty)
+            loadFx (*e, 2, type);
+        e->setParam (slotParam (2, kSlotOn), on ? 1.0 : 0.0);
+        if (setup)
+            setup (*e);
+        e->noteOn (60, 1.0f);
+        return run (*e, 96000, host);
+    };
+    HostInfo h120;
+    h120.bpm = 120.0;
+    const auto dry = render (kFxEmpty, true, h120, nullptr);
+    const auto off = render (kFxWubr, false, h120, nullptr);
+    double offDiff = 0.0;
+    for (size_t i = 0; i < dry.l.size (); ++i)
+        offDiff = std::max (offDiff, (double)std::fabs (off.l[i] - dry.l[i]));
+    CHECK (offDiff < 1e-6, "off: untouched (%g)", offDiff);
+    const auto offLv = dbWindows (off.l, kWin);
+    const auto [offLo, offHi] = std::minmax_element (offLv.begin () + 2, offLv.end ());
+    CHECK (*offHi - *offLo < 0.5, "off: steady %.2f .. %.2f dB", *offLo, *offHi);
+
+    const auto on = render (kFxWubr, true, h120, nullptr);
+    const auto lv = dbOver (on.l, off.l, kWin);
+    const auto [lo, hi] = std::minmax_element (lv.begin () + 1, lv.end ());
+    std::printf ("    on: %.1f .. %.1f dB against off, %d peaks in 2 s\n", *lo, *hi, peaksOver (lv, 6.0));
+    CHECK (*hi > 10.0 && *lo < -10.0, "swings +-12 dB: %.1f .. %.1f dB", *lo, *hi);
+    CHECK (peaksOver (lv, 6.0) == 4, "two cycles a second at 120 BPM: %d peaks", peaksOver (lv, 6.0));
+    // the host's tempo reaches it
+    HostInfo h60;
+    h60.bpm = 60.0;
+    const auto slow = dbOver (render (kFxWubr, true, h60, nullptr).l, off.l, kWin);
+    CHECK (peaksOver (slow, 6.0) == 2, "one a second at 60 BPM: %d peaks", peaksOver (slow, 6.0));
+    // and its song position while it plays: half a beat in, the 1/4 triangle is at its top; at 0 at its bottom
+    HostInfo at0 = h120, atHalf = h120;
+    at0.playing = atHalf.playing = true;
+    at0.ppqValid = atHalf.ppqValid = true;
+    atHalf.ppq = 0.5;
+    const auto top = dbOver (render (kFxWubr, true, atHalf, nullptr).l, off.l, kWin);
+    const auto bottom = dbOver (render (kFxWubr, true, at0, nullptr).l, off.l, kWin);
+    std::printf ("    the song position: %.1f dB half a beat in, %.1f dB at 0\n", top[1], bottom[1]);
+    CHECK (top[1] > 5.0 && bottom[1] < -5.0, "follows the song: %.1f / %.1f dB", top[1], bottom[1]);
+
+    // band 2 instead (band 1 off), moved to 120 Hz: the same triangle, until its third point's level (a
+    // value in the slot's extension) goes to the top: then the second half of each cycle stays up
+    const uint32_t ext = (uint32_t)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
+    CHECK (ext >= kSlotBlock && ext < kSlotBlockAll, "band 2's point 3 level is in the extension: %u", ext);
+    auto band2 = [&] (bool raise) {
+        return [raise] (Engine& e) {
+            setFx (e, 2, wubr::bandParam (0, wubr::kBandOn), 0.0);
+            setFx (e, 2, wubr::bandParam (1, wubr::kBandOn), 1.0);
+            setFx (e, 2, wubr::bandParam (1, wubr::kFreq), 120.0);
+            if (raise)
+                setFx (e, 2, wubr::pointParam (1, 2, wubr::kPtY), 1.0);
+        };
+    };
+    const auto tri = dbOver (render (kFxWubr, true, h120, band2 (false)).l, off.l, kWin);
+    const auto raised = dbOver (render (kFxWubr, true, h120, band2 (true)).l, off.l, kWin);
+    const auto [tLo, tHi] = std::minmax_element (tri.begin () + 1, tri.end ());
+    const double triMean = meanOf (tri, 1, tri.size ()), raisedMean = meanOf (raised, 1, raised.size ());
+    std::printf ("    band 2: %.1f .. %.1f dB, mean %.1f dB; its point 3 raised: mean %.1f dB\n", *tLo, *tHi, triMean, raisedMean);
+    CHECK (*tHi > 10.0 && *tLo < -10.0 && std::fabs (triMean) < 1.5, "band 2 swings: %.1f .. %.1f, mean %.1f dB", *tLo, *tHi, triMean);
+    CHECK (raisedMean > triMean + 4.0, "the extension's value reaches the engine: mean %.1f vs %.1f dB", raisedMean, triMean);
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        loadFx (*e, 2, kFxWubr);
+        band2 (true) (*e);
+        CHECK (e->param (slotBlockParam (2, ext)) == 1.0 && e->param (slotBlockParam (1, ext)) == 0.0 &&
+                   e->param (slotBlockParam (3, ext)) == 0.0,
+               "stored in slot 3's extension only");
+    }
+}
+
+TEST (rack_wubr_envelope_follows_notes)
+{
+    // Wubr in Envelope mode, MIDI: the sampler's note-on starts band 1's shape (from -12 dB up to its
+    // hold point, the top, +12 dB, a quarter second in at 120 BPM) and it stays there while a note is
+    // held; a second note starts it again; letting go of the last note plays the rest (down to -12 dB).
+    // The sampler's release is long, so the sound carries on; the level is the 120 Hz of the first note,
+    // against the same notes with Wubr off.
+    auto s = sine (120.0, 6.0);
+    auto render = [&] (bool on) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kVolume, -20.0);
+        e->setParam (kAmpR, 5000.0);
+        loadFx (*e, 0, kFxWubr);
+        setFx (*e, 0, wubr::kMode, wubr::kEnvelope);
+        setFx (*e, 0, wubr::bandParam (0, wubr::kHold), 2.0);
+        e->setParam (slotParam (0, kSlotOn), on ? 1.0 : 0.0);
+        Out o;
+        auto more = [&] (int frames) {
+            const Out p = run (*e, frames);
+            o.l.insert (o.l.end (), p.l.begin (), p.l.end ());
+        };
+        more (4800); // nothing playing yet
+        e->noteOn (60, 1.0f);
+        more (48000);
+        e->noteOn (72, 1.0f); // an octave up (240 Hz: whole cycles in the windows, so it does not count)
+        more (24000);
+        e->noteOff (72);
+        more (24000);
+        e->noteOff (60);
+        more (48000);
+        return o;
+    };
+    const auto on = render (true), off = render (false);
+    // the 120 Hz level against Wubr off, per 25 ms from `t` seconds after the first note, over `secs`
+    auto level = [&] (double t, double secs) {
+        std::vector<double> d;
+        for (size_t a = 4800 + (size_t)(t * kHostSr); a + kWin <= 4800 + (size_t)((t + secs) * kHostSr); a += kWin)
+            d.push_back (20.0 * std::log10 ((toneAmp (on.l, 120.0, a, a + kWin) + 1e-12) / (toneAmp (off.l, 120.0, a, a + kWin) + 1e-12)));
+        return d;
+    };
+    auto range = [] (const std::vector<double>& v) { return std::make_pair (*std::min_element (v.begin (), v.end ()), *std::max_element (v.begin (), v.end ())); };
+    // (the second note's window starts 25 ms in: the drop from the top takes a few ms, and the output
+    // is late by the end saturator's latency)
+    const auto start = level (0.0, 0.025), held = level (0.4, 0.6), again = level (1.025, 0.025), again2 = level (1.4, 0.1),
+               stillHeld = level (1.6, 0.4), rest = level (2.35, 0.65);
+    std::printf ("    note on %.1f dB, held %.1f .. %.1f, 2nd note %.1f, 2nd note off %.1f .. %.1f, let go %.1f .. %.1f dB\n",
+                 start[0], range (held).first, range (held).second, again[0], range (stillHeld).first, range (stillHeld).second,
+                 range (rest).first, range (rest).second);
+    CHECK (start[0] < -6.0, "a note starts the shape at its bottom: %.1f dB", start[0]);
+    CHECK (range (held).first > 10.0, "held at the top: %.1f dB", range (held).first);
+    CHECK (again[0] < -6.0 && range (again2).first > 10.0, "a second note starts it again: %.1f, then %.1f dB", again[0],
+           range (again2).first);
+    CHECK (range (stillHeld).first > 10.0, "the first note still holds it after the second lets go: %.1f dB", range (stillHeld).first);
+    CHECK (range (rest).second < -10.0, "let go: the rest of the shape, down to the bottom: %.1f dB", range (rest).second);
+    const double released = rms (on.l, 4800 + (size_t)(2.35 * kHostSr), on.l.size ());
+    CHECK (released > 1e-3, "the sampler still sounds after the last note-off: %f", released);
+}
+
+TEST (rack_wubr_slots_and_moves)
+{
+    // every value of every slot (Type, On, each block position, the extension too) is a parameter of
+    // its own: no two slots share one, and none is the end saturator's
+    std::vector<int> owner (kNumParams, -1);
+    for (int s = 0; s < kRackSlots; ++s)
+        for (uint32_t k = 0; k < kSlotParams + kSlotBlockAll; ++k)
+        {
+            const uint32_t id = k < kSlotParams ? slotParam (s, k) : slotBlockParam (s, k - kSlotParams);
+            CHECK (id < kNumParams && owner[id] < 0 && isRackParam (id) && !isTailParam (id), "slot %d value %u: id %u (slot %d had it)", s,
+                   k, id, id < kNumParams ? owner[id] : -2);
+            if (id < kNumParams)
+                owner[id] = s;
+            CHECK (rackField (id).slot == s && rackField (id).field == k, "slot %d value %u decodes to %d / %u", s, k, rackField (id).slot,
+                   rackField (id).field);
+        }
+    // a Wubr slot moved the way the editor moves one (every value copied to the other slot, the old slot
+    // emptied) sounds the same, its extension values with it
+    auto s = sine (120.0, 2.0);
+    const uint32_t ext = (uint32_t)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
+    auto setup = [&] (Engine& e, int slot) {
+        e.setParam (kVolume, -20.0);
+        loadFx (e, slot, kFxWubr);
+        setFx (e, slot, wubr::bandParam (0, wubr::kBandOn), 0.0);
+        setFx (e, slot, wubr::bandParam (1, wubr::kBandOn), 1.0);
+        setFx (e, slot, wubr::bandParam (1, wubr::kFreq), 120.0);
+        setFx (e, slot, wubr::pointParam (1, 2, wubr::kPtY), 1.0); // in the extension
+        setFx (e, slot, wubr::pointParam (1, 1, wubr::kPtCurve), 0.6);
+    };
+    auto play = [&] (Engine& e) {
+        e.reset ();
+        e.noteOn (60, 1.0f);
+        return run (e, 48000);
+    };
+    std::unique_ptr<Engine> a (makeEngine (s)), b (makeEngine (s)), c (makeEngine (s));
+    setup (*a, 1);
+    const auto ref = play (*a);
+    setup (*b, 1);
+    for (uint32_t k = 0; k < kSlotParams + kSlotBlockAll; ++k)
+    {
+        const uint32_t from = k < kSlotParams ? slotParam (1, k) : slotBlockParam (1, k - kSlotParams);
+        const uint32_t to = k < kSlotParams ? slotParam (4, k) : slotBlockParam (4, k - kSlotParams);
+        b->setParam (to, b->param (from));
+    }
+    b->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
+    CHECK (b->rackType (4) == kFxWubr && b->rackType (1) == kFxEmpty && b->param (slotBlockParam (4, ext)) == 1.0,
+           "moved: slot 5 is Wubr (%d), slot 2 empty (%d)", b->rackType (4), b->rackType (1));
+    const auto moved = play (*b);
+    double diff = 0.0;
+    for (size_t i = 0; i < ref.l.size (); ++i)
+        diff = std::max (diff, (double)std::fabs (moved.l[i] - ref.l[i]));
+    CHECK (diff < 1e-6, "moved, it sounds the same: %g", diff);
+    // without the extension's value it would not
+    setup (*c, 4);
+    setFx (*c, 4, wubr::pointParam (1, 2, wubr::kPtY), -1.0);
+    const auto plain = play (*c);
+    double diff2 = 0.0;
+    for (size_t i = 0; i < ref.l.size (); ++i)
+        diff2 = std::max (diff2, (double)std::fabs (plain.l[i] - ref.l[i]));
+    std::printf ("    moved: %g apart; without its extension value: %g\n", diff, diff2);
+    CHECK (diff2 > 0.01, "the extension's value matters: %g", diff2);
 }
 
 TEST (defaults_one_voice_and_root_note)

@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -189,7 +190,7 @@ private:
     void killGroup (int group);
     void updateSlices ();
     void makeCtx (const HostInfo& host, BlockCtx& c) const;
-    void renderEffects (float* L, float* R, int n);
+    void renderEffects (float* L, float* R, int n, const HostInfo& host);
     bool regionFor (int note, PlayRegion& r) const;
     void computeBeatBounds (const PlayRegion& r);
 
@@ -204,6 +205,7 @@ private:
     double sr = 44100.0;
     float bend = 0.0f;
     bool sustain = false;
+    std::bitset<128> pedalHeld; // notes let go while the pedal was down (for the rack's Wubr)
     uint64_t ageCounter = 0;
     int groupCounter = 0;
     int lastNote = -1;

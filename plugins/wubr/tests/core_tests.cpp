@@ -149,10 +149,16 @@ TEST (free_rate_and_sync_to_the_song)
             ++peaks;
     CHECK (peaks >= 3 && peaks <= 5, "about 4 cycles in a second: %d peaks", peaks);
     // synced, playing: at song position 0.5 beats (half a 1/4 cycle) the triangle is at its top
+    // started half a beat into the song (1/4 at 120 BPM: a cycle a beat), it is at the top of the triangle;
+    // 0.2 s later it lines up with one started at the song's beginning 0.45 s before
     auto s = engine ();
-    s->setTransport (120.0, 0.5, true); // (held there: every block starts at the top)
-    auto at = levels (*s, 120.0, 0.06, 0.01);
-    CHECK (at.back () > 11.0, "the song position sets the phase: %.1f dB", at.back ());
+    s->setTransport (120.0, 0.5, true);
+    auto at = levels (*s, 120.0, 0.2, 0.01);
+    auto z = engine ();
+    z->setTransport (120.0, 0.0, true);
+    auto from0 = levels (*z, 120.0, 0.45, 0.01);
+    CHECK (at[1] > 9.0, "the song position sets the phase: %.1f dB", at[1]);
+    CHECK (std::fabs (at.back () - from0.back ()) < 0.5, "and it keeps time with the song: %.1f vs %.1f dB", at.back (), from0.back ());
 }
 
 TEST (frequency_target_sweeps_the_centre)
@@ -188,10 +194,10 @@ TEST (envelope_holds_and_releases)
     e->setParam (bandParam (0, kHold), 2.0);
     auto before = levels (*e, 120.0, 0.2, 0.05);
     CHECK (before.back () < -9.0, "at rest at the end of the shape: %.1f dB", before.back ());
-    e->noteOn ();
+    e->noteOn (60);
     auto held = levels (*e, 120.0, 1.0, 0.05); // the shape's top is 0.25 s in (1/4 at 120 BPM: 0.5 s a cycle)
     CHECK (held.back () > 9.0 && held[10] > 9.0, "held at the top: %.1f / %.1f dB", held[10], held.back ());
-    e->noteOff ();
+    e->noteOff (60);
     auto after = levels (*e, 120.0, 0.6, 0.05);
     CHECK (after.back () < -9.0, "let go: to the end: %.1f dB", after.back ());
     // an LFO would not hold
@@ -226,6 +232,74 @@ TEST (transient_trigger)
     }
     CHECK (m.triggers.load () == 2, "the tone starting, then the hit: %u triggers", m.triggers.load ());
     CHECK (std::fabs (m.pos[0].load () - 0.5f) < 0.01f && m.value[0].load () > 0.99f, "held at the hold point: %.2f", m.pos[0].load ());
+}
+
+TEST (notes_by_key_and_a_hold_moved_back)
+{
+    // the same key twice and one note-off: nothing hangs (notes are kept by key, not counted)
+    auto e = engine ();
+    e->setParam (kMode, kEnvelope);
+    e->setParam (bandParam (0, kHold), 2.0);
+    e->noteOn (60);
+    e->noteOn (60);
+    levels (*e, 120.0, 0.4, 0.05);
+    e->noteOff (60);
+    auto after = levels (*e, 120.0, 0.6, 0.05);
+    CHECK (after.back () < -9.0, "let go once: it plays to the end (%.1f dB)", after.back ());
+    // held at the top, then the hold moved back to the first point: the band follows it down
+    auto h = engine ();
+    h->setParam (kMode, kEnvelope);
+    h->setParam (bandParam (0, kHold), 2.0);
+    h->noteOn (60);
+    auto top = levels (*h, 120.0, 0.5, 0.05);
+    h->setParam (bandParam (0, kHold), 1.0);
+    auto back = levels (*h, 120.0, 0.3, 0.05);
+    CHECK (top.back () > 9.0 && back.back () < -9.0, "back to the new hold: %.1f -> %.1f dB", top.back (), back.back ());
+    h->allNotesOff ();
+}
+
+TEST (band_off_fades_and_split_blocks_stay_in_time)
+{
+    // a band at +12 dB switched off mid-tone: no jump bigger than the tone's own steps
+    auto e = engine ();
+    e->setParam (bandParam (0, kTarget), kTargetGain);
+    e->setParam (bandParam (0, kGain), 12.0);
+    e->setParam (bandParam (0, kDepth), 0.0);
+    const int n = 48000;
+    std::vector<float> l (n), r (n);
+    for (int i = 0; i < n; ++i)
+        l[(size_t)i] = r[(size_t)i] = (float)(0.1 * std::sin (2.0 * M_PI * 120.0 * i / kSr));
+    e->process (l.data (), r.data (), l.data (), r.data (), n / 2);
+    e->setParam (bandParam (0, kBandOn), 0.0);
+    e->process (l.data () + n / 2, r.data () + n / 2, l.data () + n / 2, r.data () + n / 2, n / 2);
+    double steady = 0.0, around = 0.0;
+    for (int i = 1000; i < n / 2 - 1000; ++i)
+        steady = std::max (steady, (double)std::fabs (l[(size_t)i] - l[(size_t)i - 1]));
+    for (int i = n / 2 - 100; i < n / 2 + 2000; ++i)
+        around = std::max (around, (double)std::fabs (l[(size_t)i] - l[(size_t)i - 1]));
+    CHECK (around <= steady * 1.05, "no click: %.4f vs %.4f", around, steady);
+    CHECK (std::fabs (20.0 * std::log10 (std::fabs (l[(size_t)n - 100]) + 1e-9)) < 60.0, "finite");
+    // a synced LFO while the host plays: a block split in two (as at a note) sounds like one block
+    auto run = [] (bool split) {
+        auto x = engine ();
+        x->setTransport (120.0, 3.25, true);
+        std::vector<float> a (4800), b (4800);
+        for (int i = 0; i < 4800; ++i)
+            a[(size_t)i] = b[(size_t)i] = (float)(0.1 * std::sin (2.0 * M_PI * 120.0 * i / kSr));
+        if (split)
+        {
+            x->process (a.data (), b.data (), a.data (), b.data (), 1700);
+            x->process (a.data () + 1700, b.data () + 1700, a.data () + 1700, b.data () + 1700, 3100);
+        }
+        else
+            x->process (a.data (), b.data (), a.data (), b.data (), 4800);
+        return a;
+    };
+    const auto whole = run (false), split = run (true);
+    double diff = 0.0;
+    for (size_t i = 0; i < whole.size (); ++i)
+        diff = std::max (diff, (double)std::fabs (whole[i] - split[i]));
+    CHECK (diff < 1e-4, "split at a note, still in time: %.6f", diff);
 }
 
 TEST (defaults_and_the_end_saturator)

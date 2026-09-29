@@ -26,6 +26,21 @@ const pk::ParamTable& paramTable ()
 static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams &&
                    kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
+// Wubr in a slot: its own IDs without its end saturator (5 .. 10 and 85 on), in order
+constexpr uint32_t kWubrHosted = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase);
+static_assert (wubr::kTailBase == 5 && kWubrHosted <= kSlotBlockAll, "Wubr's parameters must fit a slot's block and extension");
+static int64_t wubrIdAt (uint32_t j)
+{
+    if (j < wubr::kTailBase)
+        return j;
+    return j < kWubrHosted ? (int64_t)(j - wubr::kTailBase + wubr::kBandBase) : -1;
+}
+static int64_t wubrBlockOf (uint32_t id)
+{
+    if (id < wubr::kTailBase)
+        return id;
+    return id >= wubr::kBandBase && id < wubr::kTailExtBase ? (int64_t)(id - wubr::kBandBase + wubr::kTailBase) : -1;
+}
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
 static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields && multidyn::kRmsWindow == kSlotBlock &&
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
@@ -34,6 +49,8 @@ static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields && mu
 
 int64_t fxIdAt (int type, uint32_t j)
 {
+    if (type == kFxWubr)
+        return wubrIdAt (j);
     if (type == kFxMultidyn)
     {
         if (j == multidyn::kSatOn)
@@ -48,6 +65,8 @@ int64_t fxIdAt (int type, uint32_t j)
 
 int64_t fxBlockOf (int type, uint32_t id)
 {
+    if (type == kFxWubr)
+        return wubrBlockOf (id);
     if (type == kFxMultidyn)
     {
         if (id == multidyn::kRmsWindow)
@@ -84,6 +103,15 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
         {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
     };
+    static const std::vector<RackHidden> wubrHidden {
+        {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: the rack has one at the end"},
+        // each band's points and their count: drawn in the shape display (a ShapeView, not a control per value)
+        {wubr::bandParam (0, wubr::kPointCount), wubr::bandParam (0, wubr::kPointCount), "the shape display adds and removes points"},
+        {wubr::pointParam (0, 0, wubr::kPtX), wubr::pointParam (0, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
+        {wubr::bandParam (1, wubr::kPointCount), wubr::bandParam (1, wubr::kPointCount), "the shape display adds and removes points"},
+        {wubr::pointParam (1, 0, wubr::kPtX), wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
+    };
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Clarity button (a band works while its Range is above 0)"},
     };
@@ -93,12 +121,27 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         case kFxPara: return paraHidden;
         case kFxMultidyn: return multidynHidden;
         case kFxWidr: return widrHidden;
+        case kFxWubr: return wubrHidden;
         default: return none;
     }
 }
 
 const pk::ParamTable& fxBlockTable (int type)
 {
+    if (type == kFxWubr)
+    {
+        static const pk::ParamTable t ([] {
+            std::vector<pk::ParamInfo> v;
+            for (uint32_t j = 0; j < kWubrHosted; ++j)
+            {
+                pk::ParamInfo pi = wubr::paramTable ().info ((uint32_t)wubrIdAt (j));
+                pi.id = j;
+                v.push_back (pi);
+            }
+            return v;
+        }());
+        return t;
+    }
     if (type != kFxMultidyn)
         return fxTable (type);
     static const pk::ParamTable t ([] {
@@ -130,6 +173,7 @@ const char* fxName (int type)
         case kFxMsEq: return "m/s eq";
         case kFxSmacheratr: return "smacheratr";
         case kFxWidr: return "widr";
+        case kFxWubr: return "wubr";
         default: return "";
     }
 }
@@ -144,6 +188,7 @@ const pk::ParamTable& fxTable (int type)
         case kFxMsEq: return mseq::paramTable ();
         case kFxSmacheratr: return smacheratr::paramTable ();
         case kFxWidr: return widr::paramTable ();
+        case kFxWubr: return wubr::paramTable ();
         default: return empty;
     }
 }
@@ -165,6 +210,7 @@ void Rack::prepare (double sampleRate, int maxBlockSize)
         s->ms.prepare (sr);
         s->sat.prepare (sr, maxBlock);
         s->widr.prepare (sr, maxBlock);
+        s->wubr.prepare (sr, maxBlock);
         applyAll (*s);
     }
 }
@@ -178,6 +224,7 @@ void Rack::reset ()
         s->ms.reset ();
         s->sat.reset ();
         s->widr.reset ();
+        s->wubr.reset ();
     }
 }
 
@@ -190,6 +237,7 @@ void Rack::setMeters (RackMeters* m)
         s.para.setMeters (m ? &m->para[(size_t)i] : nullptr);
         s.sat.setMeters (m ? &m->sat[(size_t)i] : nullptr);
         s.widr.setMeters (m ? &m->widr[(size_t)i] : nullptr);
+        s.wubr.setMeters (m ? &m->wubr[(size_t)i] : nullptr);
     }
 }
 
@@ -210,13 +258,14 @@ void Rack::apply (Slot& s, uint32_t block)
             s.sat.setParam (j, j == smacheratr::kDryWet && !s.on ? 0.0 : v);
             break;
         case kFxWidr: s.widr.setParam (j, v); break;
+        case kFxWubr: s.wubr.setParam (j, v); break;
         default: break; // the M/S EQ reads its values when it runs
     }
 }
 
 void Rack::applyAll (Slot& s)
 {
-    for (uint32_t j = 0; j < kSlotBlock; ++j)
+    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         apply (s, j);
     s.multidyn.setBypass (!s.on);
     switch (s.type)
@@ -226,6 +275,7 @@ void Rack::applyAll (Slot& s)
         case kFxMsEq: s.ms.reset (); break;
         case kFxSmacheratr: s.sat.reset (); break;
         case kFxWidr: s.widr.reset (); break;
+        case kFxWubr: s.wubr.reset (); break;
         default: break;
     }
 }
@@ -234,9 +284,9 @@ void Rack::setParam (uint32_t id, double plain)
 {
     if (!isRackParam (id))
         return;
-    const uint32_t rel = id - kRackBase;
-    Slot& s = *slots[rel / kSlotSize];
-    const uint32_t field = rel % kSlotSize;
+    const RackField rf = rackField (id);
+    Slot& s = *slots[(size_t)rf.slot];
+    const uint32_t field = rf.field;
     if (field == kSlotType)
     {
         const int t = std::clamp ((int)std::lround (plain), 0, kNumFxTypes - 1);
@@ -277,6 +327,27 @@ void Rack::noteOn (int note)
     for (auto& s : slots)
         if (s->type == kFxPara)
             s->para.noteOn (note);
+        else if (s->type == kFxWubr)
+            s->wubr.noteOn (note);
+}
+
+void Rack::noteOff (int note)
+{
+    for (auto& s : slots)
+        s->wubr.noteOff (note); // every slot, so a Wubr loaded while a note is down does not hang on to it
+}
+
+void Rack::allNotesOff ()
+{
+    for (auto& s : slots)
+        s->wubr.allNotesOff ();
+}
+
+void Rack::setTransport (double bpm, double ppq, bool playing)
+{
+    for (auto& s : slots)
+        if (s->type == kFxWubr)
+            s->wubr.setTransport (bpm, ppq, playing);
 }
 
 void Rack::setPitchBend (float bipolar)
@@ -312,6 +383,10 @@ void Rack::process (float* L, float* R, int n)
             case kFxWidr:
                 if (s.on)
                     s.widr.process (L, R, L, R, n);
+                break;
+            case kFxWubr:
+                if (s.on)
+                    s.wubr.process (L, R, L, R, n);
                 break;
             default: break;
         }

@@ -564,9 +564,15 @@ void Engine::setSustain (bool onOff)
 {
     sustain = onOff;
     if (!onOff)
+    {
         for (auto& v : voices)
             if (v.isActive () && v.sustained)
                 v.release (p);
+        for (int n = 0; n < 128; ++n)
+            if (pedalHeld.test ((size_t)n))
+                rack.noteOff (n);
+        pedalHeld.reset ();
+    }
 }
 
 void Engine::updateSlices ()
@@ -792,6 +798,11 @@ void Engine::startNote (int note, float velocity, bool)
 
 void Engine::noteOff (int note)
 {
+    // Wubr: letting go plays the rest of its envelopes (with the pedal down: when it comes up, as the sound)
+    if (sustain)
+        pedalHeld.set ((size_t)std::clamp (note, 0, 127));
+    else
+        rack.noteOff (note);
     const int mode = idx (p[kMode]);
     if (mode == kModeClassic && idx (p[kGlideMode]) == kGlideMono)
     {
@@ -824,6 +835,8 @@ void Engine::noteOff (int note)
 void Engine::allNotesOff ()
 {
     monoStack.clear ();
+    rack.allNotesOff ();
+    pedalHeld.reset ();
     for (auto& v : voices)
         if (v.isActive ())
             v.release (p);
@@ -853,7 +866,7 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
     globalLfoPhase -= std::floor (globalLfoPhase);
     if (!smp)
     {
-        renderEffects (L, R, n);
+        renderEffects (L, R, n, host);
         return;
     }
     updateSlices ();
@@ -879,11 +892,12 @@ void Engine::render (float* L, float* R, int n, const HostInfo& host)
         L[i] *= volGain;
         R[i] *= volGain;
     }
-    renderEffects (L, R, n);
+    renderEffects (L, R, n, host);
 }
 
-void Engine::renderEffects (float* L, float* R, int n)
+void Engine::renderEffects (float* L, float* R, int n, const HostInfo& host)
 {
+    rack.setTransport (host.bpm > 0.0 ? host.bpm : 120.0, host.ppq, host.playing && host.ppqValid);
     rack.process (L, R, n);
     tail.process (L, R, n);
 }

@@ -7,6 +7,7 @@
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace smempler {
 
@@ -21,7 +22,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 5: Clarity Frequency 20 Hz - 20 kHz (20 - 500 Hz before), in the rack and the end saturator
 // 6: Clarity's second band in the rack
 // 7: one Clarity button (a band works while its Range is above 0), in the rack and the end saturator
-constexpr int32 kVersion = 7;
+// 8: Wubr in the rack: the slot type's choice has one more entry
+constexpr int32 kVersion = 8;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -107,6 +109,14 @@ bool readState (IBStream* stream, PluginState& st)
         st.norm[kLoopFadePower] = st.constantPowerFade ? 1.0 : 0.0;
         st.has[kLoopFadePower] = true;
     }
+    // the slot type was stored over the kinds before Wubr: the same kind on the longer list
+    if (version < 8)
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (st.has[typeId])
+                st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeWubr - 1)));
+        }
     migrateToRack (st);
     if (version < 2)
         for (int slot = 0; slot < kRackSlots; ++slot)

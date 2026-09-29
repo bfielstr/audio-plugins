@@ -213,7 +213,7 @@ std::vector<ParamInfo> buildTable ()
     for (int s = 0; s < kRackSlots; ++s)
     {
         const std::string fx = "FX " + std::to_string (s + 1);
-        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr"},
+        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr", "wubr"},
                      kFxEmpty));
         add (toggle ((ParamId)slotParam (s, kSlotOn), keep (fx + " On"), keep (fx + " On"), true));
         for (uint32_t j = 0; j < kSlotBlock; ++j)
@@ -224,6 +224,13 @@ std::vector<ParamInfo> buildTable ()
     }
     // the rest of the end-of-chain Smacheratr
     smacheratr::addTailExtParams (t, kTailExtBase);
+    // the slots' extensions
+    for (int s = 0; s < kRackSlots; ++s)
+        for (uint32_t j = kSlotBlock; j < kSlotBlockAll; ++j)
+        {
+            const std::string n = "FX " + std::to_string (s + 1) + " " + std::to_string (j + 1);
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+        }
     return t;
 }
 

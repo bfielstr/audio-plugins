@@ -117,9 +117,13 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
 
     // the host's tempo and song position (synced LFOs follow it while it plays)
     if (const ProcessContext* ctx = data.processContext)
-        engine.setTransport ((ctx->state & ProcessContext::kTempoValid) ? ctx->tempo : 120.0,
-                             (ctx->state & ProcessContext::kProjectTimeMusicValid) ? ctx->projectTimeMusic : 0.0,
-                             (ctx->state & ProcessContext::kPlaying) != 0);
+    {
+        const bool ppqValid = (ctx->state & ProcessContext::kProjectTimeMusicValid) != 0;
+        engine.setTransport ((ctx->state & ProcessContext::kTempoValid) ? ctx->tempo : 120.0, ppqValid ? ctx->projectTimeMusic : 0.0,
+                             ppqValid && (ctx->state & ProcessContext::kPlaying) != 0);
+    }
+    else
+        engine.setTransport (120.0, 0.0, false);
 
     // note events, in order, applied between the pieces of the block
     struct Ev
@@ -127,10 +131,11 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         int offset, note;
         bool on;
     };
-    Ev events[64];
+    constexpr int kMaxEvents = 512;
+    Ev events[kMaxEvents];
     int numEvents = 0;
     if (data.inputEvents)
-        for (int32 i = 0; i < data.inputEvents->getEventCount () && numEvents < 64; ++i)
+        for (int32 i = 0; i < data.inputEvents->getEventCount () && numEvents < kMaxEvents; ++i)
         {
             Event e {};
             if (data.inputEvents->getEvent (i, e) != kResultOk)
@@ -141,7 +146,10 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             else if (e.type == Event::kNoteOffEvent)
                 events[numEvents++] = {off, e.noteOff.pitch, false};
         }
-    std::stable_sort (events, events + numEvents, [] (const Ev& a, const Ev& b) { return a.offset < b.offset; });
+    // in order of time, keeping the order of events at the same time (an insertion sort: no allocation)
+    for (int i = 1; i < numEvents; ++i)
+        for (int j = i; j > 0 && events[j - 1].offset > events[j].offset; --j)
+            std::swap (events[j - 1], events[j]);
 
     const float* inL = data.inputs[0].channelBuffers32[0];
     const float* inR = data.inputs[0].channelBuffers32[1];
@@ -157,9 +165,9 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         if (k < numEvents)
         {
             if (events[k].on)
-                engine.noteOn ();
+                engine.noteOn (events[k].note);
             else
-                engine.noteOff ();
+                engine.noteOff (events[k].note);
         }
     }
     data.outputs[0].silenceFlags = 0;
