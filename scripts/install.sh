@@ -1,6 +1,6 @@
 #!/bin/sh
 # Downloads the latest release and installs the VST3 plug-ins (Smempler, Multidyn, Locus, Stretchr,
-# Smacheratr, Para, Widr, Wubr)
+# Smacheratr, Para, Widr, Wubr, Detonatr, Levlr)
 # for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
 # removed (only if they are ours).

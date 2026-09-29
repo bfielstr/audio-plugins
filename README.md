@@ -1,4 +1,4 @@
-# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr
+# Audio plug-ins: Smempler, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -9,10 +9,12 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
-| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, an optional pre-limiter before the drive, colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
+| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 | [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf, a MIDI-triggered split envelope, and Vocal / Liquid movement | a morphing EQ, Live-styled |
 | [**Widr**](plugins/widr/README.md) | Trailer-style stereo width (Haas, decorrelation, micro pitch, early reflections, a side-only reverb) that keeps the mono fold; the Widrs of a session share the stereo field by role | cinematic trailer mixing |
 | [**Wubr**](plugins/wubr/README.md) | Two bell bands whose gain and/or centre you draw LFO shapes for (synced or free), or run as envelopes triggered by MIDI or transients with a hold point; Smacheratr at the end | LFO Tool / ShaperBox-style wubs |
+| [**Detonatr**](plugins/detonatr/README.md) | Explosion / impact designer: denoise and dereverb, tuned resonators and vocoded recordings of household items with a disperser, Multidyn, a spike-and-drop transient shaper and Smacheratr, in any order | a sound designer's RX, vocoder, disperser, multiband, transient and saturator chain |
+| [**Levlr**](plugins/levlr/README.md) | The spectrum in four touching bands with a level each: movable minimum-phase Linkwitz-Riley crossovers (12/24/48 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
 
 ![Smempler](docs/smempler/ui_slicing.png)
 
@@ -89,6 +91,8 @@ plugins/smacheratr saturator              same structure
 plugins/para    parallel filters        same structure
 plugins/widr    stereo width            same structure
 plugins/wubr    drawn band LFOs         same structure
+plugins/detonatr explosion designer    same structure
+plugins/levlr   four-band levels        same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
