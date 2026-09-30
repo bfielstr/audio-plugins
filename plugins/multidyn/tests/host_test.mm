@@ -97,7 +97,7 @@ int main (int argc, char** argv)
         CHECK (std::lround (plainOf (rig, kBands)) == 2 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (1, kAboveRatio)) - 66.7) < 1e-6 &&
                    std::fabs (plainOf (rig, bandParam (0, kBandOutput))) < 1e-6 &&
-                   plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, multidyn::kOutput)) < 1e-6,
+                   std::fabs (plainOf (rig, bandParam (2, kBelowRatio)) - 4.17) < 1e-6 && std::fabs (plainOf (rig, multidyn::kOutput)) < 1e-6,
                "preset defaults");
         CHECK (std::lround (plainOf (rig, kXoverSlope)) == kXover24 && plainOf (rig, kSoftenColor) < 0.5 && plainOf (rig, kSubOn) < 0.5 &&
                    std::fabs (plainOf (rig, kSubFreq) - 40.0) < 1e-6,

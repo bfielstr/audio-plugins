@@ -482,7 +482,8 @@ int main (int argc, char** argv)
         {
             auto v10 = baseState (wav);
             const uint32_t typeId = smemplr::slotParam (0, smemplr::kSlotType);
-            v10.norm[typeId] = smemplr::toNormalized (typeId, smemplr::kFxSmacheratr);
+            // (version 10 stored the slot type over the kinds before Gently and Smoothr)
+            v10.norm[typeId] = (double)smemplr::kFxSmacheratr / (smemplr::kFxTypesBeforeGently - 1);
             for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 v10.norm[smemplr::slotBlockParam (0, id)] = 1.0;
             MemoryStream raw;
