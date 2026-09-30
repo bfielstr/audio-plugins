@@ -36,6 +36,15 @@ struct PeakLevel
     std::vector<float> mn[2], mx[2];
 };
 
+// A band-limited, decimated copy of the sample for reading it fast (far transposed up): level k
+// is low-passed below its own Nyquist and keeps every 2^k-th frame, so its frame j is at frame
+// j * 2^k of the sample (the filters are centred: no delay). See Interp.h: SampleReader.
+struct MipLevel
+{
+    int length = 0;
+    std::vector<float> ch[2];
+};
+
 class SampleData
 {
 public:
@@ -49,9 +58,27 @@ public:
     std::vector<Onset> onsets;
     PeakLevel peaks; // coarse min/max for fast waveform drawing
     float peakAbs = 0.0f;
+    // Levels 1 .. kMipLevels (1/2 .. 1/64 of the rate): mips[k - 1] is level k. A read 2^k times
+    // faster than real time takes level k, so a sample transposed far up (+48 semitones, and
+    // bent or modulated further) never aliases. About as much memory again as the sample.
+    static constexpr int kMipLevels = 6;
+    std::vector<MipLevel> mips;
 
     const float* data (int c) const { return ch[c < numChannels ? c : 0].data (); }
     double seconds () const { return length / sampleRate; }
+    // Level 0 is the sample itself.
+    int levels () const { return 1 + (int)mips.size (); }
+    const float* levelData (int level, int c) const
+    {
+        if (level <= 0)
+            return data (c);
+        const auto& m = mips[(size_t)level - 1];
+        return m.ch[c < numChannels ? c : 0].data ();
+    }
+    int levelLength (int level) const { return level <= 0 ? length : mips[(size_t)level - 1].length; }
+
+    // Builds the band-limited levels (loaders call it; off the audio thread).
+    void buildMips ();
 
     // Nearest zero crossing (left channel) within +/- maxDistance frames, or pos if none.
     int snapToZero (int pos, int maxDistance = 4096) const;

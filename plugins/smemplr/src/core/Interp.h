@@ -2,6 +2,8 @@
 // than real time so that pitching up doesn't alias.
 #pragma once
 
+#include "SampleData.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -124,5 +126,87 @@ inline int sincReach (float cutoff)
 {
     return (int)std::ceil (SincTable::kHalf / std::clamp (cutoff, SincTable::kMinCutoff, 1.0f)) + 1;
 }
+
+// Reads a sample at any speed without aliasing. readSinc alone narrows its band for a fast read only
+// down to kMinCutoff (4x faster than real time); faster, the rest folds down across the spectrum. So a
+// fast read takes a band-limited level of the sample instead (SampleData::mips): level k is read
+// between 1 and 2^0.75 of its own rate, where readSinc's kernel is short (16 to 28 taps). In the top
+// quarter octave before the next level, the two are crossfaded by how far the rate is into it, so a
+// pitch bend or glide across a level glides too (the levels are phase-aligned: a plain linear blend).
+// Below 2^0.75 (+9 semitones at the same sample rate) the sample itself is read exactly as readSinc
+// always did.
+class SampleReader
+{
+public:
+    static constexpr double kFadeFrom = 0.75; // of an octave: where the crossfade to the next level starts
+
+    SampleReader () = default;
+    SampleReader (const SampleData& s, double rate) { set (s, rate); }
+
+    // rate: sample frames per output sample (the read head's speed)
+    void set (const SampleData& s, double rate)
+    {
+        rate = std::max (rate, 1e-9);
+        const int top = s.levels () - 1;
+        if (top <= 0 || rate < std::exp2 (kFadeFrom))
+        {
+            use (0, s, 0, rate, 1.0f);
+            count = 1;
+            return;
+        }
+        const double oct = std::log2 (rate);
+        const int k = std::min ((int)std::floor (oct), top);
+        const double f = oct - k; // above the top level f grows past 1: that level alone, narrowed
+        if (k >= top || f < kFadeFrom)
+        {
+            use (0, s, k, rate, 1.0f);
+            count = 1;
+            return;
+        }
+        const float t = (float)((f - kFadeFrom) / (1.0 - kFadeFrom));
+        use (0, s, k, rate, 1.0f - t);
+        use (1, s, k + 1, rate, t);
+        count = 2;
+    }
+
+    // Positions are in the sample's frames (whatever the level); outside it reads 0.
+    void read (double pos, float& l, float& r) const
+    {
+        const Src& a = src[0];
+        readSinc (a.a, a.b, a.len, pos * a.scale, a.cutoff, l, r);
+        if (count == 1)
+            return;
+        const Src& b = src[1];
+        float l2, r2;
+        readSinc (b.a, b.b, b.len, pos * b.scale, b.cutoff, l2, r2);
+        l = l * a.gain + l2 * b.gain;
+        r = r * a.gain + r2 * b.gain;
+    }
+
+    int level () const { return src[count - 1].level; } // the (upper) level read
+
+private:
+    struct Src
+    {
+        const float* a = nullptr;
+        const float* b = nullptr;
+        int len = 0, level = 0;
+        double scale = 1.0; // level frames per sample frame (exact: a power of two)
+        float cutoff = 1.0f, gain = 1.0f;
+    };
+    void use (int i, const SampleData& s, int level, double rate, float gain)
+    {
+        Src& d = src[i];
+        d.level = level;
+        d.a = s.levelData (level, 0);
+        d.b = s.numChannels > 1 ? s.levelData (level, 1) : nullptr;
+        d.len = s.levelLength (level);
+        d.scale = std::ldexp (1.0, -level);
+        d.cutoff = (float)std::min (1.0, 1.0 / (rate * d.scale));
+        d.gain = gain;
+    }
+    Src src[2];
+    int count = 1;
+};
 
 } // namespace smemplr

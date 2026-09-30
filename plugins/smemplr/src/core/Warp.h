@@ -17,6 +17,8 @@
 
 namespace smemplr {
 
+class SampleReader; // Interp.h
+
 struct PlayRegion
 {
     double start = 0.0, end = 0.0; // source frames, playback region
@@ -64,7 +66,7 @@ private:
         int dir = 1;
         bool active = false;
     };
-    void readerTick (const SampleData& s, Reader& rd, double rate, float cutoff, float& l, float& r) const;
+    void readerTick (const SampleData& s, const SampleReader& in, Reader& rd, double rate, float& l, float& r) const;
     void beginSegment (int idx, double p, const WarpRates& w);
 
     PlayRegion region;
@@ -125,17 +127,25 @@ public:
 private:
     void synthesiseFrame (const SampleData& s, const WarpRates& w);
     void readFrame (const SampleData& s, double centre, float* mid, float* l, float* r) const;
+    void setFrame (int size);
+    void chooseLevel (const SampleData& s, double consume);
 
     static constexpr int kMaxN = 4096;
     static constexpr int kFifo = 16384;
     PlayRegion region;
-    Fft fft1k {1024}, fft2k {2048}, fft4k {4096};
+    Fft fft256 {256}, fft512 {512}, fft1k {1024}, fft2k {2048}, fft4k {4096};
     Fft* fft = &fft2k;
-    int N = 2048, hs = 512;
+    int N = 2048, hs = 512, baseN = 2048; // baseN: the frame at the sample's rate
     bool stereo = false, formantMode = false, firstFrame = true;
     float formants = 1.0f;
     int envOrder = 128;
     double apos = 0.0, v = 0.0;
+    // Read far faster than real time, the vocoder works on a band-limited level of the sample
+    // (SampleData::mips), at its rate: the fifo holds that rate and is read that much slower. The
+    // level is chosen when the note starts (from its speed then) and kept for the note, as the
+    // vocoder's state is at that rate; a bend of up to about an octave up still reads it cleanly.
+    int level = -1;            // -1: not chosen yet
+    double levelScale = 1.0;   // 2^level: sample frames per level frame
     double readPos = 0.0;      // fifo read position (absolute)
     long long written = 0;     // fifo frames written (absolute)
     long long endWritten = -1; // fifo index where the region ended

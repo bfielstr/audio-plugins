@@ -10,10 +10,6 @@
 namespace smemplr {
 
 namespace {
-inline void readAt (const SampleData& s, double pos, float cutoff, float& l, float& r)
-{
-    readSinc (s.data (0), s.numChannels > 1 ? s.data (1) : nullptr, s.length, pos, cutoff, l, r);
-}
 inline float wrapPi (float x)
 {
     x = std::fmod (x + (float)M_PI, 2.0f * (float)M_PI);
@@ -88,7 +84,7 @@ void BeatsWarp::beginSegment (int idx, double p, const WarpRates& w)
     cur.active = true;
 }
 
-void BeatsWarp::readerTick (const SampleData& s, Reader& rd, double rate, float cutoff, float& l, float& r) const
+void BeatsWarp::readerTick (const SampleData& s, const SampleReader& in, Reader& rd, double rate, float& l, float& r) const
 {
     switch (loopMode)
     {
@@ -99,7 +95,7 @@ void BeatsWarp::readerTick (const SampleData& s, Reader& rd, double rate, float 
                 l = r = 0.0f;
                 break;
             }
-            readAt (s, rd.pos, cutoff, l, r);
+            in.read (rd.pos, l, r);
             const double xf = fadeLen * rate;
             const double rem = rd.segEnd - rd.pos;
             if (rem < xf)
@@ -114,13 +110,13 @@ void BeatsWarp::readerTick (const SampleData& s, Reader& rd, double rate, float 
         case 1: // Forward loop of the segment tail
         {
             const double tail = rd.segEnd - rd.tailStart;
-            readAt (s, rd.pos, cutoff, l, r);
+            in.read (rd.pos, l, r);
             const double xf = std::min (tail * 0.5, 0.004 * s.sampleRate);
             if (xf > 2.0 && rd.pos > rd.segEnd - xf)
             {
                 const float x = (float)((rd.pos - (rd.segEnd - xf)) / xf);
                 float l2, r2;
-                readAt (s, rd.pos - tail, cutoff, l2, r2);
+                in.read (rd.pos - tail, l2, r2);
                 l = l * (1.0f - x) + l2 * x;
                 r = r * (1.0f - x) + r2 * x;
             }
@@ -132,7 +128,7 @@ void BeatsWarp::readerTick (const SampleData& s, Reader& rd, double rate, float 
         }
         default: // Back and forth over the tail
         {
-            readAt (s, rd.pos, cutoff, l, r);
+            in.read (rd.pos, l, r);
             rd.pos += rate * rd.dir;
             int guard = 0;
             while (++guard < 64)
@@ -158,7 +154,7 @@ void BeatsWarp::readerTick (const SampleData& s, Reader& rd, double rate, float 
 void BeatsWarp::render (const SampleData& s, float* L, float* R, int n, const WarpRates& w)
 {
     const double rate = w.pitchRatio * w.srcRate;
-    const float cutoff = (float)std::min (1.0, 1.0 / rate);
+    const SampleReader in (s, rate); // band-limited at any speed
     const float envPow = (1.0f - envelope) * 3.0f;
     for (int i = 0; i < n; ++i)
     {
@@ -175,7 +171,7 @@ void BeatsWarp::render (const SampleData& s, float* L, float* R, int n, const Wa
         lastP = p;
 
         float l, r;
-        readerTick (s, cur, rate, cutoff, l, r);
+        readerTick (s, in, cur, rate, l, r);
         if (envPow > 0.0f)
         {
             const float t = (float)std::min (1.0, segOutElapsed / segOutLen);
@@ -186,7 +182,7 @@ void BeatsWarp::render (const SampleData& s, float* L, float* R, int n, const Wa
         if (oldFade > 0)
         {
             float ol, orr;
-            readerTick (s, old, rate, cutoff, ol, orr);
+            readerTick (s, in, old, rate, ol, orr);
             const float x = (float)oldFade / (float)fadeLen;
             l = l * (1.0f - x) + ol * x;
             r = r * (1.0f - x) + orr * x;
@@ -276,7 +272,7 @@ double GrainWarp::align (const SampleData& s, double natural, double target, dou
 void GrainWarp::render (const SampleData& s, float* L, float* R, int n, const WarpRates& w)
 {
     const double rate = w.pitchRatio * w.srcRate;
-    const float cutoff = (float)std::min (1.0, 1.0 / rate);
+    const SampleReader in (s, rate); // band-limited at any speed
     const int hop = grainLen / 2;
     const double fadeSrc = 64.0 * rate;
     for (int i = 0; i < n; ++i)
@@ -328,7 +324,7 @@ void GrainWarp::render (const SampleData& s, float* L, float* R, int n, const Wa
             if (wgt > 0.0f)
             {
                 float l, r;
-                readAt (s, g.src, cutoff, l, r);
+                in.read (g.src, l, r);
                 sl += l * wgt;
                 sr += r * wgt;
             }
@@ -369,11 +365,10 @@ void PvWarp::start (const SampleData& s, const PlayRegion& r, bool fm, float f01
     formantMode = fm;
     formants = std::clamp (f01, 0.0f, 1.0f);
     envOrder = order;
-    N = frameSize == 1024 || frameSize == 2048 || frameSize == 4096 ? frameSize : (s.sampleRate > 50000.0 ? 4096 : 2048);
-    fft = N == 4096 ? &fft4k : (N == 2048 ? &fft2k : &fft1k);
-    hs = N / 4;
-    for (int i = 0; i < N; ++i)
-        window[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N);
+    baseN = frameSize == 1024 || frameSize == 2048 || frameSize == 4096 ? frameSize : (s.sampleRate > 50000.0 ? 4096 : 2048);
+    level = -1; // chosen by the first render, from the speed the note starts at
+    levelScale = 1.0;
+    setFrame (baseN);
     stereo = s.numChannels > 1;
     std::fill (olaL.begin (), olaL.end (), 0.0f);
     std::fill (olaR.begin (), olaR.end (), 0.0f);
@@ -382,24 +377,49 @@ void PvWarp::start (const SampleData& s, const PlayRegion& r, bool fm, float f01
     apos = r.start;
     v = r.start;
     written = 0;
-    readPos = N / 2;
     firstFrame = true;
     finished = false;
 }
 
+void PvWarp::setFrame (int size)
+{
+    N = size;
+    fft = N == 4096 ? &fft4k : (N == 2048 ? &fft2k : (N == 1024 ? &fft1k : (N == 512 ? &fft512 : &fft256)));
+    hs = N / 4;
+    for (int i = 0; i < N; ++i)
+        window[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N);
+    readPos = N / 2;
+}
+
+void PvWarp::chooseLevel (const SampleData& s, double consume)
+{
+    // the level whose rate the note starts at between 2^0.5 and 2^1.5 times real time: room to bend
+    // about an octave up (readSincRing is clean up to 4x) and some down before the top gets dull
+    level = consume >= std::exp2 (1.5) ? std::min ((int)std::floor (std::log2 (consume) - 0.5), s.levels () - 1) : 0;
+    levelScale = std::ldexp (1.0, level);
+    // the same analysis as at the sample's rate: frames as long in the sample's time, so the same
+    // frequency resolution (and the same transients), at the level's rate
+    if (level > 0)
+        setFrame (std::max (256, baseN >> level));
+}
+
 void PvWarp::readFrame (const SampleData& s, double centre, float* mid, float* l, float* r) const
 {
-    const long long c = (long long)std::llround (centre);
-    const float* d0 = s.data (0);
-    const float* d1 = stereo ? s.data (1) : nullptr;
+    // centre and the region are in the sample's frames; the frame's samples are the level's
+    const int lv = std::max (level, 0);
+    const double scale = levelScale;
+    const long long c = (long long)std::llround (centre / scale);
+    const float* d0 = s.levelData (lv, 0);
+    const float* d1 = stereo ? s.levelData (lv, 1) : nullptr;
+    const long long len = s.levelLength (lv);
     for (int i = 0; i < N; ++i)
     {
-        const double vp = (double)(c - N / 2 + i);
+        const double vp = (double)(c - N / 2 + i) * scale;
         float a = 0.0f, b = 0.0f;
         if (vp >= region.start && !region.pastEnd (vp))
         {
-            const long long idx = (long long)region.map (vp);
-            if (idx >= 0 && idx < s.length)
+            const long long idx = lv == 0 ? (long long)region.map (vp) : (long long)std::floor (region.map (vp) / scale + 0.5);
+            if (idx >= 0 && idx < len)
             {
                 a = d0[idx];
                 b = d1 ? d1[idx] : a;
@@ -420,7 +440,7 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     const int bins = N / 2 + 1;
     const float twoPi = 2.0f * (float)M_PI;
 
-    readFrame (s, apos - hs, fa.data (), nullptr, nullptr);
+    readFrame (s, apos - hs * levelScale, fa.data (), nullptr, nullptr);
     readFrame (s, apos, fb.data (), fl.data (), stereo ? fr.data () : nullptr);
     fft->forward (fa.data (), sa.data ());
     fft->forward (fb.data (), sb.data ());
@@ -570,14 +590,16 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     std::fill (olaW.begin () + (N - hs), olaW.begin () + N, 0.0f);
     written += hs;
 
-    const double consume = w.pitchRatio * w.srcRate; // fifo frames read per output sample
-    apos += hs * w.srcPerOut / consume;
+    const double consume = w.pitchRatio * w.srcRate / levelScale; // fifo frames read per output sample
+    apos += hs * w.srcPerOut / consume * levelScale;
     firstFrame = false;
 }
 
 void PvWarp::render (const SampleData& s, float* L, float* R, int n, const WarpRates& w)
 {
-    const double consume = w.pitchRatio * w.srcRate;
+    if (level < 0)
+        chooseLevel (s, w.pitchRatio * w.srcRate);
+    const double consume = w.pitchRatio * w.srcRate / levelScale; // the fifo is at the level's rate
     const float cutoff = (float)std::min (1.0, 1.0 / consume);
     const int reach = sincReach (cutoff);
     const int mask = kFifo - 1;

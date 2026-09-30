@@ -132,6 +132,14 @@ inline const char* forParam (uint32_t id)
         case kGlideMode: return "Glide: monophonic legato slides. Portamento: every new note slides from the last one.";
         case kGlideTime: return "Glide / portamento time.";
         case kLoopFadePower: return "Loop crossfade shape: constant power (on) or linear.";
+        case kTransHpOn:
+            return "A high-pass that follows the transposition: its cutoff moves with Transpose, Detune, pitch bend, the "
+                   "pitch envelope and LFO (not with the key played), so a sample transposed far up keeps its own "
+                   "low end (rumble, DC) below the audible range.";
+        case kTransHpFreq:
+            return "The high-pass's cutoff at 0 semitones: it doubles for each octave the sample is transposed up "
+                   "(20 Hz at +48 is 320 Hz). Drag up/down, double-click to reset.";
+        case kTransHpSlope: return "The high-pass's slope, as in Para: 6 and 18 dB are -3 dB at the cutoff, 12 to 48 dB (Linkwitz-Riley) -6 dB.";
         default: break;
     }
     const uint32_t b = envAdsrBase (0);

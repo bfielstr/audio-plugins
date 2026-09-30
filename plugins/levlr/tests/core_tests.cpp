@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <complex>
 #include <cstdio>
@@ -61,11 +62,13 @@ static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set 
     return e;
 }
 
-// The engine's impulse response (left channel), `secs` long.
+// The engine's impulse response (left channel), `secs` long, from its latency on (so the drives'
+// constant delay doesn't count as phase).
 static std::vector<double> impulse (Engine& e, double sr = kSr, double secs = 1.0)
 {
-    const int n = (int)(secs * sr);
-    std::vector<double> h ((size_t)n);
+    const int lat = e.latency ();
+    const int n = (int)(secs * sr) + lat;
+    std::vector<double> h ((size_t)(n - lat));
     std::vector<float> l (512), r (512);
     for (int pos = 0; pos < n; pos += 512)
     {
@@ -76,7 +79,8 @@ static std::vector<double> impulse (Engine& e, double sr = kSr, double secs = 1.
         std::copy (l.begin (), l.end (), r.begin ());
         e.process (l.data (), r.data (), l.data (), r.data (), m);
         for (int i = 0; i < m; ++i)
-            h[(size_t)(pos + i)] = l[(size_t)i];
+            if (pos + i >= lat)
+                h[(size_t)(pos + i - lat)] = l[(size_t)i];
     }
     return h;
 }
@@ -144,6 +148,15 @@ TEST (parameters_and_defaults)
                "band %d at 0 dB, heard", b + 1);
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
            "the end Smacheratr: off, Pre-Limit on");
+    // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
+    CHECK (kBandCount == 45 && kDriveBase == 46 && kNumParams == 54, "Bands at 45, the drives at 46 .. 53");
+    CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
+    for (int b = 0; b < kBands; ++b)
+        CHECK (t.info (driveParam (b, kDriveDb)).def == 0.0 && t.info (driveParam (b, kDriveDb)).max == kMaxDriveDb &&
+                   t.info (driveParam (b, kDriveType)).def == (double)kDriveAnalog &&
+                   std::string (t.info (driveParam (b, kDriveDb)).name) == "Band " + std::to_string (b + 1) + " Drive",
+               "band %d: drive 0 dB (off), Analog", b + 1);
+    CHECK (t.info (driveParam (0, kDriveType)).choices.size () == (size_t)kNumDriveTypes, "five drive types");
     std::printf ("    %u parameters (tail at %u, bands at %u, tail ext at %u)\n", (unsigned)kNumParams, (unsigned)kTailBase,
                  (unsigned)kBandBase, (unsigned)kTailExtBase);
 }

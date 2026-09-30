@@ -154,8 +154,14 @@ enum ParamId : uint32_t
     // --- added in 0.8: the rack slots' extensions (the end saturator's block before it is full: its
     // fields are fixed at 17; more would go after this) ---
     kRackExtBase = kTailExtBase + 17,
+    // --- added after the rack's extensions: a high-pass on each voice whose cutoff follows the pitch
+    // it is transposed by (Transpose, Detune, pitch bend, the pitch envelope and LFO; the key played
+    // does not move it; Engine.cpp: Voice::render). New IDs go after these. ---
+    kTransHpOn = kRackExtBase + kRackSlots * kSlotExt,
+    kTransHpFreq,  // Hz: the cutoff at 0 semitones
+    kTransHpSlope, // 6 / 12 / 18 / 24 / 36 / 48 dB per octave
 
-    kNumParams = kRackExtBase + kRackSlots * kSlotExt
+    kNumParams
 };
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
@@ -241,6 +247,7 @@ enum FilterCircuit { kClean = 0, kOSR, kMS2, kSMP, kPRD };
 enum AmpLoop { kAmpLoopNone = 0, kAmpLoopTrigger, kAmpLoopLoop, kAmpLoopBeat, kAmpLoopSync };
 enum LfoWave { kSine = 0, kSquare, kTriangle, kSawDown, kSawUp, kRandom };
 enum GlideMode { kGlideOff = 0, kGlideMono, kGlidePorta };
+enum TransHpSlope { kTransHp6 = 0, kTransHp12, kTransHp18, kTransHp24, kTransHp36, kTransHp48 };
 
 int voicesFromIndex (int index);
 double syncDivisionBeats (int index); // length in quarter-note beats

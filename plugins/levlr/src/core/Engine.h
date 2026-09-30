@@ -1,13 +1,22 @@
-// Levlr: the spectrum in four bands that touch (band k's top edge is band k+1's bottom edge), each
-// with its own level, then Output and the Smacheratr at the end of the chain.
+// Levlr: the spectrum in up to four bands that touch (band k's top edge is band k+1's bottom edge),
+// each with its own level and drive, then Output and the Smacheratr at the end of the chain.
 // The bands come from a tree of Linkwitz-Riley splits (Crossover.h), minimum phase: split at
 // crossover 1 into band 1 and the rest, the rest at crossover 2, and so on; bands 1 and 2 then go
 // through the all-passes of the crossovers above them, so with every band at 0 dB the four add up to
 // an all-pass of the input. Its level is flat and its phase turns around each crossover: the sound of
 // the crossovers, on purpose (moving a band's level is then a shelf-like step between two edges).
+//   Bands (1 .. 4): with N bands only the first N-1 crossovers split (1 band: no split at all, the input
+// as it is). The whole tree always runs: N bands are taps on it (3 bands: band 1 through crossover 2's
+// all-pass only, band 2 before crossover 3's all-pass, band 3 the input of crossover 3), so a new
+// count crossfades (20 ms) between the two sets of taps, which are there at once.
+//   Each band then: its level, then its drive (Drive.h), then all of them add up. The drive's
+// oversampling delays a band, so every band is delayed by that latency, driven or not (and the
+// output's level with them): with every drive off the output is today's Levlr's, bit for bit, only
+// latency () samples later (37 at 48 kHz, 59 at 44.1, 14 at 96).
 #pragma once
 
 #include "Crossover.h"
+#include "Drive.h"
 #include "Params.h"
 
 #include "pluginkit/ScopeBuffer.h"
@@ -17,6 +26,7 @@
 #include <atomic>
 #include <cmath>
 #include <complex>
+#include <vector>
 
 namespace levlr {
 
@@ -28,12 +38,13 @@ ParamArray defaultParams ();
 void effectiveCrossovers (const double set[kCrossovers], double sampleRate, double out[kCrossovers]);
 
 // Each band's gain as the engine applies it (linear): its level, or 0 when it is muted or another
-// band is soloed. A soloed band is heard even when muted.
+// band is soloed. A soloed band is heard even when muted. Only the bands in use (count) count for
+// solo (a soloed band past them doesn't silence the rest).
 template <typename Get>
-void bandGains (Get plain, double gains[kBands])
+void bandGains (Get plain, double gains[kBands], int count = kBands)
 {
     bool anySolo = false;
-    for (int b = 0; b < kBands; ++b)
+    for (int b = 0; b < count && b < kBands; ++b)
         anySolo |= plain (bandParam (b, kSolo)) >= 0.5;
     for (int b = 0; b < kBands; ++b)
     {
@@ -42,10 +53,12 @@ void bandGains (Get plain, double gains[kBands])
     }
 }
 
-// One band's response at f (crossovers as effectiveCrossovers gives them), and the whole of them.
-std::complex<double> bandResponse (int band, const double xover[kCrossovers], int slope, double f, double sampleRate);
+// One band's response at f (crossovers as effectiveCrossovers gives them), and the whole of them,
+// with `count` bands in use (the bands past them: 0).
+std::complex<double> bandResponse (int band, const double xover[kCrossovers], int slope, double f, double sampleRate,
+                                   int count = kBands);
 std::complex<double> totalResponse (const double xover[kCrossovers], int slope, const double gains[kBands], double f,
-                                    double sampleRate);
+                                    double sampleRate, int count = kBands);
 
 // For the editor (written by the audio thread).
 struct Meters
@@ -65,19 +78,26 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return hasTail ? tail.latency () : 0; }
+    // the drives' oversampling (always, whatever is on), and the end saturator's
+    int latency () const { return driveLatency () + (hasTail ? tail.latency () : 0); }
+    int driveLatency () const { return drive[0].latency (); }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
     int slopeInUse () const { return slopeNow; }
 
+    int bandsInUse () const { return countNow; }
+
     // In place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
+    // Switched off where it is built into another plug-in: only the latency's delay, in place.
+    void processBypassed (float* l, float* r, int n);
 
 private:
     static constexpr int kChunk = 256;
     void processChunk (const float* inL, const float* inR, float* outL, float* outR, int n); // n <= kChunk
     void retune ();       // the filters to xfNow and slopeNow
     void resetFilters ();
+    int countTarget () const { return bandsOf (p[kBandCount]); }
 
     float inMono[kChunk] {}; // the chunk's input, for the analyser
     ParamArray p = defaultParams ();
@@ -92,6 +112,19 @@ private:
     float duck = 1.0f; // fades out and back in around a change of slope
     double smoothGain = 0.0, glide = 0.0;
     float duckStep = 0.0f;
+    // the band count: taps crossfade from countFrom's to countNow's (countFade 0 .. 1)
+    int countNow = kBands, countFrom = kBands;
+    float countFade = 1.0f, countStep = 0.001f;
+    // each band's drive, and the delay every band takes with it: per sample, the bands' taps (left,
+    // right), their gains, the output level and the clean output (left, right), kRingStride floats,
+    // latency () samples long
+    BandDrive drive[kBands];
+    static constexpr int kRingStride = 2 * kBands + kBands + 1 + 2;
+    std::vector<float> ring, bypassRing;
+    int ringPos = 0, bypassPos = 0;
+    // the chunk's bands for the drives: into them, the clean bands delayed, the drives' outputs
+    float pre[kBands][2][kChunk] {}, dry[kBands][2][kChunk] {}, wet[kBands][2][kChunk] {}, mix[kBands][kChunk] {};
+    float levelD[kChunk] {};
     smacheratr::Tail tail;
     bool hasTail = true;
     Meters* meters = nullptr;

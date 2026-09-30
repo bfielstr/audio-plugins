@@ -33,7 +33,15 @@ std::vector<ParamInfo> buildTable ()
     }
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
-    static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+    v.push_back (choice (kBandCount, "Bands", "Bands", {"1", "2", "3", "4"}, kBands - 1));
+    for (int b = 0; b < kBands; ++b)
+    {
+        const std::string n = "Band " + std::to_string (b + 1) + " ";
+        v.push_back (real (driveParam (b, kDriveDb), keep (n + "Drive"), "Drive", 0.0, kMaxDriveDb, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (choice (driveParam (b, kDriveType), keep (n + "Drive Type"), "Type", {"Analog", "Tape", "Tube", "Hard Clip", "Fold"},
+                             kDriveAnalog));
+    }
+    static_assert (kNumParams == kDriveBase + kBands * kDriveBlock, "the bands' drives are the last block");
     return v;
 }
 

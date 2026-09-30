@@ -72,29 +72,38 @@ void effectiveCrossovers (const double set[kCrossovers], double sampleRate, doub
     }
 }
 
-std::complex<double> bandResponse (int band, const double xover[kCrossovers], int slope, double f, double sampleRate)
+std::complex<double> bandResponse (int band, const double xover[kCrossovers], int slope, double f, double sampleRate, int count)
 {
+    count = std::clamp (count, 1, kBands);
+    if (band < 0 || band >= count)
+        return {0.0, 0.0};
+    if (count == 1)
+        return {1.0, 0.0}; // no split
     SplitResponse s[kCrossovers];
-    for (int k = 0; k < kCrossovers; ++k)
+    for (int k = 0; k < count - 1; ++k)
         s[k] = splitResponse (xover[k], slope, f, sampleRate);
     // the tree: band 1 = low of 1 (through the all-passes of 2 and 3), band 2 = high of 1, low of 2
-    // (through 3's), band 3 = high of 1 and 2, low of 3, band 4 = the highs of all three
-    switch (band)
+    // (through 3's), band 3 = high of 1 and 2, low of 3, band 4 = the highs of all three; with fewer
+    // bands the last is the high of the last crossover in use, and no all-passes past it
+    std::complex<double> h (1.0, 0.0);
+    for (int k = 0; k < band; ++k)
+        h *= s[k].high;
+    if (band < count - 1)
     {
-        case 0: return s[0].low * s[1].allpass * s[2].allpass;
-        case 1: return s[0].high * s[1].low * s[2].allpass;
-        case 2: return s[0].high * s[1].high * s[2].low;
-        default: return s[0].high * s[1].high * s[2].high;
+        h *= s[band].low;
+        for (int k = band + 1; k < count - 1; ++k)
+            h *= s[k].allpass;
     }
+    return h;
 }
 
 std::complex<double> totalResponse (const double xover[kCrossovers], int slope, const double gains[kBands], double f,
-                                    double sampleRate)
+                                    double sampleRate, int count)
 {
     std::complex<double> h (0.0, 0.0);
-    for (int b = 0; b < kBands; ++b)
+    for (int b = 0; b < std::min (count, kBands); ++b)
         if (gains[b] != 0.0)
-            h += gains[b] * bandResponse (b, xover, slope, f, sampleRate);
+            h += gains[b] * bandResponse (b, xover, slope, f, sampleRate, count);
     return h;
 }
 
@@ -108,6 +117,11 @@ void Engine::prepare (double sampleRate, int maxBlock)
     smoothGain = 1.0 - std::exp (-1.0 / (0.005 * sr));              // 5 ms on the band levels
     glide = 1.0 - std::exp (-1.0 / (0.015 * sr / kCoeffEvery));     // 15 ms on the crossovers, per retuning
     duckStep = (float)(1.0 / (0.004 * sr));                          // 4 ms out, 4 ms back in
+    countStep = (float)(1.0 / (0.020 * sr));                         // 20 ms between two band counts
+    for (auto& d : drive)
+        d.prepare (sr, kChunk);
+    ring.assign ((size_t)std::max (1, driveLatency ()) * kRingStride, 0.0f);
+    bypassRing.assign ((size_t)std::max (1, driveLatency ()) * 2, 0.0f);
     if (meters)
         meters->sampleRate.store ((float)sr);
     reset ();
@@ -151,6 +165,17 @@ void Engine::reset ()
     out = (float)dbToGain (p[kOutput]);
     duck = 1.0f;
     coeffCountdown = 0;
+    countNow = countFrom = countTarget ();
+    countFade = 1.0f;
+    for (int b = 0; b < kBands; ++b)
+    {
+        const double db = p[driveParam (b, kDriveDb)];
+        drive[b].set (db > 0.0 && b < countNow, (int)std::lround (p[driveParam (b, kDriveType)]), db);
+        drive[b].reset ();
+    }
+    std::fill (ring.begin (), ring.end (), 0.0f);
+    std::fill (bypassRing.begin (), bypassRing.end (), 0.0f);
+    ringPos = bypassPos = 0;
     tail.reset ();
 }
 
@@ -174,6 +199,25 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
     }
 }
 
+void Engine::processBypassed (float* l, float* r, int n)
+{
+    // the same delay as when it runs, so switching it off doesn't move the rest of the rack in time
+    const int len = (int)(bypassRing.size () / 2);
+    if (driveLatency () <= 0 || len <= 0)
+        return;
+    for (int i = 0; i < n; ++i)
+    {
+        float* s = &bypassRing[(size_t)bypassPos * 2];
+        const float dl = s[0], dr = s[1];
+        s[0] = l[i];
+        s[1] = r[i];
+        l[i] = dl;
+        r[i] = dr;
+        if (++bypassPos >= len)
+            bypassPos = 0;
+    }
+}
+
 void Engine::processChunk (const float* inL, const float* inR, float* outL, float* outR, int n)
 {
     // this block's targets
@@ -181,13 +225,25 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     for (int k = 0; k < kCrossovers; ++k)
         set[k] = p[xoverParam (k)];
     effectiveCrossovers (set, sr, xfT);
-    bandGains ([this] (uint32_t id) { return p[id]; }, gT);
+    const int countT = countTarget ();
+    bandGains ([this] (uint32_t id) { return p[id]; }, gT, countT);
     float gainT[kBands];
     for (int b = 0; b < kBands; ++b)
         gainT[b] = (float)gT[b];
     const float outT = (float)dbToGain (p[kOutput]);
     const int slopeT = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
     const float sg = (float)smoothGain;
+
+    // the drives: a band past the count has its drive off
+    bool driving[kBands], anyDrive = false;
+    for (int b = 0; b < kBands; ++b)
+    {
+        const double db = p[driveParam (b, kDriveDb)];
+        drive[b].set (db > 0.0 && b < countT, (int)std::lround (p[driveParam (b, kDriveType)]), db);
+        driving[b] = !drive[b].idle ();
+        anyDrive |= driving[b];
+    }
+    const int len = (int)(ring.size () / kRingStride);
 
     for (int i = 0; i < n; ++i)
     {
@@ -234,6 +290,29 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         out += (outT - out) * sg;
         const float level = out * duck;
 
+        // a new band count: crossfade to its taps (one change at a time: the next waits for this one)
+        if (countFade >= 1.0f && countT != countNow)
+        {
+            countFrom = countNow;
+            countNow = countT;
+            countFade = 0.0f;
+        }
+        const bool countFading = countFade < 1.0f;
+        if (countFading)
+            countFade = std::min (1.0f, countFade + countStep);
+
+        // the delay every band takes (the drives' latency): the gains and the level from then
+        float* slot = &ring[(size_t)ringPos * kRingStride];
+        float gd[kBands];
+        for (int b = 0; b < kBands; ++b)
+        {
+            gd[b] = slot[2 * kBands + b];
+            slot[2 * kBands + b] = gain[b];
+        }
+        const float ld = slot[3 * kBands];
+        slot[3 * kBands] = level;
+        levelD[i] = ld;
+
         const float x[2] = {inL[i], inR[i]};
         float y[2];
         for (int c = 0; c < 2; ++c)
@@ -242,13 +321,82 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
             split[0].tick (x[c], c, b0, rest);
             split[1].tick (rest, c, b1, rest2);
             split[2].tick (rest2, c, b2, b3);
-            b0 = apLow[1].tick (apLow[0].tick (b0, c), c);
-            b1 = apMid.tick (b1, c);
-            y[c] = (gain[0] * b0 + gain[1] * b1 + gain[2] * b2 + gain[3] * b3) * level;
+            const float a0 = apLow[0].tick (b0, c);  // band 1 through crossover 2's all-pass
+            const float a00 = apLow[1].tick (a0, c); // and crossover 3's
+            const float a1 = apMid.tick (b1, c);     // band 2 through crossover 3's
+            // each count's bands: taps on the one tree
+            auto taps = [&] (int count, float t[kBands]) {
+                switch (count)
+                {
+                    case 1: t[0] = x[c], t[1] = t[2] = t[3] = 0.0f; break;
+                    case 2: t[0] = b0, t[1] = rest, t[2] = t[3] = 0.0f; break;
+                    case 3: t[0] = a0, t[1] = b1, t[2] = rest2, t[3] = 0.0f; break;
+                    default: t[0] = a00, t[1] = a1, t[2] = b2, t[3] = b3; break;
+                }
+            };
+            float tap[kBands];
+            taps (countNow, tap);
+            if (countFading)
+            {
+                float from[kBands];
+                taps (countFrom, from);
+                for (int b = 0; b < kBands; ++b)
+                    tap[b] = from[b] + (tap[b] - from[b]) * countFade;
+            }
+            float td[kBands];
+            for (int b = 0; b < kBands; ++b)
+            {
+                td[b] = slot[c * kBands + b];
+                slot[c * kBands + b] = tap[b];
+            }
+            // the clean output: the bands at their levels added up as Levlr always has (the same sum,
+            // so the same numbers), then delayed; with every drive off it is the output
+            y[c] = (gain[0] * tap[0] + gain[1] * tap[1] + gain[2] * tap[2] + gain[3] * tap[3]) * level;
+            float& yd = slot[3 * kBands + 1 + c];
+            const float yOut = yd;
+            yd = y[c];
+            y[c] = yOut;
+            if (anyDrive)
+                for (int b = 0; b < kBands; ++b)
+                {
+                    dry[b][c][i] = gd[b] * td[b];
+                    pre[b][c][i] = gain[b] * tap[b]; // into the drive: the band at its level
+                }
         }
+        if (++ringPos >= len)
+            ringPos = 0;
         inMono[i] = 0.5f * (x[0] + x[1]); // (the input may be the output buffer)
-        outL[i] = y[0];
-        outR[i] = y[1];
+        if (!anyDrive)
+        {
+            outL[i] = y[0];
+            outR[i] = y[1];
+        }
+    }
+
+    if (anyDrive)
+    {
+        // the driven bands through their curves, then all of them added up at the output's level
+        for (int b = 0; b < kBands; ++b)
+            if (driving[b])
+            {
+                const float* in[2] = {pre[b][0], pre[b][1]};
+                float* w[2] = {wet[b][0], wet[b][1]};
+                drive[b].process (in, w, mix[b], n);
+            }
+        for (int c = 0; c < 2; ++c)
+        {
+            float* o = c == 0 ? outL : outR;
+            for (int i = 0; i < n; ++i)
+            {
+                float t[kBands];
+                for (int b = 0; b < kBands; ++b)
+                {
+                    const float d = dry[b][c][i];
+                    t[b] = driving[b] ? d + (wet[b][c][i] - d) * mix[b][i] : d;
+                }
+                o[i] = (t[0] + t[1] + t[2] + t[3]) * levelD[i];
+            }
+        }
     }
     if (hasTail)
         tail.process (outL, outR, n);

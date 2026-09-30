@@ -1,7 +1,10 @@
 #include "Params.h"
 
+#include "Crossover.h"
+
 #include "smacheratr/src/core/TailExt.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace multidyn {
@@ -14,7 +17,7 @@ namespace {
 std::vector<ParamInfo> buildTable ()
 {
     std::vector<ParamInfo> t;
-    t.push_back (real (kOutput, "Output", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db)); // 0 dB = the baked -7 dB
+    t.push_back (real (kOutput, "Output", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db)); // 0 dB = the baked kBakedMasterDb
     t.push_back (percent (kAmount, "Amount", "Amount", 1.0));
     t.push_back (real (kTime, "Time", "Time", 0.1, 10.0, 1.0, Curve::Log, Disp::Percent));
     t.push_back (toggle (kSoftKnee, "Soft Knee", "Soft Knee", true));
@@ -28,18 +31,19 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (percent (kScMix, "Sidechain Dry/Wet", "SC Mix", 1.0));
     t.push_back (toggle (kScListen, "Sidechain Listen", "Listen", false));
 
-    // Defaults (3 bands, Character mode): heavy upward compression (the "OTT" preset pushed further: the
-    // Below blocks at 1:inf lift everything to the threshold), with the attack / release times of
-    // OTT. The preset's gains are baked in (see kBakedInputDb): every gain control defaults to 0 dB.
+    // Defaults (3 bands at 88.3 Hz and 2.5 kHz): Live's Multiband Dynamics "OTT" preset (the sound Xfer's
+    // OTT gets close to): Above 1:66.7 and Below 1:4.17 on every band, Amount and Time 100 %. The
+    // preset's band Output gains are baked in (kBakedOutputDb): every gain control defaults to 0 dB.
+    // A fourth band (above Crossover 3, 8 kHz) starts like the top band of three.
     struct BandDefaults
     {
         double below, belowRatio, above, aboveRatio, attack, release;
     };
     const BandDefaults defs[kMaxBands] = {
-        {-40.8, kRatioInf, -35.5, 66.7, 47.8, 282.0},      // band 1 (low)
-        {-40.8, kRatioInf, -35.5, 66.7, 22.4, 282.0},      // band 2
-        {-40.8, kRatioInf, -35.5, kRatioInf, 13.5, 132.0}, // band 3
-        {-40.8, 4.17, -35.5, kRatioInf, 13.5, 132.0},      // band 4 (high)
+        {-40.8, 4.17, -33.8, 66.7, 47.8, 282.0}, // band 1 (low)
+        {-41.8, 4.17, -30.2, 66.7, 22.4, 282.0}, // band 2 (mid)
+        {-40.8, 4.17, -35.5, 66.7, 13.5, 132.0}, // band 3 (high, with three bands)
+        {-40.8, 4.17, -35.5, 66.7, 13.5, 132.0}, // band 4 (high, with four)
     };
     for (int b = 0; b < kMaxBands; ++b)
     {
@@ -69,7 +73,10 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
     smacheratr::addTailExtParams (t, kSatExtBase);
     smacheratr::addTailExt2Params (t, kSatExt2Base);
-    static_assert (kNumParams == kSatExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+    t.push_back (choice (kXoverSlope, "Crossover Slope", "Slope", {"6 dB", "12 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"},
+                         kXover24));
+    t.push_back (toggle (kSoftenColor, "Soften Color", "Color", false));
+    static_assert (kNumParams == kSoftenColor + 1, "the table ends with Soften's Color");
     return t;
 }
 
@@ -79,6 +86,30 @@ const ParamTable& paramTable ()
 {
     static const ParamTable t (buildTable ());
     return t;
+}
+
+double oldBakedShiftDb (uint32_t id)
+{
+    if (id == kOutput)
+        return kOldBakedMasterDb - kBakedMasterDb;
+    if (id >= kBandBase && id < kBandBase + kMaxBands * kBandBlock)
+    {
+        const int band = (int)((id - kBandBase) / kBandBlock), field = (int)((id - kBandBase) % kBandBlock);
+        if (field == kBandInput)
+            return kOldBakedInputDb - kBakedInputDb;
+        if (field == kBandOutput)
+            return kOldBakedOutputDb[band] - kBakedOutputDb[band];
+    }
+    return 0.0;
+}
+
+double migrateOldBakedNorm (uint32_t id, double norm)
+{
+    const double shift = oldBakedShiftDb (id);
+    if (shift == 0.0)
+        return norm;
+    const auto& info = paramTable ().info (id);
+    return toNormalized (id, std::clamp (toPlain (id, norm) + shift, info.min, info.max));
 }
 
 } // namespace multidyn

@@ -133,8 +133,8 @@ TEST (params)
 
 TEST (filters_meeting_sum_flat)
 {
-    // high-pass and low-pass at the same cutoff with resonance 0 sum to a flat response
-    for (int slope : {kSlope12, kSlope18, kSlope24})
+    // high-pass and low-pass at the same cutoff with resonance 0 sum to a flat response, at every slope
+    for (int slope = 0; slope < kNumSlopes; ++slope)
     {
         auto e = engine ();
         e->setParam (kSlope, slope);
@@ -143,6 +143,210 @@ TEST (filters_meeting_sum_flat)
         for (double f : {60.0, 300.0, 1000.0, 3000.0, 12000.0})
             CHECK (std::fabs (gainAt (*e, f)) < 0.3, "slope %d at %.0f Hz: %f dB", slope, f, gainAt (*e, f));
     }
+}
+
+// The display's model of a filter at f: the analog response at the frequency the bilinear transform
+// warps f to (as FilterView draws it), in dB.
+static double modelDb (int slope, bool hp, double f, double fc, double res, double sr = kSr)
+{
+    const double c = std::clamp (fc, 5.0, 0.49 * sr);
+    const double fw = c * std::tan (M_PI * f / sr) / std::tan (M_PI * c / sr);
+    return 20.0 * std::log10 (std::max (1e-15, std::abs (filterResponse (slope, hp, fw, c, res))));
+}
+
+// One filter alone (the other at -inf) at fc, resonance res.
+static std::unique_ptr<Engine> single (int slope, bool hp, double fc, double res)
+{
+    auto e = engine ();
+    e->setParam (kSlope, slope);
+    e->setParam (hp ? kHpFreq : kLpFreq, fc);
+    e->setParam (hp ? kHpRes : kLpRes, res);
+    e->setParam (hp ? kLpGain : kHpGain, kGainMinDb);
+    e->reset ();
+    return e;
+}
+
+TEST (slopes)
+{
+    const auto& t = paramTable ();
+    const auto& info = t.info (kSlope);
+    CHECK (info.choices.size () == (size_t)kNumSlopes && info.def == (double)kSlope24, "%zu slopes, 24 dB by default", info.choices.size ());
+    const char* names[kNumSlopes] = {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"};
+    for (int s = 0; s < kNumSlopes; ++s)
+        CHECK (t.toText (kSlope, s) == names[s], "%d: %s", s, t.toText (kSlope, s).c_str ());
+    // the model's slope far from the cutoff is the slope's (dB per octave), both filters
+    const int dbPerOct[kNumSlopes - 1] = {6, 12, 18, 24, 36, 48, 60, 72, 84, 96};
+    for (int s = 0; s < kNumSlopes - 1; ++s)
+    {
+        const double hp = modelDb (s, true, 1.0, 1000.0, 0.0, 1e9) - modelDb (s, true, 0.5, 1000.0, 0.0, 1e9);
+        const double lp = modelDb (s, false, 1e6, 1000.0, 0.0, 1e9) - modelDb (s, false, 2e6, 1000.0, 0.0, 1e9);
+        CHECK (std::fabs (hp - dbPerOct[s]) < 0.01 && std::fabs (lp - dbPerOct[s]) < 0.01, "%s: %f / %f dB per octave", names[s], hp, lp);
+    }
+    // resonance 0: -3 dB at the cutoff (first order, 18 dB, Brickwall) or -6 (Linkwitz-Riley); the handle's peak
+    for (int s = 0; s < kNumSlopes; ++s)
+    {
+        const bool lr = s != kSlope6 && s != kSlope18 && s != kSlopeBrickwall;
+        const double at = modelDb (s, true, 1000.0, 1000.0, 0.0);
+        CHECK (std::fabs (at - (lr ? -6.02 : -3.01)) < 0.02, "%s at the cutoff: %f dB", names[s], at);
+        // full resonance: a peak at the cutoff, as high as 24 dB's from 24 dB on (not a power of it)
+        const double peak = modelDb (s, true, 1000.0, 1000.0, 1.0);
+        const double expect = s == kSlope12 ? 20.0 : (s == kSlope18 || !lr ? 23.0 : 46.0);
+        CHECK (std::fabs (peak - expect) < 0.1, "%s, resonance 1: %f dB at the cutoff", names[s], peak);
+    }
+}
+
+TEST (slopes_measured_match_the_model)
+{
+    // each filter alone, at each slope, at two resonances: what comes out is what the display draws,
+    // down to -120 dB
+    const double fc = 1000.0;
+    for (int s = 0; s < kNumSlopes; ++s)
+        for (bool hp : {true, false})
+            for (double res : {0.0, 0.6})
+            {
+                auto e = single (s, hp, fc, res);
+                double worst = 0.0, worstF = 0.0;
+                for (double f : {62.5, 125.0, 250.0, 500.0, 707.0, 800.0, 900.0, 950.0, 1000.0, 1050.0, 1111.0, 1250.0, 1414.0, 2000.0,
+                                 4000.0, 8000.0, 16000.0})
+                {
+                    const double model = modelDb (s, hp, f, fc, res);
+                    if (model < -120.0)
+                        continue;
+                    const double d = std::fabs (gainAt (*e, f) - model);
+                    if (d > worst)
+                    {
+                        worst = d;
+                        worstF = f;
+                    }
+                }
+                CHECK (worst < (res > 0.0 ? 0.3 : 0.2), "slope %d %s res %.1f: %f dB off the model at %.0f Hz", s, hp ? "HP" : "LP", res,
+                       worst, worstF);
+            }
+}
+
+TEST (slopes_measured_db_per_octave)
+{
+    // where each high-pass is 60 dB down (6 and 12 dB: 40), the measured slope over a quarter octave
+    // is the slope's dB per octave
+    const int dbPerOct[kNumSlopes - 1] = {6, 12, 18, 24, 36, 48, 60, 72, 84, 96};
+    for (int s = 0; s < kNumSlopes - 1; ++s)
+    {
+        const double fc = s <= kSlope12 ? 8000.0 : 2000.0, target = s <= kSlope12 ? -40.0 : -60.0;
+        double lo = 1.0, hi = fc; // the frequency where the model is at target
+        for (int k = 0; k < 60; ++k)
+        {
+            const double mid = std::sqrt (lo * hi);
+            (modelDb (s, true, mid, fc, 0.0) < target ? lo : hi) = mid;
+        }
+        auto e = single (s, true, fc, 0.0);
+        const double f = lo, f2 = f * std::pow (2.0, 0.25);
+        const double measured = 4.0 * (gainAt (*e, f2) - gainAt (*e, f));
+        CHECK (std::fabs (measured - dbPerOct[s]) < 0.05 * dbPerOct[s], "slope %d: %.2f dB per octave at %.0f Hz (%d)", s, measured, f,
+               dbPerOct[s]);
+    }
+}
+
+TEST (brickwall_is_steep)
+{
+    // -3 dB at the cutoff, 40 dB down a tenth of the way past it, 75 or more from 0.8 x (1.25 x) on;
+    // far steeper there than 96 dB
+    const double fc = 2000.0;
+    auto hp = single (kSlopeBrickwall, true, fc, 0.0), lp = single (kSlopeBrickwall, false, fc, 0.0);
+    CHECK (std::fabs (gainAt (*hp, fc) + 3.01) < 0.2 && std::fabs (gainAt (*lp, fc) + 3.01) < 0.2, "at the cutoff: %f / %f",
+           gainAt (*hp, fc), gainAt (*lp, fc));
+    CHECK (gainAt (*hp, 0.9 * fc) < -38.0 && gainAt (*lp, fc / 0.9) < -38.0, "a tenth past: %f / %f", gainAt (*hp, 0.9 * fc),
+           gainAt (*lp, fc / 0.9));
+    for (double x : {0.8, 0.7, 0.5, 0.25, 0.1})
+        CHECK (gainAt (*hp, x * fc) < -75.0 && gainAt (*lp, fc / x) < -75.0, "%.2f x: %f / %f", x, gainAt (*hp, x * fc), gainAt (*lp, fc / x));
+    // the pass band is flat right next to the cutoff
+    CHECK (std::fabs (gainAt (*hp, 1.15 * fc)) < 0.1 && std::fabs (gainAt (*hp, 4.0 * fc)) < 0.05 && std::fabs (gainAt (*lp, 0.87 * fc)) < 0.1,
+           "pass band: %f / %f / %f", gainAt (*hp, 1.15 * fc), gainAt (*hp, 4.0 * fc), gainAt (*lp, 0.87 * fc));
+    auto steep = single (kSlope96, true, fc, 0.0);
+    CHECK (gainAt (*hp, 0.8 * fc) < gainAt (*steep, 0.8 * fc) - 30.0, "steeper than 96 dB: %f vs %f", gainAt (*hp, 0.8 * fc),
+           gainAt (*steep, 0.8 * fc));
+    // resonance: a bell at the cutoff
+    auto res = single (kSlopeBrickwall, true, fc, 1.0);
+    CHECK (gainAt (*res, 1.02 * fc) > 15.0 && gainAt (*res, 0.8 * fc) < -50.0, "resonance: %f at the edge, %f below",
+           gainAt (*res, 1.02 * fc), gainAt (*res, 0.8 * fc));
+}
+
+// The largest step between neighbouring samples from sample `from` on.
+static double largestStep (const std::vector<float>& x, size_t from)
+{
+    double step = 0.0;
+    for (size_t i = from + 1; i < x.size (); ++i)
+        step = std::max (step, (double)std::fabs (x[i] - x[i - 1]));
+    return step;
+}
+
+TEST (moving_cutoffs_stay_stable_and_smooth)
+{
+    // Split swept +-24 semitones five times a second (and the resonance with it), block by block as
+    // automation would, at the steepest slopes: the output stays bounded and moves no faster than the
+    // input does (no clicks); the same with Vocal sweeping the low-pass through the high-pass
+    auto in = tones ({{150.0, -6.0}, {1000.0, -12.0}, {5000.0, -18.0}}, 2.0);
+    const double inStep = largestStep (in.l, 0);
+    for (int s : {kSlope60, kSlope84, kSlope96, kSlopeBrickwall, kSlope6})
+        for (double res : {0.0, 0.5})
+            for (int mode : {kFree, kVocal})
+            {
+                auto e = engine ();
+                e->setParam (kSlope, s);
+                e->setParam (kHpRes, res);
+                e->setParam (kLpRes, res);
+                e->setParam (kMovement, mode);
+                e->reset ();
+                Sig out;
+                out.l.resize (in.l.size ());
+                out.r.resize (in.r.size ());
+                for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 64, ++k)
+                {
+                    const double ph = 2.0 * M_PI * 5.0 * (double)pos / kSr;
+                    if (mode == kFree)
+                        e->setParam (kSplit, 24.0 * std::sin (ph));
+                    else // the low-pass swept through the high-pass and back
+                        e->setParam (kLpFreq, 100.0 * std::pow (2.0, 3.0 + 3.0 * std::sin (ph)));
+                    e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 64);
+                }
+                bool finite = true;
+                double peak = 0.0;
+                for (float v : out.l)
+                {
+                    finite &= std::isfinite (v);
+                    peak = std::max (peak, (double)std::fabs (v));
+                }
+                const double step = largestStep (out.l, 2400);
+                CHECK (finite && peak < (res > 0.0 ? 8.0 : 2.5), "slope %d res %.1f %s: peak %f", s, res, mode == kFree ? "Free" : "Vocal", peak);
+                CHECK (step < (res > 0.0 ? 4.0 : 1.6) * inStep, "slope %d res %.1f %s: largest step %f (the input's %f)", s, res,
+                       mode == kFree ? "Free" : "Vocal", step, inStep);
+            }
+}
+
+TEST (slope_changes_do_not_click)
+{
+    // every slope in turn, a new one every 50 ms, the filters meeting (they sum flat at every slope):
+    // the 10 ms crossfades never jump
+    auto e = engine ();
+    e->setParam (kHpFreq, 700.0);
+    e->setParam (kLpFreq, 700.0);
+    e->reset ();
+    auto in = tones ({{200.0, -6.0}, {3000.0, -12.0}}, 2.0);
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 240, ++k)
+    {
+        if (k % 10 == 0)
+            e->setParam (kSlope, (double)((k / 10 * 7) % kNumSlopes)); // jumping around the list
+        e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 240);
+    }
+    const double step = largestStep (out.l, 4800), inStep = largestStep (in.l, 0);
+    CHECK (step < 1.3 * inStep, "largest step %f (the input's %f)", step, inStep);
+    // the level stays (all of them sum flat): no dips around the changes
+    double lowest = 1e9;
+    for (size_t a = 4800; a + 480 <= out.l.size (); a += 480)
+        lowest = std::min (lowest, toneDb (out.l, 200.0, a, a + 480));
+    CHECK (lowest > -6.0 - 1.5, "the 200 Hz tone stays: lowest %f dB", lowest);
 }
 
 TEST (notch_between_the_filters)
@@ -426,15 +630,19 @@ TEST (drive_params)
     const auto& t = paramTable ();
     for (uint32_t id = 0; id < kNumParams; ++id)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
-    CHECK (kDriveOn == kTailExtBase + 17 && kTailExt2Base == kDriveOn + 3, "the drive's IDs follow the end saturator's block");
-    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+    CHECK (kHpDriveOn == kTailExtBase + 17 && kTailExt2Base == kHpDriveOn + 3, "the drive's IDs follow the end saturator's block");
+    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kNumParams == kLpDrive + 1 &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's) is the last");
+           "Gently's Advanced block (the end saturator's), then the low-pass drive, the last");
+    CHECK (std::string (t.info (kHpDriveOn).name) == "High-Pass Drive On" && std::string (t.info (kHpDrive).name) == "High-Pass Drive" &&
+               std::string (t.info (kLpDriveOn).name) == "Low-Pass Drive On" && std::string (t.info (kLpDrive).name) == "Low-Pass Drive",
+           "one drive per filter");
     // off, 0 dB and Pre are normalized 0, so a value never stored (a rack slot from before) is the default
-    for (uint32_t id : {kDriveOn, kDrive, kDrivePos})
+    for (uint32_t id : {kHpDriveOn, kHpDrive, kDrivePos, kLpDriveOn, kLpDrive})
         CHECK (t.defaultNormalized (id) == 0.0, "%s: default %f", t.info (id).name, t.defaultNormalized (id));
     CHECK (t.toText (kDrivePos, kDrivePost) == "Post", "%s", t.toText (kDrivePos, kDrivePost).c_str ());
+    CHECK (t.info (kHpDrive).max == 36.0 && t.info (kLpDrive).max == 36.0, "+36 dB");
 }
 
 TEST (drive_latency_is_the_same_everywhere)
@@ -450,7 +658,8 @@ TEST (drive_latency_is_the_same_everywhere)
         Engine a, b;
         a.prepare (sr, 512);
         b.prepare (sr, 512);
-        b.setParam (kDriveOn, 1.0);
+        b.setParam (kHpDriveOn, 1.0);
+        b.setParam (kLpDriveOn, 1.0);
         b.setParam (kDrivePos, kDrivePost);
         CHECK (a.latency () == b.latency (), "%.0f Hz: %d vs %d", sr, a.latency (), b.latency ());
     }
@@ -459,7 +668,8 @@ TEST (drive_latency_is_the_same_everywhere)
         {
             auto e = engine ();
             e->setParam (kDryWet, 0.0);
-            e->setParam (kDriveOn, on);
+            e->setParam (kHpDriveOn, on);
+            e->setParam (kLpDriveOn, on);
             e->setParam (kDrivePos, pos);
             e->reset ();
             CHECK (e->latency () == lat, "latency %d", e->latency ());
@@ -477,8 +687,10 @@ TEST (drive_latency_is_the_same_everywhere)
     auto e = engine (), f = engine ();
     for (auto* x : {e.get (), f.get ()})
     {
-        x->setParam (kDriveOn, 1.0);
-        x->setParam (kDrive, 12.0);
+        x->setParam (kHpDriveOn, 1.0);
+        x->setParam (kLpDriveOn, 1.0);
+        x->setParam (kHpDrive, 12.0);
+        x->setParam (kLpDrive, 12.0);
         x->reset ();
     }
     auto in = tones ({{110.0, -6.0}, {3000.0, -12.0}}, 0.3);
@@ -515,7 +727,8 @@ TEST (drive_off_leaves_the_sound)
     // Drive on at 0 dB with a quiet signal (below the curve's knee): the same as off, but for the
     // oversampling filters' ripple
     auto on = engine (), off = engine ();
-    on->setParam (kDriveOn, 1.0);
+    on->setParam (kHpDriveOn, 1.0);
+    on->setParam (kLpDriveOn, 1.0);
     on->reset ();
     auto quiet = tones ({{220.0, -30.0}, {2000.0, -36.0}}, 0.3);
     auto x = run (*on, quiet), y = run (*off, quiet);
@@ -533,8 +746,10 @@ TEST (drive_adds_harmonics)
         auto e = engine ();
         e->setParam (kHpFreq, 1000.0);
         e->setParam (kLpFreq, 1000.0);
-        e->setParam (kDriveOn, on ? 1.0 : 0.0);
-        e->setParam (kDrive, db);
+        e->setParam (kHpDriveOn, on ? 1.0 : 0.0);
+        e->setParam (kLpDriveOn, on ? 1.0 : 0.0);
+        e->setParam (kHpDrive, db);
+        e->setParam (kLpDrive, db);
         e->reset ();
         auto out = run (*e, tones ({{100.0, -6.0}}, 0.5));
         h2 = toneDb (out.l, 200.0, 12000, 24000);
@@ -550,8 +765,10 @@ TEST (drive_adds_harmonics)
     auto e = engine ();
     e->setParam (kHpFreq, 1000.0);
     e->setParam (kLpFreq, 1000.0);
-    e->setParam (kDriveOn, 1.0);
-    e->setParam (kDrive, 36.0);
+    e->setParam (kHpDriveOn, 1.0);
+    e->setParam (kLpDriveOn, 1.0);
+    e->setParam (kHpDrive, 36.0);
+    e->setParam (kLpDrive, 36.0);
     e->setParam (kDrivePos, kDrivePost);
     auto out = run (*e, tones ({{100.0, 0.0}}, 0.3));
     CHECK (std::fabs (out.l[peakAt (out.l)]) < 1.1f, "peak %f", out.l[peakAt (out.l)]);
@@ -565,8 +782,10 @@ TEST (drive_pre_and_post)
         auto e = engine ();
         e->setParam (kHpGain, kGainMinDb);
         e->setParam (kLpFreq, 500.0);
-        e->setParam (kDriveOn, 1.0);
-        e->setParam (kDrive, 18.0);
+        e->setParam (kHpDriveOn, 1.0);
+        e->setParam (kLpDriveOn, 1.0);
+        e->setParam (kHpDrive, 18.0);
+        e->setParam (kLpDrive, 18.0);
         e->setParam (kDrivePos, pos);
         e->reset ();
         auto out = run (*e, tones ({{200.0, -6.0}}, 0.5));
@@ -589,7 +808,8 @@ TEST (drive_switches_without_clicks)
     auto e = engine ();
     e->setParam (kHpFreq, 1000.0);
     e->setParam (kLpFreq, 1000.0);
-    e->setParam (kDrive, 12.0);
+    e->setParam (kHpDrive, 12.0);
+    e->setParam (kLpDrive, 12.0);
     e->reset ();
     auto in = tones ({{200.0, -6.0}}, 2.0);
     Sig out;
@@ -598,7 +818,11 @@ TEST (drive_switches_without_clicks)
     for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 256, ++k)
     {
         if (k % 40 == 10)
-            e->setParam (kDriveOn, e->param (kDriveOn) < 0.5 ? 1.0 : 0.0);
+        {
+            const double on = e->param (kHpDriveOn) < 0.5 ? 1.0 : 0.0;
+            e->setParam (kHpDriveOn, on);
+            e->setParam (kLpDriveOn, on);
+        }
         if (k % 40 == 30)
             e->setParam (kDrivePos, e->param (kDrivePos) < 0.5 ? kDrivePost : kDrivePre);
         e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 256);
@@ -616,8 +840,10 @@ TEST (drive_switches_without_clicks)
         auto s = engine ();
         s->setParam (kHpFreq, 1000.0);
         s->setParam (kLpFreq, 1000.0);
-        s->setParam (kDrive, 12.0);
-        s->setParam (kDriveOn, 1.0);
+        s->setParam (kHpDrive, 12.0);
+        s->setParam (kLpDrive, 12.0);
+        s->setParam (kHpDriveOn, 1.0);
+        s->setParam (kLpDriveOn, 1.0);
         s->setParam (kDrivePos, pos);
         s->reset ();
         steady = std::max (steady, largestStep (run (*s, tones ({{200.0, -6.0}}, 0.2)).l, 4800));
@@ -701,8 +927,10 @@ TEST (performance)
     std::printf ("    CPU: %.2f%% of one core (stereo, 24 dB)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
     // with the drive on (4x oversampled)
-    e->setParam (kDriveOn, 1.0);
-    e->setParam (kDrive, 12.0);
+    e->setParam (kHpDriveOn, 1.0);
+    e->setParam (kLpDriveOn, 1.0);
+    e->setParam (kHpDrive, 12.0);
+    e->setParam (kLpDrive, 12.0);
     const auto t1 = std::chrono::steady_clock::now ();
     run (*e, in);
     const double secs1 = std::chrono::duration<double> (std::chrono::steady_clock::now () - t1).count ();

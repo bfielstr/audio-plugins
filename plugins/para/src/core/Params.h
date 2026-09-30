@@ -1,6 +1,5 @@
-// Para parameters. IDs are persisted in projects: only ever append. The end saturator's extended
-// block (kTailExtBase) was the last; a new Para parameter goes in the block after it (and from then on
-// the extended block stays as it is).
+// Para parameters. IDs are persisted in projects: only ever append (after the low-pass drive now; the
+// end saturator's blocks keep the room they have).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -8,6 +7,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <functional>
 
 namespace para {
 
@@ -17,7 +17,7 @@ enum ParamId : uint32_t
     kHpRes,      // 0 .. 1
     kLpFreq,     // Hz, low-pass cutoff (at the root note)
     kLpRes,      // 0 .. 1
-    kSlope,      // 12 / 18 / 24 dB per octave
+    kSlope,      // 6 .. 96 dB per octave or Brickwall (Slope; 12 / 18 / 24 dB before, see slopeFromThreeChoices)
     kSplit,      // semitones: > 0 pushes the filters apart, < 0 brings them together
     kEnvAmount,  // semitones of Split added by the envelope at its peak
     kEnvAttack,  // ms
@@ -41,18 +41,41 @@ enum ParamId : uint32_t
     kLpFloor,    // Hz: the low-pass never goes below this (keeps the sub)
     kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
     // --- after the end saturator's block (which stays as it is from here on) ---
-    kDriveOn = kTailExtBase + 17, // the drive in Para's own path (Smacheratr's Analog curve, see Engine.h)
-    kDrive,                       // dB into the curve
-    kDrivePos,                    // Pre (before the filters) / Post (after them)
-    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kHpDriveOn = kTailExtBase + 17, // the high-pass branch's drive (Smacheratr's Analog curve, see Engine.h); the one
+                                    // drive for both filters until the drive was per band
+    kHpDrive,                       // dB into the curve
+    kDrivePos,                      // Pre (before each filter) / Post (after it), for both drives
+    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    // --- after Gently's Advanced block (its room is fixed at 5 from here on) ---
+    kLpDriveOn = kTailExt2Base + 5, // the low-pass branch's drive
+    kLpDrive,                       // dB into the curve
+    kNumParams
 };
-static_assert (pk::kTailExtFields <= kDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
+static_assert (pk::kTailExtFields <= kHpDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
+static_assert (pk::kTailExt2Fields == kLpDriveOn - kTailExt2Base, "Gently's Advanced block must fill its room: IDs are persisted");
+static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 56 && kLpDrive == 57 &&
+                   kNumParams == 58,
+               "Para's IDs are persisted in projects");
 
 // The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.
 constexpr uint32_t kHostedParams = kTailBase + pk::kTailFields;
 
-enum Slope { kSlope12 = 0, kSlope18, kSlope24 };
+// The filters' slopes (Slopes.h), in dB per octave. Before 0.7 there were three (12, 18, 24 dB).
+enum Slope
+{
+    kSlope6 = 0,
+    kSlope12,
+    kSlope18,
+    kSlope24,
+    kSlope36,
+    kSlope48,
+    kSlope60,
+    kSlope72,
+    kSlope84,
+    kSlope96,
+    kSlopeBrickwall,
+    kNumSlopes
+};
 enum Movement { kFree = 0, kVocal };
 enum DrivePos { kDrivePre = 0, kDrivePost };
 
@@ -68,5 +91,15 @@ const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+
+// A slope saved over the three choices of before (12 / 18 / 24 dB: normalized 0 / 0.5 / 1), normalized
+// over the slopes now (the same slope).
+double slopeFromThreeChoices (double oldNorm);
+// Settings saved before the per-band drive and the slopes 6 .. 96 dB and Brickwall (Para's state before
+// version 4, a Para slot of Smemplr's rack before version 13), made to mean the same: the slope moves to
+// its place on the longer list, and the low-pass branch gets the drive the high-pass branch has (it was
+// one drive for both: Pre, that is the same sound). get (id, v): the saved normalized value, false when
+// there is none; set (id, v) stores one.
+void upgradeToPerBandDrive (const std::function<bool (uint32_t, double&)>& get, const std::function<void (uint32_t, double)>& set);
 
 } // namespace para

@@ -249,6 +249,11 @@ std::vector<ParamInfo> buildTable ()
             const std::string n = "FX " + std::to_string (s + 1) + " " + std::to_string (j + 1);
             add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, slotDefault (s, j), Curve::Linear, Disp::Percent));
         }
+    // the high-pass that follows Transpose (off: a new or old project sounds as before)
+    add (toggle (kTransHpOn, "Transpose HP", "HP", false));
+    add (fl (kTransHpFreq, "Transpose HP Frequency", "HP Freq", 10.0, 200.0, 20.0, Curve::Log, Disp::Hz));
+    add (choice (kTransHpSlope, "Transpose HP Slope", "HP Slope", {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB"},
+                 kTransHp24));
     return t;
 }
 

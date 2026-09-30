@@ -1,0 +1,131 @@
+// Gently: Smacheratr's Gently on its own, without the saturation curve around it. Up to two bands
+// (smacheratr/src/core/ClarityBand.h: 12 dB/oct below, 6 dB/oct above, around each band's
+// frequency), each a gentle compressor on its region: when the band's level goes over the threshold
+// (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every 5 over, at
+// most by its Range (smacheratr::clarityCutDb). The bands work one after the other, each measuring
+// its own band: x + (g - 1) * band, so with no cut a band leaves the signal exactly as it was.
+//
+//   input -> [to mid / side] -> band 1 cut -> band 2 cut -> [back to left / right] -> delay
+//                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added
+//         -> Mix (against the input, delayed the same) -> Output -> Smacheratr at the end
+//
+// Advanced's region Drive puts the cut bands through Smacheratr's Analog curve on their own, level
+// matched (smacheratr::clarityRegionDrive: denser, not louder), oversampled 4x. The oversampler's
+// delay is always in the path (the dry signal is delayed to match), so the latency never changes.
+// The detector follows each band's peak level (a sine's peak from its mean square), with Attack and
+// Release (Smacheratr's 15 and 150 ms by default). Stereo: left and right share one detector (the
+// image stays put); Mid/Side works on the mid and the side, each with its own; Mid or Side works on
+// that one only.
+#pragma once
+
+#include "Params.h"
+
+#include "pluginkit/ScopeBuffer.h"
+#include "smacheratr/src/core/Biquad.h"
+#include "smacheratr/src/core/Engine.h"
+#include "smacheratr/src/core/Oversampler.h"
+#include "smacheratr/src/core/Tail.h"
+
+#include <array>
+#include <atomic>
+#include <vector>
+
+namespace gently {
+
+using ParamArray = std::array<double, kNumParams>;
+ParamArray defaultParams ();
+
+// For the editor (written by the audio thread).
+struct Meters
+{
+    pk::ScopeBuffer<8192> scope;           // mono input (a) and output (b), for the analyser
+    smacheratr::Meters bands;              // each band's cut (clarityDb, clarity2Db) and level (clarityLevelDb, ...)
+    std::atomic<uint32_t> blocks {0};      // counts processed blocks
+    std::atomic<float> sampleRate {48000.0f};
+};
+
+class Engine
+{
+public:
+    // withTail: the end-of-chain Smacheratr (off where Gently is built into another plug-in, and in tests)
+    explicit Engine (bool withTail = true) : hasTail (withTail) {}
+    void prepare (double sampleRate, int maxBlock);
+    void reset ();
+    void setParam (uint32_t id, double plain);
+    double param (uint32_t id) const { return p[id]; }
+    // Depends on the sample rate only (the region Drive's oversampler, and the end Smacheratr's).
+    int latency () const { return chan[0].os.latency () + (hasTail ? tail.latency () : 0); }
+    void setMeters (Meters* m) { meters = m; }
+    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
+
+    // In place capable.
+    void process (const float* inL, const float* inR, float* outL, float* outR, int n);
+
+private:
+    static constexpr int kChunk = 256;
+    static constexpr int kCtrl = 16; // samples between updates of the cuts
+    struct Delay
+    {
+        std::vector<float> buf;
+        int pos = 0;
+        void resize (int n)
+        {
+            buf.assign ((size_t)std::max (0, n), 0.0f);
+            pos = 0;
+        }
+        void reset ()
+        {
+            std::fill (buf.begin (), buf.end (), 0.0f);
+            pos = 0;
+        }
+        float push (float x)
+        {
+            if (buf.empty ())
+                return x;
+            const float y = buf[(size_t)pos];
+            buf[(size_t)pos] = x;
+            if (++pos >= (int)buf.size ())
+                pos = 0;
+            return y;
+        }
+    };
+    struct Channel
+    {
+        smacheratr::Biquad hp[kBands], lp[kBands]; // the bands
+        smacheratr::Oversampler os;                // the region Drive
+        Delay dryDelay, wetDelay;
+        void reset ();
+    };
+    void processChunk (const float* inL, const float* inR, float* outL, float* outR, int n); // n <= kChunk
+    void retune (bool force);
+    void resetBand (int k); // its filters and detectors, from silence
+
+    ParamArray p = defaultParams ();
+    double sr = 48000.0;
+    Channel chan[2];
+    int mode = kStereoLinked; // the stereo mode in use (a new one waits for the fade, see processChunk)
+    // the detector: each band's level (mean square of its peak), per channel (channel 0's for both
+    // while linked), the cut it asks for and the band's (smoothed) gain
+    double env[2][kBands] {}, atk = 0.0, rel = 0.0;
+    float cutDb[2][kBands] {}, gBand[2][kBands] {};
+    int ctrlCountdown = 0;
+    float gTarget[2][kBands] {};
+    double bandFreq[kBands] = {-1.0, -1.0}, bandWidth[kBands] = {-1.0, -1.0};
+    float bandNorm[kBands] = {1.0f, 1.0f};
+    // a band runs while it works (on, Range above 0) and, after it stops, until its cut has let go
+    bool running[kBands] = {false, false};
+    // how much of Gently is in (1 normally): faded out and back in around a change of stereo mode
+    float fx = 1.0f, fxStep = 0.0f;
+    int hold = 0; // samples left, faded out, before the new mode starts
+    // the region Drive: its gain and how much of it is in (both smoothed), the cut bands per channel
+    float regionGain = 1.0f, regionMix = 0.0f;
+    float region[2][kChunk] {}, regionOut[2][kChunk] {}, dryBuf[2][kChunk] {}, wetBuf[2][kChunk] {}, inMono[kChunk] {};
+    float gRegion[kChunk] {}, gRegionMix[kChunk] {};
+    std::vector<float> osBuf;
+    float out = 1.0f, mix = 1.0f, smooth = 0.0f, smoothCut = 0.0f;
+    smacheratr::Tail tail;
+    bool hasTail = true;
+    Meters* meters = nullptr;
+};
+
+} // namespace gently

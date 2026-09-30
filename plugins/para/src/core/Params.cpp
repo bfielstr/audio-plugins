@@ -17,7 +17,9 @@ const ParamTable& paramTable ()
         v.push_back (percent (kHpRes, "High-Pass Resonance", "HP Res", 0.0));
         v.push_back (real (kLpFreq, "Low-Pass Frequency", "LP Freq", 20.0, 20000.0, 100.0, Curve::Log, Disp::Hz));
         v.push_back (percent (kLpRes, "Low-Pass Resonance", "LP Res", 0.0));
-        v.push_back (choice (kSlope, "Slope", "Slope", {"12 dB", "18 dB", "24 dB"}, kSlope24));
+        // (12 / 18 / 24 dB in states from before: slopeFromThreeChoices)
+        v.push_back (choice (kSlope, "Slope", "Slope",
+                             {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"}, kSlope24));
         v.push_back (real (kSplit, "Split", "Split", -48.0, 48.0, 0.0, Curve::Linear, Disp::Semis));
         v.push_back (real (kEnvAmount, "Envelope Amount", "Env Amt", -48.0, 48.0, 0.0, Curve::Linear, Disp::Semis));
         v.push_back (real (kEnvAttack, "Envelope Attack", "Attack", 0.1, 2000.0, 5.0, Curve::Log, Disp::Ms));
@@ -43,14 +45,39 @@ const ParamTable& paramTable ()
         smacheratr::addTailExtParams (v, kTailExtBase);
         // off, 0 dB and Pre are all normalized 0: where the values were never stored (Smemplr's rack
         // slots from before) they read as the defaults
-        v.push_back (toggle (kDriveOn, "Drive", "Drive", false));
-        v.push_back (real (kDrive, "Drive Amount", "Drive", 0.0, 36.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kHpDriveOn, "High-Pass Drive On", "HP Drive On", false));
+        v.push_back (real (kHpDrive, "High-Pass Drive", "HP Drive", 0.0, 36.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (choice (kDrivePos, "Drive Position", "Drive Pos", {"Pre", "Post"}, kDrivePre));
         smacheratr::addTailExt2Params (v, kTailExt2Base);
-        static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+        // off and 0 dB are normalized 0 too (a rack slot's places that never held them: see upgradeToPerBandDrive)
+        v.push_back (toggle (kLpDriveOn, "Low-Pass Drive On", "LP Drive On", false));
+        v.push_back (real (kLpDrive, "Low-Pass Drive", "LP Drive", 0.0, 36.0, 0.0, Curve::Linear, Disp::Db));
         return v;
     }());
     return t;
+}
+
+double slopeFromThreeChoices (double oldNorm)
+{
+    // 12, 18, 24 dB: the second, third and fourth slopes now
+    const double index = std::round (std::fmin (std::fmax (oldNorm, 0.0), 1.0) * 2.0) + (double)kSlope12;
+    return toNormalized (kSlope, index);
+}
+
+void upgradeToPerBandDrive (const std::function<bool (uint32_t, double&)>& get, const std::function<void (uint32_t, double)>& set)
+{
+    double v = 0.0;
+    if (get (kSlope, v))
+        set (kSlope, slopeFromThreeChoices (v));
+    // the one drive was on the input of both filters (Pre) or on their sum (Post): now each filter has
+    // one, both as the old one was (never saved: off, 0 dB)
+    double on = 0.0, amount = 0.0;
+    if (!get (kHpDriveOn, on))
+        on = 0.0;
+    if (!get (kHpDrive, amount))
+        amount = 0.0;
+    set (kLpDriveOn, on);
+    set (kLpDrive, amount);
 }
 
 } // namespace para

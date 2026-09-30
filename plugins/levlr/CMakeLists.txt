@@ -6,6 +6,7 @@ add_library(levlr_core STATIC
     src/core/Params.h
     src/core/Params.cpp
     src/core/Crossover.h
+    src/core/Drive.h
     src/core/Engine.h
     src/core/Engine.cpp
 )

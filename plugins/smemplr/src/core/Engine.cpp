@@ -176,6 +176,8 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
     pitchEnv.noteOn ();
     lfo.start (s.lfoPhase, s.seed * 2654435761u);
     filter.reset ();
+    transHp.reset ();
+    transHpRunning = false;
 }
 
 void Voice::release (const ParamArray& p)
@@ -277,9 +279,8 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
 
     const double rate = st.warp ? pitchRatio * c.srcPerOut : pitchRatio * c.srcRate;
     lastRate = rate;
-    const float cutoff = (float)std::min (1.0, 1.0 / rate);
-    const float* a = s.data (0);
-    const float* b = s.numChannels > 1 ? s.data (1) : nullptr;
+    // band-limited at any speed (the sample's levels when it is read fast)
+    const SampleReader rd (s, rate);
     const auto& r = st.region;
     const double loopLen = r.loopEnd - r.loopStart;
     double fade = 0.0;
@@ -308,12 +309,12 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
             continue;
         }
         float l, rr;
-        readSinc (a, b, s.length, pos, cutoff, l, rr);
+        rd.read (pos, l, rr);
         if (fade > 1.0 && pos > r.loopEnd - fade)
         {
             const double x = (pos - (r.loopEnd - fade)) / fade;
             float l2, r2;
-            readSinc (a, b, s.length, pos - wrapLen, cutoff, l2, r2);
+            rd.read (pos - wrapLen, l2, r2);
             float ga, gb;
             if (c.constantPowerFade)
             {
@@ -359,6 +360,9 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
     const float fadeOutLen = (float)(p[kFadeOut] * 0.001 * sr);
     const int loopMode = idx (p[kAmpLoopMode]);
     const double loopRateBeats = syncDivisionBeats (idx (p[kAmpLoopRate]));
+    const bool transHpOn = on (p[kTransHpOn]);
+    if (!transHpOn)
+        transHpRunning = false;
 
     int done = 0;
     while (done < n && active)
@@ -422,6 +426,29 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
         const double ratio = std::exp2 (semis / 12.0);
         const double rem0 = remainingOut ();
         sourceRender (tmpL, tmpR, m, c, ratio);
+
+        // the high-pass that follows the transposition: what the note is transposed by (not the key
+        // played, nor glide or spread), so the sample's own low end moves with the pitch and stays
+        // out of the way; it glides (4 ms) so a jump in the pitch does not click
+        if (transHpOn)
+        {
+            const double target = p[kTranspose] + p[kDetune] / 100.0 + c.bendSemis +
+                                  pitchEnv.value () * p[kPitchEnvAmt] + lfoV * p[kLfoPitch] * 12.0;
+            if (!transHpRunning)
+            {
+                transHp.reset ();
+                transHpSemis = target;
+                transHpRunning = true;
+            }
+            else
+                transHpSemis += (target - transHpSemis) * (1.0 - std::exp (-m / (0.004 * sr)));
+            transHp.setup (idx (p[kTransHpSlope]), p[kTransHpFreq] * std::exp2 (transHpSemis / 12.0), sr);
+            for (int i = 0; i < m; ++i)
+            {
+                tmpL[i] = transHp.process (tmpL[i], 0);
+                tmpR[i] = mono ? tmpL[i] : transHp.process (tmpR[i], 1);
+            }
+        }
 
         if (filterOn)
         {

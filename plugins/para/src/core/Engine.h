@@ -15,15 +15,19 @@
 // movement (this used to be a separate Liquid mode).
 // Floor: the low-pass never goes below Low-Pass Floor (40 Hz by default), whatever Split, the
 // envelope or the swing do, so the sub stays.
-// Drive: Smacheratr's Analog curve (DriveStage, oversampled), Pre: on the input, before the filters
-// (and the dry/wet); Post: on what comes out of them (after the dry/wet, before Output). Either way
-// it delays the sound by the same amount, on or off, so Para's latency never changes. Moving it
-// between Pre and Post fades the output out and back in (the stage's delay moves with it).
+// Slope: 6 to 96 dB per octave or Brickwall, both filters (Slopes.h). A new slope crossfades from the
+// old one (10 ms, both running meanwhile), so switching never clicks.
+// Drive, per filter: Smacheratr's Analog curve (DriveStage, oversampled) in the high-pass's branch and in
+// the low-pass's, each on or off with its own amount. Pre: on the filter's input, so the filter shapes
+// what it adds; Post: on its output (before its gain), so the harmonics stay. The dry part of Dry/Wet
+// is never driven. Every path is delayed by the same amount, the drives on or off, so Para's latency
+// never changes. Moving the drives between Pre and Post fades the output out and back in (their delay
+// moves with them).
 #pragma once
 
 #include "Drive.h"
 #include "Params.h"
-#include "Svf.h"
+#include "Slopes.h"
 
 #include "pluginkit/ScopeBuffer.h"
 #include "smacheratr/src/core/Tail.h"
@@ -109,13 +113,13 @@ public:
             tail.setParam (id - kTailBase, plain);
         else if (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields)
             tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-        else if (id >= kTailExt2Base)
+        else if (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields)
             tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
     }
     double param (uint32_t id) const { return p[id]; }
-    // Depends on the sample rate only: the drive's delay, whether it is on and wherever it is, and
-    // the end-of-chain Smacheratr's.
-    int latency () const { return drive.latency () + (hasTail ? tail.latency () : 0); }
+    // Depends on the sample rate only: the drives' delay, whether they are on and wherever they are,
+    // and the end-of-chain Smacheratr's.
+    int latency () const { return driveHp.latency () + (hasTail ? tail.latency () : 0); }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     void noteOn (int note);
@@ -146,10 +150,25 @@ private:
     ParamArray p = defaultParams ();
     double sr = 48000.0;
     int maxBlock = 512;
-    Svf hp[2][2], lp[2][2]; // [channel][stage]
-    OnePole hp1[2], lp1[2];  // the first-order section of 18 dB
-    double hpG1 = 0.0, lpG1 = 0.0;
-    SvfCoeffs hpC, lpC;
+    // the filters at one slope; two, so a new slope can fade in over the old one
+    struct FilterSet
+    {
+        int slope = kSlope24;
+        FilterCoeffs hpC, lpC;
+        FilterState hp[2], lp[2]; // [channel]
+        void reset ()
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                hp[c].reset ();
+                lp[c].reset ();
+            }
+        }
+    };
+    FilterSet sets[2];
+    int cur = 0;                              // the set of the slope set now
+    double slopeFade = 1.0, slopeStep = 0.0;  // how far the current set has faded in over the other one
+    void setCoeffs (FilterSet& f, double hz, double lz, double qHpRes, double qLpRes);
     int lastNote = -1;
     float bend = 0.0f;
     double env = 0.0;
@@ -167,13 +186,17 @@ private:
     double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
     smacheratr::Tail tail;
-    // the drive, where it is (kDrivePos) and the fade that covers moving it: out to silence, held
-    // while the stage fills again, back in
-    DriveStage drive;
+    // the drives, where they are (kDrivePos) and the fade that covers moving them: out to silence, held
+    // while the stages fill again, back in
+    DriveStage driveHp, driveLp;
     bool drivePost = false;
     float duck = 1.0f, duckStep = 0.0f;
     int duckHold = 0;
-    std::vector<float> src[2], mixed[2], gOut, scopeIn; // the input (process may be in place), the dry/wet sum (Post)
+    // the input (process may be in place), the dry part (delayed as much as the drives delay), the
+    // filters' inputs (Pre: driven) or outputs (Post: driven after), and the gains per sample (Post)
+    std::vector<float> src[2], dry[2], hBuf[2], lBuf[2], gHp, gLp, gMix, gOut, scopeIn;
+    std::vector<float> dryDelay[2];
+    int dryPos = 0;
     std::vector<float> bypassDelay[2];
     int bypassPos = 0;
 };

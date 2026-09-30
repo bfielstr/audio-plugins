@@ -23,16 +23,19 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
     sr = sampleRate;
     maxBlock = std::max (1, maxBlockSize);
     tail.prepare (sr, maxBlock);
-    drive.prepare (sr, maxBlock);
+    driveHp.prepare (sr, maxBlock);
+    driveLp.prepare (sr, maxBlock);
     for (int c = 0; c < 2; ++c)
     {
-        src[c].assign ((size_t)maxBlock, 0.0f);
-        mixed[c].assign ((size_t)maxBlock, 0.0f);
+        for (auto* v : {&src[c], &dry[c], &hBuf[c], &lBuf[c]})
+            v->assign ((size_t)maxBlock, 0.0f);
         bypassDelay[c].assign ((size_t)latency (), 0.0f);
+        dryDelay[c].assign ((size_t)driveHp.latency (), 0.0f);
     }
-    gOut.assign ((size_t)maxBlock, 0.0f);
-    scopeIn.assign ((size_t)maxBlock, 0.0f);
-    duckStep = (float)(1.0 / (0.003 * sr)); // 3 ms fades around moving the drive
+    for (auto* v : {&gHp, &gLp, &gMix, &gOut, &scopeIn})
+        v->assign ((size_t)maxBlock, 0.0f);
+    duckStep = (float)(1.0 / (0.003 * sr)); // 3 ms fades around moving the drives
+    slopeStep = 1.0 / (0.01 * sr);          // 10 ms from one slope to another
     for (uint32_t f = 0; f < pk::kTailFields; ++f)
         tail.setParam (f, p[kTailBase + f]);
     for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
@@ -49,23 +52,27 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
 
 void Engine::reset ()
 {
-    for (auto& c : hp)
-        for (auto& s : c)
-            s.reset ();
-    for (auto& c : lp)
-        for (auto& s : c)
-            s.reset ();
+    for (auto& f : sets)
+        f.reset ();
+    cur = 0;
+    sets[0].slope = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
+    slopeFade = 1.0;
     env = 0.0;
     envRising = false;
     tail.reset ();
-    drive.set (p[kDriveOn] >= 0.5, p[kDrive]);
-    drive.reset ();
+    driveHp.set (p[kHpDriveOn] >= 0.5, p[kHpDrive]);
+    driveLp.set (p[kLpDriveOn] >= 0.5, p[kLpDrive]);
+    driveHp.reset ();
+    driveLp.reset ();
     drivePost = p[kDrivePos] >= 0.5;
     duck = 1.0f;
     duckHold = 0;
     for (auto& d : bypassDelay)
         std::fill (d.begin (), d.end (), 0.0f);
     bypassPos = 0;
+    for (auto& d : dryDelay)
+        std::fill (d.begin (), d.end (), 0.0f);
+    dryPos = 0;
     prevHpBase = p[kHpFreq]; // the leader of Vocal movement is kept
     prevLpBase = p[kLpFreq];
     hpMul = lpMul = hpMulT = lpMulT = 1.0f;
@@ -77,16 +84,13 @@ void Engine::reset ()
     out = dbToGain (p[kOutput]);
     hpG = (float)filterGain (p[kHpGain]);
     lpG = (float)filterGain (p[kLpGain]);
-    for (int c = 0; c < 2; ++c)
-    {
-        hp1[c].reset ();
-        lp1[c].reset ();
-    }
-    const int slope = (int)std::lround (p[kSlope]);
-    hpC.set (hpCutoff (p[kHpFreq], offset, split), resonanceToQ (p[kHpRes], slope), sr);
-    lpC.set (lpCutoff (p[kLpFreq], offset, split), resonanceToQ (lpRes (), slope), sr);
-    hpG1 = onePoleG (hpCutoff (p[kHpFreq], offset, split), sr);
-    lpG1 = onePoleG (lpCutoff (p[kLpFreq], offset, split), sr);
+    setCoeffs (sets[0], hpCutoff (p[kHpFreq], offset, split), lpCutoff (p[kLpFreq], offset, split), p[kHpRes], lpRes ());
+}
+
+void Engine::setCoeffs (FilterSet& f, double hz, double lz, double hpResonance, double lpResonance)
+{
+    f.hpC.set (f.slope, hz, hpResonance, sr);
+    f.lpC.set (f.slope, lz, lpResonance, sr);
 }
 
 // The cutoffs do not follow the notes any more (the notes only trigger the envelope).
@@ -138,9 +142,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
 void Engine::processBlock (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
-    const int slope = std::clamp ((int)std::lround (p[kSlope]), (int)kSlope12, (int)kSlope24);
+    const int slopeT = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
     const double hpBase = p[kHpFreq], lpBase = p[kLpFreq];
-    const double qHp = resonanceToQ (p[kHpRes], slope), qLp = resonanceToQ (lpRes (), slope);
+    const double resHp = p[kHpRes], resLp = lpRes ();
     const double envAmount = p[kEnvAmount];
     const double attackStep = 1.0 / std::max (1.0, p[kEnvAttack] * 0.001 * sr);
     const double decayCoef = std::exp (-1.0 / std::max (1.0, p[kEnvDecay] * 0.001 * sr));
@@ -165,28 +169,78 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
     }
     double envPeak = 0.0;
 
-    // the drive: moving it waits for the output to have faded out; it restarts from silence in its
-    // new place, and the output stays silent until the stage has filled again (and the filters have
-    // settled after the jump in time), then fades back in
-    drive.set (p[kDriveOn] >= 0.5, p[kDrive]);
+    // the drives: moving them waits for the output to have faded out; they restart from silence in
+    // their new place, and the output stays silent until the stages have filled again (and the filters
+    // have settled after the jump in time), then fades back in
+    driveHp.set (p[kHpDriveOn] >= 0.5, p[kHpDrive]);
+    driveLp.set (p[kLpDriveOn] >= 0.5, p[kLpDrive]);
     const bool wantPost = std::lround (p[kDrivePos]) == kDrivePost;
     if (wantPost != drivePost && duck <= 0.0f)
     {
         drivePost = wantPost;
-        drive.reset ();
-        duckHold = drive.latency () + (int)std::lround (0.002 * sr);
+        driveHp.reset ();
+        driveLp.reset ();
+        duckHold = driveHp.latency () + (int)std::lround (0.002 * sr);
     }
     const bool moving = wantPost != drivePost;
-    // the input is copied, as the output may be the same buffer; Pre drives it before the filters
+    // a new slope: the other set of filters starts from silence with it and fades in over this one
+    // (a change during a fade waits for the fade to end)
+    if (slopeT != sets[cur].slope && slopeFade >= 1.0)
+    {
+        cur ^= 1;
+        sets[cur].slope = slopeT;
+        sets[cur].reset ();
+        slopeFade = 0.0;
+    }
+    FilterSet& now = sets[cur];
+    FilterSet& old = sets[cur ^ 1];
+    const SlopeShape& shNow = slopeShape (now.slope);
+    const SlopeShape& shOld = slopeShape (old.slope);
+
+    // the input is copied, as the output may be the same buffer
     std::copy (xl, xl + n, src[0].data ());
     std::copy (xr, xr + n, src[1].data ());
-    if (meters) // the spectrum's input is what came in, before the drive
+    if (meters) // the spectrum's input is what came in, before the drives
         for (int i = 0; i < n; ++i)
             scopeIn[(size_t)i] = 0.5f * (xl[i] + xr[i]);
-    float* const ins2[2] = {src[0].data (), src[1].data ()};
-    float* const mix2[2] = {mixed[0].data (), mixed[1].data ()};
+    // the dry part, delayed as much as the drives delay the filters' paths (on or off)
+    const int dlen = (int)dryDelay[0].size ();
+    for (int c = 0; c < 2; ++c)
+    {
+        int q = dryPos;
+        for (int i = 0; i < n; ++i)
+        {
+            if (dlen > 0)
+            {
+                dry[c][(size_t)i] = dryDelay[c][(size_t)q];
+                dryDelay[c][(size_t)q] = src[c][(size_t)i];
+                if (++q >= dlen)
+                    q = 0;
+            }
+            else
+                dry[c][(size_t)i] = src[c][(size_t)i];
+        }
+    }
+    if (dlen > 0)
+        dryPos = (dryPos + n) % dlen;
+    // Pre: each filter gets its own driven copy of the input (a drive off only delays it); Post: both
+    // filter the input as it is and their outputs are driven below
+    float* const hb[2] = {hBuf[0].data (), hBuf[1].data ()};
+    float* const lb[2] = {lBuf[0].data (), lBuf[1].data ()};
+    const float* hIn[2] = {src[0].data (), src[1].data ()};
+    const float* lIn[2] = {src[0].data (), src[1].data ()};
     if (!drivePost)
-        drive.process (ins2, n);
+    {
+        for (int c = 0; c < 2; ++c)
+        {
+            std::copy (src[c].begin (), src[c].begin () + n, hBuf[c].begin ());
+            std::copy (src[c].begin (), src[c].begin () + n, lBuf[c].begin ());
+            hIn[c] = hb[c];
+            lIn[c] = lb[c];
+        }
+        driveHp.process (hb, n);
+        driveLp.process (lb, n);
+    }
 
     for (int i = 0; i < n; ++i)
     {
@@ -211,6 +265,7 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         // Split raises the high-pass and lowers the low-pass)
         const double swing = vocal ? std::clamp ((lead - liquidSlow) * (leaderLp ? -2.0 : 2.0), -36.0, 36.0) : 0.0;
         split += (p[kSplit] + envAmount * env + swing - split) * semiSmooth;
+        const bool fading = slopeFade < 1.0;
         if (i % kCoeffInterval == 0)
         {
             double hz = hpCutoff (hpBase, offset, split), lz = std::max (lpFloor, lpCutoff (lpBase, offset, split));
@@ -221,10 +276,9 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
                 vocalPush (hz, lz, leaderLp, p[kFade], p[kDipStart], hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;
-            hpC.set (hz, qHp, sr);
-            lpC.set (lz, qLp, sr);
-            hpG1 = onePoleG (hz, sr);
-            lpG1 = onePoleG (lz, sr);
+            setCoeffs (now, hz, lz, resHp, resLp);
+            if (fading)
+                setCoeffs (old, hz, lz, resHp, resLp);
         }
         mix += (mixT - mix) * smooth;
         out += (outT - out) * smooth;
@@ -232,55 +286,54 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         lpMul += (lpMulT - lpMul) * smooth;
         hpG += (hpGT - hpG) * smooth;
         lpG += (lpGT - lpG) * smooth;
+        if (fading)
+            slopeFade = std::min (1.0, slopeFade + slopeStep);
 
-        const float ins[2] = {src[0][(size_t)i], src[1][(size_t)i]};
         float* outs[2] = {yl, yr};
         for (int c = 0; c < 2; ++c)
         {
-            const double x = ins[c];
-            double l, h, l2, h2, tmp, wet;
-            if (slope == kSlope18)
+            // the filters, with the polarity that makes the pair sum flat (see Slopes.h)
+            const double hx = hIn[c][i], lx = lIn[c][i];
+            double h = filterTick (shNow, now.hpC, now.hp[c], hx, true);
+            double l = filterTick (shNow, now.lpC, now.lp[c], lx, false);
+            if (fading)
             {
-                // Butterworth 3: a first-order and a second-order section (Q 1); the pair is in
-                // quadrature, so it sums flat without inverting
-                double h1, l1;
-                hp1[c].tick (hpG1, x, tmp, h1);
-                lp1[c].tick (lpG1, x, l1, tmp);
-                hp[c][0].tick (hpC, h1, tmp, h);
-                lp[c][0].tick (lpC, l1, l, tmp);
-                wet = hpG * hpMul * h + lpG * lpMul * l;
+                const double ho = filterTick (shOld, old.hpC, old.hp[c], hx, true);
+                const double lo = filterTick (shOld, old.lpC, old.lp[c], lx, false);
+                h = ho + (h - ho) * slopeFade;
+                l = lo + (l - lo) * slopeFade;
             }
-            else
-            {
-                hp[c][0].tick (hpC, x, tmp, h);
-                lp[c][0].tick (lpC, x, l, tmp);
-                if (slope == kSlope24)
-                {
-                    hp[c][1].tick (hpC, h, tmp, h2);
-                    lp[c][1].tick (lpC, l, l2, tmp);
-                    h = h2;
-                    l = l2;
-                }
-                // second-order sections are 180 degrees apart at the crossing, so the high-pass is
-                // inverted at 12 dB; the fourth-order pair is back in phase
-                wet = slope == kSlope24 ? hpG * hpMul * h + lpG * lpMul * l : lpG * lpMul * l - hpG * hpMul * h;
-            }
-            const double y = x * (1.0 - mix) + wet * mix;
             if (drivePost)
-                mixed[c][(size_t)i] = (float)y; // Output comes after the drive
+            {
+                hb[c][i] = (float)h; // driven below, then summed
+                lb[c][i] = (float)l;
+            }
             else
+            {
+                const double wet = hpG * hpMul * h + lpG * lpMul * l;
+                const double y = dry[c][(size_t)i] * (1.0 - mix) + wet * mix;
                 outs[c][i] = (float)(y * out);
+            }
         }
+        gHp[(size_t)i] = hpG * hpMul;
+        gLp[(size_t)i] = lpG * lpMul;
+        gMix[(size_t)i] = mix;
         gOut[(size_t)i] = out;
     }
     if (drivePost)
     {
-        drive.process (mix2, n);
+        // each filter's output driven, then its gain, the dry/wet and the output level
+        driveHp.process (hb, n);
+        driveLp.process (lb, n);
         for (int c = 0; c < 2; ++c)
         {
             float* o = c == 0 ? yl : yr;
             for (int i = 0; i < n; ++i)
-                o[i] = mixed[c][(size_t)i] * gOut[(size_t)i];
+            {
+                const auto k = (size_t)i;
+                const double wet = (double)gHp[k] * hb[c][i] + (double)gLp[k] * lb[c][i];
+                o[i] = (float)((dry[c][k] * (1.0 - gMix[k]) + wet * gMix[k]) * gOut[k]);
+            }
         }
     }
     if (moving || duck < 1.0f || duckHold > 0)

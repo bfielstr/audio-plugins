@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "Fft.h"
 #include "Filter.h"
+#include "Interp.h"
 #include "Params.h"
 #include "Rack.h"
 #include "SampleData.h"
@@ -1958,6 +1959,485 @@ TEST (fuzz_random_params_with_sample)
     }
     std::printf ("    worst peak %.2f (iteration %d)\n", worstPeak, worst);
     CHECK (worstPeak < 64.0, "runaway level %f at iteration %d", worstPeak, worst);
+}
+
+// ---------------------------------------------------------------------------
+// Far transposition: band-limited reads at any speed, and the high-pass that follows Transpose
+
+// A band-limited sawtooth (every harmonic below Nyquist): a low, bright sound. The period is a
+// whole number of samples, so one period is built and repeated.
+static std::shared_ptr<SampleData> brightSaw (int period, double secs, double sr = 44100.0)
+{
+    std::vector<float> one ((size_t)period, 0.0f);
+    const double f0 = sr / period;
+    for (int k = 1; k * f0 < 0.5 * sr; ++k)
+        for (int i = 0; i < period; ++i)
+            one[(size_t)i] += (float)(0.3 * std::sin (2.0 * M_PI * k * i / period) / k);
+    std::vector<float> l ((size_t)(secs * sr));
+    for (size_t i = 0; i < l.size (); ++i)
+        l[i] = one[i % (size_t)period];
+    return SampleData::fromBuffers (l, {}, sr, "saw");
+}
+
+// Power spectrum (Blackman-Harris window) of x[a, a + n), n a power of two.
+static std::vector<double> powerSpectrum (const std::vector<float>& x, size_t a, int n)
+{
+    Fft fft (n);
+    std::vector<float> buf ((size_t)n);
+    for (int i = 0; i < n; ++i)
+    {
+        const double t = 2.0 * M_PI * i / n;
+        const double w = 0.35875 - 0.48829 * std::cos (t) + 0.14128 * std::cos (2 * t) - 0.01168 * std::cos (3 * t);
+        buf[(size_t)i] = a + i < x.size () ? (float)(x[a + (size_t)i] * w) : 0.0f;
+    }
+    std::vector<Fft::cf> spec ((size_t)fft.bins ());
+    fft.forward (buf.data (), spec.data ());
+    std::vector<double> p ((size_t)fft.bins ());
+    for (size_t k = 0; k < p.size (); ++k)
+        p[k] = (double)std::norm (spec[k]);
+    return p;
+}
+
+// dB of the power in [fLo, fHi) relative to the whole spectrum.
+static double bandDb (const std::vector<double>& p, int n, double fLo, double fHi, double sr = kHostSr)
+{
+    double band = 1e-30, all = 1e-30;
+    for (size_t k = 1; k < p.size (); ++k)
+    {
+        const double f = (double)k * sr / n;
+        all += p[k];
+        if (f >= fLo && f < fHi)
+            band += p[k];
+    }
+    return 10.0 * std::log10 (band / all);
+}
+
+static void emptyRack (Engine& e)
+{
+    for (int slot = 0; slot < kRackSlots; ++slot)
+        e.setParam (slotParam (slot, kSlotType), (double)kFxEmpty);
+    e.setParam (kFilterOn, 0.0);
+}
+
+// The sample read the way every reader did before the levels: readSinc alone, its band narrowed with
+// the speed down to a quarter (kMinCutoff).
+static std::vector<float> readTheOldWay (const SampleData& s, double start, double rate, int n)
+{
+    std::vector<float> out ((size_t)n);
+    const float cutoff = (float)std::min (1.0, 1.0 / rate);
+    float r;
+    for (int i = 0; i < n; ++i)
+        readSinc (s.data (0), nullptr, s.length, start + rate * i, cutoff, out[(size_t)i], r);
+    return out;
+}
+static std::vector<float> readWithLevels (const SampleData& s, double start, double rate, int n)
+{
+    std::vector<float> out ((size_t)n);
+    const SampleReader rd (s, rate);
+    float r;
+    for (int i = 0; i < n; ++i)
+        rd.read (start + rate * i, out[(size_t)i], r);
+    return out;
+}
+
+TEST (transpose_up_48_has_no_low_junk)
+{
+    // A 55 Hz saw transposed up 48 semitones has its fundamental at 882 Hz: nothing may sound below
+    // it. Reading 16 samples per output sample needs a 1/16 band; readSinc narrowed it only to 1/4, so
+    // what was between folded down across the spectrum (aliasing), a lot of it into the low end.
+    auto s = brightSaw (800, 8.0); // 55.125 Hz
+    const int n = 16384;
+    const double rate = 16.0 * 44100.0 / kHostSr;
+    {
+        const double before = bandDb (powerSpectrum (readTheOldWay (*s, 1000.0, rate, n), 0, n), n, 20.0, 800.0);
+        const double after = bandDb (powerSpectrum (readWithLevels (*s, 1000.0, rate, n), 0, n), n, 20.0, 800.0);
+        std::printf ("    reader +48 st: power below the fundamental (20..800 Hz) %.1f dB before, %.1f dB with the levels\n",
+                     before, after);
+        CHECK (before > -40.0, "the old way was cleaner than expected: %.1f dB", before);
+        CHECK (after < before - 50.0 && after < -90.0, "low junk %.1f dB (before %.1f)", after, before);
+    }
+    // through the engine, in the modes that resample (Beats loops segment tails, which modulates the
+    // sound on its own: not measured here)
+    for (int mode : {0, 1, 2})
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        emptyRack (*e);
+        e->setParam (kTranspose, 48.0);
+        const char* name = "classic";
+        if (mode > 0)
+        {
+            e->setParam (kWarp, 1.0);
+            e->setParam (kWarpBeats, 16.0); // the sample is 8 s: 120 BPM
+            e->setParam (kWarpMode, mode == 1 ? kWarpTones : kWarpComplex);
+            name = mode == 1 ? "tones" : "complex";
+        }
+        e->noteOn (60, 1.0f);
+        auto o = run (*e, 8000 + n);
+        const double junk = bandDb (powerSpectrum (o.l, 8000, n), n, 20.0, 800.0);
+        std::printf ("    %-8s +48 st: power below the fundamental (20..800 Hz) %.1f dB\n", name, junk);
+        CHECK (junk < (mode == 0 ? -90.0 : -60.0), "%s: low junk %.1f dB", name, junk);
+    }
+}
+
+TEST (reads_are_band_limited_at_any_speed)
+{
+    // Sines read at 1x to 64x: a tone that lands above the output's Nyquist must be gone (not folded
+    // down), one below it must pass at its level. Rates in the crossfades between levels too.
+    const double rates[] = {1.0, 1.5, 1.8, 2.0, 3.0, 3.7, 4.0, 6.0, 7.5, 8.0, 12.0, 15.0, 16.0, 24.0, 30.0, 32.0, 48.0, 60.0, 64.0};
+    const int n = 8192;
+    double worstStop = -300.0, worstStopOld = -300.0, worstPass = 0.0, worstSpur = -300.0;
+    for (double rate : rates)
+    {
+        // output frequencies (cycles per output sample): in the band, and past Nyquist (0.5)
+        for (double fo : {0.02, 0.1, 0.25, 0.33, 0.66, 0.9, 1.7, 3.3})
+        {
+            const double f = fo / rate; // in the sample
+            if (f >= 0.45)
+                continue;
+            std::vector<float> x ((size_t)(rate * n + 4096));
+            for (size_t i = 0; i < x.size (); ++i)
+                x[i] = (float)std::sin (2.0 * M_PI * f * (double)i);
+            auto s = SampleData::fromBuffers (x, {}, 48000.0);
+            auto y = readWithLevels (*s, 1024.0, rate, n);
+            auto p = powerSpectrum (y, 0, n);
+            double all = 0.0;
+            for (double v : p)
+                all += v;
+            // a full-scale sine's power through this window and FFT
+            double ref = 0.0;
+            {
+                std::vector<float> t ((size_t)n);
+                for (int i = 0; i < n; ++i)
+                    t[(size_t)i] = (float)std::sin (2.0 * M_PI * 0.1 * i);
+                for (double v : powerSpectrum (t, 0, n))
+                    ref += v;
+            }
+            const double levelDb = 10.0 * std::log10 (all / ref + 1e-30);
+            if (fo > 0.5)
+            {
+                // above 1.3x Nyquist readSinc's own kernel is past its transition band
+                if (fo > 0.65)
+                {
+                    worstStop = std::max (worstStop, levelDb);
+                    auto yo = readTheOldWay (*s, 1024.0, rate, n);
+                    double allOld = 0.0;
+                    for (double v : powerSpectrum (yo, 0, n))
+                        allOld += v;
+                    worstStopOld = std::max (worstStopOld, 10.0 * std::log10 (allOld / ref + 1e-30));
+                    CHECK (levelDb < -70.0, "rate %.1f: a tone at %.2f of the output rate reads at %.1f dB", rate, fo, levelDb);
+                }
+            }
+            else
+            {
+                if (fo <= 0.25)
+                {
+                    worstPass = std::max (worstPass, std::fabs (levelDb));
+                    CHECK (std::fabs (levelDb) < 0.1, "rate %.1f: a tone at %.2f reads at %.2f dB", rate, fo, levelDb);
+                }
+                // everything but the tone, in the band below 0.35 of the output rate (above it readSinc's
+                // own transition band lets some through: the very top of the spectrum)
+                const int k0 = (int)std::lround (fo * n);
+                double spur = 1e-30;
+                for (int k = 1; k < (int)(0.35 * n); ++k)
+                    if (std::abs (k - k0) > 8)
+                        spur += p[(size_t)k];
+                const double spurDb = 10.0 * std::log10 (spur / all);
+                worstSpur = std::max (worstSpur, spurDb);
+                CHECK (spurDb < -80.0, "rate %.1f: tone at %.2f: %.1f dB of other things below 0.35", rate, fo, spurDb);
+            }
+        }
+    }
+    std::printf ("    past Nyquist: at most %.1f dB (the old way: %.1f dB); in the band: level within %.3f dB, "
+                 "anything else at most %.1f dB\n",
+                 worstStop, worstStopOld, worstPass, worstSpur);
+}
+
+TEST (reads_at_up_to_9_semitones_are_as_before)
+{
+    // up to 2^0.75 times real time the sample itself is read, exactly as readSinc always did
+    auto s = brightSaw (800, 1.0);
+    for (double rate : {0.1, 0.5, 0.91875, 1.0, 1.2, 1.5, 1.68})
+    {
+        auto a = readTheOldWay (*s, 100.25, rate, 4000);
+        auto b = readWithLevels (*s, 100.25, rate, 4000);
+        CHECK (a == b, "rate %.3f reads differently", rate);
+    }
+}
+
+TEST (bend_across_levels_is_smooth)
+{
+    // A slow bend over two octaves crosses three level boundaries: no step anywhere. A step would show
+    // in the second difference, which for a sine of amplitude A and w radians per sample is at most w^2 A.
+    auto s = sine (100.0, 1.0, 48000.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    emptyRack (*e);
+    e->setParam (kLoopOn, 1.0); // 100 whole periods: seamless
+    e->setParam (kTranspose, 8.0);
+    e->setParam (kPbRange, 26.0);
+    e->noteOn (60, 1.0f);
+    const int total = 96000, block = 32;
+    Out o;
+    o.l.resize ((size_t)total);
+    o.r.resize ((size_t)total);
+    std::vector<double> semis ((size_t)total);
+    for (int pos = 0; pos < total; pos += block)
+    {
+        const float bend = std::min (1.0f, (float)pos / (float)(total - 4800));
+        e->setPitchBend (bend);
+        e->render (o.l.data () + pos, o.r.data () + pos, block, {});
+        for (int i = 0; i < block; ++i)
+            semis[(size_t)(pos + i)] = 8.0 + 26.0 * bend;
+    }
+    const double amp = 0.5;
+    double worst = 0.0;
+    int at = 0;
+    for (int i = 4800; i < total; ++i)
+    {
+        const double w = 2.0 * M_PI * 100.0 * std::exp2 (std::max (semis[(size_t)i], semis[(size_t)i - 2]) / 12.0) / kHostSr;
+        const double d2 = std::fabs ((double)o.l[(size_t)i] - 2.0 * o.l[(size_t)i - 1] + o.l[(size_t)i - 2]);
+        const double ratio = d2 / (w * w * amp);
+        if (ratio > worst)
+        {
+            worst = ratio;
+            at = i;
+        }
+    }
+    // and the level stays put (the levels are flat where this tone is)
+    double lo = 1e9, hi = 0.0;
+    for (int w0 = 4800; w0 + 2400 <= total; w0 += 2400)
+    {
+        const double a = peak (std::vector<float> (o.l.begin () + w0, o.l.begin () + w0 + 2400));
+        lo = std::min (lo, a);
+        hi = std::max (hi, a);
+    }
+    std::printf ("    +8 .. +34 st: largest second difference %.3f of a clean sine's (at %.1f st); level %.4f .. %.4f\n",
+                 worst, semis[(size_t)at], lo, hi);
+    CHECK (worst < 1.05, "a step while bending: %.3f at %.1f st", worst, semis[(size_t)at]);
+    CHECK (hi / lo < 1.003, "the level moves while bending: %.4f .. %.4f", lo, hi);
+}
+
+TEST (transpose_hp_follows_the_pitch)
+{
+    // A tone at the high-pass's base frequency stays at its cutoff whatever the transposition and bend:
+    // -6 dB for the Linkwitz-Riley slopes (Para's 12, 24, 36, 48), -3 dB for 6 and 18 dB.
+    auto s = sine (100.0, 1.0, 48000.0);
+    const double wantDb[] = {-3.01, -6.02, -3.01, -6.02, -6.02, -6.02};
+    for (int slope = 0; slope < 6; ++slope)
+        for (int t : {-12, 0, 24, 48})
+            for (float bend : {0.0f, 1.0f})
+            {
+                std::unique_ptr<Engine> e (makeEngine (s));
+                emptyRack (*e);
+                e->setParam (kLoopOn, 1.0);
+                e->setParam (kTranspose, t);
+                e->setParam (kPbRange, 7.0);
+                e->setParam (kTransHpOn, 1.0);
+                e->setParam (kTransHpFreq, 100.0);
+                e->setParam (kTransHpSlope, slope);
+                e->setPitchBend (bend);
+                e->noteOn (60, 1.0f);
+                auto o = run (*e, 24000);
+                const double f = 100.0 * std::exp2 ((t + 7.0 * bend) / 12.0);
+                const double db = 20.0 * std::log10 (toneAmp (o.l, f, 12000, 24000) / 0.5);
+                CHECK (std::fabs (db - wantDb[slope]) < 0.25, "slope %d, %+d st, bend %.0f: %.2f dB at the cutoff", slope, t, bend, db);
+                if (slope == 3 && bend == 0.0f)
+                    std::printf ("    24 dB, base 100 Hz, %+d st: the tone at %.0f Hz %.2f dB\n", t, f, db);
+            }
+    // an octave below the cutoff: 24 dB down (and more) at 24 dB, whatever the transposition
+    {
+        auto low = sine (50.0, 1.0, 48000.0);
+        for (int t : {0, 36})
+        {
+            std::unique_ptr<Engine> e (makeEngine (low));
+            emptyRack (*e);
+            e->setParam (kLoopOn, 1.0);
+            e->setParam (kTranspose, t);
+            e->setParam (kTransHpOn, 1.0);
+            e->setParam (kTransHpFreq, 100.0);
+            e->setParam (kTransHpSlope, kTransHp24);
+            e->noteOn (60, 1.0f);
+            auto o = run (*e, 24000);
+            const double db = 20.0 * std::log10 (toneAmp (o.l, 50.0 * std::exp2 (t / 12.0), 12000, 24000) / 0.5);
+            std::printf ("    24 dB, an octave below the cutoff, %+d st: %.1f dB\n", t, db);
+            CHECK (db < -24.0 && db > -30.0, "%+d st: %.1f dB an octave below", t, db);
+        }
+    }
+    // while bending the cutoff glides with the pitch: the tone at the cutoff stays at -6 dB
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        emptyRack (*e);
+        e->setParam (kLoopOn, 1.0);
+        e->setParam (kTranspose, 24.0);
+        e->setParam (kPbRange, 12.0);
+        e->setParam (kTransHpOn, 1.0);
+        e->setParam (kTransHpFreq, 100.0);
+        e->setParam (kTransHpSlope, kTransHp24);
+        e->noteOn (60, 1.0f);
+        Out o;
+        o.l.resize (96000);
+        o.r.resize (96000);
+        for (int pos = 0; pos < 96000; pos += 64)
+        {
+            e->setPitchBend ((float)std::sin (2.0 * M_PI * pos / 96000.0)); // up an octave, down one, back
+            e->render (o.l.data () + pos, o.r.data () + pos, 64, {});
+        }
+        // the level through the bend, by 20 ms windows
+        double lo = 1e9, hi = 0.0;
+        for (int w0 = 4800; w0 + 960 <= 96000; w0 += 960)
+        {
+            const double a = peak (std::vector<float> (o.l.begin () + w0, o.l.begin () + w0 + 960));
+            lo = std::min (lo, a);
+            hi = std::max (hi, a);
+        }
+        std::printf ("    bending +-12 st at +24: level %.3f .. %.3f (-6 dB is %.3f)\n", lo, hi, 0.5 * 0.5012);
+        CHECK (lo > 0.23 && hi < 0.27, "the level through the bend: %.3f .. %.3f", lo, hi);
+    }
+}
+
+TEST (transpose_hp_off_changes_nothing)
+{
+    // Off (the default), the output is what it always was; switched off mid-note, from there on too.
+    auto s = brightSaw (800, 2.0);
+    auto render = [&] (bool onAWhile) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kTranspose, 19.0);
+        e->setParam (kTransHpFreq, 200.0); // 600 Hz at +19: the saw's lowest partials go
+        e->noteOn (60, 1.0f);
+        if (onAWhile)
+            e->setParam (kTransHpOn, 1.0);
+        Out a = run (*e, 12000);
+        e->setParam (kTransHpOn, 0.0);
+        Out b = run (*e, 12000);
+        return std::make_pair (a, b);
+    };
+    auto plain = render (false), toggled = render (true);
+    CHECK (paramInfo (kTransHpOn).def == 0.0, "the high-pass is on by default");
+    CHECK (plain.second.l == toggled.second.l && plain.second.r == toggled.second.r, "off is not what it was");
+    CHECK (rms (plain.first.l, 2000) > 1.2 * rms (toggled.first.l, 2000), "on does nothing: %f vs %f",
+           rms (plain.first.l, 2000), rms (toggled.first.l, 2000));
+}
+
+TEST (far_transpose_fuzz)
+{
+    // Every mode at extreme transpositions, bends, pitch envelopes and LFOs, the high-pass on at random
+    // slopes: finite and bounded.
+    auto drums = bursts ({0.0, 0.25, 0.5, 0.75}, 1.0);
+    auto saw = brightSaw (300, 1.5, 96000.0);
+    uint32_t seed = 777;
+    auto r01 = [&] { return 0.5f + 0.5f * randomBipolar (seed); };
+    double worstPeak = 0.0;
+    for (int iter = 0; iter < 120; ++iter)
+    {
+        std::unique_ptr<Engine> e (makeEngine (iter % 2 ? drums : saw));
+        emptyRack (*e);
+        e->setParam (kMode, (double)(iter % 3));
+        e->setParam (kWarp, r01 () < 0.5f ? 1.0 : 0.0);
+        e->setParam (kWarpMode, (double)std::min (5, (int)(r01 () * 6)));
+        e->setParam (kTranspose, std::round (-48.0 + 96.0 * r01 ()));
+        e->setParam (kPbRange, std::round (48.0 * r01 ()));
+        e->setParam (kPitchEnvAmt, -48.0 + 96.0 * r01 ());
+        e->setParam (kLfoOn, r01 () < 0.5f ? 1.0 : 0.0);
+        e->setParam (kLfoPitch, r01 ());
+        e->setParam (kLfoRate, 0.1 + 20.0 * r01 ());
+        e->setParam (kTransHpOn, r01 () < 0.7f ? 1.0 : 0.0);
+        e->setParam (kTransHpFreq, 10.0 + 190.0 * r01 ());
+        e->setParam (kTransHpSlope, (double)std::min (5, (int)(r01 () * 6)));
+        e->setParam (kLoopOn, r01 () < 0.5f ? 1.0 : 0.0);
+        HostInfo h;
+        h.playing = true;
+        h.ppqValid = true;
+        double pk = 0.0;
+        bool ok = true;
+        for (int step = 0; step < 16; ++step)
+        {
+            if (r01 () < 0.5f)
+                e->noteOn (36 + (int)(r01 () * 60), r01 ());
+            if (r01 () < 0.3f)
+                e->noteOff (36 + (int)(r01 () * 60));
+            e->setPitchBend (randomBipolar (seed));
+            if (r01 () < 0.2f)
+                e->setParam (kTranspose, std::round (-48.0 + 96.0 * r01 ()));
+            auto o = run (*e, 512 + (int)(r01 () * 2000), h, 1 + (int)(r01 () * 300));
+            ok = ok && finite (o.l) && finite (o.r);
+            pk = std::max (pk, peak (o.l));
+        }
+        CHECK (ok, "iteration %d produced non-finite output", iter);
+        worstPeak = std::max (worstPeak, pk);
+    }
+    std::printf ("    worst peak %.2f\n", worstPeak);
+    CHECK (worstPeak < 32.0, "runaway level %f", worstPeak);
+}
+
+TEST (far_transpose_cpu_and_memory)
+{
+    // building the levels of a minute of stereo, and what a voice costs read far up (+48) with and
+    // without the high-pass, next to the old way of reading
+    {
+        std::vector<float> l ((size_t)(60 * 44100)), r (l.size ());
+        uint32_t seed = 5;
+        for (size_t i = 0; i < l.size (); ++i)
+        {
+            l[i] = 0.5f * randomBipolar (seed);
+            r[i] = 0.5f * randomBipolar (seed);
+        }
+        const auto t0 = std::chrono::steady_clock::now ();
+        auto s = SampleData::fromBuffers (l, r, 44100.0);
+        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        size_t extra = 0;
+        for (const auto& m : s->mips)
+            extra += (size_t)m.length;
+        std::printf ("    a minute of stereo: loaded (levels and analysis) in %.2f s; the levels add %.2fx its memory\n",
+                     secs, (double)extra / s->length);
+        CHECK (s->levels () == 1 + SampleData::kMipLevels, "levels %d", s->levels ());
+    }
+    auto s = sine (110.0, 2.0, 44100.0, true);
+    auto timeIt = [&] (double transpose, bool hp, int warpMode, int voices) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        emptyRack (*e);
+        e->setParam (kVoices, 14); // 32
+        e->setParam (kLoopOn, 1);
+        e->setParam (kTranspose, transpose);
+        e->setParam (kTransHpOn, hp ? 1.0 : 0.0);
+        e->setParam (kTransHpSlope, kTransHp48);
+        e->setParam (kWarp, warpMode >= 0 ? 1.0 : 0.0);
+        e->setParam (kWarpMode, std::max (0, warpMode));
+        for (int i = 0; i < voices; ++i)
+            e->noteOn (48 + i % 12, 0.8f);
+        const auto t0 = std::chrono::steady_clock::now ();
+        run (*e, (int)kHostSr * 2);
+        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        return 100.0 * secs / 2.0; // % of one core in real time
+    };
+    const double at0 = timeIt (0.0, false, -1, 32), at48 = timeIt (48.0, false, -1, 32), hp48 = timeIt (48.0, true, -1, 32);
+    const double pv0 = timeIt (0.0, false, kWarpComplex, 8), pv48 = timeIt (48.0, false, kWarpComplex, 8);
+    // the old way at +48: readSinc at a quarter band (64 taps a channel), for 32 voices
+    double old48;
+    {
+        const double rate = 16.0 * 44100.0 / kHostSr;
+        const auto t0 = std::chrono::steady_clock::now ();
+        float sink = 0.0f;
+        for (int v = 0; v < 32; ++v)
+        {
+            float l, r;
+            double pos = 0.0;
+            for (int i = 0; i < (int)kHostSr * 2; ++i)
+            {
+                readSinc (s->data (0), s->data (1), s->length, pos, (float)(1.0 / rate), l, r);
+                sink += l + r;
+                pos += rate;
+                if (pos >= s->length)
+                    pos -= s->length;
+            }
+        }
+        old48 = 100.0 * std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count () / 2.0;
+        if (sink == 12345.0f)
+            std::printf ("-");
+    }
+    std::printf ("    CPU, 32 classic voices: %.1f%% at 0 st, %.1f%% at +48 (reading alone the old way: %.1f%%), %.1f%% at +48 "
+                 "with the 48 dB high-pass\n",
+                 at0, at48, old48, hp48);
+    std::printf ("    CPU, 8 complex voices: %.1f%% at 0 st, %.1f%% at +48\n", pv0, pv48);
+    CHECK (at48 < 25.0 && hp48 < 30.0, "too slow: %.1f%% / %.1f%%", at48, hp48);
 }
 
 TEST (performance)

@@ -20,7 +20,7 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | **Filter**: LP / HP / BP / Notch / Morph, 12/24 dB, circuits Clean / OSR / MS2 / SMP / PRD, Drive, Morph, Vel / Key / Env / LFO modulation, draggable response curve | ✓ |
 | **Envelopes**: Amp / Filter / Pitch ADSR with draggable displays; amp loop modes None / Trigger / Loop / Beat / Sync with Time / Rate | ✓ plus up to 6 extra breakpoints (double-click) and per-segment curves (Shift+drag), all automatable |
 | **LFO**: Sine / Square / Triangle / Saw Down / Saw Up / Random, Hz or tempo sync, Attack, Retrigger + Offset, Key, → Volume / Pitch / Pan / Filter, per voice | ✓ |
-| **Global**: Pan, Random Pan, Spread (2 detuned voices L/R, decided at note-on), Volume, Vel→Vol, Transpose ±48, Detune ±50 ct, pitch bend (range adjustable, default ±5), Glide (mono legato) / Portamento (poly) + Time | ✓ |
+| **Global**: Pan, Random Pan, Spread (2 detuned voices L/R, decided at note-on), Volume, Vel→Vol, Transpose ±48, Detune ±50 ct, pitch bend (range adjustable, default ±5), Glide (mono legato) / Portamento (poly) + Time | ✓ plus a high-pass that follows the transposition (**HP**, see below) |
 | Context menu: Normalize, Reverse, Crop, constant-power fade toggle, Show in Finder | ✓ (all non-destructive; the file on disk is never changed) |
 | Sustain pedal (CC64) | ✓ |
 | Sample stays at its original pitch on C3 (MIDI 60) | ✓ |
@@ -63,6 +63,23 @@ The M/S EQ slopes of older projects (6 / 12 / 24 dB) stay what they were.
 
 **Root Note** (Global panel): the note on which the sample plays at its own pitch (C3 by default).
 **Voices** defaults to 1.
+
+**Transposing far up** stays clean: a sample read many times faster than real time (+48 semitones
+reads 16 samples for each one played) needs its top octaves removed first, or they fold down across
+the spectrum as aliasing, a lot of it into the low end. When a sample loads, Smemplr makes
+band-limited copies of it at 1/2 to 1/64 of its rate (about as much memory again), and a fast read
+takes the copy that suits its speed, crossfading into the next one over the last quarter octave
+before it, so a pitch bend, glide or LFO moves smoothly across them. Up to +9 semitones (at the
+sample's own rate) the sample is read exactly as before. Every mode benefits; Complex and Complex Pro
+pick their copy when the note starts (with room for about an octave of bend up).
+
+**HP** (Global panel, next to Transpose, off by default): a high-pass whose cutoff follows the
+transposition, so what was below the audible range in the sample (rumble, a DC drift) stays out of
+the way when it is transposed up. The frequency is the cutoff at 0 semitones (10 to 200 Hz, 20 Hz by
+default); it moves with Transpose, Detune, pitch bend, the pitch envelope and the LFO's pitch (not with
+the key played), gliding a few milliseconds so a bend or a jump does not click. Transposed down it
+simply goes below the audible range. The slope is Para's: 6 or 18 dB (-3 dB at the cutoff), 12, 24,
+36 or 48 dB (Linkwitz-Riley, -6 dB at the cutoff); 24 dB by default.
 
 Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
 the waveform, audition by clicking the waveform (plays the slice under the mouse in Slicing mode),

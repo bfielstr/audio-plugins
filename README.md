@@ -1,4 +1,4 @@
-# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr, Smoothr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -15,6 +15,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Wubr**](plugins/wubr/README.md) | Two bell bands whose gain and/or centre you draw LFO shapes for (synced or free), or run as envelopes triggered by MIDI or transients with a hold point; Smacheratr at the end | LFO Tool / ShaperBox-style wubs |
 | [**Detonatr**](plugins/detonatr/README.md) | Explosion / impact designer: denoise and dereverb, tuned resonators and vocoded recordings of household items with a disperser, Multidyn, a spike-and-drop transient shaper and Smacheratr, in any order | a sound designer's RX, vocoder, disperser, multiband, transient and saturator chain |
 | [**Levlr**](plugins/levlr/README.md) | The spectrum in four touching bands with a level each: movable minimum-phase Linkwitz-Riley crossovers (12/24/48 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
+| [**Smoothr**](plugins/smoothr/README.md) | A limiter that puts a smooth low end before the last dB of loudness: slow gain on the lows and fast on the highs (a linear-phase split), a true-peak ceiling, a scrolling gain-reduction history; Smacheratr feeding it, and Character, a dip in the low mids that opens when they get loud | a mastering limiter with a FabFilter Pro-L-style history |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
@@ -93,6 +94,7 @@ plugins/widr    stereo width            same structure
 plugins/wubr    drawn band LFOs         same structure
 plugins/detonatr explosion designer    same structure
 plugins/levlr   four-band levels        same structure
+plugins/smoothr low-end-first limiter   same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

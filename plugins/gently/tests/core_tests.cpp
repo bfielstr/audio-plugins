@@ -1,0 +1,662 @@
+// Headless tests for the Gently DSP. Run: ./gently_tests [filter]
+#include "Engine.h"
+#include "Params.h"
+
+#include "smacheratr/src/core/ClarityBand.h"
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <complex>
+#include <cstdio>
+#include <functional>
+#include <memory>
+#include <string>
+#include <vector>
+
+using namespace gently;
+
+static int gFailures = 0, gChecks = 0;
+#define CHECK(cond, ...)                                                   \
+    do                                                                     \
+    {                                                                      \
+        ++gChecks;                                                         \
+        if (!(cond))                                                       \
+        {                                                                  \
+            ++gFailures;                                                   \
+            std::printf ("    FAIL %s:%d: %s  ", __FILE__, __LINE__, #cond); \
+            std::printf (__VA_ARGS__);                                     \
+            std::printf ("\n");                                            \
+        }                                                                  \
+    } while (0)
+
+struct TestCase
+{
+    const char* name;
+    std::function<void ()> fn;
+};
+static std::vector<TestCase>& tests ()
+{
+    static std::vector<TestCase> t;
+    return t;
+}
+struct Reg
+{
+    Reg (const char* n, std::function<void ()> f) { tests ().push_back ({n, std::move (f)}); }
+};
+#define TEST(name)                     \
+    static void name ();               \
+    static Reg reg_##name (#name, name); \
+    static void name ()
+
+constexpr double kSr = 48000.0;
+
+struct Sig
+{
+    std::vector<float> l, r;
+};
+
+// Gently alone (no end saturator), with `set` applied before it starts.
+static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr, Meters* meters = nullptr)
+{
+    auto e = std::make_unique<Engine> (false);
+    if (set)
+        set (*e);
+    e->setMeters (meters);
+    e->prepare (sr, 512);
+    return e;
+}
+
+// sines (Hz, dB peak) on both channels, `secs` long
+static Sig tones (const std::vector<std::pair<double, double>>& parts, double secs, double sr = kSr)
+{
+    Sig s;
+    const size_t n = (size_t)(secs * sr);
+    s.l.assign (n, 0.0f);
+    for (const auto& [hz, db] : parts)
+    {
+        const double a = std::pow (10.0, db / 20.0);
+        for (size_t i = 0; i < n; ++i)
+            s.l[i] += (float)(a * std::sin (2.0 * M_PI * hz * (double)i / sr));
+    }
+    s.r = s.l;
+    return s;
+}
+
+static Sig noise (double secs, double amp, uint32_t seed = 5)
+{
+    Sig s;
+    const size_t n = (size_t)(secs * kSr);
+    s.l.resize (n);
+    s.r.resize (n);
+    for (size_t i = 0; i < n; ++i)
+    {
+        seed = seed * 1664525u + 1013904223u;
+        s.l[i] = (float)(amp * ((double)(seed >> 8) / 8388608.0 - 1.0));
+        seed = seed * 1664525u + 1013904223u;
+        s.r[i] = (float)(amp * ((double)(seed >> 8) / 8388608.0 - 1.0));
+    }
+    return s;
+}
+
+static Sig run (Engine& e, const Sig& in, int block = 480)
+{
+    Sig out = in;
+    for (size_t pos = 0; pos < in.l.size (); pos += (size_t)block)
+    {
+        const int m = (int)std::min ((size_t)block, in.l.size () - pos);
+        e.process (out.l.data () + pos, out.r.data () + pos, out.l.data () + pos, out.r.data () + pos, m);
+    }
+    return out;
+}
+
+// a tone's level (dB peak) in x from sample `from` on
+static double toneDb (const std::vector<float>& x, double hz, size_t from, double sr = kSr)
+{
+    std::complex<double> acc (0.0, 0.0);
+    double wsum = 0.0;
+    const size_t n = x.size () - from;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * (double)i / (double)n);
+        const double ph = -2.0 * M_PI * hz * (double)(from + i) / sr;
+        acc += w * (double)x[from + i] * std::complex<double> (std::cos (ph), std::sin (ph));
+        wsum += w;
+    }
+    return 20.0 * std::log10 (2.0 * std::abs (acc) / wsum + 1e-12);
+}
+
+// the largest difference between out and the input delayed by `lat`
+static double diffDelayed (const Sig& in, const Sig& out, int lat)
+{
+    double m = 0.0;
+    for (size_t i = (size_t)lat; i < in.l.size (); ++i)
+    {
+        m = std::max (m, (double)std::fabs (out.l[i] - in.l[i - (size_t)lat]));
+        m = std::max (m, (double)std::fabs (out.r[i] - in.r[i - (size_t)lat]));
+    }
+    return m;
+}
+
+static double maxStep (const std::vector<float>& x, size_t a, size_t b)
+{
+    double m = 0.0;
+    for (size_t i = std::max<size_t> (a, 1); i < std::min (b, x.size ()); ++i)
+        m = std::max (m, (double)std::fabs (x[i] - x[i - 1]));
+    return m;
+}
+
+TEST (parameters_and_defaults)
+{
+    const auto& t = paramTable ();
+    CHECK (t.size () == kNumParams, "every parameter: %u of %u", (unsigned)t.size (), (unsigned)kNumParams);
+    for (uint32_t id = 0; id < t.size (); ++id)
+        CHECK (t.info (id).id == id, "id %u in its place", id);
+    CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
+               kNumParams == kTailExt2Base + pk::kTailExt2Fields,
+           "the end saturator's three blocks, one after the other, last");
+    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the last block");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end Smacheratr off");
+    CHECK (t.info (kAdvanced).def == 0.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced off, Drive off (12 dB)");
+    CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
+    CHECK (t.info (kStereo).def == (double)kStereoLinked && t.info (kMix).def == 1.0 && t.info (kOutput).def == 0.0, "stereo, 100 %%, 0 dB");
+    CHECK (t.info (bandParam (0, kOn)).def == 1.0 && t.info (bandParam (0, kFreq)).def == 250.0 && t.info (bandParam (0, kRange)).def == 8.0 &&
+               t.info (bandParam (1, kOn)).def == 1.0 && t.info (bandParam (1, kFreq)).def == 3000.0 && t.info (bandParam (1, kRange)).def == 6.0,
+           "band 1 on the low mids, band 2 on the upper mids");
+    // the Thresholds share Smacheratr's range exactly (its sliders work on normalized values)
+    const auto& sm = smacheratr::paramTable ();
+    for (int k = 0; k < kBands; ++k)
+    {
+        const auto& a = t.info (bandParam (k, kThreshold));
+        const auto& b = sm.info (smacheratr::kClarityThresholdIds[k]);
+        CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.curve == b.curve, "band %d's Threshold is Smacheratr's", k + 1);
+        CHECK (fromSmacheratr (smacheratr::kClarityThresholdIds[k]) == (int64_t)bandParam (k, kThreshold), "slider %d mapped", k + 1);
+    }
+    std::printf ("    %u parameters (bands at %u, tail at %u, tail ext at %u, Gently block at %u)\n", (unsigned)kNumParams,
+                 (unsigned)kBandBase, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
+}
+
+TEST (bands_off_is_the_input_delayed)
+{
+    // with both bands' Range at 0 (or off) the output is the input, delayed by the latency, bit for bit
+    const Sig in = noise (0.5, 0.8);
+    for (int how = 0; how < 3; ++how)
+    {
+        auto e = engine ([how] (Engine& en) {
+            for (int k = 0; k < kBands; ++k)
+            {
+                if (how == 0)
+                    en.setParam (bandParam (k, kRange), 0.0);
+                else
+                    en.setParam (bandParam (k, kOn), 0.0);
+            }
+            if (how == 2)
+            {
+                en.setParam (kAdvanced, 1.0); // (the region Drive needs a working band)
+                en.setParam (kDrive, 1.0);
+                en.setParam (kDriveAmount, 36.0);
+            }
+        });
+        const Sig out = run (*e, in, 333);
+        const double d = diffDelayed (in, out, e->latency ());
+        std::printf ("    %s: latency %d, largest difference %g\n", how == 0 ? "Range 0" : how == 1 ? "bands off" : "bands off, Drive on",
+                     e->latency (), d);
+        CHECK (d == 0.0, "bit for bit: %g", d);
+    }
+    // quiet enough that the default bands never cut: untouched as well
+    {
+        auto e = engine ();
+        const Sig quiet = noise (0.5, 0.02);
+        const double d = diffDelayed (quiet, run (*e, quiet), e->latency ());
+        CHECK (d == 0.0, "under the threshold, bit for bit: %g", d);
+    }
+    // the Mid/Side modes make a round trip through mid and side: all but exact
+    for (int mode : {kMidSide, kMidOnly, kSideOnly})
+    {
+        auto e = engine ([mode] (Engine& en) {
+            en.setParam (kStereo, mode);
+            for (int k = 0; k < kBands; ++k)
+                en.setParam (bandParam (k, kRange), 0.0);
+        });
+        const double d = diffDelayed (in, run (*e, in), e->latency ());
+        CHECK (d < 1e-6, "mode %d: %g", mode, d);
+    }
+}
+
+TEST (a_loud_band_is_cut_by_its_range)
+{
+    // band 1 at 250 Hz with Range 8 dB, band 2 off; a loud tone at the band's centre is turned down by
+    // about the Range, and a tone far above it is left alone
+    Meters m;
+    auto measure = [&] (double hz, double db, double range, double* meterDb = nullptr) {
+        auto e = engine (
+            [range] (Engine& en) {
+                en.setParam (bandParam (0, kRange), range);
+                en.setParam (bandParam (1, kOn), 0.0);
+            },
+            kSr, &m);
+        const Sig in = tones ({{hz, db}}, 1.0);
+        const Sig out = run (*e, in);
+        if (meterDb)
+            *meterDb = m.bands.clarityDb.load ();
+        return toneDb (out.l, hz, 24000) - toneDb (in.l, hz, 24000);
+    };
+    double meter = 0.0;
+    const double cut = measure (250.0, -1.0, 8.0, &meter);
+    // the band's cut is 8 dB at its peak; the band's phase there makes the tone's drop a little less
+    const smacheratr::ClarityBand b = smacheratr::clarityBand (kSr, 250.0, 2.0);
+    const double g = std::pow (10.0, -8.0 / 20.0);
+    std::complex<double> h (1.0, 0.0);
+    {
+        const std::complex<double> z1 = std::polar (1.0, -2.0 * M_PI * 250.0 / kSr), z2 = z1 * z1;
+        auto H = [&] (const smacheratr::BiquadCoeffs& c) { return (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2); };
+        h = H (b.hp) * H (b.lp) * b.norm;
+    }
+    const double expect = 20.0 * std::log10 (std::abs (1.0 - (1.0 - g) * h));
+    std::printf ("    250 Hz at -1 dB: %.2f dB (the band's maths: %.2f dB), meter %.2f dB\n", cut, expect, meter);
+    CHECK (std::fabs (cut - expect) < 0.3, "cut as the band's maths says: %.2f vs %.2f dB", cut, expect);
+    CHECK (cut < -5.0 && cut > -8.5, "about the Range: %.2f dB", cut);
+    CHECK (std::fabs (meter + 8.0) < 0.01, "the meter reads the Range: %.2f dB", meter);
+    // a smaller Range limits the cut
+    const double cut4 = measure (250.0, -1.0, 4.0, &meter);
+    CHECK (cut4 < -2.0 && cut4 > -4.3 && std::fabs (meter + 4.0) < 0.01, "Range 4: %.2f dB (meter %.2f)", cut4, meter);
+    // a tone far above the band (5 kHz, -6 dB): the band hears it 20 dB down, under the threshold
+    const double other = measure (5000.0, -6.0, 8.0, &meter);
+    std::printf ("    5 kHz at -6 dB: %.3f dB, meter %.2f dB\n", other, meter);
+    CHECK (std::fabs (other) < 0.01 && meter == 0.0, "untouched: %.3f dB", other);
+    // a quiet tone in the band (-24 dB, under -18): untouched
+    const double quiet = measure (250.0, -24.0, 8.0, &meter);
+    CHECK (std::fabs (quiet) < 0.01 && meter == 0.0, "quiet in the band: %.3f dB", quiet);
+    // Smacheratr's law: 3 dB for every 5 the band's level (as the detector reads it: it rides the
+    // peaks, fast up and slow down, so a steady tone reads about 2 dB over its peak level) is over the
+    // threshold (-18 dB)
+    measure (250.0, -15.0, 8.0, &meter);
+    const double level = m.bands.clarityLevelDb.load ();
+    std::printf ("    250 Hz at -15 dB: read as %.2f dB, cut %.2f dB\n", level, meter);
+    CHECK (level > -15.5 && level < -12.0, "the level read: %.2f dB", level);
+    CHECK (std::fabs (meter + 0.6 * (level + 18.0)) < 0.3, "3 dB for every 5 over: %.2f at %.2f dB over", meter, level + 18.0);
+}
+
+TEST (band_two_and_width)
+{
+    // band 2 at 3 kHz (default), a loud tone there is cut; band 1 (250 Hz) stays out of it (it hears
+    // the 3 kHz tone through its 6 dB/oct top, about 16 dB down: under its threshold)
+    Meters m;
+    auto e = engine ({}, kSr, &m);
+    const Sig in = tones ({{3000.0, -8.0}, {250.0, -30.0}}, 1.0);
+    const Sig out = run (*e, in);
+    const double c2 = toneDb (out.l, 3000.0, 24000) - toneDb (in.l, 3000.0, 24000);
+    const double c1 = toneDb (out.l, 250.0, 24000) - toneDb (in.l, 250.0, 24000);
+    std::printf ("    3 kHz: %.2f dB (meter %.2f), 250 Hz: %.2f dB (meter %.2f)\n", c2, m.bands.clarity2Db.load (), c1,
+                 m.bands.clarityDb.load ());
+    CHECK (c2 < -4.0 && std::fabs (m.bands.clarity2Db.load () + 6.0) < 0.01, "band 2 cuts its tone: %.2f dB", c2);
+    CHECK (std::fabs (c1) < 0.3 && m.bands.clarityDb.load () == 0.0f, "band 1 hears nothing loud: %.2f dB", c1);
+    // a narrow band 2 hardly touches a tone an octave and a half below it; a wide one cuts it too (the
+    // narrow one lifts it a little: under its 12 dB/oct high-pass the band's phase turns past 90
+    // degrees, so taking the band away adds a touch there; Smacheratr's band does the same)
+    auto away = [&] (double width) {
+        auto en = engine ([width] (Engine& x) {
+            x.setParam (bandParam (0, kOn), 0.0);
+            x.setParam (bandParam (1, kWidth), width);
+            x.setParam (bandParam (1, kRange), 12.0);
+        });
+        const Sig a = tones ({{3000.0, -1.0}, {1060.0, -20.0}}, 1.0);
+        const Sig o = run (*en, a);
+        return toneDb (o.l, 1060.0, 24000) - toneDb (a.l, 1060.0, 24000);
+    };
+    const double narrow = away (0.5), wide = away (4.0);
+    std::printf ("    1.06 kHz beside a loud 3 kHz: width 0.5: %.2f dB, width 4: %.2f dB\n", narrow, wide);
+    CHECK (std::fabs (narrow) < 1.5 && wide < -0.5, "the width reaches: %.2f vs %.2f dB", narrow, wide);
+}
+
+TEST (advanced_thresholds)
+{
+    Meters m;
+    auto measure = [&] (bool advanced, double thresholdDb, double toneLevelDb, double* level = nullptr) {
+        auto e = engine (
+            [=] (Engine& en) {
+                en.setParam (kAdvanced, advanced ? 1.0 : 0.0);
+                en.setParam (bandParam (0, kThreshold), thresholdDb);
+                en.setParam (bandParam (1, kOn), 0.0);
+            },
+            kSr, &m);
+        const Sig in = tones ({{250.0, toneLevelDb}}, 0.8);
+        const Sig out = run (*e, in);
+        if (level)
+            *level = m.bands.clarityLevelDb.load ();
+        return std::make_pair ((double)m.bands.clarityDb.load (), diffDelayed (in, out, e->latency ()));
+    };
+    // a tone at -24 dB (read as about -22): under -18 without Advanced; with a Threshold of -10 under
+    // it too; at -40 it is cut by the Range, at -27 by 3 dB for every 5 over
+    double level = 0.0;
+    auto [plainCut, plainDiff] = measure (false, -40.0, -24.0, &level);
+    std::printf ("    a tone at -24 dB reads %.2f dB\n", level);
+    CHECK (plainCut == 0.0 && plainDiff == 0.0, "Advanced off: the band's Threshold is not used (-18 dB): %.2f dB", plainCut);
+    CHECK (level > -24.5 && level < -21.0, "the band's level reads the tone's: %.2f dB", level);
+    auto [highCut, highDiff] = measure (true, -10.0, -24.0);
+    CHECK (highCut == 0.0 && highDiff == 0.0, "under its Threshold: no cut (%.2f dB), the output untouched (%g)", highCut, highDiff);
+    auto [lowCut, lowDiff] = measure (true, -40.0, -24.0);
+    CHECK (std::fabs (lowCut + 8.0) < 0.01, "far over its Threshold: the whole Range: %.2f dB", lowCut);
+    auto [midCut, midDiff] = measure (true, -27.0, -24.0);
+    CHECK (std::fabs (midCut + 0.6 * (level + 27.0)) < 0.3, "3 dB for every 5 over: %.2f dB at %.2f dB over", midCut, level + 27.0);
+    // a loud tone at -6 dB: cut without Advanced, not with the Threshold at 0 dB
+    auto [loudPlain, d1] = measure (false, 0.0, -6.0);
+    auto [loudHigh, d2] = measure (true, 0.0, -6.0);
+    CHECK (loudPlain < -6.0 && loudHigh == 0.0, "-6 dB: %.2f dB without Advanced, %.2f dB with the Threshold at 0", loudPlain, loudHigh);
+    (void)midDiff;
+    (void)lowDiff;
+    (void)d1;
+    (void)d2;
+}
+
+TEST (region_drive_adds_harmonics_in_the_band)
+{
+    // a tone in band 1 (250 Hz) and one far above it (5.1 kHz): the region Drive gives the band
+    // harmonics and hardly touches the other
+    const Sig in = tones ({{250.0, -14.0}, {5100.0, -14.0}}, 1.0);
+    auto render = [&] (bool drive) {
+        auto e = engine ([drive] (Engine& en) {
+            en.setParam (bandParam (0, kWidth), 1.0);
+            en.setParam (bandParam (1, kOn), 0.0);
+            en.setParam (kAdvanced, 1.0);
+            en.setParam (bandParam (0, kThreshold), -40.0);
+            en.setParam (kDrive, drive ? 1.0 : 0.0);
+            en.setParam (kDriveAmount, 30.0);
+        });
+        return run (*e, in);
+    };
+    const Sig off = render (false), on = render (true);
+    auto db = [] (const Sig& s, double f) { return toneDb (s.l, f, 24000); };
+    std::printf ("    750 Hz (3rd harmonic): %.1f -> %.1f dB, 1250 Hz (5th): %.1f -> %.1f dB\n", db (off, 750.0), db (on, 750.0),
+                 db (off, 1250.0), db (on, 1250.0));
+    std::printf ("    5.1 kHz: %.2f -> %.2f dB, 15.3 kHz (its 3rd): %.1f -> %.1f dB, 250 Hz: %.2f -> %.2f dB\n", db (off, 5100.0),
+                 db (on, 5100.0), db (off, 15300.0), db (on, 15300.0), db (off, 250.0), db (on, 250.0));
+    CHECK (db (on, 750.0) > db (off, 750.0) + 20.0 && db (on, 750.0) > -50.0, "harmonics of the band: %.1f vs %.1f dB", db (on, 750.0),
+           db (off, 750.0));
+    CHECK (std::fabs (db (on, 5100.0) - db (off, 5100.0)) < 0.5, "the tone outside the band: %.2f vs %.2f dB", db (on, 5100.0),
+           db (off, 5100.0));
+    CHECK (db (on, 15300.0) < db (on, 750.0) - 20.0, "harmonics mostly from the band: 15.3 kHz %.1f dB, 750 Hz %.1f dB", db (on, 15300.0),
+           db (on, 750.0));
+    // level matched: the band gets denser, not louder
+    CHECK (db (on, 250.0) < db (off, 250.0) + 0.5, "the band no louder: %.2f vs %.2f dB", db (on, 250.0), db (off, 250.0));
+
+    // quiet, the region passes the Drive untouched (the curve is linear there)
+    const Sig quiet = tones ({{60.0, -40.0}, {250.0, -40.0}, {1000.0, -40.0}, {9000.0, -46.0}}, 0.5);
+    auto renderQuiet = [&] (bool drive) {
+        auto e = engine ([drive] (Engine& en) {
+            en.setParam (kAdvanced, 1.0);
+            en.setParam (bandParam (0, kThreshold), -60.0);
+            en.setParam (kDrive, drive ? 1.0 : 0.0);
+            en.setParam (kDriveAmount, 12.0);
+        });
+        return run (*e, quiet, 333);
+    };
+    const Sig qOff = renderQuiet (false), qOn = renderQuiet (true);
+    double err = 0.0;
+    for (size_t i = 4800; i < qOn.l.size (); ++i)
+        err = std::max (err, (double)std::fabs (qOn.l[i] - qOff.l[i]));
+    CHECK (err < 1e-5, "quiet through the region Drive: %g", err);
+}
+
+TEST (latency_is_constant)
+{
+    for (double sr : {44100.0, 48000.0, 96000.0})
+    {
+        const int base = engine ({}, sr)->latency ();
+        int worst = base;
+        for (int variant = 0; variant < 4; ++variant)
+        {
+            auto e = engine (
+                [variant] (Engine& en) {
+                    en.setParam (kAdvanced, variant & 1 ? 1.0 : 0.0);
+                    en.setParam (kDrive, variant & 2 ? 1.0 : 0.0);
+                    en.setParam (kStereo, variant);
+                },
+                sr);
+            if (e->latency () != base)
+                worst = e->latency ();
+        }
+        Engine withTail (true);
+        withTail.prepare (sr, 512);
+        smacheratr::Tail t;
+        t.prepare (sr, 512);
+        std::printf ("    %.0f Hz: %d samples (with the end Smacheratr %d)\n", sr, base, withTail.latency ());
+        CHECK (worst == base && base > 0 && base < 100, "the same with every setting: %d / %d", base, worst);
+        CHECK (withTail.latency () == base + t.latency (), "with the end Smacheratr: %d", withTail.latency ());
+    }
+    // an impulse comes out at the latency, the Drive on (and the region lined up with it: a loud click
+    // in the band comes out as one click)
+    auto e = engine ([] (Engine& en) {
+        en.setParam (kAdvanced, 1.0);
+        en.setParam (kDrive, 1.0);
+        en.setParam (bandParam (0, kThreshold), -60.0);
+    });
+    Sig in;
+    in.l.assign (9600, 0.0f);
+    in.l[4800] = 0.3f;
+    in.r = in.l;
+    const Sig out = run (*e, in);
+    size_t peak = 0;
+    for (size_t i = 0; i < out.l.size (); ++i)
+        if (std::fabs (out.l[i]) > std::fabs (out.l[peak]))
+            peak = i;
+    CHECK ((int)peak - 4800 == e->latency (), "the impulse at %d, the latency %d", (int)peak - 4800, e->latency ());
+}
+
+TEST (stereo_modes)
+{
+    // left loud in band 1, right quiet: linked, both are cut alike; Mid/Side, the side (L - R) is cut
+    // as well as the mid; Mid, only the mid
+    Sig in = tones ({{250.0, -2.0}}, 1.0);
+    for (size_t i = 0; i < in.r.size (); ++i)
+        in.r[i] *= 0.1f;
+    auto render = [&] (int mode, Meters* m = nullptr) {
+        auto e = engine (
+            [mode] (Engine& en) {
+                en.setParam (kStereo, mode);
+                en.setParam (bandParam (1, kOn), 0.0);
+            },
+            kSr, m);
+        return run (*e, in);
+    };
+    auto drop = [&] (const Sig& o, bool right) {
+        return toneDb (right ? o.r : o.l, 250.0, 24000) - toneDb (right ? in.r : in.l, 250.0, 24000);
+    };
+    const Sig linked = render (kStereoLinked);
+    std::printf ("    linked: left %.2f dB, right %.2f dB\n", drop (linked, false), drop (linked, true));
+    CHECK (drop (linked, false) < -4.0 && std::fabs (drop (linked, false) - drop (linked, true)) < 0.05, "linked: the same cut");
+
+    // the same tone on both sides (all mid, no side): Side leaves it alone, Mid cuts it
+    const Sig mono = tones ({{250.0, -2.0}}, 1.0);
+    auto renderMono = [&] (int mode) {
+        auto e = engine ([mode] (Engine& en) {
+            en.setParam (kStereo, mode);
+            en.setParam (bandParam (1, kOn), 0.0);
+        });
+        return run (*e, mono);
+    };
+    const Sig side = renderMono (kSideOnly), mid = renderMono (kMidOnly), both = renderMono (kMidSide);
+    const double dSide = toneDb (side.l, 250.0, 24000) - toneDb (mono.l, 250.0, 24000);
+    const double dMid = toneDb (mid.l, 250.0, 24000) - toneDb (mono.l, 250.0, 24000);
+    const double dBoth = toneDb (both.l, 250.0, 24000) - toneDb (mono.l, 250.0, 24000);
+    std::printf ("    a mono tone: Side %.2f dB, Mid %.2f dB, Mid/Side %.2f dB\n", dSide, dMid, dBoth);
+    CHECK (std::fabs (dSide) < 0.01 && dMid < -4.0 && std::fabs (dMid - dBoth) < 0.05, "Side / Mid / Mid/Side");
+    // a pure side signal (L = -R): Mid leaves it, Side cuts it, and it stays a side signal
+    Sig anti = mono;
+    for (auto& v : anti.r)
+        v = -v;
+    auto renderAnti = [&] (int mode) {
+        auto e = engine ([mode] (Engine& en) {
+            en.setParam (kStereo, mode);
+            en.setParam (bandParam (1, kOn), 0.0);
+        });
+        return run (*e, anti);
+    };
+    const Sig aMid = renderAnti (kMidOnly), aSide = renderAnti (kSideOnly);
+    const double adMid = toneDb (aMid.l, 250.0, 24000) - toneDb (anti.l, 250.0, 24000);
+    const double adSide = toneDb (aSide.l, 250.0, 24000) - toneDb (anti.l, 250.0, 24000);
+    double sum = 0.0;
+    for (size_t i = 24000; i < aSide.l.size (); ++i)
+        sum = std::max (sum, (double)std::fabs (aSide.l[i] + aSide.r[i]));
+    CHECK (std::fabs (adMid) < 0.01 && adSide < -4.0 && sum < 1e-6, "a side tone: Mid %.2f dB, Side %.2f dB (mid left %g)", adMid, adSide,
+           sum);
+}
+
+TEST (changes_are_click_free)
+{
+    // a loud tone in band 1: switching the stereo mode, turning the band off and back on, Advanced and
+    // the Drive on and off: no step in the output much above the tone's own
+    const Sig in = tones ({{250.0, -3.0}}, 4.0);
+    auto e = engine ([] (Engine& en) {
+        en.setParam (bandParam (1, kOn), 0.0);
+        en.setParam (bandParam (0, kThreshold), -40.0);
+        en.setParam (kDriveAmount, 36.0);
+    });
+    Sig out = in;
+    const int block = 256;
+    double worst = 0.0;
+    const double normal = maxStep (in.l, 1, in.l.size ());
+    int blockNo = 0;
+    for (size_t pos = 0; pos < in.l.size (); pos += block, ++blockNo)
+    {
+        switch (blockNo)
+        {
+            case 60: e->setParam (kStereo, kMidSide); break;
+            case 110: e->setParam (kStereo, kMidOnly); break;
+            case 160: e->setParam (bandParam (0, kOn), 0.0); break;
+            case 210: e->setParam (bandParam (0, kOn), 1.0); break;
+            case 260: e->setParam (kAdvanced, 1.0); break;
+            case 330: e->setParam (kDrive, 1.0); break;
+            case 400: e->setParam (kDrive, 0.0); break;
+            case 470: e->setParam (kStereo, kStereoLinked); break;
+            default: break;
+        }
+        const int m = (int)std::min ((size_t)block, in.l.size () - pos);
+        e->process (out.l.data () + pos, out.r.data () + pos, out.l.data () + pos, out.r.data () + pos, m);
+    }
+    worst = maxStep (out.l, 4800, out.l.size ());
+    std::printf ("    largest step %.4f; the tone's own %.4f\n", worst, normal);
+    CHECK (worst < 1.3 * normal, "no clicks: %.4f vs %.4f", worst, normal);
+}
+
+TEST (silence_after_a_burst)
+{
+    // a loud burst, then silence: the output dies away to nothing (no denormal crawl), and fast
+    auto e = engine ([] (Engine& en) {
+        en.setParam (kAdvanced, 1.0);
+        en.setParam (kDrive, 1.0);
+        en.setParam (bandParam (0, kThreshold), -40.0);
+    });
+    std::vector<float> l (512), r (512);
+    uint32_t seed = 3;
+    for (int b = 0; b < 20; ++b)
+    {
+        for (int i = 0; i < 512; ++i)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            l[(size_t)i] = r[(size_t)i] = (float)((double)(seed >> 8) / 8388608.0 - 1.0);
+        }
+        e->process (l.data (), r.data (), l.data (), r.data (), 512);
+    }
+    float last = 0.0f;
+    const auto t0 = std::chrono::steady_clock::now ();
+    const int blocks = (int)(5.0 * kSr / 512);
+    for (int b = 0; b < blocks; ++b)
+    {
+        std::fill (l.begin (), l.end (), 0.0f);
+        std::fill (r.begin (), r.end (), 0.0f);
+        e->process (l.data (), r.data (), l.data (), r.data (), 512);
+        if (b == blocks - 1)
+            for (float v : l)
+                last = std::max (last, std::fabs (v));
+    }
+    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    std::printf ("    after 5 s of silence: %g at most; %.2f%% of real time\n", last, 100.0 * secs / 5.0);
+    CHECK (last < 1e-20f, "silent: %g", last);
+}
+
+TEST (fuzz_and_cpu)
+{
+    uint32_t seed = 11;
+    auto rnd = [&] {
+        seed = seed * 1664525u + 1013904223u;
+        return (double)((seed >> 8) & 0xFFFFFF) / 16777216.0;
+    };
+    Engine e;
+    e.prepare (kSr, 1024);
+    std::vector<float> l (1024), r (1024);
+    bool finite = true;
+    for (int blk = 0; blk < 3000; ++blk)
+    {
+        if (blk % 15 == 0)
+            for (int k = 0; k < 5; ++k)
+            {
+                const uint32_t id = (uint32_t)(rnd () * (double)kNumParams) % kNumParams;
+                const auto& info = paramTable ().info (id);
+                e.setParam (id, info.min + rnd () * (info.max - info.min));
+            }
+        const int n = 1 + (int)(rnd () * 1023);
+        for (int i = 0; i < n; ++i)
+        {
+            l[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.9f;
+            r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.9f;
+        }
+        e.process (l.data (), r.data (), l.data (), r.data (), n);
+        for (int i = 0; i < n; ++i)
+            finite &= std::isfinite (l[(size_t)i]) && std::isfinite (r[(size_t)i]) && std::fabs (l[(size_t)i]) < 100.0f;
+    }
+    CHECK (finite, "finite and bounded");
+
+    // CPU: both bands cutting; plain, with the region Drive, Mid/Side, and with the end Smacheratr on
+    struct Case
+    {
+        const char* name;
+        bool drive, ms, tail;
+    };
+    for (const Case& cs : {Case {"both bands", false, false, false}, Case {"both bands, region Drive", true, false, false},
+                           Case {"both bands, Mid/Side, region Drive", true, true, false},
+                           Case {"both bands, region Drive, end saturator on", true, false, true}})
+    {
+        Engine c (cs.tail);
+        c.setParam (kAdvanced, 1.0);
+        c.setParam (bandParam (0, kThreshold), -40.0);
+        c.setParam (bandParam (1, kThreshold), -40.0);
+        c.setParam (kDrive, cs.drive ? 1.0 : 0.0);
+        c.setParam (kStereo, cs.ms ? kMidSide : kStereoLinked);
+        c.setParam (kTailBase + pk::kTailOn, cs.tail ? 1.0 : 0.0);
+        c.prepare (kSr, 512);
+        const int blocks = (int)(10.0 * kSr / 512);
+        const auto t0 = std::chrono::steady_clock::now ();
+        for (int b = 0; b < blocks; ++b)
+        {
+            if (b % 8 == 0)
+                c.setParam (bandParam (1, kFreq), 2000.0 + 2000.0 * rnd ());
+            for (int i = 0; i < 512; ++i)
+            {
+                l[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.5f;
+                r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.5f;
+            }
+            c.process (l.data (), r.data (), l.data (), r.data (), 512);
+        }
+        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        std::printf ("    %s: %.2f%% of real time (stereo, 48 kHz)\n", cs.name, 100.0 * secs / 10.0);
+    }
+}
+
+int main (int argc, char** argv)
+{
+    const char* filter = argc > 1 ? argv[1] : nullptr;
+    int ran = 0;
+    for (auto& t : tests ())
+    {
+        if (filter && std::string (t.name).find (filter) == std::string::npos)
+            continue;
+        const int before = gFailures;
+        std::printf ("%s\n", t.name);
+        t.fn ();
+        std::printf ("  %s\n", gFailures == before ? "ok" : "FAILED");
+        ++ran;
+    }
+    std::printf ("\n%d tests, %d checks, %d failures\n", ran, gChecks, gFailures);
+    return gFailures == 0 ? 0 : 1;
+}

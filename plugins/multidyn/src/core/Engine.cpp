@@ -46,6 +46,119 @@ double belowGainDb (double x, double thresh, double ratio, bool softKnee, double
     return kneeGain (thresh - x, 1.0 - 1.0 / std::max (0.01, ratio), softKnee, kneeDb);
 }
 
+Engine::Engine (bool withTail) : hasTail (withTail)
+{
+    // Soften's Color: Smacheratr with only its high colour, around the Analog curve at Drive 0 dB
+    using namespace smacheratr;
+    color.setParam (kColorOn, 1.0);
+    color.setParam (kColorLo, 0.0);
+    color.setParam (kColorFreq, kColorPeakHz);
+    color.setParam (kColorWidth, kColorPeakWidth);
+    color.setParam (smacheratr::kDrive, 0.0);
+    color.setParam (smacheratr::kPreLimit, 0.0);
+    color.setParam (kPostClip, kPostOff);
+    color.setParam (smacheratr::kOutput, 0.0);
+    color.setParam (kHiQuality, 1.0);
+    color.setParam (kDcFilter, 0.0);
+    color.setParam (kMidSide, 0.0);
+    color.setParam (kClarity, 0.0);
+    color.setParam (kClarityAdvanced, 0.0);
+    color.setParam (kClarityDrive, 0.0);
+    color.setParam (kDryWet, 1.0);
+    syncColor ();
+}
+
+void Engine::syncColor () { color.setParam (smacheratr::kColorHi, softenColorAmount (p[kSoften])); }
+
+void Engine::processColor (float* L, float* R, int n)
+{
+    const bool want = on (p[kSoftenColor]);
+    const int len = (int)colorDelay[0].size ();
+    for (int pos = 0; pos < n; pos += kColorChunk)
+    {
+        const int m = std::min (kColorChunk, n - pos);
+        float* ch[2] = {L + pos, R + pos};
+        if (colorState == ColorState::Off && want)
+        {
+            // starting: from silence, beside the dry path, not heard until it has settled
+            color.reset ();
+            colorState = ColorState::Warming;
+            colorPos = 0;
+            colorMix = 0.0f;
+        }
+        const bool running = colorState != ColorState::Off;
+        if (running)
+        {
+            for (int c = 0; c < 2; ++c)
+                std::copy (ch[c], ch[c] + m, colorWet[c]);
+            color.process (colorWet[0], colorWet[1], colorWet[0], colorWet[1], m);
+        }
+        for (int i = 0; i < m; ++i)
+        {
+            // the dry path: the same latency as the colour's
+            float dry[2];
+            for (int c = 0; c < 2; ++c)
+            {
+                dry[c] = colorDelay[c][(size_t)colorDelayPos];
+                colorDelay[c][(size_t)colorDelayPos] = ch[c][i];
+            }
+            if (++colorDelayPos >= len)
+                colorDelayPos = 0;
+            if (colorState == ColorState::Warming)
+            {
+                if (!want)
+                    colorState = ColorState::Off;
+                else if (++colorPos >= colorWarm)
+                    colorState = ColorState::In;
+            }
+            else if (colorState == ColorState::In)
+            {
+                colorMix = std::clamp (colorMix + (want ? colorStep : -colorStep), 0.0f, 1.0f);
+                if (colorMix <= 0.0f)
+                    colorState = ColorState::Off; // faded out: it stops
+            }
+            if (!running || colorMix <= 0.0f)
+            {
+                ch[0][i] = dry[0];
+                ch[1][i] = dry[1];
+            }
+            else if (colorMix >= 1.0f)
+            {
+                ch[0][i] = colorWet[0][i];
+                ch[1][i] = colorWet[1][i];
+            }
+            else
+                for (int c = 0; c < 2; ++c)
+                    ch[c][i] = dry[c] + (colorWet[c][i] - dry[c]) * colorMix;
+        }
+    }
+}
+
+void Engine::Bank::tune (int j, float g)
+{
+    split[j].setup (g, slope);
+    scSplit[j].setup (g, slope);
+    for (int b = 0; b < kMaxBands - 1; ++b)
+    {
+        ap[b][j].setup (g, slope);
+        scAp[b][j].setup (g, slope);
+    }
+}
+
+void Engine::Bank::reset ()
+{
+    for (int j = 0; j < kMaxBands - 1; ++j)
+    {
+        split[j].reset ();
+        scSplit[j].reset ();
+        for (int b = 0; b < kMaxBands - 1; ++b)
+        {
+            ap[b][j].reset ();
+            scAp[b][j].reset ();
+        }
+    }
+}
+
 void Engine::prepare (double sampleRate, int)
 {
     sr = sampleRate;
@@ -61,6 +174,13 @@ void Engine::prepare (double sampleRate, int)
     guardC = (float)std::exp (-1.0 / (0.003 * sr));
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
     sat.prepare (sr, 512);
+    color.prepare (sr, kColorChunk);
+    colorWarm = color.latency () + (int)std::lround (0.010 * sr);
+    colorStep = (float)(1.0 / (0.020 * sr));
+    for (auto& d : colorDelay)
+        d.assign ((size_t)std::max (1, color.latency ()), 0.0f);
+    fadeWarm = (int)std::lround (0.030 * sr); // a new slope's filters settle, then the bands crossfade
+    fadeLen = std::max (1, (int)std::lround (0.020 * sr));
     for (auto& d : bypassDelay)
         d.assign ((size_t)std::max (1, latency ()), 0.0f);
     bypassPos = 0;
@@ -69,16 +189,10 @@ void Engine::prepare (double sampleRate, int)
 
 void Engine::reset ()
 {
-    for (int j = 0; j < kMaxBands - 1; ++j)
-    {
-        split[j].reset ();
-        scSplit[j].reset ();
-        for (int b = 0; b < kMaxBands - 1; ++b)
-        {
-            ap[b][j].reset ();
-            scAp[b][j].reset ();
-        }
-    }
+    fadePos = -1;
+    banks[cur].slope = std::clamp ((int)std::lround (p[kXoverSlope]), 0, kNumXoverSlopes - 1);
+    for (auto& bank : banks)
+        bank.reset ();
     for (int b = 0; b < kNumBands; ++b)
     {
         bands[b] = BandState {};
@@ -90,6 +204,13 @@ void Engine::reset ()
     scGain = dbToGain (p[kScGain]);
     syncSaturator ();
     sat.reset ();
+    syncColor ();
+    color.reset ();
+    for (auto& d : colorDelay)
+        std::fill (d.begin (), d.end (), 0.0f);
+    colorDelayPos = 0;
+    colorState = on (p[kSoftenColor]) ? ColorState::In : ColorState::Off;
+    colorMix = colorState == ColorState::In ? 1.0f : 0.0f;
     updateFilters (true);
 }
 
@@ -124,18 +245,15 @@ void Engine::updateFilters (bool force)
         if (force || std::fabs (next - xf[j]) > 1e-3f * xf[j])
         {
             xf[j] = next;
-            split[j].setup (next, fsr);
-            scSplit[j].setup (next, fsr);
-            for (int b = 0; b < kMaxBands - 1; ++b)
-            {
-                ap[b][j].setup (next, fsr);
-                scAp[b][j].setup (next, fsr);
-            }
+            xg[j] = xoverG (next, fsr);
+            banks[cur].tune (j, xg[j]);
+            if (fadePos >= 0)
+                banks[cur ^ 1].tune (j, xg[j]);
         }
     }
 }
 
-void Engine::splitBands (float x, int c, int n, Lr4Split* sp, Allpass2 (*aps)[kMaxBands - 1], float* out)
+void Engine::splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out)
 {
     float rest = x;
     for (int j = 0; j < n - 1; ++j)
@@ -186,7 +304,9 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const float scMix = scActive ? (float)std::clamp (p[kScMix], 0.0, 1.0) : 0.0f;
     const bool listen = on (p[kScListen]) && scActive;
     const float outTarget = dbToGain (p[kOutput] + kBakedMasterDb), scTarget = dbToGain (p[kScGain]);
+    const int slopeT = std::clamp ((int)std::lround (p[kXoverSlope]), 0, kNumXoverSlopes - 1);
     syncSaturator ();
+    syncColor ();
 
     bool used[kNumBands], active[kNumBands], audible[kNumBands];
     bool anySolo = false;
@@ -233,22 +353,53 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     {
         outGain += (outTarget - outGain) * smooth;
         scGain += (scTarget - scGain) * smooth;
+        // a new Slope: the other bank starts from silence with it, settles, and the bands crossfade to it
+        if (fadePos < 0 && slopeT != banks[cur].slope)
+        {
+            Bank& fresh = banks[cur ^ 1];
+            fresh.slope = slopeT;
+            for (int j = 0; j < kMaxBands - 1; ++j)
+                fresh.tune (j, xg[j]);
+            fresh.reset ();
+            fadePos = 0;
+        }
+        const bool fading = fadePos >= 0;
+        const float w = fading ? std::clamp ((float)(fadePos - fadeWarm) / (float)fadeLen, 0.0f, 1.0f) : 0.0f;
+        Bank& bk = banks[cur];
+        Bank& nb = banks[cur ^ 1];
         float xs[2] = {inL[i], inR[i]};
         float band[kNumBands][2] {};
         float scBand[kNumBands][2] {};
         for (int c = 0; c < 2; ++c)
         {
-            float tmp[kMaxBands] {};
-            splitBands (xs[c], c, nBands, split, ap, tmp);
+            float tmp[kMaxBands] {}, tmp2[kMaxBands] {};
+            splitBands (xs[c], c, nBands, bk.split, bk.ap, tmp);
+            if (fading)
+            {
+                splitBands (xs[c], c, nBands, nb.split, nb.ap, tmp2);
+                for (int bb = 0; bb < nBands; ++bb)
+                    tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
+            }
             for (int bb = 0; bb < nBands; ++bb)
                 band[bb][c] = tmp[bb];
             if (scActive)
             {
                 const float sx = (c == 0 ? scL[i] : scR[i]) * scGain;
-                splitBands (sx, c, nBands, scSplit, scAp, tmp);
+                splitBands (sx, c, nBands, bk.scSplit, bk.scAp, tmp);
+                if (fading)
+                {
+                    splitBands (sx, c, nBands, nb.scSplit, nb.scAp, tmp2);
+                    for (int bb = 0; bb < nBands; ++bb)
+                        tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
+                }
                 for (int bb = 0; bb < nBands; ++bb)
                     scBand[bb][c] = tmp[bb];
             }
+        }
+        if (fading && ++fadePos > fadeWarm + fadeLen)
+        {
+            cur ^= 1; // the new bank is all there is now
+            fadePos = -1;
         }
 
         float sumL = 0.0f, sumR = 0.0f;
@@ -415,7 +566,10 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         }
     }
 
-    // the built-in saturator after the Output gain (not on the side-chain listen signal)
+    // Soften's Color after the Output gain, then the built-in saturator (neither on the side-chain
+    // listen signal)
+    if (!listen)
+        processColor (outL, outR, n);
     if (!listen && hasTail)
         sat.process (outL, outR, n);
 

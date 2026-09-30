@@ -9,6 +9,7 @@
 #include "Rack.h"
 #include "SampleData.h"
 #include "Slices.h"
+#include "TrackingHp.h"
 #include "Warp.h"
 
 #include "smacheratr/src/core/Tail.h"
@@ -126,6 +127,10 @@ private:
     Envelope ampEnv, filtEnv, pitchEnv;
     Lfo lfo;
     MultiFilter filter;
+    // the high-pass that follows the transposition; its cutoff (in semitones) glides a few ms
+    TrackingHp transHp;
+    double transHpSemis = 0.0;
+    bool transHpRunning = false;
     double glideOffset = 0.0, glideStep = 0.0;
     double beatAcc = 0.0;
     long long lastSyncSlot = -1;

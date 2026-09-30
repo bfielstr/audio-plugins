@@ -15,6 +15,17 @@
 // plainer Base mode; kMode is kept only because IDs are persisted.)
 // Gains: the preset's gain staging is baked in (kBakedInputDb and friends), so every gain control
 // reads 0 dB at the default and trims around it.
+// Crossovers: the Slope (kXoverSlope, Crossover.h) from 6 dB/oct to a brickwall (Linkwitz-Riley 32),
+// 24 dB by default; the bands always sum to an all-pass. A new slope starts a second set of filters
+// beside the running one, lets it settle (30 ms) and crossfades the bands to it (20 ms), so a change
+// never clicks and the latency stays the same.
+// Soften's Color (off by default): Smacheratr's colour chain after the Output gain, before the built-in
+// saturator: the high colour peak at 5 kHz, Width 4, Amount 15 % (Soften 0) to 35 % (Soften 100 %),
+// Drive 0 dB, Hi-Quality (4x): the highs are pushed into the Analog curve and taken back down after
+// it, so the loud highs upward compression brings up come out rounder. Its latency is always part of
+// Multidyn's: off, the signal only goes through a delay of that length (to the bit) and the colour
+// does not run; switched on, the colour starts beside the delay, settles (10 ms after its latency)
+// and is crossfaded in (20 ms); switched off, it is crossfaded out and stops.
 // Pre-Limit (off by default): a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
 // the band's Above threshold, so a transient pushed hard into the thresholds is held where the
 // compressor will settle anyway instead of passing through at full level until the attack
@@ -40,8 +51,9 @@
 #include "Crossover.h"
 #include "Params.h"
 
-#include "smacheratr/src/core/Tail.h" // the end-of-chain saturator
+#include "smacheratr/src/core/Tail.h" // the end-of-chain saturator (and Soften's Color: its Engine)
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -51,6 +63,14 @@ using ParamArray = std::array<double, kNumParams>;
 ParamArray defaultParams ();
 
 constexpr double kKneeDb = 6.0, kCharacterKneeDb = 12.0;
+
+// Soften's Color: Smacheratr's high colour peak (its Amt Hi, Color Frequency and Width) and the amount
+// Soften sets
+constexpr double kColorPeakHz = 5000.0, kColorPeakWidth = 4.0, kColorAmountMin = 0.15, kColorAmountMax = 0.35;
+inline double softenColorAmount (double soften)
+{
+    return kColorAmountMin + (kColorAmountMax - kColorAmountMin) * std::clamp (soften, 0.0, 1.0);
+}
 
 // Static gain curve (dB), shared with the editor's display.
 double aboveGainDb (double levelDb, double thresh, double ratio, bool softKnee, double kneeDb = kKneeDb);
@@ -71,8 +91,9 @@ public:
     void setParam (uint32_t id, double plain) { p[id] = plain; }
     double param (uint32_t id) const { return p[id]; }
     // withTail: the end-of-chain Smacheratr (off where Multidyn is built into another plug-in)
-    explicit Engine (bool withTail = true) : hasTail (withTail) {}
-    int latency () const { return look + (hasTail ? sat.latency () : 0); } // constant for a sample rate
+    explicit Engine (bool withTail = true);
+    int latency () const { return look + color.latency () + (hasTail ? sat.latency () : 0); } // constant for a sample rate
+    int colorLatency () const { return color.latency (); } // Soften's Color's part of it
     // Bypassed, the dry signal passes with the same latency (for the built-in use in Smemplr).
     void setBypass (bool b) { bypass = b; }
     // Levels of the built-in saturator for an editor (may be null).
@@ -106,16 +127,29 @@ private:
     };
     void updateFilters (bool force);
     void syncSaturator (); // pushes the saturator parameters into its engine
+    void syncColor ();     // Soften's Color: its amount
+    void processColor (float* l, float* r, int n);
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
     int look = 48;
     // Crossover tree: split[j] separates band j from everything above it. Lower bands are
-    // passed through allpasses at every higher crossover so the bands sum to an allpass.
-    Lr4Split split[kMaxBands - 1], scSplit[kMaxBands - 1];
-    Allpass2 ap[kMaxBands - 1][kMaxBands - 1], scAp[kMaxBands - 1][kMaxBands - 1];
-    float xf[kMaxBands - 1] {};
-    void splitBands (float x, int c, int n, Lr4Split* sp, Allpass2 (*aps)[kMaxBands - 1], float* out);
+    // passed through allpasses at every higher crossover so the bands sum to an allpass. Two banks
+    // of them: the one in use (cur) and, while the Slope changes, the new one fading in.
+    struct Bank
+    {
+        XoverSplit split[kMaxBands - 1], scSplit[kMaxBands - 1];
+        XoverAllpass ap[kMaxBands - 1][kMaxBands - 1], scAp[kMaxBands - 1][kMaxBands - 1];
+        int slope = kXover24;
+        void tune (int j, float g); // crossover j's corner
+        void reset ();
+    };
+    Bank banks[2];
+    int cur = 0;
+    int fadePos = -1;              // samples since the new bank started (-1: no change running)
+    int fadeWarm = 0, fadeLen = 1; // it settles this long, then the bands crossfade this long
+    float xf[kMaxBands - 1] {}, xg[kMaxBands - 1] {}; // the crossovers in use and their prewarped corners
+    void splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out);
     BandState bands[kNumBands];
     BandMeter meters[kNumBands];
     float outGain = 1.0f, scGain = 1.0f;
@@ -123,6 +157,15 @@ private:
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
     float guardC = 0.0f; // the transient guard's 3 ms RMS
     smacheratr::Tail sat;
+    smacheratr::Engine color; // Soften's Color (its dry/wet always 1: the crossfade is processColor's)
+    enum class ColorState { Off, Warming, In }; // In: fading in, on, or fading out
+    ColorState colorState = ColorState::Off;
+    int colorPos = 0, colorWarm = 1;       // samples since it started, and how long it settles
+    float colorMix = 0.0f, colorStep = 0.0f; // how much of it is heard, and its change per sample
+    std::vector<float> colorDelay[2];      // the dry path: the colour's latency
+    int colorDelayPos = 0;
+    static constexpr int kColorChunk = 256;
+    float colorWet[2][kColorChunk] {};
     bool hasTail = true;
     bool bypass = false;
     std::vector<float> bypassDelay[2];

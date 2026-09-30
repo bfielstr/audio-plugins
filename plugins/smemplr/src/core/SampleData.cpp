@@ -196,7 +196,108 @@ std::shared_ptr<SampleData> SampleData::fromBuffers (std::vector<float> left, st
         s->ch[1] = std::move (right);
     }
     s->analyse ();
+    s->buildMips ();
     return s;
+}
+
+namespace {
+
+// The half-band low-pass that makes each level from the one before (Kaiser-windowed sinc, 127 taps):
+// flat to 0.9 of the new level's Nyquist, -6 dB at it and about -100 dB from 1.1 of it up, so what
+// folds down in the decimation lands only in the top tenth of the new band (at most at the very top of
+// the output: above 0.9 of its Nyquist, and only while the level is read at about its own rate).
+// Half-band: every even tap but the centre is zero, so an output frame costs 32 multiplies (the
+// taps are symmetric).
+constexpr int kHbHalf = 63;
+constexpr int kHbOdd = (kHbHalf + 1) / 2;
+
+struct HalfBand
+{
+    float odd[kHbOdd]; // h[1], h[3], ..., h[kHbHalf] (h[-n] = h[n], h[0] = 0.5)
+
+    HalfBand ()
+    {
+        const double beta = 10.06; // -100 dB side lobes
+        auto bessel0 = [] (double x) {
+            double sum = 1.0, term = 1.0;
+            for (int k = 1; k < 60; ++k)
+            {
+                term *= (x / (2.0 * k)) * (x / (2.0 * k));
+                sum += term;
+            }
+            return sum;
+        };
+        double h[kHbOdd], sum = 0.0;
+        for (int m = 0; m < kHbOdd; ++m)
+        {
+            const double n = 2 * m + 1;
+            const double r = n / (kHbHalf + 1);
+            const double w = bessel0 (beta * std::sqrt (1.0 - r * r)) / bessel0 (beta);
+            h[m] = std::sin (M_PI * n * 0.5) / (M_PI * n) * w;
+            sum += 2.0 * h[m];
+        }
+        // the odd taps add up to one half, with the centre's half: unity gain at DC
+        for (int m = 0; m < kHbOdd; ++m)
+            odd[m] = (float)(h[m] * 0.5 / sum);
+    }
+};
+
+const HalfBand& halfBand ()
+{
+    static const HalfBand h;
+    return h;
+}
+
+// y[j] = filtered x at frame 2j (x is zero outside its length).
+void halfBandDecimate (const std::vector<float>& x, std::vector<float>& y, int outLen)
+{
+    const auto& hb = halfBand ();
+    const int n = (int)x.size ();
+    const float* d = x.data ();
+    y.assign ((size_t)outLen, 0.0f);
+    for (int j = 0; j < outLen; ++j)
+    {
+        const int c = 2 * j;
+        float acc = c < n ? 0.5f * d[c] : 0.0f;
+        if (c - kHbHalf >= 0 && c + kHbHalf < n)
+        {
+            for (int m = 0; m < kHbOdd; ++m)
+                acc += hb.odd[m] * (d[c - 1 - 2 * m] + d[c + 1 + 2 * m]);
+        }
+        else
+        {
+            for (int m = 0; m < kHbOdd; ++m)
+            {
+                const int a = c - 1 - 2 * m, b = c + 1 + 2 * m;
+                const float xa = a >= 0 && a < n ? d[a] : 0.0f;
+                const float xb = b >= 0 && b < n ? d[b] : 0.0f;
+                acc += hb.odd[m] * (xa + xb);
+            }
+        }
+        y[(size_t)j] = acc;
+    }
+}
+
+} // namespace
+
+void SampleData::buildMips ()
+{
+    mips.clear ();
+    const std::vector<float>* prev[2] = {&ch[0], &ch[1]};
+    int prevLen = length;
+    mips.reserve ((size_t)kMipLevels);
+    // a level shorter than a sinc kernel is of no use
+    for (int k = 1; k <= kMipLevels && prevLen >= 64; ++k)
+    {
+        MipLevel m;
+        m.length = (prevLen + 1) / 2;
+        for (int c = 0; c < numChannels; ++c)
+            halfBandDecimate (*prev[c], m.ch[c], m.length);
+        mips.push_back (std::move (m));
+        for (int c = 0; c < numChannels; ++c)
+            prev[c] = &mips.back ().ch[c];
+        prevLen = mips.back ().length;
+    }
 }
 
 std::shared_ptr<SampleData> SampleData::load (const std::string& path, const SampleOps& opsIn, std::string& error)
