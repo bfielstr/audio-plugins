@@ -47,6 +47,9 @@ add_executable(gently_state_tests tests/state_tests.cpp src/plugin/State.cpp
     ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp)
 target_include_directories(gently_state_tests PRIVATE src)
 target_link_libraries(gently_state_tests PRIVATE gently_core sdk)
+if(APPLE)
+    target_link_libraries(gently_state_tests PRIVATE "-framework CoreFoundation") # the SDK's base library uses it
+endif()
 add_test(NAME gently_state COMMAND gently_state_tests)
 
 pk_add_host_test(gently_hosttest
