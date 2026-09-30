@@ -71,7 +71,9 @@ protected:
     // The VST3 parameter registered for a table entry (a TableParameter unless overridden).
     virtual Steinberg::Vst::Parameter* makeParameter (uint32_t id);
 
-    EditorBase* editor = nullptr;
+    // every open editor (a host may show more than one view of a plug-in, or open the next before it
+    // closes the last): each one follows the parameters
+    std::vector<EditorBase*> editors;
     const ParamTable& tableRef;
     Steinberg::FUID presetClassId;
     std::string presetPlugin, presetTitle, presetFormer; // presetFormer: the name its presets were saved under before a rename
