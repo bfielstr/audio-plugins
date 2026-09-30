@@ -319,6 +319,23 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
     }
 }
 
+void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 13)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxLevlr)
+            continue;
+        for (uint32_t id = levlr::kFirstAddedAfter060; id < levlr::kEndAddedAfter060; ++id)
+        {
+            norm[slotBlockParam (slot, id)] = levlr::defaultNormalized (id);
+            has[slotBlockParam (slot, id)] = true;
+        }
+    }
+}
+
 Rack::Rack ()
 {
     for (auto& s : slots)
@@ -470,6 +487,8 @@ int Rack::latency () const
             l += s->sat.latency ();
         else if (s->type == kFxPara)
             l += s->para.latency (); // its drive's oversampling, on or off
+        else if (s->type == kFxLevlr)
+            l += s->levlr.latency (); // its drives' oversampling, on or off
         else if (s->type == kFxGently)
             l += s->gently.latency (); // its region Drive's oversampler, always in the path
         else if (s->type == kFxSmoothr)
@@ -545,9 +564,11 @@ void Rack::process (float* L, float* R, int n)
                 if (s.on)
                     s.wubr.process (L, R, L, R, n);
                 break;
-            case kFxLevlr: // (no latency without its own saturator: off simply passes)
+            case kFxLevlr:
                 if (s.on)
                     s.levlr.process (L, R, L, R, n);
+                else
+                    s.levlr.processBypassed (L, R, n); // off: its latency's delay only
                 break;
             case kFxGently: s.gently.process (L, R, L, R, n); break; // off: fully dry, same latency
             case kFxSmoothr:

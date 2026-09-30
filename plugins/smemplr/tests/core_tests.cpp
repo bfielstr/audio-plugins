@@ -382,6 +382,34 @@ TEST (rack_gently)
     CHECK (std::fabs (rms (o.l, 24000, 48000) / dry - 1.0) < 0.01, "off: dry (%.3f)", rms (o.l, 24000, 48000) / dry);
 }
 
+TEST (rack_levlr_bands_and_drives)
+{
+    // Levlr's latency (its drives' oversampling) counts, on or off; an old state's Levlr slot gets 4
+    // bands and no drive (its Bands read 0 there: 1 band)
+    auto s = sine (440.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    const int base = e->latency ();
+    loadFx (*e, 0, kFxLevlr);
+    levlr::Engine alone (false);
+    alone.prepare (kHostSr, 512);
+    CHECK (alone.latency () > 0 && e->latency () == base + alone.latency (), "reported: %d (%d + %d)", e->latency (), base, alone.latency ());
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    CHECK (e->latency () == base + alone.latency (), "off, the same: %d", e->latency ());
+    auto st = std::make_unique<std::array<double, kNumParams>> ();
+    auto has = std::make_unique<std::array<bool, kNumParams>> ();
+    st->fill (0.0);
+    has->fill (false);
+    (*st)[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), (double)kFxLevlr);
+    (*has)[slotParam (2, kSlotType)] = true;
+    migrateLevlrInSlots (*st, *has, 12);
+    CHECK ((*st)[slotBlockParam (2, levlr::kBandCount)] == 1.0 && (*st)[slotBlockParam (2, levlr::driveParam (1, levlr::kDriveDb))] == 0.0,
+           "4 bands, no drive");
+    (*st)[slotBlockParam (2, levlr::kBandCount)] = 0.0;
+    migrateLevlrInSlots (*st, *has, 13);
+    CHECK ((*st)[slotBlockParam (2, levlr::kBandCount)] == 0.0, "a new state is left as it is");
+}
+
 TEST (settings_text_roundtrip)
 {
     // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back

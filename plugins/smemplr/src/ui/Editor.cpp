@@ -1385,29 +1385,34 @@ void Editor::buildBody ()
         {
             // Levlr's own IDs throughout (levlr::)
             auto tip = [] (uint32_t id) { return levlr::help::forParam (id); };
-            levlrView = new levlr::LevelView (CRect (8, 8, 520, 226), h, [this, s] () -> const levlr::Meters* {
+            levlrView = new levlr::LevelView (CRect (8, 8, 436, 226), h, [this, s] () -> const levlr::Meters* {
                 auto* b = ctl->getBridge ();
                 return b ? &b->rack.levlr[(size_t)s] : nullptr;
             });
             add (levlrView, levlr::help::kDisplay);
-            // per band: its gain, mute and solo (band 1 lowest, left)
+            // per band: its gain, mute and solo, its drive and the drive's curve (band 1 lowest, left)
             for (int b = 0; b < levlr::kBands; ++b)
             {
-                const double x = 528 + b * 76;
-                auto* name = new Label (CRect (x, 8, x + 70, 22), "Band " + std::to_string (b + 1), 10.0, true, 1);
+                const double x = 444 + b * 98;
+                auto* name = new Label (CRect (x, 8, x + 92, 22), "Band " + std::to_string (b + 1), 10.0, true, 1);
                 g->addView (name);
-                add (new Knob (knobRect (x + 7, 22), h, levlr::bandParam (b, levlr::kGain), "Gain", true), tip (levlr::bandParam (b, levlr::kGain)));
-                add (new Toggle (CRect (x + 2, 90, x + 34, 108), h, levlr::bandParam (b, levlr::kMute), "M"), tip (levlr::bandParam (b, levlr::kMute)));
-                add (new Toggle (CRect (x + 38, 90, x + 70, 108), h, levlr::bandParam (b, levlr::kSolo), "S"), tip (levlr::bandParam (b, levlr::kSolo)));
+                add (new Knob (knobRect (x + 18, 22), h, levlr::bandParam (b, levlr::kGain), "Gain", true), tip (levlr::bandParam (b, levlr::kGain)));
+                add (new Toggle (CRect (x + 8, 88, x + 44, 104), h, levlr::bandParam (b, levlr::kMute), "M"), tip (levlr::bandParam (b, levlr::kMute)));
+                add (new Toggle (CRect (x + 48, 88, x + 84, 104), h, levlr::bandParam (b, levlr::kSolo), "S"), tip (levlr::bandParam (b, levlr::kSolo)));
+                add (new NumberBox (CRect (x + 4, 108, x + 88, 126), h, levlr::driveParam (b, levlr::kDriveDb)), tip (levlr::driveParam (b, levlr::kDriveDb)));
+                add (new Choice (CRect (x + 4, 130, x + 88, 148), h, levlr::driveParam (b, levlr::kDriveType)), tip (levlr::driveParam (b, levlr::kDriveType)));
             }
-            auto* xl = new Label (CRect (528, 118, 834, 130), "Crossovers", 9.5, true, 0);
+            auto* xl = new Label (CRect (444, 156, 700, 170), "Crossovers", 9.5, true, 0);
             xl->setDim (true);
             g->addView (xl);
             for (int k = 0; k < levlr::kCrossovers; ++k)
-                add (new NumberBox (CRect (528 + k * 102, 132, 624 + k * 102, 150), h, levlr::xoverParam (k)), tip (levlr::xoverParam (k)));
-            g->addView (new Label (CRect (528, 162, 570, 178), "Slope", 10.5, false, 0));
-            add (new Choice (CRect (574, 160, 690, 180), h, levlr::kSlope), tip (levlr::kSlope));
-            add (new Knob (knobRect (720, 156), h, levlr::kOutput, nullptr, true), tip (levlr::kOutput));
+                add (new NumberBox (CRect (444 + k * 86, 172, 526 + k * 86, 190), h, levlr::xoverParam (k)), tip (levlr::xoverParam (k)));
+            g->addView (new Label (CRect (444, 200, 484, 216), "Slope", 10.5, false, 0));
+            add (new Choice (CRect (486, 198, 580, 218), h, levlr::kSlope), tip (levlr::kSlope));
+            g->addView (new Label (CRect (590, 200, 634, 216), "Bands", 10.5, false, 0));
+            add (new Choice (CRect (636, 198, 690, 218), h, levlr::kBandCount), tip (levlr::kBandCount));
+            g->addView (new Label (CRect (704, 176, 750, 192), "Output", 10.5, false, 0));
+            add (new NumberBox (CRect (752, 174, 834, 192), h, levlr::kOutput), tip (levlr::kOutput));
             break;
         }
         case kFxGently:
