@@ -1,6 +1,7 @@
 #include "EditorBase.h"
 
 #include "pluginkit/TailParams.h"
+#include "pluginkit/vst/Clipboard.h"
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/cvstguitimer.h"
@@ -201,6 +202,31 @@ void EditorBase::applyParamTooltips (const char* (*helpFor) (uint32_t))
         if (const char* t = helpFor (id))
             for (auto* v : views)
                 v->setTooltipText (t);
+}
+
+} // namespace pk
+
+namespace pk {
+
+void EditorBase::copySettings () { putClipboardText (frame, controller->settingsText ()); }
+
+bool EditorBase::pasteSettings ()
+{
+    const bool ok = controller->applySettingsText (clipboardText (frame));
+    if (ok)
+        refresh ();
+    return ok;
+}
+
+bool EditorBase::settingsMenuPicked (int index, int first)
+{
+    if (index == first)
+        copySettings ();
+    else if (index == first + 1)
+        pasteSettings ();
+    else
+        return false;
+    return true;
 }
 
 } // namespace pk

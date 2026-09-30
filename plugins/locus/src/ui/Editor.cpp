@@ -4,6 +4,7 @@
 #include "SpectrumView.h"
 #include "plugin/Controller.h"
 
+#include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/ui/Theme.h"
 #include "pluginkit/vst/PresetBar.h"
 
@@ -125,8 +126,11 @@ void Editor::showMenu (CPoint where)
         std::snprintf (buf, sizeof (buf), "Interface Size %d%%", (int)std::lround (s * 100));
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
-    menu->popup (frame, where, [this, sizes, menu] (COptionMenu* m) {
+    const int settingsAt = pk::addSettingsMenuEntries (menu);
+    menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (settingsMenuPicked (r, settingsAt))
+            return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });

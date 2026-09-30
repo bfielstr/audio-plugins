@@ -39,6 +39,14 @@ public:
             frame->invalid ();
     }
 
+    // Copy / Paste Settings (the plug-in's menu): every parameter as text on the clipboard, for this
+    // plug-in or the same effect in Smemplr's rack (ControllerBase::settingsText).
+    void copySettings ();
+    bool pasteSettings ();
+    // A menu's callback: index is the entry picked, first what addSettingsMenuEntries returned; true
+    // when it was one of the two.
+    bool settingsMenuPicked (int index, int first);
+
     void setTooltipsEnabled (bool on);
     bool tooltipsEnabled () const { return controller->uiShowTips; }
     void resizeTo (double scale);

@@ -1,5 +1,7 @@
 #include "ControllerBase.h"
 
+#include "pluginkit/SettingsText.h"
+
 #include "pluginkit/CrashDump.h"
 
 #include "EditorBase.h"
@@ -217,6 +219,34 @@ void ControllerBase::resetToDefaults ()
     presetTitle.clear ();
     markDirty ();
     refreshEditor ();
+}
+
+std::string ControllerBase::settingsText ()
+{
+    SettingValues v;
+    for (uint32_t id = 0; id < tableRef.size (); ++id)
+        v.emplace_back (id, getParamNormalized (id));
+    return settingsToText (presetPlugin, v, &tableRef);
+}
+
+bool ControllerBase::applySettingsText (const std::string& text)
+{
+    SettingValues v;
+    if (presetPlugin.empty () || !settingsFromText (text, presetPlugin, v))
+        return false;
+    for (const auto& [id, n] : v)
+    {
+        if (id >= tableRef.size ())
+            continue;
+        beginEdit (id);
+        setParamNormalized (id, n);
+        performEdit (id, n);
+        endEdit (id);
+    }
+    presetTitle.clear ();
+    markDirty ();
+    refreshEditor ();
+    return true;
 }
 
 tresult PLUGIN_API ControllerBase::notify (IMessage* message)
