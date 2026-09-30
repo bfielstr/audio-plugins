@@ -46,15 +46,15 @@ enum ParamId : uint32_t
     kHpDrive,                       // dB into the curve
     kDrivePos,                      // Pre (before each filter) / Post (after it), for both drives
     kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
-    // --- after Gently's Advanced block (its room is fixed at 5 from here on) ---
-    kLpDriveOn = kTailExt2Base + 5, // the low-pass branch's drive
+    // --- after Gently's Advanced block and its Sub band (its room is fixed at 9 from here on) ---
+    kLpDriveOn = kTailExt2Base + 9, // the low-pass branch's drive
     kLpDrive,                       // dB into the curve
     kNumParams
 };
 static_assert (pk::kTailExtFields <= kHpDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 static_assert (pk::kTailExt2Fields == kLpDriveOn - kTailExt2Base, "Gently's Advanced block must fill its room: IDs are persisted");
-static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 56 && kLpDrive == 57 &&
-                   kNumParams == 58,
+static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 60 && kLpDrive == 61 &&
+                   kNumParams == 62,
                "Para's IDs are persisted in projects");
 
 // The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.

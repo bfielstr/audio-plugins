@@ -58,7 +58,7 @@ static int64_t wubrBlockOf (uint32_t id)
     return id >= wubr::kLinkRate && id < wubr::kTailExt2Base ? (int64_t)(id - wubr::kLinkRate + kWubrBands) : -1;
 }
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
-static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields + pk::kTailExt2Fields && multidyn::kRmsWindow == kSlotBlock &&
+static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk::kTailExt2Fields && multidyn::kRmsWindow == kSlotBlock &&
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");

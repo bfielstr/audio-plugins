@@ -106,9 +106,9 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Knob (knobRect (440, 22), this, kLpFloor));
     // the drive, in Para's own path: on, before or after the filters, how hard
     outP->addView (new Label (CRect (516, 24, 660, 38), "Drive", 10.5, false, 1));
-    bind (outP, new Toggle (CRect (516, 42, 556, 62), this, kDriveOn, "On"));
+    bind (outP, new Toggle (CRect (516, 42, 556, 62), this, kHpDriveOn, "On"));
     driveViews[0] = bind (outP, new Segmented (CRect (562, 42, 660, 62), this, kDrivePos, {"Pre", "Post"}));
-    driveViews[1] = bind (outP, new Knob (knobRect (676, 22), this, kDrive, "Amount"));
+    driveViews[1] = bind (outP, new Knob (knobRect (676, 22), this, kHpDrive, "Amount"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     auto* tailPanel = addTailPanel (root, CRect (8, 518, 752, 598 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
@@ -129,7 +129,7 @@ void Editor::updateLooks ()
         lpResKnob->setEnabledLook (plainValue (kResLink) < 0.5);
     for (auto* v : driveViews)
         if (v)
-            v->setEnabledLook (plainValue (kDriveOn) >= 0.5);
+            v->setEnabledLook (plainValue (kHpDriveOn) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -139,7 +139,7 @@ void Editor::paramChanged (uint32_t id)
         tailDisplays->paramChanged (id);
     if (view)
         view->invalid ();
-    if (id == kResLink || id == kDriveOn)
+    if (id == kResLink || id == kHpDriveOn)
         updateLooks ();
 }
 

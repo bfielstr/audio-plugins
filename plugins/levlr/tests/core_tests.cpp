@@ -136,7 +136,7 @@ TEST (parameters_and_defaults)
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
     CHECK (kTailExt2Base == kTailExtBase + pk::kTailExtFields, "the end saturator's extended block, then Gently's Advanced block");
-    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+    CHECK (kBandCount == kTailExt2Base + pk::kTailExt2Fields &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
            "Gently's Advanced block (the end saturator's) is the last");
@@ -150,7 +150,7 @@ TEST (parameters_and_defaults)
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
            "the end Smacheratr: off, Pre-Limit on");
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
-    CHECK (kBandCount == 45 && kDriveBase == 46 && kNumParams == 54, "Bands at 45, the drives at 46 .. 53");
+    CHECK (kBandCount == 49 && kDriveBase == 50 && kNumParams == 58, "Bands at 49, the drives at 50 .. 57");
     CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
     for (int b = 0; b < kBands; ++b)
         CHECK (t.info (driveParam (b, kDriveDb)).def == 0.0 && t.info (driveParam (b, kDriveDb)).max == kMaxDriveDb &&

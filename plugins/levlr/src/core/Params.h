@@ -1,6 +1,6 @@
 // Levlr parameters. IDs are persisted in projects: only ever append. The end saturator's blocks
 // (kTailBase, kTailExtBase, kTailExt2Base) are closed now: the band count and the bands' drives come
-// after them, at 45 (pinned below, so a saturator block that grows can't move them).
+// after them, at 49 (pinned below, so a saturator block that grows can't move them).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -54,7 +54,7 @@ enum ParamId : uint32_t
     kBandBase = kTailBase + pk::kTailFields,        // kBands x kBandBlock
     kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
-    kBandCount = 45,                                // Bands: how many are in use (a choice: 1 .. 4, 4 by default)
+    kBandCount = 49,                                // Bands: how many are in use (a choice: 1 .. 4, 4 by default)
     kDriveBase,                                     // kBands x kDriveBlock: each band's drive
     kNumParams = kDriveBase + kBands * kDriveBlock
 };

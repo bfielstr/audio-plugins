@@ -1126,9 +1126,9 @@ void Editor::buildBody ()
             add (new Knob (knobRect (538, 164), h, kFade, "Fade"), tip (kFade));
             add (new Knob (knobRect (596, 164), h, kLpFloor, "Floor"), tip (kLpFloor));
             // the drive in Para's own path: on, before or after the filters, how hard
-            add (new Toggle (CRect (662, 168, 742, 186), h, kDriveOn, "Drive"), tip (kDriveOn));
+            add (new Toggle (CRect (662, 168, 742, 186), h, kHpDriveOn, "Drive"), tip (kHpDriveOn));
             add (new Segmented (CRect (662, 192, 742, 210), h, kDrivePos, {"Pre", "Post"}), tip (kDrivePos));
-            add (new Knob (knobRect (750, 164), h, kDrive, "Amount"), tip (kDrive));
+            add (new Knob (knobRect (750, 164), h, kHpDrive, "Amount"), tip (kHpDrive));
             break;
         }
         case kFxMultidyn:
