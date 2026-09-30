@@ -16,3 +16,31 @@ add_test(NAME deepr_core COMMAND deepr_tests)
 if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
+
+pk_add_plugin(Deepr
+    BUNDLE_ID com.bfielstr.vst3.deepr
+    SOURCES
+        src/plugin/Cids.h
+        src/plugin/Version.h
+        src/plugin/SharedMeters.h
+        src/plugin/State.h
+        src/plugin/State.cpp
+        src/plugin/Processor.h
+        src/plugin/Processor.cpp
+        src/plugin/Controller.h
+        src/plugin/Controller.cpp
+        src/plugin/Entry.cpp
+        src/ui/Help.h
+        src/ui/DeeprView.h
+        src/ui/DeeprView.cpp
+        src/ui/Editor.h
+        src/ui/Editor.cpp
+)
+target_include_directories(Deepr PRIVATE src)
+target_link_libraries(Deepr PRIVATE deepr_core smacheratr_ui)
+
+pk_add_host_test(deepr_hosttest
+    PLUGIN Deepr
+    SOURCES tests/host_test.mm src/plugin/State.cpp
+    LIBS deepr_core
+    INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)
