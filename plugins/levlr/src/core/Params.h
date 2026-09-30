@@ -59,6 +59,7 @@ enum ParamId : uint32_t
     kNumParams = kDriveBase + kBands * kDriveBlock
 };
 static_assert (kTailExt2Base + pk::kTailExt2Fields == kBandCount, "the end saturator's blocks end where the band count starts");
+static_assert (kBandCount == 49 && kDriveBase == 50 && kNumParams == 58, "saved IDs: Bands at 49, the drives at 50 .. 57");
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 constexpr uint32_t xoverParam (int k) { return kXover + (uint32_t)k; }
@@ -85,5 +86,16 @@ const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+
+// The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives.
+constexpr int kStateVersion = 3;
+// Brings the normalized values of a state saved by `version` to this one: version 1's three slopes
+// among the eight; before 3, four bands and every drive off (the sound it was saved with). `has`:
+// the IDs the state had (the rest hold their defaults).
+void migrateState (int version, double norm[kNumParams], const bool has[kNumParams]);
+// The parameters added after 0.6.0 (Bands and the drives). A host that stored Levlr's parameters
+// without them and reads them as normalized 0 (Smemplr's rack slots) sets each to its default:
+// Bands' default is 4 (normalized 1), not 0 (1 band); the drives' defaults are normalized 0.
+constexpr uint32_t kFirstAddedAfter060 = kBandCount, kEndAddedAfter060 = kNumParams;
 
 } // namespace levlr

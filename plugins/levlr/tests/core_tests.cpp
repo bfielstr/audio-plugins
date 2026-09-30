@@ -451,6 +451,555 @@ TEST (fuzz_and_cpu)
     }
 }
 
+// ---- Bands and the drives ----
+
+// A stereo signal: (sample index, channel) -> value.
+using Signal = std::function<float (long long, int)>;
+
+// Runs `n` samples of `sig` (from sample t on, which it advances) through e in blocks of `block`;
+// appends the output.
+static void run (Engine& e, const Signal& sig, long long& t, int n, std::vector<float>& outL, std::vector<float>* outR = nullptr,
+                 int block = 480)
+{
+    std::vector<float> l ((size_t)block), r ((size_t)block);
+    for (int pos = 0; pos < n; pos += block)
+    {
+        const int m = std::min (block, n - pos);
+        for (int i = 0; i < m; ++i)
+        {
+            l[(size_t)i] = sig (t + i, 0);
+            r[(size_t)i] = sig (t + i, 1);
+        }
+        e.process (l.data (), r.data (), l.data (), r.data (), m);
+        outL.insert (outL.end (), l.begin (), l.begin () + m);
+        if (outR)
+            outR->insert (outR->end (), r.begin (), r.begin () + m);
+        t += m;
+    }
+}
+
+static Signal sine (double hz, double amp)
+{
+    return [hz, amp] (long long t, int) { return (float)(amp * std::sin (2.0 * M_PI * hz * (double)t / kSr)); };
+}
+
+// a fixed noise (its own on each channel)
+static Signal noise (double amp, uint32_t seed = 1)
+{
+    return [amp, seed] (long long t, int c) {
+        uint32_t s = (uint32_t)(t * 2 + c) * 2654435761u + seed * 97u;
+        s ^= s >> 13;
+        s *= 0x5bd1e995u;
+        s ^= s >> 15;
+        return (float)(amp * ((double)(s & 0xFFFFFF) / 8388608.0 - 1.0));
+    };
+}
+
+// a spread of sines up to 9 kHz, well inside the oversampler's pass band (a different phase on each channel)
+static Signal tones (double amp)
+{
+    return [amp] (long long t, int c) {
+        static const double f[] = {63.0, 180.0, 440.0, 1250.0, 3100.0, 5300.0, 8900.0};
+        double v = 0.0;
+        for (int k = 0; k < 7; ++k)
+            v += std::sin (2.0 * M_PI * f[k] * (double)t / kSr + 0.7 * k + 1.3 * c);
+        return (float)(amp * v / 7.0);
+    };
+}
+
+// the amplitude of the component at hz in x[a .. b) (Hann-windowed)
+static double amplitudeAt (const std::vector<float>& x, size_t a, size_t b, double hz, double sr = kSr)
+{
+    std::complex<double> acc (0.0, 0.0);
+    double wsum = 0.0;
+    const size_t n = b - a;
+    for (size_t i = 0; i < n; ++i)
+    {
+        const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * (double)i / (double)n);
+        const double ph = -2.0 * M_PI * hz * (double)i / sr;
+        acc += w * (double)x[a + i] * std::complex<double> (std::cos (ph), std::sin (ph));
+        wsum += w;
+    }
+    return 2.0 * std::abs (acc) / wsum;
+}
+
+static void fft (std::vector<std::complex<double>>& a)
+{
+    const size_t n = a.size ();
+    for (size_t i = 1, j = 0; i < n; ++i)
+    {
+        size_t bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if (i < j)
+            std::swap (a[i], a[j]);
+    }
+    for (size_t len = 2; len <= n; len <<= 1)
+    {
+        const double ang = -2.0 * M_PI / (double)len;
+        const std::complex<double> wl (std::cos (ang), std::sin (ang));
+        for (size_t i = 0; i < n; i += len)
+        {
+            std::complex<double> w (1.0, 0.0);
+            for (size_t k = 0; k < len / 2; ++k)
+            {
+                const auto u = a[i + k], v = a[i + k + len / 2] * w;
+                a[i + k] = u + v;
+                a[i + k + len / 2] = u - v;
+                w *= wl;
+            }
+        }
+    }
+}
+
+// The strongest component that is not a harmonic of f0 (nor DC), in dB against the fundamental: what
+// the curve's harmonics above Nyquist fold back as. x: 16384 samples from `a` on (Blackman-Harris).
+static double worstAliasDb (const std::vector<float>& x, size_t a, double f0, double sr = kSr)
+{
+    constexpr size_t kN = 16384;
+    std::vector<std::complex<double>> s (kN);
+    for (size_t i = 0; i < kN; ++i)
+    {
+        const double p = 2.0 * M_PI * (double)i / (double)kN;
+        const double w = 0.35875 - 0.48829 * std::cos (p) + 0.14128 * std::cos (2 * p) - 0.01168 * std::cos (3 * p);
+        s[i] = w * (double)x[a + i];
+    }
+    fft (s);
+    const double bin = sr / (double)kN;
+    auto nearHarmonic = [&] (size_t k) {
+        const double f = (double)k * bin;
+        const double h = std::round (f / f0);
+        return std::fabs (f - h * f0) <= 6.0 * bin; // (h 0: DC)
+    };
+    const double fund = std::abs (s[(size_t)std::lround (f0 / bin)]);
+    double worst = 0.0;
+    for (size_t k = 1; k < kN / 2; ++k)
+        if (!nearHarmonic (k))
+            worst = std::max (worst, std::abs (s[k]));
+    return 20.0 * std::log10 (worst / fund + 1e-15);
+}
+
+static void setBands (Engine& e, int count) { e.setParam (kBandCount, (double)(count - 1)); }
+static void setDrive (Engine& e, int band, double db, int type)
+{
+    e.setParam (driveParam (band, kDriveDb), db);
+    e.setParam (driveParam (band, kDriveType), (double)type);
+}
+static const char* kTypeNames[kNumDriveTypes] = {"Analog", "Tape", "Tube", "Hard Clip", "Fold"};
+
+TEST (latency_is_constant)
+{
+    for (double sr : {44100.0, 48000.0, 96000.0})
+    {
+        // the latency is the drives' oversampler's (plus the end saturator's), whatever is set
+        auto e = engine ({}, sr);
+        const int lat = e->latency ();
+        Engine withTail;
+        withTail.prepare (sr, 512);
+        std::printf ("    %.0f Hz: %d samples (with the end saturator %d)\n", sr, lat, withTail.latency ());
+        CHECK (lat > 0 && lat == e->driveLatency (), "the drives' latency: %d", lat);
+        const int tailLat = withTail.latency ();
+        CHECK (tailLat > lat, "the end saturator's adds to it");
+        bool same = true;
+        std::vector<float> out;
+        long long t = 0;
+        for (int count = 1; count <= kBands; ++count)
+            for (int type = 0; type < kNumDriveTypes; ++type)
+                for (double db : {0.0, 12.0, 36.0})
+                {
+                    setBands (*e, count);
+                    for (int b = 0; b < kBands; ++b)
+                        setDrive (*e, b, db, type);
+                    run (*e, noise (0.3), t, 256, out);
+                    same &= e->latency () == lat;
+                    setBands (withTail, count);
+                    setDrive (withTail, 0, db, type);
+                    same &= withTail.latency () == tailLat;
+                }
+        CHECK (same, "the same latency at every Bands, Drive and Type");
+    }
+
+    // one band, no drive: the input exactly, latency () samples later
+    {
+        auto e = engine ([] (Engine& en) { setBands (en, 1); });
+        const int lat = e->latency ();
+        std::vector<float> outL, outR;
+        long long t = 0;
+        const Signal in = noise (0.5, 7);
+        run (*e, in, t, 9000, outL, &outR, 333);
+        bool exact = true;
+        for (int i = 0; i < 9000; ++i)
+        {
+            const float wantL = i < lat ? 0.0f : in (i - lat, 0), wantR = i < lat ? 0.0f : in (i - lat, 1);
+            exact &= outL[(size_t)i] == wantL && outR[(size_t)i] == wantR;
+        }
+        CHECK (exact, "one band: the input, %d samples later, bit for bit", lat);
+
+        // switched off (built into another plug-in): the same delay
+        auto b = engine ();
+        std::vector<float> l (9000), r (9000);
+        for (int i = 0; i < 9000; ++i)
+        {
+            l[(size_t)i] = in (i, 0);
+            r[(size_t)i] = in (i, 1);
+        }
+        for (int pos = 0; pos < 9000; pos += 500)
+            b->processBypassed (l.data () + pos, r.data () + pos, 500);
+        bool delayed = true;
+        for (int i = 0; i < 9000; ++i)
+            delayed &= l[(size_t)i] == (i < lat ? 0.0f : in (i - lat, 0)) && r[(size_t)i] == (i < lat ? 0.0f : in (i - lat, 1));
+        CHECK (delayed, "bypassed: the same %d samples of delay", lat);
+    }
+
+    // a driven band lines up with the clean ones: Hard Clip below its clip is the band itself (its auto
+    // gain undoes the drive), so with it on the output nulls against the clean output
+    for (int band : {0, 1, 3})
+    {
+        auto clean = engine ();
+        auto driven = engine ([band] (Engine& en) { setDrive (en, band, 6.0, kDriveHard); });
+        std::vector<float> a, b;
+        long long ta = 0, tb = 0;
+        const int n = (int)(0.5 * kSr);
+        run (*clean, tones (0.08), ta, n, a);
+        run (*driven, tones (0.08), tb, n, b);
+        double sig = 0.0, diff = 0.0;
+        for (size_t i = (size_t)n / 2; i < (size_t)n; ++i)
+        {
+            sig += (double)a[i] * a[i];
+            diff += ((double)a[i] - b[i]) * ((double)a[i] - b[i]);
+        }
+        const double nullDb = 10.0 * std::log10 (diff / sig + 1e-30);
+        std::printf ("    band %d driven (Hard Clip 6 dB, under its clip) against clean: %.1f dB\n", band + 1, nullDb);
+        CHECK (nullDb < -40.0, "band %d: a driven band stays in time with the rest (%.1f dB)", band + 1, nullDb);
+    }
+}
+
+TEST (drive_off_is_clean)
+{
+    // Drive at 0 dB (every type) is no drive, bit for bit
+    const int n = (int)(0.4 * kSr);
+    std::vector<float> ref, refR;
+    {
+        auto e = engine ([] (Engine& en) {
+            en.setParam (kSlope, kSlope48);
+            en.setParam (bandParam (1, kGain), 5.0);
+        });
+        long long t = 0;
+        run (*e, noise (0.4), t, n, ref, &refR);
+    }
+    for (int type = 0; type < kNumDriveTypes; ++type)
+    {
+        auto e = engine ([type] (Engine& en) {
+            en.setParam (kSlope, kSlope48);
+            en.setParam (bandParam (1, kGain), 5.0);
+            for (int b = 0; b < kBands; ++b)
+                setDrive (en, b, 0.0, type);
+        });
+        std::vector<float> l, r;
+        long long t = 0;
+        run (*e, noise (0.4), t, n, l, &r);
+        CHECK (l == ref && r == refR, "%s at 0 dB: the clean output, bit for bit", kTypeNames[type]);
+    }
+
+    // a drive turned on and back off: once it has faded out, the output is the clean one again, bit for bit
+    {
+        auto clean = engine ();
+        auto e = engine ();
+        std::vector<float> a, b;
+        long long ta = 0, tb = 0;
+        run (*clean, noise (0.4), ta, 4800, a);
+        run (*e, noise (0.4), tb, 4800, b);
+        setDrive (*e, 1, 24.0, kDriveTube);
+        setDrive (*e, 3, 12.0, kDriveFold);
+        run (*clean, noise (0.4), ta, 9600, a);
+        run (*e, noise (0.4), tb, 9600, b);
+        double diff = 0.0;
+        for (size_t i = 4800; i < a.size (); ++i)
+            diff = std::max (diff, (double)std::fabs (a[i] - b[i]));
+        CHECK (diff > 0.01, "the drives do something: %.3f", diff);
+        setDrive (*e, 1, 0.0, kDriveTube);
+        setDrive (*e, 3, 0.0, kDriveFold);
+        run (*clean, noise (0.4), ta, 4800, a); // (15 ms fades)
+        run (*e, noise (0.4), tb, 4800, b);
+        const size_t from = a.size ();
+        run (*clean, noise (0.4), ta, 9600, a);
+        run (*e, noise (0.4), tb, 9600, b);
+        bool exact = true;
+        for (size_t i = from; i < a.size (); ++i)
+            exact &= a[i] == b[i];
+        CHECK (exact, "off again: the clean output, bit for bit");
+    }
+
+    // a drive on a band past the count does nothing
+    {
+        auto two = engine ([] (Engine& en) { setBands (en, 2); });
+        auto twoDriven = engine ([] (Engine& en) {
+            setBands (en, 2);
+            setDrive (en, 2, 36.0, kDriveHard);
+            setDrive (en, 3, 36.0, kDriveFold);
+        });
+        std::vector<float> a, b;
+        long long ta = 0, tb = 0;
+        run (*two, noise (0.4), ta, n, a);
+        run (*twoDriven, noise (0.4), tb, n, b);
+        CHECK (a == b, "Bands 2: the drives of bands 3 and 4 are off");
+    }
+}
+
+TEST (each_type_saturates)
+{
+    // one band (the whole signal through band 1's drive), a sine at the auto gain's level (-12 dBFS peak)
+    const double f0 = 220.0;
+    double second[kNumDriveTypes] {};
+    for (int type = 0; type < kNumDriveTypes; ++type)
+        for (double driveDb : {0.0, 6.0, 18.0})
+        {
+            auto e = engine ([&] (Engine& en) {
+                setBands (en, 1);
+                setDrive (en, 0, driveDb, type);
+            });
+            std::vector<float> out;
+            long long t = 0;
+            const int n = (int)(0.6 * kSr);
+            run (*e, sine (f0, kDriveRefPeak), t, n, out);
+            const size_t a = (size_t)n / 3, b = (size_t)n;
+            const double h1 = amplitudeAt (out, a, b, f0);
+            double hSum = 0.0;
+            for (int h = 2; h <= 15; ++h)
+            {
+                const double ah = amplitudeAt (out, a, b, f0 * h);
+                hSum += ah * ah;
+                if (h == 2 && driveDb == 18.0)
+                    second[type] = 20.0 * std::log10 (ah / h1 + 1e-12);
+            }
+            const double thd = std::sqrt (hSum) / h1, levelDb = 20.0 * std::log10 (h1 / kDriveRefPeak);
+            std::printf ("    %-9s Drive %4.1f dB: THD %6.2f%%, fundamental %+.2f dB\n", kTypeNames[type], driveDb, 100.0 * thd,
+                         levelDb);
+            if (driveDb == 0.0)
+                CHECK (thd < 1e-4, "%s at 0 dB: clean (THD %.4f%%)", kTypeNames[type], 100.0 * thd);
+            else if (driveDb == 18.0)
+            {
+                CHECK (thd > 0.03, "%s at 18 dB saturates: THD %.2f%%", kTypeNames[type], 100.0 * thd);
+                // (the auto gain keeps the level near where it was)
+                CHECK (std::fabs (levelDb) < 4.0, "%s at 18 dB: the level stays (%.2f dB)", kTypeNames[type], levelDb);
+            }
+        }
+    std::printf ("    2nd harmonic at 18 dB: Analog %.1f, Tape %.1f, Tube %.1f, Hard %.1f, Fold %.1f dB\n", second[0], second[1],
+                 second[2], second[3], second[4]);
+    CHECK (second[kDriveTube] > -35.0, "Tube: even harmonics (%.1f dB)", second[kDriveTube]);
+    CHECK (second[kDriveTape] < -70.0 && second[kDriveHard] < -70.0, "Tape and Hard Clip: symmetric (%.1f, %.1f dB)", second[kDriveTape],
+           second[kDriveHard]);
+}
+
+TEST (aliasing_is_low)
+{
+    // one band, a high sine driven hard: what folds back below Nyquist, against the same curve run at
+    // the plain sample rate (no oversampling)
+    for (double f0 : {1003.7, 4987.3}) // (not divisors of the rate)
+    for (int type = 0; type < kNumDriveTypes; ++type)
+    {
+        const double driveDb = 18.0;
+        auto e = engine ([&] (Engine& en) {
+            setBands (en, 1);
+            setDrive (en, 0, driveDb, type);
+        });
+        std::vector<float> out;
+        long long t = 0;
+        run (*e, sine (f0, kDriveRefPeak), t, 16384 + 9600, out);
+        const double over = worstAliasDb (out, 9600, f0);
+        // the same curve at 1x
+        const auto& makeup = DriveMakeup::get ();
+        const float g = (float)std::pow (10.0, driveDb / 20.0), mk = makeup.at (type, driveDb);
+        std::vector<float> naive (16384);
+        for (size_t i = 0; i < naive.size (); ++i)
+            naive[i] = mk * driveCurve (type, g * sine (f0, kDriveRefPeak) ((long long)i, 0));
+        const double plain = worstAliasDb (naive, 0, f0);
+        std::printf ("    %-9s at %.0f Hz, 18 dB: worst alias %.1f dB (without oversampling %.1f dB)\n", kTypeNames[type], f0,
+                     over, plain);
+        // (a 5 kHz sine hard-clipped at 18 dB is the worst case: its harmonics are strong far past 4x)
+        CHECK (over < (f0 < 2000.0 ? -60.0 : -35.0), "%s at %.0f Hz: aliasing %.1f dB", kTypeNames[type], f0, over);
+        CHECK (over < plain - 10.0 || over < -80.0, "%s: oversampling helps (%.1f against %.1f dB)", kTypeNames[type], over, plain);
+    }
+}
+
+TEST (bands_count)
+{
+    CHECK (bandsOf (0.0) == 1 && bandsOf (3.0) == 4 && bandsOf (-5.0) == 1 && bandsOf (9.0) == 4, "the choice as a count");
+    // N bands at 0 dB: flat (an all-pass), and the display's model of them matches
+    for (int count = 1; count <= kBands; ++count)
+        for (int s : {kSlope12, kSlope48, kSlope96})
+        {
+            auto e = engine ([&] (Engine& en) {
+                setBands (en, count);
+                en.setParam (kSlope, s);
+            });
+            CHECK (e->bandsInUse () == count, "%d bands in use", count);
+            const auto h = impulse (*e);
+            const double xo[kCrossovers] = {120.0, 1000.0, 6000.0};
+            const double ones[kBands] = {1.0, 1.0, 1.0, 1.0};
+            double worst = 0.0, worstModel = 0.0;
+            for (double f : logFreqs (40, 20.0, 20000.0))
+            {
+                const auto r = at (h, f);
+                worst = std::max (worst, std::fabs (db (r)));
+                worstModel = std::max (worstModel, std::abs (r - totalResponse (xo, s, ones, f, kSr, count)));
+            }
+            CHECK (worst < 0.1 && worstModel < 0.003, "%d bands, %s: flat within %.3f dB, model off by %.5f", count, kSlopeNames[s],
+                   worst, worstModel);
+        }
+    // two bands: band 2 is everything above crossover 1; bands 3 and 4 (their gain, mute, solo) are not there
+    {
+        auto e = engine ([] (Engine& en) {
+            setBands (en, 2);
+            en.setParam (bandParam (1, kGain), 12.0);
+            en.setParam (bandParam (2, kGain), -24.0);
+            en.setParam (bandParam (3, kSolo), 1.0);
+        });
+        const auto h = impulse (*e);
+        const double low = db (at (h, 40.0)), mid = db (at (h, 2500.0)), high = db (at (h, 12000.0));
+        std::printf ("    2 bands, band 2 +12 (band 3 at -24, band 4 soloed: unused): %.2f dB at 40 Hz, %.2f at 2.5 kHz, %.2f at 12 kHz\n",
+                     low, mid, high);
+        CHECK (std::fabs (low) < 0.5 && std::fabs (mid - 12.0) < 0.5 && std::fabs (high - 12.0) < 0.5, "2 bands: band 2 is the rest");
+        double g[kBands];
+        bandGains ([&] (uint32_t id) { return e->param (id); }, g, 2);
+        CHECK (g[0] == 1.0 && g[1] > 3.9, "a solo past the count doesn't silence the bands in use");
+    }
+    // one band: bands 2 .. 4 don't count; band 1's gain is the whole
+    {
+        auto e = engine ([] (Engine& en) {
+            setBands (en, 1);
+            en.setParam (bandParam (0, kGain), -6.0);
+        });
+        const auto h = impulse (*e);
+        CHECK (std::fabs (db (at (h, 50.0)) + 6.0) < 0.05 && std::fabs (db (at (h, 10000.0)) + 6.0) < 0.05, "1 band: its gain everywhere");
+    }
+}
+
+TEST (drive_and_bands_changes_are_click_free)
+{
+    // a 200 Hz sine in band 2: while the band count changes, a drive comes on, changes type, goes off,
+    // the largest step between samples stays near the larger of the settled signal's before and after
+    // (a driven sine has steeper edges of its own)
+    const double amp = 0.25, normal = amp * 2.0 * M_PI * 200.0 / kSr;
+    auto e = engine ();
+    std::vector<float> out;
+    long long t = 0;
+    auto worstStep = [&] (int blocks) {
+        const size_t from = out.size ();
+        run (*e, sine (200.0, amp), t, blocks * 480, out);
+        double worst = 0.0;
+        for (size_t i = std::max<size_t> (from, 1); i < out.size (); ++i)
+            worst = std::max (worst, (double)std::fabs (out[i] - out[i - 1]));
+        return worst;
+    };
+    double before = worstStep (20);
+    struct Step
+    {
+        const char* what;
+        std::function<void ()> change;
+    };
+    const Step steps[] = {
+        {"Bands 4 -> 1", [&] { setBands (*e, 1); }},
+        {"Bands 1 -> 3", [&] { setBands (*e, 3); }},
+        {"Bands 3 -> 2", [&] { setBands (*e, 2); }},
+        {"drive on (Tape 12 dB)", [&] { setDrive (*e, 1, 12.0, kDriveTape); }},
+        {"Tape -> Tube", [&] { setDrive (*e, 1, 12.0, kDriveTube); }},
+        {"Tube -> Fold", [&] { setDrive (*e, 1, 12.0, kDriveFold); }},
+        {"12 -> 24 dB", [&] { setDrive (*e, 1, 24.0, kDriveFold); }},
+        {"Bands 2 -> 4, driven", [&] { setBands (*e, 4); }},
+        {"drive off", [&] { setDrive (*e, 1, 0.0, kDriveFold); }},
+    };
+    for (const auto& s : steps)
+    {
+        s.change ();
+        const double w = worstStep (10), after = worstStep (10);
+        const double settled = std::max ({before, after, normal});
+        std::printf ("    %-22s largest step %.4f (settled %.4f before, %.4f after; the sine's own %.4f)\n", s.what, w, before,
+                     after, normal);
+        CHECK (w < 1.25 * settled, "%s: no click (%.4f against %.4f)", s.what, w, settled);
+        before = after;
+    }
+    CHECK (e->bandsInUse () == 4, "4 bands again");
+}
+
+TEST (old_state_migration)
+{
+    // a 0.6.0 state (version 2): every ID up to the end saturator's third block, none of the new ones.
+    // Whatever the new places hold, it loads with four bands and every drive off
+    double norm[kNumParams];
+    bool has[kNumParams];
+    for (uint32_t id = 0; id < kNumParams; ++id)
+    {
+        has[id] = id < kBandCount;
+        norm[id] = has[id] ? defaultNormalized (id) : 0.0; // (0: as a host reading them missing might)
+    }
+    norm[xoverParam (1)] = toNormalized (xoverParam (1), 2500.0);
+    migrateState (2, norm, has);
+    CHECK (bandsOf (toPlain (kBandCount, norm[kBandCount])) == 4, "four bands");
+    for (int b = 0; b < kBands; ++b)
+        CHECK (toPlain (driveParam (b, kDriveDb), norm[driveParam (b, kDriveDb)]) == 0.0, "band %d's drive off", b + 1);
+    CHECK (std::fabs (toPlain (xoverParam (1), norm[xoverParam (1)]) - 2500.0) < 0.5, "the rest as it was saved");
+    CHECK (kFirstAddedAfter060 == kBandCount && kEndAddedAfter060 == kNumParams, "the IDs added after 0.6.0");
+    CHECK (defaultNormalized (kBandCount) == 1.0, "Bands: 4 is normalized 1");
+
+    // version 1: its three slopes among the eight
+    for (int old = 0; old < 3; ++old)
+    {
+        double n1[kNumParams];
+        bool h1[kNumParams] {};
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            n1[id] = defaultNormalized (id);
+        n1[kSlope] = old / 2.0;
+        h1[kSlope] = true;
+        migrateState (1, n1, h1);
+        const int want[3] = {kSlope12, kSlope24, kSlope48};
+        CHECK (std::lround (toPlain (kSlope, n1[kSlope])) == want[old], "version 1's slope %d", old);
+    }
+    // this version's own state is kept as it is
+    double n3[kNumParams];
+    bool h3[kNumParams];
+    for (uint32_t id = 0; id < kNumParams; ++id)
+    {
+        n3[id] = 0.25;
+        h3[id] = true;
+    }
+    migrateState (kStateVersion, n3, h3);
+    bool kept = true;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        kept &= n3[id] == 0.25;
+    CHECK (kept, "version %d: unchanged", kStateVersion);
+}
+
+TEST (cpu_with_drives)
+{
+    // every band driven (each a different type), 96 dB/oct, the end saturator on: the processor's own
+    // CPU time, the best of three renders of 5 s
+    auto cpu = [] (bool drives) {
+        double best = 1e9;
+        for (int rep = 0; rep < 3; ++rep)
+        {
+            Engine c;
+            c.setParam (kSlope, kSlope96);
+            c.setParam (kTailBase + pk::kTailOn, 1.0);
+            if (drives)
+                for (int b = 0; b < kBands; ++b)
+                    setDrive (c, b, 12.0 + 4.0 * b, (b + 1) % kNumDriveTypes);
+            c.prepare (kSr, 512);
+            std::vector<float> out;
+            out.reserve ((size_t)(5.0 * kSr) + 512);
+            long long t = 0;
+            const std::clock_t t0 = std::clock ();
+            run (c, tones (0.3), t, (int)(5.0 * kSr), out, nullptr, 512);
+            best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        }
+        return best / 5.0;
+    };
+    const double clean = cpu (false), driven = cpu (true);
+    std::printf ("    96 dB/oct, saturator on: %.2f%% of real time; every band driven: %.2f%%\n", 100.0 * clean, 100.0 * driven);
+    CHECK (driven < 0.25, "every band driven: %.2f%% of real time", 100.0 * driven);
+}
+
 int main (int argc, char** argv)
 {
     const char* filter = argc > 1 ? argv[1] : nullptr;

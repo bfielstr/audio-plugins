@@ -1,7 +1,8 @@
-// The four bands on a frequency display, in the style of a multiband's: each band a coloured column
-// between its crossovers, filled from 0 dB to its level; the whole response in white (the bands'
-// filters added up as the engine adds them, so the steps between levels show as they sound); the
-// output's spectrum behind.
+// The bands in use (Bands: 1 .. 4) on a frequency display, in the style of a multiband's: each band a
+// coloured column between its crossovers, filled from 0 dB to its level, its drive (when on) as a tag
+// at the foot; the whole response in white (the bands' filters added up as the engine adds them, so
+// the steps between levels show as they sound); the output's spectrum behind. The last band in use
+// reaches to the top of the display; the crossovers past it aren't shown.
 //   a band, up / down             its Gain (Shift: fine)
 //   the line between two bands    that crossover, sideways (it stops 1/6 octave from its neighbours)
 //   double-click / right-click    resets a band's gain, or a crossover's frequency
@@ -49,6 +50,7 @@ public:
     double plotTop () const { return getViewSize ().top + 22.0; }
     double plotBottom () const { return getViewSize ().bottom - 16.0; }
     void crossovers (double out[kCrossovers]) const; // as the engine uses them
+    int count () const;                              // the bands in use
     double edgeX (int k) const;                      // crossover k's line
     double bandLeft (int band) const;
     double bandRight (int band) const;

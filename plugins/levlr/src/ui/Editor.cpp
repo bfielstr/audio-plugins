@@ -78,7 +78,8 @@ public:
         for (int k = 0; k < kCrossovers; ++k)
             set[k] = host->plainValue (xoverParam (k));
         effectiveCrossovers (set, sampleRate (), xo);
-        const double lo = band == 0 ? LevelView::kMinHz : xo[band - 1], hi = band == kBands - 1 ? LevelView::kMaxHz : xo[band];
+        const int count = bandsOf (host->plainValue (kBandCount)); // (the last band in use goes to the top)
+        const double lo = band == 0 ? LevelView::kMinHz : xo[band - 1], hi = band >= count - 1 ? LevelView::kMaxHz : xo[band];
         char name[16];
         std::snprintf (name, sizeof (name), "BAND %d", band + 1);
         ctx->setFont (pk::theme::font (10.5, true));
@@ -103,6 +104,10 @@ void Editor::onClose ()
     tailDisplays.reset ();
     levels = nullptr;
     headers.clear ();
+    for (auto& c : columns)
+        c.clear ();
+    for (auto& t : driveType)
+        t = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -129,17 +134,26 @@ void Editor::buildUI (CFrame* f)
     levels->setTooltipText (help::kDisplay);
     root->addView (levels);
 
-    // each band: its name and range, level, mute and solo
+    // each band: its name and range, level, mute and solo; under them its drive and the drive's type
     headers.clear ();
     for (int b = 0; b < kBands; ++b)
     {
         const double x = kViewLeft + b * kColumnW;
+        auto& col = columns[b];
+        col.clear ();
         auto* h = new BandHeader (CRect (x, kRowTop, x + kColumnW - 8, kRowTop + 18), this, b, rateOf);
         root->addView (h);
         headers.push_back (h);
-        bind (root, new Knob (knobRect (x, kRowTop + 24), this, bandParam (b, kGain), nullptr, true));
-        bind (root, new Toggle (CRect (x + 64, kRowTop + 32, x + kColumnW - 8, kRowTop + 52), this, bandParam (b, kMute), "Mute"));
-        bind (root, new Toggle (CRect (x + 64, kRowTop + 58, x + kColumnW - 8, kRowTop + 78), this, bandParam (b, kSolo), "Solo"));
+        col.push_back (h);
+        col.push_back (bind (root, new Knob (knobRect (x, kRowTop + 24), this, bandParam (b, kGain), nullptr, true)));
+        col.push_back (
+            bind (root, new Toggle (CRect (x + 64, kRowTop + 32, x + kColumnW - 8, kRowTop + 52), this, bandParam (b, kMute), "Mute")));
+        col.push_back (
+            bind (root, new Toggle (CRect (x + 64, kRowTop + 58, x + kColumnW - 8, kRowTop + 78), this, bandParam (b, kSolo), "Solo")));
+        col.push_back (bind (root, new Knob (knobRect (x, kDriveTop), this, driveParam (b, kDriveDb))));
+        driveType[b] = bind (root, new Choice (CRect (x + 64, kDriveTop + 12, x + kColumnW - 8, kDriveTop + 47), this,
+                                               driveParam (b, kDriveType), "Type"));
+        col.push_back (driveType[b]);
     }
 
     // the crossovers, the slope, the output
@@ -154,6 +168,8 @@ void Editor::buildUI (CFrame* f)
     }
     root->addView (new Label (CRect (cx, kRowTop + 62, cx + 40, kRowTop + 80), "Slope", 10.5, false));
     bind (root, new Choice (CRect (cx + 42, kRowTop + 61, cx + 194, kRowTop + 81), this, kSlope));
+    root->addView (new Label (CRect (cx, kBandsTop + 1, cx + 40, kBandsTop + 19), "Bands", 10.5, false));
+    bind (root, new Segmented (CRect (kBandsLeft, kBandsTop, kBandsRight, kBandsTop + 20), this, kBandCount, {"1", "2", "3", "4"}));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 16), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
@@ -169,7 +185,25 @@ void Editor::buildUI (CFrame* f)
     tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
 
     applyParamTooltips (&help::forParam);
+    updateBands ();
     idle ();
+}
+
+void Editor::updateBands ()
+{
+    const int count = bandsOf (plainValue (kBandCount));
+    for (int b = 0; b < kBands; ++b)
+    {
+        for (auto* v : columns[b])
+            if (v->isVisible () != (b < count))
+            {
+                v->setVisible (b < count);
+                if (auto* parent = v->getParentView ())
+                    parent->invalidRect (v->getViewSize ());
+            }
+        if (driveType[b])
+            driveType[b]->setEnabledLook (plainValue (driveParam (b, kDriveDb)) > 0.0);
+    }
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -181,9 +215,11 @@ void Editor::paramChanged (uint32_t id)
         return;
     if (levels)
         levels->invalid ();
-    if (id >= kXover && id < kXover + kCrossovers)
+    if ((id >= kXover && id < kXover + kCrossovers) || id == kBandCount)
         for (auto* h : headers)
             h->invalid ();
+    if (id == kBandCount || (id >= kDriveBase && id < kNumParams))
+        updateBands ();
 }
 
 void Editor::idle ()

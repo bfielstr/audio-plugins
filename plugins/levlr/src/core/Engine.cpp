@@ -159,7 +159,7 @@ void Engine::reset ()
     resetFilters ();
     retune ();
     double g[kBands];
-    bandGains ([this] (uint32_t id) { return p[id]; }, g);
+    bandGains ([this] (uint32_t id) { return p[id]; }, g, countTarget ());
     for (int b = 0; b < kBands; ++b)
         gain[b] = (float)g[b];
     out = (float)dbToGain (p[kOutput]);

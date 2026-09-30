@@ -5,6 +5,7 @@
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
 
+#include "base/source/fstreamer.h"
 #include "public.sdk/source/common/memorystream.h"
 
 #include <algorithm>
@@ -95,6 +96,36 @@ int main (int argc, char** argv)
         CHECK (muted < -20.0, "muted: %.1f dB", muted);
         rig.param (bandParam (1, kMute), 0.0);
 
+        // the drives' latency is reported, and it stays whatever the drives and Bands do
+        const uint32 lat0 = rig.processor->getLatencySamples ();
+        CHECK (lat0 > 0, "the latency is reported: %u", (unsigned)lat0);
+
+        // Bands 2: band 2 is everything above crossover 1, so a tone in band 4's old range rises with it
+        rig.param (kBandCount, toNormalized (kBandCount, 1.0));
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (12000.0, 0.1));
+        const double two = dbfs (rms (out, out.size () / 2, out.size ())) - dbfs (0.1 / std::sqrt (2.0));
+        CHECK (std::fabs (two - 12.0) < 0.6, "Bands 2, band 2 +12: %.2f dB at 12 kHz", two);
+        CHECK (rig.processor->getLatencySamples () == lat0, "Bands keeps the latency");
+
+        // band 2's drive (Hard Clip, 18 dB) on a loud tone: harmonics; the level stays near (auto gain)
+        rig.param (bandParam (1, kGain), toNormalized (bandParam (1, kGain), 0.0));
+        rig.param (driveParam (1, kDriveDb), toNormalized (driveParam (1, kDriveDb), 18.0));
+        rig.param (driveParam (1, kDriveType), toNormalized (driveParam (1, kDriveType), (double)kDriveHard));
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (346.0, 0.25));
+        const double driven = dbfs (rms (out, out.size () / 2, out.size ())) - dbfs (0.25 / std::sqrt (2.0));
+        double peak = 0.0;
+        for (size_t i = out.size () / 2; i < out.size (); ++i)
+            peak = std::max (peak, (double)std::fabs (out[i]));
+        CHECK (allFinite (out) && std::fabs (driven) < 4.0, "driven: %.2f dB", driven);
+        CHECK (peak / std::pow (10.0, (driven + dbfs (0.25 / std::sqrt (2.0))) / 20.0) < 1.3, "hard-clipped: a flat top (crest %.2f)",
+               peak / std::pow (10.0, (driven + dbfs (0.25 / std::sqrt (2.0))) / 20.0));
+        CHECK (rig.processor->getLatencySamples () == lat0, "a drive keeps the latency");
+        rig.param (driveParam (1, kDriveDb), 0.0);
+        rig.param (kBandCount, 1.0);
+        rig.param (bandParam (1, kGain), toNormalized (bandParam (1, kGain), 12.0));
+
         // state round trip
         rig.param (kSlope, toNormalized (kSlope, kSlope48));
         rig.param (xoverParam (1), toNormalized (xoverParam (1), 2500.0));
@@ -108,6 +139,26 @@ int main (int argc, char** argv)
         CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == kSlope48, "the slope saved");
         CHECK (std::fabs (toPlain (xoverParam (1), back.norm[xoverParam (1)]) - 2500.0) < 1.0, "crossover 2 saved");
         CHECK (std::fabs (toPlain (bandParam (1, kGain), back.norm[bandParam (1, kGain)]) - 12.0) < 0.01, "band 2's gain saved");
+        CHECK (back.has[kBandCount] && back.has[driveParam (3, kDriveType)], "Bands and the drives saved");
+
+        // a 0.6.0 state (version 2, without Bands and the drives): four bands, no drive
+        rig.param (kBandCount, toNormalized (kBandCount, 0.0));
+        rig.param (driveParam (2, kDriveDb), toNormalized (driveParam (2, kDriveDb), 20.0));
+        CHECK (rig.applyState ([] (IBStream* stream) {
+                   IBStreamer s (stream, kLittleEndian);
+                   bool ok = s.writeInt32 (0x4C45564C) && s.writeInt32 (2) && s.writeInt32 ((int32)kBandCount);
+                   for (uint32 id = 0; ok && id < kBandCount; ++id)
+                       ok = s.writeInt32u (id) && s.writeDouble (defaultNormalized (id));
+                   return ok;
+               }),
+               "a 0.6.0 state loads");
+        CHECK (bandsOf (plainOf (rig, kBandCount)) == 4 && plainOf (rig, driveParam (2, kDriveDb)) == 0.0,
+               "0.6.0: four bands (%d), band 3's drive off (%.1f dB)", bandsOf (plainOf (rig, kBandCount)),
+               plainOf (rig, driveParam (2, kDriveDb)));
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (346.0, 0.1));
+        const double old = dbfs (rms (out, out.size () / 2, out.size ())) - dbfs (0.1 / std::sqrt (2.0));
+        CHECK (std::fabs (old) < 0.2, "0.6.0's defaults: flat (%.2f dB)", old);
 
         // editor screenshot: a signal playing, the bands at different levels, the saturator on
         rig.param (kSlope, toNormalized (kSlope, kSlope24));
@@ -115,6 +166,11 @@ int main (int argc, char** argv)
         const double gains[kBands] = {6.0, -4.0, 3.0, -9.0};
         for (int b = 0; b < kBands; ++b)
             rig.param (bandParam (b, kGain), toNormalized (bandParam (b, kGain), gains[b]));
+        // bands 1 and 3 driven (Tube, Fold)
+        rig.param (driveParam (0, kDriveDb), toNormalized (driveParam (0, kDriveDb), 9.0));
+        rig.param (driveParam (0, kDriveType), toNormalized (driveParam (0, kDriveType), (double)kDriveTube));
+        rig.param (driveParam (2, kDriveDb), toNormalized (driveParam (2, kDriveDb), 14.0));
+        rig.param (driveParam (2, kDriveType), toNormalized (driveParam (2, kDriveType), (double)kDriveFold));
         rig.param (kTailBase + pk::kTailOn, 1.0);
         rig.param (kTailBase + pk::kTailDrive, toNormalized (kTailBase + pk::kTailDrive, 9.0));
         {
@@ -136,6 +192,32 @@ int main (int argc, char** argv)
             pump (0.05);
             const double after = plainOf (rig, bandParam (2, kGain));
             CHECK (after > before + 3.0, "dragging band 3 up raised it: %.1f -> %.1f dB", before, after);
+
+            // Bands: click 3 (band 4's column and its part of the display go)
+            const double segW = (Editor::kBandsRight - Editor::kBandsLeft) / 4.0;
+            win.click (Editor::kBandsLeft + 2.5 * segW, Editor::kBandsTop + 10.0);
+            pump (0.05);
+            CHECK (bandsOf (plainOf (rig, kBandCount)) == 3, "Bands 3 clicked: %d", bandsOf (plainOf (rig, kBandCount)));
+            for (int i = 0; i < 10; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, music ());
+                pump (0.03);
+            }
+            CHECK (win.savePng (outDir + "/ui_levlr_3_bands.png"), "screenshot, 3 bands, two driven");
+
+            // band 1's Drive knob: double-click resets it (off)
+            win.click (Editor::kViewLeft + 28.0, Editor::kDriveTop + 30.0, 2);
+            pump (0.05);
+            CHECK (plainOf (rig, driveParam (0, kDriveDb)) == 0.0, "band 1's drive reset: %.1f dB", plainOf (rig, driveParam (0, kDriveDb)));
+            // band 2's drive dragged up
+            win.drag (Editor::kViewLeft + Editor::kColumnW + 28.0, Editor::kDriveTop + 30.0, Editor::kViewLeft + Editor::kColumnW + 28.0,
+                      Editor::kDriveTop - 20.0);
+            pump (0.05);
+            CHECK (plainOf (rig, driveParam (1, kDriveDb)) > 3.0, "band 2's drive dragged up: %.1f dB", plainOf (rig, driveParam (1, kDriveDb)));
+            win.click (Editor::kBandsLeft + 3.5 * segW, Editor::kBandsTop + 10.0);
+            pump (0.05);
+            CHECK (bandsOf (plainOf (rig, kBandCount)) == 4, "Bands 4 again");
 
             // the end saturator's Gently with Advanced on: the Threshold sliders and the region Drive at
             // the right of its colour display
