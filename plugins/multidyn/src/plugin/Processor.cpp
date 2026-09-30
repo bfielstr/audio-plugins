@@ -132,7 +132,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     engine.process (inL, inR, scL, scR, data.outputs[0].channelBuffers32[0], data.outputs[0].channelBuffers32[1], n);
     data.outputs[0].silenceFlags = 0;
 
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b <= kSubBand; ++b) // the bands and the Sub band
     {
         const auto& m = engine.meter (b);
         meters->inputDb[(size_t)b].store (m.inputDb, std::memory_order_relaxed);

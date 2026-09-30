@@ -15,7 +15,9 @@ class DynDisplay;
 
 // Laid out like Live's Multiband Dynamics: a Split column (band names, On, Solo, the crossover
 // fields between the lanes), the Input knobs, the lanes with their Below / Above / Att/Rel value
-// fields, the Output knobs, and the global Output / Time / Amount on the right.
+// fields, the Output knobs, and the global Output / Time / Amount / Soften (and Soften's Color) on the
+// right. The Sub band, when on, is a lane at the bottom (its Above and Att/Rel fields, its Output as a
+// field); its On and Frequency sit in the bottom row with the crossovers' Slope.
 class Editor : public pk::EditorBase
 {
 public:
@@ -24,6 +26,10 @@ public:
     // layout (also used by the host test)
     static constexpr double kDisplayLeft = 166.0, kDisplayTop = 40.0, kDisplayRight = 760.0, kDisplayBottom = 336.0;
     static constexpr double kBandColLeft = 8.0, kInputColLeft = 104.0, kOutputColLeft = 766.0, kGlobalColLeft = 842.0;
+    // the second row under the display: Slope, the Sub band's On and Frequency; Soften's Color under Soften
+    static constexpr double kRow2Top = 382.0;
+    static constexpr double kSlopeLeft = 50.0, kSubOnLeft = 150.0, kSubFreqLeft = 204.0;
+    static constexpr double kColorTop = 330.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -44,6 +50,9 @@ private:
     VSTGUI::CView* onToggles[4] {}, * soloToggles[4] {}, * inputKnobs[4] {}, * outputKnobs[4] {};
     VSTGUI::CView* valueBoxes[4][6] {}; // below thr / ratio, above thr / ratio, attack, release
     VSTGUI::CView* xoverBoxes[3] {};
+    pk::Label* subName = nullptr;
+    VSTGUI::CView* subBoxes[4] {}; // threshold, ratio, attack, release
+    VSTGUI::CView* subOutBox = nullptr;
     pk::Label* scStatus = nullptr;
     pk::NumberBox* rmsWindowBox = nullptr; // dimmed with the Peak detector
 };

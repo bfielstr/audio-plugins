@@ -8,6 +8,8 @@
 //   Cmd/Ctrl while dragging    same change on every band
 //   Alt/Option while dragging  above and below together for this band
 //   double-click a block       reset its ratio to 1:1 (no processing)
+// With the Sub band on, it gets a lane of its own at the bottom (kSubBand): only an Above block (its
+// Threshold and Ratio), dragged the same way.
 #pragma once
 
 #include "../core/Params.h"
@@ -41,9 +43,11 @@ public:
     void idle (); // animates the meters
 
     enum class Hit { None, BelowEdge, AboveEdge, BelowBlock, AboveBlock };
-    VSTGUI::CRect laneRect (int band) const;  // the full-width lane
+    VSTGUI::CRect laneRect (int band) const;  // the full-width lane (band: 0 .. bands() - 1, or kSubBand)
     VSTGUI::CRect graphRect (int band) const; // the graph part of the lane
     int bands () const;
+    bool subShown () const;                   // the Sub band is on: its lane at the bottom
+    int lanes () const { return bands () + (subShown () ? 1 : 0); }
     double xOf (double db) const;
     Hit hitTest (const VSTGUI::CPoint& p, int& band) const;
 
@@ -60,7 +64,7 @@ private:
     Hit dragHit = Hit::None;
     std::vector<Target> targets;
     VSTGUI::CPoint downPoint;
-    float shownIn[kNumBands] {}, shownOut[kNumBands] {}, shownGain[kNumBands] {};
+    float shownIn[kNumBands + 1] {}, shownOut[kNumBands + 1] {}, shownGain[kNumBands + 1] {}; // and the Sub band's
 };
 
 } // namespace multidyn

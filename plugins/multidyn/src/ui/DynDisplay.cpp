@@ -49,19 +49,37 @@ std::string gainText (double db)
 
 DynDisplay::DynDisplay (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
 {
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b <= kNumBands; ++b)
         shownIn[b] = shownOut[b] = -100.0f;
 }
+
+bool DynDisplay::subShown () const { return host->plainValue (kSubOn) >= 0.5; }
+
+namespace {
+// a band's (or the Sub band's) parameters as the display uses them; the Sub band has no Below block
+struct LaneIds
+{
+    bool sub;
+    uint32_t active, belowT, belowR, aboveT, aboveR;
+};
+LaneIds laneIds (int band)
+{
+    if (band == kSubBand)
+        return {true, kSubOn, 0, 0, kSubThresh, kSubRatio};
+    return {false, bandParam (band, kBandActive), bandParam (band, kBelowThresh), bandParam (band, kBelowRatio),
+            bandParam (band, kAboveThresh), bandParam (band, kAboveRatio)};
+}
+} // namespace
 
 int DynDisplay::bands () const { return std::clamp ((int)std::lround (host->plainValue (kBands)) + 1, 1, kMaxBands); }
 
 CRect DynDisplay::laneRect (int band) const
 {
     const CRect r = getViewSize ();
-    const int n = bands ();
+    const int n = bands (), rows = lanes ();
     const double top = r.top + kHeader;
-    const double laneH = (r.getHeight () - kHeader - kScaleHeight) / n;
-    const int row = n - 1 - band; // highest band on top
+    const double laneH = (r.getHeight () - kHeader - kScaleHeight) / rows;
+    const int row = band == kSubBand ? n : n - 1 - band; // highest band on top, the Sub band at the bottom
     return CRect (r.left, top + row * laneH + 1, r.right, top + (row + 1) * laneH - 1);
 }
 
@@ -96,17 +114,19 @@ void DynDisplay::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
 
     const int n = bands ();
-    for (int b = 0; b < n; ++b)
+    for (int k = 0; k < lanes (); ++k) // the bands, then the Sub band
     {
+        const int b = k < n ? k : kSubBand;
+        const LaneIds ids = laneIds (b);
         const CRect lane = laneRect (b), g = graphRect (b);
         ctx->setFillColor (theme::kWaveBg);
         ctx->drawRect (g, kDrawFilled);
-        const bool active = host->plainValue (bandParam (b, kBandActive)) >= 0.5;
+        const bool active = host->plainValue (ids.active) >= 0.5;
         const bool dim = !active;
-        const double tb = host->plainValue (bandParam (b, kBelowThresh));
-        const double ta = host->plainValue (bandParam (b, kAboveThresh));
-        const double rb = host->plainValue (bandParam (b, kBelowRatio));
-        const double ra = host->plainValue (bandParam (b, kAboveRatio));
+        const double tb = ids.sub ? kMinDb : host->plainValue (ids.belowT);
+        const double ta = host->plainValue (ids.aboveT);
+        const double rb = ids.sub ? 1.0 : host->plainValue (ids.belowR);
+        const double ra = host->plainValue (ids.aboveR);
         const double xb = xOf (tb), xa = xOf (ta);
 
         // grid
@@ -122,7 +142,8 @@ void DynDisplay::draw (CDrawContext* ctx)
         ctx->drawRect (CRect (xa, g.top, g.right, g.bottom), kDrawFilled);
         ctx->setLineWidth (2.0);
         ctx->setFrameColor (dim ? theme::kTextDim : theme::kTextBright);
-        ctx->drawLine (CPoint (xb, g.top), CPoint (xb, g.bottom));
+        if (!ids.sub)
+            ctx->drawLine (CPoint (xb, g.top), CPoint (xb, g.bottom));
         ctx->drawLine (CPoint (xa, g.top), CPoint (xa, g.bottom));
         ctx->setLineWidth (1.0);
 
@@ -141,7 +162,7 @@ void DynDisplay::draw (CDrawContext* ctx)
         const CColor tc = dim ? theme::kTextDim : theme::kText;
         const bool knee = host->plainValue (kSoftKnee) >= 0.5;
         const double amount = host->plainValue (kAmount);
-        const double belowMax = std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
+        const double belowMax = ids.sub ? 0.0 : std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
         const double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
         if (std::fabs (belowMax) >= 0.05 && xb - g.left > 50)
             text (ctx, gainText (belowMax), CRect (g.left + 4, g.bottom - 14, g.left + 60, g.bottom - 1), tc, 9.5, kLeftText, true);
@@ -170,11 +191,16 @@ DynDisplay::Hit DynDisplay::hitTest (const CPoint& p, int& band) const
     for (int b = 0; b < bands (); ++b)
         if (graphRect (b).pointInside (p))
             band = b;
+    if (subShown () && graphRect (kSubBand).pointInside (p))
+        band = kSubBand;
     if (band < 0)
         return Hit::None;
-    const double xb = xOf (host->plainValue (bandParam (band, kBelowThresh)));
-    const double xa = xOf (host->plainValue (bandParam (band, kAboveThresh)));
+    const LaneIds ids = laneIds (band);
+    const double xa = xOf (host->plainValue (ids.aboveT));
     constexpr double grab = 5.0;
+    if (ids.sub) // only an Above block
+        return std::fabs (p.x - xa) <= grab ? Hit::AboveEdge : (p.x > xa ? Hit::AboveBlock : Hit::None);
+    const double xb = xOf (host->plainValue (ids.belowT));
     if (std::fabs (p.x - xb) <= grab)
         return Hit::BelowEdge;
     if (std::fabs (p.x - xa) <= grab)
@@ -193,6 +219,11 @@ std::vector<uint32_t> DynDisplay::targetsFor (Hit hit, int band, const Modifiers
     const int fieldThis = edge ? (below ? kBelowThresh : kAboveThresh) : (below ? kBelowRatio : kAboveRatio);
     const int fieldOther = edge ? (below ? kAboveThresh : kBelowThresh) : (below ? kAboveRatio : kBelowRatio);
     std::vector<uint32_t> ids;
+    if (band == kSubBand) // its own: the Sub band's threshold or ratio
+    {
+        ids.push_back (edge ? kSubThresh : kSubRatio);
+        return ids;
+    }
     const bool allBands = mods.has (ModifierKey::Control);
     const bool both = mods.has (ModifierKey::Alt);
     for (int b = 0; b < bands (); ++b)
@@ -264,7 +295,7 @@ void DynDisplay::onMouseMoveEvent (MouseMoveEvent& e)
         {
             // "volume" of a block: dragging up makes it louder. Above: louder = lower ratio;
             // Below: louder = higher ratio (upward compression).
-            const bool belowRatio = (t.id - kBandBase) % kBandBlock == kBelowRatio;
+            const bool belowRatio = t.id >= kBandBase && t.id < kBandBase + kMaxBands * kBandBlock && (t.id - kBandBase) % kBandBlock == kBelowRatio;
             const double dir = belowRatio ? -1.0 : 1.0;
             const double v = t.start + dir * (e.mousePosition.y - downPoint.y) / 200.0 * fine;
             host->setNorm (t.id, std::clamp (v, 0.0, 1.0));
@@ -296,7 +327,7 @@ void DynDisplay::idle ()
 {
     Meters* m = meters ? meters () : nullptr;
     bool changed = false;
-    for (int b = 0; b < kNumBands; ++b)
+    for (int b = 0; b <= kNumBands; ++b) // and the Sub band
     {
         const float in = m ? m->inputDb[(size_t)b].load (std::memory_order_relaxed) : -100.0f;
         const float out = m ? m->outputDb[(size_t)b].load (std::memory_order_relaxed) : -100.0f;

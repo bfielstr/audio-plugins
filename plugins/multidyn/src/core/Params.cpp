@@ -73,10 +73,19 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
     smacheratr::addTailExtParams (t, kSatExtBase);
     smacheratr::addTailExt2Params (t, kSatExt2Base);
-    t.push_back (choice (kXoverSlope, "Crossover Slope", "Slope", {"6 dB", "12 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"},
+    t.push_back (choice (kXoverSlope, "Crossover Slope", "Slope", {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"},
                          kXover24));
     t.push_back (toggle (kSoftenColor, "Soften Color", "Color", false));
-    static_assert (kNumParams == kSoftenColor + 1, "the table ends with Soften's Color");
+    // the Sub band: off; when on, below 40 Hz, compressed 4:1 above -18 dB with slow enough times for
+    // the longest cycles (a 20 Hz cycle is 50 ms)
+    t.push_back (toggle (kSubOn, "Sub Band", "Sub", false));
+    t.push_back (real (kSubFreq, "Sub Frequency", "Sub Freq", 20.0, 100.0, 40.0, Curve::Log, Disp::Hz));
+    t.push_back (real (kSubThresh, "Sub Threshold", "Thresh", -80.0, 0.0, -18.0, Curve::Linear, Disp::Db));
+    t.push_back (real (kSubRatio, "Sub Ratio", "Ratio", kRatioMin, kRatioInf, 4.0, Curve::Ratio, Disp::Ratio));
+    t.push_back (real (kSubAttack, "Sub Attack", "Attack", 0.1, 1000.0, 30.0, Curve::Log, Disp::Ms));
+    t.push_back (real (kSubRelease, "Sub Release", "Release", 1.0, 3000.0, 200.0, Curve::Log, Disp::Ms));
+    t.push_back (real (kSubOutput, "Sub Output Gain", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+    static_assert (kNumParams == kSubOutput + 1, "the table ends with the Sub band");
     return t;
 }
 
@@ -110,6 +119,12 @@ double migrateOldBakedNorm (uint32_t id, double norm)
         return norm;
     const auto& info = paramTable ().info (id);
     return toNormalized (id, std::clamp (toPlain (id, norm) + shift, info.min, info.max));
+}
+
+void migrateOldBaked (double* norm)
+{
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        norm[id] = migrateOldBakedNorm (id, norm[id]);
 }
 
 } // namespace multidyn

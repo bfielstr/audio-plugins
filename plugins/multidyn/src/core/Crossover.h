@@ -4,7 +4,10 @@
 // they are summed unprocessed), shifted in phase (the steeper, the more).
 //   6 dB/oct: a first-order complementary split (low = 1 / (1 + s), high = s / (1 + s)): the two parts
 //     add up to the input itself, so the "all-pass" for the lower bands is nothing at all.
-//   12 .. 96 dB/oct: Linkwitz-Riley 2 .. 16, as in Levlr (levlr/src/core/Crossover.h, the same design):
+//   18 dB/oct: a third-order Butterworth split (low = 1 / ((1 + s)(s^2 + s + 1)), high = s^3 / (...)):
+//     for an odd Butterworth order low + high is an all-pass, here (s^2 - s + 1) / (s^2 + s + 1). The
+//     one-pole comes first and is shared by both sides, then one SVF section (Q 1) on each side.
+//   12, 24 .. 96 dB/oct: Linkwitz-Riley 2, 4 .. 16, as in Levlr (levlr/src/core/Crossover.h, the same design):
 //     a split of order 2N is a Butterworth of order N squared on each side. A Butterworth pair of
 //     poles (damping 2 sin ((2i-1) pi / 2N)) is squared, so each appears twice; with N odd the squared
 //     first-order pole is one section of Q 0.5. The high side is turned over when N is odd (only
@@ -15,6 +18,7 @@
 //     split, so it still sums flat and adds no latency. The SVF sections stay well behaved in float
 //     down to the lowest crossover at high sample rates (the tests check it).
 // The first section is shared by both sides (an SVF gives its low- and high-pass from the same state).
+// The Sub band (Engine.h) splits off below its corner with the same slope.
 // The 24 dB/oct split is the Lr4Split below (the one Multidyn always had), section for section.
 #pragma once
 
@@ -103,6 +107,7 @@ enum XoverSlope
 {
     kXover6 = 0,
     kXover12,
+    kXover18,
     kXover24,
     kXover36,
     kXover48,
@@ -118,6 +123,7 @@ constexpr int kXoverMaxSections = 16; // per side, at the brickwall
 struct XoverDef
 {
     bool firstOrder = false;       // 6 dB: a one-pole complementary split, no all-pass
+    bool onePoleFirst = false;     // 18 dB: the shared first stage is a one-pole (k[0] unused)
     int sections = 0;              // SVF sections per side (the first one shared)
     float k[kXoverMaxSections] {}; // each section's damping (1/Q)
     float hiSign = 1.0f;           // the high side's polarity (turned over for odd N, so the sum is flat)
@@ -154,10 +160,23 @@ inline XoverDef makeFirstOrderDef ()
     return d;
 }
 
+// 18 dB: a Butterworth 3 on each side (not squared), the one-pole shared, the high side not turned over
+inline XoverDef makeButterworth3Def ()
+{
+    XoverDef d;
+    d.onePoleFirst = true;
+    d.sections = 2;
+    d.k[1] = 1.0f;
+    d.apSections = 1;
+    d.apK[0] = 1.0f;
+    return d;
+}
+
 inline const XoverDef& xoverDef (int slope)
 {
-    static const XoverDef defs[kNumXoverSlopes] = {makeFirstOrderDef (), makeXoverDef (1), makeXoverDef (2), makeXoverDef (3), makeXoverDef (4),
-                                                   makeXoverDef (5),     makeXoverDef (6), makeXoverDef (7), makeXoverDef (8), makeXoverDef (16)};
+    static const XoverDef defs[kNumXoverSlopes] = {makeFirstOrderDef (), makeXoverDef (1), makeButterworth3Def (), makeXoverDef (2),
+                                                   makeXoverDef (3),     makeXoverDef (4), makeXoverDef (5),       makeXoverDef (6),
+                                                   makeXoverDef (7),     makeXoverDef (8), makeXoverDef (16)};
     return defs[slope < 0 ? 0 : (slope >= kNumXoverSlopes ? kNumXoverSlopes - 1 : slope)];
 }
 
@@ -192,7 +211,8 @@ struct XoverSplit
         g1 = g / (1.0f + g);
         if (d.firstOrder)
             return;
-        tuneSvf (first, g, d.k[0]);
+        if (!d.onePoleFirst)
+            tuneSvf (first, g, d.k[0]);
         for (int i = 1; i < d.sections; ++i)
         {
             tuneSvf (lo[i - 1], g, d.k[i]);
@@ -212,7 +232,7 @@ struct XoverSplit
     inline void tick (float x, int c, float& low, float& high)
     {
         const XoverDef& d = xoverDef (slope);
-        if (d.firstOrder)
+        if (d.firstOrder || d.onePoleFirst)
         {
             // trapezoidal one-pole: the low-pass, and the rest of the input as the high side
             const float v = (x - z1[c]) * g1;
@@ -220,10 +240,17 @@ struct XoverSplit
             z1[c] = lp + v;
             low = lp;
             high = x - lp;
-            return;
+            if (d.firstOrder)
+                return;
         }
         float l, b, h, dummy;
-        first.tick (x, c, l, b, h);
+        if (d.onePoleFirst)
+        {
+            l = low;
+            h = high;
+        }
+        else
+            first.tick (x, c, l, b, h);
         for (int i = 1; i < d.sections; ++i)
         {
             lo[i - 1].tick (l, c, l, b, dummy);
@@ -289,6 +316,12 @@ inline XoverResponse xoverResponse (double fc, int slope, double f, double sr)
     std::complex<double> lp (1.0, 0.0), hp (1.0, 0.0);
     for (int i = 0; i < d.sections; ++i)
     {
+        if (i == 0 && d.onePoleFirst)
+        {
+            lp /= 1.0 + s;
+            hp *= s / (1.0 + s);
+            continue;
+        }
         const std::complex<double> den = s * s + (double)d.k[i] * s + 1.0;
         lp /= den;
         hp *= s * s / den;

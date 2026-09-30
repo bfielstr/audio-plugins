@@ -12,7 +12,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x44544E52;    // 'DTNR'
-constexpr int32 kVersion = 1;
+constexpr int32 kMbOttDefaults = 2; // 2: the Multiband stage has Live's OTT gain staging baked in
+static_assert (kStateVersion == kMbOttDefaults);
 constexpr int32 kRecMagic = 0x52454353; // 'RECS'
 constexpr int32 kMaxFrames = 192000 * 20;
 
@@ -50,8 +51,9 @@ bool readChannel (IBStreamer& s, std::vector<float>& x, int32 frames)
 }
 } // namespace
 
-bool writeState (IBStream* stream, const State& st)
+bool writeState (IBStream* stream, const State& st, int32 version)
 {
+    const int32 kVersion = version;
     IBStreamer s (stream, kLittleEndian);
     int32 present = 0;
     for (uint32 id = 0; id < kNumParams; ++id)
@@ -101,6 +103,18 @@ bool readState (IBStream* stream, State& st, bool withRecordings)
             st.has[id] = true;
         }
     }
+    // the Multiband stage's baked gains were the old ones: the difference moves into its gain controls
+    // (multidyn::migrateOldBakedNorm; a missing one was at 0 dB, its default then and now)
+    if (version < kMbOttDefaults)
+        for (uint32 id = 0; id < kNumParams; ++id)
+        {
+            const int64_t md = mdIdOf (id);
+            if (md >= 0 && multidyn::oldBakedShiftDb ((uint32_t)md) != 0.0)
+            {
+                st.norm[id] = multidyn::migrateOldBakedNorm ((uint32_t)md, st.norm[id]);
+                st.has[id] = true;
+            }
+        }
     st.hasRecordings = false;
     for (auto& r : st.recordings)
         r = {};

@@ -22,6 +22,7 @@ namespace detonatr {
 
 using namespace VSTGUI;
 using pk::ActionButton;
+using pk::Choice;
 using pk::Knob;
 using pk::Label;
 using pk::NumberBox;
@@ -198,10 +199,7 @@ void Editor::buildMultiband (CViewContainer* p)
 {
     using namespace multidyn;
     bind (p, new Toggle (CRect (8, 24, 64, 40), this, kMultibandOn, "On"));
-    mbHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (), [] (uint32_t id) -> int64_t {
-        const int64_t b = mbBlockOf (id);
-        return b < 0 ? -1 : (int64_t)(kMbBase + b);
-    });
+    mbHost = std::make_unique<pk::MappedParamHost> (this, multidyn::paramTable (), [] (uint32_t id) -> int64_t { return detIdOfMd (id); });
     pk::MappedParamHost* h = mbHost.get ();
     auto add = [p] (CView* v, const char* tip) {
         if (tip)
@@ -230,12 +228,21 @@ void Editor::buildMultiband (CViewContainer* p)
             mbBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)),
                                  tip (bandParam (b, fields[i])));
     }
+    // the Sub band's lane (shown when it is on)
+    mbSubName = new Label (none, "Sub", 10.0, true, 0);
+    p->addView (mbSubName);
+    const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
+    for (int i = 0; i < 4; ++i)
+        mbSubBoxes[i] = add (new NumberBox (none, h, subFields[i], i < 2 ? above : pk::theme::kTextBright), tip (subFields[i]));
+    mbSubOut = add (new NumberBox (none, h, kSubOutput), tip (kSubOutput));
     add (new Segmented (CRect (608, 40, 716, 58), h, kBands, {"1", "2", "3", "4"}), tip (kBands));
     add (new Toggle (CRect (722, 40, 830, 58), h, kSoftKnee, "Soft Knee"), tip (kSoftKnee));
     add (new Segmented (CRect (608, 64, 700, 82), h, kDetector, {"Peak", "RMS"}), tip (kDetector));
     add (new Toggle (CRect (706, 64, 776, 82), h, kPreLimit, "Pre-Lim"), tip (kPreLimit));
     add (new NumberBox (CRect (780, 64, 830, 82), h, kPreLimitCeiling), tip (kPreLimitCeiling));
-    dimLabel (p, CRect (608, 88, 830, 100), "Splits");
+    dimLabel (p, CRect (608, 88, 700, 100), "Splits");
+    dimLabel (p, CRect (736, 86, 770, 100), "Slope");
+    add (new Choice (CRect (772, 84, 846, 100), h, kXoverSlope), tip (kXoverSlope));
     for (int x = 0; x < 3; ++x)
         add (new NumberBox (CRect (608 + x * 74, 102, 676 + x * 74, 120), h, (uint32_t)(kXover1 + x)), tip ((uint32_t)(kXover1 + x)));
     add (new Knob (knobRect (608, 128), h, kAmount), tip (kAmount));
@@ -244,6 +251,9 @@ void Editor::buildMultiband (CViewContainer* p)
     add (new Knob (knobRect (776, 128), h, kSoften), tip (kSoften));
     dimLabel (p, CRect (608, 204, 680, 220), "RMS window");
     add (new NumberBox (CRect (684, 202, 740, 220), h, kRmsWindow), tip (kRmsWindow));
+    add (new Toggle (CRect (776, 202, 832, 220), h, kSoftenColor, "Color"), tip (kSoftenColor));
+    add (new Toggle (CRect (608, 224, 656, 242), h, kSubOn, "Sub"), tip (kSubOn));
+    add (new NumberBox (CRect (660, 224, 720, 242), h, kSubFreq), tip (kSubFreq));
     updateMbLayout ();
 }
 
@@ -260,8 +270,9 @@ void Editor::updateMbLayout ()
     };
     const double dispL = 112, dispR = 600, dispT = 24, dispB = 242;
     const int n = std::clamp ((int)std::lround (mbHost->plainValue (multidyn::kBands)) + 1, 1, multidyn::kMaxBands);
+    const bool sub = dyn->subShown ();
     const double top = dispT + multidyn::DynDisplay::kHeader;
-    const double laneH = (dispB - dispT - multidyn::DynDisplay::kHeader - multidyn::DynDisplay::kScaleHeight) / n;
+    const double laneH = (dispB - dispT - multidyn::DynDisplay::kHeader - multidyn::DynDisplay::kScaleHeight) / dyn->lanes ();
     const double belowX = dispL + 4, aboveX = dispR - multidyn::DynDisplay::kRightCol + 4, timeX = aboveX + 80;
     for (int b = 0; b < 4; ++b)
     {
@@ -288,6 +299,22 @@ void Editor::updateMbLayout ()
         {
             const double y = i % 2 == 0 ? cy - 20 : cy + 2;
             place (mbBoxes[b][i], CRect (xs[i], y, xs[i] + 68, y + 18));
+        }
+    }
+    // the Sub band's lane, at the bottom: its name and Output on the left, its fields on the right
+    for (CView* v : {(CView*)mbSubName, mbSubBoxes[0], mbSubBoxes[1], mbSubBoxes[2], mbSubBoxes[3], mbSubOut})
+        if (v)
+            v->setVisible (sub);
+    if (sub)
+    {
+        const double laneTop = top + n * laneH, cy = laneTop + laneH / 2;
+        place (mbSubName, CRect (8, laneTop + 2, 48, laneTop + 16));
+        place (mbSubOut, CRect (58, laneTop + 18, 106, laneTop + 34));
+        const double xs[4] = {aboveX, aboveX, timeX, timeX};
+        for (int i = 0; i < 4; ++i)
+        {
+            const double y = i % 2 == 0 ? cy - 20 : cy + 2;
+            place (mbSubBoxes[i], CRect (xs[i], y, xs[i] + 68, y + 18));
         }
     }
     if (panels[kStageMultiband])
@@ -398,7 +425,8 @@ void Editor::paramChanged (uint32_t id)
         updateRootNote ();
     if (isMbParam (id))
     {
-        if (mbIdAt (id - kMbBase) == multidyn::kBands)
+        const int64_t md = mdIdOf (id);
+        if (md == multidyn::kBands || md == multidyn::kSubOn)
             updateMbLayout ();
         if (panels[kStageMultiband])
             panels[kStageMultiband]->invalid ();
