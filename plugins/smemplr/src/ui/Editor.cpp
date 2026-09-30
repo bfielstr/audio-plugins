@@ -511,14 +511,18 @@ void Editor::buildUI (CFrame* f)
     bind (gp, new Knob (knobRect (118, 22), this, kPan, nullptr, true));
     bind (gp, new Knob (knobRect (4, 92), this, kPanRand));
     bind (gp, new Knob (knobRect (61, 92), this, kSpread));
-    bind (gp, new Knob (knobRect (118, 92), this, kTranspose, nullptr, true));
-    bind (gp, new Knob (knobRect (4, 162), this, kDetune, nullptr, true));
-    bind (gp, new Knob (knobRect (61, 162), this, kPbRange));
+    bind (gp, new Knob (knobRect (118, 92), this, kPbRange));
+    bind (gp, new Knob (knobRect (4, 162), this, kTranspose, nullptr, true));
+    bind (gp, new Knob (knobRect (61, 162), this, kDetune, nullptr, true));
     bind (gp, new Knob (knobRect (118, 162), this, kGlideTime));
-    gp->addView (new Label (CRect (4, 236, 174, 250), "Glide", 10.5, false, 1));
-    bind (gp, new Segmented (CRect (4, 252, 174, 272), this, kGlideMode, {"Off", "Glide", "Porta"}));
-    gp->addView (new Label (CRect (4, 280, 60, 296), "Root", 10.5, false, 0));
-    bind (gp, new NumberBox (CRect (64, 278, 174, 298), this, kRootKey));
+    // right under Transpose and Detune: the high-pass that follows them (on, cutoff at 0 st, slope)
+    bind (gp, new Toggle (CRect (4, 232, 38, 250), this, kTransHpOn, "HP"));
+    bind (gp, new NumberBox (CRect (42, 232, 104, 250), this, kTransHpFreq));
+    bind (gp, new Choice (CRect (108, 232, 174, 250), this, kTransHpSlope));
+    gp->addView (new Label (CRect (4, 257, 42, 273), "Glide", 10.5, false, 0));
+    bind (gp, new Segmented (CRect (44, 256, 174, 274), this, kGlideMode, {"Off", "Glide", "Porta"}));
+    gp->addView (new Label (CRect (4, 281, 42, 297), "Root", 10.5, false, 0));
+    bind (gp, new NumberBox (CRect (44, 280, 174, 298), this, kRootKey));
 
     // hover help for every parameter control
 

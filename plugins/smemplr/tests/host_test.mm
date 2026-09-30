@@ -142,6 +142,26 @@ static void uiInteraction (Rig& rig)
     CHECK (std::fabs (rig.controller->getParamNormalized (smemplr::kFilterFreq) - smemplr::defaultNormalized (smemplr::kFilterFreq)) < 1e-6,
            "double-click reset: %f", rig.controller->getParamNormalized (smemplr::kFilterFreq));
 
+    // the Transpose high-pass on the Global panel (at 924, 410), under Transpose: HP (4..38 x 232..250),
+    // its frequency (42..104) and slope (108..174)
+    const bool hpWasOn = plain (smemplr::kTransHpOn) >= 0.5; // (the loop screenshot's state has it on)
+    win.click (924 + 21, 410 + 241);
+    CHECK ((plain (smemplr::kTransHpOn) >= 0.5) != hpWasOn, "clicking HP should switch it");
+    const double hpBefore = rig.controller->getParamNormalized (smemplr::kTransHpFreq);
+    win.mouseDown (924 + 73, 410 + 241);
+    for (int i = 1; i <= 10; ++i)
+        win.mouseDrag (924 + 73, 410 + 241 - i * 4);
+    win.mouseUp (924 + 73, 410 + 201);
+    CHECK (rig.controller->getParamNormalized (smemplr::kTransHpFreq) > hpBefore, "dragging the HP frequency up: %f -> %f",
+           hpBefore, rig.controller->getParamNormalized (smemplr::kTransHpFreq));
+    win.click (924 + 73, 410 + 241, 1);
+    win.mouseDown (924 + 73, 410 + 241, 2);
+    win.mouseUp (924 + 73, 410 + 241, 2);
+    CHECK (std::fabs (rig.controller->getParamNormalized (smemplr::kTransHpFreq) - smemplr::defaultNormalized (smemplr::kTransHpFreq)) < 1e-6,
+           "double-click resets the HP frequency: %f", rig.controller->getParamNormalized (smemplr::kTransHpFreq));
+    win.click (924 + 21, 410 + 241);
+    CHECK ((plain (smemplr::kTransHpOn) >= 0.5) == hpWasOn, "clicking HP again should switch it back");
+
     // --- loop bar (Classic, state has loop on, flags 0.1..0.8, start 10 %, length 32 %) ---
     // the loop begins at Start and Length is its length (a share of the flagged region)
     auto wx = [] (double pos) { return 8.0 + pos * 1094.0; };
@@ -725,6 +745,10 @@ int main (int argc, char** argv)
         st4.norm[smemplr::kFilterMorph] = 0.35;
         st4.norm[smemplr::kFilterRes] = 0.5;
         st4.norm[smemplr::kFilterFreq] = smemplr::toNormalized (smemplr::kFilterFreq, 900.0);
+        // the Transpose high-pass on, at 40 Hz and 36 dB (the Global panel shows it)
+        st4.norm[smemplr::kTransHpOn] = 1.0;
+        st4.norm[smemplr::kTransHpFreq] = smemplr::toNormalized (smemplr::kTransHpFreq, 40.0);
+        st4.norm[smemplr::kTransHpSlope] = smemplr::toNormalized (smemplr::kTransHpSlope, smemplr::kTransHp36);
         rig.stop ();
         applyState (rig, st4);
         rig.start ();

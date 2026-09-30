@@ -698,7 +698,16 @@ TEST (rack_wubr_mapping)
     // the end saturator's second block, between the rack and the extensions, is not the rack's
     for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
         CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
-    CHECK (kNumParams == kRackExtBase + kRackSlots * kSlotExt && kNumParams < kMidiPitchBend, "kNumParams %u", (unsigned)kNumParams);
+    // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
+    // high-pass), not the rack's, and the IDs run on to kNumParams with no gap
+    CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kNumParams == kTransHpSlope + 1 &&
+               kNumParams < kMidiPitchBend,
+           "kNumParams %u", (unsigned)kNumParams);
+    for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
+        CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id), "%u is the sampler's", id);
+    CHECK (isRackParam (kRackExtEnd - 1) && rackField (kRackExtEnd - 1).slot == kRackSlots - 1 &&
+               rackField (kRackExtEnd - 1).field == kSlotParams + kSlotBlockAll - 1,
+           "the last extension ID is the last slot's last position");
     // what the rack page does not show: Wubr's own IDs, and every one it does show has a block position
     for (const auto& h : rackHiddenParams (kFxWubr))
         CHECK (h.first <= h.last && h.last < wubr::kNumParams, "hidden %u..%u", h.first, h.last);
@@ -2276,25 +2285,51 @@ TEST (transpose_up_48_has_no_low_junk)
         CHECK (after < before - 50.0 && after < -90.0, "low junk %.1f dB (before %.1f)", after, before);
     }
     // through the engine, in the modes that resample (Beats loops segment tails, which modulates the
-    // sound on its own: not measured here)
-    for (int mode : {0, 1, 2})
-    {
-        std::unique_ptr<Engine> e (makeEngine (s));
+    // sound on its own: not measured here). The phase vocoder (Complex, Complex Pro) gets a 220 Hz saw:
+    // its 2048-sample frame does not resolve a 55 Hz saw's partials (2.6 bins apart), and stretched it
+    // adds its own sub-harmonic (f0 / 2, about -53 dB) at every transposition from +7 up, levels or not.
+    // The old way folded -22 dB (Complex) and -29 dB (Complex Pro) of the 220 Hz saw below its fundamental.
+    auto s220 = brightSaw (200, 8.0); // 220.5 Hz: 3528 Hz at +48
+    auto warped = [&] (std::shared_ptr<SampleData> smp, int mode) {
+        std::unique_ptr<Engine> e (makeEngine (smp));
         emptyRack (*e);
         e->setParam (kTranspose, 48.0);
-        const char* name = "classic";
-        if (mode > 0)
+        if (mode >= 0)
         {
             e->setParam (kWarp, 1.0);
             e->setParam (kWarpBeats, 16.0); // the sample is 8 s: 120 BPM
-            e->setParam (kWarpMode, mode == 1 ? kWarpTones : kWarpComplex);
-            name = mode == 1 ? "tones" : "complex";
+            e->setParam (kWarpMode, mode);
         }
         e->noteOn (60, 1.0f);
-        auto o = run (*e, 8000 + n);
-        const double junk = bandDb (powerSpectrum (o.l, 8000, n), n, 20.0, 800.0);
-        std::printf ("    %-8s +48 st: power below the fundamental (20..800 Hz) %.1f dB\n", name, junk);
-        CHECK (junk < (mode == 0 ? -90.0 : -60.0), "%s: low junk %.1f dB", name, junk);
+        return run (*e, 8000 + n);
+    };
+    const int modes[] = {-1, kWarpTones, kWarpComplex, kWarpComplexPro};
+    const char* names[] = {"classic", "tones", "complex", "complex pro"};
+    for (int m = 0; m < 4; ++m)
+    {
+        const double below = m >= 2 ? 3000.0 : 800.0;
+        const double junk = bandDb (powerSpectrum (warped (m >= 2 ? s220 : s, modes[m]).l, 8000, n), n, 20.0, below);
+        std::printf ("    %-11s +48 st: power below the fundamental (20..%.0f Hz) %.1f dB\n", names[m], below, junk);
+        // Complex Pro's formant correction has an artifact of its own a little below the fundamental
+        // (about -40 dB from +24 up the old way, -51 dB here: on a level its envelope comes from the
+        // sample, once per quarter frame); its fold-down is measured below, on its own
+        const double limit[] = {-90.0, -60.0, -80.0, -45.0};
+        CHECK (junk < limit[m], "%s: low junk %.1f dB", names[m], junk);
+    }
+    // The fold-down itself in the vocoder's modes: a 3100 Hz tone over the 220 Hz one lands at 49.6 kHz
+    // at +48, past the output's Nyquist; the old way folded it down to 1600 Hz, now it is gone.
+    {
+        std::vector<float> x ((size_t)(8 * 44100));
+        for (size_t i = 0; i < x.size (); ++i)
+            x[i] = (float)(0.4 * std::sin (2.0 * M_PI * 220.5 * (double)i / 44100.0) +
+                           0.2 * std::sin (2.0 * M_PI * 3100.0 * (double)i / 44100.0));
+        auto two = SampleData::fromBuffers (x, {}, 44100.0, "two tones");
+        for (int m = 2; m < 4; ++m)
+        {
+            const double folded = bandDb (powerSpectrum (warped (two, modes[m]).l, 8000, n), n, 1560.0, 1640.0);
+            std::printf ("    %-11s +48 st: a tone past Nyquist, folded down to 1600 Hz: %.1f dB\n", names[m], folded);
+            CHECK (folded < -90.0, "%s: folded down %.1f dB", names[m], folded);
+        }
     }
 }
 
@@ -2387,10 +2422,11 @@ TEST (bend_across_levels_is_smooth)
 {
     // A slow bend over two octaves crosses three level boundaries: no step anywhere. A step would show
     // in the second difference, which for a sine of amplitude A and w radians per sample is at most w^2 A.
-    auto s = sine (100.0, 1.0, 48000.0);
+    // Long enough that the read never reaches the end (about 7.7 s of it are read): a loop's wrap is a
+    // step of its own when the loop does not crossfade (Loop Fade 0), at any speed, and is not measured.
+    auto s = sine (100.0, 10.0, 48000.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     emptyRack (*e);
-    e->setParam (kLoopOn, 1.0); // 100 whole periods: seamless
     e->setParam (kTranspose, 8.0);
     e->setParam (kPbRange, 26.0);
     e->noteOn (60, 1.0f);
@@ -2515,10 +2551,39 @@ TEST (transpose_hp_follows_the_pitch)
 
 TEST (transpose_hp_off_changes_nothing)
 {
-    // Off (the default), the output is what it always was; switched off mid-note, from there on too.
+    // Off (the default), the output is what it always was: the whole default chain (the rack's
+    // Smacheratr, the filter) sounds the same whatever the high-pass's frequency and slope, in every mode.
     auto s = brightSaw (800, 2.0);
+    CHECK (paramInfo (kTransHpOn).def == 0.0, "the high-pass is on by default");
+    for (int mode : {-1, (int)kWarpBeatsMode, (int)kWarpTones, (int)kWarpComplex})
+    {
+        auto render = [&] (bool touch) {
+            std::unique_ptr<Engine> e (makeEngine (s));
+            e->setParam (kFilterOn, 1.0);
+            e->setParam (kTranspose, 19.0);
+            e->setParam (kPitchEnvAmt, 5.0);
+            if (mode >= 0)
+            {
+                e->setParam (kWarp, 1.0);
+                e->setParam (kWarpMode, mode);
+            }
+            if (touch)
+            {
+                e->setParam (kTransHpFreq, 200.0);
+                e->setParam (kTransHpSlope, kTransHp6);
+            }
+            e->noteOn (60, 1.0f);
+            e->setPitchBend (0.3f);
+            return run (*e, 12000);
+        };
+        const Out a = render (false), b = render (true);
+        CHECK (a.l == b.l && a.r == b.r, "mode %d: off, the high-pass's settings change the sound", mode);
+    }
+    // Switched off mid-note it stops at once: from there on the voice is what it would have been. (Measured
+    // with nothing stateful after the voice's source, as the rack and the filter keep what they heard.)
     auto render = [&] (bool onAWhile) {
         std::unique_ptr<Engine> e (makeEngine (s));
+        emptyRack (*e);
         e->setParam (kTranspose, 19.0);
         e->setParam (kTransHpFreq, 200.0); // 600 Hz at +19: the saw's lowest partials go
         e->noteOn (60, 1.0f);
@@ -2530,7 +2595,6 @@ TEST (transpose_hp_off_changes_nothing)
         return std::make_pair (a, b);
     };
     auto plain = render (false), toggled = render (true);
-    CHECK (paramInfo (kTransHpOn).def == 0.0, "the high-pass is on by default");
     CHECK (plain.second.l == toggled.second.l && plain.second.r == toggled.second.r, "off is not what it was");
     CHECK (rms (plain.first.l, 2000) > 1.2 * rms (toggled.first.l, 2000), "on does nothing: %f vs %f",
            rms (plain.first.l, 2000), rms (toggled.first.l, 2000));
@@ -2622,18 +2686,24 @@ TEST (far_transpose_cpu_and_memory)
         e->setParam (kWarpMode, std::max (0, warpMode));
         for (int i = 0; i < voices; ++i)
             e->noteOn (48 + i % 12, 0.8f);
-        const auto t0 = std::chrono::steady_clock::now ();
-        run (*e, (int)kHostSr * 2);
-        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
-        return 100.0 * secs / 2.0; // % of one core in real time
+        // CPU time (other programs running do not count), the best of three renders
+        double best = 1e9;
+        for (int k = 0; k < 3; ++k)
+        {
+            const std::clock_t t0 = std::clock ();
+            run (*e, (int)kHostSr * 2);
+            best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        }
+        return 100.0 * best / 2.0; // % of one core in real time
     };
     const double at0 = timeIt (0.0, false, -1, 32), at48 = timeIt (48.0, false, -1, 32), hp48 = timeIt (48.0, true, -1, 32);
     const double pv0 = timeIt (0.0, false, kWarpComplex, 8), pv48 = timeIt (48.0, false, kWarpComplex, 8);
+    const double pro0 = timeIt (0.0, false, kWarpComplexPro, 8), pro48 = timeIt (48.0, false, kWarpComplexPro, 8);
     // the old way at +48: readSinc at a quarter band (64 taps a channel), for 32 voices
     double old48;
     {
         const double rate = 16.0 * 44100.0 / kHostSr;
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock ();
         float sink = 0.0f;
         for (int v = 0; v < 32; ++v)
         {
@@ -2648,15 +2718,18 @@ TEST (far_transpose_cpu_and_memory)
                     pos -= s->length;
             }
         }
-        old48 = 100.0 * std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count () / 2.0;
+        old48 = 100.0 * (double)(std::clock () - t0) / CLOCKS_PER_SEC / 2.0;
         if (sink == 12345.0f)
             std::printf ("-");
     }
     std::printf ("    CPU, 32 classic voices: %.1f%% at 0 st, %.1f%% at +48 (reading alone the old way: %.1f%%), %.1f%% at +48 "
                  "with the 48 dB high-pass\n",
                  at0, at48, old48, hp48);
-    std::printf ("    CPU, 8 complex voices: %.1f%% at 0 st, %.1f%% at +48\n", pv0, pv48);
+    std::printf ("    CPU, 8 complex voices: %.1f%% at 0 st, %.1f%% at +48; 8 complex pro voices: %.1f%% at 0 st, %.1f%% at +48\n",
+                 pv0, pv48, pro0, pro48);
     CHECK (at48 < 25.0 && hp48 < 30.0, "too slow: %.1f%% / %.1f%%", at48, hp48);
+    // (read the old way, at the sample's rate, 8 complex voices at +48 took about 290%, complex pro 360%)
+    CHECK (pv48 < 110.0 && pro48 < 130.0, "the vocoder too slow at +48: %.1f%% / %.1f%%", pv48, pro48);
 }
 
 TEST (performance)

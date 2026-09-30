@@ -156,17 +156,28 @@ enum ParamId : uint32_t
     // --- added in 0.8: the rack slots' extensions (the end saturator's block before it is full: its
     // fields are fixed at 17; more would go after this) ---
     kRackExtBase = kTailExtBase + 17,
-    // --- added after the rack's extensions: a high-pass on each voice whose cutoff follows the pitch
-    // it is transposed by (Transpose, Detune, pitch bend, the pitch envelope and LFO; the key played
-    // does not move it; Engine.cpp: Voice::render). New IDs go after these. ---
-    kTransHpOn = kRackExtBase + kRackSlots * kSlotExt,
-    kTransHpFreq,  // Hz: the cutoff at 0 semitones
-    kTransHpSlope, // 6 / 12 / 18 / 24 / 36 / 48 dB per octave
+    // (the rack's extensions: kRackSlots * kSlotExt IDs, slot by slot, up to kRackExtEnd)
+    kRackExtEnd = kRackExtBase + kRackSlots * kSlotExt,
+    // --- added after the rack's extensions (state version 12 still: a state without them reads their
+    // defaults, off): a high-pass on each voice whose cutoff follows the pitch it is transposed by
+    // (Transpose, Detune, pitch bend, the pitch envelope and LFO; the key played does not move it;
+    // Engine.cpp: Voice::render) ---
+    kTransHpOn = kRackExtEnd, // 975
+    kTransHpFreq,             // 976, Hz: the cutoff at 0 semitones
+    kTransHpSlope,            // 977, 6 / 12 / 18 / 24 / 36 / 48 dB per octave
 
+    // The next free ID (978). New parameters are appended here, never in a block above: every ID is
+    // stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
+    // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
+    // second extension block from here (kRackSlots times the new count, slot by slot), which
+    // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
     kNumParams
 };
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
+static_assert (kRackExtEnd == 975 && kTransHpOn == 975 && kTransHpFreq == 976 && kTransHpSlope == 977,
+               "stored IDs moved: append, never insert");
+static_assert (kNumParams == 978, "a new parameter: update the next free ID in the comment above (and this)");
 
 constexpr uint32_t slotParam (int slot, uint32_t field) { return kRackBase + (uint32_t)slot * kSlotSize + field; }
 // the parameter of a slot's block position j (0 .. kSlotBlockAll - 1)
@@ -176,7 +187,7 @@ constexpr uint32_t slotBlockParam (int slot, uint32_t j)
 }
 constexpr bool isRackParam (uint32_t id)
 {
-    return (id >= kRackBase && id < kTailExtBase) || (id >= kRackExtBase && id < kRackExtBase + kRackSlots * kSlotExt);
+    return (id >= kRackBase && id < kTailExtBase) || (id >= kRackExtBase && id < kRackExtEnd);
 }
 // A rack parameter's slot and field: kSlotType, kSlotOn, or kSlotParams + its block position.
 struct RackField
@@ -186,7 +197,7 @@ struct RackField
 };
 constexpr RackField rackField (uint32_t id)
 {
-    if (id >= kRackExtBase)
+    if (id >= kRackExtBase) // (a rack parameter: below kRackExtEnd)
         return {(int)((id - kRackExtBase) / kSlotExt), kSlotParams + kSlotBlock + (id - kRackExtBase) % kSlotExt};
     return {(int)((id - kRackBase) / kSlotSize), (id - kRackBase) % kSlotSize};
 }
