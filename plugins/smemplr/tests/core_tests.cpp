@@ -410,6 +410,32 @@ TEST (rack_levlr_bands_and_drives)
     CHECK ((*st)[slotBlockParam (2, levlr::kBandCount)] == 0.0, "a new state is left as it is");
 }
 
+TEST (old_para_slots_keep_their_slope_and_drive)
+{
+    // a Para slot saved before version 13: its slope was one of 12 / 18 / 24 dB (normalized 0 / 0.5 / 1),
+    // its one drive now both filters'
+    auto st = std::make_unique<std::array<double, kNumParams>> ();
+    auto has = std::make_unique<std::array<bool, kNumParams>> ();
+    st->fill (0.0);
+    has->fill (false);
+    auto put = [&] (uint32_t id, double v) {
+        (*st)[id] = v;
+        (*has)[id] = true;
+    };
+    put (slotParam (1, kSlotType), toNormalized (slotParam (1, kSlotType), (double)kFxPara));
+    put (slotBlockParam (1, para::kSlope), 0.5); // 18 dB
+    put (slotBlockParam (1, para::kHpDriveOn), 1.0);
+    put (slotBlockParam (1, para::kHpDrive), para::toNormalized (para::kHpDrive, 9.0));
+    migrateParaInSlots (*st, *has, 12);
+    CHECK (std::lround (para::toPlain (para::kSlope, (*st)[slotBlockParam (1, para::kSlope)])) == para::kSlope18, "18 dB stays 18 dB");
+    CHECK ((*st)[slotBlockParam (1, para::kLpDriveOn)] == 1.0 &&
+               std::fabs (para::toPlain (para::kLpDrive, (*st)[slotBlockParam (1, para::kLpDrive)]) - 9.0) < 1e-9,
+           "the low-pass drive is the old drive");
+    const double now = (*st)[slotBlockParam (1, para::kSlope)];
+    migrateParaInSlots (*st, *has, 13);
+    CHECK ((*st)[slotBlockParam (1, para::kSlope)] == now, "a new state is left as it is");
+}
+
 TEST (settings_text_roundtrip)
 {
     // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back

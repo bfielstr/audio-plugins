@@ -82,6 +82,9 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
 // held nothing that was used; they get their defaults (Advanced and Sub off: the same sound).
 void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 13: a Para slot's slope (one of 12 / 18 / 24 dB then) on the longer list,
+// and its one drive becomes both filters' drives (para::upgradeToPerBandDrive).
+void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 // States from before version 13: a Levlr slot's Bands and band drives (added in 0.7) read 0 there,
 // which is 1 band: they get their defaults (4 bands, no drive: the same sound).
 void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);

@@ -319,6 +319,30 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
     }
 }
 
+void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 13)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxPara)
+            continue;
+        para::upgradeToPerBandDrive (
+            [&] (uint32_t id, double& v) {
+                const uint32_t pid = slotBlockParam (slot, id);
+                if (!has[pid])
+                    return false;
+                v = norm[pid];
+                return true;
+            },
+            [&] (uint32_t id, double v) {
+                norm[slotBlockParam (slot, id)] = v;
+                has[slotBlockParam (slot, id)] = true;
+            });
+    }
+}
+
 void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
     if (version >= 13)

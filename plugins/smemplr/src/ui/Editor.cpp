@@ -1183,7 +1183,7 @@ void Editor::buildBody ()
             });
             add (fxFilterView, para::help::kDisplay);
             add (new Toggle (CRect (380, 30, 462, 48), h, kDragGain, "Drag Gain"), tip (kDragGain));
-            add (new Segmented (CRect (480, 8, 570, 26), h, kSlope, {"12", "18", "24"}), tip (kSlope));
+            add (new Choice (CRect (480, 8, 570, 26), h, kSlope), tip (kSlope)); // 6 .. 96 dB, Brickwall
             add (new Segmented (CRect (576, 8, 676, 26), h, kMovement, {"Free", "Vocal"}), tip (kMovement));
             add (new Toggle (CRect (682, 8, 780, 26), h, kResLink, "Link Res"), tip (kResLink));
             const uint32_t ids[12] = {kHpFreq, kHpRes, kHpGain, kLpFreq, kLpRes, kLpGain, kSplit, kEnvAmount, kEnvAttack, kEnvDecay, kDryWet, kOutput};
@@ -1193,10 +1193,12 @@ void Editor::buildBody ()
             add (new Knob (knobRect (480, 164), h, kDipStart, "Dip"), tip (kDipStart));
             add (new Knob (knobRect (538, 164), h, kFade, "Fade"), tip (kFade));
             add (new Knob (knobRect (596, 164), h, kLpFloor, "Floor"), tip (kLpFloor));
-            // the drive in Para's own path: on, before or after the filters, how hard
-            add (new Toggle (CRect (662, 168, 742, 186), h, kHpDriveOn, "Drive"), tip (kHpDriveOn));
-            add (new Segmented (CRect (662, 192, 742, 210), h, kDrivePos, {"Pre", "Post"}), tip (kDrivePos));
-            add (new Knob (knobRect (750, 164), h, kHpDrive, "Amount"), tip (kHpDrive));
+            // each filter's drive: on and how hard; before or after the filters (both)
+            add (new Toggle (CRect (662, 164, 738, 182), h, kHpDriveOn, "HP Drive"), tip (kHpDriveOn));
+            add (new NumberBox (CRect (742, 164, 834, 182), h, kHpDrive), tip (kHpDrive));
+            add (new Toggle (CRect (662, 186, 738, 204), h, kLpDriveOn, "LP Drive"), tip (kLpDriveOn));
+            add (new NumberBox (CRect (742, 186, 834, 204), h, kLpDrive), tip (kLpDrive));
+            add (new Segmented (CRect (662, 208, 834, 226), h, kDrivePos, {"Pre", "Post"}), tip (kDrivePos));
             break;
         }
         case kFxMultidyn:
