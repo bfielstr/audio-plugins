@@ -110,7 +110,7 @@ void Editor::buildUI (CFrame* f)
         colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
     // Gently's Threshold sliders (Advanced), at the right edge of the colour display while Advanced is on
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
         thresholdSliders[k] = bind (root, new ThresholdSlider (CRect (0, 0, 1, 1), this, k, [c = ctl] () -> const Meters* {
                                         auto* s = c->getShared ();
                                         return s ? &s->meters : nullptr;
@@ -122,14 +122,26 @@ void Editor::buildUI (CFrame* f)
     root->addView (cp);
     bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gently"));
     clarityBandButtons.clear ();
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
     {
-        auto* bt = new ActionButton (CRect (96 + k * 68, 30, 160 + k * 68, 50), k == 0 ? "Band 1" : "Band 2",
-                                     [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-        bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)."
-                                   : "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).");
+        static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub"};
+        static const char* const tips[kGentlyBands] = {
+            "Show Gently's first band (green in the display).",
+            "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).",
+            "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once switched on "
+            "and its Range is above 0 dB)."};
+        auto* bt = new ActionButton (CRect (96 + k * 52, 30, 144 + k * 52, 50), names[k], [this, k] { showClarityBand (k); },
+                                     [this, k] { return clarityBand == k; });
+        bt->setTooltipText (tips[k]);
         cp->addView (bt);
         clarityBandButtons.push_back (bt);
+        if (k == kSubBand)
+        {
+            clarityViews[k].push_back (bind (cp, new Toggle (CRect (254, 30, 306, 50), this, kClaritySub, "Sub")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (312, 10), this, kClaritySubFreq, "Freq")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (374, 10), this, kClaritySubRange, "Range")));
+            continue;
+        }
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (250, 10), this, kClarityFreqIds[k], "Freq")));
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (312, 10), this, kClarityWidthIds[k], "Width")));
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (374, 10), this, kClarityRangeIds[k], "Range")));
@@ -148,8 +160,8 @@ void Editor::buildUI (CFrame* f)
 
 void Editor::showClarityBand (int band)
 {
-    clarityBand = band == 1 ? 1 : 0;
-    for (int k = 0; k < kClarityBands; ++k)
+    clarityBand = band < 0 ? 0 : band >= kGentlyBands ? kGentlyBands - 1 : band;
+    for (int k = 0; k < kGentlyBands; ++k)
         for (auto* v : clarityViews[k])
             v->setVisible (k == clarityBand);
     for (auto* b : clarityBandButtons)
@@ -173,12 +185,14 @@ void Editor::updateLooks ()
     for (auto* v : colorViews)
         v->setEnabledLook (on);
     const bool gently = plainValue (kClarity) >= 0.5;
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
     {
-        for (auto* v : clarityViews[k])
-            v->setEnabledLook (gently);
+        // (the Sub band's Freq and Range, after its switch, also dim while Sub is off)
+        for (size_t i = 0; i < clarityViews[k].size (); ++i)
+            clarityViews[k][i]->setEnabledLook (gently && (k != kSubBand || i == 0 || plainValue (kClaritySub) >= 0.5));
         if (thresholdSliders[k])
-            thresholdSliders[k]->setEnabledLook (clarityBandOn (plainValue (kClarity), plainValue (kClarityRangeIds[k])));
+            thresholdSliders[k]->setEnabledLook (k == kSubBand ? claritySubOn (plainValue (kClarity), plainValue (kClaritySub), plainValue (kClaritySubRange))
+                                                            : clarityBandOn (plainValue (kClarity), plainValue (kGentlyRangeIds[k])));
     }
     for (auto* v : advancedViews)
         v->setEnabledLook (gently);
@@ -193,7 +207,7 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClarityDrive)
+    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClaritySub || id == kClaritySubRange || id == kClarityDrive)
         updateLooks ();
     if (id == kClarityAdvanced)
         layoutAdvanced ();

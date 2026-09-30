@@ -46,7 +46,7 @@ private:
     ShaperView* shaper = nullptr;
     ColorView* color = nullptr;
     VSTGUI::CRect colorArea;
-    ThresholdSlider* sliders[kClarityBands] = {nullptr, nullptr};
+    ThresholdSlider* sliders[kGentlyBands] = {nullptr, nullptr, nullptr};
     pk::ParamView* driveOn = nullptr;
     pk::ParamView* driveAmount = nullptr;
 };

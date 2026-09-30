@@ -452,7 +452,7 @@ int main (int argc, char** argv)
             const double drive = smacheratr::paramTable ().toPlain (smacheratr::kDrive, b8.norm[smemplr::slotBlockParam (2, smacheratr::kDrive)]);
             CHECK (std::lround (slope) == smemplr::MsEq::k12 && std::fabs (drive - 6.0) < 1e-6, "slope %f (12 dB), drive %f", slope, drive);
             // the old saturator never had Gently's Advanced mode: its slot gets the defaults
-            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 CHECK (b8.norm[smemplr::slotBlockParam (2, id)] == smacheratr::defaultNormalized (id), "version 8: %s at its default",
                        smacheratr::paramTable ().info (id).name);
         }
@@ -463,7 +463,7 @@ int main (int argc, char** argv)
             auto v10 = baseState (wav);
             const uint32_t typeId = smemplr::slotParam (0, smemplr::kSlotType);
             v10.norm[typeId] = smemplr::toNormalized (typeId, smemplr::kFxSmacheratr);
-            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 v10.norm[smemplr::slotBlockParam (0, id)] = 1.0;
             MemoryStream raw;
             CHECK (smemplr::writeState (&raw, v10), "write a state");
@@ -472,7 +472,7 @@ int main (int argc, char** argv)
             raw.seek (0, IBStream::kIBSeekSet, nullptr);
             smemplr::PluginState b10;
             CHECK (smemplr::readState (&raw, b10), "read a version 10 state");
-            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 CHECK (b10.norm[smemplr::slotBlockParam (0, id)] == smacheratr::defaultNormalized (id), "version 10: %s at its default (%f)",
                        smacheratr::paramTable ().info (id).name, b10.norm[smemplr::slotBlockParam (0, id)]);
         }

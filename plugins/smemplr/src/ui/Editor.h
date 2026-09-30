@@ -136,11 +136,11 @@ private:
     smacheratr::ColorView* fxColorView = nullptr;
     // Gently's (Clarity's) band selector on the Smacheratr page: the band shown
     int clarityBand = 0;
-    std::vector<VSTGUI::CView*> rackBandViews[2], rackBandButtons;
+    std::vector<VSTGUI::CView*> rackBandViews[3], rackBandButtons;
     void showClarityBand (int band);
     // Gently's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
     // display and the region Drive's controls, shown while Advanced is on (satHost: the page's host)
-    smacheratr::ThresholdSlider* fxThresholds[2] = {nullptr, nullptr};
+    smacheratr::ThresholdSlider* fxThresholds[3] = {nullptr, nullptr, nullptr};
     std::vector<pk::ParamView*> fxSatAdvanced;
     pk::MappedParamHost* satHost = nullptr;
     void updateSatAdvanced ();

@@ -7,6 +7,7 @@
 //   right handle, sideways        Freq
 //   Gently handle, sideways       a Gently band's frequency (band 2 is drawn blue)
 //   Gently handle, up / down      its Range: the handle sits at the most it cuts, drag down for more
+//   Sub handle (amber; only with Sub on): sideways its Freq (20 - 100 Hz), down its Range; no width
 //   Gently band edge, sideways    its width
 //   Alt (Option) + drag on a Gently band, sideways   its width, the band staying centred (right: wider)
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Gently's width
@@ -15,6 +16,7 @@
 // sample rate and the levels come from functions so it does not depend on a controller.
 #pragma once
 
+#include "../core/ClarityBand.h"
 #include "../core/Engine.h"
 #include "../core/Params.h"
 
@@ -42,7 +44,7 @@ public:
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle (); // follows Gently's cut
     std::function<void (int)> onBandPicked; // a Gently band's handle or edge was grabbed
-    // Gently band k's colour: green, and blue for the second (also its Threshold slider's)
+    // Gently band k's colour: green, blue for the second, amber for Sub (also its Threshold slider's)
     static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255);
 
     double xOfHz (double hz) const;
@@ -57,8 +59,9 @@ private:
     Drag hit (const VSTGUI::CPoint& p, int* band = nullptr) const; // band: which Clarity band was hit
     int bandUnder (const VSTGUI::CPoint& p) const;                 // the working band whose region p is in (-1: none)
     double sampleRate () const;
-    bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0)
-    bool clarityShown (int band) const; // its handle is there to grab (Clarity on)
+    bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0; Sub: and Sub on)
+    bool clarityShown (int band) const; // its handle is there to grab (Clarity on; Sub: and Sub on)
+    ClarityBand bandOf (int band) const; // its shape (Sub: subBand, no width)
 
     pk::ParamHost* host;
     RateSource rate;
@@ -68,7 +71,7 @@ private:
     int dragBand = 0; // the Clarity band being dragged
     double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0, startRange = 0.0, startWidth = 0.0;
     bool movedH = false, movedV = false;
-    float shownCut[kClarityBands] = {0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
+    float shownCut[kGentlyBands] = {0.0f, 0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
 };
 
 } // namespace smacheratr

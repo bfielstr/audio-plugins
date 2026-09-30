@@ -18,7 +18,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
-Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
+Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before), Gently's **Sub** band (the sub region from 20 Hz up to a taper point of 20 to 100 Hz) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
 
 In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 
