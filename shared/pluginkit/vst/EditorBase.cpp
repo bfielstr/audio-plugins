@@ -125,10 +125,10 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     tip (bind (p, new Toggle (row (392, 424, rowA), this, extBase + kTailExtDcFilter, "DC")), "Remove DC offset before the curve.");
     tip (bind (p, new Toggle (row (430, 480, rowA), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
-    // Gently: one button, Advanced, a band selector and the selected band's controls (both bands' are
+    // Gently: one button, Advanced, a band selector and the selected band's controls (all bands' are
     // made; the other band's are hidden)
     tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gently")),
-         "Gently: a compressor on up to two bands, so a hard-pushed drive does not go muddy or harsh (12 dB/oct below, "
+         "Gently: a compressor on up to three bands (the third is the Sub band, from the bottom), so a hard-pushed drive does not go muddy or harsh (12 dB/oct below, "
          "6 dB/oct above each band). A band works while its Range is above 0 dB.");
     tip (bind (p, new Toggle (row (64, 124, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
          "Gently's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
@@ -136,21 +136,39 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     for (auto& v : tailBandViews)
         v.clear ();
     tailBandButtons.clear ();
-    for (int k = 0; k < 2; ++k)
+    static const char* const bandNames[3] = {"1", "2", "S"};
+    static const char* const bandTips[3] = {
+        "Show Gently's first band (green in the display).", "Show Gently's second band (blue in the display).",
+        "Show Gently's Sub band: from the bottom of the spectrum, it starts to taper at its Freq."};
+    for (int k = 0; k < 3; ++k)
     {
-        auto* bt = new ActionButton (row (128 + k * 20, 146 + k * 20, rowB), k == 0 ? "1" : "2", [this, k] { showTailBand (k); },
+        auto* bt = new ActionButton (row (128 + k * 18, 144 + k * 18, rowB), bandNames[k], [this, k] { showTailBand (k); },
                                      [this, k] { return tailBand == k; });
-        bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)." : "Show Gently's second band (blue in the display).");
+        bt->setTooltipText (bandTips[k]);
         p->addView (bt);
         tailBandButtons.push_back (bt);
-        const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
-        const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
-        const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
-        CView* views[3] = {bind (p, new NumberBox (row (170, 218, rowB), this, f)), bind (p, new NumberBox (row (222, 256, rowB), this, w)),
-                           bind (p, new NumberBox (row (260, 304, rowB), this, g))};
-        tip (views[0], "Gently: the centre of this band.");
-        tip (views[1], "Gently: this band's width in octaves (or Alt-drag the band in the display).");
-        tip (views[2], "Gently: the most this band is turned down; at 0 dB the band does nothing.");
+        CView* views[3];
+        if (k < 2)
+        {
+            const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
+            const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
+            const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
+            views[0] = bind (p, new NumberBox (row (184, 228, rowB), this, f));
+            views[1] = bind (p, new NumberBox (row (232, 264, rowB), this, w));
+            views[2] = bind (p, new NumberBox (row (268, 306, rowB), this, g));
+            tip (views[0], "Gently: the centre of this band.");
+            tip (views[1], "Gently: this band's width in octaves (or Alt-drag the band in the display).");
+            tip (views[2], "Gently: the most this band is turned down; at 0 dB the band does nothing.");
+        }
+        else
+        {
+            views[0] = bind (p, new NumberBox (row (184, 228, rowB), this, ext2Base + kTailExt2SubFreq));
+            views[1] = bind (p, new Toggle (row (232, 264, rowB), this, ext2Base + kTailExt2Sub, "Sub"));
+            views[2] = bind (p, new NumberBox (row (268, 306, rowB), this, ext2Base + kTailExt2SubRange));
+            tip (views[0], "Gently's Sub band: where it starts to taper off.");
+            tip (views[1], "Gently's Sub band on or off (it works once its Range is above 0 dB).");
+            tip (views[2], "Gently's Sub band: the most it turns the sub region down; at 0 dB it does nothing.");
+        }
         for (auto* v : views)
             tailBandViews[k].push_back (v);
     }
@@ -169,8 +187,8 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
 
 void EditorBase::showTailBand (int band)
 {
-    tailBand = band == 1 ? 1 : 0;
-    for (int k = 0; k < 2; ++k)
+    tailBand = band < 0 ? 0 : band > 2 ? 2 : band;
+    for (int k = 0; k < 3; ++k)
         for (auto* v : tailBandViews[k])
             v->setVisible (k == tailBand);
     for (auto* b : tailBandButtons)

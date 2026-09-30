@@ -7,6 +7,7 @@
 #include <chrono>
 #include <complex>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -1281,9 +1282,9 @@ TEST (performance)
         e->setParam (bandParam (b, kBelowRatio), 0.7);
     }
     auto in = sine (440.0, -12.0, 10.0);
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     run (*e, in, &in);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.08, "too slow"); // 4 bands plus the 4x oversampled saturator
 }

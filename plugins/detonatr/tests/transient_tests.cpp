@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <random>
 #include <vector>
 
@@ -517,9 +518,9 @@ TEST (cpu)
         l[(size_t)i] = r[(size_t)i] = u (rng);
     for (int k = 0; k < 100; ++k)
         addHit (l, sr, (int)(k * 0.6 * sr), 0.9, 0.2);
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     const Out o = run (t, l, r, 256);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    60 s of stereo at 48 kHz in %.1f ms: %.3f%% of real time (checksum %g)\n", 1000.0 * secs,
                  100.0 * secs / 60.0, (double)o.l[(size_t)n / 2]);
     CHECK (secs / 60.0 < 0.02, "too slow: %.2f%% of real time", 100.0 * secs / 60.0);

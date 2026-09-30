@@ -86,7 +86,7 @@ protected:
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
     int tailBand = 0;                                              // Gently band shown in the tail panel
-    std::vector<VSTGUI::CView*> tailBandViews[2], tailBandButtons; // its controls, per band; the selector
+    std::vector<VSTGUI::CView*> tailBandViews[3], tailBandButtons; // its controls, per band; the selector
 };
 
 } // namespace pk

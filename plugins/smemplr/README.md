@@ -81,6 +81,11 @@ the key played), gliding a few milliseconds so a bend or a jump does not click. 
 simply goes below the audible range. The slope is Para's: 6 or 18 dB (-3 dB at the cutoff), 12, 24,
 36 or 48 dB (Linkwitz-Riley, -6 dB at the cutoff); 24 dB by default.
 
+**Drop a clip from your DAW** onto the waveform to load it (a clip dragged out of REAPER or Ableton
+Live, or a file from Finder / Explorer). A DAW's drag carries the clip's name as text beside its audio
+file; the file is what gets loaded. A temporary file (a render the DAW deletes later) is copied to
+Documents/bfielstr/Samples first.
+
 Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
 the waveform, audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
 ◀ ▶ step through the samples in the current folder, zoom (Cmd/Alt + scroll, or drag the ruler

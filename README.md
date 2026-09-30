@@ -1,4 +1,4 @@
-# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr, Smoothr
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr, Deepr, Smoothr, Gently
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -16,10 +16,11 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Detonatr**](plugins/detonatr/README.md) | Explosion / impact designer: denoise and dereverb, tuned resonators and vocoded recordings of household items with a disperser, Multidyn, a spike-and-drop transient shaper and Smacheratr, in any order | a sound designer's RX, vocoder, disperser, multiband, transient and saturator chain |
 | [**Levlr**](plugins/levlr/README.md) | The spectrum in four touching bands with a level each: movable minimum-phase Linkwitz-Riley crossovers (12/24/48 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
 | [**Smoothr**](plugins/smoothr/README.md) | A limiter that puts a smooth low end before the last dB of loudness: slow gain on the lows and fast on the highs (a linear-phase split), a true-peak ceiling, a scrolling gain-reduction history; Smacheratr feeding it, and Character, a dip in the low mids that opens when they get loud | a mastering limiter with a FabFilter Pro-L-style history |
+| [**Deepr**](plugins/deepr/README.md) | Makes a bass or reese sound deeper by contrast: dips the low mids only while the sub plays, folds the sub to mono; no latency of its own; Smacheratr at the end | psychoacoustic bass contrast |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
-Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
+Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before), Gently's **Sub** band (the sub region from 20 Hz up to a taper point of 20 to 100 Hz) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
 
 In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 
@@ -95,6 +96,7 @@ plugins/wubr    drawn band LFOs         same structure
 plugins/detonatr explosion designer    same structure
 plugins/levlr   four-band levels        same structure
 plugins/smoothr low-end-first limiter   same structure
+plugins/deepr   bass depth by contrast  same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

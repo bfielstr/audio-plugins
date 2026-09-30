@@ -68,8 +68,9 @@ Parameter* ControllerBase::makeParameter (uint32_t id) { return new TableParamet
 tresult PLUGIN_API ControllerBase::setParamNormalized (ParamID tag, ParamValue value)
 {
     const tresult r = EditController::setParamNormalized (tag, value);
-    if (editor && tag < tableRef.size ())
-        editor->paramChanged (tag);
+    if (tag < tableRef.size ())
+        for (auto* e : editors)
+            e->paramChanged (tag);
     return r;
 }
 
@@ -102,18 +103,22 @@ tresult PLUGIN_API ControllerBase::getState (IBStream* stream)
                                                                                                      : kResultFalse;
 }
 
-void ControllerBase::editorAttached (EditorView* e) { editor = dynamic_cast<EditorBase*> (e); }
+void ControllerBase::editorAttached (EditorView* e)
+{
+    if (auto* b = dynamic_cast<EditorBase*> (e))
+        if (std::find (editors.begin (), editors.end (), b) == editors.end ())
+            editors.push_back (b);
+}
 
 void ControllerBase::editorRemoved (EditorView* e)
 {
-    if (editor == e)
-        editor = nullptr;
+    editors.erase (std::remove (editors.begin (), editors.end (), e), editors.end ());
 }
 
 void ControllerBase::refreshEditor ()
 {
-    if (editor)
-        editor->refresh ();
+    for (auto* e : editors)
+        e->refresh ();
 }
 
 void ControllerBase::setFromUI (uint32_t id, double normalized)

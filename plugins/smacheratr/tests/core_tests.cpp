@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstring>
 #include <cstdio>
 #include <functional>
@@ -867,12 +868,176 @@ TEST (performance)
         e->setParam (kPreLimit, 1.0);
         e->setParam (kPostClip, kPostSoft);
         e->setParam (kDrive, 12.0);
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
         run (*e, in);
-        secs = std::min (secs, std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ());
+        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
     }
     std::printf ("    CPU: %.2f%% of one core (stereo, Hi-Quality)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
+}
+
+// ---------------------------------------------------------------------------
+// Gently's Sub band: the bottom of the spectrum up to where it tapers off (20 - 100 Hz)
+
+TEST (gently_sub_band)
+{
+    // the band's shape: flat from 20 Hz to the slider's frequency, then 12 dB/oct down
+    for (double taper : {20.0, 40.0, 100.0})
+    {
+        const ClarityBand b = subBand (kSr, taper);
+        auto db = [&] (double hz) { return clarityBandDb (b, hz, kSr); };
+        double peak = -200.0;
+        for (double hz = 10.0; hz < 400.0; hz *= 1.02)
+            peak = std::max (peak, db (hz));
+        CHECK (std::fabs (peak) < 0.05, "taper %.0f Hz: peaks at 0 dB (%.2f)", taper, peak);
+        CHECK (db (taper) > -2.0 && db (taper) < 0.0, "taper %.0f Hz: still within 2 dB of the peak where it starts to taper (%.2f dB)", taper, db (taper));
+        CHECK (db (4.0 * taper) < -14.0, "taper %.0f Hz: 12 dB/oct above it (%.1f dB at %.0f Hz)", taper, db (4.0 * taper), 4.0 * taper);
+        CHECK (db (1000.0) < -30.0, "taper %.0f Hz: 1 kHz is out (%.1f dB)", taper, db (1000.0));
+        CHECK (db (1.0) < -30.0, "taper %.0f Hz: DC and rumble are out (%.1f dB at 1 Hz)", taper, db (1.0));
+    }
+    {
+        const ClarityBand b = subBand (kSr, 100.0);
+        CHECK (clarityBandDb (b, 20.0, kSr) > -4.5, "it reaches down to 20 Hz (%.1f dB)", clarityBandDb (b, 20.0, kSr));
+    }
+    const auto& t = paramTable ();
+    CHECK (t.info (kClaritySub).def == 0.0 && t.info (kClaritySubFreq).def == 40.0 && t.info (kClaritySubFreq).min == 20.0 &&
+               t.info (kClaritySubFreq).max == 100.0 && t.info (kClaritySubRange).def == 8.0 && t.info (kClaritySubThreshold).def == -18.0,
+           "defaults: off, starts to taper at 40 Hz (20 - 100 Hz), Range 8 dB, Threshold -18 dB");
+
+    // a 40 Hz bass and a 1 kHz note, driven hard: Sub cuts the bass, not the note, and only while on
+    auto in = tones ({{40.0, -8.0}, {1000.0, -14.0}}, 1.5);
+    auto measure = [&] (bool gently, bool sub, double taper, double f, Meters* m = nullptr, double range = 8.0) {
+        auto e = engine ();
+        if (m)
+            e->setMeters (m);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kDrive, 12.0);
+        e->setParam (kClarity, gently ? 1.0 : 0.0);
+        e->setParam (kClarityRange, 0.0); // the other bands off: only Sub
+        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+        e->setParam (kClaritySubFreq, taper);
+        e->setParam (kClaritySubRange, range);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 48000, 72000);
+    };
+    Meters m;
+    const double subOn = measure (true, true, 40.0, 40.0, &m), subOff = measure (true, false, 40.0, 40.0);
+    std::printf("    40 Hz: %.1f dB with Sub, %.1f dB without; Sub cut %.1f dB, level %.1f dB\n", subOn, subOff, m.claritySubDb.load (),
+                m.claritySubLevelDb.load ());
+    CHECK (subOn < subOff - 2.0, "Sub turns the bass down: %.1f vs %.1f dB", subOn, subOff);
+    CHECK (m.claritySubDb.load () < -2.0 && m.claritySubDb.load () >= -8.0 - 1e-3, "the Sub meter shows the cut (%.1f dB, Range 8)",
+           m.claritySubDb.load ());
+    {
+        // (the note alone: with the bass, cutting it frees headroom in the curve for the note, as any compressor does)
+        auto note = tones ({{1000.0, -14.0}}, 1.5);
+        auto noteDb = [&] (bool sub) {
+            auto e = engine ();
+            e->setParam (kPreLimit, 0.0);
+            e->setParam (kDrive, 12.0);
+            e->setParam (kClarity, 1.0);
+            e->setParam (kClarityRange, 0.0);
+            e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+            return toneDb (run (*e, note).l, 1000.0, 48000, 72000);
+        };
+        CHECK (noteDb (true) == noteDb (false), "the 1 kHz note is left alone: %.2f vs %.2f dB", noteDb (true), noteDb (false));
+    }
+    CHECK (measure (false, true, 40.0, 40.0) == subOff, "Gently off: Sub does nothing");
+    CHECK (measure (true, true, 40.0, 40.0, nullptr, 0.0) == subOff, "Range 0 dB: Sub does nothing");
+    CHECK (measure (true, true, 40.0, 40.0, nullptr, 3.0) > subOn + 1.0, "a smaller Range cuts less");
+
+    // the slider moves where the taper starts: a 90 Hz tone is in the band with 100 Hz, mostly out with 25 Hz
+    auto in90 = tones ({{90.0, -8.0}}, 1.5);
+    auto cut90 = [&] (double taper) {
+        Meters mm;
+        auto e = engine ();
+        e->setMeters (&mm);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kDrive, 12.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, 0.0);
+        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClaritySubFreq, taper);
+        run (*e, in90);
+        return (double)mm.claritySubDb.load ();
+    };
+    CHECK (cut90 (100.0) < cut90 (25.0) - 1.5, "the slider sets what reaches the band: %.1f dB at 100 Hz, %.1f dB at 25 Hz", cut90 (100.0),
+           cut90 (25.0));
+
+    // Sub off is what Gently was before it: bit for bit, and the bands 1 / 2 do not care about it
+    auto render = [&] (bool sub, double taper) {
+        auto e = engine ();
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarity2Range, 6.0);
+        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+        e->setParam (kClaritySubFreq, taper);
+        return run (*e, in).l;
+    };
+    CHECK (render (false, 40.0) == render (false, 90.0), "Sub off ignores its controls");
+    CHECK (render (true, 40.0) != render (false, 40.0), "Sub on changes the sound");
+
+    // Advanced: the Sub band's Threshold
+    auto cutAt = [&] (double threshold) {
+        Meters mm;
+        auto e = engine ();
+        e->setMeters (&mm);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kDrive, -6.0); // (a level of about -12 dB)
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, 0.0);
+        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClaritySubThreshold, threshold);
+        run (*e, in);
+        return (double)mm.claritySubDb.load ();
+    };
+    CHECK (cutAt (-3.0) == 0.0 && cutAt (-50.0) < -7.9, "Advanced: its Threshold sets where it cuts (%.2f / %.2f dB)", cutAt (-3.0), cutAt (-50.0));
+
+    // the region Drive works on the Sub band too, and stays finite
+    {
+        auto e = engine ();
+        e->setParam (kDrive, 12.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, 0.0);
+        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClarityDrive, 1.0);
+        e->setParam (kClarityDriveAmount, 24.0);
+        auto out = run (*e, in);
+        bool finite = true;
+        for (float x : out.l)
+            finite = finite && std::isfinite (x) && std::fabs (x) < 4.0f;
+        CHECK (finite, "the region Drive on the Sub band is finite");
+        CHECK (out.l != render (true, 40.0), "and does something");
+    }
+
+    // through the tail: the four fields are in the third block
+    const uint32_t ext2Field = pk::kTailFields + pk::kTailExtFields;
+    CHECK (tailFieldOf (kClaritySub) == (int)(ext2Field + pk::kTailExt2Sub) && tailFieldOf (kClaritySubFreq) == (int)(ext2Field + pk::kTailExt2SubFreq) &&
+               tailFieldOf (kClaritySubRange) == (int)(ext2Field + pk::kTailExt2SubRange) &&
+               tailFieldOf (kClaritySubThreshold) == (int)(ext2Field + pk::kTailExt2SubThreshold),
+           "Sub's IDs to tail fields");
+    std::vector<pk::ParamInfo> v2;
+    addTailExt2Params (v2, 200);
+    CHECK (std::string (v2[pk::kTailExt2Sub].name) == "Saturator Gently Sub" && v2[pk::kTailExt2SubFreq].def == 40.0 &&
+               v2[pk::kTailExt2SubFreq].id == 200 + pk::kTailExt2SubFreq,
+           "Sub in the tail's third block");
+    auto renderT = [&] (bool sub) {
+        Tail tail;
+        tail.prepare (48000.0, 512);
+        tail.setParam (pk::kTailOn, 1.0);
+        tail.setParam (pk::kTailMix, 1.0);
+        tail.setParam (pk::kTailPreLimit, 0.0);
+        tail.setParam (pk::kTailDrive, 12.0);
+        tail.setParam (pk::kTailFields + pk::kTailExtClarity, 1.0);
+        tail.setParam (pk::kTailFields + pk::kTailExtClarityRange, 0.0);
+        tail.setParam (ext2Field + pk::kTailExt2Sub, sub ? 1.0 : 0.0);
+        Sig out = in;
+        for (size_t pos = 0; pos < out.l.size (); pos += 512)
+            tail.process (out.l.data () + pos, out.r.data () + pos, (int)std::min<size_t> (512, out.l.size () - pos));
+        return toneDb (out.l, 40.0, 48000, 72000);
+    };
+    CHECK (renderT (true) < renderT (false) - 2.0, "Sub through the tail: %.1f vs %.1f dB", renderT (true), renderT (false));
 }
 
 int main (int argc, char** argv)

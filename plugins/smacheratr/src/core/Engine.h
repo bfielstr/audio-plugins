@@ -43,6 +43,8 @@ struct Meters
     // while the band is off), for the Threshold sliders
     std::atomic<float> clarityLevelDb {-120.0f};
     std::atomic<float> clarity2LevelDb {-120.0f};
+    std::atomic<float> claritySubDb {0.0f};        // the Sub band's cut
+    std::atomic<float> claritySubLevelDb {-120.0f}; // and its level
 };
 
 class Engine
@@ -91,7 +93,7 @@ private:
     struct Channel
     {
         Biquad dc, preLo, preHi, postLo, postHi;
-        Biquad bandHp[kClarityBands], bandLp[kClarityBands], postHp[kClarityBands], postLp[kClarityBands]; // Clarity's bands, before and after the curve
+        Biquad bandHp[kGentlyBands], bandLp[kGentlyBands], postHp[kGentlyBands], postLp[kGentlyBands]; // Clarity's bands, before and after the curve
         Oversampler os, regionOs; // regionOs: Gently's driven region, oversampled beside the rest
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
@@ -107,12 +109,12 @@ private:
     bool inMs = false;
     // Clarity: the level of its band going into the curve (mean square, both channels), the cut it
     // asks for, the band in use and the (smoothed) gains of the band before and after the curve
-    double lmEnv[kClarityBands] {}, lmAtk = 0.0, lmRel = 0.0;
-    float lmCutDb[kClarityBands] {};
-    double bandFreq[kClarityBands] = {-1.0, -1.0}, bandWidth[kClarityBands] = {-1.0, -1.0};
-    float bandNorm[kClarityBands] = {1.0f, 1.0f}, gBandPre[kClarityBands] = {1.0f, 1.0f}, gBandPost[kClarityBands] = {1.0f, 1.0f};
-    std::vector<float> gPost[kClarityBands];
-    bool clarityWas[kClarityBands] = {false, false};
+    double lmEnv[kGentlyBands] {}, lmAtk = 0.0, lmRel = 0.0;
+    float lmCutDb[kGentlyBands] {};
+    double bandFreq[kGentlyBands] = {-1.0, -1.0, -1.0}, bandWidth[kGentlyBands] = {-1.0, -1.0, -1.0};
+    float bandNorm[kGentlyBands] = {1.0f, 1.0f, 1.0f}, gBandPre[kGentlyBands] = {1.0f, 1.0f, 1.0f}, gBandPost[kGentlyBands] = {1.0f, 1.0f, 1.0f};
+    std::vector<float> gPost[kGentlyBands];
+    bool clarityWas[kGentlyBands] = {false, false, false};
     // Gently's region drive: the cut bands per channel, oversampled, and the drive's (smoothed) gain
     // and how much of it is in (faded in and out, so switching it clicks nowhere)
     std::vector<float> region[2], regionOsBuf, gRegion, gRegionMix;

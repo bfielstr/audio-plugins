@@ -2,7 +2,7 @@
 // The first six (pk::TailField) came first and sit in a block in the middle of each plug-in's IDs;
 // these came later, so each plug-in appends them as a second block (pk::kTailExtFields entries).
 // Field i is Smacheratr parameter kTailExtIds[i], with Smacheratr's name, range and default (the
-// colour filters start off, and Mid/Side where the plug-in asks for it). Gently's Advanced mode came
+// colour filters start off, and Mid/Side where the plug-in asks for it). Gently's Advanced mode and its Sub band came
 // after that block was closed in (plug-ins have parameters right after it): a third block
 // (pk::kTailExt2Fields entries, kTailExt2Ids) at the very end of each plug-in's IDs.
 #pragma once
@@ -23,8 +23,9 @@ inline constexpr uint32_t kTailExtIds[pk::kTailExtFields] = {kOutput,    kColorO
                                                             kClarity2Range};
 static_assert (pk::kTailExtFields == 17, "one Smacheratr parameter per extended tail field");
 inline constexpr uint32_t kTailExt2Ids[pk::kTailExt2Fields] = {kClarityAdvanced, kClarityThreshold, kClarity2Threshold,
-                                                              kClarityDrive, kClarityDriveAmount};
-static_assert (pk::kTailExt2Fields == 5, "one Smacheratr parameter per field of the tail's third block");
+                                                              kClarityDrive, kClarityDriveAmount,
+                                                              kClaritySub, kClaritySubFreq, kClaritySubRange, kClaritySubThreshold};
+static_assert (pk::kTailExt2Fields == 9, "one Smacheratr parameter per field of the tail's third block");
 
 inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool midSide = false)
 {

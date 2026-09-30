@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <cmath>
+#include <ctime>
 #include <complex>
 #include <cstdio>
 #include <functional>
@@ -364,7 +365,7 @@ TEST (silence_after_a_burst)
         e->process (l.data (), r.data (), l.data (), r.data (), 512);
     }
     float last = 0.0f;
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     const int blocks = (int)(5.0 * kSr / 512);
     for (int b = 0; b < blocks; ++b)
     {
@@ -375,7 +376,7 @@ TEST (silence_after_a_burst)
             for (float v : l)
                 last = std::max (last, std::fabs (v));
     }
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    after 5 s of silence: %g at most; %.2f%% of real time\n", last, 100.0 * secs / 5.0);
     CHECK (last < 1e-20f, "silent: %g", last);
 }
@@ -422,7 +423,7 @@ TEST (fuzz_and_cpu)
         c.setParam (kTailBase + pk::kTailOn, 1.0);
         c.prepare (kSr, 512);
         const int blocks = (int)(10.0 * kSr / 512);
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
         for (int b = 0; b < blocks; ++b)
         {
             if (b % 8 == 0)
@@ -431,13 +432,13 @@ TEST (fuzz_and_cpu)
                 l[(size_t)i] = r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.3f;
             c.process (l.data (), r.data (), l.data (), r.data (), 512);
         }
-        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
         std::printf ("    %s, saturator on: %.2f%% of real time (stereo, 48 kHz)\n", kSlopeNames[s], 100.0 * secs / 10.0);
     }
     // and the crossovers alone
     {
         auto c = engine ([] (Engine& en) { en.setParam (kSlope, kSlope48); });
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
         const int blocks = (int)(10.0 * kSr / 512);
         for (int b = 0; b < blocks; ++b)
         {
@@ -445,7 +446,7 @@ TEST (fuzz_and_cpu)
                 l[(size_t)i] = r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.3f;
             c->process (l.data (), r.data (), l.data (), r.data (), 512);
         }
-        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
         std::printf ("    48 dB/oct crossovers alone: %.2f%% of real time\n", 100.0 * secs / 10.0);
     }
 }

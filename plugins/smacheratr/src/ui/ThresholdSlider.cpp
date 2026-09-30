@@ -26,7 +26,7 @@ bool isFine (const Modifiers& m) { return m.has (ModifierKey::Shift) || m.has (M
 } // namespace
 
 ThresholdSlider::ThresholdSlider (const CRect& r, pk::ParamHost* h, int b, MeterSource m)
-    : ParamView (r, h, kClarityThresholdIds[b == 1 ? 1 : 0]), band (b == 1 ? 1 : 0), meters (std::move (m))
+    : ParamView (r, h, kGentlyThresholdIds[std::clamp (b, 0, kGentlyBands - 1)]), band (std::clamp (b, 0, kGentlyBands - 1)), meters (std::move (m))
 {
 }
 
@@ -46,7 +46,7 @@ double ThresholdSlider::yOfDb (double db) const
 void ThresholdSlider::idle ()
 {
     const Meters* m = meters ? meters () : nullptr;
-    const float level = !m ? -120.0f : (band == 0 ? m->clarityLevelDb : m->clarity2LevelDb).load (std::memory_order_relaxed);
+    const float level = !m ? -120.0f : (band == 0 ? m->clarityLevelDb : band == 1 ? m->clarity2LevelDb : m->claritySubLevelDb).load (std::memory_order_relaxed);
     const float before = shownDb;
     // up at once, down eased (like a peak meter)
     shownDb = level > shownDb ? level : shownDb + (level - shownDb) * 0.25f;
@@ -64,7 +64,7 @@ void ThresholdSlider::draw (CDrawContext* ctx)
     ctx->setFrameColor (dragging ? ColorView::bandColor (band, 200) : theme::kPanelEdge);
     ctx->setLineWidth (1.0);
     ctx->drawRect (r, kDrawStroked);
-    text (ctx, band == 0 ? "1" : "2", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? ColorView::bandColor (band) : theme::kTextDim,
+    text (ctx, band == 0 ? "1" : band == 1 ? "2" : "S", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? ColorView::bandColor (band) : theme::kTextDim,
           10.0, true);
 
     // the level: dim below the threshold, bright above it (the part being cut)
@@ -196,7 +196,7 @@ void ThresholdSlider::layout (ColorView* color, ThresholdSlider* const* sliders,
         v->setMouseableArea (r);
         top += 22;
     }
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
         if (auto* s = sliders[k])
         {
             const CRect r (left + k * (kWidth + kGap), top, left + k * (kWidth + kGap) + kWidth, area.bottom);

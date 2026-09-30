@@ -6,8 +6,8 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(AudioPlugins
-    VERSION 0.5.0
-    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para and Widr VST3 plug-ins"
+    VERSION 0.6.0
+    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Detonatr, Levlr and Deepr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -49,5 +49,6 @@ add_subdirectory(plugins/widr)
 add_subdirectory(plugins/wubr)
 add_subdirectory(plugins/detonatr)
 add_subdirectory(plugins/levlr)
+add_subdirectory(plugins/deepr)
 add_subdirectory(plugins/gently)
 add_subdirectory(plugins/smoothr)

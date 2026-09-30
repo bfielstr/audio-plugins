@@ -1,5 +1,5 @@
 # Detonatr: an explosion / impact designer: Clean, Tone, Multiband, Transient and Saturator stages in any order.
-project(Detonatr VERSION 0.1.0.0)
+project(Detonatr VERSION 0.6.0.0)
 
 # each stage's own test program builds the stage directly (so the stages can be worked on apart)
 foreach(unit Clean Tone Transient)
