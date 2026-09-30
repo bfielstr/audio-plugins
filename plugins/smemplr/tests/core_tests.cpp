@@ -350,6 +350,38 @@ TEST (rack_smoothr)
     }
 }
 
+TEST (rack_gently)
+{
+    // Gently in a slot: its latency counts, on or off; a band on the sample's pitch turns a loud note
+    // down; off, the slot is dry (same latency)
+    auto s = sine (440.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    const int base = e->latency ();
+    e->setParam (kGain, 12.0);
+    e->noteOn (60, 1.0f);
+    auto o = run (*e, 48000);
+    const double dry = rms (o.l, 24000, 48000);
+    loadFx (*e, 0, kFxGently);
+    gently::Engine alone (false);
+    alone.prepare (kHostSr, 512);
+    CHECK (e->latency () == base + alone.latency (), "its latency is reported: %d (%d + %d)", e->latency (), base, alone.latency ());
+    setFx (*e, 0, gently::bandParam (0, gently::kFreq), 440.0);
+    setFx (*e, 0, gently::bandParam (0, gently::kRange), 12.0);
+    setFx (*e, 0, gently::bandParam (1, gently::kOn), 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    const double cut = rms (o.l, 24000, 48000);
+    CHECK (cut < dry * 0.7, "the band turns it down: %.2f dB", 20.0 * std::log10 (cut / dry));
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    CHECK (e->latency () == base + alone.latency (), "off, the same latency: %d", e->latency ());
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    CHECK (std::fabs (rms (o.l, 24000, 48000) / dry - 1.0) < 0.01, "off: dry (%.3f)", rms (o.l, 24000, 48000) / dry);
+}
+
 TEST (settings_text_roundtrip)
 {
     // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back

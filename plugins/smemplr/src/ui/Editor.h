@@ -36,6 +36,9 @@ class LevelView;
 namespace smoothr {
 class HistoryView;
 }
+namespace gently {
+class GentlyView;
+}
 namespace pk {
 class ScopeView;
 }
@@ -159,6 +162,7 @@ private:
     wubr::BandView* wubrBands = nullptr;
     levlr::LevelView* levlrView = nullptr; // the Levlr page's band display
     smoothr::HistoryView* smoothrView = nullptr; // the Smoothr page's history
+    gently::GentlyView* gentlyView = nullptr;    // the Gently page's band display
     wubr::ShapeView* wubrShapes[2] {};
     int wubrBand = 0;
     std::vector<VSTGUI::CView*> wubrBandViews[2], wubrBandButtons;

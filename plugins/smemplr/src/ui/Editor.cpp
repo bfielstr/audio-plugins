@@ -35,6 +35,8 @@
 #include "levlr/src/ui/LevelView.h"
 #include "smoothr/src/ui/Help.h"
 #include "smoothr/src/ui/HistoryView.h"
+#include "gently/src/ui/GentlyView.h"
+#include "gently/src/ui/Help.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cfileselector.h"
@@ -275,6 +277,7 @@ void Editor::onClose ()
     wubrBands = nullptr;
     levlrView = nullptr;
     smoothrView = nullptr;
+    gentlyView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -1121,6 +1124,7 @@ void Editor::clearBody ()
     wubrBands = nullptr;
     levlrView = nullptr;
     smoothrView = nullptr;
+    gentlyView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -1406,6 +1410,45 @@ void Editor::buildBody ()
             add (new Knob (knobRect (720, 156), h, levlr::kOutput, nullptr, true), tip (levlr::kOutput));
             break;
         }
+        case kFxGently:
+        {
+            // Gently's own IDs throughout (gently::)
+            auto tip = [] (uint32_t id) { return gently::help::forParam (id); };
+            gentlyView = new gently::GentlyView (CRect (8, 8, 470, 226), h, [this, s] () -> const gently::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.gently[(size_t)s] : nullptr;
+            });
+            add (gentlyView, gently::help::kDisplay);
+            // the bands: a row each (band 1, band 2, Sub), On and its values
+            const char* heads[5] = {"", "Freq", "Width", "Range", "Thresh"};
+            for (int c = 1; c < 5; ++c)
+            {
+                auto* hl = new Label (CRect (540 + (c - 1) * 74, 6, 610 + (c - 1) * 74, 20), heads[c], 9.5, false, 1);
+                hl->setDim (true);
+                g->addView (hl);
+            }
+            for (int k = 0; k < gently::kAllBands; ++k)
+            {
+                const double y = 22 + k * 24;
+                add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k), k == gently::kSub ? "Sub" : (k == 0 ? "Band 1" : "Band 2")),
+                     tip (gently::onParam (k)));
+                add (new NumberBox (CRect (540, y, 610, y + 20), h, gently::freqParam (k)), tip (gently::freqParam (k)));
+                if (k != gently::kSub)
+                    add (new NumberBox (CRect (614, y, 684, y + 20), h, gently::bandParam (k, gently::kWidth)), tip (gently::bandParam (k, gently::kWidth)));
+                add (new NumberBox (CRect (688, y, 758, y + 20), h, gently::rangeParam (k)), tip (gently::rangeParam (k)));
+                add (new NumberBox (CRect (762, y, 832, y + 20), h, gently::thresholdParam (k)), tip (gently::thresholdParam (k)));
+            }
+            // Advanced (the Thresholds and the region Drive work), the Drive; the detector, stereo, mix, output
+            add (new Toggle (CRect (480, 100, 568, 120), h, gently::kAdvanced, "Advanced"), tip (gently::kAdvanced));
+            add (new Toggle (CRect (574, 100, 630, 120), h, gently::kDrive, "Drive"), tip (gently::kDrive));
+            add (new NumberBox (CRect (634, 100, 704, 120), h, gently::kDriveAmount), tip (gently::kDriveAmount));
+            g->addView (new Label (CRect (712, 102, 758, 118), "Stereo", 10.0, false, 2));
+            add (new Choice (CRect (762, 100, 832, 120), h, gently::kStereo), tip (gently::kStereo));
+            const uint32_t knobs[4] = {gently::kAttack, gently::kRelease, gently::kMix, gently::kOutput};
+            for (int i = 0; i < 4; ++i)
+                add (new Knob (knobRect (484 + i * 88, 132), h, knobs[i], nullptr, i == 3), tip (knobs[i]));
+            break;
+        }
         case kFxSmoothr:
         {
             // Smoothr's own IDs throughout (smoothr::)
@@ -1622,6 +1665,8 @@ void Editor::idle ()
         levlrView->idle ();
     if (smoothrView)
         smoothrView->idle ();
+    if (gentlyView)
+        gentlyView->idle ();
     for (auto* shape : wubrShapes)
         if (shape)
             shape->idle ();

@@ -631,6 +631,73 @@ int main (int argc, char** argv)
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 
+        // the kinds that did not fit the rack above (it has 8 slots): Gently and Smoothr, their pages (every
+        // parameter with a control, or listed as not shown), and Copy / Paste between two Smoothr slots
+        {
+            loadFx (0, smemplr::kFxGently);
+            loadFx (1, smemplr::kFxSmoothr);
+            loadFx (2, smemplr::kFxSmoothr);
+            const uint32_t ceil1 = smemplr::slotBlockParam (1, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
+            const uint32_t ceil2 = smemplr::slotBlockParam (2, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
+            rig.param (ceil1, 0.2);
+            EditorWindow fx (rig.controller);
+            CHECK (fx.ok (), "fx editor (gently, smoothr)");
+            const double tabY = smemplr::Editor::kFxTabTop + 10, ctlY = smemplr::Editor::kFxCtlTop + 10;
+            auto tabX = [] (int pos) { return 8 + pos * smemplr::Editor::kFxTabWidth + 40; };
+            const int more[2] = {smemplr::kFxGently, smemplr::kFxSmoothr};
+            const char* moreNames[2] = {"gently", "smoothr"};
+            for (int t = 0; t < 2; ++t)
+            {
+                fx.click (tabX (t), tabY);
+                rig.note (60, 1.0f);
+                for (int i = 0; i < 12; ++i)
+                {
+                    rig.render (0.05, out);
+                    pump (0.03);
+                }
+                rig.note (60, 0.0f);
+                CHECK (fx.savePng (outDir + "/ui_fx_" + moreNames[t] + ".png"), "fx %s snapshot", moreNames[t]);
+                std::set<uint32_t> shown;
+                int reported = -1;
+                std::ifstream rep (rackReport);
+                for (std::string line; std::getline (rep, line);)
+                {
+                    std::istringstream ls (line);
+                    int type = -1;
+                    ls >> type;
+                    if (type != more[t])
+                        continue;
+                    reported = type;
+                    shown.clear ();
+                    for (uint32_t id; ls >> id;)
+                        shown.insert (id);
+                }
+                CHECK (reported == more[t], "rack %s: the page was reported", moreNames[t]);
+                const auto& table = smemplr::fxTable (more[t]);
+                const auto& hidden = smemplr::rackHiddenParams (more[t]);
+                for (uint32_t id = 0; id < table.size (); ++id)
+                {
+                    const bool listed = std::any_of (hidden.begin (), hidden.end (),
+                                                     [id] (const smemplr::RackHidden& h) { return id >= h.first && id <= h.last; });
+                    CHECK (listed || shown.count (id) == 1, "rack %s: \"%s\" (%u) has no control on the page", moreNames[t],
+                           table.info (id).name, id);
+                }
+            }
+            // Copy on slot 2's page, Paste on slot 3's: the Ceiling comes along
+            fx.click (tabX (1), tabY);
+            pump (0.1);
+            fx.click (8 + 284 + 26, ctlY); // Copy
+            fx.click (tabX (2), tabY);
+            pump (0.1);
+            fx.click (8 + 340 + 26, ctlY); // Paste
+            pump (0.1);
+            CHECK (std::fabs (rig.controller->getParamNormalized (ceil2) - 0.2) < 1e-9, "pasted: the ceiling %f",
+                   rig.controller->getParamNormalized (ceil2));
+        }
+        for (int s = 0; s < smemplr::kRackSlots; ++s)
+            rig.param (slotParam (s, smemplr::kSlotType), 0.0);
+        rig.render (0.3, out);
+
         auto set = [&] (uint32_t id, double plain) { rig.controller->setParamNormalized (id, smemplr::toNormalized (id, plain)); };
         auto st3 = baseState (wav);
         st3.norm[smemplr::kMode] = smemplr::toNormalized (smemplr::kMode, smemplr::kModeSlicing);

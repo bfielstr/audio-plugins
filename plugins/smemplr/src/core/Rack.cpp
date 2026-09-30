@@ -145,6 +145,10 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {smoothr::kTailExt2Base, smoothr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
     };
     static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
+    static const std::vector<RackHidden> gentlyHidden {
+        {gently::kTailBase, gently::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+    };
+    static_assert (gently::kNumParams <= kSlotBlock, "Gently's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
     };
@@ -157,6 +161,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         case kFxWubr: return wubrHidden;
         case kFxLevlr: return levlrHidden;
         case kFxSmoothr: return smoothrHidden;
+        case kFxGently: return gentlyHidden;
         default: return none;
     }
 }
@@ -229,6 +234,7 @@ const pk::ParamTable& fxTable (int type)
         case kFxWubr: return wubr::paramTable ();
         case kFxLevlr: return levlr::paramTable ();
         case kFxSmoothr: return smoothr::paramTable ();
+        case kFxGently: return gently::paramTable ();
         default: return empty;
     }
 }
@@ -333,6 +339,7 @@ void Rack::prepare (double sampleRate, int maxBlockSize)
         s->wubr.prepare (sr, maxBlock);
         s->levlr.prepare (sr, maxBlock);
         s->smoothr.prepare (sr, maxBlock);
+        s->gently.prepare (sr, maxBlock);
         applyAll (*s);
     }
 }
@@ -349,6 +356,7 @@ void Rack::reset ()
         s->wubr.reset ();
         s->levlr.reset ();
         s->smoothr.reset ();
+        s->gently.reset ();
     }
 }
 
@@ -364,6 +372,7 @@ void Rack::setMeters (RackMeters* m)
         s.wubr.setMeters (m ? &m->wubr[(size_t)i] : nullptr);
         s.levlr.setMeters (m ? &m->levlr[(size_t)i] : nullptr);
         s.smoothr.setMeters (m ? &m->smoothr[(size_t)i] : nullptr);
+        s.gently.setMeters (m ? &m->gently[(size_t)i] : nullptr);
     }
 }
 
@@ -390,6 +399,10 @@ void Rack::apply (Slot& s, uint32_t block)
             // its own saturator stays off in the rack (a Smacheratr slot before it does that)
             s.smoothr.setParam (j, j == smoothr::kTailBase + pk::kTailOn ? 0.0 : v);
             break;
+        case kFxGently:
+            // off: fully dry (its dry path is delayed to its latency)
+            s.gently.setParam (j, j == gently::kMix && !s.on ? 0.0 : v);
+            break;
         default: break; // the M/S EQ reads its values when it runs
     }
 }
@@ -409,6 +422,7 @@ void Rack::applyAll (Slot& s)
         case kFxWubr: s.wubr.reset (); break;
         case kFxLevlr: s.levlr.reset (); break;
         case kFxSmoothr: s.smoothr.reset (); break;
+        case kFxGently: s.gently.reset (); break;
         default: break;
     }
 }
@@ -435,6 +449,8 @@ void Rack::setParam (uint32_t id, double plain)
         s.multidyn.setBypass (!s.on);
         if (s.type == kFxSmacheratr)
             apply (s, smacheratr::kDryWet);
+        else if (s.type == kFxGently)
+            apply (s, gently::kMix);
     }
     else
     {
@@ -454,6 +470,8 @@ int Rack::latency () const
             l += s->sat.latency ();
         else if (s->type == kFxPara)
             l += s->para.latency (); // its drive's oversampling, on or off
+        else if (s->type == kFxGently)
+            l += s->gently.latency (); // its region Drive's oversampler, always in the path
         else if (s->type == kFxSmoothr)
             l += s->smoothr.latency (); // the limiter's look-ahead (and its saturator's, off), on or off
     return l;
@@ -531,6 +549,7 @@ void Rack::process (float* L, float* R, int n)
                 if (s.on)
                     s.levlr.process (L, R, L, R, n);
                 break;
+            case kFxGently: s.gently.process (L, R, L, R, n); break; // off: fully dry, same latency
             case kFxSmoothr:
                 if (s.on)
                     s.smoothr.process (L, R, L, R, n);

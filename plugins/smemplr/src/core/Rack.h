@@ -20,6 +20,7 @@
 #include "wubr/src/core/Engine.h"
 #include "levlr/src/core/Engine.h"
 #include "smoothr/src/core/Engine.h"
+#include "gently/src/core/Engine.h"
 
 #include "pluginkit/ParamTable.h"
 
@@ -92,6 +93,7 @@ struct RackMeters
     std::array<wubr::Meters, kRackSlots> wubr;
     std::array<levlr::Meters, kRackSlots> levlr;
     std::array<smoothr::Meters, kRackSlots> smoothr;
+    std::array<gently::Meters, kRackSlots> gently;
 };
 
 class Rack
@@ -131,6 +133,7 @@ private:
         wubr::Engine wubr {false};
         levlr::Engine levlr {false};
         smoothr::Engine smoothr;
+        gently::Engine gently {false};
     };
     void apply (Slot& s, uint32_t j);      // one value to the slot's current effect
     void applyAll (Slot& s);               // every value (a new kind), and a clean start
