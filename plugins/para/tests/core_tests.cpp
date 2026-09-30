@@ -1,7 +1,10 @@
 // Headless tests for the Para DSP. Run: ./para_tests [filter]
 #include "Engine.h"
+#include "Oversampler.h"
 #include "Params.h"
 #include "Svf.h"
+
+#include "smacheratr/src/core/Oversampler.h"
 
 #include <chrono>
 #include <cmath>
@@ -175,13 +178,19 @@ TEST (slopes)
     const char* names[kNumSlopes] = {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"};
     for (int s = 0; s < kNumSlopes; ++s)
         CHECK (t.toText (kSlope, s) == names[s], "%d: %s", s, t.toText (kSlope, s).c_str ());
-    // the model's slope far from the cutoff is the slope's (dB per octave), both filters
+    // the analog model's slope far from the cutoff (a thousandth of it, a thousand times it) is the
+    // slope's: its order x 20 log10 (2) dB per octave (6.02 dB a pole, which "6 dB per octave" rounds),
+    // both filters. (Far down: 96 dB is -960 dB there, so the levels are not floored.)
     const int dbPerOct[kNumSlopes - 1] = {6, 12, 18, 24, 36, 48, 60, 72, 84, 96};
+    auto analogDb = [] (int s, bool hp, double f) {
+        return 20.0 * std::log10 (std::abs (filterResponse (s, hp, f, 1000.0, 0.0)));
+    };
     for (int s = 0; s < kNumSlopes - 1; ++s)
     {
-        const double hp = modelDb (s, true, 1.0, 1000.0, 0.0, 1e9) - modelDb (s, true, 0.5, 1000.0, 0.0, 1e9);
-        const double lp = modelDb (s, false, 1e6, 1000.0, 0.0, 1e9) - modelDb (s, false, 2e6, 1000.0, 0.0, 1e9);
-        CHECK (std::fabs (hp - dbPerOct[s]) < 0.01 && std::fabs (lp - dbPerOct[s]) < 0.01, "%s: %f / %f dB per octave", names[s], hp, lp);
+        const double perPole = 20.0 * std::log10 (2.0), expect = dbPerOct[s] / 6 * perPole;
+        const double hp = analogDb (s, true, 1.0) - analogDb (s, true, 0.5);
+        const double lp = analogDb (s, false, 1e6) - analogDb (s, false, 2e6);
+        CHECK (std::fabs (hp - expect) < 0.01 && std::fabs (lp - expect) < 0.01, "%s: %f / %f dB per octave (%f)", names[s], hp, lp, expect);
     }
     // resonance 0: -3 dB at the cutoff (first order, 18 dB, Brickwall) or -6 (Linkwitz-Riley); the handle's peak
     for (int s = 0; s < kNumSlopes; ++s)
@@ -280,35 +289,60 @@ static double largestStep (const std::vector<float>& x, size_t from)
     return step;
 }
 
+// The loudest of what is above 12 kHz in x from sample `from` on (the 96 dB high-pass at 12 kHz: a tone
+// at 5 kHz is 120 dB down), as a level: clicks and zipper noise are broadband, a filter moving smoothly
+// over tones below it adds nothing up there.
+static double clickResidueDb (const std::vector<float>& x, size_t from)
+{
+    const SlopeShape& sh = slopeShape (kSlope96);
+    FilterCoeffs c;
+    c.set (kSlope96, 12000.0, 0.0, kSr);
+    FilterState st;
+    st.reset ();
+    double peak = 0.0;
+    for (size_t i = 0; i < x.size (); ++i)
+    {
+        const double y = filterTick (sh, c, st, x[i], true);
+        if (i >= from)
+            peak = std::max (peak, std::fabs (y));
+    }
+    return 20.0 * std::log10 (std::max (1e-12, peak));
+}
+
 TEST (moving_cutoffs_stay_stable_and_smooth)
 {
     // Split swept +-24 semitones five times a second (and the resonance with it), block by block as
-    // automation would, at the steepest slopes: the output stays bounded and moves no faster than the
-    // input does (no clicks); the same with Vocal sweeping the low-pass through the high-pass
+    // automation would, at the steepest slopes: the output stays bounded and nothing clicks; the same
+    // with Vocal sweeping the low-pass through the high-pass (100 Hz to 6.4 kHz and back)
     auto in = tones ({{150.0, -6.0}, {1000.0, -12.0}, {5000.0, -18.0}}, 2.0);
     const double inStep = largestStep (in.l, 0);
-    for (int s : {kSlope60, kSlope84, kSlope96, kSlopeBrickwall, kSlope6})
+    auto sweep = [&] (int s, double res, int mode, double hz) {
+        auto e = engine ();
+        e->setParam (kSlope, s);
+        e->setParam (kHpRes, res);
+        e->setParam (kLpRes, res);
+        e->setParam (kMovement, mode);
+        e->reset ();
+        Sig out;
+        out.l.resize (in.l.size ());
+        out.r.resize (in.r.size ());
+        for (size_t pos = 0; pos < in.l.size (); pos += 64)
+        {
+            const double ph = 2.0 * M_PI * hz * (double)pos / kSr;
+            if (mode == kFree)
+                e->setParam (kSplit, 24.0 * std::sin (ph));
+            else // the low-pass swept through the high-pass and back
+                e->setParam (kLpFreq, 100.0 * std::pow (2.0, 3.0 + 3.0 * std::sin (ph)));
+            e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 64);
+        }
+        return out;
+    };
+    for (int s : {kSlope60, kSlope84, kSlope96, kSlopeBrickwall, kSlope6, kSlope24})
         for (double res : {0.0, 0.5})
             for (int mode : {kFree, kVocal})
             {
-                auto e = engine ();
-                e->setParam (kSlope, s);
-                e->setParam (kHpRes, res);
-                e->setParam (kLpRes, res);
-                e->setParam (kMovement, mode);
-                e->reset ();
-                Sig out;
-                out.l.resize (in.l.size ());
-                out.r.resize (in.r.size ());
-                for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 64, ++k)
-                {
-                    const double ph = 2.0 * M_PI * 5.0 * (double)pos / kSr;
-                    if (mode == kFree)
-                        e->setParam (kSplit, 24.0 * std::sin (ph));
-                    else // the low-pass swept through the high-pass and back
-                        e->setParam (kLpFreq, 100.0 * std::pow (2.0, 3.0 + 3.0 * std::sin (ph)));
-                    e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 64);
-                }
+                const char* name = mode == kFree ? "Free" : "Vocal";
+                const auto out = sweep (s, res, mode, 5.0);
                 bool finite = true;
                 double peak = 0.0;
                 for (float v : out.l)
@@ -317,37 +351,78 @@ TEST (moving_cutoffs_stay_stable_and_smooth)
                     peak = std::max (peak, (double)std::fabs (v));
                 }
                 const double step = largestStep (out.l, 2400);
-                CHECK (finite && peak < (res > 0.0 ? 8.0 : 2.5), "slope %d res %.1f %s: peak %f", s, res, mode == kFree ? "Free" : "Vocal", peak);
-                CHECK (step < (res > 0.0 ? 4.0 : 1.6) * inStep, "slope %d res %.1f %s: largest step %f (the input's %f)", s, res,
-                       mode == kFree ? "Free" : "Vocal", step, inStep);
+                CHECK (finite && peak < (res > 0.0 ? 8.0 : 2.5), "slope %d res %.1f %s: peak %f", s, res, name, peak);
+                // no clicks: nothing broadband (above 12 kHz, where no tone is) but the faint sidebands of the
+                // sweep itself
+                const double hf = clickResidueDb (out.l, 2400);
+                CHECK (hf < -40.0, "slope %d res %.1f %s: %f dB above 12 kHz", s, res, name, hf);
+                if (res <= 0.0) // the output moves no faster than the input does
+                    CHECK (step < 1.6 * inStep, "slope %d res %.1f %s: largest step %f (the input's %f)", s, res, name, step, inStep);
+                else
+                {
+                    // resonant, a peak sweeping over a tone lifts it (+20 dB at 0.5, the low-pass over the 5 kHz
+                    // tone in Vocal), and with it its steps: they are no larger than with the same sweep ten times
+                    // slower (a click would be; the steps of a lifted tone are the same)
+                    const double slow = largestStep (sweep (s, res, mode, 0.5).l, 2400);
+                    CHECK (step < 1.3 * slow, "slope %d res %.1f %s: largest step %f (swept slowly: %f)", s, res, name, step, slow);
+                }
             }
 }
 
 TEST (slope_changes_do_not_click)
 {
-    // every slope in turn, a new one every 50 ms, the filters meeting (they sum flat at every slope):
-    // the 10 ms crossfades never jump
-    auto e = engine ();
-    e->setParam (kHpFreq, 700.0);
-    e->setParam (kLpFreq, 700.0);
-    e->reset ();
+    // every slope in turn, a new one every 50 ms (or one slope throughout), the filters meeting (they
+    // sum flat at every slope)
+    auto render = [] (const Sig& in, bool tail, int fixedSlope) {
+        auto e = std::make_unique<Engine> (tail);
+        e->prepare (kSr, 512);
+        e->setParam (kHpFreq, 700.0);
+        e->setParam (kLpFreq, 700.0);
+        if (fixedSlope >= 0)
+            e->setParam (kSlope, fixedSlope);
+        e->reset ();
+        Sig out;
+        out.l.resize (in.l.size ());
+        out.r.resize (in.r.size ());
+        for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 240, ++k)
+        {
+            if (k % 10 == 0 && fixedSlope < 0)
+                e->setParam (kSlope, (double)((k / 10 * 7) % kNumSlopes)); // jumping around the list
+            e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 240);
+        }
+        return out;
+    };
+    auto slopeAt = [] (size_t k) { return (int)((k / 10 * 7) % kNumSlopes); }; // k: the 240-sample block
     auto in = tones ({{200.0, -6.0}, {3000.0, -12.0}}, 2.0);
-    Sig out;
-    out.l.resize (in.l.size ());
-    out.r.resize (in.r.size ());
-    for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 240, ++k)
-    {
-        if (k % 10 == 0)
-            e->setParam (kSlope, (double)((k / 10 * 7) % kNumSlopes)); // jumping around the list
-        e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 240);
-    }
-    const double step = largestStep (out.l, 4800), inStep = largestStep (in.l, 0);
+    // the 10 ms crossfades never jump
+    const double step = largestStep (render (in, true, -1).l, 4800), inStep = largestStep (in.l, 0);
     CHECK (step < 1.3 * inStep, "largest step %f (the input's %f)", step, inStep);
-    // the level stays (all of them sum flat): no dips around the changes
-    double lowest = 1e9;
-    for (size_t a = 4800; a + 480 <= out.l.size (); a += 480)
-        lowest = std::min (lowest, toneDb (out.l, 200.0, a, a + 480));
-    CHECK (lowest > -6.0 - 1.5, "the 200 Hz tone stays: lowest %f dB", lowest);
+    // each crossfade is exactly the one from the old slope's output to the new one's, as they sound
+    // having run all along: the new filters fade in settled (starting from silence they would ring over
+    // the fade), and in between the output is the slope's. (Every slope's pair sums flat, but each with
+    // its own phase, an all-pass: at 200 Hz from 0 degrees at 6 dB to -170 at 96, so while two with
+    // phases far apart fade across, the tone dips for the 10 ms, as any crossfade between them would:
+    // -8 dB half way from 18 to 96 dB.)
+    const auto out = render (in, false, -1);
+    std::vector<Sig> fixed;
+    for (int sl = 0; sl < kNumSlopes; ++sl)
+        fixed.push_back (render (in, false, sl));
+    double worstFade = 0.0, worstBetween = 0.0;
+    for (size_t i = 4800; i < out.l.size (); ++i)
+    {
+        const size_t k = i / 240, into = i - k / 10 * 2400; // samples since the last change
+        const int to = slopeAt (k);
+        if (into < 480) // fading from the slope before
+        {
+            const double f = (double)(into + 1) / 480.0;
+            const double ideal = fixed[(size_t)slopeAt (k - 10)].l[i] * (1.0 - f) + fixed[(size_t)to].l[i] * f;
+            worstFade = std::max (worstFade, std::fabs (out.l[i] - ideal));
+        }
+        else
+            worstBetween = std::max (worstBetween, (double)std::fabs (out.l[i] - fixed[(size_t)to].l[i]));
+    }
+    CHECK (worstFade < 2e-3, "the crossfades: %g off the ideal one", worstFade);
+    CHECK (worstBetween < 1e-4, "between them: %g off the slope's own output", worstBetween);
 }
 
 TEST (notch_between_the_filters)
@@ -646,6 +721,115 @@ TEST (drive_params)
     CHECK (t.info (kHpDrive).max == 36.0 && t.info (kLpDrive).max == 36.0, "+36 dB");
 }
 
+TEST (old_settings_upgrade)
+{
+    // the three slopes of before (12 / 18 / 24 dB, normalized 0 / 0.5 / 1) keep their slope
+    CHECK (std::lround (toPlain (kSlope, slopeFromThreeChoices (0.0))) == kSlope12 &&
+               std::lround (toPlain (kSlope, slopeFromThreeChoices (0.5))) == kSlope18 &&
+               std::lround (toPlain (kSlope, slopeFromThreeChoices (1.0))) == kSlope24,
+           "12 / 18 / 24 dB");
+    // a setting from before the per-band drive: the one drive (now the high-pass's) goes to the
+    // low-pass too, the slope to its place on the list; nothing else changes
+    auto upgrade = [] (std::vector<std::pair<uint32_t, double>> saved) {
+        std::vector<double> v (kNumParams, -1.0); // -1: not stored
+        for (auto [id, x] : saved)
+            v[id] = x;
+        upgradeToPerBandDrive ([&] (uint32_t id, double& x) { return v[id] >= 0.0 ? (x = v[id], true) : false; },
+                               [&] (uint32_t id, double x) { v[id] = x; });
+        return v;
+    };
+    const double amt = toNormalized (kHpDrive, 18.0);
+    auto v = upgrade ({{kSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, amt}, {kDrivePos, 1.0}, {kHpFreq, 0.3}});
+    CHECK (std::lround (toPlain (kSlope, v[kSlope])) == kSlope18, "slope %f", v[kSlope]);
+    CHECK (v[kLpDriveOn] == 1.0 && v[kLpDrive] == amt && v[kHpDriveOn] == 1.0 && v[kHpDrive] == amt && v[kDrivePos] == 1.0 && v[kHpFreq] == 0.3,
+           "drive copied: %f %f", v[kLpDriveOn], v[kLpDrive]);
+    // nothing stored (a setting from before the drive): both off at 0 dB, the slope left alone (the default)
+    v = upgrade ({{kHpFreq, 0.3}});
+    CHECK (v[kLpDriveOn] == 0.0 && v[kLpDrive] == 0.0 && v[kSlope] == -1.0, "no drive: %f %f, slope %f", v[kLpDriveOn], v[kLpDrive], v[kSlope]);
+    // and it sounds the same: Pre, the one drive on the input of both filters is each filter's drive
+    // the same (the dry part never driven)
+    auto render = [] (bool lpDrive) {
+        auto e = engine ();
+        e->setParam (kHpFreq, 800.0);
+        e->setParam (kLpFreq, 200.0);
+        e->setParam (kHpDriveOn, 1.0);
+        e->setParam (kHpDrive, 18.0);
+        e->setParam (kLpDriveOn, lpDrive ? 1.0 : 0.0);
+        e->setParam (kLpDrive, lpDrive ? 18.0 : 0.0);
+        e->reset ();
+        return run (*e, tones ({{110.0, -6.0}, {1500.0, -12.0}}, 0.3));
+    };
+    const auto both = render (true), hpOnly = render (false);
+    CHECK (toneDb (both.l, 330.0, 4800, 14400) > toneDb (hpOnly.l, 330.0, 4800, 14400) + 10.0,
+           "the low-pass branch driven too: 330 Hz at %f vs %f dB", toneDb (both.l, 330.0, 4800, 14400), toneDb (hpOnly.l, 330.0, 4800, 14400));
+}
+
+TEST (drives_per_band)
+{
+    // only the high-pass's drive on: a low tone (in the low-pass's band) stays clean, a high one gets
+    // harmonics; only the low-pass's: the other way round. Pre and Post alike.
+    for (int pos : {kDrivePre, kDrivePost})
+    {
+        auto h3 = [pos] (bool hpOn, bool lpOn, double f) {
+            auto e = engine ();
+            e->setParam (kHpFreq, 1000.0);
+            e->setParam (kLpFreq, 400.0);
+            e->setParam (kHpDriveOn, hpOn ? 1.0 : 0.0);
+            e->setParam (kLpDriveOn, lpOn ? 1.0 : 0.0);
+            e->setParam (kHpDrive, 18.0);
+            e->setParam (kLpDrive, 18.0);
+            e->setParam (kDrivePos, pos);
+            e->reset ();
+            auto out = run (*e, tones ({{f, -6.0}}, 0.5));
+            return toneDb (out.l, 3.0 * f, 12000, 24000);
+        };
+        const double lowHp = h3 (true, false, 100.0), lowLp = h3 (false, true, 100.0);
+        const double highHp = h3 (true, false, 3000.0), highLp = h3 (false, true, 3000.0);
+        const char* name = pos == kDrivePre ? "Pre" : "Post";
+        CHECK (lowLp > -40.0 && lowHp < lowLp - 30.0, "%s, 100 Hz: 300 Hz at %f (low-pass driven) / %f dB (high-pass driven)", name, lowLp,
+               lowHp);
+        CHECK (highHp > -40.0 && highLp < highHp - 30.0, "%s, 3 kHz: 9 kHz at %f (high-pass driven) / %f dB (low-pass driven)", name,
+               highHp, highLp);
+    }
+}
+
+TEST (oversampler_is_smacheratrs)
+{
+    // Para's polyphase oversampler computes what Smacheratr's does (the same filters), at every rate
+    for (double sr : {44100.0, 48000.0, 96000.0, 192000.0})
+    {
+        smacheratr::Oversampler ref;
+        Oversampler4x os;
+        ref.prepare (sr, 256);
+        os.prepare (sr, 256);
+        CHECK (ref.latency () == os.latency (), "%.0f Hz: latency %d vs %d", sr, os.latency (), ref.latency ());
+        uint32_t seed = 1;
+        std::vector<float> x (256), up1 (1024), up2 (1024), d1 (256), d2 (256);
+        double worstUp = 0.0, worstDown = 0.0;
+        for (int b = 0; b < 20; ++b)
+        {
+            for (auto& v : x)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                v = (float)((double)(seed >> 8) / 16777216.0 * 2.0 - 1.0);
+            }
+            const int n = b % 2 ? 256 : 97;
+            ref.up (x.data (), up1.data (), n);
+            os.up (x.data (), up2.data (), n);
+            for (int i = 0; i < 4 * n; ++i)
+            {
+                worstUp = std::max (worstUp, (double)std::fabs (up1[(size_t)i] - up2[(size_t)i]));
+                up1[(size_t)i] = up2[(size_t)i] = std::tanh (2.0f * up1[(size_t)i]); // something in between
+            }
+            ref.down (up1.data (), d1.data (), n);
+            os.down (up2.data (), d2.data (), n);
+            for (int i = 0; i < n; ++i)
+                worstDown = std::max (worstDown, (double)std::fabs (d1[(size_t)i] - d2[(size_t)i]));
+        }
+        CHECK (worstUp < 1e-5 && worstDown < 1e-5, "%.0f Hz: up %g, down %g apart", sr, worstUp, worstDown);
+    }
+}
+
 TEST (drive_latency_is_the_same_everywhere)
 {
     // an impulse through the dry path comes out at latency (), with the drive off or on (at 0 dB and
@@ -920,12 +1104,12 @@ TEST (performance)
     // the processor's own CPU time (not the wall clock, which other programs running at the same time
     // stretch), the best of three renders of 10 s
     auto in = tones ({{55.0, -6.0}, {1000.0, -12.0}, {8000.0, -20.0}}, 10.0);
-    auto cpuSecs = [&] (bool drive) {
+    auto cpuSecs = [&] (bool drive, int slope) {
         double best = 1e9;
         for (int i = 0; i < 3; ++i)
         {
             auto e = engine ();
-            e->setParam (kSlope, kSlope24);
+            e->setParam (kSlope, slope);
             e->setParam (kEnvAmount, 12.0);
             e->noteOn (64);
             if (drive)
@@ -941,13 +1125,20 @@ TEST (performance)
         }
         return best;
     };
-    const double secs = cpuSecs (false);
+    const double secs = cpuSecs (false, kSlope24);
     std::printf ("    CPU: %.2f%% of one core (stereo, 24 dB)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
-    // with the drive on (4x oversampled)
-    const double secs1 = cpuSecs (true);
-    std::printf ("    CPU: %.2f%% of one core with the drive on\n", 100.0 * secs1 / 10.0);
-    CHECK (secs1 / 10.0 < 0.05, "too slow with the drive");
+    // with both drives on (each 4x oversampled)
+    const double secs1 = cpuSecs (true, kSlope24);
+    std::printf ("    CPU: %.2f%% of one core with both drives on\n", 100.0 * secs1 / 10.0);
+    CHECK (secs1 / 10.0 < 0.05, "too slow with the drives");
+    // the steepest slopes (eight sections a filter; Brickwall's all-passes) with both drives
+    for (int slope : {kSlope96, kSlopeBrickwall})
+    {
+        const double t = cpuSecs (true, slope);
+        std::printf ("    CPU: %.2f%% of one core, %s, both drives on\n", 100.0 * t / 10.0, paramTable ().toText (kSlope, slope).c_str ());
+        CHECK (t / 10.0 < 0.05, "too slow at %s", paramTable ().toText (kSlope, slope).c_str ());
+    }
 }
 
 int main (int argc, char** argv)

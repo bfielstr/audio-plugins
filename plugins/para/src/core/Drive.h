@@ -1,10 +1,11 @@
 // Para's drive: a gain into Smacheratr's Analog curve (smacheratr::analogClip), 4x oversampled with
-// Smacheratr's oversampler, left and right apart. The stage is always in the path: off, it only
-// delays the signal by the oversampler's latency, so the latency never changes. On and off
-// crossfade (20 ms) between that delayed signal and the curve's output.
+// Smacheratr's oversampling filters (computed polyphase: Oversampler.h), left and right apart. The
+// stage is always in the path: off, it only delays the signal by the oversampler's latency, so the
+// latency never changes. On and off crossfade (20 ms) between that delayed signal and the curve's
+// output.
 #pragma once
 
-#include "smacheratr/src/core/Oversampler.h"
+#include "Oversampler.h"
 #include "smacheratr/src/core/Shaper.h"
 
 #include <algorithm>
@@ -124,7 +125,7 @@ private:
             pos = (pos + n) % len;
     }
 
-    smacheratr::Oversampler os[2];
+    Oversampler4x os[2];
     std::vector<float> dry[2]; // the delay the dry signal takes, as long as the oversampler's
     std::vector<float> pre, wet, gGain, gAmt, osBuf;
     int maxBlock = 512, pos = 0;
