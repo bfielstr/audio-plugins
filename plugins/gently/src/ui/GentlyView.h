@@ -1,16 +1,17 @@
-// Gently's two bands on a frequency display, the way a multiband compressor shows its bands (and the
-// way Smacheratr's colour display shows its Gently): each band's region shaded between its edges, the
-// most it can cut outlined (dashed), the cut it is making right now filled in from the 0 dB line and
-// moving with the audio, a handle at its centre as deep as its Range. The whole response in white
-// (both bands at their cuts now, with their phase: the curve is what the sound gets). Behind: the
-// input's spectrum (a line) and the output's (filled), so the cut shows between them.
-//   handle, sideways              the band's Frequency
+// Gently's two bands and its Sub band on a frequency display, the way a multiband compressor shows its
+// bands (and the way Smacheratr's colour display shows its Gently): each band's region shaded between
+// its edges, the most it can cut outlined (dashed), the cut it is making right now filled in from the
+// 0 dB line and moving with the audio, a handle at its centre as deep as its Range (Sub's at its Freq,
+// where it starts to taper). The whole response in white (every band at its cut now, with its phase:
+// the curve is what the sound gets). Behind: the input's spectrum (a line) and the output's (filled),
+// so the cut shows between them. Band 1 green, band 2 blue, Sub amber (Smacheratr's colours).
+//   handle, sideways              the band's Frequency (Sub: 20 - 100 Hz)
 //   handle, up / down             its Range (the handle sits at the most it cuts: drag down for more)
-//   band edge, sideways           its Width (the band stays centred)
+//   band edge, sideways           its Width (the band stays centred; Sub has no width)
 //   Alt (Option) + drag on a band, sideways   its Width (right: wider)
 //   wheel on a handle (held, or with Shift)   its Width
 //   double-click / right-click a handle       resets the band's Frequency, Width and Range
-//   the band's name at the top                switches the band on or off
+//   the band's readout at the top             switches the band (Sub) on or off
 #pragma once
 
 #include "../core/Engine.h"
@@ -39,7 +40,7 @@ public:
     using MeterSource = std::function<const Meters* ()>;
 
     GentlyView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
-    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently colours (green, blue)
+    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently colours (green, blue, amber)
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
@@ -55,9 +56,10 @@ public:
     double yOfDb (double db) const;
     double plotTop () const { return getViewSize ().top + 8.0; }
     double plotBottom () const { return getViewSize ().bottom - 16.0; }
-    VSTGUI::CPoint handle (int band) const; // at its centre, as deep as its Range
+    VSTGUI::CPoint handle (int band) const; // at its centre (Sub: its Freq), as deep as its Range
     double edgeX (int band, bool high) const;
-    VSTGUI::CRect pill (int band) const;     // its name and cut, at the top
+    VSTGUI::CRect pill (int band) const;     // its name and cut, at the top (a row lower where they would overlap)
+    double pillsBottom () const;             // under the lowest readout (the edges start there)
 
 private:
     enum class Drag { None, Handle, Low, High, Width };
@@ -77,7 +79,7 @@ private:
     int dragBand = 0, hoverBand = -1;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRange = 0.0, startWidth = 0.0;
-    float shownCut[kBands] = {0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
+    float shownCut[kAllBands] = {0.0f, 0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
 
     // the analyser: input and output
     std::vector<float> window, bufIn, bufOut, specIn, specOut;

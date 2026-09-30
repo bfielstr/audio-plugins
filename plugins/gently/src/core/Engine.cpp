@@ -61,7 +61,7 @@ ParamArray defaultParams ()
 
 void Engine::Channel::reset ()
 {
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         hp[k].reset ();
         lp[k].reset ();
@@ -87,7 +87,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));     // 20 ms on Output, Mix and the Drive
     smoothCut = (float)(1.0 - std::exp (-1.0 / (0.002 * sr))); // 2 ms on the cuts (they move every kCtrl samples)
     fxStep = (float)(1.0 / (0.005 * sr));                       // 5 ms out, 5 ms back in
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
         bandFreq[k] = bandWidth[k] = -1.0; // the bands are designed for this rate
     retune (true);
     if (meters)
@@ -111,10 +111,10 @@ void Engine::reset ()
 {
     for (auto& c : chan)
         c.reset ();
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         resetBand (k);
-        running[k] = bandWorks (p[bandParam (k, kOn)], p[bandParam (k, kRange)]);
+        running[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
     }
     mode = std::clamp ((int)std::lround (p[kStereo]), 0, kNumStereoModes - 1);
     fx = 1.0f;
@@ -138,12 +138,12 @@ void Engine::setParam (uint32_t id, double plain)
 
 void Engine::retune (bool force)
 {
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
-        const double f = p[bandParam (k, kFreq)], w = p[bandParam (k, kWidth)];
+        const double f = p[freqParam (k)], w = k == kSub ? 0.0 : p[bandParam (k, kWidth)]; // (the Sub band has no width)
         if (!force && f == bandFreq[k] && w == bandWidth[k])
             continue;
-        const smacheratr::ClarityBand b = smacheratr::clarityBand (sr, f, w);
+        const smacheratr::ClarityBand b = k == kSub ? smacheratr::subBand (sr, f) : smacheratr::clarityBand (sr, f, w);
         bandFreq[k] = f;
         bandWidth[k] = w;
         bandNorm[k] = (float)b.norm;
@@ -175,19 +175,19 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     atk = coeffOfMs (p[kAttack], sr);
     rel = coeffOfMs (p[kRelease], sr);
     retune (false);
-    bool works[kBands], anyWorks = false;
-    double thresholdDb[kBands], rangeDb[kBands];
-    for (int k = 0; k < kBands; ++k)
+    bool works[kAllBands], anyWorks = false;
+    double thresholdDb[kAllBands], rangeDb[kAllBands];
+    for (int k = 0; k < kAllBands; ++k)
     {
-        works[k] = bandWorks (p[bandParam (k, kOn)], p[bandParam (k, kRange)]);
+        works[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
         anyWorks |= works[k];
         if (works[k] && !running[k])
         {
             resetBand (k); // starting: from silence, no cut
             running[k] = true;
         }
-        thresholdDb[k] = advanced ? p[bandParam (k, kThreshold)] : smacheratr::kClarityThresholdDb;
-        rangeDb[k] = p[bandParam (k, kRange)];
+        thresholdDb[k] = advanced ? p[thresholdParam (k)] : smacheratr::kClarityThresholdDb;
+        rangeDb[k] = p[rangeParam (k)];
     }
 
     // the region Drive (Advanced): faded in and out, and only running while it is in, so with it off
@@ -230,7 +230,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
                 mode = modeT;
                 hold = 0;
                 modeFlags ();
-                for (int k = 0; k < kBands; ++k)
+                for (int k = 0; k < kAllBands; ++k)
                     resetBand (k);
                 for (auto& c : chan)
                     c.os.reset ();
@@ -248,7 +248,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         {
             ctrlCountdown = kCtrl - 1;
             for (int e = 0; e < (linked ? 1 : 2); ++e)
-                for (int k = 0; k < kBands; ++k)
+                for (int k = 0; k < kAllBands; ++k)
                 {
                     const double level = 10.0 * std::log10 (std::max (1e-12, env[e][k]));
                     cutDb[e][k] = works[k] ? (float)smacheratr::clarityCutDb (level, thresholdDb[k], rangeDb[k]) : 0.0f;
@@ -256,7 +256,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
                 }
         }
         for (int e = 0; e < (linked ? 1 : 2); ++e)
-            for (int k = 0; k < kBands; ++k)
+            for (int k = 0; k < kAllBands; ++k)
                 if (running[k])
                     gBand[e][k] += (gTarget[e][k] - gBand[e][k]) * smoothCut;
 
@@ -278,7 +278,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
             v[0] = 0.5f * (xl + xr);
             v[1] = 0.5f * (xl - xr);
         }
-        double power[2][kBands] = {};
+        double power[2][kAllBands] = {};
         for (int c = 0; c < 2; ++c)
         {
             region[c][i] = 0.0f;
@@ -286,7 +286,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
                 continue;
             const int e = linked ? 0 : c;
             double d = v[c], cutBands = 0.0; // cutBands: the bands as they leave, after their cuts (the region Drive's input)
-            for (int k = 0; k < kBands; ++k)
+            for (int k = 0; k < kAllBands; ++k)
                 if (running[k])
                 {
                     const double band = chan[c].lp[k].process (chan[c].hp[k].process (d)) * bandNorm[k];
@@ -300,7 +300,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
                 region[c][i] = (float)(fx * cutBands);
         }
         for (int e = 0; e < (linked ? 1 : 2); ++e)
-            for (int k = 0; k < kBands; ++k)
+            for (int k = 0; k < kAllBands; ++k)
                 if (works[k])
                     env[e][k] += (power[e][k] - env[e][k]) * (power[e][k] > env[e][k] ? atk : rel);
         // back to left / right, then the delay that lines up with the region Drive
@@ -310,7 +310,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     }
 
     // a band that stopped working runs until its cut has let go, then rests
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
         if (running[k] && !works[k])
         {
             bool done = true;
@@ -362,8 +362,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         for (int i = 0; i < n; ++i)
             meters->scope.push (inMono[i], 0.5f * (outL[i] + outR[i]));
         // each band's cut and level: the larger of the two detectors when they work apart
-        float cut[kBands], level[kBands];
-        for (int k = 0; k < kBands; ++k)
+        float cut[kAllBands], level[kAllBands];
+        for (int k = 0; k < kAllBands; ++k)
         {
             cut[k] = 0.0f;
             level[k] = -120.0f;
@@ -382,6 +382,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         meters->bands.clarity2Db.store (-cut[1], std::memory_order_relaxed);
         meters->bands.clarityLevelDb.store (level[0], std::memory_order_relaxed);
         meters->bands.clarity2LevelDb.store (level[1], std::memory_order_relaxed);
+        meters->bands.claritySubDb.store (-cut[kSub], std::memory_order_relaxed);
+        meters->bands.claritySubLevelDb.store (level[kSub], std::memory_order_relaxed);
         meters->blocks.fetch_add (1, std::memory_order_relaxed);
     }
 }

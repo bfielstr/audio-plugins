@@ -53,7 +53,7 @@ std::string hzText (double hz)
     return buf;
 }
 
-// A band's name in its colour and the edges of its region now.
+// A band's name in its colour and the edges of its region now (the Sub band: where it starts to taper).
 class BandHeader : public CView
 {
 public:
@@ -64,7 +64,7 @@ public:
     void draw (CDrawContext* ctx) override
     {
         const CRect r = getViewSize ();
-        const bool on = bandWorks (host->plainValue (bandParam (band, kOn)), host->plainValue (bandParam (band, kRange)));
+        const bool on = bandWorks (host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
         if (auto p = owned (ctx->createGraphicsPath ()))
         {
             p->addRoundRect (r, 3.0);
@@ -73,17 +73,23 @@ public:
         }
         ctx->setFillColor (GentlyView::bandColor (band, on ? 255 : 90));
         ctx->drawRect (CRect (r.left, r.top + 3, r.left + 3, r.bottom - 3), kDrawFilled);
-        const smacheratr::ClarityBand b = smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)),
-                                                                   host->plainValue (bandParam (band, gently::kWidth)));
         char name[16];
-        std::snprintf (name, sizeof (name), "BAND %d", band + 1);
+        std::snprintf (name, sizeof (name), band == kSub ? "SUB" : "BAND %d", band + 1);
         ctx->setFont (pk::theme::font (10.5, true));
         ctx->setFontColor (GentlyView::bandColor (band, on ? 255 : 130));
         ctx->drawString (name, CRect (r.left + 9, r.top, r.right, r.bottom), kLeftText, true);
         ctx->setFont (pk::theme::font (9.5));
         ctx->setFontColor (on ? pk::theme::kText : pk::theme::kTextDim);
-        ctx->drawString ((hzText (b.lowHz) + " - " + hzText (b.highHz)).c_str (), CRect (r.left, r.top, r.right - 6, r.bottom), kRightText,
-                         true);
+        std::string edges;
+        if (band == kSub)
+            edges = "20 - " + hzText (host->plainValue (kSubFreq));
+        else
+        {
+            const smacheratr::ClarityBand b = smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)),
+                                                                       host->plainValue (bandParam (band, gently::kWidth)));
+            edges = hzText (b.lowHz) + " - " + hzText (b.highHz);
+        }
+        ctx->drawString (edges.c_str (), CRect (r.left, r.top, r.right - 6, r.bottom), kRightText, true);
     }
 
 private:
@@ -115,12 +121,12 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "gently", 14.0, true));
-    root->addView (new pk::PresetBar (CRect (580, 6, 776, 28), ctl));
-    auto* helpBtn = new ActionButton (CRect (784, 6, 806, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
+    root->addView (new pk::PresetBar (CRect (680, 6, 876, 28), ctl));
+    auto* helpBtn = new ActionButton (CRect (884, 6, 906, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide these help tooltips.");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (CPoint (812, 28)); }));
+    root->addView (new ActionButton (CRect (912, 6, 992, 28), "Menu", [this] { showMenu (CPoint (912, 28)); }));
 
     auto metersOf = [c = ctl] () -> const Meters* {
         auto* s = c->getShared ();
@@ -136,13 +142,13 @@ void Editor::buildUI (CFrame* f)
 
     // the Threshold sliders are Smacheratr's, on Gently's Thresholds (the same range) and levels
     sliderHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) { return fromSmacheratr (id); });
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         sliders[k] = new smacheratr::ThresholdSlider (CRect (0, 0, 1, 1), sliderHost.get (), k, [c = ctl] () -> const smacheratr::Meters* {
             auto* s = c->getShared ();
             return s ? &s->meters.bands : nullptr;
         });
-        sliders[k]->setTooltipText (help::kThresholdSlider);
+        sliders[k]->setTooltipText (k == kSub ? help::kSubThresholdSlider : help::kThresholdSlider);
         root->addView (sliders[k]); // (not bound: its ID is Smacheratr's; paramChanged repaints it)
     }
 
@@ -160,15 +166,24 @@ void Editor::buildUI (CFrame* f)
         for (int i = 0; i < 3; ++i)
             bandViews[k].push_back (bind (root, new Knob (knobRect (x + i * 64, kRowTop + 24), this, bandParam (k, knobFields[i]), knobLabels[i])));
     }
+    // the Sub band: its name and where it tapers, On, Frequency, Range (no width)
+    {
+        auto* h = new BandHeader (CRect (kSubLeft, kRowTop, kSubLeft + 96, kRowTop + 18), this, kSub, rateOf);
+        root->addView (h);
+        headers.push_back (h);
+        bind (root, new Toggle (CRect (kSubLeft + 102, kRowTop - 1, kSubLeft + kSubW - 8, kRowTop + 19), this, kSubOn, "On"));
+        bandViews[kSub].push_back (bind (root, new Knob (knobRect (kSubLeft, kRowTop + 24), this, kSubFreq, "Freq")));
+        bandViews[kSub].push_back (bind (root, new Knob (knobRect (kSubLeft + 64, kRowTop + 24), this, kSubRange, "Range")));
+    }
 
     // the detector: stereo mode, Attack, Release
-    const double dx = kViewLeft + kBands * kBandW + 8; // 412
+    const double dx = kSubLeft + kSubW + 8; // 568
     bind (root, new Choice (CRect (dx, kRowTop - 1, dx + 120, kRowTop + 19), this, kStereo));
     bind (root, new Knob (knobRect (dx, kRowTop + 24), this, kAttack));
     bind (root, new Knob (knobRect (dx + 64, kRowTop + 24), this, kRelease));
 
     // Advanced, and with it the region Drive
-    const double ax = dx + 146; // 558
+    const double ax = dx + 146; // 714
     bind (root, new Toggle (CRect (ax, kRowTop - 1, ax + 120, kRowTop + 19), this, kAdvanced, "Advanced"));
     advancedViews.push_back (bind (root, new Toggle (CRect (ax, kRowTop + 40, ax + 56, kRowTop + 60), this, kDrive, "Drive")));
     driveAmount = bind (root, new Knob (knobRect (ax + 64, kRowTop + 24), this, kDriveAmount, "Amount"));
@@ -186,7 +201,7 @@ void Editor::buildUI (CFrame* f)
                                                                    auto* s = c->getShared ();
                                                                    return s ? &s->tailMeters : nullptr;
                                                                });
-    tailDisplays->add (tailPanel, CRect (10, 24, 874, 24 + smacheratr::TailDisplays::kHeight - 22));
+    tailDisplays->add (tailPanel, CRect (10, 24, kViewRight - kViewLeft - 10, 24 + smacheratr::TailDisplays::kHeight - 22));
     tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
 
     applyParamTooltips (&help::forParam);
@@ -217,11 +232,11 @@ void Editor::layoutAdvanced ()
 
 void Editor::updateLooks ()
 {
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
-        const bool works = bandWorks (plainValue (bandParam (k, kOn)), plainValue (bandParam (k, kRange)));
+        const bool works = bandWorks (plainValue (onParam (k)), plainValue (rangeParam (k)));
         for (auto* v : bandViews[k])
-            v->setEnabledLook (plainValue (bandParam (k, kOn)) >= 0.5);
+            v->setEnabledLook (plainValue (onParam (k)) >= 0.5);
         if (sliders[k])
             sliders[k]->setEnabledLook (works);
     }

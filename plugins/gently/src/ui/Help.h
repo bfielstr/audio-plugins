@@ -24,9 +24,21 @@ inline const char* forParam (uint32_t id)
                    "worked on apart, each with its own detector. Mid or Side: only that one (the other passes).";
         case kMix: return "Dry / wet: the input, delayed to line up, against Gently's output.";
         case kOutput: return "Output level, before the Smacheratr at the end.";
+        case kSubOn:
+            return "The Sub band on or off (or click its readout in the display): compresses the sub region, from the bottom "
+                   "of the spectrum (20 Hz) up to where it starts to taper off (Freq), 12 dB/oct above that. Off by default.";
+        case kSubFreq:
+            return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its amber handle "
+                   "sideways). Everything below it, down to 20 Hz, is compressed.";
+        case kSubRange:
+            return "The Sub band: the most it turns the sub region down (drag its handle down). 3 dB for every 5 the band is "
+                   "over its threshold, up to this. 0 dB: the band does nothing.";
+        case kSubThreshold:
+            return "Advanced: where the Sub band starts cutting (its peak level, dB). The slider shows the band's level: "
+                   "brighter above the threshold, where it is being cut.";
         default: break;
     }
-    if (isBandParam (id))
+    if (isBandParam (id) && !isSubParam (id))
         switch ((id - kBandBase) % kBandBlock)
         {
             case kOn: return "Switches the band on or off (or click its name at the top of the display).";
@@ -46,11 +58,15 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "Gently's two bands (1 green, 2 blue): each band's region shaded, the most it can cut dashed, the cut it is making "
-    "now filled in, the whole response in white. Behind: the output's spectrum filled, the input's dotted (tilted "
-    "4.5 dB/oct). Drag a handle sideways for the band's frequency, down for its Range; drag an edge, or Alt-drag the "
-    "band, for its width; the wheel on a handle (Shift) too. Double-click or right-click a handle resets the band. "
-    "Click a band's name at the top to switch it on or off.";
+    "Gently's bands (1 green, 2 blue, Sub amber): each band's region shaded, the most it can cut dashed, the cut it is "
+    "making now filled in, the whole response in white. Behind: the output's spectrum filled, the input's dotted "
+    "(tilted 4.5 dB/oct). Drag a handle sideways for the band's frequency, down for its Range; drag an edge, or "
+    "Alt-drag the band, for its width (the Sub band has none); the wheel on a handle (Shift) too. Double-click or "
+    "right-click a handle resets the band. Click a band's readout at the top to switch it on or off.";
+
+constexpr const char* kSubThresholdSlider =
+    "Advanced: the Sub band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "
+    "the threshold and being cut. Double-click or right-click: -18 dB.";
 
 constexpr const char* kThresholdSlider =
     "Advanced: the band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over the "
