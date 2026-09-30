@@ -192,8 +192,9 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                 if (bridge)
                     bridge->release ();
                 bridge = b;
-                if (auto* e = dynamic_cast<Editor*> (editor))
-                    e->bridgeChanged ();
+                for (auto* ed : editors)
+                    if (auto* e = dynamic_cast<Editor*> (ed))
+                        e->bridgeChanged ();
             }
         }
         return kResultOk;
