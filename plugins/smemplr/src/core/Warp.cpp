@@ -348,9 +348,9 @@ void PvWarp::prepare (double sampleRate)
 {
     hostSr = sampleRate;
     const size_t n = kMaxN, b = kMaxN / 2 + 1;
-    for (auto* vec : {&window, &fa, &fb, &fl, &fr, &olaL, &olaR, &olaW, &cep})
+    for (auto* vec : {&window, &winBase, &fa, &fb, &fl, &fr, &olaL, &olaR, &olaW, &cep})
         vec->assign (n, 0.0f);
-    for (auto* vec : {&synthPhase, &corr, &logEnv})
+    for (auto* vec : {&synthPhase, &corr, &logEnv, &envBase})
         vec->assign (b, 0.0f);
     for (auto* vec : {&sa, &sb, &sl, &sr, &stmp})
         vec->assign (b, Fft::cf ());
@@ -369,22 +369,29 @@ void PvWarp::start (const SampleData& s, const PlayRegion& r, bool fm, float f01
     level = -1; // chosen by the first render, from the speed the note starts at
     levelScale = 1.0;
     setFrame (baseN);
+    std::copy (window.begin (), window.begin () + baseN, winBase.begin ());
     stereo = s.numChannels > 1;
     std::fill (olaL.begin (), olaL.end (), 0.0f);
     std::fill (olaR.begin (), olaR.end (), 0.0f);
     std::fill (olaW.begin (), olaW.end (), 0.0f);
     std::fill (synthPhase.begin (), synthPhase.end (), 0.0f);
     apos = r.start;
+    envValid = false;
     v = r.start;
     written = 0;
     firstFrame = true;
     finished = false;
 }
 
+Fft* PvWarp::fftOf (int size)
+{
+    return size == 4096 ? &fft4k : (size == 2048 ? &fft2k : (size == 1024 ? &fft1k : (size == 512 ? &fft512 : &fft256)));
+}
+
 void PvWarp::setFrame (int size)
 {
     N = size;
-    fft = N == 4096 ? &fft4k : (N == 2048 ? &fft2k : (N == 1024 ? &fft1k : (N == 512 ? &fft512 : &fft256)));
+    fft = fftOf (N);
     hs = N / 4;
     for (int i = 0; i < N; ++i)
         window[(size_t)i] = 0.5f - 0.5f * std::cos (2.0f * (float)M_PI * i / N);
@@ -432,6 +439,79 @@ void PvWarp::readFrame (const SampleData& s, double centre, float* mid, float* l
             l[i] = a * wv;
         if (r)
             r[i] = b * wv;
+    }
+}
+
+void PvWarp::sampleEnvelope (const SampleData& s)
+{
+    const int eN = baseN;
+    const int eBins = eN / 2 + 1;
+    Fft* efft = fftOf (eN);
+    const long long c = (long long)std::llround (apos);
+    const float* d0 = s.data (0);
+    const float* d1 = stereo ? s.data (1) : nullptr;
+    float* x = fa.data (); // free again: its spectrum is in sa, which is free too
+    for (int i = 0; i < eN; ++i)
+    {
+        const double vp = (double)(c - eN / 2 + i);
+        float a = 0.0f, b = 0.0f;
+        if (vp >= region.start && !region.pastEnd (vp))
+        {
+            const long long idx = (long long)region.map (vp);
+            if (idx >= 0 && idx < s.length)
+            {
+                a = d0[idx];
+                b = d1 ? d1[idx] : a;
+            }
+        }
+        x[i] = 0.5f * (a + b) * winBase[(size_t)i];
+    }
+    std::vector<Fft::cf>& tmp = sa;
+    efft->forward (x, tmp.data ());
+    for (int k = 0; k < eBins; ++k)
+        tmp[(size_t)k] = Fft::cf (std::log (std::abs (tmp[(size_t)k]) + 1e-7f), 0.0f);
+    efft->inverse (tmp.data (), cep.data ());
+    const int q = std::clamp (envOrder * eN / 8192, 4, eN / 2 - 1);
+    for (int i = q; i <= eN - q; ++i)
+        cep[(size_t)i] = 0.0f;
+    efft->forward (cep.data (), tmp.data ());
+    for (int k = 0; k < eBins; ++k)
+        envBase[(size_t)k] = tmp[(size_t)k].real ();
+}
+
+void PvWarp::levelFormants (const SampleData& s, const WarpRates& w, bool shiftFormants)
+{
+    // On a level the frame holds only the level's band (a 16th of the spectrum at level 4, say), but
+    // the formants of what is heard up to the output's Nyquist lie far above it: the envelope is taken
+    // from the sample itself, a frame of baseN (as long as the level's frame in the sample's time, so
+    // level bin k is the envelope's bin k * baseN / (N * 2^level)), the rest as at level 0. Taken
+    // again once the analysis has moved on by a quarter of that frame (as often as at the sample's own
+    // rate: read fast, the level's frames come several times as often).
+    const int eN = baseN;
+    const int eBins = eN / 2 + 1;
+    if (!envValid || std::fabs (apos - envAt) >= 0.25 * eN)
+    {
+        envAt = apos;
+        envValid = true;
+        sampleEnvelope (s);
+    }
+    auto env = [&] (float kk) {
+        if (kk >= eBins - 1)
+            return envBase[(size_t)eBins - 1];
+        const int i0 = (int)kk;
+        const float fr0 = kk - i0;
+        return envBase[(size_t)i0] + fr0 * (envBase[(size_t)i0 + 1] - envBase[(size_t)i0]);
+    };
+    const float toBase = (float)(eN / (N * levelScale));
+    const float ratio = (float)w.pitchRatio;
+    const float amount = shiftFormants ? 1.0f : formants;
+    const float target = shiftFormants ? (float)(std::pow (w.pitchRatio, formantMode ? 1.0 - formants : 1.0) * w.formantShift)
+                                       : 1.0f;
+    const int bins = N / 2 + 1;
+    for (int k = 0; k < bins; ++k)
+    {
+        const float kb = k * toBase;
+        corr[(size_t)k] = std::clamp (std::exp (amount * (env (kb * ratio / target) - env (kb))), 0.06f, 16.0f);
     }
 }
 
@@ -521,7 +601,9 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     const bool shiftFormants = std::fabs (w.formantShift - 1.0) > 1e-4;
     const bool doFormants =
         (formantMode && formants > 0.0f && std::fabs (w.pitchRatio - 1.0) > 1e-4) || shiftFormants;
-    if (doFormants)
+    if (doFormants && level > 0)
+        levelFormants (s, w, shiftFormants);
+    else if (doFormants)
     {
         std::vector<Fft::cf>& tmp = sa; // sa is no longer needed
         for (int k = 0; k < bins; ++k)

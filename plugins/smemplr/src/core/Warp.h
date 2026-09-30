@@ -128,6 +128,9 @@ private:
     void synthesiseFrame (const SampleData& s, const WarpRates& w);
     void readFrame (const SampleData& s, double centre, float* mid, float* l, float* r) const;
     void setFrame (int size);
+    Fft* fftOf (int size);
+    void levelFormants (const SampleData& s, const WarpRates& w, bool shiftFormants);
+    void sampleEnvelope (const SampleData& s);
     void chooseLevel (const SampleData& s, double consume);
 
     static constexpr int kMaxN = 4096;
@@ -149,6 +152,10 @@ private:
     double readPos = 0.0;      // fifo read position (absolute)
     long long written = 0;     // fifo frames written (absolute)
     long long endWritten = -1; // fifo index where the region ended
+    // Complex Pro on a level: the formants come from the sample's own frame (baseN, winBase)
+    std::vector<float> winBase, envBase;
+    double envAt = 0.0; // the analysis position envBase was taken at
+    bool envValid = false;
     std::vector<float> window, fa, fb, fl, fr, olaL, olaR, olaW, fifoL, fifoR, synthPhase, corr, cep, logEnv;
     std::vector<Fft::cf> sa, sb, sl, sr, stmp;
     std::vector<int> peakOf;

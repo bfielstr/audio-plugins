@@ -71,9 +71,11 @@ band-limited copies of it at 1/2 to 1/64 of its rate (about as much memory again
 takes the copy that suits its speed, crossfading into the next one over the last quarter octave
 before it, so a pitch bend, glide or LFO moves smoothly across them. Up to +9 semitones (at the
 sample's own rate) the sample is read exactly as before. Every mode benefits; Complex and Complex Pro
-pick their copy when the note starts (with room for about an octave of bend up).
+pick their copy when the note starts (with room for about an octave of bend up), and Complex Pro
+still takes its formants from the sample itself (a copy holds only the bottom of its spectrum). Read
+far up, the phase vocoder also costs less: its frames are the copy's, a fraction of the size.
 
-**HP** (Global panel, next to Transpose, off by default): a high-pass whose cutoff follows the
+**HP** (Global panel, under Transpose and Detune, off by default): a high-pass whose cutoff follows the
 transposition, so what was below the audible range in the sample (rumble, a DC drift) stays out of
 the way when it is transposed up. The frequency is the cutoff at 0 semitones (10 to 200 Hz, 20 Hz by
 default); it moves with Transpose, Detune, pitch bend, the pitch envelope and the LFO's pitch (not with
