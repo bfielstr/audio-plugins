@@ -1,0 +1,83 @@
+# Gently
+
+Smacheratr's **Gently** (it was called Clarity) on its own: a gentle dynamic de-muddier and
+de-harsher. Two bands and a Sub band watch their part of the spectrum and turn it down only while it
+gets loud, so a mix, a bus or a synth keeps its body at normal levels and stops going boomy, muddy or
+harsh when it is pushed. Nothing is cut while a band stays under its threshold. Install instructions
+are in the [top-level README](../../README.md).
+
+The chain: **Input** -> **band 1** -> **band 2** -> **Sub** (each turned down on its own when it is
+loud; with Advanced, the region they cut can be driven) -> **Mix** -> **Output** -> **Smacheratr**.
+
+## The bands
+
+Each band is a region of the spectrum (a 12 dB/oct high-pass below it, a 6 dB/oct low-pass above it,
+around its frequency, scaled so it peaks at 0 dB: Smacheratr's band) with a compressor on it. When the
+band's level (its peak level, as a sine's peak) goes over -18 dBFS, the band is turned down by 3 dB for
+every 5 dB over (2.5 : 1, hard knee), at most by its **Range**, which it reaches (Range / 0.6) dB over
+the threshold. The band is taken out of the signal and put back turned down (x + (g - 1) * band), so a
+band that is not cutting leaves the signal exactly as it was, bit for bit.
+
+- **Band 1** (green): the low mids, the mud: 250 Hz, 2 octaves wide, Range 8 dB.
+- **Band 2** (blue): the upper mids, the harshness: 3 kHz, 2 octaves wide, Range 6 dB.
+- **On**, **Freq** (20 Hz to 20 kHz), **Width** (0.5 to 4 octaves between the band's edges) and
+  **Range** (0 to 24 dB; at 0 dB the band does nothing) for each. The band's name shows the edges of
+  its region now.
+- **Sub** (amber, off by default): the sub region, from the bottom of the spectrum (20 Hz, a
+  12 dB/oct high-pass that also keeps DC and rumble out of its level) up to where it starts to taper
+  off, its **Freq** (20 to 100 Hz, 40 Hz by default; 1 dB down there), falling away at 12 dB/oct above
+  that. It has a **Range** (8 dB by default) and the same law as the other bands, and no width. It
+  works while it is on and its Range is above 0 dB.
+
+The bands work one after the other (band 1, band 2, Sub, as in Smacheratr), each measuring its own
+band. **Attack** (0.5 to 100 ms, 15 ms) and **Release** (20 ms to 2 s, 150 ms) set how fast a band's
+cut follows its level going up and lets go after it (Smacheratr's times by default).
+
+**Stereo**: **Stereo** (left and right share one detector per band, so the image stays put),
+**Mid/Side** (the mid and the side are worked on apart, each with its own detectors), **Mid** or
+**Side** (only that one; the other passes). A change of mode fades Gently out and back in (5 ms each
+way), so it does not click.
+
+## Advanced
+
+**Advanced** gives each band its own **Threshold** instead of the fixed -18 dB: a vertical slider per
+band (band 1, band 2, Sub) at the right edge of the display, with the band's level as Gently measures
+it rising beside it, bright where it is over the threshold (there the band is being cut). The law
+over the threshold stays the same. Drag a slider (Shift: fine); a double-click or right-click puts it
+back to -18 dB. With Advanced off, the Thresholds are kept but not used.
+
+Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB, 12 dB by default): the bands
+as they leave, after their cuts, go through Smacheratr's Analog curve on their own, level-matched
+(the curve's output divided by the gain) and added back, so the region Gently works on gets denser
+and gains harmonics without getting louder, while the rest of the sound stays clean. It runs 4x
+oversampled, fades in and out when switched, and a quiet region passes it unchanged.
+
+## The display
+
+The display shows each band as a multiband compressor shows its bands: its region shaded, the most
+it can cut outlined (dashed), the cut it is making now filled in from the 0 dB line and moving with
+the audio, a handle at its centre (Sub: at its Freq) as deep as its Range, and the whole response in
+white (every band at its cut now, with its phase: the curve is what the sound gets). Behind them, the
+output's spectrum (filled) and the input's (dotted), tilted 4.5 dB/oct so a mix reads level: where
+the input stands above the output, Gently is cutting. The readouts at the top show each band's
+frequency and its cut now.
+
+- Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz), down for its Range.
+- Drag a band's edge, or hold Alt / Option and drag the band sideways, for its width (the band stays
+  centred); the mouse wheel on a handle (while you hold it, or with Shift) too. The Sub band has no
+  width.
+- Double-click or right-click a handle to reset the band (its frequency, width and Range).
+- Click a band's readout at the top to switch the band on or off.
+
+**Mix** (dry / wet: the input, delayed to line up, against Gently's output) and **Output** (+-24 dB,
+before the Smacheratr at the end).
+
+**Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB), with
+all its controls, its own Gently included.
+
+## Latency
+
+The region Drive's 4x oversampler delays the signal a little (37 samples at 48 kHz); its delay is
+always in the path, with the dry signal delayed to match, so the latency never changes with the
+settings. The end saturator adds its own (about 1.7 ms), also always in the path. Both are reported
+to the host for automatic compensation.

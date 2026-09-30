@@ -47,6 +47,11 @@ std::vector<ParamInfo> buildTable ()
         v.push_back (like (bandParam (b, kThreshold), smacheratr::kClarityThreshold, n + "Threshold", "Thresh",
                            smacheratr::kClarityThresholdDb));
     }
+    // the Sub band: Smacheratr's (off by default)
+    v.push_back (like (kSubOn, smacheratr::kClaritySub, "Sub", "Sub", 0.0));
+    v.push_back (like (kSubFreq, smacheratr::kClaritySubFreq, "Sub Frequency", "Freq", smacheratr::kSubDefaultHz));
+    v.push_back (like (kSubRange, smacheratr::kClaritySubRange, "Sub Range", "Range", 8.0));
+    v.push_back (like (kSubThreshold, smacheratr::kClaritySubThreshold, "Sub Threshold", "Thresh", smacheratr::kClarityThresholdDb));
     pk::addTailParams (v, kTailBase);
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);

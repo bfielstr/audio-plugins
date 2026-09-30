@@ -1,6 +1,6 @@
-# Gently: Smacheratr's Gently on its own, a gentle dynamic de-muddier / de-harsher: two bands that
-# turn their region down when it gets loud, into Smacheratr.
-project(Gently VERSION 0.1.0.0)
+# Gently: Smacheratr's Gently on its own, a gentle dynamic de-muddier / de-harsher: two bands and a
+# Sub band that turn their region down when it gets loud, into Smacheratr.
+project(Gently VERSION 0.6.0.0)
 
 add_library(gently_core STATIC
     src/core/Params.h
@@ -41,6 +41,13 @@ pk_add_plugin(Gently
 )
 target_include_directories(Gently PRIVATE src)
 target_link_libraries(Gently PRIVATE gently_core smacheratr_ui)
+
+# the saved state (plugin/State.cpp) on its own: runs everywhere, beside the core tests
+add_executable(gently_state_tests tests/state_tests.cpp src/plugin/State.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp)
+target_include_directories(gently_state_tests PRIVATE src)
+target_link_libraries(gently_state_tests PRIVATE gently_core sdk)
+add_test(NAME gently_state COMMAND gently_state_tests)
 
 pk_add_host_test(gently_hosttest
     PLUGIN Gently

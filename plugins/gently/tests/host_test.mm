@@ -28,8 +28,8 @@ static InputFn tone (double hz, double amp)
     };
 }
 
-// a mix with too much of the low mids (220 Hz) and of the upper mids (3.2 kHz), the rest of the
-// spectrum and some noise, the same on both channels: both bands have something to cut
+// a mix with too much sub (45 Hz), low mids (220 Hz) and upper mids (3.2 kHz), the rest of the
+// spectrum and some noise, the same on both channels: every band has something to cut
 static InputFn harshMix ()
 {
     return [] (int, int, float* buf, int n, long long pos) {
@@ -40,7 +40,8 @@ static InputFn harshMix ()
             const double s = (double)t / 48000.0;
             // the loud parts swell and fall back, so the cuts move
             const double swell = 0.6 + 0.4 * std::sin (2 * M_PI * 0.7 * s);
-            double v = 0.35 * swell * std::sin (2 * M_PI * 220.0 * s) + 0.25 * swell * std::sin (2 * M_PI * 3200.0 * s);
+            double v = 0.35 * swell * std::sin (2 * M_PI * 220.0 * s) + 0.25 * swell * std::sin (2 * M_PI * 3200.0 * s) +
+                       0.3 * swell * std::sin (2 * M_PI * 45.0 * s);
             double a = 0.12;
             for (double f : freqs)
             {
@@ -117,11 +118,21 @@ int main (int argc, char** argv)
         rig.render (0.2, out, nullptr, tone (250.0, 0.9));
         CHECK (allFinite (out), "finite");
 
+        // the Sub band: off by default (a loud 40 Hz passes), on it is cut by about its Range (8 dB)
+        const double subOff = gainDb (rig, 40.0, 0.9);
+        rig.param (kSubOn, 1.0);
+        const double subOn = gainDb (rig, 40.0, 0.9);
+        rig.param (kSubOn, 0.0);
+        CHECK (std::fabs (subOff) < 0.3 && subOn < -5.0 && subOn > -9.0, "a loud 40 Hz: Sub off %.2f dB, on %.2f dB", subOff, subOn);
+
         // state round trip
-        rig.param (kAdvanced, 1.0);
+        rig.param (gently::kAdvanced, 1.0);
         rig.param (kStereo, toNormalized (kStereo, kMidSide));
         rig.param (bandParam (1, kFreq), toNormalized (bandParam (1, kFreq), 5000.0));
         rig.param (bandParam (0, kThreshold), toNormalized (bandParam (0, kThreshold), -30.0));
+        rig.param (kSubOn, 1.0);
+        rig.param (kSubFreq, toNormalized (kSubFreq, 70.0));
+        rig.param (kSubThreshold, toNormalized (kSubThreshold, -36.0));
         out.clear ();
         rig.render (0.05, out, nullptr, tone (346.0, 0.1)); // (the processor takes the changes in its next block)
         MemoryStream saved;
@@ -129,18 +140,26 @@ int main (int argc, char** argv)
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
         CHECK (readState (&saved, back), "readState");
-        CHECK (back.norm[kAdvanced] >= 0.5, "Advanced saved");
+        CHECK (back.norm[gently::kAdvanced] >= 0.5, "Advanced saved");
         CHECK (std::lround (toPlain (kStereo, back.norm[kStereo])) == kMidSide, "the stereo mode saved");
         CHECK (std::fabs (toPlain (bandParam (1, kFreq), back.norm[bandParam (1, kFreq)]) - 5000.0) < 1.0, "band 2's frequency saved");
         CHECK (std::fabs (toPlain (bandParam (0, kThreshold), back.norm[bandParam (0, kThreshold)]) + 30.0) < 0.01, "band 1's threshold saved");
+        CHECK (back.norm[kSubOn] >= 0.5 && std::fabs (toPlain (kSubFreq, back.norm[kSubFreq]) - 70.0) < 0.1 &&
+                   std::fabs (toPlain (kSubThreshold, back.norm[kSubThreshold]) + 36.0) < 0.01,
+               "the Sub band saved");
+        // and loaded back into a fresh state of the controller
+        CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, back); }), "setState");
+        CHECK (std::fabs (plainOf (rig, kSubFreq) - 70.0) < 0.1 && plainOf (rig, kSubOn) >= 0.5, "the Sub band loaded");
 
-        // back to the defaults for the screenshots
-        for (uint32_t id : {(uint32_t)kAdvanced, (uint32_t)kStereo, bandParam (1, kFreq), bandParam (0, kThreshold)})
+        // back to the defaults for the screenshots, the Sub band on
+        for (uint32_t id : {(uint32_t)gently::kAdvanced, (uint32_t)kStereo, bandParam (1, kFreq), bandParam (0, kThreshold), (uint32_t)kSubFreq,
+                            (uint32_t)kSubThreshold})
             rig.param (id, defaultNormalized (id));
+        rig.param (kSubOn, 1.0);
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");
-            // both bands cutting a mix with too much 220 Hz and 3.2 kHz
+            // every band cutting a mix with too much 45 Hz, 220 Hz and 3.2 kHz
             for (int i = 0; i < 24; ++i)
             {
                 out.clear ();
@@ -158,11 +177,26 @@ int main (int argc, char** argv)
             CHECK (after > before + 2.0, "dragging band 1's handle down: Range %.1f -> %.1f dB", before, after);
             rig.param (bandParam (0, kRange), defaultNormalized (bandParam (0, kRange)));
 
+            // drag the Sub band's handle right 60 px (its Freq rises, up to 100 Hz) and down 30 px (its Range grows)
+            const double sf0 = plainOf (rig, kSubFreq), sr0 = plainOf (rig, kSubRange);
+            const double sx0 = xOfHz (sf0), sy0 = yOfDb (-sr0);
+            win.drag (sx0, sy0, sx0 + 60.0, sy0 + 30.0);
+            pump (0.05);
+            const double sf1 = plainOf (rig, kSubFreq), sr1 = plainOf (rig, kSubRange);
+            CHECK (sf1 > sf0 + 5.0 && sf1 <= 100.0 && sr1 > sr0 + 2.0, "dragging the Sub handle: Freq %.1f -> %.1f Hz, Range %.1f -> %.1f dB",
+                   sf0, sf1, sr0, sr1);
+            // a double-click on it resets it
+            win.click (xOfHz (sf1), yOfDb (-sr1), 2);
+            pump (0.05);
+            CHECK (std::fabs (plainOf (rig, kSubFreq) - 40.0) < 0.1 && std::fabs (plainOf (rig, kSubRange) - 8.0) < 0.01,
+                   "a double-click resets the Sub band: %.1f Hz, %.1f dB", plainOf (rig, kSubFreq), plainOf (rig, kSubRange));
+
             // Advanced: a Threshold per band on the sliders at the right of the display, the region Drive
-            rig.param (kAdvanced, 1.0);
+            rig.param (gently::kAdvanced, 1.0);
             rig.param (kDrive, 1.0);
             rig.param (bandParam (0, kThreshold), toNormalized (bandParam (0, kThreshold), -26.0));
             rig.param (bandParam (1, kThreshold), toNormalized (bandParam (1, kThreshold), -22.0));
+            rig.param (kSubThreshold, toNormalized (kSubThreshold, -24.0));
             for (int i = 0; i < 16; ++i)
             {
                 out.clear ();
@@ -180,6 +214,13 @@ int main (int argc, char** argv)
             pump (0.05);
             const double t1 = plainOf (rig, bandParam (1, kThreshold));
             CHECK (t1 > t0 + 5.0, "dragging band 2's Threshold slider up: %.1f -> %.1f dB", t0, t1);
+            // and the Sub band's (the third slider) down 40 px: its threshold falls
+            const double u0 = plainOf (rig, kSubThreshold);
+            const double ux = sx + (smacheratr::ThresholdSlider::kWidth + smacheratr::ThresholdSlider::kGap);
+            win.drag (ux, sy, ux, sy + 40.0);
+            pump (0.05);
+            const double u1 = plainOf (rig, kSubThreshold);
+            CHECK (u1 < u0 - 5.0, "dragging the Sub Threshold slider down: %.1f -> %.1f dB", u0, u1);
         }
         return finish ("gently host test");
     }

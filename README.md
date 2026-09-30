@@ -17,6 +17,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Levlr**](plugins/levlr/README.md) | The spectrum in four touching bands with a level each: movable minimum-phase Linkwitz-Riley crossovers (12/24/48 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
 | [**Smoothr**](plugins/smoothr/README.md) | A limiter that puts a smooth low end before the last dB of loudness: slow gain on the lows and fast on the highs (a linear-phase split), a true-peak ceiling, a scrolling gain-reduction history; Smacheratr feeding it, and Character, a dip in the low mids that opens when they get loud | a mastering limiter with a FabFilter Pro-L-style history |
 | [**Deepr**](plugins/deepr/README.md) | Makes a bass or reese sound deeper by contrast: dips the low mids only while the sub plays, folds the sub to mono; no latency of its own; Smacheratr at the end | psychoacoustic bass contrast |
+| [**Gently**](plugins/gently/README.md) | Smacheratr's Gently on its own: a gentle dynamic de-muddier / de-harsher, two bands and a Sub band that turn their region down only while it is loud, with a live display of the cuts over the spectrum; Advanced: a Threshold per band on vertical sliders and a drive for the region it cuts; Smacheratr at the end | a dynamic EQ / multiband compressor display |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
@@ -97,6 +98,7 @@ plugins/detonatr explosion designer    same structure
 plugins/levlr   four-band levels        same structure
 plugins/smoothr low-end-first limiter   same structure
 plugins/deepr   bass depth by contrast  same structure
+plugins/gently  gentle de-mud / de-harsh same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

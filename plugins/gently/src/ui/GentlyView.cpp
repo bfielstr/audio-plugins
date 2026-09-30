@@ -102,11 +102,13 @@ double GentlyView::sampleRate () const
 
 bool GentlyView::works (int band) const
 {
-    return bandWorks (host->plainValue (bandParam (band, kOn)), host->plainValue (bandParam (band, kRange)));
+    return bandWorks (host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
 }
 
 ClarityBand GentlyView::bandNow (int band) const
 {
+    if (band == kSub)
+        return smacheratr::subBand (sampleRate (), host->plainValue (kSubFreq));
     return smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)), host->plainValue (bandParam (band, kWidth)));
 }
 
@@ -130,7 +132,7 @@ double GentlyView::yOfDb (double db) const
 
 CPoint GentlyView::handle (int band) const
 {
-    return CPoint (xOfHz (host->plainValue (bandParam (band, kFreq))), yOfDb (-host->plainValue (bandParam (band, kRange))));
+    return CPoint (xOfHz (host->plainValue (freqParam (band))), yOfDb (-host->plainValue (rangeParam (band))));
 }
 
 double GentlyView::edgeX (int band, bool high) const
@@ -141,14 +143,35 @@ double GentlyView::edgeX (int band, bool high) const
 
 CRect GentlyView::pill (int band) const
 {
-    // above its band; the second one a row lower when the two would overlap
+    // above its band, in the first row where it overlaps none of the bands before it
     const CRect all = getViewSize ();
     auto left = [&] (int k) { return std::clamp (handle (k).x - kPillW / 2, all.left + 4, all.right - kPillW - 34); };
-    const double x = left (band);
-    double y = all.top + kPillTop;
-    if (band == 1 && std::fabs (x - left (0)) < kPillW + 4)
-        y += kPillH + 4;
+    int row[kAllBands] = {};
+    for (int k = 0; k <= band; ++k)
+    {
+        const double x = left (k);
+        for (int r = 0; r < kAllBands; ++r)
+        {
+            bool free = true;
+            for (int j = 0; j < k; ++j)
+                free &= row[j] != r || std::fabs (x - left (j)) >= kPillW + 4;
+            if (free)
+            {
+                row[k] = r;
+                break;
+            }
+        }
+    }
+    const double x = left (band), y = all.top + kPillTop + row[band] * (kPillH + 4);
     return CRect (x, y, x + kPillW, y + kPillH);
+}
+
+double GentlyView::pillsBottom () const
+{
+    double b = getViewSize ().top;
+    for (int k = 0; k < kAllBands; ++k)
+        b = std::max (b, pill (k).bottom);
+    return b + 4.0;
 }
 
 bool GentlyView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
@@ -195,9 +218,10 @@ void GentlyView::idle ()
     const Meters* m = meters ? meters () : nullptr;
     bool changed = false;
     // the cuts, eased
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
-        const float cut = !m ? 0.0f : (k == 0 ? m->bands.clarityDb : m->bands.clarity2Db).load (std::memory_order_relaxed);
+        const float cut =
+            !m ? 0.0f : (k == 0 ? m->bands.clarityDb : k == 1 ? m->bands.clarity2Db : m->bands.claritySubDb).load (std::memory_order_relaxed);
         const float target = works (k) ? cut : 0.0f;
         const float before = shownCut[k];
         shownCut[k] += (target - shownCut[k]) * 0.35f;
@@ -257,16 +281,16 @@ void GentlyView::draw (CDrawContext* ctx)
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
-    bool on[kBands];
-    ClarityBand bands[kBands];
-    for (int k = 0; k < kBands; ++k)
+    bool on[kAllBands];
+    ClarityBand bands[kAllBands];
+    for (int k = 0; k < kAllBands; ++k)
     {
         on[k] = works (k);
         bands[k] = bandNow (k);
     }
 
     // the bands' regions, behind everything
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         if (!on[k])
             continue;
@@ -372,12 +396,13 @@ void GentlyView::draw (CDrawContext* ctx)
         }
         return gp;
     };
-    for (int k = 0; k < kBands; ++k)
+    const double edgeTop = pillsBottom ();
+    for (int k = 0; k < kAllBands; ++k)
     {
         if (!on[k])
             continue;
         const ClarityBand& b = bands[k];
-        const double range = host->plainValue (bandParam (k, kRange));
+        const double range = host->plainValue (rangeParam (k));
         if (auto rp = gainPath ([&] (double hz) { return toDb (bandGain (b, hz, sr, -range)); }, false))
         {
             ctx->setLineWidth (1.0);
@@ -395,18 +420,21 @@ void GentlyView::draw (CDrawContext* ctx)
                 ctx->setFrameColor (bandColor (k));
                 ctx->drawGraphicsPath (lp, CDrawContext::kPathStroked);
             }
+        // (Sub: no edges to drag; its region starts at the bottom of the display)
+        if (k == kSub)
+            continue;
         const bool edgeHot = dragBand == k && (drag == Drag::Low || drag == Drag::High || drag == Drag::Width);
         ctx->setLineWidth (edgeHot ? 2.0 : 1.0);
         ctx->setFrameColor (bandColor (k, edgeHot ? 220 : 100));
         for (double x : {xOfHz (b.lowHz), xOfHz (b.highHz)})
-            ctx->drawLine (CPoint (x, top + 2.0 * (kPillH + 4)), CPoint (x, bot));
+            ctx->drawLine (CPoint (x, edgeTop), CPoint (x, bot));
     }
 
-    // the whole response now: both bands at their cuts, one after the other as the engine applies them
+    // the whole response now: every band at its cut, one after the other as the engine applies them
     if (auto path = gainPath (
             [&] (double hz) {
                 std::complex<double> h (1.0, 0.0);
-                for (int k = 0; k < kBands; ++k)
+                for (int k = 0; k < kAllBands; ++k)
                     if (on[k] && shownCut[k] < 0.0f)
                         h *= bandGain (bands[k], hz, sr, shownCut[k]);
                 return toDb (h);
@@ -419,7 +447,7 @@ void GentlyView::draw (CDrawContext* ctx)
     }
 
     // the handles (a band that does not work: dim, still there to pull down or move)
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         const CPoint h = handle (k);
         const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k);
@@ -433,16 +461,18 @@ void GentlyView::draw (CDrawContext* ctx)
     }
 
     // the readouts: the band's name, its frequency and its cut now (a click switches the band)
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
         const CRect p = pill (k);
-        const bool enabled = host->plainValue (bandParam (k, kOn)) >= 0.5;
+        const bool enabled = host->plainValue (onParam (k)) >= 0.5;
+        char name[8];
+        std::snprintf (name, sizeof (name), k == kSub ? "Sub" : "%d", k + 1);
         char s[64];
         if (on[k])
-            std::snprintf (s, sizeof (s), "%d   %s   %.1f dB", k + 1, host->valueText (bandParam (k, kFreq)).c_str (), (double)shownCut[k]);
+            std::snprintf (s, sizeof (s), "%s   %s   %.1f dB", name, host->valueText (freqParam (k)).c_str (), (double)shownCut[k]);
         else
-            std::snprintf (s, sizeof (s), "%d   %s   %s", k + 1, host->valueText (bandParam (k, kFreq)).c_str (), enabled ? "no range" : "off");
-        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 225) : CColor (22, 28, 44, 225));
+            std::snprintf (s, sizeof (s), "%s   %s   %s", name, host->valueText (freqParam (k)).c_str (), enabled ? "no range" : "off");
+        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 225) : k == 1 ? CColor (22, 28, 44, 225) : CColor (44, 32, 16, 225));
         ctx->drawRect (p, kDrawFilled);
         ctx->setFrameColor (bandColor (k, on[k] ? 170 : 80));
         ctx->setLineWidth (1.0);
@@ -455,7 +485,7 @@ void GentlyView::draw (CDrawContext* ctx)
 
 int GentlyView::bandUnder (const CPoint& p) const
 {
-    // the second band is drawn on top, so it is found first
+    // the second band is drawn on top, so it is found first (Sub has no width: not here)
     for (int k = kBands - 1; k >= 0; --k)
         if (works (k) && p.x >= edgeX (k, false) - kEdgeGrab && p.x <= edgeX (k, true) + kEdgeGrab)
             return k;
@@ -465,13 +495,13 @@ int GentlyView::bandUnder (const CPoint& p) const
 GentlyView::Drag GentlyView::hit (const CPoint& p, int* band) const
 {
     auto near = [&] (const CPoint& h) { return std::hypot (p.x - h.x, p.y - h.y) <= kHandleRadius + 4.0; };
-    for (int k = kBands - 1; k >= 0; --k)
+    for (int k = kAllBands - 1; k >= 0; --k)
         if (near (handle (k)))
         {
             *band = k;
             return Drag::Handle;
         }
-    if (p.y < plotTop () + 2.0 * (kPillH + 4))
+    if (p.y < pillsBottom ())
         return Drag::None; // (the edges start under the readouts)
     for (int k = kBands - 1; k >= 0; --k)
     {
@@ -517,10 +547,10 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
         e.ignoreFollowUpMoveAndUpEvents (true);
     };
     // a band's readout: switches it on or off
-    for (int k = kBands - 1; k >= 0; --k)
+    for (int k = kAllBands - 1; k >= 0; --k)
         if (pill (k).pointInside (e.mousePosition))
         {
-            const uint32_t id = bandParam (k, kOn);
+            const uint32_t id = onParam (k);
             host->setOnce (id, host->norm (id) >= 0.5 ? 0.0 : 1.0);
             done ();
             return;
@@ -531,7 +561,7 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     if (!right && e.clickCount < 2 && e.modifiers.has (ModifierKey::Alt))
     {
         const int under = drag != Drag::None ? k : bandUnder (e.mousePosition);
-        if (under >= 0)
+        if (under >= 0 && under != kSub) // (Sub has no width)
         {
             drag = Drag::Width;
             k = under;
@@ -540,11 +570,13 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     if (drag == Drag::None)
         return;
     dragBand = k;
-    const uint32_t freq = bandParam (k, kFreq), width = bandParam (k, kWidth), range = bandParam (k, kRange);
+    const bool sub = k == kSub;
+    const uint32_t freq = freqParam (k), width = sub ? freq : bandParam (k, kWidth), range = rangeParam (k); // (Sub: no width)
     if (e.clickCount == 2 || right)
     {
         host->setOnce (freq, host->table ().defaultNormalized (freq));
-        host->setOnce (width, host->table ().defaultNormalized (width));
+        if (!sub)
+            host->setOnce (width, host->table ().defaultNormalized (width));
         if (drag == Drag::Handle)
             host->setOnce (range, host->table ().defaultNormalized (range));
         done ();
@@ -553,7 +585,7 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     down = e.mousePosition;
     startFreq = host->plainValue (freq);
     startRange = host->plainValue (range);
-    startWidth = host->plainValue (width);
+    startWidth = sub ? 0.0 : host->plainValue (width);
     if (drag == Drag::Handle)
     {
         host->beginEdit (freq);
@@ -572,11 +604,11 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
         int k = -1;
         Drag h = hit (e.mousePosition, &k);
         bool onPill = false;
-        for (int b = 0; b < kBands; ++b)
+        for (int b = 0; b < kAllBands; ++b)
             onPill |= pill (b).pointInside (e.mousePosition);
         if (onPill)
             h = Drag::None;
-        else if (e.modifiers.has (ModifierKey::Alt) && (h != Drag::None || bandUnder (e.mousePosition) >= 0))
+        else if (e.modifiers.has (ModifierKey::Alt) && (h != Drag::None ? k != kSub : bandUnder (e.mousePosition) >= 0))
             h = Drag::Width; // Alt: the band's width, sideways
         if (auto* f = getFrame ())
             f->setCursor (onPill ? kCursorHand : h == Drag::Handle ? kCursorSizeAll : h != Drag::None ? kCursorHSize : kCursorDefault);
@@ -587,11 +619,13 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
     const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     auto setPlain = [this] (uint32_t id, double v) { host->setNorm (id, host->table ().toNormalized (id, v)); };
-    const uint32_t freq = bandParam (dragBand, kFreq), width = bandParam (dragBand, kWidth), range = bandParam (dragBand, kRange);
+    const uint32_t freq = freqParam (dragBand), range = rangeParam (dragBand);
+    const uint32_t width = dragBand == kSub ? freq : bandParam (dragBand, kWidth); // (only a Handle drag for Sub)
     if (drag == Drag::Handle)
     {
         // sideways the frequency, down the Range (the handle follows the depth of the cut)
-        setPlain (freq, startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ()));
+        const double hz = startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ());
+        setPlain (freq, dragBand == kSub ? std::clamp (hz, smacheratr::kSubMinHz, smacheratr::kSubMaxHz) : hz);
         const double dbPerPixel = (kTopDb - kBottomDb) / (plotBottom () - plotTop ());
         setPlain (range, std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
     }
@@ -616,8 +650,8 @@ void GentlyView::onMouseUpEvent (MouseUpEvent& e)
         return;
     if (drag == Drag::Handle)
     {
-        host->endEdit (bandParam (dragBand, kFreq));
-        host->endEdit (bandParam (dragBand, kRange));
+        host->endEdit (freqParam (dragBand));
+        host->endEdit (rangeParam (dragBand));
     }
     else
         host->endEdit (bandParam (dragBand, kWidth));
@@ -647,7 +681,7 @@ void GentlyView::onMouseWheelEvent (MouseWheelEvent& e)
     // the suite's wheel on a filter handle (held, or with Shift over it): here the band's width, wheel up wider
     int k = dragBand;
     const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition, &k) != Drag::None);
-    if (!active)
+    if (!active || k == kSub) // (Sub has no width)
         return;
     const uint32_t id = bandParam (k, kWidth);
     const double dn = pk::wheelStep (e, host->table (), id);

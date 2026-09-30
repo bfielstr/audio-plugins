@@ -1,11 +1,13 @@
 // Gently: Smacheratr's Gently on its own, without the saturation curve around it. Up to two bands
 // (smacheratr/src/core/ClarityBand.h: 12 dB/oct below, 6 dB/oct above, around each band's
-// frequency), each a gentle compressor on its region: when the band's level goes over the threshold
-// (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every 5 over, at
-// most by its Range (smacheratr::clarityCutDb). The bands work one after the other, each measuring
-// its own band: x + (g - 1) * band, so with no cut a band leaves the signal exactly as it was.
+// frequency) and the Sub band (from 20 Hz up to where it starts to taper off, 12 dB/oct above that:
+// smacheratr::subBand), each a gentle compressor on its region: when the band's level goes over the
+// threshold (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every
+// 5 over, at most by its Range (smacheratr::clarityCutDb). The bands work one after the other (band 1,
+// band 2, Sub, as in Smacheratr), each measuring its own band: x + (g - 1) * band, so with no cut a
+// band leaves the signal exactly as it was.
 //
-//   input -> [to mid / side] -> band 1 cut -> band 2 cut -> [back to left / right] -> delay
+//   input -> [to mid / side] -> band 1 cut -> band 2 cut -> Sub cut -> [back to left / right] -> delay
 //                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added
 //         -> Mix (against the input, delayed the same) -> Output -> Smacheratr at the end
 //
@@ -16,6 +18,9 @@
 // Release (Smacheratr's 15 and 150 ms by default). Stereo: left and right share one detector (the
 // image stays put); Mid/Side works on the mid and the side, each with its own; Mid or Side works on
 // that one only.
+//
+// On its own (another plug-in hosting it, e.g. a rack): Engine (false) (no end saturator), prepare,
+// setParam (Gently's IDs below kTailBase, plain values), process; latency () is fixed per sample rate.
 #pragma once
 
 #include "Params.h"
@@ -39,7 +44,7 @@ ParamArray defaultParams ();
 struct Meters
 {
     pk::ScopeBuffer<8192> scope;           // mono input (a) and output (b), for the analyser
-    smacheratr::Meters bands;              // each band's cut (clarityDb, clarity2Db) and level (clarityLevelDb, ...)
+    smacheratr::Meters bands;              // each band's cut (clarityDb, clarity2Db, claritySubDb) and level (clarityLevelDb, ...)
     std::atomic<uint32_t> blocks {0};      // counts processed blocks
     std::atomic<float> sampleRate {48000.0f};
 };
@@ -91,7 +96,7 @@ private:
     };
     struct Channel
     {
-        smacheratr::Biquad hp[kBands], lp[kBands]; // the bands
+        smacheratr::Biquad hp[kAllBands], lp[kAllBands]; // the bands (Sub: its high-pass and low-pass)
         smacheratr::Oversampler os;                // the region Drive
         Delay dryDelay, wetDelay;
         void reset ();
@@ -106,14 +111,14 @@ private:
     int mode = kStereoLinked; // the stereo mode in use (a new one waits for the fade, see processChunk)
     // the detector: each band's level (mean square of its peak), per channel (channel 0's for both
     // while linked), the cut it asks for and the band's (smoothed) gain
-    double env[2][kBands] {}, atk = 0.0, rel = 0.0;
-    float cutDb[2][kBands] {}, gBand[2][kBands] {};
+    double env[2][kAllBands] {}, atk = 0.0, rel = 0.0;
+    float cutDb[2][kAllBands] {}, gBand[2][kAllBands] {};
     int ctrlCountdown = 0;
-    float gTarget[2][kBands] {};
-    double bandFreq[kBands] = {-1.0, -1.0}, bandWidth[kBands] = {-1.0, -1.0};
-    float bandNorm[kBands] = {1.0f, 1.0f};
+    float gTarget[2][kAllBands] {};
+    double bandFreq[kAllBands] = {-1.0, -1.0, -1.0}, bandWidth[kAllBands] = {-1.0, -1.0, -1.0};
+    float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f};
     // a band runs while it works (on, Range above 0) and, after it stops, until its cut has let go
-    bool running[kBands] = {false, false};
+    bool running[kAllBands] = {false, false, false};
     // how much of Gently is in (1 normally): faded out and back in around a change of stereo mode
     float fx = 1.0f, fxStep = 0.0f;
     int hold = 0; // samples left, faded out, before the new mode starts
