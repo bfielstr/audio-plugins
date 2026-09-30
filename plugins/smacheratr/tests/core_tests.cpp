@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstring>
 #include <cstdio>
 #include <functional>
@@ -867,9 +868,9 @@ TEST (performance)
         e->setParam (kPreLimit, 1.0);
         e->setParam (kPostClip, kPostSoft);
         e->setParam (kDrive, 12.0);
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
         run (*e, in);
-        secs = std::min (secs, std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ());
+        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
     }
     std::printf ("    CPU: %.2f%% of one core (stereo, Hi-Quality)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");

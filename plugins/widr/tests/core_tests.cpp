@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -786,9 +787,9 @@ TEST (performance)
     e->setParam (kBeyond, 0.5);
     e->reset ();
     auto in = pink (10.0, true);
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     run (*e, in);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    CPU: %.2f%% of one core (stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
 }

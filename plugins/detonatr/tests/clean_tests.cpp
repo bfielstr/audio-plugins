@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <limits>
 #include <random>
 #include <vector>
@@ -670,9 +671,9 @@ TEST (clean_cpu)
         c.prepare (sr, 256);
         c.setDenoise (0.8);
         c.setDereverb (0.6);
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
         const Stereo out = run (c, in, 256);
-        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
         const double pct = 100.0 * secs / 20.0;
 
         // The work comes in lumps: one frame per hop (~10.7 ms), all in the block that completes it.

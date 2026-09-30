@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -259,11 +260,14 @@ TEST (sub_gain_and_listen)
 
 TEST (finite_and_cpu)
 {
-    auto e = engine ();
-    e->setParam (kTailBase + pk::kTailOn, 1.0);
-    e->setParam (kAttack, 1.0);
-    e->setParam (kThreshold, -60.0);
-    e->setParam (kDepth, 12.0);
+    auto make = [] {
+        auto e = engine ();
+        e->setParam (kTailBase + pk::kTailOn, 1.0);
+        e->setParam (kAttack, 1.0);
+        e->setParam (kThreshold, -60.0);
+        e->setParam (kDepth, 12.0);
+        return e;
+    };
     Sig in;
     const size_t n = (size_t)(10.0 * kSr);
     in.l.resize (n);
@@ -275,9 +279,16 @@ TEST (finite_and_cpu)
         in.l[i] = (float)((int32_t)seed / 2147483648.0) * 0.9f;
         in.r[i] = (float)std::sin (2.0 * M_PI * 41.0 * i / kSr);
     }
-    const auto t0 = std::chrono::steady_clock::now ();
-    auto out = run (*e, in, 333);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    // CPU time (other programs running do not count), the best of three renders
+    Sig out;
+    double secs = 1e9;
+    for (int i = 0; i < 3; ++i)
+    {
+        auto e = make ();
+        const std::clock_t t0 = std::clock ();
+        out = run (*e, in, 333);
+        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+    }
     bool finite = true;
     for (size_t i = 0; i < n; ++i)
         finite = finite && std::isfinite (out.l[i]) && std::isfinite (out.r[i]) && std::fabs (out.l[i]) < 8.0f;

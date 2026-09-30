@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -334,13 +335,18 @@ TEST (fuzz_and_automation)
 
 TEST (performance)
 {
-    auto e = engine ();
-    e->setParam (kContrast, 0.8);
-    e->setParam (kHighFreq, 1000.0);
+    // CPU time (other programs running do not count), the best of three renders
     auto in = tones ({{55.0, -6.0}, {80.0, -20.0}, {1000.0, -20.0}}, 10.0);
-    const auto t0 = std::chrono::steady_clock::now ();
-    run (*e, in);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    double secs = 1e9;
+    for (int i = 0; i < 3; ++i)
+    {
+        auto e = engine ();
+        e->setParam (kContrast, 0.8);
+        e->setParam (kHighFreq, 1000.0);
+        const std::clock_t t0 = std::clock ();
+        run (*e, in);
+        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+    }
     std::printf ("    CPU: %.2f%% of one core (stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
 }
