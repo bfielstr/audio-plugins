@@ -38,6 +38,10 @@ const ParamTable& paramTable ()
         v.push_back (real (kClarity2Threshold, "Gently 2 Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityDrive, "Gently Drive", "Drive", false));
         v.push_back (real (kClarityDriveAmount, "Gently Drive Amount", "Drive", 0.0, 36.0, 12.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kClaritySub, "Gently Sub", "Sub", false));
+        v.push_back (real (kClaritySubFreq, "Gently Sub Frequency", "Freq", kSubMinHz, kSubMaxHz, kSubDefaultHz, Curve::Log, Disp::Hz));
+        v.push_back (real (kClaritySubRange, "Gently Sub Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kClaritySubThreshold, "Gently Sub Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         return v;
     }());
     return t;

@@ -50,6 +50,16 @@ inline const char* forParam (uint32_t id)
             return "Gently's Advanced mode: each band gets a Threshold (the vertical sliders at the right of the frequency "
                    "display, with the band's level beside them) and the region it cuts can be driven (Drive). Off, Gently "
                    "works exactly as before: its bands start cutting at -18 dB.";
+        case kClaritySub:
+            return "Gently's Sub band on or off: compresses the sub region, from the bottom of the spectrum (20 Hz) up to "
+                   "where it starts to taper off (Freq), 12 dB/oct above that. Needs Gently on and a Range above 0 dB.";
+        case kClaritySubFreq:
+            return "Gently Sub: where the band starts to taper off, 20 to 100 Hz (40 Hz by default). Everything below it, "
+                   "down to 20 Hz, is compressed.";
+        case kClaritySubRange:
+            return "Gently Sub: the most it turns the sub region down before the curve (after it, half as much). 8 dB by "
+                   "default, 0 to 24 dB; at 0 dB the band does nothing.";
+        case kClaritySubThreshold:
         case kClarityThreshold:
         case kClarity2Threshold:
             return "Gently (Advanced): the band's level where it starts cutting (-18 dB by default, where it starts without "

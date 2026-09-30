@@ -49,7 +49,7 @@ enum TailExtField : uint32_t
     kTailExtFields
 };
 
-// Gently's Advanced mode, a third block each plug-in appends at the very end of its IDs (the
+// Gently's Advanced mode and its Sub band, a third block each plug-in appends at the very end of its IDs (the
 // parameters: smacheratr/src/core/TailExt.h, addTailExt2Params). In smacheratr::Tail::setParam field
 // kTailFields + kTailExtFields + i is this block's field i.
 enum TailExt2Field : uint32_t
@@ -59,6 +59,10 @@ enum TailExt2Field : uint32_t
     kTailExt2Threshold2,   // dB, band 2
     kTailExt2Drive,        // drive the band region Gently works on
     kTailExt2DriveAmount,  // dB
+    kTailExt2Sub,          // Gently's Sub band on
+    kTailExt2SubFreq,      // Hz, where the Sub band starts to taper off
+    kTailExt2SubRange,     // dB
+    kTailExt2SubThreshold, // dB
     kTailExt2Fields
 };
 

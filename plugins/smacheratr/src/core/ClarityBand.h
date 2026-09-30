@@ -63,6 +63,27 @@ inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, d
     return b;
 }
 
+// Gently's Sub band: from the bottom of the spectrum (a 12 dB/oct high-pass at 20 Hz, which also keeps
+// DC and rumble out of its level) up to `taperHz`, where it starts to taper off (12 dB/oct, 1 dB down
+// there), scaled so the band peaks at 0 dB. taperHz is 20 - 100 Hz.
+inline ClarityBand subBand (double sr, double taperHz)
+{
+    constexpr double kBottomHz = 20.0, kButterworthOneDbDown = 0.7126; // f / fc where a 2nd-order Butterworth is at -1 dB
+    ClarityBand b;
+    b.lowHz = kBottomHz;
+    b.highHz = std::clamp (taperHz, 20.0, 100.0) / kButterworthOneDbDown;
+    b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
+    b.lp = lowPass (sr, b.highHz, M_SQRT1_2);
+    double peakDb = -200.0;
+    for (int i = 0; i <= 64; ++i)
+    {
+        const double hz = b.lowHz * std::pow (b.highHz / b.lowHz, i / 64.0);
+        peakDb = std::max (peakDb, magnitudeDb (b.hp, hz, sr) + magnitudeDb (b.lp, hz, sr));
+    }
+    b.norm = std::pow (10.0, -peakDb / 20.0);
+    return b;
+}
+
 // the band's level at hz, dB (0 at its peak)
 inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
 {
