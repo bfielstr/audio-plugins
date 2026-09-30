@@ -25,7 +25,10 @@ struct State
     bool hasRecordings = false; // the stream had the recordings' section
 };
 
-bool writeState (Steinberg::IBStream* stream, const State& s);
+// Version 2: the Multiband stage's OTT gain staging (1 is migrated with multidyn::migrateOldBakedNorm).
+constexpr Steinberg::int32 kStateVersion = 2;
+// version: what the stream says it is (the tests write an older one)
+bool writeState (Steinberg::IBStream* stream, const State& s, Steinberg::int32 version = kStateVersion);
 // withRecordings false: only the parameters (the controller's copy of the state).
 bool readState (Steinberg::IBStream* stream, State& s, bool withRecordings = true);
 

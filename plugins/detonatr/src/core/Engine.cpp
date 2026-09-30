@@ -105,7 +105,7 @@ void Engine::setParam (uint32_t id, double v)
     }
     if (isMbParam (id))
     {
-        const int64_t md = mbIdAt (id - kMbBase);
+        const int64_t md = mdIdOf (id);
         if (md >= 0)
             multiband.setParam ((uint32_t)md, v);
         return;
@@ -222,7 +222,7 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
         {
             meters->inDb.store (inPeak, std::memory_order_relaxed);
             meters->outDb.store (peakDb (outL + start, outR + start, m), std::memory_order_relaxed);
-            for (int b = 0; b < multidyn::kNumBands; ++b)
+            for (int b = 0; b <= multidyn::kSubBand; ++b) // the bands and the Sub band
             {
                 const auto& bm = multiband.meter (b);
                 meters->multiband.inputDb[(size_t)b].store (bm.inputDb, std::memory_order_relaxed);

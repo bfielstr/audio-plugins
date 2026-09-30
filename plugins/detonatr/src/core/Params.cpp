@@ -38,6 +38,23 @@ int64_t mbBlockOf (uint32_t id)
     return -1;
 }
 
+int64_t mdIdOf (uint32_t id)
+{
+    if (id >= kMbBase && id < kMbBase + kMbBlock)
+        return mbIdAt (id - kMbBase);
+    if (id >= kMb2Base && id < kMb2Base + kMb2Block)
+        return multidyn::kXoverSlope + (id - kMb2Base);
+    return -1;
+}
+
+int64_t detIdOfMd (uint32_t id)
+{
+    if (id >= multidyn::kXoverSlope && id < multidyn::kNumParams)
+        return kMb2Base + (id - multidyn::kXoverSlope);
+    const int64_t b = mbBlockOf (id);
+    return b < 0 ? -1 : (int64_t)(kMbBase + b);
+}
+
 Order resolveOrder (const int chosen[kNumStages])
 {
     Order o {};
@@ -112,7 +129,15 @@ std::vector<ParamInfo> buildTable ()
 
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
-    static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+    // the Multiband stage's second block: Slope, Soften Color, the Sub band
+    for (uint32_t j = 0; j < kMb2Block; ++j)
+    {
+        ParamInfo pi = md.info (multidyn::kXoverSlope + j);
+        pi.id = kMb2Base + j;
+        pi.name = keep (std::string ("Multiband ") + pi.name);
+        v.push_back (pi);
+    }
+    static_assert (kNumParams == kMb2Base + kMb2Block, "the Multiband stage's second block is the last");
     return v;
 }
 

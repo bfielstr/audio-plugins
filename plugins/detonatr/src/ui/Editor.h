@@ -72,6 +72,9 @@ private:
     pk::Label* mbNames[4] {};
     VSTGUI::CView *mbOn[4] {}, *mbSolo[4] {}, *mbIn[4] {}, *mbOut[4] {};
     VSTGUI::CView* mbBoxes[4][6] {};
+    pk::Label* mbSubName = nullptr;
+    VSTGUI::CView* mbSubBoxes[4] {}; // the Sub band's threshold, ratio, attack, release
+    VSTGUI::CView* mbSubOut = nullptr;
     // Transient
     TransientCurve* curve = nullptr;
 };

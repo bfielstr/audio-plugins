@@ -45,9 +45,27 @@ inline const char* forParam (uint32_t id)
         case kScGain: return "Level of the side-chain signal feeding the detectors (it is never heard).";
         case kScMix: return "Detector blend: 0% = the processed signal itself, 100% = only the side-chain.";
         case kScListen: return "Listen to the side-chain signal instead of the output while setting it up.";
+        case kXoverSlope:
+            return "How steeply the crossovers split the bands, 6 dB/oct to Brickwall (192 dB/oct). Steeper keeps each band's "
+                   "processing to its own range; gentler overlaps the bands and turns the phase less. The bands always add "
+                   "back up flat. 24 dB by default (Linkwitz-Riley 4, as in Live).";
+        case kSoftenColor:
+            return "Soften's Color: Smacheratr's high colour after the Output gain (a peak at 5 kHz pushed into the Analog "
+                   "curve and taken back down after it), so the loud highs upward compression brings up come out rounder. "
+                   "Its amount follows Soften (15 % at 0, 35 % at 100 %). The latency is the same on or off.";
+        case kSubOn:
+            return "Sub band: an extra band below band 1 that takes the region under the Sub frequency (down to 20 Hz) and "
+                   "compresses it on its own, so the sub stays steady while the bands above do their work. Off, the sound "
+                   "is exactly as without it.";
+        case kSubFreq: return "Where the Sub band tapers off (with the crossovers' Slope): it takes what is below. 40 Hz by default.";
+        case kSubThresh: return "Sub band threshold: sub levels above it are compressed.";
+        case kSubRatio: return "Sub band ratio 1:x. x > 1 compresses (1:inf limits); x < 1 expands upward.";
+        case kSubAttack: return "How fast the Sub band's compression takes hold (keep it long enough for the sub's slow cycles).";
+        case kSubRelease: return "How fast the Sub band's compression lets go.";
+        case kSubOutput: return "Sub band level after its compression.";
         default: break;
     }
-    if (id >= kBandBase && id < kNumParams)
+    if (id >= kBandBase && id < kBandBase + kMaxBands * kBandBlock)
         switch ((id - kBandBase) % kBandBlock)
         {
             case kBandActive: return "Band on/off. Off bypasses this band's dynamics and gain controls.";

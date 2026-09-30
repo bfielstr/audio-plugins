@@ -85,10 +85,10 @@ TEST (table_is_consistent)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "%u entries, %u ids", t.size (), (unsigned)kNumParams);
-    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+    CHECK (kMb2Base == kTailExt2Base + pk::kTailExt2Fields &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's) is the last");
+           "Gently's Advanced block (the end saturator's), then the Multiband stage's second block");
     bool ids = true;
     for (uint32_t i = 0; i < t.size (); ++i)
         ids = ids && t.info (i).id == i;
@@ -105,6 +105,60 @@ TEST (table_is_consistent)
         const auto& b = multidyn::paramTable ().info ((uint32_t)mbIdAt (j));
         CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.type == b.type, "multiband %u has Multidyn's range", j);
     }
+    // the second block, at the end: Slope, Soften Color and the Sub band, in Multidyn's order
+    CHECK (kMb2Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kMb2Base + kMb2Block &&
+               mbParam (multidyn::kXoverSlope) == kMb2Base && mbParam (multidyn::kSubOutput) == kNumParams - 1,
+           "the second Multiband block ends the table");
+    CHECK (std::string (t.info (mbParam (multidyn::kSubOn)).name) == "Multiband Sub Band" &&
+               std::string (t.info (mbParam (multidyn::kXoverSlope)).name) == "Multiband Crossover Slope",
+           "named like Multidyn's, with Multiband in front");
+    for (uint32_t md = 0; md < multidyn::kNumParams; ++md)
+    {
+        const int64_t id = detIdOfMd (md);
+        if (id < 0)
+            continue;
+        CHECK (mdIdOf ((uint32_t)id) == (int64_t)md && isMbParam ((uint32_t)id) && mbParam (md) == (uint32_t)id, "Multidyn %u maps both ways", md);
+        const auto& a = t.info ((uint32_t)id);
+        const auto& b = multidyn::paramTable ().info (md);
+        CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.type == b.type && a.curve == b.curve, "%s has Multidyn's range", a.name);
+    }
+    CHECK (detIdOfMd (multidyn::kSatOn) == -1 && detIdOfMd (multidyn::kScOn) == (int64_t)(kMbBase + multidyn::kScOn),
+           "Multidyn's side-chain On sits in the first block (unused), its saturator not");
+}
+
+TEST (multiband_new_parameters_reach_the_stage)
+{
+    // the Multiband stage alone: the Sub band (80 Hz) compresses a loud 30 Hz tone, and Soften Color on
+    // keeps the latency
+    auto tone = [] (double hz, double seconds) {
+        std::vector<float> x ((size_t)(seconds * kSr));
+        for (size_t i = 0; i < x.size (); ++i)
+            x[i] = (float)(0.5 * std::sin (2 * kPi * hz * (double)i / kSr));
+        return x;
+    };
+    auto render = [&] (double ratio, bool color, int& latency) {
+        auto e = engine ();
+        allOff (*e);
+        set (*e, kMultibandOn, 1.0);
+        set (*e, mbParam (multidyn::kSubOn), 1.0);
+        set (*e, mbParam (multidyn::kSubFreq), 80.0);
+        set (*e, mbParam (multidyn::kSubThresh), -30.0);
+        set (*e, mbParam (multidyn::kSubRatio), ratio);
+        set (*e, mbParam (multidyn::kSoftenColor), color ? 1.0 : 0.0);
+        e->reset ();
+        latency = e->latency ();
+        const auto y = run (*e, tone (30.0, 2.0));
+        double s = 0.0;
+        for (size_t i = 48000; i < 96000; ++i)
+            s += (double)y[i] * y[i];
+        return 10.0 * std::log10 (s / 48000.0 + 1e-30);
+    };
+    int l0 = 0, l1 = 0, l2 = 0;
+    const double off = render (1.0, false, l0), on = render (8.0, false, l1);
+    render (1.0, true, l2);
+    std::printf ("    30 Hz through the Multiband stage: the Sub band at 1:1 %.1f dB, at 1:8 %.1f dB\n", off, on);
+    CHECK (on < off - 10.0, "the Sub band turns the loud sub down: %.1f vs %.1f dB", on, off);
+    CHECK (l0 == l1 && l0 == l2, "the latency stays: %d / %d / %d", l0, l1, l2);
 }
 
 TEST (order_resolves)

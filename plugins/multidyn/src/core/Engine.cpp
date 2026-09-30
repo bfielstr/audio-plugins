@@ -143,6 +143,25 @@ void Engine::Bank::tune (int j, float g)
         ap[b][j].setup (g, slope);
         scAp[b][j].setup (g, slope);
     }
+    subAp[j].setup (g, slope);
+    scSubAp[j].setup (g, slope);
+}
+
+void Engine::Bank::tuneSub (float g)
+{
+    sub.setup (g, slope);
+    scSub.setup (g, slope);
+}
+
+void Engine::Bank::resetSub ()
+{
+    sub.reset ();
+    scSub.reset ();
+    for (int j = 0; j < kMaxBands - 1; ++j)
+    {
+        subAp[j].reset ();
+        scSubAp[j].reset ();
+    }
 }
 
 void Engine::Bank::reset ()
@@ -157,6 +176,7 @@ void Engine::Bank::reset ()
             scAp[b][j].reset ();
         }
     }
+    resetSub ();
 }
 
 void Engine::prepare (double sampleRate, int)
@@ -181,6 +201,8 @@ void Engine::prepare (double sampleRate, int)
         d.assign ((size_t)std::max (1, color.latency ()), 0.0f);
     fadeWarm = (int)std::lround (0.030 * sr); // a new slope's filters settle, then the bands crossfade
     fadeLen = std::max (1, (int)std::lround (0.020 * sr));
+    subWarm = (int)std::lround (0.100 * sr); // the Sub band settles, then fades in
+    subStep = (float)(1.0 / (0.030 * sr));
     for (auto& d : bypassDelay)
         d.assign ((size_t)std::max (1, latency ()), 0.0f);
     bypassPos = 0;
@@ -200,6 +222,11 @@ void Engine::reset ()
         bands[b].outGain = dbToGain (p[bandParam (b, kBandOutput)] + kBakedOutputDb[b]);
         meters[b] = BandMeter {};
     }
+    bands[kSubBand] = BandState {};
+    bands[kSubBand].outGain = dbToGain (p[kSubOutput]);
+    meters[kSubBand] = BandMeter {};
+    subState = on (p[kSubOn]) ? SubState::In : SubState::Off;
+    subMix = subState == SubState::In ? 1.0f : 0.0f;
     outGain = dbToGain (p[kOutput] + kBakedMasterDb);
     scGain = dbToGain (p[kScGain]);
     syncSaturator ();
@@ -251,6 +278,45 @@ void Engine::updateFilters (bool force)
                 banks[cur ^ 1].tune (j, xg[j]);
         }
     }
+    // the Sub band's corner, gliding the same way
+    const float st = (float)std::clamp (p[kSubFreq], 20.0, 100.0);
+    const float nextSub = force || subF <= 0.0f ? st : std::exp (std::log (subF) + 0.35f * (std::log (st) - std::log (subF)));
+    if (force || std::fabs (nextSub - subF) > 1e-3f * subF)
+    {
+        subF = nextSub;
+        subG = xoverG (nextSub, fsr);
+        banks[cur].tuneSub (subG);
+        if (fadePos >= 0)
+            banks[cur ^ 1].tuneSub (subG);
+    }
+}
+
+void Engine::startSub ()
+{
+    // from silence, beside the bands, not heard until it has settled
+    for (auto& bank : banks)
+        bank.resetSub ();
+    bands[kSubBand] = BandState {};
+    bands[kSubBand].outGain = dbToGain (p[kSubOutput]);
+    subState = SubState::Warming;
+    subPos = 0;
+    subMix = 0.0f;
+}
+
+void Engine::splitWithSub (float x, int c, int n, bool sc, Bank& bk, float mix, float* out)
+{
+    float lo, hi;
+    (sc ? bk.scSub : bk.sub).tick (x, c, lo, hi);
+    // the bands' input: the input as it is, going over to the part above the corner
+    const float rest = mix >= 1.0f ? hi : x + (hi - x) * mix;
+    if (sc)
+        splitBands (rest, c, n, bk.scSplit, bk.scAp, out);
+    else
+        splitBands (rest, c, n, bk.split, bk.ap, out);
+    XoverAllpass* aps = sc ? bk.scSubAp : bk.subAp;
+    for (int j = 0; j < n - 1; ++j)
+        lo = aps[j].tick (lo, c);
+    out[kSubBand] = lo;
 }
 
 void Engine::splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out)
@@ -305,10 +371,13 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const bool listen = on (p[kScListen]) && scActive;
     const float outTarget = dbToGain (p[kOutput] + kBakedMasterDb), scTarget = dbToGain (p[kScGain]);
     const int slopeT = std::clamp ((int)std::lround (p[kXoverSlope]), 0, kNumXoverSlopes - 1);
+    const bool wantSub = on (p[kSubOn]);
     syncSaturator ();
     syncColor ();
 
-    bool used[kNumBands], active[kNumBands], audible[kNumBands];
+    // the bands, then the Sub band (kSubBand: its parameters in a band's terms, Above only)
+    constexpr int kAll = kNumBands + 1;
+    bool used[kAll], active[kAll], audible[kAll];
     bool anySolo = false;
     for (int b = 0; b < kNumBands; ++b)
     {
@@ -316,10 +385,28 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         active[b] = on (p[bandParam (b, kBandActive)]);
         anySolo |= used[b] && on (p[bandParam (b, kBandSolo)]);
     }
-    float inTarget[kNumBands], outTargetB[kNumBands], atk[kNumBands], rel[kNumBands], relSlow[kNumBands], ceiling[kNumBands];
-    double ta[kNumBands], ra[kNumBands], tb[kNumBands], rb[kNumBands];
-    for (int b = 0; b < kNumBands; ++b)
+    active[kSubBand] = true;
+    audible[kSubBand] = !anySolo;
+    float inTarget[kAll], outTargetB[kAll], atk[kAll], rel[kAll], relSlow[kAll], ceiling[kAll];
+    double ta[kAll], ra[kAll], tb[kAll], rb[kAll];
+    for (int b = 0; b < kAll; ++b)
     {
+        if (b == kSubBand)
+        {
+            inTarget[b] = 1.0f;
+            outTargetB[b] = dbToGain (p[kSubOutput]);
+            const double attackMs = std::max (0.01, p[kSubAttack] * timeScale / 3.0);
+            const double releaseMs = std::max (0.1, p[kSubRelease] * timeScale / 3.0);
+            atk[b] = (float)std::exp (-1.0 / (attackMs * 0.001 * sr));
+            rel[b] = (float)std::exp (-1.0 / (releaseMs * 0.001 * sr));
+            relSlow[b] = (float)std::exp (-1.0 / (3.0 * releaseMs * 0.001 * sr));
+            ta[b] = p[kSubThresh];
+            ceiling[b] = dbToGain (ta[b] + ceilingOffset);
+            ra[b] = p[kSubRatio];
+            tb[b] = -120.0; // no Below: ratio 1:1
+            rb[b] = 1.0;
+            continue;
+        }
         audible[b] = used[b] && (!anySolo || on (p[bandParam (b, kBandSolo)]));
         inTarget[b] = dbToGain (p[bandParam (b, kBandInput)] + kBakedInputDb);
         outTargetB[b] = dbToGain (p[bandParam (b, kBandOutput)] + kBakedOutputDb[b]);
@@ -337,8 +424,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         rb[b] = p[bandParam (b, kBelowRatio)];
     }
     // skip the gain computers when nothing would happen (ratio 1:1 everywhere or amount 0)
-    bool neutral[kNumBands];
-    for (int b = 0; b < kNumBands; ++b)
+    bool neutral[kAll];
+    for (int b = 0; b < kAll; ++b)
         neutral[b] = amount <= 0.0 || (std::fabs (ra[b] - 1.0) < 1e-6 && std::fabs (rb[b] - 1.0) < 1e-6);
     // Soften, on the top band: how far it is engaged (the thresholds' closeness times the knob)
     const int top = nBands - 1;
@@ -360,6 +447,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
             fresh.slope = slopeT;
             for (int j = 0; j < kMaxBands - 1; ++j)
                 fresh.tune (j, xg[j]);
+            fresh.tuneSub (subG);
             fresh.reset ();
             fadePos = 0;
         }
@@ -367,32 +455,63 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         const float w = fading ? std::clamp ((float)(fadePos - fadeWarm) / (float)fadeLen, 0.0f, 1.0f) : 0.0f;
         Bank& bk = banks[cur];
         Bank& nb = banks[cur ^ 1];
+        // the Sub band: starting, settling, fading in or out (off, nothing of it runs)
+        if (subState == SubState::Off && wantSub)
+            startSub ();
+        if (subState == SubState::Warming)
+        {
+            if (!wantSub)
+                subState = SubState::Off;
+            else if (++subPos >= subWarm)
+                subState = SubState::In;
+        }
+        else if (subState == SubState::In)
+        {
+            subMix = std::clamp (subMix + (wantSub ? subStep : -subStep), 0.0f, 1.0f);
+            if (subMix <= 0.0f)
+                subState = SubState::Off; // faded out: it stops
+        }
+        const bool subRun = subState != SubState::Off;
+        used[kSubBand] = subRun;
         float xs[2] = {inL[i], inR[i]};
-        float band[kNumBands][2] {};
-        float scBand[kNumBands][2] {};
+        float band[kAll][2] {};
+        float scBand[kAll][2] {};
+        const int nOut = subRun ? kAll : nBands;
         for (int c = 0; c < 2; ++c)
         {
-            float tmp[kMaxBands] {}, tmp2[kMaxBands] {};
-            splitBands (xs[c], c, nBands, bk.split, bk.ap, tmp);
+            float tmp[kAll] {}, tmp2[kAll] {};
+            if (subRun)
+                splitWithSub (xs[c], c, nBands, false, bk, subMix, tmp);
+            else
+                splitBands (xs[c], c, nBands, bk.split, bk.ap, tmp);
             if (fading)
             {
-                splitBands (xs[c], c, nBands, nb.split, nb.ap, tmp2);
-                for (int bb = 0; bb < nBands; ++bb)
+                if (subRun)
+                    splitWithSub (xs[c], c, nBands, false, nb, subMix, tmp2);
+                else
+                    splitBands (xs[c], c, nBands, nb.split, nb.ap, tmp2);
+                for (int bb = 0; bb < nOut; ++bb)
                     tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
             }
-            for (int bb = 0; bb < nBands; ++bb)
+            for (int bb = 0; bb < nOut; ++bb)
                 band[bb][c] = tmp[bb];
             if (scActive)
             {
                 const float sx = (c == 0 ? scL[i] : scR[i]) * scGain;
-                splitBands (sx, c, nBands, bk.scSplit, bk.scAp, tmp);
+                if (subRun)
+                    splitWithSub (sx, c, nBands, true, bk, subMix, tmp);
+                else
+                    splitBands (sx, c, nBands, bk.scSplit, bk.scAp, tmp);
                 if (fading)
                 {
-                    splitBands (sx, c, nBands, nb.scSplit, nb.scAp, tmp2);
-                    for (int bb = 0; bb < nBands; ++bb)
+                    if (subRun)
+                        splitWithSub (sx, c, nBands, true, nb, subMix, tmp2);
+                    else
+                        splitBands (sx, c, nBands, nb.scSplit, nb.scAp, tmp2);
+                    for (int bb = 0; bb < nOut; ++bb)
                         tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
                 }
-                for (int bb = 0; bb < nBands; ++bb)
+                for (int bb = 0; bb < nOut; ++bb)
                     scBand[bb][c] = tmp[bb];
             }
         }
@@ -403,7 +522,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         }
 
         float sumL = 0.0f, sumR = 0.0f;
-        for (int b = 0; b < kNumBands; ++b)
+        for (int b = 0; b < kAll; ++b)
         {
             if (!used[b])
                 continue;
@@ -548,6 +667,12 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                 st.meterIn = std::max (std::max (std::fabs (xl), std::fabs (xr)), st.meterIn * meterFall);
                 st.meterOut = std::max (std::max (std::fabs (yl), std::fabs (yr)), st.meterOut * meterFall);
             }
+            if (b == kSubBand)
+            {
+                // heard as far as it has faded in
+                yl *= subMix;
+                yr *= subMix;
+            }
             if (audible[b])
             {
                 sumL += yl;
@@ -573,7 +698,8 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     if (!listen && hasTail)
         sat.process (outL, outR, n);
 
-    for (int b = 0; b < kNumBands; ++b)
+    used[kSubBand] = subState != SubState::Off;
+    for (int b = 0; b < kAll; ++b)
     {
         meters[b].inputDb = gainToDb (bands[b].meterIn);
         meters[b].outputDb = gainToDb (bands[b].meterOut);

@@ -161,10 +161,14 @@ TEST (params_roundtrip)
                std::string (t.info (kSatExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kSatExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kSatExt2Base + pk::kTailExt2Advanced).def == 0.0,
            "Gently's Advanced block (the end saturator's), then the Slope");
-    CHECK (kSoftenColor == kXoverSlope + 1 && kNumParams == kSoftenColor + 1 && t.info (kXoverSlope).choices.size () == kNumXoverSlopes &&
+    CHECK (kSoftenColor == kXoverSlope + 1 && t.info (kXoverSlope).choices.size () == kNumXoverSlopes &&
                t.info (kXoverSlope).def == (double)kXover24 && t.toText (kXoverSlope, kXoverBrickwall) == "Brickwall" &&
-               t.toText (kXoverSlope, kXover6) == "6 dB",
-           "Slope: 6 dB .. Brickwall, 24 dB by default; Soften Color last");
+               t.toText (kXoverSlope, kXover6) == "6 dB" && t.toText (kXoverSlope, kXover18) == "18 dB" &&
+               t.toText (kXoverSlope, kXover24) == "24 dB" && t.toText (kXoverSlope, kXover96) == "96 dB",
+           "Slope: 6 dB .. Brickwall, 24 dB by default; then Soften Color");
+    CHECK (kSubOn == kSoftenColor + 1 && kNumParams == kSubOutput + 1 && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
+               t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
+           "the Sub band last: off, 40 Hz in 20 .. 100 Hz");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& p = t.info (id);
@@ -492,7 +496,8 @@ TEST (preset_defaults)
                    std::fabs (e.param (bandParam (b, kAttack)) - want[b].attack) < 1e-9 &&
                    std::fabs (e.param (bandParam (b, kRelease)) - want[b].release) < 1e-9,
                "band %d: Above %.1f, Below %.1f dB, %.1f / %.0f ms", b + 1, want[b].above, want[b].below, want[b].attack, want[b].release);
-    CHECK (std::lround (e.param (kXoverSlope)) == kXover24 && e.param (kSoftenColor) < 0.5, "24 dB crossovers, Soften Color off");
+    CHECK (std::lround (e.param (kXoverSlope)) == kXover24 && e.param (kSoftenColor) < 0.5 && e.param (kSubOn) < 0.5,
+           "24 dB crossovers, Soften Color and the Sub band off");
     // It squashes dynamics hard: a 44 dB level difference at 1 kHz comes out within ~15 dB.
     auto level = [] (double inDb) {
         Engine x;
@@ -772,9 +777,11 @@ TEST (fuzz_random_params)
         }
         auto sc = in;
         auto out = run (e, in, rnd () < 0.5 ? &sc : nullptr, 1 + (int)(rnd () * 600));
-        // and on, with a new Slope and Soften Color (switched while it runs)
+        // and on, with a new Slope, Soften Color and the Sub band (switched while it runs)
         e.setParam (kXoverSlope, std::floor (rnd () * (double)kNumXoverSlopes));
         e.setParam (kSoftenColor, rnd () < 0.5 ? 1.0 : 0.0);
+        e.setParam (kSubOn, e.param (kSubOn) < 0.5 ? 1.0 : 0.0);
+        e.setParam (kSubFreq, paramTable ().toPlain (kSubFreq, rnd ()));
         const auto more = run (e, in, nullptr, 1 + (int)(rnd () * 600));
         out.l.insert (out.l.end (), more.l.begin (), more.l.end ());
         bool finite = true;
@@ -990,7 +997,8 @@ TEST (slope_responses_sum_to_allpass)
     {
         const double at4k = 20.0 * std::log10 (std::abs (xoverResponse (1000.0, s, 4000.0, 192000.0).low));
         const double at8k = 20.0 * std::log10 (std::abs (xoverResponse (1000.0, s, 8000.0, 192000.0).low));
-        const double expect = s == kXover6 ? 6.0 : (s == kXoverBrickwall ? 192.0 : 12.0 * s);
+        const double perOctave[kNumXoverSlopes] = {6, 12, 18, 24, 36, 48, 60, 72, 84, 96, 192};
+        const double expect = perOctave[s];
         CHECK (std::fabs ((at4k - at8k) - expect) < 0.5 + 0.02 * expect, "slope %d: %.1f dB per octave", s, at4k - at8k);
     }
 }
@@ -1088,11 +1096,14 @@ TEST (steeper_slopes_separate_bands_more)
         };
         const double mid = gainAt (380.0), leak = std::max (std::fabs (gainAt (40.0)), std::fabs (gainAt (4000.0)));
         std::printf ("    slope %d: middle %+.1f dB, 40 Hz / 4 kHz up to %+.2f dB\n", s, mid, leak);
-        CHECK (mid > (s <= kXover12 ? 10.0 : 11.5), "slope %d: the band's middle gets its gain: %.1f dB", s, mid);
+        CHECK (mid > (s <= kXover18 ? 10.0 : 11.5), "slope %d: the band's middle gets its gain: %.1f dB", s, mid);
         CHECK (leak < prevLeak + 0.01, "slope %d: steeper leaks less (%.2f vs %.2f dB)", s, leak, prevLeak);
         if (s >= kXover24)
             CHECK (leak < (s == kXover24 ? 0.5 : 0.1), "slope %d: the other bands keep their level: %.2f dB", s, leak);
-        prevLeak = leak;
+        // 18 dB (a Butterworth, not a Linkwitz-Riley) leaks less than 12 dB; the Linkwitz-Riley slopes
+        // are compared with each other
+        if (s != kXover18)
+            prevLeak = leak;
     }
 }
 
@@ -1167,6 +1178,9 @@ TEST (soften_color_off_is_a_plain_delay)
     smacheratr::Engine satAlone;
     satAlone.prepare (kSr, 512);
     CHECK (e->colorLatency () == satAlone.latency (), "Color's latency is Smacheratr's: %d", e->colorLatency ());
+    Engine full;
+    full.prepare (kSr, 512);
+    std::printf ("    latency at 48 kHz: %d samples (Color's %d)\n", full.latency (), full.colorLatency ());
 }
 
 // a bright, loud signal: a sawtooth with noise, pushed through the OTT defaults
@@ -1272,6 +1286,265 @@ TEST (soften_color_toggle_does_not_click)
     }
 }
 
+// ---- the brickwall -----------------------------------------------------------------------------------------
+
+TEST (brickwall_is_steep)
+{
+    // two bands split at 1 kHz, only the high band heard (soloed): a third of an octave below the
+    // crossover the brickwall has taken it down more than 50 dB, a third above it passes (and the
+    // 96 dB slope is far gentler there)
+    auto highOnly = [] (int slope, double f) {
+        auto e = neutralEngine (kSr, 2, slope);
+        e->setParam (kXover1, 1000.0);
+        e->setParam (bandParam (1, kBandSolo), 1.0);
+        e->reset ();
+        auto in = sine (f, -12.0, 1.0);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 24000, 48000) - toneDb (in.l, f, 24000, 48000);
+    };
+    const double below = highOnly (kXoverBrickwall, 1000.0 / 1.25), above = highOnly (kXoverBrickwall, 1000.0 * 1.25);
+    const double below96 = highOnly (kXover96, 1000.0 / 1.25);
+    std::printf ("    a third of an octave below: %.1f dB (96 dB: %.1f), above: %.2f dB\n", below, below96, above);
+    CHECK (below < -50.0 && above > -1.0 && below < below96 - 20.0, "brickwall: %.1f / %.2f dB", below, above);
+    // the prototype: -6 dB at the corner on both sides (the Linkwitz-Riley point)
+    const auto at = xoverResponse (1000.0, kXoverBrickwall, 1000.0, 192000.0);
+    CHECK (std::fabs (20.0 * std::log10 (std::abs (at.low)) + 6.02) < 0.05 && std::fabs (20.0 * std::log10 (std::abs (at.high)) + 6.02) < 0.05,
+           "-6 dB at the corner on both sides");
+}
+
+// ---- the Sub band -------------------------------------------------------------------------------------------
+
+// a signal with everything in it: noise and a low sweep, loud and quiet
+static Sig mixedSignal (double secs)
+{
+    Sig s;
+    const size_t n = (size_t)(secs * kSr);
+    s.l.resize (n);
+    s.r.resize (n);
+    uint32_t state = 4242u;
+    auto rnd = [&] {
+        state = state * 1664525u + 1013904223u;
+        return (double)(state >> 8) / (double)(1u << 24);
+    };
+    for (size_t i = 0; i < n; ++i)
+    {
+        const double env = (i / 7000) % 2 ? 0.6 : 0.03;
+        const double sw = std::sin (2.0 * M_PI * (25.0 + 200.0 * i / n) * i / kSr);
+        s.l[i] = (float)(env * (0.4 * (rnd () * 2 - 1) + 0.6 * sw));
+        s.r[i] = (float)(env * (0.3 * (rnd () * 2 - 1) + 0.7 * sw));
+    }
+    return s;
+}
+
+TEST (sub_band_off_is_identical)
+{
+    // off, the Sub band's settings change nothing, to the bit (the OTT defaults, 3 and 4 bands, the
+    // side-chain on)
+    for (int bands : {2, 3})
+    {
+        Engine a, b;
+        for (Engine* e : {&a, &b})
+        {
+            e->prepare (kSr, 512);
+            e->setParam (kBands, bands);
+            e->setParam (kScOn, 1.0);
+        }
+        b.setParam (kSubFreq, 90.0);
+        b.setParam (kSubThresh, -50.0);
+        b.setParam (kSubRatio, 20.0);
+        b.setParam (kSubAttack, 1.0);
+        b.setParam (kSubOutput, 12.0);
+        a.reset ();
+        b.reset ();
+        const Sig in = mixedSignal (1.0);
+        const Sig sc = sine (50.0, -10.0, 1.0);
+        const Sig oa = run (a, in, &sc), ob = run (b, in, &sc);
+        size_t diff = 0;
+        for (size_t i = 0; i < oa.l.size (); ++i)
+            diff += oa.l[i] != ob.l[i] || oa.r[i] != ob.r[i];
+        CHECK (diff == 0 && !b.subRunning (), "%d bands: %zu samples differ", bands + 1, diff);
+        CHECK (a.latency () == b.latency (), "the same latency");
+    }
+    // switched on and off again it stops (after its fade)
+    Engine e;
+    e.prepare (kSr, 512);
+    e.setParam (kSubOn, 1.0);
+    e.reset ();
+    CHECK (e.subRunning (), "on from the start");
+    run (e, mixedSignal (0.2));
+    e.setParam (kSubOn, 0.0);
+    run (e, mixedSignal (0.2));
+    CHECK (!e.subRunning (), "stopped after fading out");
+}
+
+TEST (sub_band_sums_flat)
+{
+    // with nothing processed the Sub band and the bands still add up to an all-pass, at every slope, for
+    // 1, 3 and 4 bands, with the corner anywhere in its range
+    for (int s = 0; s < kNumXoverSlopes; ++s)
+        for (int bands : {1, 3, 4})
+            for (double corner : {20.0, 40.0, 100.0})
+            {
+                auto e = neutralEngine (kSr, bands, s);
+                e->setParam (kXover1, 150.0);
+                e->setParam (kSubOn, 1.0);
+                e->setParam (kSubFreq, corner);
+                e->setParam (kSubRatio, 1.0);
+                double worst = 0.0;
+                for (double f : {15.0, 30.0, 40.0, 70.0, 100.0, 300.0, 3000.0})
+                {
+                    e->reset ();
+                    auto in = sine (f, -12.0, 1.2);
+                    auto out = run (*e, in);
+                    const double gain = rmsDb (out.l, 38400, 57600) - rmsDb (in.l, 38400, 57600);
+                    worst = std::max (worst, std::fabs (gain));
+                }
+                CHECK (worst < 0.1, "slope %d, %d bands, Sub at %.0f Hz: %.3f dB off flat", s, bands, corner, worst);
+            }
+    // the Slope changed while the Sub band runs: after the crossfade it is flat again at the new slope
+    auto e = neutralEngine (kSr, 3, kXover24);
+    e->setParam (kSubOn, 1.0);
+    e->setParam (kSubRatio, 1.0);
+    e->reset ();
+    const auto in = sine (40.0, -12.0, 2.0);
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    for (size_t pos = 0; pos < in.l.size (); pos += 256)
+    {
+        if (pos == 24064)
+            e->setParam (kXoverSlope, kXover96);
+        const int n = (int)std::min<size_t> (256, in.l.size () - pos);
+        e->process (in.l.data () + pos, in.r.data () + pos, nullptr, nullptr, out.l.data () + pos, out.r.data () + pos, n);
+    }
+    const double after = rmsDb (out.l, 72000, 96000) - rmsDb (in.l, 72000, 96000);
+    CHECK (std::fabs (after) < 0.1, "flat after the Slope changed with the Sub band on: %.3f dB", after);
+}
+
+TEST (sub_band_compresses_the_sub)
+{
+    // three neutral bands; the Sub band at 40 Hz, 4:1 above -30 dB: a loud 30 Hz tone is compressed,
+    // a loud 200 Hz tone is not, and a quiet 30 Hz one (under the threshold) is not either
+    double corner = 40.0;
+    auto gainAt = [&corner] (double f, double levelDb, bool sub) {
+        auto e = neutralEngine (kSr, 3, kXover24);
+        e->setParam (kSubOn, sub ? 1.0 : 0.0);
+        e->setParam (kSubFreq, corner);
+        e->setParam (kSubThresh, -30.0);
+        e->setParam (kSubRatio, 4.0);
+        e->setParam (kSubAttack, 30.0);
+        e->setParam (kSubRelease, 200.0);
+        e->reset ();
+        auto in = sine (f, levelDb, 2.0);
+        auto out = run (*e, in);
+        return toneDb (out.l, f, 48000, 96000) - toneDb (in.l, f, 48000, 96000);
+    };
+    const double loud30 = gainAt (30.0, -6.0, true), loud200 = gainAt (200.0, -6.0, true), quiet30 = gainAt (30.0, -40.0, true);
+    const double off30 = gainAt (30.0, -6.0, false);
+    std::printf ("    30 Hz at -6 dB: %+.1f dB (off %+.2f), 200 Hz at -6 dB: %+.2f dB, 30 Hz at -40 dB: %+.2f dB\n", loud30, off30, loud200,
+                 quiet30);
+    // at 40 Hz the tone sits inside the corner's taper (a quarter of it, -6 dB, still goes to band 1),
+    // so it gets part of the 18 dB 4:1 takes from 24 dB above the threshold; with the corner at 80 Hz,
+    // most of it
+    CHECK (loud30 < -6.0 && std::fabs (off30) < 0.1, "a loud 30 Hz tone compressed: %.1f dB", loud30);
+    CHECK (std::fabs (loud200) < 0.2, "200 Hz untouched: %.2f dB", loud200);
+    CHECK (std::fabs (quiet30) < 0.2, "a quiet 30 Hz tone untouched: %.2f dB", quiet30);
+    corner = 80.0;
+    const double loud30at80 = gainAt (30.0, -6.0, true), loud200at80 = gainAt (200.0, -6.0, true);
+    std::printf ("    corner at 80 Hz: 30 Hz %+.1f dB, 200 Hz %+.2f dB\n", loud30at80, loud200at80);
+    CHECK (loud30at80 < -14.0 && std::fabs (loud200at80) < 0.3, "corner at 80 Hz: %.1f / %.2f dB", loud30at80, loud200at80);
+    // the Sub band's Output, and its meter
+    auto e = neutralEngine (kSr, 3, kXover24);
+    e->setParam (kSubOn, 1.0);
+    e->setParam (kSubRatio, 1.0);
+    e->setParam (kSubOutput, 6.0);
+    e->reset ();
+    auto in = sine (25.0, -20.0, 1.5);
+    auto out = run (*e, in);
+    const double g = toneDb (out.l, 25.0, 48000, 72000) - toneDb (in.l, 25.0, 48000, 72000);
+    CHECK (g > 3.0 && g < 6.5, "Sub Output +6 dB: %.2f dB at 25 Hz", g);
+    CHECK (e->meter (kSubBand).outputDb > -20.0 && e->meter (kSubBand).outputDb < -8.0, "the Sub band's meter: %.1f dB",
+           e->meter (kSubBand).outputDb);
+}
+
+TEST (sub_band_toggle_does_not_click)
+{
+    // a 45 Hz and a 400 Hz tone, the Sub band compressing, switched on at 0.5 s and off at 1.5 s: the
+    // latency stays, no clicks, no drop-out
+    auto e = neutralEngine (kSr, 3, kXover24);
+    e->setParam (kSubThresh, -30.0);
+    e->setParam (kSubRatio, 4.0);
+    e->reset ();
+    const int latency = e->latency ();
+    Sig in = sine (45.0, -8.0, 2.5);
+    const Sig hi = sine (400.0, -14.0, 2.5);
+    for (size_t i = 0; i < in.l.size (); ++i)
+    {
+        in.l[i] += hi.l[i];
+        in.r[i] += hi.r[i];
+    }
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    bool sameLatency = true;
+    for (size_t pos = 0; pos < in.l.size (); pos += 256)
+    {
+        if (pos == 24064)
+            e->setParam (kSubOn, 1.0);
+        if (pos == 72192)
+            e->setParam (kSubOn, 0.0);
+        const int n = (int)std::min<size_t> (256, in.l.size () - pos);
+        e->process (in.l.data () + pos, in.r.data () + pos, nullptr, nullptr, out.l.data () + pos, out.r.data () + pos, n);
+        sameLatency &= e->latency () == latency;
+    }
+    CHECK (sameLatency, "the latency never changes");
+    const double off = maxJump (out.l, 12000, 24000), on = maxJump (out.l, 50000, 72000);
+    const double across = std::max (maxJump (out.l, 24000, 50000), maxJump (out.l, 72000, 100000));
+    std::printf ("    largest second difference %.5f off, %.5f on, %.5f across the switches\n", off, on, across);
+    CHECK (across < 1.3 * std::max (off, on), "no clicks: %.5f vs %.5f / %.5f", across, off, on);
+    for (size_t a = 24000; a + 480 < 100000; a += 480)
+        CHECK (rmsDb (out.l, a, a + 480) > rmsDb (in.l, a, a + 480) - 12.0, "window at %zu: %.1f dB", a,
+               rmsDb (out.l, a, a + 480) - rmsDb (in.l, a, a + 480));
+    CHECK (!e->subRunning (), "off again at the end");
+}
+
+TEST (ott_migration_round_trip)
+{
+    // every gain an old state holds: the old baked gain plus the old trim is the new baked gain plus the
+    // migrated trim (unless held at the range's end), and migrating a whole state is the same as
+    // migrating each value
+    const auto& t = paramTable ();
+    uint32_t seed = 5;
+    auto rnd = [&] {
+        seed = seed * 1664525u + 1013904223u;
+        return (double)(seed >> 8) / (double)(1u << 24);
+    };
+    std::vector<double> old (kNumParams), whole (kNumParams);
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        old[id] = whole[id] = rnd ();
+    migrateOldBaked (whole.data ());
+    int moved = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+    {
+        CHECK (whole[id] == migrateOldBakedNorm (id, old[id]), "%s: whole state vs one value", t.info (id).name);
+        const double shift = oldBakedShiftDb (id);
+        if (shift == 0.0)
+        {
+            CHECK (whole[id] == old[id], "%s untouched", t.info (id).name);
+            continue;
+        }
+        ++moved;
+        const double oldPlain = t.toPlain (id, old[id]), newPlain = t.toPlain (id, whole[id]);
+        const auto& info = t.info (id);
+        const double want = std::clamp (oldPlain + shift, info.min, info.max);
+        CHECK (std::fabs (newPlain - want) < 1e-9, "%s: %.2f -> %.2f dB (want %.2f)", info.name, oldPlain, newPlain, want);
+    }
+    CHECK (moved == 2 * kMaxBands + 1, "the band Inputs and Outputs and the Output move (%d)", moved);
+    // the new parameters are where an old project was: 24 dB crossovers, no Color, no Sub band
+    CHECK (t.info (kXoverSlope).def == (double)kXover24 && t.info (kSoftenColor).def == 0.0 && t.info (kSubOn).def == 0.0,
+           "an old state (without them) gets the old sound");
+}
+
 TEST (performance)
 {
     auto e = engine (false);
@@ -1287,6 +1560,33 @@ TEST (performance)
     const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.08, "too slow"); // 4 bands plus the 4x oversampled saturator
+    // four bands with the side-chain, the new parts one by one, up to the heaviest: the brickwall with
+    // the Sub band and Soften's Color
+    struct Setup
+    {
+        int slope;
+        bool sub, color;
+        const char* name;
+    };
+    const Setup setups[] = {{kXover24, false, false, "24 dB"},
+                            {kXover24, true, false, "24 dB, Sub band"},
+                            {kXover24, false, true, "24 dB, Color"},
+                            {kXoverBrickwall, false, false, "brickwall"},
+                            {kXoverBrickwall, true, true, "brickwall, Sub band, Color"}};
+    double heaviest = 0.0;
+    for (const Setup& s : setups)
+    {
+        e->setParam (kBands, 3);
+        e->setParam (kXoverSlope, s.slope);
+        e->setParam (kSubOn, s.sub ? 1.0 : 0.0);
+        e->setParam (kSoftenColor, s.color ? 1.0 : 0.0);
+        e->reset ();
+        const std::clock_t t1 = std::clock ();
+        run (*e, in, &in);
+        heaviest = (double)(std::clock () - t1) / CLOCKS_PER_SEC / 10.0;
+        std::printf ("    CPU: %.2f%% of one core (4 bands + side-chain: %s)\n", 100.0 * heaviest, s.name);
+    }
+    CHECK (heaviest < 0.2, "too slow");
 }
 
 int main (int argc, char** argv)

@@ -84,6 +84,10 @@ void Editor::onClose ()
     }
     for (auto& v : xoverBoxes)
         v = nullptr;
+    subName = nullptr;
+    for (auto& v : subBoxes)
+        v = nullptr;
+    subOutBox = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -140,12 +144,20 @@ void Editor::buildUI (CFrame* f)
     }
     for (int x = 0; x < kMaxBands - 1; ++x)
         xoverBoxes[x] = bind (root, new NumberBox (none, this, (uint32_t)(kXover1 + x)));
+    // the Sub band's lane (shown when it is on)
+    subName = new Label (none, "Sub", 10.5, true, 0);
+    root->addView (subName);
+    const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
+    for (int i = 0; i < 4; ++i)
+        subBoxes[i] = bind (root, new NumberBox (none, this, subFields[i], i < 2 ? kAboveColor : pk::theme::kTextBright));
+    subOutBox = bind (root, new NumberBox (none, this, kSubOutput));
 
     // global column
     bind (root, new Knob (knobRect (kGlobalColLeft, 40), this, kOutput, nullptr, true));
     bind (root, new Knob (knobRect (kGlobalColLeft, 114), this, kTime));
     bind (root, new Knob (knobRect (kGlobalColLeft, 188), this, kAmount));
     bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
+    bind (root, new Toggle (CRect (kGlobalColLeft, kColorTop, kGlobalColLeft + 60, kColorTop + 18), this, kSoftenColor, "Color"));
 
     // bottom row
     bind (root, new Toggle (CRect (8, 352, 96, 372), this, kSoftKnee, "Soft Knee"));
@@ -154,6 +166,13 @@ void Editor::buildUI (CFrame* f)
     rl->setDim (true);
     root->addView (rl);
     rmsWindowBox = bind (root, new NumberBox (CRect (254, 353, 314, 371), this, kRmsWindow));
+    // second row: the crossovers' Slope, the Sub band
+    auto* sl = new Label (CRect (8, kRow2Top + 2, kSlopeLeft - 4, kRow2Top + 18), "Slope", 9.5, true, 2);
+    sl->setDim (true);
+    root->addView (sl);
+    bind (root, new Choice (CRect (kSlopeLeft, kRow2Top, kSlopeLeft + 90, kRow2Top + 20), this, kXoverSlope));
+    bind (root, new Toggle (CRect (kSubOnLeft, kRow2Top, kSubOnLeft + 48, kRow2Top + 20), this, kSubOn, "Sub"));
+    bind (root, new NumberBox (CRect (kSubFreqLeft, kRow2Top + 1, kSubFreqLeft + 64, kRow2Top + 19), this, kSubFreq));
     auto* sp = new Panel (CRect (350, 344, 640, 416), "SIDECHAIN");
     root->addView (sp);
     bind (sp, new Toggle (CRect (12, 30, 66, 50), this, kScOn, "On"));
@@ -181,9 +200,13 @@ void Editor::buildUI (CFrame* f)
 
 void Editor::updateLayout ()
 {
+    if (!display)
+        return;
     const int n = std::clamp ((int)std::lround (plainValue (kBands)) + 1, 1, kMaxBands);
+    const bool sub = display->subShown ();
     const double top = kDisplayTop + DynDisplay::kHeader;
-    const double laneH = (kDisplayBottom - kDisplayTop - DynDisplay::kHeader - DynDisplay::kScaleHeight) / n;
+    const double laneH = (kDisplayBottom - kDisplayTop - DynDisplay::kHeader - DynDisplay::kScaleHeight) / display->lanes ();
+    const double knobH = std::min (kKnobH, laneH - 2);
     const double belowX = kDisplayLeft + 4, aboveX = kDisplayRight - DynDisplay::kRightCol + 4, timeX = aboveX + 80;
     for (int b = 0; b < kMaxBands; ++b)
     {
@@ -201,9 +224,9 @@ void Editor::updateLayout ()
         place (nameLabels[b], CRect (kBandColLeft, laneTop + 12, kBandColLeft + 48, laneTop + 26));
         place (onToggles[b], CRect (kBandColLeft + 50, laneTop + 12, kBandColLeft + 76, laneTop + 26));
         place (soloToggles[b], CRect (kBandColLeft + 80, laneTop + 12, kBandColLeft + 98, laneTop + 26));
-        const double ky = std::max (laneTop + 1, cy - kKnobH / 2);
-        place (inputKnobs[b], knobRect (kInputColLeft, ky));
-        place (outputKnobs[b], knobRect (kOutputColLeft, ky));
+        const double ky = std::max (laneTop + 1, cy - knobH / 2);
+        place (inputKnobs[b], CRect (kInputColLeft, ky, kInputColLeft + kKnobW, ky + knobH));
+        place (outputKnobs[b], CRect (kOutputColLeft, ky, kOutputColLeft + kKnobW, ky + knobH));
         const double xs[6] = {belowX, belowX, aboveX, aboveX, timeX, timeX};
         for (int i = 0; i < 6; ++i)
         {
@@ -220,6 +243,22 @@ void Editor::updateLayout ()
             const double boundary = top + (n - 1 - x) * laneH; // between band x (below) and x + 1 (above)
             place (xoverBoxes[x], CRect (kBandColLeft + 14, boundary - 9, kBandColLeft + 84, boundary + 9));
         }
+    }
+    // the Sub band's lane, at the bottom
+    for (CView* v : {static_cast<CView*> (subName), subBoxes[0], subBoxes[1], subBoxes[2], subBoxes[3], subOutBox})
+        if (v)
+            v->setVisible (sub);
+    if (sub)
+    {
+        const double laneTop = top + n * laneH, cy = laneTop + laneH / 2;
+        place (subName, CRect (kBandColLeft, laneTop + 12, kBandColLeft + 48, laneTop + 26));
+        const double xs[4] = {aboveX, aboveX, timeX, timeX};
+        for (int i = 0; i < 4; ++i)
+        {
+            const double y = i % 2 == 0 ? cy - 20 : cy + 2;
+            place (subBoxes[i], CRect (xs[i], y, xs[i] + 68, y + 18));
+        }
+        place (subOutBox, CRect (kOutputColLeft, cy - 9, kOutputColLeft + kKnobW + 10, cy + 9));
     }
     if (frame)
         frame->invalid ();
@@ -238,7 +277,7 @@ void Editor::paramChanged (uint32_t id)
         tailDisplays->paramChanged (id);
     if (display)
         display->invalid ();
-    if (id == kBands)
+    if (id == kBands || id == kSubOn)
         updateLayout ();
     if (id == kDetector && rmsWindowBox)
         rmsWindowBox->setEnabledLook (std::lround (plainValue (kDetector)) == kRms);
@@ -283,6 +322,9 @@ void Editor::showMenu (CPoint where)
             for (int b = 0; b < kMaxBands; ++b)
                 for (int f : {kAboveRatio, kBelowRatio})
                     ctl->setPlainFromUI (bandParam (b, f), 1.0);
+            // and the Sub band's
+            if (r == (int32_t)sizes.size () + 1)
+                ctl->setPlainFromUI (kSubRatio, 1.0);
     });
 }
 

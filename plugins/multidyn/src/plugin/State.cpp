@@ -12,13 +12,15 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x4d44594e; // 'MDYN'
-constexpr int32 kVersion = 3;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
-constexpr int32 kClarityFullRange = 2;
+constexpr int32 kClarityFullRange = 2; // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
+constexpr int32 kOttDefaults = 4;      // 4: Live's OTT preset's gain staging baked in (Params.h)
+static_assert (kStateVersion == kOttDefaults);
 } // namespace
 
-bool writeState (IBStream* stream, const State& st)
+bool writeState (IBStream* stream, const State& st, int32 version)
 {
+    const int32 kVersion = version;
     IBStreamer s (stream, kLittleEndian);
     int32 present = 0;
     for (uint32 id = 0; id < kNumParams; ++id)
@@ -53,6 +55,15 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // the baked gains were the old ones: the difference moves into the gain controls (a missing one was
+    // at its default, 0 dB, which is also where it is now)
+    if (version < kOttDefaults)
+    {
+        migrateOldBaked (st.norm.data ());
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (oldBakedShiftDb (id) != 0.0)
+                st.has[id] = true;
     }
     // one Clarity button: a state from before, made to mean the same
     if (version < kClarityOneButton)

@@ -1,5 +1,6 @@
 // End-to-end test of the built Multidyn.vst3: audio (with the side-chain bus), state, the editor
 // and its mouse gestures. usage: multidyn_hosttest <Multidyn.vst3> <output dir>
+#include "Crossover.h"
 #include "Params.h"
 #include "plugin/State.h"
 #include "ui/DynDisplay.h"
@@ -98,6 +99,42 @@ int main (int argc, char** argv)
                    std::fabs (plainOf (rig, bandParam (0, kBandOutput))) < 1e-6 &&
                    plainOf (rig, bandParam (2, kBelowRatio)) >= kRatioInf * 0.999 && std::fabs (plainOf (rig, multidyn::kOutput)) < 1e-6,
                "preset defaults");
+        CHECK (std::lround (plainOf (rig, kXoverSlope)) == kXover24 && plainOf (rig, kSoftenColor) < 0.5 && plainOf (rig, kSubOn) < 0.5 &&
+                   std::fabs (plainOf (rig, kSubFreq) - 40.0) < 1e-6,
+               "24 dB crossovers, Soften Color off, the Sub band off at 40 Hz");
+
+        // --- an old state (version 3: the gains around the old baked ones) sounds the same: its gains move ---
+        {
+            State old;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                old.norm[id] = defaultNormalized (id);
+                old.has[id] = id < kXoverSlope; // saved before the Slope existed
+            }
+            set (old, bandParam (1, kBandOutput), 2.0);
+            auto roundTrip = [&] (int32 version) {
+                MemoryStream s;
+                writeState (&s, old, version);
+                s.seek (0, IBStream::kIBSeekSet, nullptr);
+                State got;
+                readState (&s, got);
+                return got;
+            };
+            const State v3 = roundTrip (3), v4 = roundTrip (kStateVersion);
+            auto plain = [] (const State& st, uint32_t id) { return toPlain (id, st.norm[id]); };
+            CHECK (std::fabs (plain (v3, bandParam (0, kBandOutput)) - 13.7) < 1e-6 && std::fabs (plain (v3, bandParam (1, kBandOutput)) - 5.4) < 1e-6 &&
+                       std::fabs (plain (v3, bandParam (2, kBandInput)) - 5.2) < 1e-6 && std::fabs (plain (v3, multidyn::kOutput) + 7.0) < 1e-6,
+                   "version 3 migrated: band 1 Output %.2f, band 2 Output %.2f, Output %.2f", plain (v3, bandParam (0, kBandOutput)),
+                   plain (v3, bandParam (1, kBandOutput)), plain (v3, multidyn::kOutput));
+            CHECK (std::fabs (plain (v4, bandParam (0, kBandOutput))) < 1e-9 && std::fabs (plain (v4, bandParam (1, kBandOutput)) - 2.0) < 1e-9,
+                   "version 4 loads as it is");
+            CHECK (std::lround (plain (v3, kXoverSlope)) == kXover24 && plain (v3, kSubOn) < 0.5 && plain (v3, kSoftenColor) < 0.5,
+                   "the new parameters where an old project was");
+            // through the plug-in: the controller shows the migrated value
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, old, 3); }), "old state applied");
+            CHECK (std::fabs (plainOf (rig, bandParam (0, kBandOutput)) - 13.7) < 1e-6, "controller: band 1 Output %.2f",
+                   plainOf (rig, bandParam (0, kBandOutput)));
+        }
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
         State st = baseState ();
@@ -149,6 +186,41 @@ int main (int argc, char** argv)
         CHECK (std::fabs (back.norm[bandParam (0, kAboveRatio)] - toNormalized (bandParam (0, kAboveRatio), 10.0)) < 1e-9,
                "automated ratio saved");
         CHECK (std::fabs (back.norm[kBands] - toNormalized (kBands, 3)) < 1e-9, "band count saved");
+
+        // --- the Sub band and Soften's Color through the plug-in: the latency stays; a loud 30 Hz tone
+        // is turned down by the Sub band, the new settings are saved ---
+        {
+            const uint32 latency = rig.processor->getLatencySamples ();
+            auto low = [] (int bus, int, float* buf, int n, long long pos) {
+                if (bus != 0)
+                    return;
+                for (int i = 0; i < n; ++i)
+                    buf[i] = (float)(0.5 * std::sin (2.0 * M_PI * 30.0 * (double)(pos + i) / 48000.0));
+            };
+            rig.param (kScOn, 0.0);
+            rig.param (kSubFreq, toNormalized (kSubFreq, 80.0));
+            rig.param (kSubThresh, toNormalized (kSubThresh, -30.0));
+            rig.param (kSubRatio, toNormalized (kSubRatio, 1.0));
+            rig.param (kSubOn, 1.0);
+            rig.param (kSoftenColor, 1.0);
+            rig.param (kXoverSlope, toNormalized (kXoverSlope, kXover48));
+            out.clear ();
+            rig.render (1.5, out, nullptr, low);
+            const double flat = rms (out, 48000, 72000);
+            rig.param (kSubRatio, toNormalized (kSubRatio, 8.0));
+            out.clear ();
+            rig.render (1.5, out, nullptr, low);
+            const double squashed = rms (out, 48000, 72000);
+            CHECK (dbfs (squashed) < dbfs (flat) - 10.0, "the Sub band at 1:8: %.1f dB (1:1: %.1f dB)", dbfs (squashed), dbfs (flat));
+            CHECK (rig.processor->getLatencySamples () == latency, "the latency stays: %u vs %u", rig.processor->getLatencySamples (), latency);
+            MemoryStream s2;
+            rig.component->getState (&s2);
+            s2.seek (0, IBStream::kIBSeekSet, nullptr);
+            State got;
+            CHECK (readState (&s2, got) && got.norm[kSubOn] > 0.5 && got.norm[kSoftenColor] > 0.5 &&
+                       std::lround (toPlain (kXoverSlope, got.norm[kXoverSlope])) == kXover48,
+                   "Sub band, Color and Slope saved");
+        }
         rig.stop ();
 
         // --- editor with the untouched OTT defaults while audio plays (docs screenshot) ---
@@ -297,6 +369,40 @@ int main (int argc, char** argv)
             win.click (fx, fy, 2);
             CHECK (std::fabs (plainOf (rig, midAttack) - toPlain (midAttack, defaultNormalized (midAttack))) < 1e-6,
                    "double-click resets the field");
+
+            // 9. the Sub band: its On in the second row under the display; on, it gets a lane at the
+            // bottom (four lanes now), whose threshold edge drags like a band's
+            win.click (Editor::kSubOnLeft + 24, Editor::kRow2Top + 10);
+            CHECK (plainOf (rig, kSubOn) > 0.5, "Sub band on");
+            pump (0.3);
+            CHECK (win.savePng (outDir + "/ui_multidyn_sub.png"), "screenshot with the Sub band");
+            const double laneH4 = (Editor::kDisplayBottom - lanesTop - DynDisplay::kScaleHeight) / 4.0;
+            const double subY = lanesTop + laneH4 * 3.5;
+            const double s0 = plainOf (rig, kSubThresh);
+            win.drag (xOf (s0), subY, xOf (s0) - 8.0 * pxPerDb, subY);
+            CHECK (std::fabs (plainOf (rig, kSubThresh) - (s0 - 8.0)) < 0.3, "Sub threshold drag -> %.2f (want %.2f)", plainOf (rig, kSubThresh),
+                   s0 - 8.0);
+            win.drag (inAbove, subY, inAbove, subY + 40);
+            CHECK (plainOf (rig, kSubRatio) > 4.0 * 1.3, "Sub ratio drag down: %.2f", plainOf (rig, kSubRatio));
+            win.click (inAbove, subY, 2);
+            CHECK (std::fabs (plainOf (rig, kSubRatio) - 1.0) < 1e-6, "double-click: the Sub band at 1:1");
+            // its Attack field in the lane, its Frequency in the second row
+            const double sfx = Editor::kDisplayRight - DynDisplay::kRightCol + 84 + 34;
+            const double sa0 = plainOf (rig, kSubAttack);
+            win.drag (sfx, subY - 11, sfx, subY - 51);
+            CHECK (plainOf (rig, kSubAttack) > sa0 * 1.2, "Sub attack field drag: %.1f -> %.1f ms", sa0, plainOf (rig, kSubAttack));
+            const double f0 = plainOf (rig, kSubFreq);
+            win.drag (Editor::kSubFreqLeft + 30, Editor::kRow2Top + 10, Editor::kSubFreqLeft + 30, Editor::kRow2Top - 30);
+            CHECK (plainOf (rig, kSubFreq) > f0 * 1.1, "Sub frequency field drag: %.1f -> %.1f Hz", f0, plainOf (rig, kSubFreq));
+            // 10. Soften's Color under the Soften knob; the Slope (a menu: set here, shown in the screenshot)
+            win.click (Editor::kGlobalColLeft + 30, Editor::kColorTop + 9);
+            CHECK (plainOf (rig, kSoftenColor) > 0.5, "Soften Color on");
+            rig.param (kXoverSlope, toNormalized (kXoverSlope, kXoverBrickwall));
+            pump (0.2);
+            CHECK (win.savePng (outDir + "/ui_multidyn_sub_color_brickwall.png"), "screenshot: Color on, Brickwall");
+            // the Sub band off again: its lane goes
+            win.click (Editor::kSubOnLeft + 24, Editor::kRow2Top + 10);
+            CHECK (plainOf (rig, kSubOn) < 0.5, "Sub band off");
         }
         rig.stop ();
         return finish ("multidyn host test");

@@ -19,11 +19,18 @@ static_assert (pk::kTailFields == 6, "Detonatr's Multiband IDs start after the s
 enum Stage { kStageClean = 0, kStageTone, kStageMultiband, kStageTransient, kStageSaturator, kNumStages };
 const char* stageName (int stage);
 
-// The Multiband stage is Multidyn without its side-chain and its own saturator: block position j
-// holds Multidyn parameter j for j < kSatOn, then RMS Window and Soften.
+// The Multiband stage is Multidyn without its side-chain and its own saturator, in two blocks. The first:
+// block position j holds Multidyn parameter j for j < kSatOn, then RMS Window and Soften. The second
+// (at the end of the table, kMb2Base): Multidyn's parameters from the crossovers' Slope on (Slope,
+// Soften Color and the Sub band), in Multidyn's order.
 constexpr uint32_t kMbBlock = multidyn::kSatOn + 2;
-int64_t mbIdAt (uint32_t block);    // the Multidyn ID at a block position (-1: none)
-int64_t mbBlockOf (uint32_t mdId); // the block position of a Multidyn ID (-1: not in Detonatr)
+constexpr uint32_t kMb2Block = 9; // multidyn::kXoverSlope .. multidyn::kSubOutput
+static_assert (multidyn::kXoverSlope + kMb2Block == multidyn::kNumParams,
+               "a Multidyn parameter added after the Sub band goes in a new block at the end of Detonatr's table");
+int64_t mbIdAt (uint32_t block);    // the Multidyn ID at a first-block position (-1: none)
+int64_t mbBlockOf (uint32_t mdId); // the first-block position of a Multidyn ID (-1: not in the first block)
+int64_t mdIdOf (uint32_t id);      // the Multidyn ID of a Detonatr parameter (-1: not a Multiband one)
+int64_t detIdOfMd (uint32_t mdId); // the Detonatr ID of a Multidyn parameter (-1: not in Detonatr)
 
 enum ParamId : uint32_t
 {
@@ -60,8 +67,12 @@ enum ParamId : uint32_t
     kMbBase = kTailBase + pk::kTailFields, // the Multiband stage: kMbBlock entries (mbIdAt)
     kTailExtBase = kMbBase + kMbBlock,     // the rest of the Saturator stage: pk::kTailExtFields entries
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the Saturator stage: pk::kTailExt2Fields entries (the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kMb2Base = kTailExt2Base + pk::kTailExt2Fields, // the Multiband stage's second block: kMb2Block entries
+    kNumParams = kMb2Base + kMb2Block
 };
+// pinned: IDs are persisted
+static_assert (kMbBase == 35 && kTailExtBase == 93 && kTailExt2Base == 110 && kMb2Base == 119 && kNumParams == 128,
+               "the Multiband stage's second block is 119 .. 127");
 
 constexpr uint32_t kOrderBase = kOrder1;
 constexpr bool isTailParam (uint32_t id)
@@ -75,11 +86,12 @@ constexpr uint32_t tailField (uint32_t id)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }
-constexpr bool isMbParam (uint32_t id) { return id >= kMbBase && id < kMbBase + kMbBlock; }
-// the Detonatr ID of a Multidyn parameter in the block (mbBlockOf must not be -1)
+constexpr bool isMbParam (uint32_t id) { return (id >= kMbBase && id < kMbBase + kMbBlock) || (id >= kMb2Base && id < kMb2Base + kMb2Block); }
+// the Detonatr ID of a Multidyn parameter in Detonatr (detIdOfMd must not be -1)
 constexpr uint32_t mbParam (uint32_t mdId)
 {
-    return kMbBase + (mdId == multidyn::kRmsWindow ? multidyn::kSatOn : mdId == multidyn::kSoften ? multidyn::kSatOn + 1 : mdId);
+    return mdId >= multidyn::kXoverSlope ? kMb2Base + (mdId - multidyn::kXoverSlope)
+                                         : kMbBase + (mdId == multidyn::kRmsWindow ? multidyn::kSatOn : mdId == multidyn::kSoften ? multidyn::kSatOn + 1 : mdId);
 }
 
 // Where each stage runs, from the five order parameters (see kOrder1).

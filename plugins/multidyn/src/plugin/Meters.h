@@ -13,16 +13,17 @@ namespace multidyn {
 
 struct Meters
 {
-    std::array<std::atomic<float>, kNumBands> inputDb {};
-    std::array<std::atomic<float>, kNumBands> outputDb {};
-    std::array<std::atomic<float>, kNumBands> gainDb {};
+    // the bands, then the Sub band (kSubBand)
+    std::array<std::atomic<float>, kNumBands + 1> inputDb {};
+    std::array<std::atomic<float>, kNumBands + 1> outputDb {};
+    std::array<std::atomic<float>, kNumBands + 1> gainDb {};
     std::atomic<bool> sidechainConnected {false};
     smacheratr::Meters satMeters;            // the saturator at the end of the chain
     std::atomic<double> sampleRate {48000.0};
 
     Meters ()
     {
-        for (int b = 0; b < kNumBands; ++b)
+        for (int b = 0; b <= kNumBands; ++b)
         {
             inputDb[(size_t)b] = -100.0f;
             outputDb[(size_t)b] = -100.0f;

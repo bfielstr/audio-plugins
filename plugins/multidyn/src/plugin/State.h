@@ -15,7 +15,10 @@ struct State
     std::array<bool, kNumParams> has {};
 };
 
-bool writeState (Steinberg::IBStream* stream, const State& s);
+// Version 4: the OTT gain staging (3 and older are migrated with migrateOldBaked, Params.h).
+constexpr Steinberg::int32 kStateVersion = 4;
+// version: what the stream says it is (the tests write an older one)
+bool writeState (Steinberg::IBStream* stream, const State& s, Steinberg::int32 version = kStateVersion);
 bool readState (Steinberg::IBStream* stream, State& s);
 
 } // namespace multidyn

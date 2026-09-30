@@ -26,6 +26,20 @@
 // Multidyn's: off, the signal only goes through a delay of that length (to the bit) and the colour
 // does not run; switched on, the colour starts beside the delay, settles (10 ms after its latency)
 // and is crossfaded in (20 ms); switched off, it is crossfaded out and stops.
+// Sub band (off by default): an extra band below band 1 for the sub region. The input is split at the
+// Sub Frequency (20 - 100 Hz, 40 Hz by default) with the crossovers' Slope before the band tree: what
+// is below goes to the Sub band, the rest into the bands as before (so band 1 no longer gets the sub
+// region), and the Sub band goes through the all-passes of every crossover of the tree, so everything
+// still sums to an all-pass. The Sub band compresses downward only: its Threshold and Ratio act as a
+// band's Above threshold and ratio (no Below: nothing is lifted in the sub region), with its own Attack,
+// Release and Output gain; the detector (Peak / RMS, the RMS Window), Soft Knee, Amount, Time, the
+// side-chain and Pre-Limit work on it as on the bands; Soften does not (it is the top band's). It runs
+// through the same look-ahead delay, so the latency stays the same. Off, none of it runs: the output is
+// the same as without it, to the bit. Switched on, it starts beside the bands without being heard,
+// settles (100 ms) and then fades in (30 ms): the bands' input goes from the whole input to the part
+// above the corner while the Sub band comes up, so the switch does not click (for those 30 ms the
+// region around the corner dips, as the two phases are blended); switched off, it fades out the same
+// way and stops.
 // Pre-Limit (off by default): a 1 ms look-ahead limiter on each band's driven input with its ceiling relative to
 // the band's Above threshold, so a transient pushed hard into the thresholds is held where the
 // compressor will settle anyway instead of passing through at full level until the attack
@@ -103,7 +117,8 @@ public:
     void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
                   int n);
 
-    const BandMeter& meter (int band) const { return meters[band]; }
+    const BandMeter& meter (int band) const { return meters[band]; } // 0 .. kMaxBands - 1, or kSubBand
+    bool subRunning () const { return subState != SubState::Off; }
     bool bandUsed (int band) const { return band < bandCount (); }
     int bandCount () const;
 
@@ -140,9 +155,14 @@ private:
     {
         XoverSplit split[kMaxBands - 1], scSplit[kMaxBands - 1];
         XoverAllpass ap[kMaxBands - 1][kMaxBands - 1], scAp[kMaxBands - 1][kMaxBands - 1];
+        // the Sub band: its split, and the all-passes of the tree's crossovers it goes through
+        XoverSplit sub, scSub;
+        XoverAllpass subAp[kMaxBands - 1], scSubAp[kMaxBands - 1];
         int slope = kXover24;
         void tune (int j, float g); // crossover j's corner
+        void tuneSub (float g);     // the Sub band's corner
         void reset ();
+        void resetSub ();
     };
     Bank banks[2];
     int cur = 0;
@@ -150,8 +170,17 @@ private:
     int fadeWarm = 0, fadeLen = 1; // it settles this long, then the bands crossfade this long
     float xf[kMaxBands - 1] {}, xg[kMaxBands - 1] {}; // the crossovers in use and their prewarped corners
     void splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out);
-    BandState bands[kNumBands];
-    BandMeter meters[kNumBands];
+    // one bank's split with the Sub band: the bands (out[0 .. n-1]) and the Sub band (out[kSubBand]);
+    // subMix: how far the bands' input has gone over to the part above the Sub band's corner
+    void splitWithSub (float x, int c, int n, bool sc, Bank& bk, float subMix, float* out);
+    BandState bands[kNumBands + 1]; // and the Sub band's (kSubBand)
+    BandMeter meters[kNumBands + 1];
+    enum class SubState { Off, Warming, In }; // In: fading in, on, or fading out
+    SubState subState = SubState::Off;
+    int subPos = 0, subWarm = 1;
+    float subMix = 0.0f, subStep = 0.0f;
+    float subF = 0.0f, subG = 0.0f; // the Sub band's corner in use and its prewarped form
+    void startSub ();
     float outGain = 1.0f, scGain = 1.0f;
     float peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;

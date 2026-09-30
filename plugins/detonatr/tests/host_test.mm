@@ -1,5 +1,6 @@
 // End-to-end test of the built Detonatr.vst3. usage: detonatr_hosttest <Detonatr.vst3> <output dir>
 #include "Params.h"
+#include "multidyn/src/core/Crossover.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
@@ -65,6 +66,45 @@ int main (int argc, char** argv)
         const double level = dbfs (rms (out, 0, out.size ()));
         CHECK (level > -40.0 && level < 6.0, "the defaults sound: %.1f dBFS rms", level);
 
+        // an old state (version 1): the Multiband stage's gains move to where they keep its sound (Live's
+        // OTT gain staging is baked in since version 2); the new Multiband parameters are where it was
+        {
+            State old;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                old.norm[id] = defaultNormalized (id);
+                old.has[id] = id < kMb2Base; // saved before the second Multiband block
+            }
+            auto roundTrip = [&] (int32 version) {
+                MemoryStream s;
+                writeState (&s, old, version);
+                s.seek (0, IBStream::kIBSeekSet, nullptr);
+                State got;
+                readState (&s, got);
+                return got;
+            };
+            const State v1 = roundTrip (1), v2 = roundTrip (kStateVersion);
+            auto plain = [] (const State& st, uint32_t id) { return toPlain (id, st.norm[id]); };
+            const uint32_t lowOut = mbParam (multidyn::bandParam (0, multidyn::kBandOutput));
+            CHECK (std::fabs (plain (v1, lowOut) - 13.7) < 1e-6 && std::fabs (plain (v1, mbParam (multidyn::kOutput)) + 7.0) < 1e-6 &&
+                       std::fabs (plain (v1, mbParam (multidyn::bandParam (1, multidyn::kBandInput))) - 5.2) < 1e-6,
+                   "version 1 migrated: low band Output %.2f dB", plain (v1, lowOut));
+            CHECK (std::fabs (plain (v2, lowOut)) < 1e-9, "version 2 loads as it is");
+            CHECK (std::lround (plain (v1, mbParam (multidyn::kXoverSlope))) == multidyn::kXover24 && plain (v1, mbParam (multidyn::kSubOn)) < 0.5 &&
+                       plain (v1, mbParam (multidyn::kSoftenColor)) < 0.5,
+                   "the new Multiband parameters where an old project was");
+            CHECK (std::fabs (plain (v1, detonatr::kOutput) - plain (old, detonatr::kOutput)) < 1e-12, "Detonatr's own Output untouched");
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, old, 1); }), "old state applied");
+            CHECK (std::fabs (plainOf (rig, lowOut) - 13.7) < 1e-6, "controller: low band Output %.2f", plainOf (rig, lowOut));
+            State fresh;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                fresh.norm[id] = defaultNormalized (id);
+                fresh.has[id] = true;
+            }
+            rig.applyState ([&] (IBStream* s) { return writeState (s, fresh); });
+        }
+
         // a recording in slot 1, set through the state; it comes back out of the state
         {
             State st;
@@ -122,6 +162,31 @@ int main (int argc, char** argv)
                     pump (0.03);
                 }
                 CHECK (win.savePng (outDir + "/ui_detonatr_" + pages[pos] + ".png"), "screenshot %s", pages[pos]);
+            }
+            // the Multiband page's new controls: the Sub band's On (its lane appears) and Soften's Color;
+            // the Slope (a menu) set here, shown in the screenshot
+            {
+                win.click (boxX (2), kBoxY); // Multiband, 3rd
+                const double px = 8.0, py = Editor::kStageTop; // the page's origin
+                win.click (px + 632, py + 233);
+                CHECK (plainOf (rig, mbParam (multidyn::kSubOn)) > 0.5, "Multiband Sub band on");
+                win.click (px + 804, py + 211);
+                CHECK (plainOf (rig, mbParam (multidyn::kSoftenColor)) > 0.5, "Multiband Soften Color on");
+                const double f0 = plainOf (rig, mbParam (multidyn::kSubFreq));
+                win.drag (px + 690, py + 233, px + 690, py + 193);
+                CHECK (plainOf (rig, mbParam (multidyn::kSubFreq)) > f0 * 1.1, "Multiband Sub frequency drag: %.1f -> %.1f Hz", f0,
+                       plainOf (rig, mbParam (multidyn::kSubFreq)));
+                rig.param (mbParam (multidyn::kXoverSlope), detonatr::toNormalized (mbParam (multidyn::kXoverSlope), multidyn::kXover48));
+                for (int i = 0; i < 8; ++i)
+                {
+                    out.clear ();
+                    rig.render (0.08, out, nullptr, hits ());
+                    pump (0.03);
+                }
+                CHECK (allFinite (out), "finite with the Sub band and Color");
+                CHECK (win.savePng (outDir + "/ui_detonatr_multiband_sub.png"), "screenshot Multiband with the Sub band");
+                win.click (px + 632, py + 233);
+                CHECK (plainOf (rig, mbParam (multidyn::kSubOn)) < 0.5, "Multiband Sub band off again");
             }
             // drag Transient (4th) to the front
             win.drag (boxX (3), kBoxY, boxX (0) - 30, kBoxY);

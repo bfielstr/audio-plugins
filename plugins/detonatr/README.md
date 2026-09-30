@@ -21,7 +21,13 @@ show its controls, click its light to turn it on or off. A stage that is off onl
   - **Dry**: the input through the stage as it is (0 by default, so the output stays tonal; raise it for the raw grit).
   - **Disperse** / **Disperse Frequency**: a chain of all-pass filters that smears the phase into the chirpy
     disperser sound without changing the level.
-- **Multiband**: Multidyn (every control and its display; no side-chain and no saturator of its own).
+- **Multiband**: Multidyn (every control and its display; no side-chain and no saturator of its own), with
+  Live's OTT preset as its defaults. Its crossovers' **Slope** (6 dB/oct to Brickwall, 24 dB by default)
+  sits beside the Splits, Soften's **Color** under Soften, and the **Sub** band's On and frequency under the
+  RMS window; with the Sub band on, the display gets a lane for it at the bottom (its threshold, ratio,
+  attack, release and output). See [Multidyn's README](../multidyn/README.md) for how they work. A project
+  saved before the OTT defaults (Detonatr 0.6 and earlier) loads with the stage's gains moved so it sounds
+  the same.
 - **Transient**: at each hit, a **Spike** (0.1 to 20 ms) at full level, then down by **Drop** (0 to 48 dB)
   over **Fall**, held until the next hit. Hits are found with a 5 ms look-ahead, so the spike starts right
   on the hit. **Sensitivity**: how far the level must jump for a new hit.
