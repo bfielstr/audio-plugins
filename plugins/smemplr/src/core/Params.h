@@ -20,11 +20,13 @@ namespace smemplr {
 // the same whatever is loaded where. An effect with more parameters than that (Wubr) uses the slot's
 // extension too: kSlotExt more positions per slot, in a block of their own after the end saturator's
 // (block positions kSlotBlock and up; slotBlockParam finds either).
-enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kFxWubr, kFxLevlr, kNumFxTypes };
+enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kFxWubr, kFxLevlr, kFxGently, kFxSmoothr, kNumFxTypes };
 // the slot types before Wubr (states before version 8 stored the type over this many)
 constexpr int kFxTypesBeforeWubr = 6;
 // ... and before Levlr (states 8 and 9)
 constexpr int kFxTypesBeforeLevlr = 7;
+// ... and before Gently and Smoothr (states 10 .. 12)
+constexpr int kFxTypesBeforeGently = 8;
 constexpr int kRackSlots = 8;
 // A new Smemplr's first slot (with the effect's own defaults; the other slots start empty). Before 0.9
 // a Smacheratr sat after the rack instead (kTailBase: kept for old projects, see StateIO.cpp).

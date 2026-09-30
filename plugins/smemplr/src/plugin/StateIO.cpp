@@ -28,7 +28,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 10: Levlr in the rack: the slot type's choice has one more entry
 // 11: Gently's (Clarity's) Advanced mode in the rack's Smacheratrs
 // 12: Gently's Sub band in the rack's Smacheratrs
-constexpr int32 kVersion = 12;
+// 13: Gently and Smoothr in the rack: the slot type's choice has two more entries
+constexpr int32 kVersion = 13;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -129,6 +130,14 @@ bool readState (IBStream* stream, PluginState& st)
             const uint32_t typeId = slotParam (slot, kSlotType);
             if (st.has[typeId])
                 st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeLevlr - 1)));
+        }
+    // 10 .. 12 over the kinds before Gently and Smoothr
+    else if (version < 13)
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (st.has[typeId])
+                st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeGently - 1)));
         }
     // the M/S EQ's slope was stored over its three choices (6, 12, 24 dB): the same slope on the longer
     // list (before the old fixed M/S EQ moves into the rack, which converts its own)

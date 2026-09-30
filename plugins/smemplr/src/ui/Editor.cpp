@@ -11,7 +11,9 @@
 #include "plugin/Controller.h"
 
 #include "pluginkit/SampleFiles.h"
+#include "pluginkit/SettingsText.h"
 #include "pluginkit/ui/ScopeView.h"
+#include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/vst/PresetBar.h"
 
 #include "multidyn/src/ui/DynDisplay.h"
@@ -31,6 +33,8 @@
 #include "wubr/src/ui/ShapeView.h"
 #include "levlr/src/ui/Help.h"
 #include "levlr/src/ui/LevelView.h"
+#include "smoothr/src/ui/Help.h"
+#include "smoothr/src/ui/HistoryView.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cfileselector.h"
@@ -270,6 +274,7 @@ void Editor::onClose ()
     fxGonio = nullptr;
     wubrBands = nullptr;
     levlrView = nullptr;
+    smoothrView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -917,6 +922,56 @@ void Editor::dropTab (int pos, int target, bool copy)
         setFxTab (tabSlots[(size_t)pos]);
 }
 
+namespace {
+bool rackHides (int type, uint32_t id)
+{
+    for (const RackHidden& r : rackHiddenParams (type))
+        if (id >= r.first && id <= r.last)
+            return true;
+    return false;
+}
+} // namespace
+
+std::string Editor::slotSettingsText (int slot)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return "";
+    const int type = ctl->slotType (slot);
+    if (type == kFxEmpty)
+        return "";
+    const auto& t = fxTable (type);
+    pk::SettingValues v;
+    for (uint32_t id = 0; id < t.size (); ++id)
+    {
+        const int64_t j = fxBlockOf (type, id);
+        if (j >= 0 && !rackHides (type, id))
+            v.emplace_back (id, norm (slotBlockParam (slot, (uint32_t)j)));
+    }
+    return pk::settingsToText (fxName (type), v, &t);
+}
+
+bool Editor::applySlotSettingsText (int slot, const std::string& text)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return false;
+    const int type = ctl->slotType (slot);
+    pk::SettingValues v;
+    if (type == kFxEmpty || !pk::settingsFromText (text, fxName (type), v))
+        return false;
+    for (const auto& [id, n] : v)
+    {
+        const int64_t j = fxBlockOf (type, id);
+        if (j < 0 || id >= fxTable (type).size () || rackHides (type, id))
+            continue;
+        const uint32_t pid = slotBlockParam (slot, (uint32_t)j);
+        if (norm (pid) != n)
+            setOnce (pid, n);
+    }
+    if (frame)
+        frame->invalid ();
+    return true;
+}
+
 void Editor::moveOldEndIntoRack ()
 {
     const int slot = slotAfterChain ([this] (int s) { return ctl->slotType (s); });
@@ -1013,7 +1068,15 @@ void Editor::rebuildRack ()
         auto* rm = new ActionButton (CRect (208, 0, 276, 20), "Remove", [this, s] { removeFx (s); });
         rm->setTooltipText ("Take this effect out of the rack (the ones after it move up).");
         fxCtl->addView (rm);
-        noteX = 286.0;
+        auto* cp = new ActionButton (CRect (284, 0, 336, 20), "Copy", [this, s] { pk::putClipboardText (frame, slotSettingsText (s)); });
+        cp->setTooltipText ("Copy this effect's settings (to paste into another slot of the same effect, or into the effect's own "
+                            "plug-in: its Menu, Paste Settings).");
+        fxCtl->addView (cp);
+        auto* ps = new ActionButton (CRect (340, 0, 392, 20), "Paste", [this, s] { applySlotSettingsText (s, pk::clipboardText (frame)); });
+        ps->setTooltipText ("Paste settings copied from the same effect: another slot's, or its own plug-in's (its Menu, Copy "
+                            "Settings). Settings of another effect are ignored.");
+        fxCtl->addView (ps);
+        noteX = 402.0;
     }
     // an old project's saturator after the rack, still on because the rack had no room for it
     if (plainValue (kTailBase + pk::kTailOn) >= 0.5)
@@ -1057,6 +1120,7 @@ void Editor::clearBody ()
     satHost = nullptr;
     wubrBands = nullptr;
     levlrView = nullptr;
+    smoothrView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -1342,6 +1406,30 @@ void Editor::buildBody ()
             add (new Knob (knobRect (720, 156), h, levlr::kOutput, nullptr, true), tip (levlr::kOutput));
             break;
         }
+        case kFxSmoothr:
+        {
+            // Smoothr's own IDs throughout (smoothr::)
+            auto tip = [] (uint32_t id) { return smoothr::help::forParam (id); };
+            smoothrView = new smoothr::HistoryView (CRect (8, 8, 520, 226), h, [this, s] () -> smoothr::Meters* {
+                auto* b = ctl->getBridge ();
+                return b ? &b->rack.smoothr[(size_t)s] : nullptr;
+            });
+            add (smoothrView, smoothr::help::kDisplay);
+            auto* ll = new Label (CRect (528, 8, 834, 22), "limiter", 10.0, true, 0);
+            g->addView (ll);
+            add (new Knob (knobRect (530, 24), h, smoothr::kInput), tip (smoothr::kInput));
+            add (new Knob (knobRect (598, 24), h, smoothr::kCeiling), tip (smoothr::kCeiling));
+            add (new Knob (knobRect (666, 24), h, smoothr::kRelease), tip (smoothr::kRelease));
+            add (new Toggle (CRect (730, 46, 780, 66), h, smoothr::kAutoRelease, "Auto"), tip (smoothr::kAutoRelease));
+            add (new Knob (knobRect (530, 112), h, smoothr::kSmooth), tip (smoothr::kSmooth));
+            auto* cl = new Label (CRect (598, 96, 834, 110), "character", 10.0, true, 0);
+            g->addView (cl);
+            add (new Knob (knobRect (598, 112), h, smoothr::kCharacter), tip (smoothr::kCharacter));
+            auto* n = new Label (CRect (528, 196, 834, 222), "its saturator before the limiter: a smacheratr slot before this one", 9.5);
+            n->setDim (true);
+            g->addView (n);
+            break;
+        }
         case kFxWubr:
         {
             // Wubr's own IDs throughout (wubr::): unqualified kMode / kWidth / kOutput here are
@@ -1532,6 +1620,8 @@ void Editor::idle ()
         wubrBands->idle ();
     if (levlrView)
         levlrView->idle ();
+    if (smoothrView)
+        smoothrView->idle ();
     for (auto* shape : wubrShapes)
         if (shape)
             shape->idle ();

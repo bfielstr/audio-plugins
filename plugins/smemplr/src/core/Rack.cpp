@@ -138,6 +138,13 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {wubr::bandParam (1, wubr::kPointCount), wubr::bandParam (1, wubr::kPointCount), "the shape display adds and removes points"},
         {wubr::pointParam (1, 0, wubr::kPtX), wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
     };
+    // Smoothr's saturator before its limiter: a Smacheratr slot before it does that (in the rack it is off)
+    static const std::vector<RackHidden> smoothrHidden {
+        {smoothr::kTailBase, smoothr::kTailBase + pk::kTailFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
+        {smoothr::kTailExtBase, smoothr::kTailExtBase + pk::kTailExtFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
+        {smoothr::kTailExt2Base, smoothr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
+    };
+    static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
     };
@@ -149,6 +156,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         case kFxWidr: return widrHidden;
         case kFxWubr: return wubrHidden;
         case kFxLevlr: return levlrHidden;
+        case kFxSmoothr: return smoothrHidden;
         default: return none;
     }
 }
@@ -202,6 +210,8 @@ const char* fxName (int type)
         case kFxWidr: return "widr";
         case kFxWubr: return "wubr";
         case kFxLevlr: return "levlr";
+        case kFxGently: return "gently";
+        case kFxSmoothr: return "smoothr";
         default: return "";
     }
 }
@@ -218,6 +228,7 @@ const pk::ParamTable& fxTable (int type)
         case kFxWidr: return widr::paramTable ();
         case kFxWubr: return wubr::paramTable ();
         case kFxLevlr: return levlr::paramTable ();
+        case kFxSmoothr: return smoothr::paramTable ();
         default: return empty;
     }
 }
@@ -321,6 +332,7 @@ void Rack::prepare (double sampleRate, int maxBlockSize)
         s->widr.prepare (sr, maxBlock);
         s->wubr.prepare (sr, maxBlock);
         s->levlr.prepare (sr, maxBlock);
+        s->smoothr.prepare (sr, maxBlock);
         applyAll (*s);
     }
 }
@@ -336,6 +348,7 @@ void Rack::reset ()
         s->widr.reset ();
         s->wubr.reset ();
         s->levlr.reset ();
+        s->smoothr.reset ();
     }
 }
 
@@ -350,6 +363,7 @@ void Rack::setMeters (RackMeters* m)
         s.widr.setMeters (m ? &m->widr[(size_t)i] : nullptr);
         s.wubr.setMeters (m ? &m->wubr[(size_t)i] : nullptr);
         s.levlr.setMeters (m ? &m->levlr[(size_t)i] : nullptr);
+        s.smoothr.setMeters (m ? &m->smoothr[(size_t)i] : nullptr);
     }
 }
 
@@ -372,6 +386,10 @@ void Rack::apply (Slot& s, uint32_t block)
         case kFxWidr: s.widr.setParam (j, v); break;
         case kFxWubr: s.wubr.setParam (j, v); break;
         case kFxLevlr: s.levlr.setParam (j, v); break;
+        case kFxSmoothr:
+            // its own saturator stays off in the rack (a Smacheratr slot before it does that)
+            s.smoothr.setParam (j, j == smoothr::kTailBase + pk::kTailOn ? 0.0 : v);
+            break;
         default: break; // the M/S EQ reads its values when it runs
     }
 }
@@ -390,6 +408,7 @@ void Rack::applyAll (Slot& s)
         case kFxWidr: s.widr.reset (); break;
         case kFxWubr: s.wubr.reset (); break;
         case kFxLevlr: s.levlr.reset (); break;
+        case kFxSmoothr: s.smoothr.reset (); break;
         default: break;
     }
 }
@@ -435,6 +454,8 @@ int Rack::latency () const
             l += s->sat.latency ();
         else if (s->type == kFxPara)
             l += s->para.latency (); // its drive's oversampling, on or off
+        else if (s->type == kFxSmoothr)
+            l += s->smoothr.latency (); // the limiter's look-ahead (and its saturator's, off), on or off
     return l;
 }
 
@@ -509,6 +530,12 @@ void Rack::process (float* L, float* R, int n)
             case kFxLevlr: // (no latency without its own saturator: off simply passes)
                 if (s.on)
                     s.levlr.process (L, R, L, R, n);
+                break;
+            case kFxSmoothr:
+                if (s.on)
+                    s.smoothr.process (L, R, L, R, n);
+                else
+                    s.smoothr.processBypassed (L, R, n); // off: its latency's delay only
                 break;
             default: break;
         }

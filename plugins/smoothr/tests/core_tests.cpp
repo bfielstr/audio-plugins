@@ -290,6 +290,36 @@ TEST (latency_constant_and_exact)
     }
 }
 
+TEST (bypassed_is_the_latency_s_delay)
+{
+    // off (a Smemplr rack slot switched off): the input delayed by the latency, bit for bit, in any
+    // block size
+    auto e = engine ();
+    const int lat = e->latency ();
+    std::mt19937 rng (11);
+    std::uniform_real_distribution<float> u (-1.0f, 1.0f);
+    Buf l (20000), r (20000);
+    for (size_t i = 0; i < l.size (); ++i)
+    {
+        l[i] = u (rng);
+        r[i] = u (rng);
+    }
+    Buf ol = l, orr = r;
+    for (size_t pos = 0, k = 0; pos < ol.size (); ++k)
+    {
+        const int n = (int)std::min<size_t> (1 + (k * 37) % 700, ol.size () - pos);
+        e->processBypassed (ol.data () + pos, orr.data () + pos, n);
+        pos += (size_t)n;
+    }
+    bool exact = true;
+    for (size_t i = 0; i < ol.size (); ++i)
+    {
+        const float wl = i >= (size_t)lat ? l[i - (size_t)lat] : 0.0f, wr = i >= (size_t)lat ? r[i - (size_t)lat] : 0.0f;
+        exact &= ol[i] == wl && orr[i] == wr;
+    }
+    CHECK (exact, "the input, %d samples later", lat);
+}
+
 TEST (idle_is_exact_delay)
 {
     // the saturator off, Character 0, under the ceiling: the output is the input, delayed, bit for bit

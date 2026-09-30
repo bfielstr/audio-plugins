@@ -17,6 +17,7 @@
 
 #include <array>
 #include <atomic>
+#include <vector>
 
 namespace smoothr {
 
@@ -51,6 +52,9 @@ public:
 
     // In place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
+    // Off (a slot of Smemplr's rack switched off): the input delayed by the latency only, so switching
+    // it off does not move the audio. In place.
+    void processBypassed (float* L, float* R, int n);
 
 private:
     static constexpr int kChunk = 256;
@@ -65,6 +69,10 @@ private:
     CharacterDip dip;
     Limiter limiter;
     Meters* meters = nullptr;
+    // processBypassed's delay line (kBypassSize a channel, allocated in prepare)
+    static constexpr int kBypassSize = 1 << 14;
+    std::vector<float> bypL, bypR;
+    int bypPos = 0;
     // the history column being gathered
     int colLen = 300, colFill = 0;
     float colIn = 0.0f, colOut = 0.0f, colLow = 1.0f, colHigh = 1.0f;

@@ -1,5 +1,5 @@
 // Smemplr's effects rack: kRackSlots slots after the sampler (Params.h), each Empty or one of the
-// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr), in any order; the same effect may sit
+// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gently, smoothr), in any order; the same effect may sit
 // in several slots. Every slot owns one engine of each kind, allocated up front, so loading or
 // moving an effect never allocates on the audio thread; only the slot's current kind runs.
 //
@@ -19,6 +19,7 @@
 #include "widr/src/core/Engine.h"
 #include "wubr/src/core/Engine.h"
 #include "levlr/src/core/Engine.h"
+#include "smoothr/src/core/Engine.h"
 
 #include "pluginkit/ParamTable.h"
 
@@ -90,6 +91,7 @@ struct RackMeters
     std::array<widr::Meters, kRackSlots> widr;
     std::array<wubr::Meters, kRackSlots> wubr;
     std::array<levlr::Meters, kRackSlots> levlr;
+    std::array<smoothr::Meters, kRackSlots> smoothr;
 };
 
 class Rack
@@ -128,6 +130,7 @@ private:
         widr::Engine widr {false};
         wubr::Engine wubr {false};
         levlr::Engine levlr {false};
+        smoothr::Engine smoothr;
     };
     void apply (Slot& s, uint32_t j);      // one value to the slot's current effect
     void applyAll (Slot& s);               // every value (a new kind), and a clean start

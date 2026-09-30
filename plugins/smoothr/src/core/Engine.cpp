@@ -78,11 +78,16 @@ void Engine::prepare (double sampleRate, int)
     colLen = std::max (1, (int)std::lround (sr / Meters::kColumnHz));
     if (meters)
         meters->sampleRate.store ((float)sr);
+    bypL.assign ((size_t)kBypassSize, 0.0f);
+    bypR.assign ((size_t)kBypassSize, 0.0f);
     reset ();
 }
 
 void Engine::reset ()
 {
+    std::fill (bypL.begin (), bypL.end (), 0.0f);
+    std::fill (bypR.begin (), bypR.end (), 0.0f);
+    bypPos = 0;
     tail.reset ();
     dip.reset ();
     limiter.reset ();
@@ -122,6 +127,23 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
     }
     if (meters)
         meters->blocks.fetch_add (1, std::memory_order_relaxed);
+}
+
+void Engine::processBypassed (float* L, float* R, int n)
+{
+    if (bypL.empty ())
+        return;
+    const int d = std::clamp (latency (), 0, kBypassSize - 1);
+    const int mask = kBypassSize - 1;
+    for (int i = 0; i < n; ++i)
+    {
+        bypL[(size_t)bypPos] = L[i];
+        bypR[(size_t)bypPos] = R[i];
+        const int r = (bypPos - d) & mask;
+        L[i] = bypL[(size_t)r];
+        R[i] = bypR[(size_t)r];
+        bypPos = (bypPos + 1) & mask;
+    }
 }
 
 void Engine::processChunk (const float* inL, const float* inR, float* outL, float* outR, int n)

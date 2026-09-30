@@ -33,6 +33,9 @@ class ShapeView;
 namespace levlr {
 class LevelView;
 }
+namespace smoothr {
+class HistoryView;
+}
 namespace pk {
 class ScopeView;
 }
@@ -74,6 +77,11 @@ public:
     void removeFx (int slot);
     void moveFx (int from, int to);
     void duplicateFx (int from, int at); // a copy of slot `from` at slot `at` (the ones from there move up one)
+    // Copy / Paste on a rack page: the slot's effect settings as text on the clipboard, the same text
+    // as the effect's own plug-in copies (its menu's Copy / Paste Settings), so settings go both ways
+    // between a plug-in and a slot. The parameters the rack does not use (rackHiddenParams) are left out.
+    std::string slotSettingsText (int slot);
+    bool applySlotSettingsText (int slot, const std::string& text); // false: not this slot's effect
     void showMenu (VSTGUI::CPoint where);
 
 private:
@@ -150,6 +158,7 @@ private:
     // on, else the selected band's; Sync or Hz by its rate mode), and the controls only Envelope mode uses
     wubr::BandView* wubrBands = nullptr;
     levlr::LevelView* levlrView = nullptr; // the Levlr page's band display
+    smoothr::HistoryView* smoothrView = nullptr; // the Smoothr page's history
     wubr::ShapeView* wubrShapes[2] {};
     int wubrBand = 0;
     std::vector<VSTGUI::CView*> wubrBandViews[2], wubrBandButtons;

@@ -11,6 +11,7 @@
 #include "dr_wav.h"
 #include "pluginkit/CrashDump.h"
 #include "pluginkit/SampleFiles.h"
+#include "pluginkit/SettingsText.h"
 
 #include <chrono>
 #include <cmath>
@@ -306,6 +307,71 @@ TEST (rack_effects)
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
+}
+
+TEST (rack_smoothr)
+{
+    // Smoothr in a slot: its latency counts, on or off; it holds a loud sample under its ceiling; its
+    // own saturator stays off (a Smacheratr slot before it does that)
+    auto s = sine (110.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    const int base = e->latency ();
+    loadFx (*e, 0, kFxSmoothr);
+    smoothr::Engine alone;
+    alone.prepare (kHostSr, 512);
+    alone.setParam (smoothr::kTailBase + pk::kTailOn, 0.0);
+    CHECK (e->latency () == base + alone.latency (), "its latency is reported: %d (%d + %d)", e->latency (), base, alone.latency ());
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    CHECK (e->latency () == base + alone.latency (), "off, the same: %d", e->latency ());
+    e->setParam (slotParam (0, kSlotOn), 1.0);
+    e->setParam (kGain, 18.0);
+    setFx (*e, 0, smoothr::kCeiling, -6.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    auto o = run (*e, 48000);
+    const double pk = std::max (peak (o.l), peak (o.r));
+    CHECK (pk <= std::pow (10.0, -6.0 / 20.0) * 1.02, "held under -6 dB: peak %.2f dB", 20.0 * std::log10 (pk));
+    // off: the sound passes, delayed by the same latency (so it lines up with the sound on)
+    e->setParam (slotParam (0, kSlotOn), 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    CHECK (std::max (peak (o.l), peak (o.r)) > 1.0, "off: not limited (%.2f)", std::max (peak (o.l), peak (o.r)));
+    CHECK (finite (o.l) && finite (o.r), "finite");
+    // the hidden saturator: every Smoothr tail parameter is listed as not shown on the page
+    const auto& hidden = rackHiddenParams (kFxSmoothr);
+    for (uint32_t id = 0; id < smoothr::kNumParams; ++id)
+    {
+        bool listed = false;
+        for (const auto& h : hidden)
+            listed |= id >= h.first && id <= h.last;
+        CHECK (listed == smoothr::isTailParam (id), "smoothr %u hidden: %d", id, listed);
+    }
+}
+
+TEST (settings_text_roundtrip)
+{
+    // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back
+    pk::SettingValues v {{0, 0.25}, {3, 1.0}, {17, 0.123456789012345678}};
+    const std::string t = pk::settingsToText ("Para", v, &para::paramTable ());
+    pk::SettingValues back;
+    CHECK (pk::settingsFromText (t, "para", back) && back == v, "round trip (the effect's name in any case)");
+    CHECK (!pk::settingsFromText (t, "multidyn", back), "another effect's settings are refused");
+    CHECK (!pk::settingsFromText ("hello", "para", back), "not settings");
+    CHECK (pk::settingsEffect (t) == "Para", "the effect: %s", pk::settingsEffect (t).c_str ());
+    CHECK (t.find ("High-Pass") != std::string::npos, "names for the reader");
+}
+
+TEST (old_slot_types_keep_their_effect)
+{
+    // the slot type was stored normalized over the kinds there were: a state from before Gently and
+    // Smoothr (version 12: 8 kinds) keeps Levlr as Levlr on the longer list (StateIO.cpp does it; here
+    // the arithmetic it relies on)
+    const uint32_t typeId = slotParam (0, kSlotType);
+    const double old = (double)kFxLevlr / (kFxTypesBeforeGently - 1);
+    CHECK (std::lround (toPlain (typeId, toNormalized (typeId, std::round (old * (kFxTypesBeforeGently - 1))))) == kFxLevlr, "Levlr");
+    CHECK (std::lround (toPlain (typeId, 1.0)) == kNumFxTypes - 1 && kFxSmoothr == kNumFxTypes - 1, "Smoothr last");
 }
 
 TEST (rack_block_mapping)

@@ -229,7 +229,7 @@ std::vector<ParamInfo> buildTable ()
     for (int s = 0; s < kRackSlots; ++s)
     {
         const std::string fx = "FX " + std::to_string (s + 1);
-        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr", "wubr", "levlr"},
+        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr", "wubr", "levlr", "gently", "smoothr"},
                      s == 0 ? kDefaultSlotType : kFxEmpty));
         add (toggle ((ParamId)slotParam (s, kSlotOn), keep (fx + " On"), keep (fx + " On"), true));
         for (uint32_t j = 0; j < kSlotBlock; ++j)
