@@ -1,5 +1,5 @@
 # Para: a high-pass and a low-pass in parallel that track MIDI, with a split envelope.
-project(Para VERSION 0.5.0.0)
+project(Para VERSION 0.6.0.0)
 
 add_library(para_core STATIC
     src/core/Params.cpp
