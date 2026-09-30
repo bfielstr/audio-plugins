@@ -44,13 +44,13 @@ private:
     pk::Label* status = nullptr;
     pk::ParamView* thresholdView = nullptr;
     std::vector<pk::ParamView*> colorViews;
-    std::vector<pk::ParamView*> clarityViews[kClarityBands]; // each band's knobs (one band shown)
+    std::vector<pk::ParamView*> clarityViews[kGentlyBands]; // each band's knobs (one band shown)
     std::vector<VSTGUI::CView*> clarityBandButtons;
     int clarityBand = 0; // the band shown
     void showClarityBand (int band);
     // Gently's Advanced mode: the Threshold sliders at the right of the colour display, the region
     // Drive's controls in the GENTLY panel (shown while Advanced is on)
-    ThresholdSlider* thresholdSliders[kClarityBands] = {nullptr, nullptr};
+    ThresholdSlider* thresholdSliders[kGentlyBands] = {nullptr, nullptr, nullptr};
     std::vector<pk::ParamView*> advancedViews;
     void layoutAdvanced ();
 };

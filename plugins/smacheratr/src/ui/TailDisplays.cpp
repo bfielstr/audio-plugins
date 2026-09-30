@@ -42,10 +42,10 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
     driveAmount = new pk::NumberBox (CRect (0, 0, 1, 1), host.get (), kClarityDriveAmount);
     driveAmount->setTooltipText (help::forParam (kClarityDriveAmount));
     parent->addView (driveAmount);
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
     {
         sliders[k] = new ThresholdSlider (CRect (0, 0, 1, 1), host.get (), k, meters);
-        sliders[k]->setTooltipText (help::forParam (kClarityThresholdIds[k]));
+        sliders[k]->setTooltipText (help::forParam (kGentlyThresholdIds[k]));
         parent->addView (sliders[k]);
     }
     layoutAdvanced ();
@@ -62,9 +62,10 @@ void TailDisplays::layoutAdvanced ()
 void TailDisplays::updateLooks ()
 {
     const double on = host->plainValue (kClarity);
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
         if (sliders[k])
-            sliders[k]->setEnabledLook (clarityBandOn (on, host->plainValue (kClarityRangeIds[k])));
+            sliders[k]->setEnabledLook (k == kSubBand ? claritySubOn (on, host->plainValue (kClaritySub), host->plainValue (kClaritySubRange))
+                                                      : clarityBandOn (on, host->plainValue (kClarityRangeIds[k])));
     if (driveOn)
         driveOn->setEnabledLook (on >= 0.5);
     if (driveAmount)
@@ -95,7 +96,7 @@ void TailDisplays::paramChanged (uint32_t id)
     if (id == ext2Base + pk::kTailExt2Advanced)
         layoutAdvanced ();
     updateLooks ();
-    for (CView* v : {(CView*)shaper, (CView*)color, (CView*)sliders[0], (CView*)sliders[1], (CView*)driveOn, (CView*)driveAmount})
+    for (CView* v : {(CView*)shaper, (CView*)color, (CView*)sliders[0], (CView*)sliders[1], (CView*)sliders[2], (CView*)driveOn, (CView*)driveAmount})
         if (v)
             v->invalid ();
 }

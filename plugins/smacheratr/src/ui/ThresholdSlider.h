@@ -23,7 +23,7 @@ class ThresholdSlider : public pk::ParamView
 public:
     using MeterSource = ColorView::MeterSource;
     static constexpr double kWidth = 24.0, kGap = 4.0;
-    static constexpr double kStripWidth = kClarityBands * (kWidth + kGap); // what the sliders take from the display
+    static constexpr double kStripWidth = kGentlyBands * (kWidth + kGap); // what the sliders take from the display
 
     ThresholdSlider (const VSTGUI::CRect& r, pk::ParamHost* host, int band, MeterSource meters);
     void draw (VSTGUI::CDrawContext* ctx) override;
@@ -34,7 +34,7 @@ public:
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle (); // follows the band's level
 
-    // Lays the colour display and both bands' sliders out in `area` (where the display alone sits
+    // Lays the colour display and all three bands' sliders out in `area` (where the display alone sits
     // without Advanced): with `advanced` the sliders take a strip at its right edge (kStripWidth wide)
     // and `above` (optional views, e.g. the region Drive's controls) are stacked at the top of that
     // strip, 18 high each; without it the display takes the whole area and those views are hidden.

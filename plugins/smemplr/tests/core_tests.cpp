@@ -333,6 +333,72 @@ TEST (rack_block_mapping)
     CHECK (std::fabs (e->param (slotBlockParam (0, multidyn::kSatPreLimit)) - 1.0) < 1e-9, "Soften stored in its place");
 }
 
+TEST (gently_sub_band_in_slots)
+{
+    // Gently's Sub band parameters have places in a Smacheratr slot's block, and keep their values there
+    static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's block");
+    auto e = std::make_unique<Engine> ();
+    e->prepare (48000.0, 256);
+    loadFx (*e, 1, kFxSmacheratr);
+    const uint32_t ids[] = {smacheratr::kClaritySub, smacheratr::kClaritySubFreq, smacheratr::kClaritySubRange, smacheratr::kClaritySubThreshold};
+    const double vals[] = {1.0, 60.0, 15.0, -30.0};
+    for (int k = 0; k < 4; ++k)
+    {
+        CHECK (fxBlockOf (kFxSmacheratr, ids[k]) == (int64_t)ids[k] && fxIdAt (kFxSmacheratr, ids[k]) == (int64_t)ids[k], "block place of %u", ids[k]);
+        setFx (*e, 1, ids[k], vals[k]);
+    }
+    for (int k = 0; k < 4; ++k)
+    {
+        const double got = smacheratr::paramTable ().toPlain (ids[k], e->param (slotBlockParam (1, ids[k])));
+        CHECK (std::fabs (got - vals[k]) < 1e-6, "Sub value %u: %f", ids[k], got);
+    }
+    // a new slot has Sub off with its defaults
+    loadFx (*e, 2, kFxSmacheratr);
+    CHECK (e->param (slotBlockParam (2, smacheratr::kClaritySub)) == smacheratr::defaultNormalized (smacheratr::kClaritySub) &&
+               smacheratr::toPlain (smacheratr::kClaritySub, e->param (slotBlockParam (2, smacheratr::kClaritySub))) == 0.0,
+           "a new slot: Sub off");
+
+    // a state from before the Sub band (versions 11 and 10 too): its Smacheratr slot's Sub places held
+    // zeros (or nothing); they load as Sub off with the defaults, other effects' places are untouched
+    for (int version : {11, 10})
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            norm[id] = 0.0;
+        const uint32_t typeId = slotParam (0, kSlotType);
+        norm[typeId] = toNormalized (typeId, kFxSmacheratr);
+        has[typeId] = true;
+        const uint32_t multiType = slotParam (1, kSlotType);
+        norm[multiType] = toNormalized (multiType, kFxWidr);
+        has[multiType] = true;
+        for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+        {
+            norm[slotBlockParam (0, id)] = 0.7;
+            has[slotBlockParam (0, id)] = true;
+        }
+        norm[slotBlockParam (1, smacheratr::kClaritySubFreq)] = 0.7; // Widr's own value in that place
+        migrateGentlyInSlots (norm, has, version);
+        for (uint32_t id = smacheratr::kClaritySub; id <= smacheratr::kClaritySubThreshold; ++id)
+            CHECK (norm[slotBlockParam (0, id)] == smacheratr::defaultNormalized (id) && has[slotBlockParam (0, id)], "version %d: %u default", version, id);
+        CHECK (smacheratr::toPlain (smacheratr::kClaritySub, norm[slotBlockParam (0, smacheratr::kClaritySub)]) == 0.0, "Sub off");
+        CHECK (norm[slotBlockParam (1, smacheratr::kClaritySubFreq)] == 0.7, "another effect's place untouched");
+        // Advanced values from version 11 are kept; from 10 they were reset too
+        CHECK ((norm[slotBlockParam (0, smacheratr::kClarityAdvanced)] == 0.7) == (version == 11), "version %d: Advanced", version);
+    }
+    // a current state keeps its Sub values
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        const uint32_t typeId = slotParam (0, kSlotType);
+        norm[typeId] = toNormalized (typeId, kFxSmacheratr);
+        has[typeId] = true;
+        norm[slotBlockParam (0, smacheratr::kClaritySub)] = 1.0;
+        migrateGentlyInSlots (norm, has, 12);
+        CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0, "version 12 untouched");
+    }
+}
+
 TEST (rack_order_and_widr)
 {
     auto s = sine (440.0, 1.0);

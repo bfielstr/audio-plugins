@@ -546,6 +546,8 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
+static_assert (smacheratr::kGentlyBands == 3, "Editor.h sizes Gently's band arrays for three bands");
+
 void Editor::updateSatAdvanced ()
 {
     // the Smacheratr page: Gently's Threshold sliders and region Drive while Advanced is on, dimmed
@@ -556,9 +558,10 @@ void Editor::updateSatAdvanced ()
     const bool advanced = satHost->plainValue (kClarityAdvanced) >= 0.5;
     ThresholdSlider::layout (fxColorView, fxThresholds, CRect (236, 34, 526, 226), advanced);
     const double on = satHost->plainValue (kClarity);
-    for (int k = 0; k < kClarityBands; ++k)
+    for (int k = 0; k < kGentlyBands; ++k)
         if (fxThresholds[k])
-            fxThresholds[k]->setEnabledLook (clarityBandOn (on, satHost->plainValue (kClarityRangeIds[k])));
+            fxThresholds[k]->setEnabledLook (k == kSubBand ? claritySubOn (on, satHost->plainValue (kClaritySub), satHost->plainValue (kClaritySubRange))
+                                                           : clarityBandOn (on, satHost->plainValue (kGentlyRangeIds[k])));
     for (size_t i = 0; i < fxSatAdvanced.size (); ++i)
     {
         fxSatAdvanced[i]->setVisible (advanced);
@@ -568,8 +571,8 @@ void Editor::updateSatAdvanced ()
 
 void Editor::showClarityBand (int band)
 {
-    clarityBand = band == 1 ? 1 : 0;
-    for (int k = 0; k < smacheratr::kClarityBands; ++k)
+    clarityBand = band < 0 ? 0 : band >= smacheratr::kGentlyBands ? smacheratr::kGentlyBands - 1 : band;
+    for (int k = 0; k < smacheratr::kGentlyBands; ++k)
         for (auto* v : rackBandViews[k])
             v->setVisible (k == clarityBand);
     for (auto* b : rackBandButtons)
@@ -1230,24 +1233,40 @@ void Editor::buildBody ()
             const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
-            // Gently: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
+            // Gently: the selected band's controls (every band's are made, one is shown): Frequency, Width
+            // and Range; Sub has a switch, Frequency and Range (no Width)
             rackBandButtons.clear ();
-            for (int k = 0; k < kClarityBands; ++k)
+            for (int k = 0; k < kGentlyBands; ++k)
             {
                 rackBandViews[k].clear ();
-                const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
-                const char* bandNames[3] = {"Gently Hz", "Gently W", "Gently dB"};
-                for (int i = 0; i < 3; ++i)
-                {
-                    auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
-                    kn->setTooltipText (smacheratr::help::forParam (bandIds[i]));
+                auto addKnob = [&] (double x, uint32_t id, const char* name) {
+                    auto* kn = new Knob (knobRect (x, 112), h, id, name);
+                    kn->setTooltipText (smacheratr::help::forParam (id));
                     add (kn, nullptr); // (recorded for the rack page check)
                     rackBandViews[k].push_back (kn);
+                };
+                if (k == kSubBand)
+                {
+                    addKnob (534 + 2 * 58, kClaritySubFreq, "Gently Hz");
+                    auto* sub = new Toggle (CRect (534 + 3 * 58, 130, 534 + 3 * 58 + 52, 148), h, kClaritySub, "Sub");
+                    add (sub, tip (kClaritySub));
+                    rackBandViews[k].push_back (sub);
+                    addKnob (534 + 4 * 58, kClaritySubRange, "Gently dB");
                 }
-                auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
+                else
+                {
+                    const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
+                    const char* bandNames[3] = {"Gently Hz", "Gently W", "Gently dB"};
+                    for (int i = 0; i < 3; ++i)
+                        addKnob (534 + (i + 2) * 58, bandIds[i], bandNames[i]);
+                }
+                static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub"};
+                auto* bt = new ActionButton (CRect (534 + k * 54, 194, 584 + k * 54, 212), names[k],
                                              [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
                 bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)."
-                                           : "Show Gently's second band (blue: it works once its Range is above 0 dB).");
+                                    : k == 1 ? "Show Gently's second band (blue: it works once its Range is above 0 dB)."
+                                             : "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; "
+                                               "it works once switched on and its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
             }
@@ -1255,11 +1274,11 @@ void Editor::buildBody ()
             // Gently's Advanced mode: the region Drive beside the band buttons, the Threshold sliders at
             // the right of the colour display (updateSatAdvanced shows them while Advanced is on)
             fxSatAdvanced.clear ();
-            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new Toggle (CRect (676, 194, 728, 212), h, kClarityDrive, "Drive"), tip (kClarityDrive))));
-            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new NumberBox (CRect (732, 194, 790, 212), h, kClarityDriveAmount), tip (kClarityDriveAmount))));
-            for (int k = 0; k < kClarityBands; ++k)
+            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new Toggle (CRect (700, 194, 752, 212), h, kClarityDrive, "Drive"), tip (kClarityDrive))));
+            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new NumberBox (CRect (756, 194, 814, 212), h, kClarityDriveAmount), tip (kClarityDriveAmount))));
+            for (int k = 0; k < kGentlyBands; ++k)
             {
-                const uint32_t tid = kClarityThresholdIds[k];
+                const uint32_t tid = kGentlyThresholdIds[k];
                 fxThresholds[k] = new ThresholdSlider (CRect (0, 0, 1, 1), h, k, [this, s] () -> const smacheratr::Meters* {
                     auto* b = ctl->getBridge ();
                     return b ? &b->rack.sat[(size_t)s] : nullptr;

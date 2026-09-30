@@ -284,6 +284,24 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
     norm[onId] = 0.0;
 }
 
+void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 12)
+        return;
+    const uint32_t first = version < 11 ? smacheratr::kClarityAdvanced : smacheratr::kClaritySub;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxSmacheratr)
+            continue;
+        for (uint32_t id = first; id < smacheratr::kNumParams; ++id)
+        {
+            norm[slotBlockParam (slot, id)] = smacheratr::defaultNormalized (id);
+            has[slotBlockParam (slot, id)] = true;
+        }
+    }
+}
+
 Rack::Rack ()
 {
     for (auto& s : slots)

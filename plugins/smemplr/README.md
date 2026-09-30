@@ -64,6 +64,11 @@ The M/S EQ slopes of older projects (6 / 12 / 24 dB) stay what they were.
 **Root Note** (Global panel): the note on which the sample plays at its own pitch (C3 by default).
 **Voices** defaults to 1.
 
+**Drop a clip from your DAW** onto the waveform to load it (a clip dragged out of REAPER or Ableton
+Live, or a file from Finder / Explorer). A DAW's drag carries the clip's name as text beside its audio
+file; the file is what gets loaded. A temporary file (a render the DAW deletes later) is copied to
+Documents/bfielstr/Samples first.
+
 Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
 the waveform, audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
 ◀ ▶ step through the samples in the current folder, zoom (Cmd/Alt + scroll, or drag the ruler
