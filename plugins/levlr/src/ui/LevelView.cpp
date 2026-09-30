@@ -11,6 +11,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 namespace levlr {
@@ -132,8 +133,9 @@ double LevelView::edgeX (int k) const
     return xOfHz (xo[std::clamp (k, 0, kCrossovers - 1)]);
 }
 
+int LevelView::count () const { return bandsOf (host->plainValue (kBandCount)); }
 double LevelView::bandLeft (int b) const { return b <= 0 ? getViewSize ().left : edgeX (b - 1); }
-double LevelView::bandRight (int b) const { return b >= kBands - 1 ? getViewSize ().right : edgeX (b); }
+double LevelView::bandRight (int b) const { return b >= count () - 1 ? getViewSize ().right : edgeX (b); }
 
 CRect LevelView::chip (int b, bool solo) const
 {
@@ -235,12 +237,13 @@ void LevelView::draw (CDrawContext* ctx)
     double xo[kCrossovers], gains[kBands];
     crossovers (xo);
     auto plain = [this] (uint32_t id) { return host->plainValue (id); };
-    bandGains (plain, gains);
+    const int bands = count ();
+    bandGains (plain, gains, bands);
     const int slope = std::clamp ((int)std::lround (plain (kSlope)), 0, kNumSlopes - 1);
     const double sr = sampleRate ();
 
-    // the bands' columns
-    for (int b = 0; b < kBands; ++b)
+    // the bands' columns (the bands in use)
+    for (int b = 0; b < bands; ++b)
     {
         const bool hot = hoverBand == b || (drag == Drag::Band && dragIndex == b);
         ctx->setFillColor (bandColor (b, hot ? 24 : 12));
@@ -293,8 +296,8 @@ void LevelView::draw (CDrawContext* ctx)
         }
     }
 
-    // each band at its level: filled from 0 dB, a line at the level, the level in dB
-    for (int b = 0; b < kBands; ++b)
+    // each band at its level: filled from 0 dB, a line at the level, the level in dB; its drive at the foot
+    for (int b = 0; b < bands; ++b)
     {
         const bool heard = gains[b] > 0.0;
         const double db = plain (bandParam (b, kGain));
@@ -325,6 +328,30 @@ void LevelView::draw (CDrawContext* ctx)
             const double ty = db >= 0.0 ? y - 16.0 : y + 3.0;
             text (ctx, s, CRect (l, ty, r, ty + 13.0), bandColor (b, heard ? 255 : 130), 10.0, kCenterText, hot);
         }
+        const double drive = plain (driveParam (b, kDriveDb));
+        if (drive > 0.0 && r - l > 30.0)
+        {
+            // the drive: its type and amount, a tag above the crossovers' labels
+            static const char* kShort[kNumDriveTypes] = {"Analog", "Tape", "Tube", "Hard", "Fold"};
+            const int type = std::clamp ((int)std::lround (plain (driveParam (b, kDriveType))), 0, kNumDriveTypes - 1);
+            char s[32];
+            if (r - l > 84.0)
+                std::snprintf (s, sizeof (s), "%s %.1f dB", kShort[type], drive);
+            else
+                std::snprintf (s, sizeof (s), "%s", kShort[type]);
+            const double w = std::min (r - l - 8.0, 8.0 + 6.2 * (double)std::strlen (s)), cx = 0.5 * (l + r);
+            const CRect tag (cx - 0.5 * w, bot - 32.0, cx + 0.5 * w, bot - 18.0);
+            if (auto p = owned (ctx->createGraphicsPath ()))
+            {
+                p->addRoundRect (tag, 3.0);
+                ctx->setFillColor (CColor (22, 22, 22, 200));
+                ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
+                ctx->setLineWidth (1.0);
+                ctx->setFrameColor (bandColor (b, heard ? 200 : 90));
+                ctx->drawGraphicsPath (p, CDrawContext::kPathStroked);
+            }
+            text (ctx, s, tag, bandColor (b, heard ? 255 : 130), 9.5, kCenterText, true);
+        }
     }
 
     // the whole response: the bands' filters added up at their levels, as the engine adds them
@@ -337,7 +364,7 @@ void LevelView::draw (CDrawContext* ctx)
             const double f = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / steps);
             if (f >= 0.4999 * sr)
                 break;
-            const double db = 20.0 * std::log10 (std::abs (totalResponse (xo, slope, gains, f, sr)) + 1e-9);
+            const double db = 20.0 * std::log10 (std::abs (totalResponse (xo, slope, gains, f, sr, bands)) + 1e-9);
             const CPoint pt (xOfHz (f), yOfDb (std::clamp (db, -kRangeDb - 3.0, kRangeDb + 3.0)));
             if (!started)
                 path->beginSubpath (pt);
@@ -350,8 +377,8 @@ void LevelView::draw (CDrawContext* ctx)
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 
-    // the crossovers: a line with a grip, and the frequency at the foot
-    for (int k = 0; k < kCrossovers; ++k)
+    // the crossovers in use: a line with a grip, and the frequency at the foot
+    for (int k = 0; k < bands - 1; ++k)
     {
         const double x = xOfHz (xo[k]);
         const bool hot = hoverEdge == k || (drag == Drag::Edge && dragIndex == k);
@@ -372,7 +399,7 @@ void LevelView::draw (CDrawContext* ctx)
     }
 
     // the band numbers, and M / S
-    for (int b = 0; b < kBands; ++b)
+    for (int b = 0; b < bands; ++b)
     {
         const double l = bandLeft (b), r = bandRight (b);
         if (r - l > 22.0)
@@ -404,7 +431,7 @@ int LevelView::hitEdge (const CPoint& p) const
         return -1;
     int best = -1;
     double bestD = kEdgeGrab;
-    for (int k = 0; k < kCrossovers; ++k)
+    for (int k = 0; k < count () - 1; ++k)
     {
         const double d = std::fabs (p.x - edgeX (k));
         if (d <= bestD)
@@ -420,15 +447,16 @@ int LevelView::hitBand (const CPoint& p) const
 {
     if (!getViewSize ().pointInside (p))
         return -1;
-    for (int b = 0; b < kBands; ++b)
+    const int bands = count ();
+    for (int b = 0; b < bands; ++b)
         if (p.x >= bandLeft (b) && p.x < bandRight (b))
             return b;
-    return kBands - 1;
+    return bands - 1;
 }
 
 bool LevelView::hitChip (const CPoint& p, int& band, bool& solo) const
 {
-    for (int b = 0; b < kBands; ++b)
+    for (int b = 0; b < count (); ++b)
         for (bool s : {false, true})
         {
             const CRect c = chip (b, s);

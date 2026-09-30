@@ -1,7 +1,11 @@
 #include "Params.h"
 
+#include "Crossover.h"
+
 #include "smacheratr/src/core/TailExt.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -51,6 +55,22 @@ const ParamTable& paramTable ()
 {
     static const ParamTable t (buildTable ());
     return t;
+}
+
+void migrateState (int version, double norm[kNumParams], const bool has[kNumParams])
+{
+    // version 1's Slope was 12 / 24 / 48 dB/oct: the same slope among the eight
+    if (version < 2 && has[kSlope])
+    {
+        static const int kOld[3] = {kSlope12, kSlope24, kSlope48};
+        const int old = std::clamp ((int)std::lround (norm[kSlope] * 2.0), 0, 2);
+        norm[kSlope] = toNormalized (kSlope, kOld[old]);
+    }
+    // before Bands and the drives: all four bands, clean (so it sounds as it did, only later by the
+    // drives' latency)
+    if (version < 3)
+        for (uint32_t id = kFirstAddedAfter060; id < kEndAddedAfter060; ++id)
+            norm[id] = defaultNormalized (id);
 }
 
 } // namespace levlr
