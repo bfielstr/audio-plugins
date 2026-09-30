@@ -176,6 +176,8 @@ private:
     pk::ScopeView* scope = nullptr;
     Label* mdNames[4] {};
     VSTGUI::CView *mdOn[4] {}, *mdSolo[4] {}, *mdIn[4] {}, *mdOut[4] {}, *mdBoxes[4][6] {};
+    // the Sub band's lane (shown while it is on): its name, Output, and threshold, ratio, attack, release
+    VSTGUI::CView *mdSubName = nullptr, *mdSubOut = nullptr, *mdSubBoxes[4] {};
 };
 
 } // namespace smemplr

@@ -6,6 +6,7 @@
 #include "Help.h"
 #include "plugin/Controller.h"
 
+#include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/ui/Theme.h"
 #include "pluginkit/vst/PresetBar.h"
 
@@ -314,8 +315,11 @@ void Editor::showMenu (CPoint where)
     }
     menu->addSeparator ();
     menu->addEntry ("Reset All Ratios to 1:1");
-    menu->popup (frame, where, [this, sizes, menu] (COptionMenu* m) {
+    const int settingsAt = pk::addSettingsMenuEntries (menu);
+    menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (settingsMenuPicked (r, settingsAt))
+            return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
         else if (r == (int32_t)sizes.size () + 1)

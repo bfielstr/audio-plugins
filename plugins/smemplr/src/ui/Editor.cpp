@@ -297,6 +297,9 @@ void Editor::onClose ()
         for (auto& v : mdBoxes[b])
             v = nullptr;
     }
+    mdSubName = mdSubOut = nullptr;
+    for (auto& v : mdSubBoxes)
+        v = nullptr;
     waveform = nullptr;
     filterDisplay = nullptr;
     envDisplay = nullptr;
@@ -672,7 +675,8 @@ void Editor::paramChanged (uint32_t id)
                 fxBody->invalid ();
             if (fxCtl)
                 fxCtl->invalid ();
-            if (field == kSlotParams + multidyn::kBands && ctl->slotType (slot) == kFxMultidyn)
+            if (ctl->slotType (slot) == kFxMultidyn &&
+                (field == kSlotParams + multidyn::kBands || field == kSlotParams + (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kSubOn)))
                 updateMdLayout ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxSmacheratr)
                 updateSatAdvanced ();
@@ -724,12 +728,11 @@ void Editor::updateMdLayout ()
             v->setMouseableArea (r);
         }
     };
-    const double dispL = 112, dispR = 600, dispT = 8, dispB = 226;
+    const double dispL = 112, dispR = 600;
     if (!mdLayoutHost)
         return;
     const int n = std::clamp ((int)std::lround (mdLayoutHost->plainValue (multidyn::kBands)) + 1, 1, multidyn::kMaxBands);
-    const double top = dispT + multidyn::DynDisplay::kHeader;
-    const double laneH = (dispB - dispT - multidyn::DynDisplay::kHeader - multidyn::DynDisplay::kScaleHeight) / n;
+    const bool sub = mdLayoutHost->plainValue (multidyn::kSubOn) >= 0.5;
     const double belowX = dispL + 4, aboveX = dispR - multidyn::DynDisplay::kRightCol + 4, timeX = aboveX + 80;
     for (int b = 0; b < 4; ++b)
     {
@@ -742,7 +745,8 @@ void Editor::updateMdLayout ()
                 v->setVisible (used);
         if (!used)
             continue;
-        const double laneTop = top + (n - 1 - b) * laneH, cy = laneTop + laneH / 2;
+        const CRect lane = fxDynDisplay->laneRect (b);
+        const double laneTop = lane.top - 1, cy = lane.getCenter ().y;
         const char* names[4] = {"Low", n == 4 ? "Mid 1" : "Mid", n == 4 ? "Mid 2" : "High", "High"};
         if (mdNames[b])
             mdNames[b]->setText (n == 1 ? "Full" : (b == n - 1 ? "High" : names[b]));
@@ -756,6 +760,23 @@ void Editor::updateMdLayout ()
         {
             const double y = i % 2 == 0 ? cy - 20 : cy + 2;
             place (mdBoxes[b][i], CRect (xs[i], y, xs[i] + 68, y + 18));
+        }
+    }
+    // the Sub band's lane, at the bottom: its Output at the left, its (Above) threshold and ratio, attack and release
+    for (VSTGUI::CView* v : {mdSubName, mdSubOut, mdSubBoxes[0], mdSubBoxes[1], mdSubBoxes[2], mdSubBoxes[3]})
+        if (v)
+            v->setVisible (sub);
+    if (sub)
+    {
+        const CRect lane = fxDynDisplay->laneRect (multidyn::kSubBand);
+        const double laneTop = lane.top - 1, cy = lane.getCenter ().y;
+        place (mdSubName, CRect (8, laneTop + 2, 48, laneTop + 16));
+        place (mdSubOut, CRect (58, laneTop + 18, 106, laneTop + 34));
+        const double xs[4] = {aboveX, aboveX, timeX, timeX};
+        for (int i = 0; i < 4; ++i)
+        {
+            const double y = i % 2 == 0 ? cy - 20 : cy + 2;
+            place (mdSubBoxes[i], CRect (xs[i], y, xs[i] + 68, y + 18));
         }
     }
     if (frame)
@@ -1148,6 +1169,9 @@ void Editor::clearBody ()
         for (auto& v : mdBoxes[b])
             v = nullptr;
     }
+    mdSubName = mdSubOut = nullptr;
+    for (auto& v : mdSubBoxes)
+        v = nullptr;
     rackPageParams.clear ();
     // no view holds a replaced host any more
     retiredHosts.clear ();
@@ -1241,14 +1265,27 @@ void Editor::buildBody ()
             g->addView (sp);
             for (int x = 0; x < 3; ++x)
                 add (new NumberBox (CRect (608 + x * 74, 94, 676 + x * 74, 112), h, (uint32_t)(kXover1 + x)), tip ((uint32_t)(kXover1 + x)));
-            add (new Knob (knobRect (608, 122), h, kAmount), tip (kAmount));
-            add (new Knob (knobRect (664, 122), h, kTime), tip (kTime));
-            add (new Knob (knobRect (720, 122), h, kOutput, nullptr, true), tip (kOutput));
-            add (new Knob (knobRect (776, 122), h, kSoften), tip (kSoften));
-            auto* rl = new Label (CRect (608, 198, 680, 214), "RMS window", 9.5, true, 0);
+            add (new Knob (knobRect (608, 114), h, kAmount), tip (kAmount));
+            add (new Knob (knobRect (664, 114), h, kTime), tip (kTime));
+            add (new Knob (knobRect (720, 114), h, kOutput, nullptr, true), tip (kOutput));
+            add (new Knob (knobRect (776, 114), h, kSoften), tip (kSoften));
+            // the crossovers' slope; Soften's Color; the RMS window; the Sub band (on, where it tapers)
+            add (new Choice (CRect (608, 182, 690, 200), h, kXoverSlope), tip (kXoverSlope));
+            add (new Toggle (CRect (694, 182, 754, 200), h, kSoftenColor, "Color"), tip (kSoftenColor));
+            auto* rl = new Label (CRect (758, 184, 790, 198), "RMS", 9.5, true, 2);
             rl->setDim (true);
             g->addView (rl);
-            add (new NumberBox (CRect (684, 196, 740, 214), h, kRmsWindow), tip (kRmsWindow));
+            add (new NumberBox (CRect (792, 182, 834, 200), h, kRmsWindow), tip (kRmsWindow));
+            add (new Toggle (CRect (608, 206, 660, 224), h, kSubOn, "Sub"), tip (kSubOn));
+            add (new NumberBox (CRect (664, 206, 740, 224), h, kSubFreq), tip (kSubFreq));
+            // the Sub band's lane (placed by updateMdLayout)
+            auto* sn = new Label (none, "Sub", 10.0, true, 0);
+            g->addView (sn);
+            mdSubName = sn;
+            mdSubOut = add (new NumberBox (none, h, kSubOutput), tip (kSubOutput));
+            const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
+            for (int i = 0; i < 4; ++i)
+                mdSubBoxes[i] = add (new NumberBox (none, h, subFields[i], i < 2 ? above : pk::theme::kTextBright), tip (subFields[i]));
             mdLayoutHost = h;
             updateMdLayout ();
             break;

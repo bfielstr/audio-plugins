@@ -69,7 +69,7 @@ int main (int argc, char** argv)
         if (gFail)
             return finish ("smoothr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
-        CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
+        CHECK (rig.component->getBusCount (kEvent, smoothr::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
@@ -84,7 +84,7 @@ int main (int argc, char** argv)
         CHECK (allFinite (out), "finite");
 
         // pushed 12 dB into it: never over the ceiling (-1 dB)
-        rig.param (kInput, toNormalized (kInput, 12.0));
+        rig.param (smoothr::kInput, toNormalized (smoothr::kInput, 12.0));
         out.clear ();
         std::vector<float> outR;
         rig.render (2.0, out, &outR, mix (1.0));
@@ -119,7 +119,7 @@ int main (int argc, char** argv)
         // line smooth under the highs'), the defaults otherwise, the saturator a little harder
         for (uint32_t id : {kCeiling, kSmooth, kCharacter, kRelease, kAutoRelease})
             rig.param (id, defaultNormalized (id));
-        rig.param (kInput, toNormalized (kInput, 9.0));
+        rig.param (smoothr::kInput, toNormalized (smoothr::kInput, 9.0));
         rig.param (kTailBase + pk::kTailDrive, toNormalized (kTailBase + pk::kTailDrive, 3.0));
         {
             EditorWindow win (rig.controller);
@@ -135,7 +135,7 @@ int main (int argc, char** argv)
             // a click on the meters clears the holds (and nothing breaks)
             win.click (Editor::kViewRight - 60.0, 0.5 * (Editor::kViewTop + Editor::kViewBottom));
             pump (0.05);
-            CHECK (plainOf (rig, kInput) > 8.9, "the input stays at +9 dB: %.1f", plainOf (rig, kInput));
+            CHECK (plainOf (rig, smoothr::kInput) > 8.9, "the input stays at +9 dB: %.1f", plainOf (rig, smoothr::kInput));
         }
         return finish ("smoothr host test");
     }

@@ -32,12 +32,18 @@ moved, switched off or removed. **+** adds an effect at the end of the chain; th
 left to right: click a tab to show that effect, **drag a tab sideways** to move the effect (an orange
 bar shows where it will land; the effects in between move over); **Ctrl-drag** (Cmd on macOS) puts a copy
 of it, with its settings, in the gap you let go on (the ones after it move up one); **Alt-click** a tab
-(Option-click) removes that effect. For the selected one, **On** and
-**Remove** (the ones after it move up). Each has its own display and controls:
+(Option-click) removes that effect. For the selected one, **On**, **Remove** (the ones after it move
+up), and **Copy** / **Paste**: the effect's settings as text on the clipboard, the same text the
+effect's own plug-in copies and pastes (its **Menu → Copy Settings / Paste Settings**), so settings go
+from a Para plug-in on a track into a para slot and back, or from one slot to another of the same
+effect. Settings of another effect are ignored; the parameters the rack does not use (an effect's own
+end saturator) are left out. Each has its own display and controls:
 
-- **para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement and the Notch);
-  its envelope is triggered by the notes played here, and its display shows the live spectrum.
-- **multidyn**: the multiband dynamics, with its lanes and band fields.
+- **para**: the parallel high-pass / low-pass (with its Vocal movement), its slopes (6 to 96 dB and
+  Brickwall) and a drive for each filter; its envelope is triggered by the notes played here, and its
+  display shows the live spectrum.
+- **multidyn**: the multiband dynamics, with its lanes and band fields, the crossovers' Slope, Soften's
+  Color and the Sub band (on, where it tapers, and its own lane while it is on).
 - **m/s eq**: a high-pass on the side signal (default 150 Hz) tapers the sides so the low end is mono
   below the cutoff, plus side and mid levels; live meters. Its slope: 6, 12, **24** (default), 36, 48,
   60, 72, 84 or 96 dB per octave (Butterworth above 6 dB, -3 dB at the cutoff), or **Brickwall** (a
@@ -47,6 +53,14 @@ of it, with its settings, in the gap you let go on (the ones after it move up on
 - **smacheratr**: the full saturator (pre-limiter, Gently with its Advanced mode, Mid/Side, colour, post clip).
 - **widr**: the stereo widener with its left and right voices (it works alone here: the group
   awareness needs its own plug-in instances).
+- **wubr**, **levlr** (with Bands and each band's Drive and curve), **gently** (its two bands and Sub
+  band on its display, a row of values for each, Advanced and its region Drive) and **smoothr** (its
+  gain-reduction history and its limiter's controls; its own saturator before the limiter is off in
+  the rack: put a smacheratr slot before it for that). Switched off, an effect keeps its latency.
+
+Projects from before 0.7 keep their sound: a para slot's slope stays what it was and its one drive
+becomes both filters' drives, a multidyn slot's gains move into its controls for the OTT gain staging
+(see Multidyn's README), and a levlr slot keeps 4 bands without drive.
 
 Every control is an automatable parameter (the host shows a slot's values in the units of the effect
 loaded there), and the latency of the effects in the rack is reported to the host, which is told when

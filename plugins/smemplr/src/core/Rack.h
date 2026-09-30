@@ -82,6 +82,10 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
 // held nothing that was used; they get their defaults (Advanced and Sub off: the same sound).
 void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an
+// "OTT pushed further" then: multidyn::migrateOldBaked moves the difference into its controls) and its
+// later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).
+void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 // States from before version 13: a Para slot's slope (one of 12 / 18 / 24 dB then) on the longer list,
 // and its one drive becomes both filters' drives (para::upgradeToPerBandDrive).
 void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);

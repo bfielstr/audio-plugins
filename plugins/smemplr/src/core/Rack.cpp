@@ -62,6 +62,10 @@ static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
+// ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band) run on into the
+// slot's extension, in order
+constexpr uint32_t kMdAdded = multidyn::kNumParams - multidyn::kXoverSlope;
+static_assert (kMdAdded == 9 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
 
 int64_t fxIdAt (int type, uint32_t j)
 {
@@ -69,6 +73,8 @@ int64_t fxIdAt (int type, uint32_t j)
         return wubrIdAt (j);
     if (type == kFxMultidyn)
     {
+        if (j >= kSlotBlock)
+            return j < kSlotBlock + kMdAdded ? (int64_t)(multidyn::kXoverSlope + (j - kSlotBlock)) : -1;
         if (j == multidyn::kSatOn)
             return multidyn::kRmsWindow;
         if (j == multidyn::kSatPreLimit)
@@ -85,6 +91,8 @@ int64_t fxBlockOf (int type, uint32_t id)
         return wubrBlockOf (id);
     if (type == kFxMultidyn)
     {
+        if (id >= multidyn::kXoverSlope)
+            return id < multidyn::kNumParams ? (int64_t)(kSlotBlock + (id - multidyn::kXoverSlope)) : -1;
         if (id == multidyn::kRmsWindow)
             return multidyn::kSatOn;
         if (id == multidyn::kSoften)
@@ -196,6 +204,12 @@ const pk::ParamTable& fxBlockTable (int type)
             else if (j == multidyn::kSatPreLimit)
                 id = multidyn::kSoften;
             pk::ParamInfo pi = md.info (id);
+            pi.id = j;
+            v.push_back (pi);
+        }
+        for (uint32_t j = kSlotBlock; j < kSlotBlock + kMdAdded; ++j)
+        {
+            pk::ParamInfo pi = md.info (multidyn::kXoverSlope + (j - kSlotBlock));
             pi.id = j;
             v.push_back (pi);
         }
@@ -316,6 +330,34 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
             norm[slotBlockParam (slot, id)] = smacheratr::defaultNormalized (id);
             has[slotBlockParam (slot, id)] = true;
         }
+    }
+}
+
+void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 13)
+        return;
+    const auto& md = multidyn::paramTable ();
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxMultidyn)
+            continue;
+        // by Multidyn's IDs: what the slot has (its later parameters were not there: defaults)
+        std::array<double, multidyn::kNumParams> v;
+        for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
+        {
+            const int64_t j = fxBlockOf (kFxMultidyn, id);
+            const bool stored = j >= 0 && id < multidyn::kXoverSlope && has[slotBlockParam (slot, (uint32_t)j)];
+            v[id] = stored ? norm[slotBlockParam (slot, (uint32_t)j)] : md.defaultNormalized (id);
+        }
+        multidyn::migrateOldBaked (v.data ());
+        for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
+            if (const int64_t j = fxBlockOf (kFxMultidyn, id); j >= 0)
+            {
+                norm[slotBlockParam (slot, (uint32_t)j)] = v[id];
+                has[slotBlockParam (slot, (uint32_t)j)] = true;
+            }
     }
 }
 
@@ -613,7 +655,7 @@ void Rack::publish (int i)
         return;
     Slot& s = *slots[(size_t)i];
     if (s.type == kFxMultidyn)
-        for (int b = 0; b < multidyn::kNumBands; ++b)
+        for (int b = 0; b <= multidyn::kSubBand; ++b) // the bands and the Sub band
         {
             const auto& m = s.multidyn.meter (b);
             meters->multidyn[(size_t)i].inputDb[(size_t)b].store (m.inputDb, std::memory_order_relaxed);

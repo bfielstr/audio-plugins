@@ -5,7 +5,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, any order, any number) and an output scope | Ableton Live's Simpler |
+| [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gently, smoothr, any order, any number) and an output scope | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
@@ -22,6 +22,10 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
 Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before), Gently's **Sub** band (the sub region from 20 Hz up to a taper point of 20 to 100 Hz) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
+
+**Copy / Paste Settings** (every plug-in's **Menu**, and **Copy** / **Paste** on each effect's page in
+Smemplr's rack) puts an effect's settings on the clipboard as text: paste them into the same plug-in
+on another track, or between a plug-in and the same effect in Smemplr's rack, both ways.
 
 In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 

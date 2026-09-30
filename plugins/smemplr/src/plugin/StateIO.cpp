@@ -29,7 +29,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 11: Gently's (Clarity's) Advanced mode in the rack's Smacheratrs
 // 12: Gently's Sub band in the rack's Smacheratrs
 // 13: Gently and Smoothr in the rack: the slot type's choice has two more entries; Levlr's Bands and
-//     band drives in its slots; Para's slopes (6 .. 96 dB, Brickwall) and a drive per filter in its slots
+//     band drives in its slots; Para's slopes (6 .. 96 dB, Brickwall) and a drive per filter in its slots;
+//     Multidyn's OTT gain staging, crossover slope, Soften Color and Sub band in its slots
 constexpr int32 kVersion = 13;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -240,6 +241,8 @@ bool readState (IBStream* stream, PluginState& st)
     migrateLevlrInSlots (st.norm, st.has, version);
     // Para's slopes and per-filter drives (13)
     migrateParaInSlots (st.norm, st.has, version);
+    // Multidyn's OTT gain staging, slope and Sub band (13)
+    migrateMultidynInSlots (st.norm, st.has, version);
     if (version < 9)
         moveEndSaturatorIntoRack (st.norm, st.has); // (the rack is what the state has; its saturator after it, into it)
     return true;

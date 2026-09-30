@@ -436,6 +436,59 @@ TEST (old_para_slots_keep_their_slope_and_drive)
     CHECK ((*st)[slotBlockParam (1, para::kSlope)] == now, "a new state is left as it is");
 }
 
+TEST (rack_multidyn_later_params)
+{
+    // Slope, Soften Color and the Sub band sit in the slot's extension, in order, and work there
+    for (uint32_t id = multidyn::kXoverSlope; id < multidyn::kNumParams; ++id)
+        CHECK (fxBlockOf (kFxMultidyn, id) == (int64_t)(kSlotBlock + id - multidyn::kXoverSlope) &&
+                   fxBlockTable (kFxMultidyn).info ((uint32_t)fxBlockOf (kFxMultidyn, id)).def == multidyn::paramTable ().info (id).def,
+               "multidyn %u", id);
+    auto s = sine (35.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    loadFx (*e, 0, kFxMultidyn);
+    CHECK (std::lround (fxTable (kFxMultidyn).toPlain (multidyn::kXoverSlope, e->param (slotBlockParam (0, (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kXoverSlope))))) == 3,
+           "24 dB by default");
+    // (the Sub band takes the sample from the low band: against itself with its threshold at the top)
+    e->setParam (kGain, 6.0);
+    setFx (*e, 0, multidyn::kSubOn, 1.0);
+    setFx (*e, 0, multidyn::kSubThresh, 0.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    auto o = run (*e, 48000);
+    const double without = rms (o.l, 24000, 48000);
+    setFx (*e, 0, multidyn::kSubThresh, -40.0);
+    setFx (*e, 0, multidyn::kSubRatio, 8.0);
+    e->reset ();
+    e->noteOn (60, 1.0f);
+    o = run (*e, 48000);
+    CHECK (rms (o.l, 24000, 48000) < without * 0.7, "the Sub band compresses a 35 Hz sample: %.2f dB",
+           20.0 * std::log10 (rms (o.l, 24000, 48000) / without));
+    // an old state's Multidyn slot: its extension read 0 (6 dB slope); it gets the defaults, and its
+    // band Outputs move by the change of the baked gains
+    auto st = std::make_unique<std::array<double, kNumParams>> ();
+    auto has = std::make_unique<std::array<bool, kNumParams>> ();
+    st->fill (0.0);
+    has->fill (false);
+    (*st)[slotParam (3, kSlotType)] = toNormalized (slotParam (3, kSlotType), (double)kFxMultidyn);
+    (*has)[slotParam (3, kSlotType)] = true;
+    const auto& md = multidyn::paramTable ();
+    for (uint32_t id = 0; id < multidyn::kXoverSlope; ++id)
+        if (const int64_t j = fxBlockOf (kFxMultidyn, id); j >= 0)
+        {
+            (*st)[slotBlockParam (3, (uint32_t)j)] = md.defaultNormalized (id);
+            (*has)[slotBlockParam (3, (uint32_t)j)] = true;
+        }
+    const uint32_t out1 = slotBlockParam (3, multidyn::bandParam (1, multidyn::kBandOutput));
+    const double before = md.toPlain (multidyn::bandParam (1, multidyn::kBandOutput), (*st)[out1]);
+    migrateMultidynInSlots (*st, *has, 12);
+    const double after = md.toPlain (multidyn::bandParam (1, multidyn::kBandOutput), (*st)[out1]);
+    CHECK (std::fabs (after - before - multidyn::oldBakedShiftDb (multidyn::bandParam (1, multidyn::kBandOutput))) < 1e-6,
+           "band 2's Output moved by %.2f dB", after - before);
+    const uint32_t slope = slotBlockParam (3, (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kXoverSlope));
+    CHECK ((*st)[slope] == md.defaultNormalized (multidyn::kXoverSlope) && (*has)[slope], "the slope's default (24 dB)");
+}
+
 TEST (settings_text_roundtrip)
 {
     // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back
@@ -473,7 +526,8 @@ TEST (rack_block_mapping)
         }
     for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
     {
-        const bool sat = (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) || id >= multidyn::kSatExtBase;
+        const bool sat = (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) ||
+                         (id >= multidyn::kSatExtBase && id < multidyn::kXoverSlope);
         CHECK ((fxBlockOf (kFxMultidyn, id) < 0) == sat, "multidyn %u", id);
     }
     const auto& t = fxBlockTable (kFxMultidyn);
