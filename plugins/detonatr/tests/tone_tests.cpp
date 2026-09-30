@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <complex>
 #include <cstdint>
 #include <random>
@@ -937,9 +938,9 @@ TEST (silence_after_a_hit)
     t.setCarrier (0, &c);
     Buf L ((size_t)(60 * sr), 0.0f), R = L;
     addHit (L, R, sr, 0.1, 1.0, 131);
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     run (t, L, R, 512);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     const double tail = std::max (peakAbs (L, (size_t)(55 * sr)), peakAbs (R, (size_t)(55 * sr)));
     std::printf ("    last 5 s peak %.3g; a minute took %.2f s\n", tail, secs);
     CHECK (allFinite (L) && allFinite (R), "not finite");
@@ -967,9 +968,9 @@ TEST (cpu)
     Buf L ((size_t)(seconds * sr), 0.0f), R = L;
     for (double at = 0.1; at < seconds; at += 0.5)
         addHit (L, R, sr, at, 0.3, (uint32_t)(at * 10));
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     run (t, L, R, 256);
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    4 stereo carriers, everything on, 48 kHz stereo: %.2f%% of real time\n", 100.0 * secs / seconds);
     CHECK (secs / seconds < 0.1, "%.1f%% of real time", 100.0 * secs / seconds);
     CHECK (allFinite (L), "not finite");

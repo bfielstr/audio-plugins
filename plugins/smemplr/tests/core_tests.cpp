@@ -13,6 +13,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -2029,7 +2030,8 @@ TEST (fuzz_random_params_with_sample)
 TEST (performance)
 {
     auto s = sine (220.0, 4.0, 44100.0, true);
-    auto timeIt = [&] (int voices, int warpMode, bool warp) {
+    // CPU time (other programs running do not count), the best of three renders
+    auto timeOnce = [&] (int voices, int warpMode, bool warp) {
         std::unique_ptr<Engine> e (makeEngine (s));
         e->setParam (kVoices, 14); // 32
         e->setParam (kFilterFreq, 3000.0);
@@ -2039,10 +2041,16 @@ TEST (performance)
         e->setParam (kWarpMode, warpMode);
         for (int i = 0; i < voices; ++i)
             e->noteOn (40 + i, 0.8f);
-        const auto t0 = std::chrono::steady_clock::now ();
+        const std::clock_t t0 = std::clock ();
         run (*e, (int)kHostSr * 4);
-        const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
         return 100.0 * secs / 4.0; // % of one core in real time
+    };
+    auto timeIt = [&] (int voices, int warpMode, bool warp) {
+        double best = 1e9;
+        for (int i = 0; i < 3; ++i)
+            best = std::min (best, timeOnce (voices, warpMode, warp));
+        return best;
     };
     const double classic = timeIt (32, 0, false);
     const double complex8 = timeIt (8, kWarpComplex, true);

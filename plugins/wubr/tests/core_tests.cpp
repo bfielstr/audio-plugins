@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <ctime>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -370,7 +371,7 @@ TEST (fuzz_and_cpu)
     auto e = engine ();
     std::vector<float> l (256), r (256);
     bool finite = true;
-    const auto t0 = std::chrono::steady_clock::now ();
+    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
     for (int blk = 0; blk < 2000; ++blk)
     {
         if (blk % 20 == 0)
@@ -389,7 +390,7 @@ TEST (fuzz_and_cpu)
         for (float v : l)
             finite &= std::isfinite (v) && std::fabs (v) < 100.0f;
     }
-    const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
+    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    %.1f%% of real time\n", 100.0 * secs / (2000.0 * 256 / kSr));
     CHECK (finite, "finite and bounded");
 }
