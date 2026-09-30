@@ -4,6 +4,7 @@
 //   handle, sideways / up-down    the band's Frequency / Gain
 //   a band's edge, sideways       its Width (the band stays centred)
 //   wheel on a handle             its Width
+//   Alt + drag a band sideways    its Width (the band stays centred; Shift: fine)
 //   click a handle                shows that band's controls
 #pragma once
 
@@ -43,14 +44,16 @@ public:
 private:
     int hit (const VSTGUI::CPoint& p) const;     // a handle, or -1
     int hitEdge (const VSTGUI::CPoint& p) const; // a band's edge, or -1 (a band that is on)
+    int hitBody (const VSTGUI::CPoint& p) const; // a band that is on, between its edges (the selected one first), or -1
     bool live () const;
 
     pk::ParamHost* host;
     MeterSource meters;
     int drag = -1;
     bool dragEdge = false;
+    bool dragWidth = false; // Alt held on a band: sideways sets its width
     VSTGUI::CPoint down;
-    double startFreq = 0.0, startGain = 0.0;
+    double startFreq = 0.0, startGain = 0.0, startWidth = 1.5;
     float shownFreq[kBands] = {120.0f, 2000.0f}, shownDb[kBands] = {0.0f, 0.0f};
     uint32_t lastBlocks = 0;
     int idleSinceBlock = 1 << 20;

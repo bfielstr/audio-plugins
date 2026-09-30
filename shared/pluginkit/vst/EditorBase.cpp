@@ -101,7 +101,8 @@ void EditorBase::setTooltipsEnabled (bool on)
     }
 }
 
-Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_t base, uint32_t extBase, const char* title)
+Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_t base, uint32_t extBase, uint32_t ext2Base,
+                                 const char* title)
 {
     auto* p = new Panel (r, title);
     parent->addView (p);
@@ -121,41 +122,44 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
          "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound stays wide.");
     tip (bind (p, new Toggle (row (342, 388, rowA), this, extBase + kTailExtHiQuality, "Hi-Q")),
          "Run the curve 4x oversampled to reduce aliasing (a little more CPU).");
-    tip (bind (p, new Toggle (row (392, 460, rowA), this, extBase + kTailExtDcFilter, "DC Filter")),
-         "Remove DC offset before the curve.");
-    // Clarity: one button, a band selector and the selected band's controls (both bands' are made;
-    // the other band's are hidden)
-    tip (bind (p, new Toggle (row (10, 64, rowB), this, extBase + kTailExtClarity, "Clarity")),
-         "A compressor on up to two bands, so a hard-pushed drive does not go muddy or harsh (12 dB/oct below, 6 dB/oct "
-         "above each band). A band works while its Range is above 0 dB.");
+    tip (bind (p, new Toggle (row (392, 424, rowA), this, extBase + kTailExtDcFilter, "DC")), "Remove DC offset before the curve.");
+    tip (bind (p, new Toggle (row (430, 480, rowA), this, extBase + kTailExtColorOn, "Color")),
+         "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
+    // Gently: one button, Advanced, a band selector and the selected band's controls (both bands' are
+    // made; the other band's are hidden)
+    tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gently")),
+         "Gently: a compressor on up to two bands, so a hard-pushed drive does not go muddy or harsh (12 dB/oct below, "
+         "6 dB/oct above each band). A band works while its Range is above 0 dB.");
+    tip (bind (p, new Toggle (row (64, 124, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
+         "Gently's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
+         "for the region it cuts. Off, Gently starts cutting at -18 dB, as it always did.");
     for (auto& v : tailBandViews)
         v.clear ();
     tailBandButtons.clear ();
     for (int k = 0; k < 2; ++k)
     {
-        auto* bt = new ActionButton (row (68 + k * 20, 86 + k * 20, rowB), k == 0 ? "1" : "2", [this, k] { showTailBand (k); },
+        auto* bt = new ActionButton (row (128 + k * 20, 146 + k * 20, rowB), k == 0 ? "1" : "2", [this, k] { showTailBand (k); },
                                      [this, k] { return tailBand == k; });
-        bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)." : "Show Clarity's second band (blue in the display).");
+        bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)." : "Show Gently's second band (blue in the display).");
         p->addView (bt);
         tailBandButtons.push_back (bt);
         const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
         const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
         const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
-        CView* views[3] = {bind (p, new NumberBox (row (110, 160, rowB), this, f)), bind (p, new NumberBox (row (164, 198, rowB), this, w)),
-                           bind (p, new NumberBox (row (202, 248, rowB), this, g))};
-        tip (views[0], "Clarity: the centre of this band.");
-        tip (views[1], "Clarity: this band's width in octaves.");
-        tip (views[2], "Clarity: the most this band is turned down; at 0 dB the band does nothing.");
+        CView* views[3] = {bind (p, new NumberBox (row (170, 218, rowB), this, f)), bind (p, new NumberBox (row (222, 256, rowB), this, w)),
+                           bind (p, new NumberBox (row (260, 304, rowB), this, g))};
+        tip (views[0], "Gently: the centre of this band.");
+        tip (views[1], "Gently: this band's width in octaves (or Alt-drag the band in the display).");
+        tip (views[2], "Gently: the most this band is turned down; at 0 dB the band does nothing.");
         for (auto* v : views)
             tailBandViews[k].push_back (v);
     }
     showTailBand (tailBand);
-    tip (bind (p, new Toggle (row (254, 300, rowB), this, extBase + kTailExtColorOn, "Color")),
-         "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
-    tip (bind (p, new NumberBox (row (304, 342, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
-    tip (bind (p, new NumberBox (row (346, 384, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
-    tip (bind (p, new NumberBox (row (388, 440, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
-    tip (bind (p, new NumberBox (row (444, 480, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
+    // the colour filters' amounts (their button is at the end of the row above)
+    tip (bind (p, new NumberBox (row (312, 350, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
+    tip (bind (p, new NumberBox (row (353, 391, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
+    tip (bind (p, new NumberBox (row (394, 444, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
+    tip (bind (p, new NumberBox (row (447, 480, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
     tip (bind (p, new Knob (CRect (490, y + 4, 546, y + 68), this, base + kTailDrive, nullptr, true)),
          "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
     tip (bind (p, new Knob (CRect (552, y + 4, 608, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");

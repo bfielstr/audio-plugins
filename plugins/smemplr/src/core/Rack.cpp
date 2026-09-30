@@ -36,10 +36,10 @@ double slopeFromThreeChoices (double oldNorm)
 static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams &&
                    kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
-// Wubr in a slot: its own IDs without its end saturator (5 .. 10 and 85 .. 101), in order, then the
-// ones after the saturator's block (Link Rates)
+// Wubr in a slot: its own IDs without its end saturator (5 .. 10, 85 .. 101 and its last block,
+// Gently's Advanced mode), in order, then the ones after the saturator's block (Link Rates)
 constexpr uint32_t kWubrBands = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase); // positions before Link Rates
-constexpr uint32_t kWubrHosted = kWubrBands + (wubr::kNumParams - wubr::kLinkRate);
+constexpr uint32_t kWubrHosted = kWubrBands + (wubr::kTailExt2Base - wubr::kLinkRate);
 static_assert (wubr::kTailBase == 5 && kWubrHosted <= kSlotBlockAll, "Wubr's parameters must fit a slot's block and extension");
 static int64_t wubrIdAt (uint32_t j)
 {
@@ -55,10 +55,10 @@ static int64_t wubrBlockOf (uint32_t id)
         return id;
     if (id >= wubr::kBandBase && id < wubr::kTailExtBase)
         return (int64_t)(id - wubr::kBandBase + wubr::kTailBase);
-    return id >= wubr::kLinkRate && id < wubr::kNumParams ? (int64_t)(id - wubr::kLinkRate + kWubrBands) : -1;
+    return id >= wubr::kLinkRate && id < wubr::kTailExt2Base ? (int64_t)(id - wubr::kLinkRate + kWubrBands) : -1;
 }
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
-static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields && multidyn::kRmsWindow == kSlotBlock &&
+static_assert (multidyn::kNumParams == kSlotBlock + 2 + pk::kTailExtFields + pk::kTailExt2Fields && multidyn::kRmsWindow == kSlotBlock &&
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
@@ -105,6 +105,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kRoot, para::kRoot, "unused since Para stopped tracking notes"},
         {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {para::kTailExt2Base, para::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
         {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
     };
@@ -113,20 +114,24 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {multidyn::kMode, multidyn::kMode, "unused: Multidyn always works in its character mode"},
         {multidyn::kSatOn, multidyn::kSatPreLimitThreshold, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {multidyn::kSatExtBase, multidyn::kSatExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {multidyn::kSatExt2Base, multidyn::kSatExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> widrHidden {
         {widr::kRole, widr::kGroup, "Mix Aware: between Widr plug-ins on different tracks, not inside Smemplr"},
         {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {widr::kTailExt2Base, widr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> levlrHidden {
         {levlr::kTailBase, levlr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {levlr::kTailExtBase, levlr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {levlr::kTailExt2Base, levlr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     static_assert (levlr::kNumParams <= kSlotBlock, "Levlr's parameters must fit a slot's block");
     static const std::vector<RackHidden> wubrHidden {
         {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {wubr::kTailExt2Base, wubr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         // each band's points and their count: drawn in the shape display (a ShapeView, not a control per value)
         {wubr::bandParam (0, wubr::kPointCount), wubr::bandParam (0, wubr::kPointCount), "the shape display adds and removes points"},
         {wubr::pointParam (0, 0, wubr::kPtX), wubr::pointParam (0, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
@@ -134,7 +139,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {wubr::pointParam (1, 0, wubr::kPtX), wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
     };
     static const std::vector<RackHidden> smacheratrHidden {
-        {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Clarity button (a band works while its Range is above 0)"},
+        {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
     };
     switch (type)
     {
@@ -221,6 +226,7 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
 {
     // Smacheratr's block positions are its own IDs; each one is a field of the old saturator (its On is
     // the slot's). The values go through their plain values, so the two tables need not agree on ranges.
+    // The old saturator never had Gently's Advanced mode (the tail's third block): those get defaults.
     const auto& st = smacheratr::paramTable ();
     static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's parameters sit in a slot's block");
     set (slotParam (slot, kSlotType), toNormalized (slotParam (slot, kSlotType), (double)kFxSmacheratr));
@@ -230,7 +236,9 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
         double v = 0.0;
         if (j < st.size ())
         {
-            const int f = smacheratr::tailFieldOf (j);
+            int f = smacheratr::tailFieldOf (j);
+            if (f >= (int)(pk::kTailFields + pk::kTailExtFields))
+                f = -1;
             const uint32_t id = f < 0 ? 0 : (f < (int)pk::kTailFields ? kTailBase + (uint32_t)f : kTailExtBase + (uint32_t)(f - pk::kTailFields));
             v = f < 0 ? st.defaultNormalized (j) : st.toNormalized (j, toPlain (id, norm (id)));
         }

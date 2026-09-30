@@ -27,7 +27,8 @@ enum ParamId : uint32_t
     kTrigger = kTailBase + pk::kTailFields, // On Play: the clip starts when the host starts; Timeline: where it is
     kStereo,           // Extreme and Alien: Wide (left and right apart) / Same (one channel, duplicated)
     kTailExtBase,      // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries (not render settings)
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (not render settings; the last block)
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 
 enum Algorithm
@@ -53,10 +54,16 @@ enum Outside { kThru = 0, kMute };
 // The end-of-chain saturator's parameters (both blocks): the processor handles them, not the session.
 constexpr bool isTailParam (uint32_t id)
 {
-    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
+    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
 }
 // Its field in smacheratr::Tail.
-constexpr uint32_t tailField (uint32_t id) { return id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase) : id - kTailBase; }
+constexpr uint32_t tailField (uint32_t id)
+{
+    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+           : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
+                                : id - kTailBase;
+}
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

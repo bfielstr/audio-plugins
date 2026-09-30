@@ -111,9 +111,9 @@ void Editor::buildUI (CFrame* f)
     {
         if (s == kStageSaturator)
         {
-            auto* tailPanel = addTailPanel (root, page, kTailBase, kTailExtBase, "saturator  (smacheratr: raises the dropped body back up)");
+            auto* tailPanel = addTailPanel (root, page, kTailBase, kTailExtBase, kTailExt2Base, "saturator  (smacheratr: raises the dropped body back up)");
             tailDisplays = std::make_unique<smacheratr::TailDisplays> (
-                this, kTailBase, kTailExtBase,
+                this, kTailBase, kTailExtBase, kTailExt2Base,
                 [c = ctl] {
                     auto* b = c->getBridge ();
                     return b ? (double)b->meters.sampleRate.load () : 48000.0;

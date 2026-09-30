@@ -27,10 +27,24 @@ while the mids and highs saturate. **Amt Hi** does the same around **Freq** with
 **Width**. The colour display shows the pre-curve EQ; drag the left handle for Amt Lo, the right handle
 up/down for Amt Hi or sideways for Freq.
 
-**Clarity** (above the curve) keeps a hard-pushed drive from going muddy: when the low mids (around
-320 Hz) hit the curve hard they are turned down before it (3 dB for every 5 dB over -18 dBFS, at
-most 8 dB, so it does nothing at gentle settings), and the lows go into the curve 4 dB down and are
-lifted back after it, so the bass drives the curve less (less intermodulation mud) but keeps its level.
+**Gently** (the panel at the bottom; it was called Clarity) keeps a hard-pushed drive from going
+muddy or harsh: a compressor on a band (the low mids around 250 Hz by default; a second band can be
+given a Range too) that turns the band down before the curve when it hits it hard (3 dB for every
+5 dB over -18 dBFS, at most the band's **Range**, 8 dB by default, so it does nothing at gentle
+settings) and after it by half as much. Set the band with **Freq** and **Width**, or in the colour
+display: drag its handle sideways for the frequency and down for the Range, drag an edge (or hold
+Alt / Option and drag the band sideways) for the width.
+
+**Advanced** (in the Gently panel) gives each band a **Threshold** instead of the fixed -18 dB: a
+vertical slider per band at the right edge of the colour display, with the band's level as Gently
+measures it rising beside it (bright where it is over the threshold, which is where the band is
+being cut). Over the threshold the law is the same: 3 dB of cut for every 5 dB over (2.5 : 1, hard
+knee), reaching the Range (Range / 0.6) dB over it. Advanced also has the region **Drive** (and its
+**Amount**, 0 ... 36 dB): the bands Gently works on are split out again with the same band filters,
+put through the Analog curve on their own and added back, level-matched (the curve's output divided
+by the gain), so the cut region gets density and harmonics while the rest of the sound stays clean.
+It runs oversampled with the rest when Hi-Quality is on, fades in and out when switched, and does not
+change the latency. With Advanced off, Gently is exactly the Clarity it was before.
 
 **Menu**: **Hi-Quality** runs the curve 4x oversampled (two linear-phase half-band stages) to keep
 aliasing down; **Pre-DC Filter** removes DC offset before the curve; **Mid/Side** saturates the mid

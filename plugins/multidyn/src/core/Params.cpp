@@ -68,6 +68,8 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kRmsWindow, "RMS Window", "RMS", 5.0, 300.0, 50.0, Curve::Log, Disp::Ms));
     t.push_back (percent (kSoften, "Soften", "Soften", 0.5));
     smacheratr::addTailExtParams (t, kSatExtBase);
+    smacheratr::addTailExt2Params (t, kSatExt2Base);
+    static_assert (kNumParams == kSatExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
     return t;
 }
 

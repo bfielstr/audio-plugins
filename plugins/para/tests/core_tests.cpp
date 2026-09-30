@@ -426,7 +426,11 @@ TEST (drive_params)
     const auto& t = paramTable ();
     for (uint32_t id = 0; id < kNumParams; ++id)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
-    CHECK (kDriveOn == kTailExtBase + 17 && kNumParams == kDriveOn + 3, "the drive's IDs follow the end saturator's block");
+    CHECK (kDriveOn == kTailExtBase + 17 && kTailExt2Base == kDriveOn + 3, "the drive's IDs follow the end saturator's block");
+    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
+           "Gently's Advanced block (the end saturator's) is the last");
     // off, 0 dB and Pre are normalized 0, so a value never stored (a rack slot from before) is the default
     for (uint32_t id : {kDriveOn, kDrive, kDrivePos})
         CHECK (t.defaultNormalized (id) == 0.0, "%s: default %f", t.info (id).name, t.defaultNormalized (id));

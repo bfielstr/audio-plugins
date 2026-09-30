@@ -21,6 +21,7 @@ class DynDisplay;
 namespace smacheratr {
 class ShaperView;
 class ColorView;
+class ThresholdSlider;
 }
 namespace widr {
 class GonioView;
@@ -72,6 +73,7 @@ public:
     void addFx (int type);
     void removeFx (int slot);
     void moveFx (int from, int to);
+    void duplicateFx (int from, int at); // a copy of slot `from` at slot `at` (the ones from there move up one)
     void showMenu (VSTGUI::CPoint where);
 
 private:
@@ -83,8 +85,8 @@ private:
     void clearBody ();     // takes the panel's views away (before the rack's slots change under them)
     // dragging a slot's tab: `pos` is its place in the row, `target` where it would land (the marker
     // shows it); dropped there, the effect moves
-    void dragTab (int pos, int target);
-    void dropTab (int pos, int target);
+    void dragTab (int pos, int target, bool copy);
+    void dropTab (int pos, int target, bool copy);
     void moveOldEndIntoRack (); // an old project's saturator after a full rack, into the rack
     void showAddMenu (VSTGUI::CPoint where);
     void copySlot (int from, int to);
@@ -132,10 +134,16 @@ private:
     multidyn::DynDisplay* fxDynDisplay = nullptr;
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
     smacheratr::ColorView* fxColorView = nullptr;
-    // Clarity's band selector on the Smacheratr page: the band shown
+    // Gently's (Clarity's) band selector on the Smacheratr page: the band shown
     int clarityBand = 0;
     std::vector<VSTGUI::CView*> rackBandViews[2], rackBandButtons;
     void showClarityBand (int band);
+    // Gently's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
+    // display and the region Drive's controls, shown while Advanced is on (satHost: the page's host)
+    smacheratr::ThresholdSlider* fxThresholds[2] = {nullptr, nullptr};
+    std::vector<pk::ParamView*> fxSatAdvanced;
+    pk::MappedParamHost* satHost = nullptr;
+    void updateSatAdvanced ();
     widr::GonioView* fxGonio = nullptr;
     // the Wubr page: its band display, both bands' shapes (stacked, always shown), both bands'
     // controls (the selected band's shown), each band's rate controls (band 1's while Link Rates is

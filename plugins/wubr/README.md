@@ -23,4 +23,4 @@ or run once as envelopes. Then Smacheratr at the end of the chain.
 - **Dry/Wet**, **Output**, then the end-of-chain **Smacheratr** with all its controls and displays.
 
 The band display shows both bands as they are right now; drag a band's handle for its frequency (sideways)
-and gain (up/down), its edges (or the wheel) for its width. Both bands' shapes are shown, band 1 above band 2.
+and gain (up/down), its edges (or the wheel, or Alt + drag the band sideways) for its width. Both bands' shapes are shown, band 1 above band 2.

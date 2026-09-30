@@ -158,9 +158,9 @@ void Editor::buildUI (CFrame* f)
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     auto* tailPanel =
-        addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase);
+        addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (
-        this, kTailBase, kTailExtBase, rateOf,
+        this, kTailBase, kTailExtBase, kTailExt2Base, rateOf,
         [c = ctl] () -> const smacheratr::Meters* {
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;

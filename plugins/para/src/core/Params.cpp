@@ -46,6 +46,8 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kDriveOn, "Drive", "Drive", false));
         v.push_back (real (kDrive, "Drive Amount", "Drive", 0.0, 36.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (choice (kDrivePos, "Drive Position", "Drive Pos", {"Pre", "Post"}, kDrivePre));
+        smacheratr::addTailExt2Params (v, kTailExt2Base);
+        static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
         return v;
     }());
     return t;

@@ -59,15 +59,22 @@ enum ParamId : uint32_t
     kTailBase,                             // the Saturator stage: pk::kTailFields entries (its On is the stage's)
     kMbBase = kTailBase + pk::kTailFields, // the Multiband stage: kMbBlock entries (mbIdAt)
     kTailExtBase = kMbBase + kMbBlock,     // the rest of the Saturator stage: pk::kTailExtFields entries
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the Saturator stage: pk::kTailExt2Fields entries (the last block)
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 
 constexpr uint32_t kOrderBase = kOrder1;
 constexpr bool isTailParam (uint32_t id)
 {
-    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
+    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
 }
-constexpr uint32_t tailField (uint32_t id) { return id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase) : id - kTailBase; }
+constexpr uint32_t tailField (uint32_t id)
+{
+    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+           : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
+                                : id - kTailBase;
+}
 constexpr bool isMbParam (uint32_t id) { return id >= kMbBase && id < kMbBase + kMbBlock; }
 // the Detonatr ID of a Multidyn parameter in the block (mbBlockOf must not be -1)
 constexpr uint32_t mbParam (uint32_t mdId)

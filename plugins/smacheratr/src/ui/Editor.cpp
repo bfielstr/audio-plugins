@@ -3,6 +3,7 @@
 #include "ColorView.h"
 #include "Help.h"
 #include "ShaperView.h"
+#include "ThresholdSlider.h"
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
@@ -54,6 +55,9 @@ void Editor::onClose ()
     for (auto& v : clarityViews)
         v.clear ();
     clarityBandButtons.clear ();
+    for (auto& t : thresholdSliders)
+        t = nullptr;
+    advancedViews.clear ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -105,17 +109,25 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 3; ++i)
         colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
-    // bottom: Clarity (one button), a band selector and the selected band's Frequency, Width and Range
-    auto* cp = new pk::Panel (CRect (8, kClarityTop, 752, kClarityTop + 80), "CLARITY");
+    // Gently's Threshold sliders (Advanced), at the right edge of the colour display while Advanced is on
+    for (int k = 0; k < kClarityBands; ++k)
+        thresholdSliders[k] = bind (root, new ThresholdSlider (CRect (0, 0, 1, 1), this, k, [c = ctl] () -> const Meters* {
+                                        auto* s = c->getShared ();
+                                        return s ? &s->meters : nullptr;
+                                    }));
+
+    // bottom: Gently (one button), a band selector and the selected band's Frequency, Width and Range;
+    // Advanced, and with it the region Drive
+    auto* cp = new pk::Panel (CRect (8, kGentlyTop, 752, kGentlyTop + 80), "GENTLY");
     root->addView (cp);
-    bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Clarity"));
+    bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gently"));
     clarityBandButtons.clear ();
     for (int k = 0; k < kClarityBands; ++k)
     {
         auto* bt = new ActionButton (CRect (96 + k * 68, 30, 160 + k * 68, 50), k == 0 ? "Band 1" : "Band 2",
                                      [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-        bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
-                                   : "Show Clarity's second band (blue in the display; it works once its Range is above 0 dB).");
+        bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)."
+                                   : "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).");
         cp->addView (bt);
         clarityBandButtons.push_back (bt);
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (250, 10), this, kClarityFreqIds[k], "Freq")));
@@ -124,6 +136,10 @@ void Editor::buildUI (CFrame* f)
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     showClarityBand (clarityBand);
+    bind (cp, new Toggle (CRect (kGentlyAdvancedX - 8 - 42, 30, kGentlyAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
+    advancedViews.push_back (bind (cp, new Toggle (CRect (548, 30, 610, 50), this, kClarityDrive, "Drive")));
+    advancedViews.push_back (bind (cp, new Knob (knobRect (618, 10), this, kClarityDriveAmount, "Amount")));
+    layoutAdvanced ();
 
     applyParamTooltips (&help::forParam);
     updateLooks ();
@@ -140,6 +156,15 @@ void Editor::showClarityBand (int band)
         b->invalid ();
 }
 
+void Editor::layoutAdvanced ()
+{
+    const bool advanced = plainValue (kClarityAdvanced) >= 0.5;
+    ThresholdSlider::layout (color, thresholdSliders,
+                             CRect (kColorLeft, kColorTop, kColorLeft + kColorViewWidth, kColorTop + kColorViewHeight), advanced);
+    for (auto* v : advancedViews)
+        v->setVisible (advanced);
+}
+
 void Editor::updateLooks ()
 {
     if (thresholdView)
@@ -147,9 +172,18 @@ void Editor::updateLooks ()
     const bool on = plainValue (kColorOn) >= 0.5;
     for (auto* v : colorViews)
         v->setEnabledLook (on);
+    const bool gently = plainValue (kClarity) >= 0.5;
     for (int k = 0; k < kClarityBands; ++k)
+    {
         for (auto* v : clarityViews[k])
-            v->setEnabledLook (plainValue (kClarity) >= 0.5);
+            v->setEnabledLook (gently);
+        if (thresholdSliders[k])
+            thresholdSliders[k]->setEnabledLook (clarityBandOn (plainValue (kClarity), plainValue (kClarityRangeIds[k])));
+    }
+    for (auto* v : advancedViews)
+        v->setEnabledLook (gently);
+    if (advancedViews.size () == 2)
+        advancedViews[1]->setEnabledLook (gently && plainValue (kClarityDrive) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -159,8 +193,10 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity)
+    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClarityDrive)
         updateLooks ();
+    if (id == kClarityAdvanced)
+        layoutAdvanced ();
 }
 
 void Editor::idle ()
@@ -169,6 +205,9 @@ void Editor::idle ()
         shaper->idle ();
     if (color)
         color->idle ();
+    for (auto* t : thresholdSliders)
+        if (t && t->isVisible ())
+            t->idle ();
     if (status)
         if (auto* s = ctl->getShared ())
         {

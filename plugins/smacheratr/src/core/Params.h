@@ -25,14 +25,21 @@ enum ParamId : uint32_t
     kHiQuality, // 4x oversampling around the shaper
     kDcFilter,  // high-pass at the input
     kMidSide,   // saturate the mid and the side apart (keeps the width when pushed)
-    kClarity,   // Clarity on (both bands; see Engine.h)
-    kClarityFreq,  // Hz, the centre of Clarity's band (ClarityBand.h); 20 Hz - 20 kHz (20 - 500 Hz before); 20 Hz - 20 kHz (20 - 500 Hz before)
+    kClarity,   // Gently (called Clarity before) on (both bands; see Engine.h)
+    kClarityFreq,  // Hz, the centre of Gently's band (ClarityBand.h); 20 Hz - 20 kHz (20 - 500 Hz before)
     kClarityWidth, // octaves between the band's edges
     kClarityRange, // dB: the most Clarity turns its band down (before the curve; half as much after)
     kClarity2,      // unused since one Clarity button: a band works while its Range is above 0 dB
     kClarity2Freq,  // Hz
     kClarity2Width, // octaves
     kClarity2Range, // dB (0 by default: the second band does nothing until it gets a range)
+    // Gently's Advanced mode (Clarity is called Gently in everything the user sees; the IDs keep the
+    // old names). With Advanced off Gently is exactly the Clarity from before.
+    kClarityAdvanced,    // Advanced on: the bands' Thresholds and the region Drive work
+    kClarityThreshold,   // dB, where band 1 starts cutting (Advanced; without it -18 dB, kClarityThresholdDb)
+    kClarity2Threshold,  // dB, band 2's
+    kClarityDrive,       // Advanced: saturate the band region Gently works on (Smacheratr's Analog curve)
+    kClarityDriveAmount, // dB into the curve for that region (level-matched: denser, not louder)
 
     kNumParams
 };
@@ -45,6 +52,18 @@ constexpr int kClarityBands = 2;
 inline constexpr uint32_t kClarityFreqIds[kClarityBands] = {kClarityFreq, kClarity2Freq};
 inline constexpr uint32_t kClarityWidthIds[kClarityBands] = {kClarityWidth, kClarity2Width};
 inline constexpr uint32_t kClarityRangeIds[kClarityBands] = {kClarityRange, kClarity2Range};
+inline constexpr uint32_t kClarityThresholdIds[kClarityBands] = {kClarityThreshold, kClarity2Threshold};
+
+// Gently's law (Engine.cpp): a band's cut before the curve is 3 dB for every 5 dB its level (the
+// band's peak level going into the curve, see Engine.h) is over the threshold, a 2.5 : 1 hard knee,
+// up to the band's Range; so it reaches the Range (Range / 0.6) dB over the threshold. Without
+// Advanced the threshold is kClarityThresholdDb, which is also where a band's Threshold starts.
+constexpr double kClarityThresholdDb = -18.0;
+constexpr double kClarityCutPerDb = 0.6;
+inline double clarityCutDb (double levelDb, double thresholdDb, double rangeDb)
+{
+    return std::clamp ((levelDb - thresholdDb) * kClarityCutPerDb, 0.0, std::clamp (rangeDb, 0.0, 24.0));
+}
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

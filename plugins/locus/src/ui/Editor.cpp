@@ -78,8 +78,8 @@ void Editor::buildUI (CFrame* f)
     bind (p, new Knob (CRect (600, 30, 656, 94), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 440, 752, 518 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase,
+    auto* tailPanel = addTailPanel (root, CRect (8, 440, 752, 518 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase, kTailExt2Base,
                                                                [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
                                                                [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
     tailDisplays->add (tailPanel, CRect (10, 24, 734, 24 + smacheratr::TailDisplays::kHeight - 22));

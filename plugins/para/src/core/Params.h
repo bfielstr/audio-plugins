@@ -44,7 +44,8 @@ enum ParamId : uint32_t
     kDriveOn = kTailExtBase + 17, // the drive in Para's own path (Smacheratr's Analog curve, see Engine.h)
     kDrive,                       // dB into the curve
     kDrivePos,                    // Pre (before the filters) / Post (after them)
-    kNumParams
+    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 static_assert (pk::kTailExtFields <= kDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 

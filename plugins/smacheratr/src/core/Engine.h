@@ -8,6 +8,13 @@
 // Everything between the Drive gain and the post clip runs 4x oversampled with Hi-Quality on. The
 // look-ahead delay is always in the path and the dry signal is delayed to match, so the latency
 // reported to the host never changes while the plug-in is running.
+//
+// Gently (called Clarity before) works between the Drive and the curve: see process() and
+// ClarityBand.h. Its Advanced mode gives each band a Threshold (clarityCutDb in Params.h) and can
+// drive the region it cuts: the cut bands are split out again (the same band filters) and put
+// through the Analog curve on their own, level-matched (clarityRegionDrive in ClarityBand.h),
+// oversampled with the rest when Hi-Quality is on, so the region gets denser without the latency
+// changing. With Advanced off none of that runs and the output is what it was before it.
 #pragma once
 
 #include "Biquad.h"
@@ -30,8 +37,12 @@ struct Meters
 {
     std::atomic<float> inPeak {0.0f};
     std::atomic<float> outPeak {0.0f};
-    std::atomic<float> clarityDb {0.0f};  // Clarity's cut before the curve (dB, 0 or less)
+    std::atomic<float> clarityDb {0.0f};  // Gently's cut before the curve (dB, 0 or less)
     std::atomic<float> clarity2Db {0.0f}; // its second band's
+    // Gently's bands' levels as it measures them (the band's peak level into the curve, dB; -120
+    // while the band is off), for the Threshold sliders
+    std::atomic<float> clarityLevelDb {-120.0f};
+    std::atomic<float> clarity2LevelDb {-120.0f};
 };
 
 class Engine
@@ -81,7 +92,7 @@ private:
     {
         Biquad dc, preLo, preHi, postLo, postHi;
         Biquad bandHp[kClarityBands], bandLp[kClarityBands], postHp[kClarityBands], postLp[kClarityBands]; // Clarity's bands, before and after the curve
-        Oversampler os;
+        Oversampler os, regionOs; // regionOs: Gently's driven region, oversampled beside the rest
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
     };
@@ -102,6 +113,10 @@ private:
     float bandNorm[kClarityBands] = {1.0f, 1.0f}, gBandPre[kClarityBands] = {1.0f, 1.0f}, gBandPost[kClarityBands] = {1.0f, 1.0f};
     std::vector<float> gPost[kClarityBands];
     bool clarityWas[kClarityBands] = {false, false};
+    // Gently's region drive: the cut bands per channel, oversampled, and the drive's (smoothed) gain
+    // and how much of it is in (faded in and out, so switching it clicks nowhere)
+    std::vector<float> region[2], regionOsBuf, gRegion, gRegionMix;
+    float regionGain = 1.0f, regionMix = 0.0f;
     float drive = 1.0f, out = 1.0f, mix = 1.0f, smooth = 0.0f;
     // pre-limiter: the input peaks inside the look-ahead window and the gain (dB), smoothed in dB
     std::vector<float> lookPeaks;

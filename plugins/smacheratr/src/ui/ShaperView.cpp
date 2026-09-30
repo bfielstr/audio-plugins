@@ -125,7 +125,7 @@ void ShaperView::draw (CDrawContext* ctx)
     else
         std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
-    // Clarity at work: how far each band is turned down before the curve (band 2 in blue, under band 1)
+    // Gently at work: how far each band is turned down before the curve (band 2 in blue, under band 1)
     int rowsShown = 0;
     for (int k = 0; k < kClarityBands; ++k)
     {
@@ -134,7 +134,7 @@ void ShaperView::draw (CDrawContext* ctx)
         const CColor c = k == 0 ? CColor (120, 210, 140) : CColor (130, 170, 255);
         const double range = std::max (1.0, host->plainValue (kClarityRangeIds[k]));
         const double cut = std::clamp (-(double)(k == 0 ? shownClarity : shownClarity2), 0.0, range);
-        std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Clarity" : "Clarity 2", -cut);
+        std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Gently" : "Gently 2", -cut);
         const double top = all.top + 4 + 24 * rowsShown++;
         text (ctx, buf, CRect (all.right - 130, top, all.right - 6, top + 14), c, 9.5, kRightText, true);
         const CRect bar (all.right - 86, top + 17, all.right - 6, top + 21);

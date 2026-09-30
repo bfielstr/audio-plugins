@@ -2,7 +2,9 @@
 // The first six (pk::TailField) came first and sit in a block in the middle of each plug-in's IDs;
 // these came later, so each plug-in appends them as a second block (pk::kTailExtFields entries).
 // Field i is Smacheratr parameter kTailExtIds[i], with Smacheratr's name, range and default (the
-// colour filters start off, and Mid/Side where the plug-in asks for it).
+// colour filters start off, and Mid/Side where the plug-in asks for it). Gently's Advanced mode came
+// after that block was closed in (plug-ins have parameters right after it): a third block
+// (pk::kTailExt2Fields entries, kTailExt2Ids) at the very end of each plug-in's IDs.
 #pragma once
 
 #include "Params.h"
@@ -20,6 +22,9 @@ inline constexpr uint32_t kTailExtIds[pk::kTailExtFields] = {kOutput,    kColorO
                                                             kClarityRange, kClarity2,  kClarity2Freq, kClarity2Width,
                                                             kClarity2Range};
 static_assert (pk::kTailExtFields == 17, "one Smacheratr parameter per extended tail field");
+inline constexpr uint32_t kTailExt2Ids[pk::kTailExt2Fields] = {kClarityAdvanced, kClarityThreshold, kClarity2Threshold,
+                                                              kClarityDrive, kClarityDriveAmount};
+static_assert (pk::kTailExt2Fields == 5, "one Smacheratr parameter per field of the tail's third block");
 
 inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool midSide = false)
 {
@@ -36,8 +41,21 @@ inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool
     }
 }
 
-// The tail field (a pk::TailField, or pk::kTailFields + i for extended field i) that holds
-// Smacheratr parameter id, or -1 (Smacheratr's own Dry/Wet is the tail's Mix).
+// The third block (Gently's Advanced mode), at `base`.
+inline void addTailExt2Params (std::vector<pk::ParamInfo>& t, uint32_t base)
+{
+    for (uint32_t i = 0; i < pk::kTailExt2Fields; ++i)
+    {
+        pk::ParamInfo pi = paramTable ().info (kTailExt2Ids[i]);
+        pi.id = base + i;
+        pi.name = pk::make::keep (std::string ("Saturator ") + pi.name);
+        t.push_back (pi);
+    }
+}
+
+// The tail field (a pk::TailField, pk::kTailFields + i for extended field i, or pk::kTailFields +
+// pk::kTailExtFields + i for field i of the third block) that holds Smacheratr parameter id, or -1
+// (Smacheratr's own Dry/Wet is the tail's Mix).
 inline int tailFieldOf (uint32_t id)
 {
     switch (id)
@@ -52,7 +70,19 @@ inline int tailFieldOf (uint32_t id)
     for (uint32_t i = 0; i < pk::kTailExtFields; ++i)
         if (kTailExtIds[i] == id)
             return (int)(pk::kTailFields + i);
+    for (uint32_t i = 0; i < pk::kTailExt2Fields; ++i)
+        if (kTailExt2Ids[i] == id)
+            return (int)(pk::kTailFields + pk::kTailExtFields + i);
     return -1;
+}
+
+// A plug-in's parameter for tail field f (as tailFieldOf gives it): its blocks at base, extBase and
+// ext2Base.
+constexpr uint32_t tailParamOf (uint32_t f, uint32_t base, uint32_t extBase, uint32_t ext2Base)
+{
+    return f < pk::kTailFields                        ? base + f
+           : f < pk::kTailFields + pk::kTailExtFields ? extBase + (f - pk::kTailFields)
+                                                      : ext2Base + (f - pk::kTailFields - pk::kTailExtFields);
 }
 
 } // namespace smacheratr

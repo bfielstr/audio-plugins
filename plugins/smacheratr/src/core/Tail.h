@@ -10,6 +10,9 @@
 
 namespace smacheratr {
 
+// every field of the tail: the three blocks
+constexpr uint32_t kTailAllFields = pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields;
+
 class Tail
 {
 public:
@@ -30,13 +33,16 @@ public:
     // saturate mid and side apart (see smacheratr::kMidSide)
     void setMidSide (bool ms) { eng.setParam (kMidSide, ms ? 1.0 : 0.0); }
 
-    // the plain value of one of the tail's fields (a pk::TailField, or pk::kTailFields + a pk::TailExtField)
+    // the plain value of one of the tail's fields (a pk::TailField, pk::kTailFields + a pk::TailExtField,
+    // or pk::kTailFields + pk::kTailExtFields + a pk::TailExt2Field)
     void setParam (uint32_t field, double v)
     {
         if (field >= pk::kTailFields)
         {
             if (field < pk::kTailFields + pk::kTailExtFields)
                 eng.setParam (kTailExtIds[field - pk::kTailFields], v);
+            else if (field < kTailAllFields)
+                eng.setParam (kTailExt2Ids[field - pk::kTailFields - pk::kTailExtFields], v);
             return;
         }
         switch (field)

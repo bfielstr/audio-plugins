@@ -26,7 +26,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 9: no saturator after the rack (a new Smemplr has a Smacheratr slot instead; an old project's goes
 //    into the rack), and the M/S EQ's side high-pass has ten slopes (6 / 12 / 24 dB before)
 // 10: Levlr in the rack: the slot type's choice has one more entry
-constexpr int32 kVersion = 10;
+// 11: Gently's (Clarity's) Advanced mode in the rack's Smacheratrs
+constexpr int32 kVersion = 11;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -220,6 +221,22 @@ bool readState (IBStream* stream, PluginState& st)
                 }
             if (version < 3 && type == kFxPara && st.norm[slotBlockParam (slot, para::kLiquid)] >= 0.5)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
+        }
+    }
+    if (version < 11)
+    {
+        // Gently's Advanced mode in the rack's Smacheratrs: its places in the slot held nothing that was
+        // used (or another effect's values); they get their defaults (Advanced off: the same sound)
+        for (int slot = 0; slot < kRackSlots; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            if (!st.has[typeId] || std::lround (toPlain (typeId, st.norm[typeId])) != kFxSmacheratr)
+                continue;
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+            {
+                st.norm[slotBlockParam (slot, id)] = smacheratr::defaultNormalized (id);
+                st.has[slotBlockParam (slot, id)] = true;
+            }
         }
     }
     if (version < 9)

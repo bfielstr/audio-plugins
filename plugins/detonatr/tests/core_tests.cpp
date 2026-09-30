@@ -6,6 +6,7 @@
 #include <cmath>
 #include <memory>
 #include <random>
+#include <string>
 #include <vector>
 
 using namespace detonatr;
@@ -84,6 +85,10 @@ TEST (table_is_consistent)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "%u entries, %u ids", t.size (), (unsigned)kNumParams);
+    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
+           "Gently's Advanced block (the end saturator's) is the last");
     bool ids = true;
     for (uint32_t i = 0; i < t.size (); ++i)
         ids = ids && t.info (i).id == i;
@@ -92,7 +97,8 @@ TEST (table_is_consistent)
     CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailBase + pk::kTailDrive).def == 18.0, "the Saturator stage is on, driven");
     CHECK (mbIdAt ((uint32_t)mbBlockOf (multidyn::kSoften)) == multidyn::kSoften && mbIdAt ((uint32_t)mbBlockOf (multidyn::kRmsWindow)) == multidyn::kRmsWindow,
            "Multidyn's later parameters map both ways");
-    CHECK (mbBlockOf (multidyn::kSatOn) == -1 && mbBlockOf (multidyn::kSatExtBase) == -1, "Multidyn's own saturator is left out");
+    CHECK (mbBlockOf (multidyn::kSatOn) == -1 && mbBlockOf (multidyn::kSatExtBase) == -1 && mbBlockOf (multidyn::kSatExt2Base) == -1,
+           "Multidyn's own saturator is left out");
     for (uint32_t j = 0; j < kMbBlock; ++j)
     {
         const auto& a = t.info (kMbBase + j);

@@ -136,6 +136,22 @@ int main (int argc, char** argv)
             pump (0.05);
             const double after = plainOf (rig, bandParam (2, kGain));
             CHECK (after > before + 3.0, "dragging band 3 up raised it: %.1f -> %.1f dB", before, after);
+
+            // the end saturator's Gently with Advanced on: the Threshold sliders and the region Drive at
+            // the right of its colour display
+            rig.param (kTailExtBase + pk::kTailExtClarity, 1.0);
+            rig.param (kTailExt2Base + pk::kTailExt2Advanced, 1.0);
+            rig.param (kTailExt2Base + pk::kTailExt2Drive, 1.0);
+            rig.param (kTailExt2Base + pk::kTailExt2Threshold,
+                       toNormalized (kTailExt2Base + pk::kTailExt2Threshold, -30.0));
+            for (int i = 0; i < 10; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, music ());
+                pump (0.03);
+            }
+            CHECK (plainOf (rig, kTailExt2Base + pk::kTailExt2Advanced) >= 0.5, "the end saturator's Gently: Advanced on");
+            CHECK (win.savePng (outDir + "/ui_levlr_gently_advanced.png"), "screenshot, Gently Advanced in the end saturator");
         }
         return finish ("levlr host test");
     }

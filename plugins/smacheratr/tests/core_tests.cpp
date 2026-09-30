@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -584,11 +585,233 @@ TEST (tail_has_every_control)
     std::vector<pk::ParamInfo> v;
     addTailExtParams (v, 100);
     CHECK (v.size () == pk::kTailExtFields && v[pk::kTailExtClarityFreq].id == 100 + pk::kTailExtClarityFreq &&
-               std::string (v[pk::kTailExtClarityFreq].name) == "Saturator Clarity Frequency" &&
+               std::string (v[pk::kTailExtClarityFreq].name) == "Saturator Gently Frequency" &&
                v[pk::kTailExtClarityFreq].def == 250.0 && v[pk::kTailExtColorOn].def == 0.0,
            "extended tail parameters");
     CHECK (tailFieldOf (kClarityWidth) == (int)(pk::kTailFields + pk::kTailExtClarityWidth) && tailFieldOf (kDryWet) == pk::kTailMix,
            "Smacheratr IDs to tail fields");
+    // the third block: Gently's Advanced mode
+    std::vector<pk::ParamInfo> v2;
+    addTailExt2Params (v2, 200);
+    CHECK (v2.size () == pk::kTailExt2Fields && v2[pk::kTailExt2Threshold].id == 200 + pk::kTailExt2Threshold &&
+               std::string (v2[pk::kTailExt2Advanced].name) == "Saturator Gently Advanced" &&
+               std::string (v2[pk::kTailExt2Threshold2].name) == "Saturator Gently 2 Threshold" &&
+               v2[pk::kTailExt2Threshold].def == -18.0 && v2[pk::kTailExt2Advanced].def == 0.0 && v2[pk::kTailExt2Drive].def == 0.0,
+           "Gently's Advanced block");
+    const uint32_t ext2Field = pk::kTailFields + pk::kTailExtFields;
+    CHECK (tailFieldOf (kClarity2Threshold) == (int)(ext2Field + pk::kTailExt2Threshold2) &&
+               tailFieldOf (kClarityDriveAmount) == (int)(ext2Field + pk::kTailExt2DriveAmount),
+           "its Smacheratr IDs to tail fields");
+    CHECK (tailParamOf (pk::kTailDrive, 10, 50, 90) == 10 + pk::kTailDrive &&
+               tailParamOf (pk::kTailFields + pk::kTailExtColorLo, 10, 50, 90) == 50 + pk::kTailExtColorLo &&
+               tailParamOf (ext2Field + pk::kTailExt2Drive, 10, 50, 90) == 90 + pk::kTailExt2Drive,
+           "tail fields to a plug-in's IDs");
+    for (uint32_t id = 0; id < kNumParams; ++id)
+    {
+        const int f = tailFieldOf (id);
+        const bool own = id == kClarity2; // (unused) and the tail's Mix is Dry/Wet: everything else has a field
+        CHECK (f >= 0 || own, "Smacheratr %u (%s) has a tail field", id, paramTable ().info (id).name);
+    }
+    // through the tail: Advanced with a low Threshold cuts where the plain Gently (-18 dB) would not
+    auto renderT = [&] (bool advanced) {
+        Tail t;
+        t.prepare (48000.0, 512);
+        t.setParam (pk::kTailOn, 1.0);
+        t.setParam (pk::kTailMix, 1.0);
+        t.setParam (pk::kTailPreLimit, 0.0);
+        t.setParam (pk::kTailFields + pk::kTailExtClarity, 1.0);
+        t.setParam (ext2Field + pk::kTailExt2Advanced, advanced ? 1.0 : 0.0);
+        t.setParam (ext2Field + pk::kTailExt2Threshold, -48.0);
+        Sig out = tones ({{250.0, -30.0}}, 0.5);
+        for (size_t pos = 0; pos < out.l.size (); pos += 512)
+            t.process (out.l.data () + pos, out.r.data () + pos, (int)std::min<size_t> (512, out.l.size () - pos));
+        return toneDb (out.l, 250.0, 12000, 24000);
+    };
+    CHECK (renderT (true) < renderT (false) - 4.0, "Advanced through the tail: %.1f vs %.1f dB", renderT (true), renderT (false));
+}
+
+// ---------------------------------------------------------------------------
+// Gently's Advanced mode (Clarity is called Gently now; the IDs keep the old names)
+
+TEST (gently_advanced_off_is_gently_as_before)
+{
+    // Advanced off: the Thresholds and the region Drive do nothing, to the bit; and Advanced on with
+    // both Thresholds at -18 dB (their default) and the Drive off is the same Gently too
+    auto in = tones ({{80.0, -8.0}, {320.0, -12.0}, {3000.0, -10.0}}, 0.5);
+    auto render = [&] (bool hq, bool advanced, double thr1, double thr2, bool drive) {
+        auto e = engine (hq);
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarity2Range, 10.0);
+        e->setParam (kClarityAdvanced, advanced ? 1.0 : 0.0);
+        e->setParam (kClarityThreshold, thr1);
+        e->setParam (kClarity2Threshold, thr2);
+        e->setParam (kClarityDrive, drive ? 1.0 : 0.0);
+        e->setParam (kClarityDriveAmount, 30.0);
+        return run (*e, in, 333);
+    };
+    for (bool hq : {true, false})
+    {
+        const Sig plain = render (hq, false, -18.0, -18.0, false);
+        auto same = [&] (const Sig& s) {
+            return std::memcmp (s.l.data (), plain.l.data (), s.l.size () * sizeof (float)) == 0 &&
+                   std::memcmp (s.r.data (), plain.r.data (), s.r.size () * sizeof (float)) == 0;
+        };
+        CHECK (same (render (hq, false, -50.0, -3.0, true)), "hq %d: Advanced off ignores the Thresholds and the Drive", hq);
+        CHECK (same (render (hq, true, -18.0, -18.0, false)), "hq %d: Advanced at -18 dB is the plain Gently", hq);
+        CHECK (!same (render (hq, true, -40.0, -18.0, false)), "hq %d: a Threshold does something with Advanced on", hq);
+    }
+    const auto& t = paramTable ();
+    CHECK (t.info (kClarityAdvanced).def == 0.0 && t.info (kClarityThreshold).def == kClarityThresholdDb &&
+               t.info (kClarity2Threshold).def == kClarityThresholdDb && t.info (kClarityDrive).def == 0.0 &&
+               t.info (kClarityDriveAmount).def == 12.0,
+           "defaults: Advanced off, Thresholds -18 dB, Drive off at 12 dB");
+    CHECK (t.info (kClarityThreshold).min == -60.0 && t.info (kClarityThreshold).max == 0.0, "Threshold -60 .. 0 dB");
+    CHECK (std::string (t.info (kClarity).name) == "Gently" && std::string (t.info (kClarityThreshold).name) == "Gently Threshold",
+           "called Gently");
+}
+
+TEST (gently_threshold)
+{
+    // a 250 Hz tone in band 1 at -12 dB (Drive 0): its level as Gently measures it is about -10 dB (the
+    // detector rides its peaks: fast up, slow down); below the Threshold no cut, 3 dB for every 5 over
+    // it, and the Range once it is far enough over
+    auto in = tones ({{250.0, -12.0}}, 1.0);
+    auto measure = [&] (bool advanced, double threshold, float* level = nullptr) {
+        Meters m;
+        auto e = engine ();
+        e->setMeters (&m);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, 12.0);
+        e->setParam (kClarityAdvanced, advanced ? 1.0 : 0.0);
+        e->setParam (kClarityThreshold, threshold);
+        run (*e, in);
+        if (level)
+            *level = m.clarityLevelDb.load ();
+        return (double)m.clarityDb.load ();
+    };
+    float level = 0.0f;
+    const double above = measure (true, -6.0, &level);
+    std::printf ("    level %.1f dB; cut at Threshold -6: %.2f, -22: %.2f, -40: %.2f dB; without Advanced (-18): %.2f dB\n", level,
+                 above, measure (true, -22.0), measure (true, -40.0), measure (false, -40.0));
+    CHECK (level > -12.5f && level < -8.5f, "the band's level: %.1f dB", level);
+    CHECK (above == 0.0, "under the Threshold: no cut (%.2f dB)", above);
+    CHECK (std::fabs (measure (true, -22.0) + 0.6 * (level + 22.0)) < 0.5, "over it: 3 dB for every 5 (%.2f at %.1f dB over)",
+           measure (true, -22.0), level + 22.0);
+    CHECK (std::fabs (measure (true, -40.0) + 12.0) < 0.01, "far over: the Range (%.2f)", measure (true, -40.0));
+    CHECK (std::fabs (measure (false, -40.0) + 0.6 * (level + 18.0)) < 0.5, "without Advanced it starts at -18 dB (%.2f)",
+           measure (false, -40.0));
+    // the law itself
+    CHECK (clarityCutDb (-20.0, -18.0, 8.0) == 0.0 && std::fabs (clarityCutDb (-13.0, -18.0, 8.0) - 3.0) < 1e-12 &&
+               clarityCutDb (10.0, -18.0, 8.0) == 8.0,
+           "3 dB for every 5 over, up to the Range");
+    // the band's level on the meter goes away with the band
+    Meters m;
+    auto e = engine ();
+    e->setMeters (&m);
+    e->setParam (kClarity, 0.0);
+    run (*e, in);
+    CHECK (m.clarityLevelDb.load () == -120.0f && m.clarity2LevelDb.load () == -120.0f, "no level while the band is off");
+}
+
+TEST (gently_region_drive)
+{
+    // a tone in band 1 (250 Hz) and one far above it (5.1 kHz), both quiet enough for the curve to
+    // leave them alone (Drive 0): the region Drive gives the band harmonics and hardly touches the other
+    auto in = tones ({{250.0, -14.0}, {5100.0, -14.0}}, 1.0);
+    auto render = [&] (bool drive, bool hq = true) {
+        auto e = engine (hq);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityWidth, 1.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClarityThreshold, -40.0);
+        e->setParam (kClarityDrive, drive ? 1.0 : 0.0);
+        e->setParam (kClarityDriveAmount, 30.0);
+        return run (*e, in);
+    };
+    const Sig off = render (false), on = render (true);
+    auto db = [] (const Sig& s, double f) { return toneDb (s.l, f, 24000, 48000); };
+    std::printf ("    750 Hz (3rd harmonic): %.1f -> %.1f dB, 5.1 kHz: %.2f -> %.2f dB, 250 Hz: %.2f -> %.2f dB\n", db (off, 750.0),
+                 db (on, 750.0), db (off, 5100.0), db (on, 5100.0), db (off, 250.0), db (on, 250.0));
+    CHECK (db (on, 750.0) > db (off, 750.0) + 20.0 && db (on, 750.0) > -50.0, "harmonics in the band's region: %.1f vs %.1f dB",
+           db (on, 750.0), db (off, 750.0));
+    CHECK (std::fabs (db (on, 5100.0) - db (off, 5100.0)) < 0.5, "the tone outside the band: %.2f vs %.2f dB", db (on, 5100.0),
+           db (off, 5100.0));
+    // oversampled or not, the region lines up with the rest (the latency does not change): Hi-Quality
+    // on and off give nearly the same output
+    const Sig onLow = render (true, false);
+    double diff = 0.0, sum = 0.0;
+    for (size_t i = 24000; i < on.l.size (); ++i)
+    {
+        diff += (on.l[i] - onLow.l[i]) * (on.l[i] - onLow.l[i]);
+        sum += on.l[i] * on.l[i];
+    }
+    CHECK (std::sqrt (diff / sum) < 0.05, "Hi-Quality on vs off with the region driven: %.3f", std::sqrt (diff / sum));
+}
+
+TEST (gently_region_drive_keeps_the_latency_and_does_not_click)
+{
+    // a quiet band passes the region Drive untouched (the curve is linear there), and the latency stays
+    auto quiet = tones ({{60.0, -40.0}, {250.0, -40.0}, {1000.0, -40.0}, {9000.0, -46.0}}, 0.5);
+    for (bool hq : {true, false})
+    {
+        auto render = [&] (bool drive, int* latency) {
+            auto e = engine (hq);
+            e->setParam (kPreLimit, 0.0);
+            e->setParam (kClarity, 1.0);
+            e->setParam (kClarityAdvanced, 1.0);
+            e->setParam (kClarityThreshold, -60.0);
+            e->setParam (kClarityDrive, drive ? 1.0 : 0.0);
+            e->setParam (kClarityDriveAmount, 12.0);
+            auto out = run (*e, quiet, 333);
+            *latency = e->latency ();
+            return out;
+        };
+        int latOff = 0, latOn = 0;
+        const Sig off = render (false, &latOff), on = render (true, &latOn);
+        CHECK (latOn == latOff && latOn == engine (hq)->latency (), "hq %d: the latency stays %d (%d)", hq, latOff, latOn);
+        double err = 0.0;
+        for (size_t i = 4800; i < on.l.size (); ++i)
+            err = std::max (err, (double)std::fabs (on.l[i] - off.l[i]));
+        CHECK (err < 1e-6, "hq %d: quiet through the region Drive: %g", hq, err);
+    }
+    // switching the Drive (or Advanced) on and off while a loud band plays fades it in and out
+    auto in = tones ({{250.0, -10.0}}, 1.5);
+    auto maxStep = [] (const Sig& s, size_t a, size_t b) {
+        double m = 0.0;
+        for (size_t i = std::max<size_t> (a, 1); i < b; ++i)
+            m = std::max (m, (double)std::fabs (s.l[i] - s.l[i - 1]));
+        return m;
+    };
+    for (uint32_t sw : {kClarityDrive, kClarityAdvanced})
+    {
+        auto e = engine ();
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClarityThreshold, -40.0);
+        e->setParam (kClarityDrive, 1.0);
+        e->setParam (kClarityDriveAmount, 36.0);
+        Sig out;
+        out.l.resize (in.l.size ());
+        out.r.resize (in.r.size ());
+        for (size_t pos = 0; pos < in.l.size (); pos += 256)
+        {
+            if (pos >= 24000 && pos < 48000)
+                e->setParam (sw, 0.0);
+            else
+                e->setParam (sw, 1.0);
+            const int n = (int)std::min<size_t> (256, in.l.size () - pos);
+            e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, n);
+        }
+        const double steady = std::max (maxStep (out, 12000, 23000), maxStep (out, 38000, 47000));
+        const double around = std::max (maxStep (out, 23000, 30000), maxStep (out, 47000, 54000));
+        std::printf ("    %s switched: largest step %.4f (steady %.4f)\n", paramTable ().info (sw).name, around, steady);
+        CHECK (around < steady * 1.1 + 1e-3, "%s: no click when switched (%.4f vs %.4f in steady state)", paramTable ().info (sw).name,
+               around, steady);
+    }
 }
 
 TEST (fuzz_and_automation)

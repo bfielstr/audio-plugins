@@ -1,9 +1,11 @@
-// Clarity's band: the low mids it compresses. A 12 dB/oct high-pass below and a 6 dB/oct low-pass
-// above, Width octaves apart around the centre frequency, scaled so the band peaks at 0 dB. The
-// engine turns the band down (x + (g - 1) * band) and the colour display draws it.
+// Gently's (called Clarity before) band: the low mids it compresses. A 12 dB/oct high-pass below and
+// a 6 dB/oct low-pass above, Width octaves apart around the centre frequency, scaled so the band
+// peaks at 0 dB. The engine turns the band down (x + (g - 1) * band) and the colour display draws it.
+// The law that sets the cut is clarityCutDb (Params.h).
 #pragma once
 
 #include "Biquad.h"
+#include "Shaper.h"
 
 #include <algorithm>
 #include <cmath>
@@ -66,5 +68,11 @@ inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
 {
     return magnitudeDb (b.hp, hz, sr) + magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
 }
+
+// Gently's region drive: what driving the cut band region `x` (the bands after their cut) through the
+// Analog curve adds to the signal, level-matched (the curve's output divided by the gain, so a quiet
+// region passes as it is and a loud one is squashed and gains harmonics, rather than getting louder).
+// The engine adds it to the signal going into the curve.
+inline double clarityRegionDrive (double x, double gain) { return analogClip (x * gain) / gain - x; }
 
 } // namespace smacheratr

@@ -25,6 +25,7 @@
 #include "smacheratr/src/core/TailExt.h"
 #include "smacheratr/src/ui/ColorView.h"
 #include "smacheratr/src/ui/ShaperView.h"
+#include "smacheratr/src/ui/ThresholdSlider.h"
 #include "wubr/src/ui/BandView.h"
 #include "wubr/src/ui/Help.h"
 #include "wubr/src/ui/ShapeView.h"
@@ -83,11 +84,13 @@ public:
 
 // A rack slot's tab. A click shows the slot; dragged sideways it follows the mouse along the row (drag
 // reports where it would land, `target`, a place in the row), and let go there, drop moves the effect.
+// With Ctrl (Cmd on macOS) held it copies instead: `target` is then the gap the copy goes into (0: before
+// the first tab .. count: after the last). An Alt-click (Option on macOS) removes the effect (onRemove).
 // Nothing is rebuilt from inside its own mouse handling: the editor does that on its next idle.
 class SlotTab : public CView
 {
 public:
-    using Place = std::function<void (int pos, int target)>;
+    using Place = std::function<void (int pos, int target, bool copy)>;
     SlotTab (const CRect& r, std::string t, int position, int tabs, std::function<void ()> click, std::function<bool ()> lit,
              Place drag, Place drop)
     : CView (r), home (r), text (std::move (t)), pos (position), count (tabs), onClick (std::move (click)), active (std::move (lit)),
@@ -99,7 +102,7 @@ public:
     {
         const CRect r = getViewSize ();
         const bool lit = active && active ();
-        const CColor fill = dragging ? theme::kAccentDim : (pressed ? theme::kKnobTrack : (lit ? theme::kControlOn : theme::kControlBg));
+        const CColor fill = dragging && !copying ? theme::kAccentDim : (pressed ? theme::kKnobTrack : (lit ? theme::kControlOn : theme::kControlBg));
         if (auto path = VSTGUI::owned (ctx->createGraphicsPath ()))
         {
             path->addRoundRect (r, 3.0);
@@ -119,7 +122,7 @@ public:
         }
         ctx->setFont (theme::font (10.5, lit));
         ctx->setFontColor (lit && !dragging ? CColor (20, 20, 20) : theme::kText);
-        ctx->drawString (text.c_str (), r, kCenterText, true);
+        ctx->drawString ((dragging && copying ? "+ " + text : text).c_str (), r, kCenterText, true);
     }
 
     void onMouseDownEvent (MouseDownEvent& e) override
@@ -128,6 +131,8 @@ public:
             return;
         pressed = true;
         dragging = false;
+        copying = e.modifiers.has (ModifierKey::Control);
+        altDown = e.modifiers.has (ModifierKey::Alt);
         downX = e.mousePosition.x;
         invalid ();
         e.consumed = true;
@@ -148,15 +153,19 @@ public:
             if (auto* row = getParentView () ? getParentView ()->asViewContainer () : nullptr)
                 row->changeViewZOrder (this, row->getNbViews () - 1);
         }
+        copying = e.modifiers.has (ModifierKey::Control); // (it can be pressed or let go on the way)
         const double step = Editor::kFxTabWidth;
-        dx = std::clamp (dx, -pos * step, (count - 1 - pos) * step);
+        // a copy goes into a gap (half a tab either side of the tabs), a move takes a tab's place
+        const double half = copying ? step / 2 : 0.0;
+        dx = std::clamp (dx, -pos * step - half, (count - 1 - pos) * step + half);
         CRect r = home;
         r.offset (dx, 0);
         setViewSize (r);
         setMouseableArea (r);
-        target = std::clamp (pos + (int)std::lround (dx / step), 0, count - 1);
+        target = copying ? std::clamp (pos + (int)std::floor (dx / step + 0.5), 0, count)
+                         : std::clamp (pos + (int)std::lround (dx / step), 0, count - 1);
         if (onDrag)
-            onDrag (pos, target);
+            onDrag (pos, target, copying);
         invalid ();
     }
 
@@ -170,20 +179,25 @@ public:
         {
             dragging = false;
             const int to = target;
+            const bool copy = copying;
             goHome ();
             if (onDrop)
-                onDrop (pos, to);
+                onDrop (pos, to, copy);
             return;
         }
         invalid ();
-        if (home.pointInside (e.mousePosition) && onClick)
+        if (!home.pointInside (e.mousePosition))
+            return;
+        if (altDown && onRemove)
+            onRemove ();
+        else if (onClick)
             onClick ();
     }
 
     void onMouseCancelEvent (MouseCancelEvent& e) override
     {
         if (dragging && onDrag)
-            onDrag (pos, pos); // (nothing moves)
+            onDrag (pos, pos, false); // (nothing moves)
         pressed = dragging = false;
         goHome ();
         e.consumed = true;
@@ -205,8 +219,11 @@ private:
     std::function<void ()> onClick;
     std::function<bool ()> active;
     Place onDrag, onDrop;
-    bool pressed = false, dragging = false;
+    bool pressed = false, dragging = false, copying = false, altDown = false;
     double downX = 0.0;
+
+public:
+    std::function<void ()> onRemove; // an Alt-click
 };
 
 std::filesystem::path u8 (const std::string& s) { return pathFromUtf8 (s); }
@@ -246,6 +263,10 @@ void Editor::onClose ()
     for (auto& v : rackBandViews)
         v.clear ();
     rackBandButtons.clear ();
+    for (auto& t : fxThresholds)
+        t = nullptr;
+    fxSatAdvanced.clear ();
+    satHost = nullptr;
     fxGonio = nullptr;
     wubrBands = nullptr;
     levlrView = nullptr;
@@ -525,6 +546,26 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
+void Editor::updateSatAdvanced ()
+{
+    // the Smacheratr page: Gently's Threshold sliders and region Drive while Advanced is on, dimmed
+    // where they do nothing (a band that does not work, the Drive's amount while it is off)
+    if (!satHost || !fxColorView)
+        return;
+    using namespace smacheratr;
+    const bool advanced = satHost->plainValue (kClarityAdvanced) >= 0.5;
+    ThresholdSlider::layout (fxColorView, fxThresholds, CRect (236, 34, 526, 226), advanced);
+    const double on = satHost->plainValue (kClarity);
+    for (int k = 0; k < kClarityBands; ++k)
+        if (fxThresholds[k])
+            fxThresholds[k]->setEnabledLook (clarityBandOn (on, satHost->plainValue (kClarityRangeIds[k])));
+    for (size_t i = 0; i < fxSatAdvanced.size (); ++i)
+    {
+        fxSatAdvanced[i]->setVisible (advanced);
+        fxSatAdvanced[i]->setEnabledLook (on >= 0.5 && (i == 0 || satHost->plainValue (kClarityDrive) >= 0.5));
+    }
+}
+
 void Editor::showClarityBand (int band)
 {
     clarityBand = band == 1 ? 1 : 0;
@@ -618,6 +659,8 @@ void Editor::paramChanged (uint32_t id)
                 fxCtl->invalid ();
             if (field == kSlotParams + multidyn::kBands && ctl->slotType (slot) == kFxMultidyn)
                 updateMdLayout ();
+            if (field >= kSlotParams && ctl->slotType (slot) == kFxSmacheratr)
+                updateSatAdvanced ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxWubr)
                 if (const int64_t w = fxIdAt (kFxWubr, field - kSlotParams); w >= 0)
                 {
@@ -808,18 +851,44 @@ void Editor::moveFx (int from, int to)
     rackDirty = true;
 }
 
-void Editor::dragTab (int pos, int target)
+void Editor::duplicateFx (int from, int at)
+{
+    if (from < 0 || from >= kRackSlots || at < 0 || at >= kRackSlots || ctl->slotType (from) == kFxEmpty)
+        return;
+    // room: the first empty slot from `at` on takes the shift (a full rack: no copy)
+    int free = -1;
+    for (int s = at; s < kRackSlots && free < 0; ++s)
+        if (ctl->slotType (s) == kFxEmpty)
+            free = s;
+    if (free < 0)
+        return;
+    clearBody (); // (as in removeFx)
+    std::array<double, kSlotValues> copy;
+    for (uint32_t k = 0; k < kSlotValues; ++k)
+        copy[k] = norm (slotValueParam (from, k));
+    for (int s = free; s > at; --s)
+        copySlot (s - 1, s);
+    for (uint32_t k = 0; k < kSlotValues; ++k)
+        if (norm (slotValueParam (at, k)) != copy[k])
+            setOnce (slotValueParam (at, k), copy[k]);
+    fxTab = at;
+    rackDirty = true;
+}
+
+void Editor::dragTab (int pos, int target, bool copy)
 {
     if (!fxDropMark)
         return;
     // a bar in the gap it would land in: before the tab it passes going left, after it going right
+    // (a copy: the gap `target` itself)
     const int n = (int)tabSlots.size ();
-    if (target == pos || pos < 0 || pos >= n || target < 0 || target >= n)
+    if ((!copy && target == pos) || pos < 0 || pos >= n || target < 0 || target > (copy ? n : n - 1))
     {
         fxDropMark->setVisible (false);
         return;
     }
-    const double left = std::max (0.0, (target > pos ? target + 1 : target) * kFxTabWidth - 4.0);
+    const int gap = copy ? target : (target > pos ? target + 1 : target);
+    const double left = std::max (0.0, gap * kFxTabWidth - 4.0);
     const CRect r (left, 0, left + 3.0, 20);
     fxDropMark->setViewSize (r);
     fxDropMark->setMouseableArea (r);
@@ -828,12 +897,18 @@ void Editor::dragTab (int pos, int target)
         fxRow->invalid ();
 }
 
-void Editor::dropTab (int pos, int target)
+void Editor::dropTab (int pos, int target, bool copy)
 {
     if (fxDropMark)
         fxDropMark->setVisible (false);
     const int n = (int)tabSlots.size ();
-    if (pos >= 0 && pos < n && target >= 0 && target < n && target != pos)
+    if (copy && pos >= 0 && pos < n && target >= 0 && target <= n)
+    {
+        // the copy goes where the tab at that gap is, or right after the last one
+        const int at = target < n ? tabSlots[(size_t)target] : tabSlots.back () + 1;
+        duplicateFx (tabSlots[(size_t)pos], at); // (the row is rebuilt on the next idle)
+    }
+    else if (pos >= 0 && pos < n && target >= 0 && target < n && target != pos)
         moveFx (tabSlots[(size_t)pos], tabSlots[(size_t)target]); // (the row is rebuilt on the next idle)
     else if (pos >= 0 && pos < n)
         setFxTab (tabSlots[(size_t)pos]);
@@ -901,8 +976,11 @@ void Editor::rebuildRack ()
         std::snprintf (buf, sizeof (buf), "%d  %s", s + 1, fxName (shownTypes[(size_t)s]));
         auto* tab = new SlotTab (CRect (pos * kFxTabWidth, 0, pos * kFxTabWidth + kFxTabWidth - 4, 20), buf, pos, n,
                                  [this, s] { setFxTab (s); }, [this, s] { return fxTab == s; },
-                                 [this] (int p, int t) { dragTab (p, t); }, [this] (int p, int t) { dropTab (p, t); });
-        tab->setTooltipText ("Click to show this effect. Drag it sideways to move it in the chain (the rack runs left to right).");
+                                 [this] (int p, int t, bool c) { dragTab (p, t, c); }, [this] (int p, int t, bool c) { dropTab (p, t, c); });
+        tab->onRemove = [this, s] { removeFx (s); }; // (rebuilt on the next idle, not from inside the tab's own click)
+        tab->setTooltipText ("Click to show this effect. Drag it sideways to move it in the chain (the rack runs left to right); "
+                             "Ctrl-drag (Cmd on macOS) puts a copy of it, with its settings, where you let go; "
+                             "Alt-click (Option-click) removes it.");
         fxRow->addView (tab);
     }
     const double x = n * kFxTabWidth;
@@ -970,6 +1048,10 @@ void Editor::clearBody ()
     for (auto& v : rackBandViews)
         v.clear ();
     rackBandButtons.clear ();
+    for (auto& t : fxThresholds)
+        t = nullptr;
+    fxSatAdvanced.clear ();
+    satHost = nullptr;
     wubrBands = nullptr;
     levlrView = nullptr;
     for (int b = 0; b < 2; ++b)
@@ -1123,7 +1205,7 @@ void Editor::buildBody ()
                 return b ? &b->rack.sat[(size_t)s] : nullptr;
             });
             add (fxShaperView, smacheratr::help::kShaperDisplay);
-            // the colour curve and Clarity's band, as in Smacheratr
+            // the colour curve and Gently's bands, as in Smacheratr
             fxColorView = new ColorView (
                 CRect (236, 34, 526, 226), h,
                 [this] () {
@@ -1138,22 +1220,23 @@ void Editor::buildBody ()
             fxColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
             add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
             add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
-            add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Clarity"), tip (kClarity));
+            add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gently"), tip (kClarity));
             add (new Toggle (CRect (436, 8, 478, 26), h, kMidSide, "M/S"), tip (kMidSide));
             add (new Choice (CRect (482, 8, 580, 26), h, kPostClip), tip (kPostClip));
             add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
             add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
             add (new Toggle (CRect (716, 8, 770, 26), h, kColorOn, "Color"), tip (kColorOn));
+            add (new Toggle (CRect (774, 8, 834, 26), h, kClarityAdvanced, "Advanced"), tip (kClarityAdvanced));
             const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
-            // Clarity: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
+            // Gently: the selected band's Frequency, Width and Range (both bands' are made, one is shown)
             rackBandButtons.clear ();
             for (int k = 0; k < kClarityBands; ++k)
             {
                 rackBandViews[k].clear ();
                 const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
-                const char* bandNames[3] = {"Clarity Hz", "Clarity W", "Clarity dB"};
+                const char* bandNames[3] = {"Gently Hz", "Gently W", "Gently dB"};
                 for (int i = 0; i < 3; ++i)
                 {
                     auto* kn = new Knob (knobRect (534 + (i + 2) * 58, 112), h, bandIds[i], bandNames[i]);
@@ -1163,12 +1246,28 @@ void Editor::buildBody ()
                 }
                 auto* bt = new ActionButton (CRect (534 + k * 70, 194, 600 + k * 70, 212), k == 0 ? "Band 1" : "Band 2",
                                              [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-                bt->setTooltipText (k == 0 ? "Show Clarity's first band (green in the display)."
-                                           : "Show Clarity's second band (blue: it works once its Range is above 0 dB).");
+                bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)."
+                                           : "Show Gently's second band (blue: it works once its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
             }
             showClarityBand (clarityBand);
+            // Gently's Advanced mode: the region Drive beside the band buttons, the Threshold sliders at
+            // the right of the colour display (updateSatAdvanced shows them while Advanced is on)
+            fxSatAdvanced.clear ();
+            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new Toggle (CRect (676, 194, 728, 212), h, kClarityDrive, "Drive"), tip (kClarityDrive))));
+            fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new NumberBox (CRect (732, 194, 790, 212), h, kClarityDriveAmount), tip (kClarityDriveAmount))));
+            for (int k = 0; k < kClarityBands; ++k)
+            {
+                const uint32_t tid = kClarityThresholdIds[k];
+                fxThresholds[k] = new ThresholdSlider (CRect (0, 0, 1, 1), h, k, [this, s] () -> const smacheratr::Meters* {
+                    auto* b = ctl->getBridge ();
+                    return b ? &b->rack.sat[(size_t)s] : nullptr;
+                });
+                add (fxThresholds[k], tip (tid));
+            }
+            satHost = h;
+            updateSatAdvanced ();
             break;
         }
         case kFxWidr:
@@ -1407,6 +1506,9 @@ void Editor::idle ()
         fxShaperView->idle ();
     if (fxColorView)
         fxColorView->idle ();
+    for (auto* t : fxThresholds)
+        if (t && t->isVisible ())
+            t->idle ();
     if (wubrBands)
         wubrBands->idle ();
     if (levlrView)

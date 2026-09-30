@@ -11,6 +11,7 @@ namespace smacheratr {
 class Controller;
 class ShaperView;
 class ColorView;
+class ThresholdSlider;
 
 // Laid out like Live's Saturator: the Analog curve with the pre-limiter above it, the post clip
 // chooser, Color and Amt Lo below it, then Drive / Output / Dry/Wet. The expanded controls (the
@@ -23,8 +24,9 @@ public:
     // layout (also used by the host test)
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
     static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 290.0;
-    // the CLARITY panel at the bottom: the Clarity button at (kClarityButtonX, kClarityTop + 40)
-    static constexpr double kClarityTop = 432.0, kClarityButtonX = 56.0;
+    // the GENTLY panel at the bottom: the Gently button at (kGentlyButtonX, kGentlyTop + 40), Advanced
+    // at (kGentlyAdvancedX, kGentlyTop + 40)
+    static constexpr double kGentlyTop = 432.0, kGentlyButtonX = 56.0, kGentlyAdvancedX = 496.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -46,6 +48,11 @@ private:
     std::vector<VSTGUI::CView*> clarityBandButtons;
     int clarityBand = 0; // the band shown
     void showClarityBand (int band);
+    // Gently's Advanced mode: the Threshold sliders at the right of the colour display, the region
+    // Drive's controls in the GENTLY panel (shown while Advanced is on)
+    ThresholdSlider* thresholdSliders[kClarityBands] = {nullptr, nullptr};
+    std::vector<pk::ParamView*> advancedViews;
+    void layoutAdvanced ();
 };
 
 } // namespace smacheratr

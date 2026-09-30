@@ -64,13 +64,15 @@ protected:
         return view;
     }
     // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`, the
-    // extended fields at `extBase`): every Smacheratr control, in two rows and three knobs. Clarity has
-    // one button and a band selector; the selected band's Frequency, Width and Range are shown.
+    // extended fields at `extBase`, Gently's Advanced block at `ext2Base`): every Smacheratr control,
+    // in two rows and three knobs. Gently (called Clarity before) has one button, Advanced and a band
+    // selector; the selected band's Frequency, Width and Range are shown (its Threshold sliders and
+    // region Drive are in smacheratr::TailDisplays, at the right of the colour display).
     // Needs about 680 x 78.
-    Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase,
+    Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase, uint32_t ext2Base,
                          const char* title = "smacheratr  (end of the chain)");
 public:
-    // Shows Clarity band `band`'s controls in the tail panel (the display calls it when a band is picked).
+    // Shows Gently band `band`'s controls in the tail panel (the display calls it when a band is picked).
     void showTailBand (int band);
 
 protected:
@@ -83,7 +85,7 @@ protected:
     const double baseWidth, baseHeight;
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
-    int tailBand = 0;                                              // Clarity band shown in the tail panel
+    int tailBand = 0;                                              // Gently band shown in the tail panel
     std::vector<VSTGUI::CView*> tailBandViews[2], tailBandButtons; // its controls, per band; the selector
 };
 

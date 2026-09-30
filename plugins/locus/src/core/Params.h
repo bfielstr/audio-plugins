@@ -21,7 +21,8 @@ enum ParamId : uint32_t
     kTailBase, // the Smacheratr at the end of the chain: pk::kTailFields entries
 
     kTailExtBase = kTailBase + pk::kTailFields, // the rest of the saturator: pk::kTailExtFields entries
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 
 enum Mode { kPunchy = 0, kSmooth };

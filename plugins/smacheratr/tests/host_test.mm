@@ -3,6 +3,7 @@
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
+#include "ui/ThresholdSlider.h"
 
 #include "public.sdk/source/common/memorystream.h"
 
@@ -124,22 +125,50 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kPreLimit) >= 0.5, "pre-limit switched on from the editor");
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
-            // Clarity: its band appears in the colour display
-            const double clarityX = Editor::kClarityButtonX, clarityY = Editor::kClarityTop + 40;
-            win.click (clarityX, clarityY);
-            CHECK (plainOf (rig, kClarity) >= 0.5, "Clarity switched on from the editor");
-            CHECK (win.savePng (outDir + "/ui_smacheratr_clarity.png"), "clarity screenshot");
-            win.click (clarityX, clarityY);
+            // Gently (called Clarity before): its band appears in the colour display
+            const double gentlyX = Editor::kGentlyButtonX, gentlyY = Editor::kGentlyTop + 40;
+            win.click (gentlyX, gentlyY);
+            CHECK (plainOf (rig, kClarity) >= 0.5, "Gently switched on from the editor");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gently.png"), "gently screenshot");
+            win.click (gentlyX, gentlyY);
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
             rig.param (kClarity, 1.0);
             rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
-            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2Range) > 7.9, "both Clarity bands on from the host");
-            CHECK (win.savePng (outDir + "/ui_smacheratr_clarity_host.png"), "clarity screenshot, both bands (set by the host)");
+            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2Range) > 7.9, "both Gently bands on from the host");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_host.png"), "gently screenshot, both bands (set by the host)");
             {
                 // a window opened with both bands on: its first picture is drawn from scratch
                 EditorWindow both (rig.controller);
-                CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_clarity_both.png"), "both bands, fresh window");
+                CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_gently_both.png"), "both bands, fresh window");
             }
+
+            // Advanced: the Threshold sliders at the right of the colour display (with the bands' levels
+            // next to them) and the region Drive in the GENTLY panel
+            win.click (Editor::kGentlyAdvancedX, gentlyY);
+            CHECK (plainOf (rig, kClarityAdvanced) >= 0.5, "Advanced switched on from the editor");
+            rig.param (kClarityDrive, 1.0);
+            rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -30.0));
+            for (int i = 0; i < 10; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, tone (250.0, 0.4));
+                pump (0.03);
+            }
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_advanced.png"), "gently advanced screenshot");
+            {
+                // band 1's slider: dragging it up raises its Threshold
+                const double sliderX = Editor::kColorLeft + Editor::kColorViewWidth - ThresholdSlider::kStripWidth +
+                                       ThresholdSlider::kGap + ThresholdSlider::kWidth / 2;
+                const double sliderY = Editor::kColorTop + Editor::kColorViewHeight / 2;
+                const double t0 = plainOf (rig, kClarityThreshold);
+                win.drag (sliderX, sliderY, sliderX, sliderY - 60);
+                CHECK (plainOf (rig, kClarityThreshold) > t0 + 5.0, "drag up raises the Threshold: %.1f -> %.1f", t0,
+                       plainOf (rig, kClarityThreshold));
+            }
+            win.click (Editor::kGentlyAdvancedX, gentlyY);
+            CHECK (plainOf (rig, kClarityAdvanced) < 0.5, "and Advanced off again");
+            rig.param (kClarityDrive, 0.0);
+            rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -18.0));
             rig.param (kClarity, 0.0);
             rig.param (kClarity2Range, 0.0);
 

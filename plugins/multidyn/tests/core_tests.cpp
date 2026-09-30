@@ -154,6 +154,10 @@ TEST (params_roundtrip)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "table size %u", t.size ());
+    CHECK (kNumParams == kSatExt2Base + pk::kTailExt2Fields &&
+               std::string (t.info (kSatExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               t.info (kSatExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kSatExt2Base + pk::kTailExt2Advanced).def == 0.0,
+           "Gently's Advanced block (the end saturator's) is the last");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& p = t.info (id);

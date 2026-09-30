@@ -34,16 +34,23 @@ enum ParamId : uint32_t
     kTailBase = kXover + kCrossovers,               // the Smacheratr at the end of the chain: pk::kTailFields entries
     kBandBase = kTailBase + pk::kTailFields,        // kBands x kBandBlock
     kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
-    kNumParams = kTailExtBase + pk::kTailExtFields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 constexpr uint32_t xoverParam (int k) { return kXover + (uint32_t)k; }
 constexpr bool isTailParam (uint32_t id)
 {
-    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
+    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
 }
-constexpr uint32_t tailField (uint32_t id) { return id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase) : id - kTailBase; }
+constexpr uint32_t tailField (uint32_t id)
+{
+    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+           : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
+                                : id - kTailBase;
+}
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

@@ -30,7 +30,9 @@ effect as many times as you like. A new Smemplr starts with **smacheratr** in th
 with Smacheratr's own defaults: Drive 0 dB, Pre-Limit on); it is a slot like any other, so it can be
 moved, switched off or removed. **+** adds an effect at the end of the chain; the tabs show the chain
 left to right: click a tab to show that effect, **drag a tab sideways** to move the effect (an orange
-bar shows where it will land; the effects in between move over). For the selected one, **On** and
+bar shows where it will land; the effects in between move over); **Ctrl-drag** (Cmd on macOS) puts a copy
+of it, with its settings, in the gap you let go on (the ones after it move up one); **Alt-click** a tab
+(Option-click) removes that effect. For the selected one, **On** and
 **Remove** (the ones after it move up). Each has its own display and controls:
 
 - **para**: the parallel high-pass / low-pass (with its Vocal and Liquid movement and the Notch);
@@ -42,7 +44,7 @@ bar shows where it will land; the effects in between move over). For the selecte
   16th-order Chebyshev: flat to the cutoff within 0.05 dB, about -40 dB a tenth below it, -70 dB at
   0.8 x). The mouse wheel on the display's handle (while holding it, or with Shift) steps through them.
   The mid is never filtered, so the mono sum is untouched.
-- **smacheratr**: the full saturator (pre-limiter, Clarity, Mid/Side, colour, post clip).
+- **smacheratr**: the full saturator (pre-limiter, Gently with its Advanced mode, Mid/Side, colour, post clip).
 - **widr**: the stereo widener with its left and right voices (it works alone here: the group
   awareness needs its own plug-in instances).
 

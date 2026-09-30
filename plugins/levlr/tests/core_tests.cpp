@@ -130,7 +130,11 @@ TEST (parameters_and_defaults)
     CHECK (t.size () == kNumParams, "every parameter: %u of %u", (unsigned)t.size (), (unsigned)kNumParams);
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
-    CHECK (kNumParams == kTailExtBase + pk::kTailExtFields, "the end saturator's extended block is last");
+    CHECK (kTailExt2Base == kTailExtBase + pk::kTailExtFields, "the end saturator's extended block, then Gently's Advanced block");
+    CHECK (kNumParams == kTailExt2Base + pk::kTailExt2Fields &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
+           "Gently's Advanced block (the end saturator's) is the last");
     CHECK (t.info (kSlope).def == (double)kSlope24, "24 dB/oct by default");
     CHECK (t.info (xoverParam (0)).def == 120.0 && t.info (xoverParam (1)).def == 1000.0 && t.info (xoverParam (2)).def == 6000.0,
            "crossovers at 120 Hz, 1 kHz, 6 kHz");

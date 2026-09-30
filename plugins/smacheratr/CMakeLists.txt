@@ -24,6 +24,8 @@ add_library(smacheratr_ui STATIC
     src/ui/ShaperView.cpp
     src/ui/ColorView.h
     src/ui/ColorView.cpp
+    src/ui/ThresholdSlider.h
+    src/ui/ThresholdSlider.cpp
     src/ui/TailDisplays.h
     src/ui/TailDisplays.cpp
 )

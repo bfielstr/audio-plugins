@@ -23,6 +23,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
         pk::addTailParams (v, kTailBase);
         smacheratr::addTailExtParams (v, kTailExtBase);
+        smacheratr::addTailExt2Params (v, kTailExt2Base);
+        static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
         return v;
     }());
     return t;

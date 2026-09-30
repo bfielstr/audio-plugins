@@ -28,11 +28,7 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 constexpr double kHandleRadius = 5.0;
-// Clarity's bands: green, and blue for the second
-CColor clarityColor (int band, uint8_t alpha = 255)
-{
-    return band == 0 ? CColor (120, 210, 140, alpha) : CColor (130, 170, 255, alpha);
-}
+CColor clarityColor (int band, uint8_t alpha = 255) { return ColorView::bandColor (band, alpha); }
 // Clarity's gain at a frequency for a cut (dB) at the band's peak: the band scaled by its response
 double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb)
 {
@@ -40,6 +36,11 @@ double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb)
     return 20.0 * std::log10 (std::max (1e-6, 1.0 - (1.0 - std::pow (10.0, cutDb / 20.0)) * m));
 }
 } // namespace
+
+CColor ColorView::bandColor (int band, uint8_t alpha)
+{
+    return band == 0 ? CColor (120, 210, 140, alpha) : CColor (130, 170, 255, alpha);
+}
 
 ColorView::ColorView (const CRect& r, pk::ParamHost* h, RateSource rs, MeterSource ms)
     : CView (r), host (h), rate (std::move (rs)), meters (std::move (ms))
@@ -136,7 +137,7 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
     }
 
-    // Clarity's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
+    // Gently's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
     const double sr0 = sampleRate ();
     bool clarity[kClarityBands];
     ClarityBand bands[kClarityBands];
@@ -150,7 +151,7 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->setFillColor (clarityColor (k, 16));
         ctx->drawRect (CRect (x0, all.top, x1, all.bottom), kDrawFilled);
         ctx->setLineWidth (1.0);
-        const bool edgeActive = dragBand == k && (drag == Drag::ClarityLow || drag == Drag::ClarityHigh);
+        const bool edgeActive = dragBand == k && (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth);
         ctx->setFrameColor (clarityColor (k, edgeActive ? 200 : 90));
         ctx->drawLine (CPoint (x0, all.top), CPoint (x0, all.bottom));
         ctx->drawLine (CPoint (x1, all.top), CPoint (x1, all.bottom));
@@ -179,14 +180,14 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 
-    // Clarity at work, as a multiband compressor shows its bands: the most each can cut outlined, the
+    // Gently at work, as a multiband compressor shows its bands: the most each can cut outlined, the
     // cut it is making right now filled in from the 0 dB line, a handle at its centre and its readout
     int pills = 0;
     for (int k = 0; k < kClarityBands; ++k)
     {
         if (!clarity[k])
         {
-            // Clarity on, this band's Range at 0: a dim handle to pull down
+            // Gently on, this band's Range at 0: a dim handle to pull down
             if (clarityShown (k))
             {
                 const CPoint h = clarityHandle (k);
@@ -243,7 +244,7 @@ void ColorView::draw (CDrawContext* ctx)
         const CPoint h = clarityHandle (k);
         // the readout, in a pill above the band (a second pill goes under the first)
         char cb[64];
-        std::snprintf (cb, sizeof (cb), "%s  %s   %.1f dB", k == 0 ? "Clarity" : "Clarity 2",
+        std::snprintf (cb, sizeof (cb), "%s  %s   %.1f dB", k == 0 ? "Gently" : "Gently 2",
                        host->valueText (kClarityFreqIds[k]).c_str (), (double)shownCut[k]);
         const double pw = 160.0, px = std::clamp (h.x - pw / 2, all.left + 4, all.right - pw - 4);
         const double py = all.top + 36 + 20 * pills++;
@@ -284,6 +285,15 @@ void ColorView::draw (CDrawContext* ctx)
     ctx->resetClipRect ();
 }
 
+int ColorView::bandUnder (const CPoint& p) const
+{
+    // the second band is drawn on top, so it is found first
+    for (int k = kClarityBands - 1; k >= 0; --k)
+        if (clarityOn (k) && p.x >= clarityEdgeX (k, false) - 4.0 && p.x <= clarityEdgeX (k, true) + 4.0)
+            return k;
+    return -1;
+}
+
 ColorView::Drag ColorView::hit (const CPoint& p, int* band) const
 {
     auto near = [&] (const CPoint& h) { return std::hypot (p.x - h.x, p.y - h.y) <= kHandleRadius + 4.0; };
@@ -319,10 +329,21 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     if (!e.buttonState.isLeft () && !right)
         return;
     drag = hit (e.mousePosition, &dragBand);
+    // Alt (Option) held on a band, its handle or anywhere in its region: a sideways drag sets its width
+    if (!right && e.clickCount < 2 && e.modifiers.has (ModifierKey::Alt) && drag != Drag::Lo && drag != Drag::Hi)
+    {
+        const int k = drag != Drag::None ? dragBand : bandUnder (e.mousePosition);
+        if (k >= 0)
+        {
+            drag = Drag::ClarityWidth;
+            dragBand = k;
+        }
+    }
     if (drag == Drag::None)
         return;
     const uint32_t cFreq = kClarityFreqIds[dragBand], cWidth = kClarityWidthIds[dragBand];
-    if ((drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh) && onBandPicked)
+    const bool onBand = drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth;
+    if (onBand && onBandPicked)
         onBandPicked (dragBand);
     if (e.clickCount == 2 || right)
     {
@@ -352,13 +373,14 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     startFreq = host->plainValue (kColorFreq);
     startClarity = host->plainValue (cFreq);
     startRange = host->plainValue (kClarityRangeIds[dragBand]);
+    startWidth = host->plainValue (cWidth);
     movedH = movedV = false;
     if (drag == Drag::Clarity)
     {
         host->beginEdit (cFreq);
         host->beginEdit (kClarityRangeIds[dragBand]);
     }
-    else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
+    else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth)
         host->beginEdit (cWidth);
     else if (drag == Drag::Lo)
         host->beginEdit (kColorLo);
@@ -374,7 +396,9 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
 {
     if (drag == Drag::None)
     {
-        const Drag h = hit (e.mousePosition);
+        Drag h = hit (e.mousePosition);
+        if (e.modifiers.has (ModifierKey::Alt) && h != Drag::Lo && h != Drag::Hi && (h != Drag::None || bandUnder (e.mousePosition) >= 0))
+            h = Drag::ClarityWidth; // Alt: the band's width, sideways
         if (auto* f = getFrame ())
             f->setCursor (h == Drag::Hi || h == Drag::Clarity ? kCursorSizeAll
                           : h == Drag::Lo ? kCursorVSize
@@ -393,6 +417,13 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
         setPlain (kClarityFreqIds[dragBand], startClarity * std::pow (kMaxHz / kMinHz, dx / r.getWidth ()));
         const double dbPerPixel = kMaxDb / (r.getHeight () * 0.5 - 12.0);
         setPlain (kClarityRangeIds[dragBand], std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
+    }
+    else if (drag == Drag::ClarityWidth)
+    {
+        // Alt-drag: right widens, left narrows, an octave of width for an octave of mouse travel (the
+        // band stays centred; Shift: fine)
+        const double octavesPerPixel = std::log2 (kMaxHz / kMinHz) / r.getWidth ();
+        setPlain (kClarityWidthIds[dragBand], startWidth + dx * octavesPerPixel);
     }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
     {
@@ -430,7 +461,7 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
         host->endEdit (kClarityFreqIds[dragBand]);
         host->endEdit (kClarityRangeIds[dragBand]);
     }
-    else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
+    else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth)
         host->endEdit (kClarityWidthIds[dragBand]);
     else if (drag == Drag::Lo)
         host->endEdit (kColorLo);
@@ -449,10 +480,10 @@ void ColorView::onMouseWheelEvent (MouseWheelEvent& e)
     const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition) != Drag::None);
     if (!active)
         return;
-    // Clarity's band: wheel up widens it
+    // Gently's band: wheel up widens it
     int overBand = dragBand;
     const Drag over = drag != Drag::None ? drag : hit (e.mousePosition, &overBand);
-    const bool band = over == Drag::Clarity || over == Drag::ClarityLow || over == Drag::ClarityHigh;
+    const bool band = over == Drag::Clarity || over == Drag::ClarityLow || over == Drag::ClarityHigh || over == Drag::ClarityWidth;
     const uint32_t id = band ? kClarityWidthIds[overBand] : kColorWidth;
     const double dn = pk::wheelStep (e, host->table (), id);
     if (dn == 0.0)

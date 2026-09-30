@@ -9,7 +9,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
-| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
+| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, Gently (a band compressor against mud and harshness, with thresholds and a region drive in its Advanced mode), soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 | [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf, a MIDI-triggered split envelope, and Vocal / Liquid movement | a morphing EQ, Live-styled |
 | [**Widr**](plugins/widr/README.md) | Trailer-style stereo width (Haas, decorrelation, micro pitch, early reflections, a side-only reverb) that keeps the mono fold; the Widrs of a session share the stereo field by role | cinematic trailer mixing |
 | [**Wubr**](plugins/wubr/README.md) | Two bell bands whose gain and/or centre you draw LFO shapes for (synced or free), or run as envelopes triggered by MIDI or transients with a hold point; Smacheratr at the end | LFO Tool / ShaperBox-style wubs |
@@ -18,7 +18,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
-Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB).
+Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before) and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
 
 In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 

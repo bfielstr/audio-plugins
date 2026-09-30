@@ -451,6 +451,30 @@ int main (int argc, char** argv)
             const double slope = smemplr::mseq::paramTable ().toPlain (smemplr::mseq::kSlope, b8.norm[smemplr::slotBlockParam (1, smemplr::mseq::kSlope)]);
             const double drive = smacheratr::paramTable ().toPlain (smacheratr::kDrive, b8.norm[smemplr::slotBlockParam (2, smacheratr::kDrive)]);
             CHECK (std::lround (slope) == smemplr::MsEq::k12 && std::fabs (drive - 6.0) < 1e-6, "slope %f (12 dB), drive %f", slope, drive);
+            // the old saturator never had Gently's Advanced mode: its slot gets the defaults
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+                CHECK (b8.norm[smemplr::slotBlockParam (2, id)] == smacheratr::defaultNormalized (id), "version 8: %s at its default",
+                       smacheratr::paramTable ().info (id).name);
+        }
+
+        // States from before version 11: Gently's Advanced places in a Smacheratr slot held nothing that
+        // was used; they get their defaults (Advanced off: the same sound)
+        {
+            auto v10 = baseState (wav);
+            const uint32_t typeId = smemplr::slotParam (0, smemplr::kSlotType);
+            v10.norm[typeId] = smemplr::toNormalized (typeId, smemplr::kFxSmacheratr);
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+                v10.norm[smemplr::slotBlockParam (0, id)] = 1.0;
+            MemoryStream raw;
+            CHECK (smemplr::writeState (&raw, v10), "write a state");
+            const int32 ten = 10;
+            std::memcpy (raw.getData () + 4, &ten, sizeof (ten));
+            raw.seek (0, IBStream::kIBSeekSet, nullptr);
+            smemplr::PluginState b10;
+            CHECK (smemplr::readState (&raw, b10), "read a version 10 state");
+            for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClarityDriveAmount; ++id)
+                CHECK (b10.norm[smemplr::slotBlockParam (0, id)] == smacheratr::defaultNormalized (id), "version 10: %s at its default (%f)",
+                       smacheratr::paramTable ().info (id).name, b10.norm[smemplr::slotBlockParam (0, id)]);
         }
 
         // Missing sample: loads without crashing, path is preserved
@@ -587,6 +611,20 @@ int main (int argc, char** argv)
             CHECK (std::fabs (moved - 0.75) < 1e-9 && freed == 0.0, "Wubr's extension moved with it: %f, left behind %f", moved, freed);
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_remove.png"), "after remove snapshot");
+            // Cmd-drag (Ctrl on Windows) Para two places right: a copy lands in that gap, the rest move up one
+            fx.drag (tabX (0), tabY, tabX (2), tabY, kCmd);
+            pump (0.1);
+            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxPara &&
+                       typeOf (3) == smemplr::kFxSmacheratr && typeOf (6) == smemplr::kFxLevlr,
+                   "duplicated: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (2), typeOf (3), typeOf (6));
+            settle ();
+            CHECK (fx.savePng (outDir + "/ui_fx_after_duplicate.png"), "after duplicate snapshot");
+            // Alt-click (Option-click) the copy: it goes, the ones after it move up
+            fx.click (tabX (2), tabY, 1, kAlt);
+            pump (0.1);
+            CHECK (typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxSmacheratr && typeOf (5) == smemplr::kFxLevlr &&
+                       typeOf (6) == smemplr::kFxEmpty,
+                   "alt-click removed it: %d %d %d %d", typeOf (1), typeOf (2), typeOf (5), typeOf (6));
         }
         for (int s = 0; s < smemplr::kRackSlots; ++s)
             rig.param (slotParam (s, smemplr::kSlotType), 0.0);

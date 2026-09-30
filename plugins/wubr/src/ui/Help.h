@@ -58,7 +58,7 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kBandDisplay =
     "The two bands (1 green, 2 blue) as they are now, moving with their shapes; dashed: the range the shape covers. "
-    "Drag a band's handle sideways for its frequency, up or down for its gain; the wheel sets its width. Click a band "
+    "Drag a band's handle sideways for its frequency, up or down for its gain; the wheel, its edges, or Alt + dragging the band sideways set its width. Click a band "
     "to show its controls; double-click or right-click resets it.";
 constexpr const char* kShapeDisplay =
     "The band's shape, one cycle from left to right. Drag a point to move it; drag a line up or down to bend it; "
