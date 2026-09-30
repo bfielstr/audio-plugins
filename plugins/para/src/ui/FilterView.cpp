@@ -1,6 +1,6 @@
 #include "FilterView.h"
 
-#include "../core/Svf.h"
+#include "../core/Slopes.h"
 
 #include "pluginkit/ui/Theme.h"
 
@@ -131,14 +131,13 @@ void FilterView::cutoffs (double& hp, double& lp) const
 
 double FilterView::handleDb (bool hpSide) const
 {
-    // the filter's gain plus its resonant peak at the cutoff (Q per second-order section; the
-    // first-order section of 18 dB takes 3 dB off), so pulling a handle up shows the resonance
+    // the filter's gain plus its resonant peak at the cutoff (the slope's response there: at resonance 0
+    // below 0 dB, so the handle sits at the gain), so pulling a handle up shows the resonance
     const double gainDb = host->plainValue (hpSide ? kHpGain : kLpGain);
     if (gainDb <= kGainMinDb + 0.01)
         return kMinDb + 1.0;
     const int slope = (int)std::lround (host->plainValue (kSlope));
-    const double q = resonanceToQ (host->plainValue (resId (hpSide)), slope);
-    const double peak = slope == kSlope24 ? q * q : (slope == kSlope18 ? q * M_SQRT1_2 : q);
+    const double peak = std::abs (filterResponse (slope, hpSide, 1000.0, 1000.0, host->plainValue (resId (hpSide))));
     return std::max (kMinDb + 1.0, gainDb + 20.0 * std::log10 (std::max (1.0, peak)));
 }
 
@@ -259,7 +258,7 @@ void FilterView::draw (CDrawContext* ctx)
     float hpMul, lpMul;
     effective (hp, lp, hpMul, lpMul);
     const int slope = (int)std::lround (host->plainValue (kSlope));
-    const double qHp = resonanceToQ (host->plainValue (resId (true)), slope), qLp = resonanceToQ (host->plainValue (resId (false)), slope);
+    const double resHp = host->plainValue (resId (true)), resLp = host->plainValue (resId (false));
     // the digital filters as they are: the cutoffs clamped like the engine's, and the analog
     // responses read at the warped frequency (bilinear, prewarped at the cutoff), which bends the
     // curves near the top of the spectrum
@@ -279,21 +278,10 @@ void FilterView::draw (CDrawContext* ctx)
             if (f >= nyquist * 0.998)
                 break;
             const double fh = warped (f, hc), fl = warped (f, lc);
-            std::complex<double> a = highPassResponse (fh, hc, qHp), b = lowPassResponse (fl, lc, qLp);
-            if (slope == kSlope24)
-            {
-                a *= a;
-                b *= b;
-            }
-            else if (slope == kSlope18)
-            {
-                a *= highPass1Response (fh, hc);
-                b *= lowPass1Response (fl, lc);
-            }
-            a *= hpGain;
-            b *= lpGain;
-            // the sum uses the polarity the engine uses (inverted high-pass at 12 dB)
-            const std::complex<double> h = which == 0 ? a : (which == 1 ? b : (slope == kSlope12 ? b - a : a + b));
+            // each with the polarity the engine sums it with (Slopes.h)
+            const std::complex<double> a = filterResponse (slope, true, fh, hc, resHp) * hpGain,
+                                       b = filterResponse (slope, false, fl, lc, resLp) * lpGain;
+            const std::complex<double> h = which == 0 ? a : (which == 1 ? b : a + b);
             const CPoint pt (xOfHz (f), yOfDb (20.0 * std::log10 (std::max (1e-6, std::abs (h)))));
             lastX = pt.x;
             if (i == 0)

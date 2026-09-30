@@ -16,7 +16,8 @@
 // Floor: the low-pass never goes below Low-Pass Floor (40 Hz by default), whatever Split, the
 // envelope or the swing do, so the sub stays.
 // Slope: 6 to 96 dB per octave or Brickwall, both filters (Slopes.h). A new slope crossfades from the
-// old one (10 ms, both running meanwhile), so switching never clicks.
+// old one (10 ms, both running meanwhile), so switching never clicks; the new filters are first run
+// over the last 30 ms of their input, so they fade in settled.
 // Drive, per filter: Smacheratr's Analog curve (DriveStage, oversampled) in the high-pass's branch and in
 // the low-pass's, each on or off with its own amount. Pre: on the filter's input, so the filter shapes
 // what it adds; Post: on its output (before its gain), so the harmonics stay. The dry part of Dry/Wet
@@ -196,6 +197,12 @@ private:
     // filters' inputs (Pre: driven) or outputs (Post: driven after), and the gains per sample (Post)
     std::vector<float> src[2], dry[2], hBuf[2], lBuf[2], gHp, gLp, gMix, gOut, scopeIn;
     std::vector<float> dryDelay[2];
+    // what went into the filters lately ([high-pass / low-pass][channel]): a new slope's filters are
+    // run over it before they fade in, so they start where they would be had they been running (not
+    // from silence, whose ringing would dip the crossfade)
+    std::vector<float> hist[2][2];
+    int histPos = 0;
+    void warmUp (FilterSet& f);
     int dryPos = 0;
     std::vector<float> bypassDelay[2];
     int bypassPos = 0;

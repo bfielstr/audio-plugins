@@ -32,6 +32,9 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
         bypassDelay[c].assign ((size_t)latency (), 0.0f);
         dryDelay[c].assign ((size_t)driveHp.latency (), 0.0f);
     }
+    for (auto& b : hist)
+        for (auto& h : b)
+            h.assign ((size_t)std::max (1, (int)std::lround (0.03 * sr)), 0.0f);
     for (auto* v : {&gHp, &gLp, &gMix, &gOut, &scopeIn})
         v->assign ((size_t)maxBlock, 0.0f);
     duckStep = (float)(1.0 / (0.003 * sr)); // 3 ms fades around moving the drives
@@ -73,6 +76,10 @@ void Engine::reset ()
     for (auto& d : dryDelay)
         std::fill (d.begin (), d.end (), 0.0f);
     dryPos = 0;
+    for (auto& b : hist)
+        for (auto& h : b)
+            std::fill (h.begin (), h.end (), 0.0f);
+    histPos = 0;
     prevHpBase = p[kHpFreq]; // the leader of Vocal movement is kept
     prevLpBase = p[kLpFreq];
     hpMul = lpMul = hpMulT = lpMulT = 1.0f;
@@ -84,13 +91,32 @@ void Engine::reset ()
     out = dbToGain (p[kOutput]);
     hpG = (float)filterGain (p[kHpGain]);
     lpG = (float)filterGain (p[kLpGain]);
-    setCoeffs (sets[0], hpCutoff (p[kHpFreq], offset, split), lpCutoff (p[kLpFreq], offset, split), p[kHpRes], lpRes ());
+    curHp = rawHp = hpCutoff (p[kHpFreq], offset, split);
+    curLp = rawLp = std::max (std::max (1.0, p[kLpFloor]), lpCutoff (p[kLpFreq], offset, split));
+    setCoeffs (sets[0], curHp, curLp, p[kHpRes], lpRes ());
 }
 
 void Engine::setCoeffs (FilterSet& f, double hz, double lz, double hpResonance, double lpResonance)
 {
     f.hpC.set (f.slope, hz, hpResonance, sr);
     f.lpC.set (f.slope, lz, lpResonance, sr);
+}
+
+void Engine::warmUp (FilterSet& f)
+{
+    // the filters as they are now, over their inputs of the last 30 ms, oldest first
+    f.reset ();
+    setCoeffs (f, curHp, curLp, p[kHpRes], lpRes ());
+    const SlopeShape& sh = slopeShape (f.slope);
+    const int len = (int)hist[0][0].size ();
+    for (int c = 0; c < 2; ++c)
+        for (int k = 0, q = histPos; k < len; ++k)
+        {
+            filterTick (sh, f.hpC, f.hp[c], hist[0][c][(size_t)q], true);
+            filterTick (sh, f.lpC, f.lp[c], hist[1][c][(size_t)q], false);
+            if (++q >= len)
+                q = 0;
+        }
 }
 
 // The cutoffs do not follow the notes any more (the notes only trigger the envelope).
@@ -189,7 +215,7 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
     {
         cur ^= 1;
         sets[cur].slope = slopeT;
-        sets[cur].reset ();
+        warmUp (sets[cur]);
         slopeFade = 0.0;
     }
     FilterSet& now = sets[cur];
@@ -320,6 +346,17 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         gMix[(size_t)i] = mix;
         gOut[(size_t)i] = out;
     }
+    // the filters' inputs, for a new slope's warm-up
+    const int hlen = (int)hist[0][0].size ();
+    for (int c = 0; c < 2; ++c)
+        for (int i = 0, q = histPos; i < n; ++i)
+        {
+            hist[0][c][(size_t)q] = hIn[c][i];
+            hist[1][c][(size_t)q] = lIn[c][i];
+            if (++q >= hlen)
+                q = 0;
+        }
+    histPos = (histPos + n) % hlen;
     if (drivePost)
     {
         // each filter's output driven, then its gain, the dry/wet and the output level

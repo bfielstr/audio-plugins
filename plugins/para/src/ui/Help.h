@@ -12,7 +12,11 @@ inline const char* forParam (uint32_t id)
         case kHpRes: return "High-pass resonance. At 0 the two filters can meet without a bump.";
         case kLpFreq: return "Low-pass cutoff.";
         case kLpRes: return "Low-pass resonance.";
-        case kSlope: return "12, 18 or 24 dB per octave for both filters.";
+        case kSlope:
+            return "Steepness of both filters: 6 to 96 dB per octave, or Brickwall (80 dB down just past the cutoff). "
+                   "At every slope the two filters meeting at one frequency sum flat. From 36 dB on the resonance "
+                   "peaks as high as at 24 dB; 6 dB and Brickwall get a resonant bell at the cutoff. Click for the "
+                   "list, or scroll over it.";
         case kSplit:
             return "Moves the two filters apart (positive: high-pass up, low-pass down) or together (negative), in "
                    "semitones around their set frequencies. Automate it, or let the envelope drive it.";
@@ -43,13 +47,20 @@ inline const char* forParam (uint32_t id)
         case kHpGain: return "Level of the high-pass filter's output, down to -inf (only the low-pass is heard).";
         case kLpGain: return "Level of the low-pass filter's output, down to -inf (only the high-pass is heard).";
         case kHpDriveOn:
-            return "Drive: Smacheratr's Analog curve (4x oversampled) in Para's own path, apart from the saturator "
-                   "at the end. Off, the sound passes untouched.";
-        case kHpDrive: return "How hard the drive pushes into the curve (0 dB: only peaks above -6 dBFS bend).";
+            return "High-pass drive: Smacheratr's Analog curve (4x oversampled) in the high-pass filter's branch only, "
+                   "apart from the saturator at the end. Off, that branch passes untouched.";
+        case kHpDrive:
+            return "How hard the high-pass drive pushes into the curve (0 dB: only peaks above -6 dBFS bend).";
+        case kLpDriveOn:
+            return "Low-pass drive: Smacheratr's Analog curve (4x oversampled) in the low-pass filter's branch only. "
+                   "With both drives on, each band saturates on its own (the lows do not bend the highs).";
+        case kLpDrive:
+            return "How hard the low-pass drive pushes into the curve (0 dB: only peaks above -6 dBFS bend).";
         case kDrivePos:
-            return "Pre: the drive goes in before the filters, so they shape the harmonics it makes (a low-pass takes the "
-                   "top ones away). Post: after the filters (and Dry/Wet, before Output), so its harmonics stay. Switching "
-                   "fades the sound out and back in for a moment.";
+            return "For both drives. Pre: each drive goes in before its filter, so the filter shapes the harmonics it "
+                   "makes (the low-pass takes the top ones away). Post: after its filter (before its gain), so its "
+                   "harmonics stay. The dry part of Dry/Wet is never driven. Switching fades the sound out and back in "
+                   "for a moment.";
         default: return nullptr;
     }
 }

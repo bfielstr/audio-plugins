@@ -1,10 +1,11 @@
 // End-to-end test of the built Para.vst3. usage: para_hosttest <Para.vst3> <output dir>
 #include "Params.h"
-#include "Svf.h"
+#include "Slopes.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
 
+#include "base/source/fstreamer.h"
 #include "public.sdk/source/common/memorystream.h"
 
 #include <cmath>
@@ -48,6 +49,16 @@ static InputFn tone (double hz, double amp)
 }
 
 static double plainOf (Rig& rig, uint32_t id) { return toPlain (id, rig.controller->getParamNormalized (id)); }
+
+// A state as Para 0.6 saved it (version 3: three slopes, one drive), with the values given (normalized).
+static bool writeOldState (IBStream* stream, const std::vector<std::pair<uint32_t, double>>& values)
+{
+    IBStreamer s (stream, kLittleEndian);
+    bool ok = s.writeInt32 (0x50455252) && s.writeInt32 (3) && s.writeInt32 ((int32)values.size ());
+    for (auto [id, v] : values)
+        ok = ok && s.writeInt32u (id) && s.writeDouble (v);
+    return ok;
+}
 
 int main (int argc, char** argv)
 {
@@ -99,20 +110,39 @@ int main (int argc, char** argv)
         out.clear ();
         rig.render (0.1, out, nullptr, tone (400.0, 0.25));
 
-        // the drive: on (Post, +18 dB), a 110 Hz tone gets its third harmonic; the latency stays
+        // the drives, one per filter (Post, +18 dB): a 110 Hz tone (in the low-pass's band) gets its third
+        // harmonic from the low-pass's drive, hardly from the high-pass's; the latency stays
         const uint32 lat0 = rig.processor->getLatencySamples ();
         out.clear ();
         rig.render (0.5, out, nullptr, tone (110.0, 0.4));
         const double h3Off = toneDb (out, 330.0, 12000, 24000);
-        rig.param (kDriveOn, 1.0);
-        rig.param (kDrive, toNormalized (kDrive, 18.0));
+        rig.param (kHpDriveOn, 1.0);
+        rig.param (kHpDrive, toNormalized (kHpDrive, 18.0));
+        rig.param (kLpDrive, toNormalized (kLpDrive, 18.0));
         rig.param (kDrivePos, toNormalized (kDrivePos, kDrivePost));
         out.clear ();
         rig.render (0.5, out, nullptr, tone (110.0, 0.4));
+        const double h3Hp = toneDb (out, 330.0, 12000, 24000);
+        rig.param (kHpDriveOn, 0.0);
+        rig.param (kLpDriveOn, 1.0);
+        out.clear ();
+        rig.render (0.5, out, nullptr, tone (110.0, 0.4));
         const double h3On = toneDb (out, 330.0, 12000, 24000);
-        CHECK (h3On > -40.0 && h3On > h3Off + 20.0, "drive: third harmonic %.1f dB (off %.1f)", h3On, h3Off);
+        CHECK (h3On > -40.0 && h3On > h3Off + 20.0 && h3On > h3Hp + 20.0, "low-pass drive: third harmonic %.1f dB (off %.1f, high-pass drive %.1f)",
+               h3On, h3Off, h3Hp);
         CHECK (rig.processor->getLatencySamples () == lat0, "the drive keeps the latency: %u vs %u",
                (unsigned)rig.processor->getLatencySamples (), (unsigned)lat0);
+
+        // a project from Para 0.6 (18 dB, the one drive on at +12 dB): the slope stays 18 dB and both
+        // filters get the drive
+        CHECK (rig.applyState ([] (IBStream* s) {
+                   return writeOldState (s, {{kSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, toNormalized (kHpDrive, 12.0)}});
+               }),
+               "old setState");
+        CHECK (std::lround (plainOf (rig, kSlope)) == kSlope18, "the old 18 dB: %s", paramTable ().toText (kSlope, plainOf (rig, kSlope)).c_str ());
+        CHECK (plainOf (rig, kLpDriveOn) >= 0.5 && std::fabs (plainOf (rig, kLpDrive) - 12.0) < 1e-6 && plainOf (rig, kHpDriveOn) >= 0.5,
+               "the old drive in both filters: %.1f dB", plainOf (rig, kLpDrive));
+        CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState again");
 
         // editor: screenshot while audio is flowing, then gestures
         {
@@ -136,10 +166,10 @@ int main (int argc, char** argv)
             const double f0 = plainOf (rig, kHpFreq);
             win.drag (hx, hy, hx + 40, hy);
             CHECK (plainOf (rig, kHpFreq) > f0 * 1.3, "drag raises the high-pass: %.0f -> %.0f", f0, plainOf (rig, kHpFreq));
-            // a handle sits as high as its gain plus its resonant peak (24 dB: Q squared)
+            // a handle sits as high as its gain plus its resonant peak (the slope's response at the cutoff)
             auto handleY = [&] () {
-                const double q = resonanceToQ (plainOf (rig, kHpRes), kSlope24);
-                return yOfDb (plainOf (rig, kHpGain) + 20.0 * std::log10 (std::max (1.0, q * q)));
+                const double peak = std::abs (filterResponse (kSlope24, true, 1.0, 1.0, plainOf (rig, kHpRes)));
+                return yOfDb (plainOf (rig, kHpGain) + 20.0 * std::log10 (std::max (1.0, peak)));
             };
             // up / down: the resonance, the gain stays
             const double hx2 = xOfHz (plainOf (rig, kHpFreq));
@@ -168,6 +198,25 @@ int main (int argc, char** argv)
                 pump (0.03);
             }
             CHECK (win.savePng (outDir + "/ui_para_vocal.png"), "vocal screenshot");
+            // the drive toggles in OUTPUT (at 8, 410): the high-pass's, then the low-pass's
+            rig.param (kHpDriveOn, 0.0);
+            rig.param (kLpDriveOn, 0.0);
+            pump (0.05);
+            win.click (8 + 537, 410 + 79);
+            CHECK (plainOf (rig, kHpDriveOn) >= 0.5 && plainOf (rig, kLpDriveOn) < 0.5, "HP drive toggle");
+            win.click (8 + 585, 410 + 79);
+            CHECK (plainOf (rig, kLpDriveOn) >= 0.5, "LP drive toggle");
+            // the slopes' drop-down (in SPLIT, at 384, 298) shows the slope; set to Brickwall, the display
+            // draws it
+            rig.param (kSlope, toNormalized (kSlope, kSlopeBrickwall));
+            rig.param (kMovement, toNormalized (kMovement, kFree));
+            for (int i = 0; i < 10; ++i)
+            {
+                out.clear ();
+                rig.render (0.05, out, nullptr, tone (110.0, 0.4));
+                pump (0.03);
+            }
+            CHECK (win.savePng (outDir + "/ui_para_brickwall.png"), "brickwall screenshot");
         }
         rig.stop ();
         return finish ("para host test");

@@ -12,9 +12,10 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50455252; // 'PERR'
-constexpr int32 kVersion = 3;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 4;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
+constexpr int32 kPerBandDrive = 4;     // 4: a drive per filter, slopes 6 .. 96 dB and Brickwall
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -71,6 +72,20 @@ bool readState (IBStream* stream, State& st)
         for (uint32_t id : {(uint32_t)(kTailExtBase + pk::kTailExtClarityFreq)})
             if (st.has[id])
                 st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
+    // one drive for both filters and three slopes (12 / 18 / 24 dB) before: the low-pass gets the drive
+    // too, the slope its place on the longer list
+    if (version < kPerBandDrive)
+        upgradeToPerBandDrive (
+            [&] (uint32_t id, double& v) {
+                if (!st.has[id])
+                    return false;
+                v = st.norm[id];
+                return true;
+            },
+            [&] (uint32_t id, double v) {
+                st.norm[id] = v;
+                st.has[id] = true;
+            });
     // Liquid used to be a toggle on top of Vocal; it is what Vocal does now
     if (st.has[kLiquid] && st.norm[kLiquid] >= 0.5)
     {

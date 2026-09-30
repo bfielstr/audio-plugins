@@ -9,7 +9,9 @@
 
 #include "vstgui/lib/cframe.h"
 #include "vstgui/lib/controls/coptionmenu.h"
+#include "vstgui/lib/events.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -17,6 +19,7 @@ namespace para {
 
 using namespace VSTGUI;
 using pk::ActionButton;
+using pk::Choice;
 using pk::Knob;
 using pk::Label;
 using pk::Panel;
@@ -26,6 +29,24 @@ using pk::Toggle;
 namespace {
 constexpr double kKnobW = 56, kKnobH = 64;
 CRect knobRect (double x, double y) { return CRect (x, y, x + kKnobW, y + kKnobH); }
+
+// The slope's drop-down (eleven slopes): the mouse wheel over it also steps through the list, as over a
+// knob (up: steeper).
+class ScrollChoice : public Choice
+{
+public:
+    using Choice::Choice;
+    void onMouseWheelEvent (MouseWheelEvent& e) override
+    {
+        const int steps = host->table ().info (param).stepCount ();
+        const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
+        if (steps <= 0 || d == 0.0)
+            return;
+        host->setOnce (param, std::clamp (host->norm (param) + (d > 0 ? 1.0 : -1.0) / steps, 0.0, 1.0));
+        invalid ();
+        e.consumed = true;
+    }
+};
 
 class Background : public CViewContainer
 {
@@ -48,7 +69,7 @@ void Editor::onClose ()
     tailDisplays.reset ();
     view = nullptr;
     lpResKnob = nullptr;
-    driveViews[0] = driveViews[1] = nullptr;
+    hpDriveKnob = lpDriveKnob = drivePosView = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -88,7 +109,7 @@ void Editor::buildUI (CFrame* f)
     bind (lpP, new Knob (knobRect (124, 22), this, kLpGain, "Gain"));
     auto* spP = section (CRect (384, 298, 752, 404), "SPLIT");
     spP->addView (new Label (CRect (10, 24, 100, 38), "Slope", 10.5, false, 1));
-    bind (spP, new Segmented (CRect (10, 42, 100, 62), this, kSlope, {"12", "18", "24"}));
+    bind (spP, new ScrollChoice (CRect (10, 42, 100, 62), this, kSlope));
     bind (spP, new Toggle (CRect (10, 70, 100, 88), this, kResLink, "Link Res"));
     const uint32_t splitIds[4] = {kSplit, kEnvAmount, kEnvAttack, kEnvDecay};
     const char* splitNames[4] = {"Split", "Env", "Attack", "Decay"};
@@ -104,11 +125,13 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Knob (knobRect (300, 22), this, kDipStart));
     bind (outP, new Knob (knobRect (362, 22), this, kFade));
     bind (outP, new Knob (knobRect (440, 22), this, kLpFloor));
-    // the drive, in Para's own path: on, before or after the filters, how hard
-    outP->addView (new Label (CRect (516, 24, 660, 38), "Drive", 10.5, false, 1));
-    bind (outP, new Toggle (CRect (516, 42, 556, 62), this, kHpDriveOn, "On"));
-    driveViews[0] = bind (outP, new Segmented (CRect (562, 42, 660, 62), this, kDrivePos, {"Pre", "Post"}));
-    driveViews[1] = bind (outP, new Knob (knobRect (676, 22), this, kHpDrive, "Amount"));
+    // the drives, one in each filter's branch: on and how hard, and (for both) before or after the filters
+    outP->addView (new Label (CRect (516, 24, 606, 38), "Drive", 10.5, false, 1));
+    drivePosView = bind (outP, new Segmented (CRect (516, 42, 606, 62), this, kDrivePos, {"Pre", "Post"}));
+    bind (outP, new Toggle (CRect (516, 70, 558, 88), this, kHpDriveOn, "HP"));
+    bind (outP, new Toggle (CRect (564, 70, 606, 88), this, kLpDriveOn, "LP"));
+    hpDriveKnob = bind (outP, new Knob (knobRect (614, 22), this, kHpDrive, "HP Drive"));
+    lpDriveKnob = bind (outP, new Knob (knobRect (676, 22), this, kLpDrive, "LP Drive"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     auto* tailPanel = addTailPanel (root, CRect (8, 518, 752, 598 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
@@ -127,9 +150,13 @@ void Editor::updateLooks ()
 {
     if (lpResKnob)
         lpResKnob->setEnabledLook (plainValue (kResLink) < 0.5);
-    for (auto* v : driveViews)
-        if (v)
-            v->setEnabledLook (plainValue (kHpDriveOn) >= 0.5);
+    const bool hpOn = plainValue (kHpDriveOn) >= 0.5, lpOn = plainValue (kLpDriveOn) >= 0.5;
+    if (hpDriveKnob)
+        hpDriveKnob->setEnabledLook (hpOn);
+    if (lpDriveKnob)
+        lpDriveKnob->setEnabledLook (lpOn);
+    if (drivePosView)
+        drivePosView->setEnabledLook (hpOn || lpOn);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -139,7 +166,7 @@ void Editor::paramChanged (uint32_t id)
         tailDisplays->paramChanged (id);
     if (view)
         view->invalid ();
-    if (id == kResLink || id == kHpDriveOn)
+    if (id == kResLink || id == kHpDriveOn || id == kLpDriveOn)
         updateLooks ();
 }
 
