@@ -27,8 +27,6 @@ Processor::Processor ()
 
 Processor::~Processor ()
 {
-    for (auto& c : localCarrier)
-        c.reset ();
     if (bridge)
         bridge->release ();
 }
@@ -89,8 +87,8 @@ tresult PLUGIN_API Processor::setActive (TBool state)
 
 uint32 PLUGIN_API Processor::getTailSamples ()
 {
-    // the resonators ring for up to their Decay (4 s at most), and Clean and Transient add their delays
-    return (uint32)(engine.latency () + 4.5 * sampleRate);
+    // the latency, the Motion stage's echoes and the compressors' holds and releases
+    return (uint32)(engine.latency () + 2.0 * sampleRate);
 }
 
 tresult PLUGIN_API Processor::process (ProcessData& data)
@@ -115,11 +113,6 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
                 engine.setParam (id, toPlain (id, v));
             }
         }
-    // the recordings (a new one restarts its slot)
-    for (int s = 0; s < kCarrierSlots; ++s)
-        if (bridge->fetchCarrier (s, localCarrier[s], carrierGen[s]))
-            engine.setCarrier (s, localCarrier[s].get ());
-
     const int n = data.numSamples;
     if (n <= 0 || data.numInputs < 1 || data.numOutputs < 1 || data.inputs[0].numChannels < 2 ||
         data.outputs[0].numChannels < 2)
@@ -141,9 +134,6 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (st.norm[id]);
     reloadParams.store (true, std::memory_order_release);
-    if (st.hasRecordings)
-        for (int s = 0; s < kCarrierSlots; ++s)
-            bridge->setCarrier (s, st.recordings[(size_t)s].audio, st.recordings[(size_t)s].name);
     return kResultOk;
 }
 
@@ -157,9 +147,6 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
         st.norm[id] = normMirror[id].load ();
         st.has[id] = true;
     }
-    for (int s = 0; s < kCarrierSlots; ++s)
-        st.recordings[(size_t)s] = {bridge->carrier (s), bridge->carrierName (s)};
-    bridge->collectGarbage ();
     return writeState (stream, st) ? kResultOk : kResultFalse;
 }
 

@@ -1,9 +1,11 @@
-// Detonatr's engine: the chain of stages, its order, its latency, dry/wet and the defaults on an impact.
+// Detonatr's engine: the chain of stages, its order, its latency, the bypasses, dry/wet, the defaults
+// on an impact and the CPU the default chain takes.
 #include "Engine.h"
 #include "Harness.h"
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <memory>
 #include <random>
 #include <string>
@@ -17,67 +19,78 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr int kBlock = 256;
 
 // a noisy impact with a low tone in it (like a raw explosion recording): a hit every `every` seconds
-std::vector<float> impact (double seconds, double every = 0.6, unsigned seed = 7)
+std::vector<float> impact (double seconds, double every = 0.6, unsigned seed = 7, double sr = kSr)
 {
     std::mt19937 rng (seed);
     std::normal_distribution<float> noise (0.0f, 1.0f);
-    std::vector<float> x ((size_t)(seconds * kSr));
-    const int period = (int)(every * kSr);
+    std::vector<float> x ((size_t)(seconds * sr));
+    const int period = (int)(every * sr);
     for (size_t i = 0; i < x.size (); ++i)
     {
-        const double t = (double)(i % (size_t)period) / kSr;
+        const double t = (double)(i % (size_t)period) / sr;
         const double env = std::exp (-t / 0.18) * std::min (1.0, t / 0.002);
         x[i] = (float)(env * (0.3 * noise (rng) + 0.4 * std::sin (2 * kPi * 70.0 * t)));
     }
     return x;
 }
 
-std::unique_ptr<Engine> engine ()
+std::unique_ptr<Engine> engine (double sr = kSr, int block = kBlock)
 {
     auto e = std::make_unique<Engine> ();
-    e->prepare (kSr, kBlock);
+    e->prepare (sr, block);
     return e;
 }
 
 void set (Engine& e, uint32_t id, double v) { e.setParam (id, v); }
 
-// runs a mono signal through as stereo, in blocks; returns the left output
-std::vector<float> run (Engine& e, const std::vector<float>& x, int block = kBlock)
+// runs a mono signal through as stereo (the right channel a little quieter), in blocks; returns the left output
+std::vector<float> run (Engine& e, const std::vector<float>& x, int block = kBlock, std::vector<float>* right = nullptr)
 {
     std::vector<float> out (x.size ()), l (block), r (block);
+    if (right)
+        right->assign (x.size (), 0.0f);
     for (size_t a = 0; a < x.size (); a += (size_t)block)
     {
         const int n = (int)std::min ((size_t)block, x.size () - a);
-        std::copy (x.begin () + (ptrdiff_t)a, x.begin () + (ptrdiff_t)a + n, l.begin ());
-        std::copy (x.begin () + (ptrdiff_t)a, x.begin () + (ptrdiff_t)a + n, r.begin ());
+        for (int i = 0; i < n; ++i)
+        {
+            l[(size_t)i] = x[a + (size_t)i];
+            r[(size_t)i] = 0.8f * x[a + (size_t)i];
+        }
         e.process (l.data (), r.data (), l.data (), r.data (), n);
         std::copy (l.begin (), l.begin () + n, out.begin () + (ptrdiff_t)a);
+        if (right)
+            std::copy (r.begin (), r.begin () + n, right->begin () + (ptrdiff_t)a);
     }
     return out;
 }
 
-double maxDelayedError (const std::vector<float>& in, const std::vector<float>& out, int latency)
+double maxDelayedError (const std::vector<float>& in, const std::vector<float>& out, int latency, float scale = 1.0f)
 {
     double err = 0.0;
     for (size_t i = (size_t)latency; i < in.size (); ++i)
-        err = std::max (err, (double)std::fabs (out[i] - in[i - (size_t)latency]));
+        err = std::max (err, (double)std::fabs (out[i] - scale * in[i - (size_t)latency]));
     return err;
 }
 
 void allOff (Engine& e)
 {
-    set (e, kCleanOn, 0.0);
-    set (e, kToneOn, 0.0);
-    set (e, kMultibandOn, 0.0);
-    set (e, kTransientOn, 0.0);
-    set (e, kTailBase + pk::kTailOn, 0.0);
+    for (int s = 0; s < kNumStages; ++s)
+        set (e, stageOnParam (s), 0.0);
 }
 
-void setOrder (Engine& e, std::initializer_list<int> stages)
+void setOrder (Engine& e, const std::vector<int>& stages)
 {
-    uint32_t i = 0;
-    for (int s : stages)
-        set (e, kOrderBase + i++, s);
+    for (size_t i = 0; i < stages.size (); ++i)
+        set (e, kOrderBase + (uint32_t)i, stages[i]);
+}
+
+double rmsDb (const std::vector<float>& y, size_t a, size_t b)
+{
+    double s = 0.0;
+    for (size_t i = a; i < b; ++i)
+        s += (double)y[i] * y[i];
+    return 10.0 * std::log10 (s / (double)(b - a) + 1e-30);
 }
 } // namespace
 
@@ -85,120 +98,132 @@ TEST (table_is_consistent)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "%u entries, %u ids", t.size (), (unsigned)kNumParams);
-    CHECK (kMb2Base == kTailExt2Base + pk::kTailExt2Fields &&
-               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
-               t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's), then the Multiband stage's second block");
     bool ids = true;
     for (uint32_t i = 0; i < t.size (); ++i)
         ids = ids && t.info (i).id == i;
     CHECK (ids, "every entry sits at its id");
-    CHECK (std::string (t.info (kTailBase + pk::kTailOn).name) == "Saturator", "the saturator block where it belongs");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailBase + pk::kTailDrive).def == 18.0, "the Saturator stage is on, driven");
-    CHECK (mbIdAt ((uint32_t)mbBlockOf (multidyn::kSoften)) == multidyn::kSoften && mbIdAt ((uint32_t)mbBlockOf (multidyn::kRmsWindow)) == multidyn::kRmsWindow,
-           "Multidyn's later parameters map both ways");
-    CHECK (mbBlockOf (multidyn::kSatOn) == -1 && mbBlockOf (multidyn::kSatExtBase) == -1 && mbBlockOf (multidyn::kSatExt2Base) == -1,
-           "Multidyn's own saturator is left out");
-    for (uint32_t j = 0; j < kMbBlock; ++j)
+    CHECK (std::string (t.info (kTailBase + pk::kTailOn).name) == "Saturator" && t.info (kTailBase + pk::kTailOn).def == 0.0,
+           "the Smacheratr at the end, off");
+    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" && kNumParams == kTailExt2Base + 9,
+           "its third block last");
+    for (int s = 0; s < kNumStages; ++s)
     {
-        const auto& a = t.info (kMbBase + j);
-        const auto& b = multidyn::paramTable ().info ((uint32_t)mbIdAt (j));
-        CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.type == b.type, "multiband %u has Multidyn's range", j);
+        CHECK (t.info (stageOnParam (s)).def == 1.0, "%s on by default", stageName (s));
+        CHECK (std::string (t.info (stageOnParam (s)).name) == stageName (s), "%s's On is named after it", stageName (s));
+        CHECK (stageOfParam (stageOnParam (s)) == s, "%s's On belongs to it", stageName (s));
+        CHECK (t.info (kOrderBase + (uint32_t)s).def == s, "stage %d: %s", s + 1, stageName (s));
     }
-    // the second block, at the end: Slope, Soften Color and the Sub band, in Multidyn's order
-    CHECK (kMb2Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kMb2Base + kMb2Block &&
-               mbParam (multidyn::kXoverSlope) == kMb2Base && mbParam (multidyn::kSubOutput) == kNumParams - 1,
-           "the second Multiband block ends the table");
-    CHECK (std::string (t.info (mbParam (multidyn::kSubOn)).name) == "Multiband Sub Band" &&
-               std::string (t.info (mbParam (multidyn::kXoverSlope)).name) == "Multiband Crossover Slope",
-           "named like Multidyn's, with Multiband in front");
-    for (uint32_t md = 0; md < multidyn::kNumParams; ++md)
-    {
-        const int64_t id = detIdOfMd (md);
-        if (id < 0)
-            continue;
-        CHECK (mdIdOf ((uint32_t)id) == (int64_t)md && isMbParam ((uint32_t)id) && mbParam (md) == (uint32_t)id, "Multidyn %u maps both ways", md);
-        const auto& a = t.info ((uint32_t)id);
-        const auto& b = multidyn::paramTable ().info (md);
-        CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.type == b.type && a.curve == b.curve, "%s has Multidyn's range", a.name);
-    }
-    CHECK (detIdOfMd (multidyn::kSatOn) == -1 && detIdOfMd (multidyn::kScOn) == (int64_t)(kMbBase + multidyn::kScOn),
-           "Multidyn's side-chain On sits in the first block (unused), its saturator not");
+    CHECK (stageOfParam (kOutput) == -1 && stageOfParam (kTailBase) == -1, "the master and tail parameters belong to no stage");
 }
 
-TEST (multiband_new_parameters_reach_the_stage)
+TEST (defaults_are_the_users_settings)
 {
-    // the Multiband stage alone: the Sub band (80 Hz) compresses a loud 30 Hz tone, and Soften Color on
-    // keeps the latency
-    auto tone = [] (double hz, double seconds) {
-        std::vector<float> x ((size_t)(seconds * kSr));
-        for (size_t i = 0; i < x.size (); ++i)
-            x[i] = (float)(0.5 * std::sin (2 * kPi * hz * (double)i / kSr));
-        return x;
-    };
-    auto render = [&] (double ratio, bool color, int& latency) {
-        auto e = engine ();
-        allOff (*e);
-        set (*e, kMultibandOn, 1.0);
-        set (*e, mbParam (multidyn::kSubOn), 1.0);
-        set (*e, mbParam (multidyn::kSubFreq), 80.0);
-        set (*e, mbParam (multidyn::kSubThresh), -30.0);
-        set (*e, mbParam (multidyn::kSubRatio), ratio);
-        set (*e, mbParam (multidyn::kSoftenColor), color ? 1.0 : 0.0);
-        e->reset ();
-        latency = e->latency ();
-        const auto y = run (*e, tone (30.0, 2.0));
-        double s = 0.0;
-        for (size_t i = 48000; i < 96000; ++i)
-            s += (double)y[i] * y[i];
-        return 10.0 * std::log10 (s / 48000.0 + 1e-30);
-    };
-    int l0 = 0, l1 = 0, l2 = 0;
-    const double off = render (1.0, false, l0), on = render (8.0, false, l1);
-    render (1.0, true, l2);
-    std::printf ("    30 Hz through the Multiband stage: the Sub band at 1:1 %.1f dB, at 1:8 %.1f dB\n", off, on);
-    CHECK (on < off - 10.0, "the Sub band turns the loud sub down: %.1f vs %.1f dB", on, off);
-    CHECK (l0 == l1 && l0 == l2, "the latency stays: %d / %d / %d", l0, l1, l2);
+    auto def = [] (uint32_t id) { return paramTable ().info (id).def; };
+    CHECK (def (kVocBands) == 32 && std::fabs (def (kVocRatio) - 0.46) < 1e-12, "Vocoder: 32 bands, Ratio 0.46");
+    CHECK (def (kSpkMode) == 1 && def (kSpkDepth) == 5.1 && def (kSpkSensitivity) == 3.7 && def (kSpkDecay) == 7.1 &&
+               def (kSpkSharpness) == 1.3 && def (kSpkDecayTilt) == 0.0 && def (kSpkLink) == 1.0 && def (kSpkMix) == 1.0 &&
+               def (kSpkTrim) == 0.0,
+           "Spike: Spiff's settings (boost, 5.1, 3.7, 7.1, 1.3)");
+    CHECK (def (kTr1Base + kTrGain) == -8.49 && def (kTr1Base + kTrThreshold) == -80.0 && def (kTr1Base + kTrRatio) == 0.27 &&
+               def (kTr1Base + kTrOvershoot) == 25.94 && def (kTr1Base + kTrRise) == 0.10 && def (kTr1Base + kTrRecovery) == 77.46 &&
+               std::fabs (def (kTr1Base + kTrOverdrive) - 0.6088) < 1e-12,
+           "Transient 1: TransMod's settings");
+    CHECK (def (kTr2Base + kTrGain) == -1.47 && def (kTr2Base + kTrThreshold) == -14.8 && def (kTr2Base + kTrRatio) == 0.58 &&
+               def (kTr2Base + kTrOvershoot) == 6.42 && def (kTr2Base + kTrOverdrive) == 0.0,
+           "Transient 2: TransMod's settings");
+    CHECK (def (kLim1Base + kLimGain) == 4.9 && def (kLim2Base + kLimGain) == 0.0 && def (kLim1Base + kLimCeiling) == 0.0 &&
+               def (kLim2Base + kLimCeiling) == 0.0 && def (kLim1Base + kLimTruePeak) == 1.0 && def (kLim2Base + kLimTruePeak) == 1.0,
+           "Limiters: +4.9 and 0 dB into 0 dBTP, True Peak");
+    bool same = true;
+    for (uint32_t f = 1; f < kCompFields; ++f)
+        same = same && def (kComp1Base + f) == def (kComp2Base + f);
+    CHECK (same && def (kComp1Base + kCompAutoThreshold) == 1.0 && def (kComp1Base + kCompAutoRelease) == 1.0 &&
+               def (kComp1Base + kCompAutoGain) == 1.0 && def (kComp1Base + kCompDry) == -60.0,
+           "Comps: the same, Auto Threshold, Auto Release, Auto Gain, no Dry");
+    CHECK (def (kTapeSplit) == 200.0 && def (kTapeLowMix) == 1.0 && def (kTapeLowDyn) == 0.0, "Tape: split at 200 Hz, mix 100 %%");
 }
 
 TEST (order_resolves)
 {
-    const int def[kNumStages] = {0, 1, 2, 3, 4};
+    int def[kNumStages];
+    for (int i = 0; i < kNumStages; ++i)
+        def[i] = i;
     Order o = resolveOrder (def);
-    CHECK (o.stage[0] == kStageClean && o.stage[4] == kStageSaturator, "the default order");
-    const int dup[kNumStages] = {kStageSaturator, kStageSaturator, kStageTone, 9, kStageTone};
+    CHECK (o.stage[0] == kStageVocoder && o.stage[9] == kStageLimiter2, "the default order");
+    int dup[kNumStages] = {kStageTape, kStageTape, kStageSpike, 99, kStageSpike, kStageTape, kStageTape, kStageTape, kStageTape, kStageTape};
     o = resolveOrder (dup);
-    // saturator first, tone, then the ones left out in the default order
-    CHECK (o.stage[0] == kStageSaturator && o.stage[1] == kStageTone && o.stage[2] == kStageClean && o.stage[3] == kStageMultiband &&
-               o.stage[4] == kStageTransient,
-           "duplicates run once, the rest after: %d %d %d %d %d", o.stage[0], o.stage[1], o.stage[2], o.stage[3], o.stage[4]);
+    CHECK (o.stage[0] == kStageTape && o.stage[1] == kStageSpike && o.stage[2] == kStageVocoder && o.stage[3] == kStageMotion &&
+               o.stage[9] == kStageLimiter2,
+           "duplicates run once, the rest after in the default order");
     bool seen[kNumStages] {};
     for (int s : o.stage)
         seen[s] = true;
-    CHECK (seen[0] && seen[1] && seen[2] && seen[3] && seen[4], "every stage runs");
+    CHECK (std::all_of (seen, seen + kNumStages, [] (bool b) { return b; }), "every stage runs");
 }
 
 TEST (latency_is_constant)
 {
-    auto e = engine ();
-    const int l0 = e->latency ();
-    std::printf ("    latency %d samples (%.2f ms)\n", l0, 1000.0 * l0 / kSr);
-    allOff (*e);
-    CHECK (e->latency () == l0, "off: %d vs %d", e->latency (), l0);
-    setOrder (*e, {4, 3, 2, 1, 0});
-    CHECK (e->latency () == l0, "reversed: %d vs %d", e->latency (), l0);
+    std::mt19937 rng (2);
+    for (double sr : {44100.0, 48000.0, 96000.0})
+    {
+        auto e = engine (sr, 512);
+        const int l0 = e->latency ();
+        std::printf ("    %.0f Hz: latency %d samples (%.2f ms)\n", sr, l0, 1000.0 * l0 / sr);
+        bool same = true;
+        for (int round = 0; round < 20; ++round)
+        {
+            std::vector<int> o (kNumStages);
+            for (int i = 0; i < kNumStages; ++i)
+                o[(size_t)i] = i;
+            std::shuffle (o.begin (), o.end (), rng);
+            setOrder (*e, o);
+            for (int s = 0; s < kNumStages; ++s)
+                set (*e, stageOnParam (s), (rng () & 1) ? 1.0 : 0.0);
+            set (*e, kVocBands, 8 + (double)(rng () % 90));
+            set (*e, kLim1Base + kLimLookahead, 0.1 + (rng () % 49) * 0.1);
+            set (*e, kTapeSplit, 80.0 + (double)(rng () % 900));
+            set (*e, kTailBase + pk::kTailOn, (rng () & 1) ? 1.0 : 0.0);
+            same = same && e->latency () == l0;
+        }
+        CHECK (same, "%.0f Hz: the same latency in every order, with any stage on or off", sr);
+    }
 }
 
-TEST (all_off_is_a_delay)
+TEST (bypassed_is_the_delayed_input)
 {
+    for (double sr : {44100.0, 48000.0, 96000.0})
+    {
+        std::mt19937 rng (5);
+        for (int round = 0; round < 3; ++round)
+        {
+            auto e = engine (sr, 512);
+            allOff (*e);
+            std::vector<int> o (kNumStages);
+            for (int i = 0; i < kNumStages; ++i)
+                o[(size_t)i] = i;
+            std::shuffle (o.begin (), o.end (), rng);
+            setOrder (*e, o);
+            e->reset ();
+            const auto x = impact (1.0, 0.6, 7, sr);
+            std::vector<float> r;
+            const auto y = run (*e, x, 173, &r);
+            const double err = std::max (maxDelayedError (x, y, e->latency ()), maxDelayedError (x, r, e->latency (), 0.8f));
+            CHECK (err == 0.0, "%.0f Hz, every stage off (order %d): the input, delayed, exactly (%.2g)", sr, round, err);
+        }
+    }
+}
+
+TEST (each_stage_alone_lines_up)
+{
+    // a stage on its own, at Mix 0 where it has one: still lined up with the others' delays
     auto e = engine ();
     allOff (*e);
+    set (*e, kMotOn, 1.0);
+    set (*e, kMotMix, 0.0);
     e->reset ();
-    const auto x = impact (1.5);
-    const auto y = run (*e, x);
-    const double err = maxDelayedError (x, y, e->latency ());
-    std::printf ("    largest difference from the delayed input %.2g\n", err);
-    CHECK (err < 1e-4, "every stage off passes the input, delayed: %.2g", err);
+    const auto x = impact (1.0);
+    const auto y = run (*e, x, 100);
+    CHECK (maxDelayedError (x, y, e->latency ()) < 1e-6, "Motion at Mix 0: the delayed input");
 }
 
 TEST (dry_is_lined_up)
@@ -214,67 +239,71 @@ TEST (dry_is_lined_up)
 
 TEST (defaults_on_an_impact)
 {
-    auto e = engine ();
+    // the default chain: sounds, never over 0 dBFS (Limiter 2 at 0 dBTP last), and each stage keeps
+    // the level in the same region as it went in
     const auto x = impact (3.0);
-    const auto y = run (*e, x);
-    bool finite = true;
-    double peak = 0.0, sum = 0.0;
-    for (float v : y)
+    const double inDb = rmsDb (x, x.size () / 3, x.size ());
+    std::printf ("    input rms %.1f dBFS\n", inDb);
+    double last = inDb;
+    bool matched = true;
+    auto e0 = engine ();
+    for (int k = 1; k <= kNumStages; ++k)
     {
-        finite = finite && std::isfinite (v);
-        peak = std::max (peak, (double)std::fabs (v));
-        sum += (double)v * v;
-    }
-    const double rms = std::sqrt (sum / (double)y.size ());
-    std::printf ("    output peak %.1f dBFS, rms %.1f dBFS\n", 20 * std::log10 (peak + 1e-12), 20 * std::log10 (rms + 1e-12));
-    CHECK (finite, "finite");
-    CHECK (rms > 1e-3, "sounds: rms %.2g", rms);
-    CHECK (peak < 4.0, "not wild: peak %.2f", peak);
-}
-
-// spectral flatness (0: tonal .. 1: noise) of the loudest 4096-sample frames, averaged
-static double flatness (const std::vector<float>& x)
-{
-    constexpr int N = 4096;
-    double total = 0.0;
-    int frames = 0;
-    for (size_t a = 0; a + N <= x.size (); a += N)
-    {
-        double e = 0.0;
-        for (int i = 0; i < N; ++i)
-            e += (double)x[a + (size_t)i] * x[a + (size_t)i];
-        if (e < 1e-4)
-            continue;
-        double logSum = 0.0, sum = 0.0;
-        for (int k = 1; k < N / 2; ++k)
+        auto e = engine ();
+        for (int s = k; s < kNumStages; ++s)
+            set (*e, stageOnParam (s), 0.0);
+        e->reset ();
+        std::vector<float> r;
+        const auto y = run (*e, x, kBlock, &r);
+        const double lvl = rmsDb (y, y.size () / 3, y.size ()); // once settled
+        double pk = 0.0;
+        bool finite = true;
+        for (size_t i = 0; i < y.size (); ++i)
         {
-            double re = 0.0, im = 0.0;
-            for (int i = 0; i < N; ++i)
-            {
-                const double w = 0.5 - 0.5 * std::cos (2 * kPi * i / N);
-                re += w * x[a + (size_t)i] * std::cos (2 * kPi * k * i / N);
-                im -= w * x[a + (size_t)i] * std::sin (2 * kPi * k * i / N);
-            }
-            const double p = re * re + im * im + 1e-20;
-            logSum += std::log (p);
-            sum += p;
+            pk = std::max ({pk, (double)std::fabs (y[i]), (double)std::fabs (r[i])});
+            finite = finite && std::isfinite (y[i]) && std::isfinite (r[i]);
         }
-        total += std::exp (logSum / (N / 2 - 1)) / (sum / (N / 2 - 1));
-        ++frames;
+        std::printf ("    up to %-12s rms %6.1f dBFS (%+5.1f dB), peak %6.2f dBFS\n", stageName (k - 1), lvl, lvl - last, 20.0 * std::log10 (pk + 1e-12));
+        CHECK (finite, "finite");
+        matched = matched && std::fabs (lvl - last) < 12.0;
+        last = lvl;
+        if (k == kNumStages)
+        {
+            CHECK (pk <= 1.0, "the default chain does not clip: peak %.4f", pk);
+            CHECK (lvl > inDb - 6.0 && lvl < 0.0, "and is loud, not exploding: %.1f dBFS rms", lvl);
+        }
     }
-    return frames ? total / frames : 1.0;
+    CHECK (matched, "no stage moves the level by 12 dB or more");
 }
 
-TEST (defaults_make_it_tonal)
+TEST (switching_a_stage_crossfades)
 {
-    // the point of Detonatr: a noisy impact comes out tonal (designed impacts measure 0.000 .. 0.006)
+    // turning the Tape stage off and on while a tone plays: no step in the output
     auto e = engine ();
-    const auto x = impact (1.2, 0.6, 11);
-    const auto y = run (*e, x);
-    const std::vector<float> yAligned (y.begin () + e->latency (), y.end ());
-    const double fin = flatness (x), fout = flatness (yAligned);
-    std::printf ("    flatness in %.3f, out %.4f\n", fin, fout);
-    CHECK (fout < 0.006, "as tonal as designed impacts (0.000 .. 0.006): %.4f (input %.3f)", fout, fin);
+    allOff (*e);
+    set (*e, kTapeOn, 1.0);
+    e->reset ();
+    std::vector<float> x (188 * kBlock); // about a second, whole blocks
+    for (size_t i = 0; i < x.size (); ++i)
+        x[i] = (float)(0.3 * std::sin (2 * kPi * 100.0 * (double)i / kSr));
+    std::vector<float> y (x.size ()), l (kBlock), r (kBlock);
+    for (size_t a = 0; a < x.size (); a += kBlock)
+    {
+        if (a == 12800)
+            set (*e, kTapeOn, 0.0);
+        if (a == 25600)
+            set (*e, kTapeOn, 1.0);
+        std::copy (x.begin () + (ptrdiff_t)a, x.begin () + (ptrdiff_t)a + kBlock, l.begin ());
+        std::copy (l.begin (), l.end (), r.begin ());
+        e->process (l.data (), r.data (), l.data (), r.data (), kBlock);
+        std::copy (l.begin (), l.end (), y.begin () + (ptrdiff_t)a);
+    }
+    double jump = 0.0;
+    for (size_t i = 12000; i + 1 < y.size (); ++i)
+        jump = std::max (jump, (double)std::fabs (y[i + 1] - y[i]));
+    const double natural = 0.3 * 2 * kPi * 100.0 / kSr;
+    std::printf ("    largest step %.4f (the tone's own %.4f)\n", jump, natural);
+    CHECK (jump < 3.0 * natural, "no click: %.4f", jump);
 }
 
 TEST (order_changes_the_sound)
@@ -282,7 +311,8 @@ TEST (order_changes_the_sound)
     const auto x = impact (1.5);
     auto a = engine ();
     auto b = engine ();
-    setOrder (*b, {kStageClean, kStageTone, kStageMultiband, kStageSaturator, kStageTransient}); // saturate, then drop
+    setOrder (*b, {kStageLimiter2, kStageVocoder, kStageSpike, kStageMotion, kStageTransient1, kStageLimiter1, kStageTransient2, kStageComp1,
+                   kStageComp2, kStageTape});
     a->reset ();
     b->reset ();
     const auto ya = run (*a, x), yb = run (*b, x);
@@ -292,37 +322,30 @@ TEST (order_changes_the_sound)
         diff += (double)(ya[i] - yb[i]) * (ya[i] - yb[i]);
         ref += (double)ya[i] * ya[i];
     }
-    std::printf ("    difference %.1f dB under the default order's output\n", 10 * std::log10 (diff / (ref + 1e-20) + 1e-20));
-    CHECK (diff > 1e-3 * ref, "moving the Saturator before the Transient stage changes the output");
+    CHECK (diff > 1e-3 * ref, "moving the last limiter to the front changes the output");
 }
 
-TEST (recordings_play)
+TEST (cpu_of_the_default_chain)
 {
-    auto e = engine ();
-    auto c = std::make_shared<Carrier> ();
-    c->frames = (int)kSr;
-    c->sampleRate = kSr;
-    for (int ch = 0; ch < 2; ++ch)
+    // the full default chain at 48 kHz, stereo: CPU time (other programs do not count), best of three
+    auto e = engine (kSr, 512);
+    const auto x = impact (10.0);
+    std::vector<float> l (512), r (512);
+    double best = 1e9;
+    for (int run = 0; run < 3; ++run)
     {
-        c->ch[ch].resize ((size_t)c->frames);
-        for (int i = 0; i < c->frames; ++i)
-            c->ch[ch][(size_t)i] = (float)(0.5 * std::sin (2 * kPi * 440.0 * i / kSr));
+        e->reset ();
+        const std::clock_t t0 = std::clock ();
+        for (size_t a = 0; a + 512 <= x.size (); a += 512)
+        {
+            std::copy (x.begin () + (ptrdiff_t)a, x.begin () + (ptrdiff_t)a + 512, l.begin ());
+            std::copy (l.begin (), l.end (), r.begin ());
+            e->process (l.data (), r.data (), l.data (), r.data (), 512);
+        }
+        best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC / 10.0);
     }
-    set (*e, kToneDry, 0.0);
-    set (*e, kResonators, 0.0);
-    set (*e, kCarriers, 1.0);
-    e->setCarrier (0, c.get ());
-    const auto x = impact (1.0);
-    const auto y = run (*e, x);
-    bool finite = true;
-    for (float v : y)
-        finite = finite && std::isfinite (v);
-    CHECK (finite, "finite with a recording");
-    e->setCarrier (0, nullptr);
-    const auto z = run (*e, x);
-    for (float v : z)
-        finite = finite && std::isfinite (v);
-    CHECK (finite, "finite after it is taken out");
+    std::printf ("    CPU: %.2f%% of one core (the default chain, 48 kHz stereo, best of three)\n", 100.0 * best);
+    CHECK (best < 0.25, "under 25 %% of a core: %.1f %%", 100.0 * best);
 }
 
 TEST (fuzz)
@@ -332,12 +355,16 @@ TEST (fuzz)
     auto e = engine ();
     const auto x = impact (0.5);
     bool finite = true;
-    for (int round = 0; round < 20; ++round)
+    for (int round = 0; round < 30; ++round)
     {
         for (uint32_t id = 0; id < kNumParams; ++id)
             if (u (rng) < 0.3)
                 e->setParam (id, toPlain (id, u (rng)));
-        const auto y = run (*e, x, 1 + (int)(u (rng) * 700));
+        auto in = x;
+        if (round % 5 == 0)
+            for (auto& v : in)
+                v *= 20.0f; // very loud
+        const auto y = run (*e, in, 1 + (int)(u (rng) * 700));
         for (float v : y)
             finite = finite && std::isfinite (v);
     }

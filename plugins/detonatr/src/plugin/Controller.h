@@ -6,8 +6,6 @@
 
 #include "pluginkit/vst/ControllerBase.h"
 
-#include <string>
-
 namespace detonatr {
 
 class Controller : public pk::ControllerBase
@@ -22,10 +20,6 @@ public:
     Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override;
 
     Bridge* getBridge () const { return bridge; }
-
-    // The Tone stage's recordings (UI thread). The project keeps their audio.
-    bool loadRecording (int slot, const std::string& path, std::string& error);
-    void clearRecording (int slot);
 
 private:
     Bridge* bridge = nullptr;

@@ -1,35 +1,28 @@
 #pragma once
 
 #include "Params.h"
-#include "Tone.h"
 
 #include "pluginterfaces/base/ibstream.h"
 
 #include <array>
-#include <memory>
-#include <string>
 
 namespace detonatr {
 
-// The parameters, then the Tone stage's recordings (their audio, so a project keeps them).
+// The parameters (each one's ID and normalized value).
 struct State
 {
     std::array<double, kNumParams> norm {};
     std::array<bool, kNumParams> has {};
-    struct Recording
-    {
-        std::shared_ptr<const Carrier> audio; // null: empty
-        std::string name;
-    };
-    std::array<Recording, kCarrierSlots> recordings;
-    bool hasRecordings = false; // the stream had the recordings' section
+    bool fromOldDetonatr = false; // the stream was a version 1 or 2 state: it loaded as the defaults
 };
 
-// Version 2: the Multiband stage's OTT gain staging (1 is migrated with multidyn::migrateOldBakedNorm).
-constexpr Steinberg::int32 kStateVersion = 2;
+// Version 3: the rebuilt Detonatr (the user's explosion chain), a new parameter table from ID 0.
+// Versions 1 and 2 (the Clean / Tone / Multiband / Transient / Saturator Detonatr, whose stream also
+// held recordings) load as the defaults: the old stages are gone, by the user's choice.
+constexpr Steinberg::int32 kStateVersion = 3;
+constexpr Steinberg::int32 kFirstRebuiltVersion = 3;
 // version: what the stream says it is (the tests write an older one)
 bool writeState (Steinberg::IBStream* stream, const State& s, Steinberg::int32 version = kStateVersion);
-// withRecordings false: only the parameters (the controller's copy of the state).
-bool readState (Steinberg::IBStream* stream, State& s, bool withRecordings = true);
+bool readState (Steinberg::IBStream* stream, State& s);
 
 } // namespace detonatr

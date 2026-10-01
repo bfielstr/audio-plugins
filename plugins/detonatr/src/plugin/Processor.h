@@ -37,8 +37,6 @@ private:
     Bridge* bridge = nullptr;
     std::array<std::atomic<double>, kNumParams> normMirror;
     std::atomic<bool> reloadParams {false};
-    CarrierPtr localCarrier[kCarrierSlots];
-    uint32_t carrierGen[kCarrierSlots] {};
     double sampleRate = 48000.0;
 };
 

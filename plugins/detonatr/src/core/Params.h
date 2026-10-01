@@ -1,100 +1,166 @@
-// Detonatr parameters. IDs are persisted in projects: only ever append. The Saturator stage's
-// extended block comes last, so it can grow; a new Detonatr parameter goes in a block after it (and
-// from then on the extended block stays as it is).
+// Detonatr parameters. IDs are persisted in projects: only ever append (a new parameter goes after
+// the tail's third block, at a fixed number). This table is new in state version 3: Detonatr was
+// rebuilt around the user's explosion chain, and a state from before (version 2 or less) loads as
+// the defaults (by the user's choice; see the README).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
 #include "pluginkit/TailParams.h"
 
-#include "multidyn/src/core/Params.h"
-
 #include <cstdint>
 
 namespace detonatr {
 
-static_assert (pk::kTailFields == 6, "Detonatr's Multiband IDs start after the six tail fields");
+// The stages, in the default order (the user's explosion chain in REAPER).
+enum Stage
+{
+    kStageVocoder = 0,
+    kStageSpike,
+    kStageMotion,
+    kStageTransient1,
+    kStageLimiter1,
+    kStageTransient2,
+    kStageComp1,
+    kStageComp2,
+    kStageTape,
+    kStageLimiter2,
+    kNumStages
+};
+const char* stageName (int stage);      // "Transient 1"
+const char* stageShortName (int stage); // for the strip: "Trans 1"
 
-// The stages, in the default order (a sound designer's chain: clean the source, make it tonal,
-// squash it, cut it to a spike and a quiet body, then drive it back up loud).
-enum Stage { kStageClean = 0, kStageTone, kStageMultiband, kStageTransient, kStageSaturator, kNumStages };
-const char* stageName (int stage);
-
-// The Multiband stage is Multidyn without its side-chain and its own saturator, in two blocks. The first:
-// block position j holds Multidyn parameter j for j < kSatOn, then RMS Window and Soften. The second
-// (at the end of the table, kMb2Base): Multidyn's parameters from the crossovers' Slope on (Slope,
-// Soften Color and the Sub band), in Multidyn's order.
-constexpr uint32_t kMbBlock = multidyn::kSatOn + 2;
-constexpr uint32_t kMb2Block = 9; // multidyn::kXoverSlope .. multidyn::kSubOutput
-static_assert (multidyn::kXoverSlope + kMb2Block == multidyn::kNumParams,
-               "a Multidyn parameter added after the Sub band goes in a new block at the end of Detonatr's table");
-int64_t mbIdAt (uint32_t block);    // the Multidyn ID at a first-block position (-1: none)
-int64_t mbBlockOf (uint32_t mdId); // the first-block position of a Multidyn ID (-1: not in the first block)
-int64_t mdIdOf (uint32_t id);      // the Multidyn ID of a Detonatr parameter (-1: not a Multiband one)
-int64_t detIdOfMd (uint32_t mdId); // the Detonatr ID of a Multidyn parameter (-1: not in Detonatr)
+// The fields of the stages that come twice (each instance a block of IDs at its base).
+// (plain numbers, so they add to the IDs without mixing enumerations)
+constexpr uint32_t kTrOn = 0;
+constexpr uint32_t kTrGain = 1; // dB, into the process
+constexpr uint32_t kTrThreshold = 2; // dB
+constexpr uint32_t kTrDeadband = 3; // dB
+constexpr uint32_t kTrRatio = 4; // -1 .. 1
+constexpr uint32_t kTrOvershoot = 5; // ms
+constexpr uint32_t kTrRise = 6; // ms
+constexpr uint32_t kTrRecovery = 7; // ms
+constexpr uint32_t kTrOverdrive = 8; // 0 .. 1
+constexpr uint32_t kTrOutput = 9; // dB
+constexpr uint32_t kTrMix = 10; // 0 .. 1
+constexpr uint32_t kTrFields = 11;
+// (plain numbers, so they add to the IDs without mixing enumerations)
+constexpr uint32_t kLimOn = 0;
+constexpr uint32_t kLimGain = 1; // dB
+constexpr uint32_t kLimCeiling = 2; // dB
+constexpr uint32_t kLimLookahead = 3; // ms
+constexpr uint32_t kLimAttack = 4; // ms
+constexpr uint32_t kLimRelease = 5; // ms
+constexpr uint32_t kLimLink = 6; // 0 .. 1
+constexpr uint32_t kLimTruePeak = 7;
+constexpr uint32_t kLimFields = 8;
+// (plain numbers, so they add to the IDs without mixing enumerations)
+constexpr uint32_t kCompOn = 0;
+constexpr uint32_t kCompThreshold = 1; // dB
+constexpr uint32_t kCompAutoThreshold = 2;
+constexpr uint32_t kCompRatio = 3;
+constexpr uint32_t kCompAttack = 4; // ms
+constexpr uint32_t kCompRelease = 5; // ms
+constexpr uint32_t kCompAutoRelease = 6;
+constexpr uint32_t kCompKnee = 7; // dB
+constexpr uint32_t kCompRange = 8; // dB
+constexpr uint32_t kCompHold = 9; // ms
+constexpr uint32_t kCompAutoGain = 10;
+constexpr uint32_t kCompDry = 11; // dB (-60: none)
+constexpr uint32_t kCompXoverLow = 12; // Hz
+constexpr uint32_t kCompXoverHigh = 13; // Hz
+constexpr uint32_t kCompOutput = 14; // dB
+constexpr uint32_t kCompFields = 15;
 
 enum ParamId : uint32_t
 {
     kOutput = 0, // dB
     kDryWet,
-    kOrder1, // which stage runs 1st .. 5th (a Stage); a stage chosen twice runs once, where it comes
-    kOrder2, // first, and a stage left out runs after the others (in the default order)
-    kOrder3,
-    kOrder4,
-    kOrder5,
-    kCleanOn,
-    kDenoise,  // 0 .. 1
-    kDereverb, // 0 .. 1
-    kToneOn,
-    kRoot,       // Hz, the resonators' fundamental
-    kMaterial,   // a Material
-    kDecay,      // ms the resonators ring
-    kResonators, // 0 .. 1
-    kCarriers,   // 0 .. 1: the vocoded recordings
-    kCarrierLevel1, // 0 .. 1 per recording
-    kCarrierLevel2,
-    kCarrierLevel3,
-    kCarrierLevel4,
-    kToneDry,     // 0 .. 1: the input through the Tone stage as it is
-    kDisperse,    // 0 .. 1
-    kDisperseFreq, // Hz
-    kMultibandOn,
-    kTransientOn,
-    kSpike,       // ms
-    kDrop,        // dB
-    kFall,        // ms
-    kSensitivity, // dB
-    kTailBase,                             // the Saturator stage: pk::kTailFields entries (its On is the stage's)
-    kMbBase = kTailBase + pk::kTailFields, // the Multiband stage: kMbBlock entries (mbIdAt)
-    kTailExtBase = kMbBase + kMbBlock,     // the rest of the Saturator stage: pk::kTailExtFields entries
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the Saturator stage: pk::kTailExt2Fields entries (the last block)
-    kMb2Base = kTailExt2Base + pk::kTailExt2Fields, // the Multiband stage's second block: kMb2Block entries
-    kNumParams = kMb2Base + kMb2Block
+    kOrder1, // which stage runs 1st .. 10th (a Stage); a stage chosen twice runs once, where it comes
+    // first, and a stage left out runs after the others (in the default order)
+    kOrderLast = kOrder1 + kNumStages - 1,
+    // Vocoder
+    kVocOn,
+    kVocBands,   // 8 .. 100
+    kVocLow,     // Hz
+    kVocHigh,    // Hz
+    kVocOrder,   // 0 .. 2: one to three filter sections
+    kVocAttack,  // ms
+    kVocRelease, // ms
+    kVocRatio,   // 0 .. 1: the input .. the vocoded signal
+    // Spike
+    kSpkOn,
+    kSpkMode,        // Cut, Boost
+    kSpkDepth,       // 0 .. 10
+    kSpkSensitivity, // 0 .. 10
+    kSpkDecay,       // 0 .. 10
+    kSpkSharpness,   // 0 .. 10
+    kSpkDecayTilt,   // -10 .. 10
+    kSpkLink,        // 0 .. 1
+    kSpkLow,         // Hz
+    kSpkHigh,        // Hz
+    kSpkMix,         // 0 .. 1
+    kSpkTrim,        // dB
+    // Motion
+    kMotOn,
+    kMotOrbs,     // 1 .. 16
+    kMotPattern,  // Orbit, Swarm
+    kMotSpeed,    // m/s
+    kMotDistance, // m
+    kMotRadius,   // m
+    kMotSpread,   // 0 .. 1
+    kMotRandom,   // 0 .. 1
+    kMotFloor,
+    kMotMix, // 0 .. 1
+    // the stages that come twice, in chain order
+    kTr1Base,
+    kLim1Base = kTr1Base + kTrFields,
+    kTr2Base = kLim1Base + kLimFields,
+    kComp1Base = kTr2Base + kTrFields,
+    kComp2Base = kComp1Base + kCompFields,
+    // Tape
+    kTapeOn = kComp2Base + kCompFields,
+    kTapeSplit,     // Hz
+    kTapeLowDrive,  // dB
+    kTapeLowMix,    // 0 .. 1
+    kTapeLowDyn,    // -1 .. 1
+    kTapeLowLevel,  // dB
+    kTapeHighDrive, // dB
+    kTapeHighMix,
+    kTapeHighDyn,
+    kTapeHighLevel,
+    kLim2Base,
+    // the Smacheratr at the end of the chain: its three blocks
+    kTailBase = kLim2Base + kLimFields,
+    kTailExtBase = kTailBase + pk::kTailFields,
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields,
+    kNumParams = kTailExt2Base + pk::kTailExt2Fields
 };
 // pinned: IDs are persisted
-static_assert (kMbBase == 35 && kTailExtBase == 93 && kTailExt2Base == 110 && kMb2Base == 119 && kNumParams == 128,
-               "the Multiband stage's second block is 119 .. 127");
+static_assert (kOrderLast == 11 && kVocOn == 12 && kSpkOn == 20 && kMotOn == 32 && kTr1Base == 42 && kLim1Base == 53 && kTr2Base == 61 &&
+                   kComp1Base == 72 && kComp2Base == 87 && kTapeOn == 102 && kLim2Base == 112 && kTailBase == 120 && kTailExtBase == 126 &&
+                   kTailExt2Base == 143 && kNumParams == 152,
+               "Detonatr's parameter IDs are fixed (version 3's table)");
+static_assert (pk::kTailFields == 6 && pk::kTailExtFields == 17 && pk::kTailExt2Fields == 9, "the tail's blocks as they were");
 
 constexpr uint32_t kOrderBase = kOrder1;
-constexpr bool isTailParam (uint32_t id)
-{
-    return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
-           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
-}
+constexpr uint32_t kTransientBase[2] = {kTr1Base, kTr2Base};
+constexpr uint32_t kLimiterBase[2] = {kLim1Base, kLim2Base};
+constexpr uint32_t kCompBase[2] = {kComp1Base, kComp2Base};
+
+constexpr bool isTailParam (uint32_t id) { return id >= kTailBase && id < kNumParams; }
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+    return id >= kTailExt2Base  ? (uint32_t)pk::kTailFields + (uint32_t)pk::kTailExtFields + (id - kTailExt2Base)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }
-constexpr bool isMbParam (uint32_t id) { return (id >= kMbBase && id < kMbBase + kMbBlock) || (id >= kMb2Base && id < kMb2Base + kMb2Block); }
-// the Detonatr ID of a Multidyn parameter in Detonatr (detIdOfMd must not be -1)
-constexpr uint32_t mbParam (uint32_t mdId)
-{
-    return mdId >= multidyn::kXoverSlope ? kMb2Base + (mdId - multidyn::kXoverSlope)
-                                         : kMbBase + (mdId == multidyn::kRmsWindow ? multidyn::kSatOn : mdId == multidyn::kSoften ? multidyn::kSatOn + 1 : mdId);
-}
 
-// Where each stage runs, from the five order parameters (see kOrder1).
+// the On parameter of a stage
+uint32_t stageOnParam (int stage);
+// the stage a parameter belongs to (-1: the master ones, the order, the tail)
+int stageOfParam (uint32_t id);
+
+// Where each stage runs, from the order parameters (see kOrder1).
 struct Order
 {
     int stage[kNumStages]; // stage[i]: the stage that runs i-th

@@ -27,7 +27,7 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
     if (!stream)
         return kInvalidArgument;
     State st;
-    if (!readState (stream, st, false))
+    if (!readState (stream, st))
         return kResultFalse;
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParamNormalized (id, st.norm[id]);
@@ -60,27 +60,6 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
         return kResultOk;
     }
     return pk::ControllerBase::notify (message);
-}
-
-bool Controller::loadRecording (int slot, const std::string& path, std::string& error)
-{
-    if (!bridge)
-    {
-        error = "Not connected to the audio engine";
-        return false;
-    }
-    if (!bridge->loadCarrier (slot, path, error))
-        return false;
-    markDirty ();
-    return true;
-}
-
-void Controller::clearRecording (int slot)
-{
-    if (!bridge)
-        return;
-    bridge->setCarrier (slot, nullptr, {});
-    markDirty ();
 }
 
 } // namespace detonatr
