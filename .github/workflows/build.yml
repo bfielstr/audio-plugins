@@ -39,7 +39,10 @@ jobs:
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
+        # (a stalled package mirror once hung this step for over an hour: give up and retry instead)
+        timeout-minutes: 10
         run: |
+          echo 'Acquire::Retries "3"; Acquire::http::Timeout "30"; Acquire::https::Timeout "30";' | sudo tee /etc/apt/apt.conf.d/80-retries
           sudo apt-get update
           sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
             libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev \
