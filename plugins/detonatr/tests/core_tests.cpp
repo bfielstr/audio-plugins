@@ -208,7 +208,8 @@ TEST (bypassed_is_the_delayed_input)
             std::vector<float> r;
             const auto y = run (*e, x, 173, &r);
             const double err = std::max (maxDelayedError (x, y, e->latency ()), maxDelayedError (x, r, e->latency (), 0.8f));
-            CHECK (err == 0.0, "%.0f Hz, every stage off (order %d): the input, delayed, exactly (%.2g)", sr, round, err);
+            // (exact here; on arm64 the compiler fuses multiply-adds, which can round the last bit: under -120 dB)
+            CHECK (err < 1e-6, "%.0f Hz, every stage off (order %d): the input, delayed (%.2g)", sr, round, err);
         }
     }
 }

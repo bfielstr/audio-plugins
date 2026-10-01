@@ -105,6 +105,8 @@ int main (int argc, char** argv)
         {
             rig.param (kTr1Base + kTrRatio, 0.8);
             rig.param (kMotOrbs, toNormalized (kMotOrbs, 11.0));
+            out.clear ();
+            rig.render (0.05, out, nullptr, hits ()); // (the processor takes the changes in its next block)
             MemoryStream saved;
             CHECK (rig.component->getState (&saved) == kResultOk, "getState");
             saved.seek (0, IBStream::kIBSeekSet, nullptr);

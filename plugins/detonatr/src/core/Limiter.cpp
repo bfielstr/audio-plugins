@@ -5,7 +5,7 @@
 namespace detonatr {
 
 namespace {
-constexpr float kTpMargin = 0.98855f; // 0.1 dB: what the interpolator can miss between its points
+constexpr float kTpMargin = 0.97724f; // 0.2 dB: what the interpolator can miss between its points (0.1 dB let 0.07 dB through on some material)
 
 double besselI0 (double x)
 {
