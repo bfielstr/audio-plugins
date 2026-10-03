@@ -133,6 +133,8 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
     active = true;
     released = killing = sustained = srcDone = gateFading = false;
     jumpLeft = 0;
+    tailing = false;
+    tailLeft = 0;
     killGain = gateGain = 1.0f;
     elapsed = 0;
     beatAcc = 0.0;
@@ -205,7 +207,7 @@ void Voice::kill ()
         return;
     killing = true;
     released = true;
-    killStep = (float)(1.0 / (0.005 * sr));
+    killStep = (float)(1.0 / (0.015 * sr));
 }
 
 void Voice::glideTo (int newNote, double newPitchBase, double glideMs)
@@ -387,6 +389,11 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
     if (!transHpOn)
         transHpRunning = false;
 
+    if (tailing)
+    {
+        renderTail (outL, outR, n, mono);
+        return;
+    }
     int done = 0;
     while (done < n && active)
     {
@@ -518,15 +525,18 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
             pitchEnv.process (pitchS, fsr);
             if (rem0 < 1e11)
                 a *= (float)std::clamp ((rem0 - i) / declickLen, 0.0, 1.0);
+            // the fast fades (a steal, a gate) act after the filter: what it is still ringing out fades
+            // with them (before it, a low-pass at a low cutoff kept sounding and was cut: a click)
+            float post = 1.0f;
             if (killing)
             {
                 killGain = std::max (0.0f, killGain - killStep);
-                a *= killGain;
+                post *= killGain;
             }
             if (gateFading)
             {
                 gateGain = std::max (0.0f, gateGain - gateStep);
-                a *= gateGain;
+                post *= gateGain;
             }
             const float t = (float)(i + 1) / (float)m;
             const float gl = prevGainL + (tl - prevGainL) * t;
@@ -537,6 +547,8 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
                 l = filter.process (l, 0);
                 r = mono ? l : filter.process (r, 1);
             }
+            l *= post;
+            r *= post;
             outL[done + i] += l * gl;
             outR[done + i] += r * gr;
             ++elapsed;
@@ -544,10 +556,53 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
         prevGainL = tl;
         prevGainR = tr;
 
-        if ((classic && ampEnv.idle ()) || srcDone || (killing && killGain <= 0.0f) ||
-            (gateFading && gateGain <= 0.0f))
+        if ((killing && killGain <= 0.0f) || (gateFading && gateGain <= 0.0f))
             active = false;
+        else if ((classic && ampEnv.idle ()) || srcDone)
+        {
+            // the note is over, but the filter may still be ringing out what it was given (a low
+            // cutoff, resonance): it rings on, fed silence, fading over 30 ms, instead of being cut
+            if (filterOn && !killing)
+            {
+                tailLen = tailLeft = std::max (1, (int)(0.03 * sr));
+                tailing = true;
+                released = true; // (stolen first when voices run out)
+                tailGainL = tl;
+                tailGainR = tr;
+                done += m;
+                renderTail (outL + done, outR + done, n - done, mono);
+                return;
+            }
+            active = false;
+        }
         done += m;
+    }
+}
+
+void Voice::renderTail (float* outL, float* outR, int n, bool mono)
+{
+    for (int i = 0; i < n && tailLeft > 0; ++i)
+    {
+        float l = filter.process (0.0f, 0);
+        float r = mono ? l : filter.process (0.0f, 1);
+        const float x = (float)tailLeft / (float)tailLen; // 1 -> 0
+        const float g = x * x * (3.0f - 2.0f * x);          // smooth
+        if (killing)
+        {
+            killGain = std::max (0.0f, killGain - killStep);
+            l *= killGain;
+            r *= killGain;
+        }
+        outL[i] += l * g * tailGainL;
+        outR[i] += r * g * tailGainR;
+        --tailLeft;
+        if (killing && killGain <= 0.0f)
+            tailLeft = 0;
+    }
+    if (tailLeft <= 0)
+    {
+        tailing = false;
+        active = false;
     }
 }
 

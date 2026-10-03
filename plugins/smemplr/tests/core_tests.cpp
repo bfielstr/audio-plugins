@@ -1635,6 +1635,59 @@ TEST (start_moved_back_while_playing_does_not_beep)
     CHECK (finite (all), "finite");
 }
 
+TEST (low_pass_does_not_click_when_a_deep_note_stops)
+{
+    // a deep note through the low-pass at a low cutoff: a new note taking over (one voice) and the
+    // release's end used to cut the filter while it still rang (up to +58 dB of clicks over the note's
+    // own steps); now the steal fades after the filter and a finished note's filter rings out
+    const double sr = 44100.0;
+    std::vector<float> saw ((size_t)(4 * sr));
+    for (size_t i = 0; i < saw.size (); ++i)
+        saw[i] = 0.5f * (float)(2.0 * std::fmod (110.0 * i / sr, 1.0) - 1.0);
+    auto s = SampleData::fromBuffers (saw, {}, sr, "saw");
+    for (int circuit : {0, 3})
+        for (int slope : {0, 1})
+        {
+            std::unique_ptr<Engine> e (makeEngine (s));
+            e->setParam (kVoices, 0); // one voice
+            e->setParam (kFilterFreq, 150.0);
+            e->setParam (kFilterCircuit, circuit);
+            e->setParam (kFilterSlope, slope);
+            std::vector<float> all;
+            auto block = [&] (int frames) {
+                auto o = run (*e, frames);
+                all.insert (all.end (), o.l.begin (), o.l.end ());
+            };
+            block (2400);
+            e->noteOn (36, 1.0f);
+            block (24000);
+            e->noteOn (31, 1.0f);
+            block (16800);
+            e->noteOff (31);
+            block (48000 * 2 - 43200);
+            // the second difference in 1 ms windows: the loudest around the events vs. the steady note
+            auto peak = [&] (double t0, double t1) {
+                double m = 0.0;
+                for (size_t a = (size_t)(t0 * kHostSr); a + 48 < (size_t)(t1 * kHostSr); a += 48)
+                {
+                    double d = 0.0;
+                    for (size_t i = a; i < a + 48; ++i)
+                    {
+                        const double x = all[i] - 2.0 * all[i - 1] + all[i - 2];
+                        d += x * x;
+                    }
+                    m = std::max (m, std::sqrt (d / 48.0));
+                }
+                return m;
+            };
+            const double steady = peak (0.2, 0.5);
+            const double steal = 20.0 * std::log10 (peak (0.54, 0.58) / steady);
+            const double end = 20.0 * std::log10 (std::max (1e-12, peak (0.94, 1.05)) / steady);
+            std::printf ("    circuit %d, %s dB: new note %+.1f dB, release end %+.1f dB (vs. the note)\n", circuit, slope ? "24" : "12", steal, end);
+            CHECK (steal < 6.0 && end < 0.0, "no click: %+.1f / %+.1f dB", steal, end);
+        }
+}
+
 TEST (oneshot_trigger_and_gate)
 {
     auto s = sine (300.0, 0.5);

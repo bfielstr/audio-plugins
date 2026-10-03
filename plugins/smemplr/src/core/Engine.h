@@ -91,7 +91,7 @@ public:
     void prepare (double sr);
     void start (const Start& s, const SampleData& sample, const ParamArray& p);
     void release (const ParamArray& p);
-    void kill (); // fast fade (voice stealing / retrigger)
+    void kill (); // fast fade, 15 ms, after the filter (voice stealing / retrigger)
     void hardStop () { active = false; }
     void glideTo (int newNote, double newPitchBase, double glideMs);
     void updateLoop (const PlayRegion& r);
@@ -124,6 +124,11 @@ private:
     // fading out over a few ms as the new one fades in (where it was, how many samples are left)
     double jumpFrom = 0.0;
     int jumpLeft = 0, jumpLen = 1;
+    // the note over, the filter ringing out (fed silence, fading over 30 ms): see render
+    bool tailing = false;
+    int tailLeft = 0, tailLen = 1;
+    float tailGainL = 1.0f, tailGainR = 1.0f;
+    void renderTail (float* outL, float* outR, int n, bool mono);
     BeatsWarp beats;
     GrainWarp grain;
     PvWarp pv;
