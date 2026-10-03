@@ -165,11 +165,11 @@ enum ParamId : uint32_t
     kTransHpOn = kRackExtEnd, // 975
     kTransHpFreq,             // 976, Hz: the cutoff at 0 semitones
     kTransHpSlope,            // 977, 6 / 12 / 18 / 24 / 36 / 48 dB per octave
-    // --- added in 0.9 (state version 18): the modulation LFOs (Modulation.h), kModLfos blocks of
+    // --- added in 0.10 (state version 18): the modulation LFOs (Modulation.h), kModLfos blocks of
     // kModLfoFields, LFO by LFO (modLfoParam); what they modulate is in the state, not in parameters ---
     kModLfoBase,                      // 978
     kModLfoEnd = kModLfoBase + 4 * 5, // 998 (kModLfos * kModLfoFields, checked below)
-    // --- added after 0.9: the filter and pitch envelopes locked to the loop (a LoopLock: Off, Restart at
+    // --- added in 0.10: the filter and pitch envelopes locked to the loop (a LoopLock: Off, Restart at
     // every pass of the loop, or Fit, restarted and its attack, points and decay stretched to one pass;
     // Engine.cpp: Voice::render). Not there in older states: Off ---
     kFiltLoopLock = kModLfoEnd, // 998

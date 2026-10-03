@@ -1,6 +1,6 @@
 # Gently: Smacheratr's Gently on its own, a gentle dynamic de-muddier / de-harsher: two bands and a
 # Sub band that turn their region down when it gets loud, into Smacheratr.
-project(Gently VERSION 0.9.0.0)
+project(Gently VERSION 0.10.0.0)
 
 add_library(gently_core STATIC
     src/core/Params.h
