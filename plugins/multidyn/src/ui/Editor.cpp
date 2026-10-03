@@ -89,7 +89,7 @@ void Editor::onClose ()
     subName = nullptr;
     for (auto& v : subBoxes)
         v = nullptr;
-    subOutBox = nullptr;
+    subInBox = subOutBox = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -154,6 +154,7 @@ void Editor::buildUI (CFrame* f)
     const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
     for (int i = 0; i < 4; ++i)
         subBoxes[i] = bind (root, new NumberBox (none, this, subFields[i], i < 2 ? kAboveColor : pk::theme::kTextBright));
+    subInBox = bind (root, new NumberBox (none, this, kSubInput));
     subOutBox = bind (root, new NumberBox (none, this, kSubOutput));
 
     // global column
@@ -249,7 +250,7 @@ void Editor::updateLayout ()
         }
     }
     // the Sub band's lane, at the bottom
-    for (CView* v : {static_cast<CView*> (subName), subBoxes[0], subBoxes[1], subBoxes[2], subBoxes[3], subOutBox})
+    for (CView* v : {static_cast<CView*> (subName), subBoxes[0], subBoxes[1], subBoxes[2], subBoxes[3], subInBox, subOutBox})
         if (v)
             v->setVisible (sub);
     if (sub)
@@ -262,6 +263,7 @@ void Editor::updateLayout ()
             const double y = i % 2 == 0 ? cy - 20 : cy + 2;
             place (subBoxes[i], CRect (xs[i], y, xs[i] + 68, y + 18));
         }
+        place (subInBox, CRect (kInputColLeft, cy - 9, kInputColLeft + kKnobW + 10, cy + 9));
         place (subOutBox, CRect (kOutputColLeft, cy - 9, kOutputColLeft + kKnobW + 10, cy + 9));
     }
     if (frame)

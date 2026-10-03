@@ -298,7 +298,7 @@ void Editor::onClose ()
         for (auto& v : mdBoxes[b])
             v = nullptr;
     }
-    mdSubName = mdSubOut = nullptr;
+    mdSubName = mdSubIn = mdSubOut = nullptr;
     for (auto& v : mdSubBoxes)
         v = nullptr;
     mdCharViews.clear ();
@@ -768,8 +768,8 @@ void Editor::updateMdLayout ()
             place (mdBoxes[b][i], CRect (xs[i], y, xs[i] + 68, y + 18));
         }
     }
-    // the Sub band's lane, at the bottom: its Output at the left, its (Above) threshold and ratio, attack and release
-    for (VSTGUI::CView* v : {mdSubName, mdSubOut, mdSubBoxes[0], mdSubBoxes[1], mdSubBoxes[2], mdSubBoxes[3]})
+    // the Sub band's lane, at the bottom: its Input and Output at the left, its (Above) threshold and ratio, attack and release
+    for (VSTGUI::CView* v : {mdSubName, mdSubIn, mdSubOut, mdSubBoxes[0], mdSubBoxes[1], mdSubBoxes[2], mdSubBoxes[3]})
         if (v)
             v->setVisible (sub);
     if (sub)
@@ -777,6 +777,7 @@ void Editor::updateMdLayout ()
         const CRect lane = fxDynDisplay->laneRect (multidyn::kSubBand);
         const double laneTop = lane.top - 1, cy = lane.getCenter ().y;
         place (mdSubName, CRect (8, laneTop + 2, 48, laneTop + 16));
+        place (mdSubIn, CRect (8, laneTop + 18, 56, laneTop + 34));
         place (mdSubOut, CRect (58, laneTop + 18, 106, laneTop + 34));
         const double xs[4] = {aboveX, aboveX, timeX, timeX};
         for (int i = 0; i < 4; ++i)
@@ -1187,7 +1188,7 @@ void Editor::clearBody ()
         for (auto& v : mdBoxes[b])
             v = nullptr;
     }
-    mdSubName = mdSubOut = nullptr;
+    mdSubName = mdSubIn = mdSubOut = nullptr;
     for (auto& v : mdSubBoxes)
         v = nullptr;
     mdCharViews.clear ();
@@ -1319,6 +1320,7 @@ void Editor::buildBody ()
             auto* sn = new Label (none, "Sub", 10.0, true, 0);
             g->addView (sn);
             mdSubName = sn;
+            mdSubIn = add (new NumberBox (none, h, kSubInput), tip (kSubInput));
             mdSubOut = add (new NumberBox (none, h, kSubOutput), tip (kSubOutput));
             const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
             for (int i = 0; i < 4; ++i)

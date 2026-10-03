@@ -63,9 +63,12 @@ inline double gainDb (int k, double e, double depth, double upScale, double down
     const double d = std::clamp (depth, 0.0, 1.0);
     const double ups = d * upScale;
     const double dns = std::min (1.0, downShape (k, d) * downScale);
-    const double g = makeupShape (k, d) * kMakeup[k] + std::min (kUpCap[k], ups * kUpSlope[k] * soft (kUpKnee[k], kUpThresh[k] + upShift - e)) -
+    const double makeup = makeupShape (k, d) * kMakeup[k];
+    const double g = makeup + std::min (kUpCap[k], ups * kUpSlope[k] * soft (kUpKnee[k], kUpThresh[k] + upShift - e)) -
                      dns * soft (kDownKnee[k], e - kDownThresh[k] - downShift);
-    return std::max (kFloor[k], g);
+    // an Above ratio under 1:1 turns the downward branch into an expander (dns < 0), which has no cap of
+    // its own: everything over the makeup stops at the upward branch's cap
+    return std::clamp (g, kFloor[k], makeup + kUpCap[k]);
 }
 
 // Which of OTT's three bands Multidyn's band b of n plays: the lowest is OTT's low band, the top its

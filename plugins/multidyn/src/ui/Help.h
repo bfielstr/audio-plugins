@@ -67,6 +67,7 @@ inline const char* forParam (uint32_t id)
         case kSubRatio: return "Sub band ratio 1:x. x > 1 compresses (1:inf limits); x < 1 expands upward.";
         case kSubAttack: return "How fast the Sub band's compression takes hold (keep it long enough for the sub's slow cycles).";
         case kSubRelease: return "How fast the Sub band's compression lets go.";
+        case kSubInput: return "Sub band level before its compression (changes how hard it hits the threshold).";
         case kSubOutput: return "Sub band level after its compression.";
         default: break;
     }

@@ -26,7 +26,8 @@ there:
 - a band's **Below / Above threshold** moves OTT's upward / downward knee by as much as it moved from
   its default;
 - the **Below / Above ratio** scales that branch's strength by (1 - 1/r) against the default ratio's
-  (1 : 1 turns the branch off);
+  (1 : 1 turns the branch off; under 1 : 1 the Above branch expands, and the boost over OTT's makeup
+  stops at the upward branch's cap, about 36 dB);
 - **Attack / Release** scale OTT's times by the same factor they moved from their defaults;
 - the band **Output** trims after OTT's makeup (the baked preset gains are Character's).
 
@@ -115,7 +116,8 @@ the **Sub** frequency (20 - 100 Hz, 40 Hz by default: the Sub band goes down to 
 tapers off above it, with the crossovers' Slope) before the other bands, which get the rest (so band 1
 no longer gets the sub region), and everything still sums back flat. The Sub band compresses
 downward only: its **Threshold** (-18 dB) and **Ratio** (1 : 4) work like a band's Above threshold and
-ratio, with its own **Attack** (30 ms, long enough for the sub's slow cycles), **Release** (200 ms) and
+ratio, with its own **Attack** (30 ms, long enough for the sub's slow cycles), **Release** (200 ms),
+**Input** gain (0 dB: before the compression, so it drives the Threshold harder, as a band's Input) and
 **Output** gain (0 dB, nothing baked in); the detector, Soft Knee, Amount, Time, the side-chain and
 Pre-Limit work on it as on the bands. It has no Below block (nothing is lifted in the sub region) and
 no Solo (soloing a band mutes it). Off, none of it runs and the sound is exactly what it is without
@@ -146,7 +148,8 @@ controls on the right.
   frequency in the row below; Pre-Limit and its Ceiling.
 - **Sub band**: when it is on, the display gets a lane for it at the bottom, with its Above block
   (drag its edge for the Threshold, inside it for the Ratio, double-click for 1:1), its Threshold,
-  Ratio, Attack and Release fields beside it, and its Output as a field in the Output column.
+  Ratio, Attack and Release fields beside it, and its Input and Output as fields in the Input and Output
+  columns.
 - **Side-chain**: route another track into inputs 3/4 in REAPER; On, Gain, Dry/Wet (detector blend)
   and Listen; the status line under the Slope row says whether a signal is routed.
 

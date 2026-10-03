@@ -66,10 +66,10 @@ static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
-// ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band, Style) run on into the
+// ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band, Style, Sub Input) run on into the
 // slot's extension, in order
 constexpr uint32_t kMdAdded = multidyn::kNumParams - multidyn::kXoverSlope;
-static_assert (kMdAdded == 10 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
+static_assert (kMdAdded == 11 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
 
 int64_t fxIdAt (int type, uint32_t j)
 {
@@ -339,13 +339,19 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
 
 void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
-    if (version >= 14)
+    if (version >= 16)
         return;
     const auto& md = multidyn::paramTable ();
     for (int slot = 0; slot < kRackSlots; ++slot)
     {
         const uint32_t typeId = slotParam (slot, kSlotType);
         if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxMultidyn)
+            continue;
+        // before Sub Input (16): the position read 0 (-24 dB), the Sub band was at 0 dB
+        const uint32_t subInJ = (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kSubInput);
+        norm[slotBlockParam (slot, subInJ)] = md.defaultNormalized (multidyn::kSubInput);
+        has[slotBlockParam (slot, subInJ)] = true;
+        if (version >= 14)
             continue;
         // before Style (14): Multidyn's own sound, Character (new slots get OTT)
         const uint32_t styleJ = (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kStyle);
