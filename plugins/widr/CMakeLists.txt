@@ -1,5 +1,5 @@
 # Widr: trailer-width stereo widener that keeps the mono fold, aware of the other Widrs in the session.
-project(Widr VERSION 0.8.0.0)
+project(Widr VERSION 0.9.0.0)
 
 add_library(widr_core STATIC
     src/core/Params.cpp

@@ -1,5 +1,5 @@
 # Dropr: a transient designer you draw (each hit starts a drawn level shape).
-project(Dropr VERSION 0.8.0.0)
+project(Dropr VERSION 0.9.0.0)
 
 add_library(dropr_core STATIC
     src/core/Params.cpp
