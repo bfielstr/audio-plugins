@@ -90,9 +90,9 @@ void Editor::buildUI (CFrame* f)
 
     // the saturator before the limiter, with Smacheratr's displays above its controls
     auto* tailPanel = addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight),
-                                    kTailBase, kTailExtBase, kTailExt2Base, "smacheratr  (before the limiter)");
+                                    kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, "smacheratr  (before the limiter)");
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (
-        this, kTailBase, kTailExtBase, kTailExt2Base,
+        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base},
         [c = ctl] {
             auto* s = c->getShared ();
             return s ? s->sampleRate.load () : 48000.0;

@@ -91,6 +91,8 @@ public:
         p[id] = plain;
         if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
+        else if (id >= kTailExt3Base)
+            tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
         else if (id >= kTailExt2Base)
             tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
         else if (id >= kTailExtBase)

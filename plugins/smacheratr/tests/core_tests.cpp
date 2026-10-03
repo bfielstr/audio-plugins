@@ -2,6 +2,7 @@
 #include "Color.h"
 #include "ClarityBand.h"
 #include "Engine.h"
+#include "NoOverlap.h"
 #include "Tail.h"
 #include "Params.h"
 #include "Shaper.h"
@@ -653,10 +654,15 @@ TEST (tail_has_every_control)
     CHECK (tailFieldOf (kClarity2Threshold) == (int)(ext2Field + pk::kTailExt2Threshold2) &&
                tailFieldOf (kClarityDriveAmount) == (int)(ext2Field + pk::kTailExt2DriveAmount),
            "its Smacheratr IDs to tail fields");
-    CHECK (tailParamOf (pk::kTailDrive, 10, 50, 90) == 10 + pk::kTailDrive &&
-               tailParamOf (pk::kTailFields + pk::kTailExtColorLo, 10, 50, 90) == 50 + pk::kTailExtColorLo &&
-               tailParamOf (ext2Field + pk::kTailExt2Drive, 10, 50, 90) == 90 + pk::kTailExt2Drive,
+    const TailBases bases {10, 50, 90, 130};
+    CHECK (tailParamOf (pk::kTailDrive, bases) == 10 + pk::kTailDrive &&
+               tailParamOf (pk::kTailFields + pk::kTailExtColorLo, bases) == 50 + pk::kTailExtColorLo &&
+               tailParamOf (ext2Field + pk::kTailExt2Drive, bases) == 90 + pk::kTailExt2Drive &&
+               tailParamOf (kTailExt3First + pk::kTailExt3NoOverlap, bases) == 130 + pk::kTailExt3NoOverlap,
            "tail fields to a plug-in's IDs");
+    for (uint32_t f = 0; f < kTailAllFields; ++f)
+        CHECK (tailFieldIn (tailParamOf (f, bases), bases) == (int)f, "tail field %u round trip", f);
+    CHECK (tailFieldIn (9, bases) == -1 && tailFieldIn (130 + pk::kTailExt3Fields, bases) == -1, "not a tail parameter");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const int f = tailFieldOf (id);
@@ -1112,6 +1118,458 @@ TEST (gently_sub_band)
         return toneDb (out.l, 40.0, 48000, 72000);
     };
     CHECK (renderT (true) < renderT (false) - 2.0, "Sub through the tail: %.1f vs %.1f dB", renderT (true), renderT (false));
+}
+
+// ---------------------------------------------------------------------------
+// Gently's High band: from where it tapers off (2 - 16 kHz) to the top of the spectrum, the Sub band's
+// mirror
+
+TEST (gently_high_band)
+{
+    // the band's shape: a shelf, flat from the slider's frequency up to the top, its cut letting go below
+    for (double taper : {2000.0, 7000.0, 12000.0})
+    {
+        const ClarityBand b = highBand (kSr, taper);
+        CHECK (b.highShelf && !b.lowShelf && b.lowHz == taper && b.highHz == 20000.0, "taper %.0f Hz: a shelf to the top (drawn to 20 kHz)", taper);
+        double peak = -200.0;
+        for (double hz = 200.0; hz < 0.5 * kSr; hz *= 1.02)
+            peak = std::max (peak, clarityBandDb (b, hz, kSr));
+        CHECK (peak > 0.0 && peak < 1.5, "taper %.0f Hz: a little rise over the corner, under 1.5 dB (%.2f)", taper, peak);
+        auto cut = [&] (double hz) { return clarityCutAtDb (b, hz, kSr, -8.0); };
+        CHECK (std::fabs (cut (23999.0) + 8.0) < 0.05, "taper %.0f Hz: the whole cut at the top (%.2f dB at Nyquist)", taper, cut (23999.0));
+        CHECK (cut (taper) < -6.8 && cut (taper) > -9.5, "taper %.0f Hz: within about 1 dB of the cut at the taper (%.2f dB)", taper, cut (taper));
+        // (about half the cut an octave down; a little less near the top, where the low-pass is squeezed towards Nyquist)
+        CHECK (cut (0.5 * taper) < (taper < 3000.0 ? -2.5 : -1.8) && cut (0.5 * taper) > -6.0, "taper %.0f Hz: about half the cut an octave down (%.2f dB)",
+               taper, cut (0.5 * taper));
+        CHECK (cut (0.25 * taper) > -1.5, "taper %.0f Hz: two octaves down, nearly none (%.2f dB)", taper, cut (0.25 * taper));
+        CHECK (cut (100.0) > -0.05, "taper %.0f Hz: 100 Hz untouched (%.2f dB)", taper, cut (100.0));
+    }
+    {
+        // the mirror of the Sub band: the same cut the same distance from the taper, the other way
+        const ClarityBand hi = highBand (kSr, 2000.0), lo = subBand (kSr, 40.0);
+        for (double ratio : {0.25, 0.5, 1.0})
+        {
+            const double h = clarityCutAtDb (hi, 2000.0 * ratio, kSr, -8.0), l = clarityCutAtDb (lo, 40.0 / ratio, kSr, -8.0);
+            CHECK (std::fabs (h - l) < 0.3, "x%.2f: High %.2f dB, Sub %.2f dB", ratio, h, l);
+        }
+    }
+    const ClarityBand clamped = highBand (kSr, 50000.0);
+    CHECK (clamped.lowHz == 16000.0, "the taper is held to 16 kHz (%.0f)", clamped.lowHz);
+    const auto& t = paramTable ();
+    CHECK (t.info (kClarityHigh).def == 0.0 && t.info (kClarityHighFreq).def == 7000.0 && t.info (kClarityHighFreq).min == 2000.0 &&
+               t.info (kClarityHighFreq).max == 16000.0 && t.info (kClarityHighRange).def == 6.0 &&
+               t.info (kClarityHighThreshold).def == -18.0 && t.info (kClarityNoOverlap).def == 0.0,
+           "defaults: off, starts to taper at 7 kHz (2 - 16 kHz), Range 6 dB, Threshold -18 dB; No Overlap off");
+    CHECK (std::string (t.info (kClarityHigh).name) == "Gently High" && std::string (t.info (kClarityNoOverlap).name) == "Gently No Overlap",
+           "called Gently High / No Overlap");
+
+    // a loud 10 kHz fizz and a 500 Hz note, driven hard: High cuts the fizz, not the note
+    auto in = tones ({{10000.0, -8.0}, {500.0, -14.0}}, 1.5);
+    auto render = [&] (bool gently, bool high, double taper, double range, Meters* m = nullptr) {
+        auto e = engine ();
+        if (m)
+            e->setMeters (m);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kDrive, 12.0);
+        e->setParam (kClarity, gently ? 1.0 : 0.0);
+        e->setParam (kClarityRange, 0.0); // the other bands off: only High
+        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+        e->setParam (kClarityHighFreq, taper);
+        e->setParam (kClarityHighRange, range);
+        return run (*e, in);
+    };
+    Meters m;
+    const Sig on = render (true, true, 7000.0, 8.0, &m), off = render (true, false, 7000.0, 8.0);
+    const double onDb = toneDb (on.l, 10000.0, 48000, 72000), offDb = toneDb (off.l, 10000.0, 48000, 72000);
+    std::printf ("    10 kHz: %.1f dB with High, %.1f dB without; High cut %.1f dB, level %.1f dB\n", onDb, offDb, m.clarityHighDb.load (),
+                 m.clarityHighLevelDb.load ());
+    CHECK (onDb < offDb - 2.0, "High turns the fizz down: %.1f vs %.1f dB", onDb, offDb);
+    CHECK (m.clarityHighDb.load () < -2.0 && m.clarityHighDb.load () >= -8.0 - 1e-3, "the High meter shows the cut (%.1f dB, Range 8)",
+           m.clarityHighDb.load ());
+    CHECK (m.claritySubDb.load () == 0.0f && m.clarityDb.load () == 0.0f, "the other bands' meters stay at 0");
+    {
+        auto note = tones ({{500.0, -14.0}}, 1.5);
+        auto noteDb = [&] (bool high) {
+            auto e = engine ();
+            e->setParam (kPreLimit, 0.0);
+            e->setParam (kDrive, 12.0);
+            e->setParam (kClarity, 1.0);
+            e->setParam (kClarityRange, 0.0);
+            e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+            return toneDb (run (*e, note).l, 500.0, 48000, 72000);
+        };
+        CHECK (std::fabs (noteDb (true) - noteDb (false)) < 0.05, "the 500 Hz note is left alone: %.2f vs %.2f dB", noteDb (true), noteDb (false));
+    }
+    CHECK (render (false, true, 7000.0, 8.0).l == render (false, false, 7000.0, 8.0).l, "Gently off: High does nothing");
+    CHECK (render (true, true, 7000.0, 0.0).l == off.l, "Range 0 dB: High does nothing");
+    CHECK (toneDb (render (true, true, 7000.0, 3.0).l, 10000.0, 48000, 72000) > onDb + 1.0, "a smaller Range cuts less");
+    {
+        // the slider moves where the taper starts: a loud 3 kHz tone is cut with the taper at 2 kHz, much
+        // less with it at 12 kHz
+        auto in3 = tones ({{3000.0, -8.0}}, 1.5);
+        auto at = [&] (double taper, bool high) {
+            auto e = engine ();
+            e->setParam (kPreLimit, 0.0);
+            e->setParam (kDrive, 12.0);
+            e->setParam (kClarity, 1.0);
+            e->setParam (kClarityRange, 0.0);
+            e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+            e->setParam (kClarityHighFreq, taper);
+            return toneDb (run (*e, in3).l, 3000.0, 48000, 72000);
+        };
+        const double off3 = at (2000.0, false), at2k = at (2000.0, true) - off3, at12k = at (12000.0, true) - off3;
+        std::printf ("    3 kHz: %.1f dB with the taper at 2 kHz, %.1f dB at 12 kHz\n", at2k, at12k);
+        CHECK (at2k < at12k - 3.0, "the slider sets what reaches the band: %.1f dB at 2 kHz, %.1f dB at 12 kHz", at2k, at12k);
+    }
+
+    // High off is what Gently was before it: bit for bit, whatever its controls say (with and without
+    // Hi-Quality, the other bands working)
+    auto in2 = tones ({{80.0, -8.0}, {320.0, -12.0}, {3000.0, -10.0}, {9000.0, -12.0}}, 0.5);
+    auto renderAll = [&] (bool hq, bool high, double taper, double range, double threshold) {
+        auto e = engine (hq);
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarity2Range, 6.0);
+        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+        e->setParam (kClarityHighFreq, taper);
+        e->setParam (kClarityHighRange, range);
+        e->setParam (kClarityHighThreshold, threshold);
+        return run (*e, in2, 333);
+    };
+    for (bool hq : {true, false})
+    {
+        const Sig plain = renderAll (hq, false, 7000.0, 6.0, -18.0), moved = renderAll (hq, false, 2500.0, 20.0, -50.0);
+        CHECK (std::memcmp (plain.l.data (), moved.l.data (), plain.l.size () * sizeof (float)) == 0 &&
+                   std::memcmp (plain.r.data (), moved.r.data (), plain.r.size () * sizeof (float)) == 0,
+               "hq %d: High off ignores its controls, to the bit", hq);
+        CHECK (renderAll (hq, true, 7000.0, 6.0, -18.0).l != plain.l, "hq %d: High on changes the sound", hq);
+    }
+    {
+        // and with High off the engine is the one from before the High band: the same output as with
+        // the High band's parameters at their defaults (which is what an old state loads)
+        auto e1 = engine (), e2 = engine ();
+        for (auto* e : {e1.get (), e2.get ()})
+        {
+            e->setParam (kDrive, 14.0);
+            e->setParam (kClarity, 1.0);
+        }
+        e2->setParam (kClarityHighFreq, 3000.0);
+        e2->setParam (kClarityHighRange, 0.0);
+        CHECK (run (*e1, in2).l == run (*e2, in2).l, "an old state (High at its defaults, off) sounds the same");
+    }
+
+    // Advanced: the High band's Threshold
+    auto cutAt = [&] (double threshold) {
+        Meters mm;
+        auto e = engine ();
+        e->setMeters (&mm);
+        e->setParam (kPreLimit, 0.0);
+        e->setParam (kDrive, -6.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityRange, 0.0);
+        e->setParam (kClarityHigh, 1.0);
+        e->setParam (kClarityHighRange, 8.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClarityHighThreshold, threshold);
+        run (*e, in);
+        return (double)mm.clarityHighDb.load ();
+    };
+    CHECK (cutAt (-3.0) == 0.0 && cutAt (-50.0) < -7.9, "Advanced: its Threshold sets where it cuts (%.2f / %.2f dB)", cutAt (-3.0), cutAt (-50.0));
+
+    // through the tail: the fourth block
+    CHECK (tailFieldOf (kClarityHigh) == (int)(kTailExt3First + pk::kTailExt3High) &&
+               tailFieldOf (kClarityHighFreq) == (int)(kTailExt3First + pk::kTailExt3HighFreq) &&
+               tailFieldOf (kClarityHighRange) == (int)(kTailExt3First + pk::kTailExt3HighRange) &&
+               tailFieldOf (kClarityHighThreshold) == (int)(kTailExt3First + pk::kTailExt3HighThreshold) &&
+               tailFieldOf (kClarityNoOverlap) == (int)(kTailExt3First + pk::kTailExt3NoOverlap),
+           "the High band's and No Overlap's IDs to tail fields");
+    std::vector<pk::ParamInfo> v3;
+    addTailExt3Params (v3, 300);
+    CHECK (v3.size () == pk::kTailExt3Fields && std::string (v3[pk::kTailExt3High].name) == "Saturator Gently High" &&
+               v3[pk::kTailExt3HighFreq].def == 7000.0 && v3[pk::kTailExt3HighFreq].id == 300 + pk::kTailExt3HighFreq &&
+               std::string (v3[pk::kTailExt3NoOverlap].name) == "Saturator Gently No Overlap" && v3[pk::kTailExt3NoOverlap].def == 0.0,
+           "the tail's fourth block");
+    auto renderT = [&] (bool high) {
+        Tail tail;
+        tail.prepare (48000.0, 512);
+        tail.setParam (pk::kTailOn, 1.0);
+        tail.setParam (pk::kTailMix, 1.0);
+        tail.setParam (pk::kTailPreLimit, 0.0);
+        tail.setParam (pk::kTailDrive, 12.0);
+        tail.setParam (pk::kTailFields + pk::kTailExtClarity, 1.0);
+        tail.setParam (pk::kTailFields + pk::kTailExtClarityRange, 0.0);
+        tail.setParam (kTailExt3First + pk::kTailExt3High, high ? 1.0 : 0.0);
+        Sig out = in;
+        for (size_t pos = 0; pos < out.l.size (); pos += 512)
+            tail.process (out.l.data () + pos, out.r.data () + pos, (int)std::min<size_t> (512, out.l.size () - pos));
+        return toneDb (out.l, 10000.0, 48000, 72000);
+    };
+    CHECK (renderT (true) < renderT (false) - 2.0, "High through the tail: %.1f vs %.1f dB", renderT (true), renderT (false));
+}
+
+// ---------------------------------------------------------------------------
+// No Overlap: Gently's working bands never cover the same frequencies (NoOverlap.h)
+
+static GentlyLayout layoutOf (double f1, double w1, double f2, double w2, double sub = 0.0, double high = 0.0)
+{
+    GentlyLayout l;
+    l.on[0] = f1 > 0.0;
+    l.on[1] = f2 > 0.0;
+    l.on[kSubBand] = sub > 0.0;
+    l.on[kHighBand] = high > 0.0;
+    l.freq[0] = f1, l.width[0] = w1;
+    l.freq[1] = f2, l.width[1] = w2;
+    l.freq[kSubBand] = sub > 0.0 ? sub : kSubDefaultHz;
+    l.freq[kHighBand] = high > 0.0 ? high : kHighDefaultHz;
+    return l;
+}
+static double loEdge (const GentlyLayout& l, int k) { return k == kHighBand ? l.freq[k] : l.freq[k] / std::exp2 (0.5 * l.width[k]); }
+static double hiEdge (const GentlyLayout& l, int k) { return k == kSubBand ? l.freq[k] : l.freq[k] * std::exp2 (0.5 * l.width[k]); }
+
+TEST (gently_no_overlap_resolves_overlaps)
+{
+    // bands apart are left exactly as they are
+    {
+        GentlyLayout l = layoutOf (250.0, 2.0, 3000.0, 2.0, 40.0, 12000.0), was = l;
+        resolveOverlaps (l);
+        CHECK (std::memcmp (&l, &was, sizeof l) == 0 && !bandsOverlap (l), "bands apart: untouched, to the bit");
+        // touching (as the editors leave them) is apart too
+        GentlyLayout t = layoutOf (250.0, 2.0, 1000.0, 2.0);
+        t.freq[1] = hiEdge (t, 0) * 2.0; // band 2's low edge on band 1's high edge
+        const GentlyLayout tw = t;
+        resolveOverlaps (t);
+        CHECK (std::memcmp (&t, &tw, sizeof t) == 0, "touching bands are apart");
+    }
+    // two bands overlapping: split at the middle of the overlap (on a log axis), the outer edges kept
+    {
+        GentlyLayout l = layoutOf (250.0, 2.0, 400.0, 2.0); // 125 - 500 Hz and 200 - 800 Hz
+        CHECK (bandsOverlap (l), "they overlap");
+        resolveOverlaps (l);
+        const double mid = std::sqrt (500.0 * 200.0);
+        CHECK (std::fabs (hiEdge (l, 0) - mid) < 1e-6 && std::fabs (loEdge (l, 1) - mid) < 1e-6, "met at the middle, %.1f / %.1f Hz (%.1f)",
+               hiEdge (l, 0), loEdge (l, 1), mid);
+        CHECK (std::fabs (loEdge (l, 0) - 125.0) < 1e-6 && std::fabs (hiEdge (l, 1) - 800.0) < 1e-6, "the outer edges stay");
+        CHECK (!bandsOverlap (l), "apart now");
+    }
+    // the band order follows the centres, whatever the band numbers
+    {
+        GentlyLayout l = layoutOf (4000.0, 2.0, 3000.0, 2.0);
+        resolveOverlaps (l);
+        CHECK (!bandsOverlap (l) && hiEdge (l, 1) <= loEdge (l, 0) * (1.0 + 1e-9), "band 2 below band 1: it stays below");
+    }
+    // a band inside a wide one: the narrow one is pushed up past the middle, as narrow as a band goes
+    {
+        GentlyLayout l = layoutOf (1000.0, 4.0, 1200.0, 0.5);
+        resolveOverlaps (l);
+        CHECK (!bandsOverlap (l), "apart");
+        CHECK (l.width[1] >= kMinWidthOct - 1e-9 && l.width[0] >= kMinWidthOct - 1e-9, "no band narrower than 0.5 octaves (%.3f, %.3f)",
+               l.width[0], l.width[1]);
+    }
+    // the shelves: Sub's Freq and High's come down / go up to meet the bands half way, within their ranges
+    {
+        GentlyLayout l = layoutOf (80.0, 2.0, 5000.0, 2.0, 100.0, 4000.0); // 40 - 160 Hz over Sub's 100 Hz; 2.5 - 10 kHz under High's 4 kHz
+        resolveOverlaps (l);
+        CHECK (!bandsOverlap (l), "apart");
+        CHECK (std::fabs (l.freq[kSubBand] - std::sqrt (100.0 * 40.0)) < 1e-6, "Sub's Freq at the middle (%.2f Hz)", l.freq[kSubBand]);
+        CHECK (std::fabs (l.freq[kHighBand] - std::sqrt (4000.0 * 10000.0)) < 1e-6, "High's Freq at the middle (%.0f Hz)", l.freq[kHighBand]);
+        CHECK (l.freq[kSubBand] >= kSubMinHz && l.freq[kSubBand] <= kSubMaxHz && l.freq[kHighBand] >= kHighMinHz &&
+                   l.freq[kHighBand] <= kHighMaxHz,
+               "in their ranges");
+    }
+    {
+        // a band low down: Sub held at 20 Hz, so the band gives up more
+        GentlyLayout l = layoutOf (25.0, 2.0, 0.0, 0.0, 30.0);
+        resolveOverlaps (l);
+        CHECK (!bandsOverlap (l) && l.freq[kSubBand] >= kSubMinHz - 1e-9 && l.freq[0] >= 20.0 - 1e-9, "Sub at %.2f Hz, the band at %.2f Hz",
+               l.freq[kSubBand], l.freq[0]);
+    }
+    // bands that do not work take no part
+    {
+        GentlyLayout l = layoutOf (250.0, 2.0, 300.0, 2.0);
+        l.on[1] = false;
+        const GentlyLayout was = l;
+        resolveOverlaps (l);
+        CHECK (std::memcmp (&l, &was, sizeof l) == 0, "band 2 does not work: nothing to keep apart");
+    }
+    // everything at once, at random: always apart, always in range, never narrower than a band can be
+    uint32_t seed = 12345;
+    auto rnd = [&] { return (seed = seed * 1664525u + 1013904223u) / 4294967296.0; };
+    int bad = 0;
+    for (int i = 0; i < 2000; ++i)
+    {
+        GentlyLayout l = layoutOf (20.0 * std::pow (1000.0, rnd ()), kMinWidthOct + rnd () * 3.5, 20.0 * std::pow (1000.0, rnd ()),
+                                   kMinWidthOct + rnd () * 3.5, rnd () < 0.7 ? 20.0 * std::pow (5.0, rnd ()) : 0.0,
+                                   rnd () < 0.7 ? 2000.0 * std::pow (8.0, rnd ()) : 0.0);
+        resolveOverlaps (l);
+        bool ok = !bandsOverlap (l) && l.freq[kSubBand] >= kSubMinHz - 1e-6 && l.freq[kSubBand] <= kSubMaxHz + 1e-6 &&
+                  l.freq[kHighBand] >= kHighMinHz - 1e-6 && l.freq[kHighBand] <= kHighMaxHz + 1e-6;
+        for (int k = 0; k < kClarityBands; ++k)
+            ok = ok && l.width[k] >= kMinWidthOct - 1e-9 && l.width[k] <= kMaxWidthOct + 1e-9 && l.freq[k] >= 20.0 - 1e-6 && l.freq[k] <= 20000.0 + 1e-6;
+        bad += ok ? 0 : 1;
+    }
+    CHECK (bad == 0, "%d random layouts were not resolved", bad);
+}
+
+TEST (gently_no_overlap_pushes)
+{
+    // band 1 dragged up into band 2: band 2's low edge is pushed along (it narrows), its high edge stays
+    {
+        const GentlyLayout before = layoutOf (250.0, 2.0, 2000.0, 2.0); // 125 - 500 Hz, 1 - 4 kHz
+        GentlyLayout l = before;
+        l.freq[0] = 1000.0; // now 500 - 2000 Hz
+        pushBands (l, 0, before);
+        CHECK (l.freq[0] == 1000.0 && l.width[0] == 2.0, "the dragged band goes where it was dragged");
+        CHECK (std::fabs (loEdge (l, 1) - 2000.0) < 1e-6 && std::fabs (hiEdge (l, 1) - 4000.0) < 1e-6, "band 2 now %.0f - %.0f Hz",
+               loEdge (l, 1), hiEdge (l, 1));
+        CHECK (!bandsOverlap (l), "apart");
+    }
+    // pushed until it is as narrow as a band goes: then it moves as a whole
+    {
+        const GentlyLayout before = layoutOf (250.0, 2.0, 2000.0, 2.0);
+        GentlyLayout l = before;
+        l.freq[0] = 2000.0; // 1 - 4 kHz: band 2 cannot be 4 kHz - 4 kHz
+        pushBands (l, 0, before);
+        CHECK (std::fabs (l.width[1] - kMinWidthOct) < 1e-9 && std::fabs (loEdge (l, 1) - 4000.0) < 1e-6, "band 2: 0.5 octaves from 4 kHz (%.3f, %.0f Hz)",
+               l.width[1], loEdge (l, 1));
+        CHECK (!bandsOverlap (l), "apart");
+    }
+    // widening a band pushes both neighbours, and stays centred
+    {
+        const GentlyLayout before = layoutOf (1000.0, 1.0, 4000.0, 1.0, 100.0);
+        GentlyLayout l = before;
+        l.width[0] = 4.0; // 250 Hz - 4 kHz
+        pushBands (l, 0, before);
+        CHECK (l.freq[0] == 1000.0 && l.width[0] == 4.0, "widened as asked (%.1f Hz, %.2f oct)", l.freq[0], l.width[0]);
+        CHECK (!bandsOverlap (l) && l.freq[kSubBand] == 100.0, "apart; Sub (at 100 Hz) untouched");
+        CHECK (std::fabs (loEdge (l, 1) - 4000.0) < 1e-6, "band 2's low edge pushed to 4 kHz (%.0f)", loEdge (l, 1));
+    }
+    // the High band at the top of its range cannot move further: the dragged band stops at it
+    {
+        const GentlyLayout before = layoutOf (1000.0, 1.0, 0.0, 0.0, 0.0, 16000.0);
+        GentlyLayout l = before;
+        l.freq[0] = 18000.0; // its high edge would be ~25 kHz, past High at its highest (16 kHz)
+        pushBands (l, 0, before);
+        CHECK (std::fabs (hiEdge (l, 0) - 16000.0) < 1e-6 && l.width[0] == 1.0, "it stops at High's 16 kHz (%.0f Hz), as wide as it was",
+               hiEdge (l, 0));
+        CHECK (l.freq[kHighBand] == 16000.0 && !bandsOverlap (l), "High stays at 16 kHz; apart");
+    }
+    {
+        // a chain: band 1 pushes band 2, which pushes High (a shelf moves its Freq), which stops at 16 kHz
+        const GentlyLayout before = layoutOf (500.0, 1.0, 1000.0, 1.0, 0.0, 2000.0);
+        GentlyLayout l = before;
+        l.freq[0] = 20000.0;
+        pushBands (l, 0, before);
+        CHECK (!bandsOverlap (l) && std::fabs (l.freq[kHighBand] - kHighMaxHz) < 1e-6 && std::fabs (l.width[1] - kMinWidthOct) < 1e-9,
+               "High at %.0f Hz, band 2 %.2f oct wide", l.freq[kHighBand], l.width[1]);
+        CHECK (std::fabs (hiEdge (l, 0) - loEdge (l, 1)) < 1e-6 && std::fabs (hiEdge (l, 1) - 16000.0) < 1e-6, "everything pressed up to it");
+    }
+    // the Sub band dragged up pushes band 1's low edge; dragged back (from where the drag began) it lets go
+    {
+        const GentlyLayout before = layoutOf (200.0, 2.0, 3000.0, 2.0, 40.0); // band 1: 100 - 400 Hz
+        GentlyLayout l = before;
+        l.freq[kSubBand] = 100.0;
+        pushBands (l, kSubBand, before);
+        CHECK (l.freq[kSubBand] == 100.0 && std::fabs (loEdge (l, 0) - 100.0) < 1e-6 && std::fabs (hiEdge (l, 0) - 400.0) < 1e-6,
+               "band 1 now %.0f - %.0f Hz", loEdge (l, 0), hiEdge (l, 0));
+        GentlyLayout back = before;
+        back.freq[kSubBand] = 50.0;
+        pushBands (back, kSubBand, before);
+        CHECK (back.freq[0] == before.freq[0] && back.width[0] == before.width[0], "dragged back: band 1 as it was");
+    }
+    // a band does not jump its neighbour: dragged past it, it pushes it along
+    {
+        const GentlyLayout before = layoutOf (500.0, 1.0, 1000.0, 1.0);
+        GentlyLayout l = before;
+        l.freq[1] = 200.0; // band 2 dragged far down, past band 1
+        pushBands (l, 1, before);
+        CHECK (!bandsOverlap (l) && hiEdge (l, 0) <= loEdge (l, 1) * (1.0 + 1e-9), "band 1 stays below band 2 (%.0f / %.0f Hz)", l.freq[0],
+               l.freq[1]);
+    }
+    // a band that does not work pushes nothing and is not pushed
+    {
+        GentlyLayout before = layoutOf (250.0, 2.0, 400.0, 2.0);
+        before.on[1] = false;
+        GentlyLayout l = before;
+        l.freq[0] = 400.0;
+        pushBands (l, 0, before);
+        CHECK (l.freq[1] == before.freq[1] && l.width[1] == before.width[1] && l.freq[0] == 400.0, "band 2 off: left alone");
+    }
+    // random drags of random bands: always apart (the bands apart before), in range
+    uint32_t seed = 777;
+    auto rnd = [&] { return (seed = seed * 1664525u + 1013904223u) / 4294967296.0; };
+    int bad = 0;
+    for (int i = 0; i < 2000; ++i)
+    {
+        GentlyLayout before = layoutOf (20.0 * std::pow (1000.0, rnd ()), kMinWidthOct + rnd () * 3.5, 20.0 * std::pow (1000.0, rnd ()),
+                                        kMinWidthOct + rnd () * 3.5, rnd () < 0.7 ? 20.0 * std::pow (5.0, rnd ()) : 0.0,
+                                        rnd () < 0.7 ? 2000.0 * std::pow (8.0, rnd ()) : 0.0);
+        resolveOverlaps (before);
+        const int k = (int)(rnd () * kGentlyBands) % kGentlyBands;
+        GentlyLayout l = before;
+        if (k == kSubBand)
+            l.freq[k] = 20.0 * std::pow (5.0, rnd ());
+        else if (k == kHighBand)
+            l.freq[k] = 2000.0 * std::pow (8.0, rnd ());
+        else if (rnd () < 0.5)
+            l.freq[k] = 20.0 * std::pow (1000.0, rnd ());
+        else
+            l.width[k] = kMinWidthOct + rnd () * 3.5;
+        pushBands (l, k, before);
+        bool ok = !bandsOverlap (l) && l.freq[kSubBand] >= kSubMinHz - 1e-6 && l.freq[kSubBand] <= kSubMaxHz + 1e-6 &&
+                  l.freq[kHighBand] >= kHighMinHz - 1e-6 && l.freq[kHighBand] <= kHighMaxHz + 1e-6;
+        for (int b = 0; b < kClarityBands; ++b)
+            ok = ok && l.width[b] >= kMinWidthOct - 1e-9 && l.width[b] <= kMaxWidthOct + 1e-9 && l.freq[b] >= 20.0 - 1e-6 && l.freq[b] <= 20000.0 + 1e-6;
+        bad += ok ? 0 : 1;
+    }
+    CHECK (bad == 0, "%d random drags left bands overlapping or out of range", bad);
+}
+
+TEST (gently_no_overlap_in_the_engine)
+{
+    auto in = tones ({{150.0, -8.0}, {400.0, -10.0}, {3000.0, -10.0}, {9000.0, -12.0}}, 0.5);
+    auto render = [&] (bool noOverlap, double f1, double w1, double f2, double w2, bool high) {
+        auto e = engine ();
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityFreq, f1);
+        e->setParam (kClarityWidth, w1);
+        e->setParam (kClarity2Freq, f2);
+        e->setParam (kClarity2Width, w2);
+        e->setParam (kClarity2Range, 6.0);
+        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+        e->setParam (kClarityNoOverlap, noOverlap ? 1.0 : 0.0);
+        return run (*e, in, 333).l;
+    };
+    // off, or with nothing overlapping, No Overlap changes nothing (to the bit)
+    CHECK (render (true, 250.0, 2.0, 3000.0, 2.0, true) == render (false, 250.0, 2.0, 3000.0, 2.0, true), "bands apart: the same sound");
+    // overlapping bands are kept apart: the sound is what the resolved layout gives
+    const auto overlapping = render (true, 250.0, 2.0, 400.0, 2.0, false);
+    CHECK (overlapping != render (false, 250.0, 2.0, 400.0, 2.0, false), "overlapping bands: No Overlap moves them");
+    GentlyLayout l = layoutOf (250.0, 2.0, 400.0, 2.0);
+    resolveOverlaps (l);
+    CHECK (overlapping == render (false, l.freq[0], l.width[0], l.freq[1], l.width[1], false), "as if the bands had been set apart");
+    // switching it on and off as it plays (automation) stays finite
+    auto e = engine ();
+    e->setParam (kDrive, 14.0);
+    e->setParam (kClarity, 1.0);
+    e->setParam (kClarity2Range, 6.0);
+    e->setParam (kClarity2Freq, 300.0);
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    bool finite = true;
+    for (size_t pos = 0, b = 0; pos < in.l.size (); pos += 256, ++b)
+    {
+        e->setParam (kClarityNoOverlap, (b & 1) ? 1.0 : 0.0);
+        e->setParam (kClarityFreq, 200.0 + 30.0 * (double)(b % 7));
+        const int n = (int)std::min<size_t> (256, in.l.size () - pos);
+        e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, n);
+    }
+    for (float x : out.l)
+        finite = finite && std::isfinite (x) && std::fabs (x) < 4.0f;
+    CHECK (finite, "No Overlap switched as it plays: finite");
 }
 
 int main (int argc, char** argv)

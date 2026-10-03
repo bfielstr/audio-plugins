@@ -48,8 +48,9 @@ enum ParamId : uint32_t
     kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
     // --- after the end saturator's block (which stays as it is from here on) ---
     kLinkRate = kTailExtBase + 17, // both bands run at band 1's rate (Sync/Free, division, Hz); each keeps its phase
-    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 
 enum Mode { kLfo = 0, kEnvelope };
@@ -70,11 +71,13 @@ constexpr uint32_t pointParam (int band, int point, uint32_t field)
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
-           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields) ||
+           (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields);
 }
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+    return id >= kTailExt3Base  ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base)
+           : id >= kTailExt2Base ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }

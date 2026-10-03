@@ -57,6 +57,22 @@ turns into a shelf there too, running flat past that end instead of dipping back
 or over its **Threshold** in Advanced) and the same region Drive. In the colour display drag its handle sideways
 for the frequency and down for the Range; it has no width. With Sub off Gently is exactly what it was.
 
+**High** (a fourth Gently band, off by default) is the Sub band's mirror for the top of the spectrum
+(harshness, fizz, sibilance): a shelf, flat from its **Freq** (2 to 16 kHz, 7 kHz by default) up to the
+very top, its cut letting go below it (about half of it an octave down, nearly none two octaves down,
+so at 7 kHz the presence region of 1 to 3 kHz is left alone). It is the complement of a critically
+damped 12 dB/oct low-pass, so its cut is exactly the Range where it is flat. It works while Gently and
+High are on and its **Range** (6 dB by default) is above 0 dB, with the same law, its own **Threshold**
+in Advanced and the same region Drive; its handle in the colour display is rose, with no width. With
+High off Gently is exactly what it was, bit for bit.
+
+**No Overlap** (in the Gently panel, off by default): Gently's working bands never cover the same
+frequencies. Dragging or widening a band in the colour display pushes its neighbours' edges along (a
+neighbour narrows, and once it is 0.5 octaves wide moves as a whole); where a neighbour cannot move
+further (Sub at 20 Hz, High at 16 kHz) the dragged band stops at it. Switched on, bands that overlap
+are split at the middle of the overlap. The engine keeps the bands apart the same way when automation
+makes them overlap, and leaves bands that do not overlap exactly as they are.
+
 **Menu**: **Hi-Quality** runs the curve 4x oversampled (two linear-phase half-band stages) to keep
 aliasing down; **Pre-DC Filter** removes DC offset before the curve; **Mid/Side** saturates the mid
 and the side apart, so the side is driven by its own, lower level and a wide sound stays wide when

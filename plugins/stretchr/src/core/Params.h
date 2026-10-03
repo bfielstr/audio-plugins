@@ -27,8 +27,9 @@ enum ParamId : uint32_t
     kTrigger = kTailBase + pk::kTailFields, // On Play: the clip starts when the host starts; Timeline: where it is
     kStereo,           // Extreme and Alien: Wide (left and right apart) / Same (one channel, duplicated)
     kTailExtBase,      // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries (not render settings)
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (not render settings; the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (not render settings)
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 
 enum Algorithm
@@ -55,12 +56,14 @@ enum Outside { kThru = 0, kMute };
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
-           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields) ||
+           (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields);
 }
 // Its field in smacheratr::Tail.
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+    return id >= kTailExt3Base  ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base)
+           : id >= kTailExt2Base ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }

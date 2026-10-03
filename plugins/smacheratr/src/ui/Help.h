@@ -59,6 +59,22 @@ inline const char* forParam (uint32_t id)
         case kClaritySubRange:
             return "Gently Sub: the most it turns the sub region down before the curve (after it, half as much). 8 dB by "
                    "default, 0 to 24 dB; at 0 dB the band does nothing.";
+        case kClarityHigh:
+            return "Gently's High band on or off: compresses the top of the spectrum (harshness, fizz, sibilance), as a shelf "
+                   "from where its cut starts to let go (Freq) up to the very top. Needs Gently on and a Range above 0 dB.";
+        case kClarityHighFreq:
+            return "Gently High: where the band starts to taper off going down, 2 to 16 kHz (7 kHz by default: the cut is half "
+                   "as deep around half that, and nearly gone an octave below, so the presence region is left alone). "
+                   "Everything above it, to the very top, is compressed.";
+        case kClarityHighRange:
+            return "Gently High: the most it turns the top of the spectrum down before the curve (after it, half as much). 6 dB "
+                   "by default, 0 to 24 dB; at 0 dB the band does nothing.";
+        case kClarityNoOverlap:
+            return "Gently's bands never cover the same frequencies: dragging or widening a band in the display pushes its "
+                   "neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot move further). "
+                   "Switched on, bands that overlap are split at the middle of the overlap; automation that makes them "
+                   "overlap is kept apart the same way.";
+        case kClarityHighThreshold:
         case kClaritySubThreshold:
         case kClarityThreshold:
         case kClarity2Threshold:
@@ -89,6 +105,7 @@ constexpr const char* kColorDisplay =
     "The colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "With Gently on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
-    "or hold Alt (Option) and drag a band sideways for its width (right: wider). Shift: fine.";
+    "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub (amber) and High (rose) bands "
+    "have no width. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
 
 } // namespace smacheratr::help

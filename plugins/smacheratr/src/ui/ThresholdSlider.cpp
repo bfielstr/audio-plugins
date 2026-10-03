@@ -46,7 +46,7 @@ double ThresholdSlider::yOfDb (double db) const
 void ThresholdSlider::idle ()
 {
     const Meters* m = meters ? meters () : nullptr;
-    const float level = !m ? -120.0f : (band == 0 ? m->clarityLevelDb : band == 1 ? m->clarity2LevelDb : m->claritySubLevelDb).load (std::memory_order_relaxed);
+    const float level = !m ? -120.0f : clarityLevelMeter (*m, band).load (std::memory_order_relaxed);
     const float before = shownDb;
     // up at once, down eased (like a peak meter)
     shownDb = level > shownDb ? level : shownDb + (level - shownDb) * 0.25f;
@@ -64,7 +64,7 @@ void ThresholdSlider::draw (CDrawContext* ctx)
     ctx->setFrameColor (dragging ? ColorView::bandColor (band, 200) : theme::kPanelEdge);
     ctx->setLineWidth (1.0);
     ctx->drawRect (r, kDrawStroked);
-    text (ctx, band == 0 ? "1" : band == 1 ? "2" : "S", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? ColorView::bandColor (band) : theme::kTextDim,
+    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? ColorView::bandColor (band) : theme::kTextDim,
           10.0, true);
 
     // the level: dim below the threshold, bright above it (the part being cut)

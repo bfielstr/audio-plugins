@@ -54,7 +54,7 @@ std::string hzText (double hz)
     return buf;
 }
 
-// A band's name in its colour and the edges of its region now (the Sub band: where it starts to taper).
+// A band's name in its colour and the edges of its region now (the Sub and High bands: where they start to taper).
 class BandHeader : public CView
 {
 public:
@@ -75,7 +75,7 @@ public:
         ctx->setFillColor (GentlyView::bandColor (band, on ? 255 : 90));
         ctx->drawRect (CRect (r.left, r.top + 3, r.left + 3, r.bottom - 3), kDrawFilled);
         char name[16];
-        std::snprintf (name, sizeof (name), band == kSub ? "SUB" : "BAND %d", band + 1);
+        std::snprintf (name, sizeof (name), band == kSub ? "SUB" : band == kHigh ? "HIGH" : "BAND %d", band + 1);
         ctx->setFont (pk::theme::font (10.5, true));
         ctx->setFontColor (GentlyView::bandColor (band, on ? 255 : 130));
         ctx->drawString (name, CRect (r.left + 9, r.top, r.right, r.bottom), kLeftText, true);
@@ -84,6 +84,8 @@ public:
         std::string edges;
         if (band == kSub)
             edges = "20 - " + hzText (host->plainValue (kSubFreq));
+        else if (band == kHigh)
+            edges = hzText (host->plainValue (kHighFreq)) + " - 20 k";
         else
         {
             const smacheratr::ClarityBand b = smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)),
@@ -122,12 +124,12 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "gently", 14.0, true));
-    root->addView (new pk::PresetBar (CRect (680, 6, 876, 28), ctl));
-    auto* helpBtn = new ActionButton (CRect (884, 6, 906, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
+    root->addView (new pk::PresetBar (CRect (840, 6, 1036, 28), ctl));
+    auto* helpBtn = new ActionButton (CRect (1044, 6, 1066, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide these help tooltips.");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (912, 6, 992, 28), "Menu", [this] { showMenu (CPoint (912, 28)); }));
+    root->addView (new ActionButton (CRect (1072, 6, 1152, 28), "Menu", [this] { showMenu (CPoint (1072, 28)); }));
 
     auto metersOf = [c = ctl] () -> const Meters* {
         auto* s = c->getShared ();
@@ -149,7 +151,7 @@ void Editor::buildUI (CFrame* f)
             auto* s = c->getShared ();
             return s ? &s->meters.bands : nullptr;
         });
-        sliders[k]->setTooltipText (k == kSub ? help::kSubThresholdSlider : help::kThresholdSlider);
+        sliders[k]->setTooltipText (k == kSub ? help::kSubThresholdSlider : k == kHigh ? help::kHighThresholdSlider : help::kThresholdSlider);
         root->addView (sliders[k]); // (not bound: its ID is Smacheratr's; paramChanged repaints it)
     }
 
@@ -167,37 +169,40 @@ void Editor::buildUI (CFrame* f)
         for (int i = 0; i < 3; ++i)
             bandViews[k].push_back (bind (root, new Knob (knobRect (x + i * 64, kRowTop + 24), this, bandParam (k, knobFields[i]), knobLabels[i])));
     }
-    // the Sub band: its name and where it tapers, On, Frequency, Range (no width)
+    // the Sub and High bands: their name and where they taper, On, Frequency, Range (no width)
+    for (int k : {kSub, kHigh})
     {
-        auto* h = new BandHeader (CRect (kSubLeft, kRowTop, kSubLeft + 96, kRowTop + 18), this, kSub, rateOf);
+        const double x = k == kSub ? kSubLeft : kHighLeft;
+        auto* h = new BandHeader (CRect (x, kRowTop, x + 96, kRowTop + 18), this, k, rateOf);
         root->addView (h);
         headers.push_back (h);
-        bind (root, new Toggle (CRect (kSubLeft + 102, kRowTop - 1, kSubLeft + kSubW - 8, kRowTop + 19), this, kSubOn, "On"));
-        bandViews[kSub].push_back (bind (root, new Knob (knobRect (kSubLeft, kRowTop + 24), this, kSubFreq, "Freq")));
-        bandViews[kSub].push_back (bind (root, new Knob (knobRect (kSubLeft + 64, kRowTop + 24), this, kSubRange, "Range")));
+        bind (root, new Toggle (CRect (x + 102, kRowTop - 1, x + kSubW - 8, kRowTop + 19), this, onParam (k), "On"));
+        bandViews[k].push_back (bind (root, new Knob (knobRect (x, kRowTop + 24), this, freqParam (k), "Freq")));
+        bandViews[k].push_back (bind (root, new Knob (knobRect (x + 64, kRowTop + 24), this, rangeParam (k), "Range")));
     }
 
     // the detector: stereo mode, Attack, Release
-    const double dx = kSubLeft + kSubW + 8; // 568
+    const double dx = kHighLeft + kSubW + 8; // 724
     bind (root, new Choice (CRect (dx, kRowTop - 1, dx + 120, kRowTop + 19), this, kStereo));
     bind (root, new Knob (knobRect (dx, kRowTop + 24), this, kAttack));
     bind (root, new Knob (knobRect (dx + 64, kRowTop + 24), this, kRelease));
 
     // Advanced, and with it the region Drive
-    const double ax = dx + 146; // 714
+    const double ax = dx + 146; // 870
     bind (root, new Toggle (CRect (ax, kRowTop - 1, ax + 120, kRowTop + 19), this, kAdvanced, "Advanced"));
     advancedViews.push_back (bind (root, new Toggle (CRect (ax, kRowTop + 40, ax + 56, kRowTop + 60), this, kDrive, "Drive")));
     driveAmount = bind (root, new Knob (knobRect (ax + 64, kRowTop + 24), this, kDriveAmount, "Amount"));
     advancedViews.push_back (driveAmount);
 
-    // Mix and Output
+    // No Overlap (the bands push each other), Mix and Output
+    bind (root, new smacheratr::NoOverlapToggle (CRect (kNoOverlapLeft, kRowTop - 1, kViewRight - 4, kRowTop + 19), this, GentlyView::bandParams ()));
     bind (root, new Knob (knobRect (kViewRight - 2 * kKnobW - 12, kRowTop + 24), this, kMix));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 24), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     auto* tailPanel = addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase,
-                                    kTailExtBase, kTailExt2Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase, kTailExt2Base, rateOf,
+                                    kTailExtBase, kTailExt2Base, kTailExt3Base);
+    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base}, rateOf,
                                                                [c = ctl] () -> const smacheratr::Meters* {
                                                                    auto* s = c->getShared ();
                                                                    return s ? &s->tailMeters : nullptr;

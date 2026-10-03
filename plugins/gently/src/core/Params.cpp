@@ -55,7 +55,14 @@ std::vector<ParamInfo> buildTable ()
     pk::addTailParams (v, kTailBase);
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
-    static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "the end saturator's Gently block is the last");
+    // the High band and No Overlap: Smacheratr's (off by default)
+    v.push_back (like (kHighOn, smacheratr::kClarityHigh, "High", "High", 0.0));
+    v.push_back (like (kHighFreq, smacheratr::kClarityHighFreq, "High Frequency", "Freq", smacheratr::kHighDefaultHz));
+    v.push_back (like (kHighRange, smacheratr::kClarityHighRange, "High Range", "Range", 6.0));
+    v.push_back (like (kHighThreshold, smacheratr::kClarityHighThreshold, "High Threshold", "Thresh", smacheratr::kClarityThresholdDb));
+    v.push_back (like (kNoOverlap, smacheratr::kClarityNoOverlap, "No Overlap", "No Overlap", 0.0));
+    smacheratr::addTailExt3Params (v, kTailExt3Base);
+    static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the end saturator's fourth block is the last");
     return v;
 }
 

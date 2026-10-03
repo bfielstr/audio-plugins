@@ -37,7 +37,8 @@ std::vector<ParamInfo> buildTable ()
     }
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
-    static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+    smacheratr::addTailExt3Params (v, kTailExt3Base);
+    static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the tail's fourth block is the last");
     return v;
 }
 

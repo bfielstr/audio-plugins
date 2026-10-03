@@ -28,6 +28,8 @@ add_library(smacheratr_ui STATIC
     src/ui/ThresholdSlider.cpp
     src/ui/TailDisplays.h
     src/ui/TailDisplays.cpp
+    src/ui/BandPush.h
+    src/ui/BandPush.cpp
 )
 target_include_directories(smacheratr_ui PUBLIC ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(smacheratr_ui PUBLIC smacheratr_core pluginkit_vst)

@@ -46,7 +46,9 @@ public:
     void setParam (uint32_t id, double plain)
     {
         p[id] = plain;
-        if (id >= kTailExt2Base)
+        if (id >= kTailExt3Base)
+            tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
+        else if (id >= kTailExt2Base)
             tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
         else if (id >= kTailExtBase)
             tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);

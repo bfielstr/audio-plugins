@@ -22,18 +22,21 @@ enum ParamId : uint32_t
     kCharacter,   // 0..1, the dynamic dip in the low mids before the limiter (0: none; Character.h)
     kTailBase,                                  // the Smacheratr before the limiter: pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields, // the rest of that Smacheratr
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gently's Advanced mode: pk::kTailExt2Fields entries (the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gently's Advanced mode: pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
-           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields) ||
+           (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields);
 }
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+    return id >= kTailExt3Base  ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base)
+           : id >= kTailExt2Base ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }

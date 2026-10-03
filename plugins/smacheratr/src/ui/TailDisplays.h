@@ -1,14 +1,17 @@
 // Smacheratr's two displays (the Analog curve, and the colour curve with Gently's bands) for the
 // saturator at the end of another plug-in's chain: the displays work on the plug-in's tail
-// parameters (pk::addTailParams at `base`, the extended block at `extBase`, Gently's Advanced block at
-// `ext2Base`) through a mapping, and read the tail's levels and the sample rate through functions.
-// While Gently's Advanced is on, a strip at the right of the colour display holds the region Drive
-// (on / amount) and the bands' Threshold sliders.
+// parameters (its four blocks, TailBases: pk::addTailParams, the extended block, Gently's Advanced
+// block, its High band and No Overlap) through a mapping, and read the tail's levels and the sample
+// rate through functions. While Gently's Advanced is on, a strip at the right of the colour display
+// holds the region Drive (on / amount) and the bands' Threshold sliders. Gently's No Overlap button
+// goes above the colour display's right end (in the tail panel's title row).
 #pragma once
 
 #include "ColorView.h"
 #include "ShaperView.h"
 #include "ThresholdSlider.h"
+
+#include "../core/TailExt.h"
 
 #include "pluginkit/ui/Widgets.h"
 
@@ -20,8 +23,7 @@ class TailDisplays
 {
 public:
     // `editor` is the plug-in's editor (the host of its own parameters)
-    TailDisplays (pk::ParamHost* editor, uint32_t base, uint32_t extBase, uint32_t ext2Base, ColorView::RateSource rate,
-                  ColorView::MeterSource meters);
+    TailDisplays (pk::ParamHost* editor, const TailBases& bases, ColorView::RateSource rate, ColorView::MeterSource meters);
 
     // Adds both displays to `parent` (usually the tail panel), side by side in `area`.
     void add (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& area);
@@ -40,13 +42,14 @@ private:
     void updateLooks ();
 
     std::unique_ptr<pk::MappedParamHost> host;
-    uint32_t base, extBase, ext2Base;
+    TailBases bases;
     ColorView::RateSource rate;
     ColorView::MeterSource meters;
     ShaperView* shaper = nullptr;
     ColorView* color = nullptr;
     VSTGUI::CRect colorArea;
-    ThresholdSlider* sliders[kGentlyBands] = {nullptr, nullptr, nullptr};
+    ThresholdSlider* sliders[kGentlyBands] = {nullptr, nullptr, nullptr, nullptr};
+    pk::ParamView* noOverlap = nullptr;
     pk::ParamView* driveOn = nullptr;
     pk::ParamView* driveAmount = nullptr;
 };

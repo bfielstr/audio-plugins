@@ -4,7 +4,9 @@
 // Field i is Smacheratr parameter kTailExtIds[i], with Smacheratr's name, range and default (the
 // colour filters start off, and Mid/Side where the plug-in asks for it). Gently's Advanced mode and its Sub band came
 // after that block was closed in (plug-ins have parameters right after it): a third block
-// (pk::kTailExt2Fields entries, kTailExt2Ids) at the very end of each plug-in's IDs.
+// (pk::kTailExt2Fields entries, kTailExt2Ids) at the end of each plug-in's IDs. Some plug-ins have
+// parameters after that one too, so Gently's High band and No Overlap are a fourth block
+// (pk::kTailExt3Fields entries, kTailExt3Ids), again at the very end of each plug-in's IDs.
 #pragma once
 
 #include "Params.h"
@@ -26,6 +28,9 @@ inline constexpr uint32_t kTailExt2Ids[pk::kTailExt2Fields] = {kClarityAdvanced,
                                                               kClarityDrive, kClarityDriveAmount,
                                                               kClaritySub, kClaritySubFreq, kClaritySubRange, kClaritySubThreshold};
 static_assert (pk::kTailExt2Fields == 9, "one Smacheratr parameter per field of the tail's third block");
+inline constexpr uint32_t kTailExt3Ids[pk::kTailExt3Fields] = {kClarityHigh, kClarityHighFreq, kClarityHighRange, kClarityHighThreshold,
+                                                              kClarityNoOverlap};
+static_assert (pk::kTailExt3Fields == 5, "one Smacheratr parameter per field of the tail's fourth block");
 
 inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool midSide = false)
 {
@@ -54,9 +59,25 @@ inline void addTailExt2Params (std::vector<pk::ParamInfo>& t, uint32_t base)
     }
 }
 
-// The tail field (a pk::TailField, pk::kTailFields + i for extended field i, or pk::kTailFields +
-// pk::kTailExtFields + i for field i of the third block) that holds Smacheratr parameter id, or -1
-// (Smacheratr's own Dry/Wet is the tail's Mix).
+// The fourth block (Gently's High band and No Overlap), at `base`.
+inline void addTailExt3Params (std::vector<pk::ParamInfo>& t, uint32_t base)
+{
+    for (uint32_t i = 0; i < pk::kTailExt3Fields; ++i)
+    {
+        pk::ParamInfo pi = paramTable ().info (kTailExt3Ids[i]);
+        pi.id = base + i;
+        pi.name = pk::make::keep (std::string ("Saturator ") + pi.name);
+        t.push_back (pi);
+    }
+}
+
+// where each block's fields start among the tail's fields
+constexpr uint32_t kTailExt2First = pk::kTailFields + pk::kTailExtFields;
+constexpr uint32_t kTailExt3First = kTailExt2First + pk::kTailExt2Fields;
+
+// The tail field (a pk::TailField, pk::kTailFields + i for extended field i, kTailExt2First + i for
+// field i of the third block, kTailExt3First + i for field i of the fourth) that holds Smacheratr
+// parameter id, or -1 (Smacheratr's own Dry/Wet is the tail's Mix).
 inline int tailFieldOf (uint32_t id)
 {
     switch (id)
@@ -73,17 +94,37 @@ inline int tailFieldOf (uint32_t id)
             return (int)(pk::kTailFields + i);
     for (uint32_t i = 0; i < pk::kTailExt2Fields; ++i)
         if (kTailExt2Ids[i] == id)
-            return (int)(pk::kTailFields + pk::kTailExtFields + i);
+            return (int)(kTailExt2First + i);
+    for (uint32_t i = 0; i < pk::kTailExt3Fields; ++i)
+        if (kTailExt3Ids[i] == id)
+            return (int)(kTailExt3First + i);
     return -1;
 }
 
-// A plug-in's parameter for tail field f (as tailFieldOf gives it): its blocks at base, extBase and
-// ext2Base.
-constexpr uint32_t tailParamOf (uint32_t f, uint32_t base, uint32_t extBase, uint32_t ext2Base)
+// Where a plug-in's four blocks of tail parameters start (pk::addTailParams, addTailExtParams,
+// addTailExt2Params, addTailExt3Params).
+struct TailBases
 {
-    return f < pk::kTailFields                        ? base + f
-           : f < pk::kTailFields + pk::kTailExtFields ? extBase + (f - pk::kTailFields)
-                                                      : ext2Base + (f - pk::kTailFields - pk::kTailExtFields);
+    uint32_t base, extBase, ext2Base, ext3Base;
+};
+
+// A plug-in's parameter for tail field f (as tailFieldOf gives it): its blocks at b.
+constexpr uint32_t tailParamOf (uint32_t f, const TailBases& b)
+{
+    return f < pk::kTailFields  ? b.base + f
+           : f < kTailExt2First ? b.extBase + (f - pk::kTailFields)
+           : f < kTailExt3First ? b.ext2Base + (f - kTailExt2First)
+                                : b.ext3Base + (f - kTailExt3First);
+}
+
+// The tail field of a plug-in's parameter id (its blocks at b), or -1 when it is none of them.
+constexpr int tailFieldIn (uint32_t id, const TailBases& b)
+{
+    return id >= b.base && id < b.base + pk::kTailFields               ? (int)(id - b.base)
+           : id >= b.extBase && id < b.extBase + pk::kTailExtFields    ? (int)(pk::kTailFields + (id - b.extBase))
+           : id >= b.ext2Base && id < b.ext2Base + pk::kTailExt2Fields ? (int)(kTailExt2First + (id - b.ext2Base))
+           : id >= b.ext3Base && id < b.ext3Base + pk::kTailExt3Fields ? (int)(kTailExt3First + (id - b.ext3Base))
+                                                                       : -1;
 }
 
 } // namespace smacheratr

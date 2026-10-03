@@ -72,13 +72,14 @@ protected:
         return view;
     }
     // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`, the
-    // extended fields at `extBase`, Gently's Advanced block at `ext2Base`): every Smacheratr control,
-    // in two rows and three knobs. Gently (called Clarity before) has one button, Advanced and a band
-    // selector; the selected band's Frequency, Width and Range are shown (its Threshold sliders and
-    // region Drive are in smacheratr::TailDisplays, at the right of the colour display).
-    // Needs about 680 x 78.
+    // extended fields at `extBase`, Gently's Advanced block at `ext2Base`, its High band and No
+    // Overlap at `ext3Base`): every Smacheratr control, in two rows and three knobs. Gently (called
+    // Clarity before) has one button, Advanced and a band selector; the selected band's Frequency,
+    // Width and Range are shown (its Threshold sliders and region Drive are in
+    // smacheratr::TailDisplays, at the right of the colour display, and so is No Overlap, at the right
+    // of the panel's title). Needs about 680 x 78.
     Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase, uint32_t ext2Base,
-                         const char* title = "smacheratr  (end of the chain)");
+                         uint32_t ext3Base, const char* title = "smacheratr  (end of the chain)");
 public:
     // Shows Gently band `band`'s controls in the tail panel (the display calls it when a band is picked).
     void showTailBand (int band);
@@ -94,7 +95,7 @@ protected:
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
     int tailBand = 0;                                              // Gently band shown in the tail panel
-    std::vector<VSTGUI::CView*> tailBandViews[3], tailBandButtons; // its controls, per band; the selector
+    std::vector<VSTGUI::CView*> tailBandViews[4], tailBandButtons; // its controls, per band (1, 2, Sub, High); the selector
 };
 
 } // namespace pk

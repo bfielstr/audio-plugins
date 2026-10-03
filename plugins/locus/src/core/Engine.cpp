@@ -28,6 +28,8 @@ void Engine::prepare (double sampleRate, int maxBlock)
         tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
     for (uint32_t f = 0; f < pk::kTailExt2Fields; ++f)
         tail.setParam (pk::kTailFields + pk::kTailExtFields + f, p[kTailExt2Base + f]);
+    for (uint32_t f = 0; f < pk::kTailExt3Fields; ++f)
+        tail.setParam (smacheratr::kTailExt3First + f, p[kTailExt3Base + f]);
     // ~85 ms analysis window at any rate, 8x overlap for good time resolution
     fftSize = 1;
     while (fftSize < sr * 0.085)

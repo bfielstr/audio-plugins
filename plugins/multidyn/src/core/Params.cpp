@@ -87,7 +87,8 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kSubOutput, "Sub Output Gain", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
     t.push_back (choice (kStyle, "Style", "Style", {"OTT", "Character"}, kStyleOtt));
     t.push_back (real (kSubInput, "Sub Input Gain", "Input", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
-    static_assert (kNumParams == kSubInput + 1, "the table ends with Sub Input");
+    smacheratr::addTailExt3Params (t, kSatExt3Base);
+    static_assert (kNumParams == kSatExt3Base + pk::kTailExt3Fields, "the table ends with the built-in Smacheratr's fourth block");
     return t;
 }
 

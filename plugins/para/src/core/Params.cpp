@@ -63,6 +63,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kLpSlope, "Low-Pass Slope", "LP Slope", slopeNames (), kSlope24));
         v.push_back (toggle (kHpGainLock, "High-Pass Gain Lock", "HP Lock", true));
         v.push_back (toggle (kLpGainLock, "Low-Pass Gain Lock", "LP Lock", false));
+        smacheratr::addTailExt3Params (v, kTailExt3Base);
         return v;
     }());
     return t;

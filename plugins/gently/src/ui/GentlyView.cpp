@@ -83,6 +83,16 @@ void fft (std::vector<std::complex<float>>& a)
 
 CColor GentlyView::bandColor (int band, uint8_t alpha) { return smacheratr::ColorView::bandColor (band, alpha); }
 
+const smacheratr::GentlyBandParams& GentlyView::bandParams ()
+{
+    static const smacheratr::GentlyBandParams bp {
+        {freqParam (0), freqParam (1), freqParam (kSub), freqParam (kHigh)},
+        {bandParam (0, kWidth), bandParam (1, kWidth), -1, -1},
+        kNoOverlap,
+        [] (pk::ParamHost* h, int k) { return bandWorks (h->plainValue (onParam (k)), h->plainValue (rangeParam (k))); }};
+    return bp;
+}
+
 GentlyView::GentlyView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
 {
     window.resize (kFftSize);
@@ -105,11 +115,22 @@ bool GentlyView::works (int band) const
     return bandWorks (host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
 }
 
+smacheratr::GentlyLayout GentlyView::layoutNow () const
+{
+    smacheratr::GentlyLayout l = smacheratr::readLayout (host, bandParams ());
+    if (host->plainValue (kNoOverlap) >= 0.5)
+        smacheratr::resolveOverlaps (l);
+    return l;
+}
+
 ClarityBand GentlyView::bandNow (int band) const
 {
+    const smacheratr::GentlyLayout l = layoutNow ();
     if (band == kSub)
-        return smacheratr::subBand (sampleRate (), host->plainValue (kSubFreq));
-    return smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)), host->plainValue (bandParam (band, kWidth)));
+        return smacheratr::subBand (sampleRate (), l.freq[band]);
+    if (band == kHigh)
+        return smacheratr::highBand (sampleRate (), l.freq[band]);
+    return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band]);
 }
 
 double GentlyView::xOfHz (double hz) const
@@ -132,7 +153,7 @@ double GentlyView::yOfDb (double db) const
 
 CPoint GentlyView::handle (int band) const
 {
-    return CPoint (xOfHz (host->plainValue (freqParam (band))), yOfDb (-host->plainValue (rangeParam (band))));
+    return CPoint (xOfHz (layoutNow ().freq[band]), yOfDb (-host->plainValue (rangeParam (band))));
 }
 
 double GentlyView::edgeX (int band, bool high) const
@@ -220,8 +241,7 @@ void GentlyView::idle ()
     // the cuts, eased
     for (int k = 0; k < kAllBands; ++k)
     {
-        const float cut =
-            !m ? 0.0f : (k == 0 ? m->bands.clarityDb : k == 1 ? m->bands.clarity2Db : m->bands.claritySubDb).load (std::memory_order_relaxed);
+        const float cut = !m ? 0.0f : smacheratr::clarityCutMeter (m->bands, k).load (std::memory_order_relaxed);
         const float target = works (k) ? cut : 0.0f;
         const float before = shownCut[k];
         shownCut[k] += (target - shownCut[k]) * 0.35f;
@@ -420,8 +440,8 @@ void GentlyView::draw (CDrawContext* ctx)
                 ctx->setFrameColor (bandColor (k));
                 ctx->drawGraphicsPath (lp, CDrawContext::kPathStroked);
             }
-        // (Sub: no edges to drag; its region starts at the bottom of the display)
-        if (k == kSub)
+        // (Sub, High: no edges to drag; their regions run to the ends of the display)
+        if (!hasWidth (k))
             continue;
         const bool edgeHot = dragBand == k && (drag == Drag::Low || drag == Drag::High || drag == Drag::Width);
         ctx->setLineWidth (edgeHot ? 2.0 : 1.0);
@@ -466,13 +486,13 @@ void GentlyView::draw (CDrawContext* ctx)
         const CRect p = pill (k);
         const bool enabled = host->plainValue (onParam (k)) >= 0.5;
         char name[8];
-        std::snprintf (name, sizeof (name), k == kSub ? "Sub" : "%d", k + 1);
+        std::snprintf (name, sizeof (name), k == kSub ? "Sub" : k == kHigh ? "High" : "%d", k + 1);
         char s[64];
         if (on[k])
             std::snprintf (s, sizeof (s), "%s   %s   %.1f dB", name, host->valueText (freqParam (k)).c_str (), (double)shownCut[k]);
         else
             std::snprintf (s, sizeof (s), "%s   %s   %s", name, host->valueText (freqParam (k)).c_str (), enabled ? "no range" : "off");
-        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 225) : k == 1 ? CColor (22, 28, 44, 225) : CColor (44, 32, 16, 225));
+        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 225) : k == 1 ? CColor (22, 28, 44, 225) : k == kSub ? CColor (44, 32, 16, 225) : CColor (44, 20, 32, 225));
         ctx->drawRect (p, kDrawFilled);
         ctx->setFrameColor (bandColor (k, on[k] ? 170 : 80));
         ctx->setLineWidth (1.0);
@@ -485,7 +505,7 @@ void GentlyView::draw (CDrawContext* ctx)
 
 int GentlyView::bandUnder (const CPoint& p) const
 {
-    // the second band is drawn on top, so it is found first (Sub has no width: not here)
+    // the second band is drawn on top, so it is found first (Sub and High have no width: not here)
     for (int k = kBands - 1; k >= 0; --k)
         if (works (k) && p.x >= edgeX (k, false) - kEdgeGrab && p.x <= edgeX (k, true) + kEdgeGrab)
             return k;
@@ -561,7 +581,7 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     if (!right && e.clickCount < 2 && e.modifiers.has (ModifierKey::Alt))
     {
         const int under = drag != Drag::None ? k : bandUnder (e.mousePosition);
-        if (under >= 0 && under != kSub) // (Sub has no width)
+        if (under >= 0 && hasWidth (under)) // (Sub and High have no width)
         {
             drag = Drag::Width;
             k = under;
@@ -570,29 +590,35 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     if (drag == Drag::None)
         return;
     dragBand = k;
-    const bool sub = k == kSub;
-    const uint32_t freq = freqParam (k), width = sub ? freq : bandParam (k, kWidth), range = rangeParam (k); // (Sub: no width)
+    const bool sub = !hasWidth (k); // (Sub or High: no width)
+    const uint32_t freq = freqParam (k), width = sub ? freq : bandParam (k, kWidth), range = rangeParam (k);
     if (e.clickCount == 2 || right)
     {
+        const smacheratr::GentlyLayout before = smacheratr::readLayout (host, bandParams ());
         host->setOnce (freq, host->table ().defaultNormalized (freq));
         if (!sub)
             host->setOnce (width, host->table ().defaultNormalized (width));
         if (drag == Drag::Handle)
             host->setOnce (range, host->table ().defaultNormalized (range));
+        smacheratr::pushOnce (host, bandParams (), k, before); // (No Overlap: back where it was, it pushes too)
         done ();
         return;
     }
     down = e.mousePosition;
-    startFreq = host->plainValue (freq);
-    startRange = host->plainValue (range);
-    startWidth = sub ? 0.0 : host->plainValue (width);
     if (drag == Drag::Handle)
     {
         host->beginEdit (freq);
         host->beginEdit (range);
+        push.begin (host, bandParams (), k, {freq, range}); // (No Overlap: first splits what overlaps)
     }
     else
+    {
         host->beginEdit (width);
+        push.begin (host, bandParams (), k, {width});
+    }
+    startFreq = host->plainValue (freq);
+    startRange = host->plainValue (range);
+    startWidth = sub ? 0.0 : host->plainValue (width);
     invalid ();
     e.consumed = true;
 }
@@ -608,7 +634,7 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
             onPill |= pill (b).pointInside (e.mousePosition);
         if (onPill)
             h = Drag::None;
-        else if (e.modifiers.has (ModifierKey::Alt) && (h != Drag::None ? k != kSub : bandUnder (e.mousePosition) >= 0))
+        else if (e.modifiers.has (ModifierKey::Alt) && (h != Drag::None ? hasWidth (k) : bandUnder (e.mousePosition) >= 0))
             h = Drag::Width; // Alt: the band's width, sideways
         if (auto* f = getFrame ())
             f->setCursor (onPill ? kCursorHand : h == Drag::Handle ? kCursorSizeAll : h != Drag::None ? kCursorHSize : kCursorDefault);
@@ -620,12 +646,14 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
     const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     auto setPlain = [this] (uint32_t id, double v) { host->setNorm (id, host->table ().toNormalized (id, v)); };
     const uint32_t freq = freqParam (dragBand), range = rangeParam (dragBand);
-    const uint32_t width = dragBand == kSub ? freq : bandParam (dragBand, kWidth); // (only a Handle drag for Sub)
+    const uint32_t width = !hasWidth (dragBand) ? freq : bandParam (dragBand, kWidth); // (only a Handle drag for Sub and High)
     if (drag == Drag::Handle)
     {
         // sideways the frequency, down the Range (the handle follows the depth of the cut)
         const double hz = startFreq * std::pow (kMaxHz / kMinHz, dx / r.getWidth ());
-        setPlain (freq, dragBand == kSub ? std::clamp (hz, smacheratr::kSubMinHz, smacheratr::kSubMaxHz) : hz);
+        setPlain (freq, dragBand == kSub    ? std::clamp (hz, smacheratr::kSubMinHz, smacheratr::kSubMaxHz)
+                        : dragBand == kHigh ? std::clamp (hz, smacheratr::kHighMinHz, smacheratr::kHighMaxHz)
+                                            : hz);
         const double dbPerPixel = (kTopDb - kBottomDb) / (plotBottom () - plotTop ());
         setPlain (range, std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
     }
@@ -640,6 +668,7 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
         // the edge follows the mouse; the band stays centred, so the width is twice the distance
         setPlain (width, 2.0 * std::fabs (std::log2 (hzOfX (e.mousePosition.x) / host->plainValue (freq))));
     }
+    push.update (host, bandParams ());
     invalid ();
     e.consumed = true;
 }
@@ -648,6 +677,7 @@ void GentlyView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag == Drag::None)
         return;
+    push.end (host);
     if (drag == Drag::Handle)
     {
         host->endEdit (freqParam (dragBand));
@@ -681,13 +711,18 @@ void GentlyView::onMouseWheelEvent (MouseWheelEvent& e)
     // the suite's wheel on a filter handle (held, or with Shift over it): here the band's width, wheel up wider
     int k = dragBand;
     const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition, &k) != Drag::None);
-    if (!active || k == kSub) // (Sub has no width)
+    if (!active || !hasWidth (k)) // (Sub and High have no width)
         return;
     const uint32_t id = bandParam (k, kWidth);
     const double dn = pk::wheelStep (e, host->table (), id);
     if (dn == 0.0)
         return;
+    const smacheratr::GentlyLayout before = smacheratr::readLayout (host, bandParams ());
     host->setOnce (id, std::clamp (host->norm (id) + dn, 0.0, 1.0));
+    if (push.active ())
+        push.update (host, bandParams ());
+    else
+        smacheratr::pushOnce (host, bandParams (), k, before);
     invalid ();
     e.consumed = true;
 }

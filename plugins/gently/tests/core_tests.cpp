@@ -3,6 +3,7 @@
 #include "Params.h"
 
 #include "smacheratr/src/core/ClarityBand.h"
+#include "smacheratr/src/core/NoOverlap.h"
 
 #include <algorithm>
 #include <chrono>
@@ -153,9 +154,16 @@ TEST (parameters_and_defaults)
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
     CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
-               kNumParams == kTailExt2Base + pk::kTailExt2Fields,
-           "the end saturator's three blocks, one after the other, last");
-    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the last block");
+               kHighOn == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields,
+           "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block last");
+    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the third block");
+    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High", "the last block");
+    // every end saturator parameter reaches the tail's field it stands for, and only those are tail parameters
+    for (uint32_t id = 0; id < kNumParams; ++id)
+    {
+        const int f = smacheratr::tailFieldIn (id, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base});
+        CHECK (isTailParam (id) == (f >= 0) && (f < 0 || tailField (id) == (uint32_t)f), "ID %u: tail field %d", id, f);
+    }
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end Smacheratr off");
     CHECK (t.info (kAdvanced).def == 1.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced on (the Thresholds show), Drive off (12 dB)");
     CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
@@ -196,10 +204,12 @@ TEST (parameters_and_defaults)
         {8, "Band 1 On"},         {9, "Band 1 Frequency"}, {10, "Band 1 Width"},        {11, "Band 1 Range"},
         {12, "Band 1 Threshold"}, {13, "Band 2 On"},      {17, "Band 2 Threshold"},     {18, "Sub"},
         {19, "Sub Frequency"},    {20, "Sub Range"},      {21, "Sub Threshold"},        {22, "Saturator"},
-        {28, "Saturator Output"}, {45, "Saturator Gently Advanced"}, {53, "Saturator Gently Sub Threshold"}};
+        {28, "Saturator Output"}, {45, "Saturator Gently Advanced"}, {53, "Saturator Gently Sub Threshold"},
+        {54, "High"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
+        {58, "No Overlap"},       {59, "Saturator Gently High"}, {63, "Saturator Gently No Overlap"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
-    CHECK (kNumParams == 54, "54 parameters: %u", (unsigned)kNumParams);
+    CHECK (kNumParams == 64, "64 parameters: %u", (unsigned)kNumParams);
     std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gently block at %u)\n", (unsigned)kNumParams,
                  (unsigned)kBandBase, (unsigned)kSubOn, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
 }
@@ -445,6 +455,129 @@ TEST (sub_band)
     const double h0 = drive (false), h1 = drive (true);
     std::printf ("    120 Hz (the 3rd of 40 Hz): Drive off %.1f dB, on %.1f dB\n", h0, h1);
     CHECK (h1 > h0 + 20.0 && h1 > -60.0, "the Sub's region driven: %.1f vs %.1f dB", h1, h0);
+}
+
+TEST (high_band)
+{
+    // the High band alone (bands 1 and 2 off): from its Freq up to the very top, the Sub band's mirror
+    Meters m;
+    auto measure = [&] (double hz, double db, const std::function<void (Engine&)>& set) {
+        auto e = engine (
+            [&] (Engine& en) {
+                en.setParam (bandParam (0, kOn), 0.0);
+                en.setParam (bandParam (1, kOn), 0.0);
+                en.setParam (kHighOn, 1.0);
+                if (set)
+                    set (en);
+            },
+            kSr, &m);
+        const Sig in = tones ({{hz, db}}, 1.5);
+        const Sig out = run (*e, in);
+        return toneDb (out.l, hz, 36000) - toneDb (in.l, hz, 36000);
+    };
+    const auto& t = paramTable ();
+    CHECK (t.info (kHighOn).def == 0.0 && t.info (kHighFreq).def == smacheratr::kHighDefaultHz && t.info (kHighFreq).min == 2000.0 &&
+               t.info (kHighFreq).max == 16000.0 && t.info (kHighRange).def == 6.0 && t.info (kHighThreshold).def == -18.0 &&
+               t.info (kNoOverlap).def == 0.0,
+           "High off at 7 kHz (2 - 16 kHz), Range 6 dB, Threshold -18 dB; No Overlap off");
+    // off by default: a loud 10 kHz passes (bit for bit: the bands off too)
+    {
+        auto e = engine (
+            [] (Engine& en) {
+                en.setParam (bandParam (0, kOn), 0.0);
+                en.setParam (bandParam (1, kOn), 0.0);
+            },
+            kSr, &m);
+        const Sig in = tones ({{10000.0, -1.0}}, 0.5);
+        const double d = diffDelayed (in, run (*e, in), e->latency ());
+        CHECK (d == 0.0 && m.bands.clarityHighDb.load () == 0.0f, "High off: untouched (%g)", d);
+    }
+    // on: a loud 10 kHz tone is cut by the Range (6 dB), as the band's maths says
+    const double cut = measure (10000.0, -1.0, {});
+    const double meter = m.bands.clarityHighDb.load ();
+    const double expect = bandMathDb (smacheratr::highBand (kSr, smacheratr::kHighDefaultHz), 10000.0, 6.0);
+    std::printf ("    10 kHz at -1 dB: %.2f dB (the band's maths %.2f dB), meter %.2f dB, level %.2f dB\n", cut, expect, meter,
+                 (double)m.bands.clarityHighLevelDb.load ());
+    CHECK (std::fabs (cut - expect) < 0.3 && cut < -4.5, "cut by the Range: %.2f vs %.2f dB", cut, expect);
+    CHECK (std::fabs (meter + 6.0) < 0.01, "the meter reads the Range: %.2f dB", meter);
+    // a loud tone well below it (300 Hz), and a quiet one in it (-24 dB): untouched
+    const double low = measure (300.0, -1.0, {});
+    CHECK (std::fabs (low) < 0.01 && m.bands.clarityHighDb.load () == 0.0f, "300 Hz untouched: %.3f dB", low);
+    CHECK (std::fabs (measure (10000.0, -24.0, {})) < 0.01, "a quiet top untouched");
+    // the Freq sets where it tapers: a loud 3 kHz tone nearly left alone with the shelf from 12 kHz, cut from 2 kHz
+    const double at12k = measure (3000.0, -6.0, [] (Engine& en) { en.setParam (kHighFreq, 12000.0); });
+    const double at2k = measure (3000.0, -6.0, [] (Engine& en) { en.setParam (kHighFreq, 2000.0); });
+    std::printf ("    3 kHz at -6 dB: High Freq 12 kHz %.2f dB, 2 kHz %.2f dB\n", at12k, at2k);
+    CHECK (std::fabs (at12k) < 1.0 && at2k < -4.0, "the taper point: %.2f / %.2f dB", at12k, at2k);
+    CHECK (std::fabs (measure (10000.0, -1.0, [] (Engine& en) { en.setParam (kHighRange, 0.0); })) < 1e-4, "Range 0");
+    CHECK (std::fabs (measure (10000.0, -1.0, [] (Engine& en) { en.setParam (kHighOn, 0.0); })) < 1e-4, "High off");
+    // Advanced: its Threshold
+    const double adv = measure (10000.0, -24.0, [] (Engine& en) {
+        en.setParam (kAdvanced, 1.0);
+        en.setParam (kHighThreshold, -40.0);
+    });
+    CHECK (adv < -4.5 && std::fabs (m.bands.clarityHighDb.load () + 6.0) < 0.01, "the High Threshold works with Advanced (%.2f dB)", adv);
+    // High off is Gently as it was: the same output (to the bit) whatever its other controls say, with
+    // every other band working
+    auto render = [] (bool on, double freq, double range) {
+        auto e = engine ([&] (Engine& en) {
+            en.setParam (kSubOn, 1.0);
+            en.setParam (kHighOn, on ? 1.0 : 0.0);
+            en.setParam (kHighFreq, freq);
+            en.setParam (kHighRange, range);
+        });
+        return run (*e, tones ({{45.0, -6.0}, {220.0, -6.0}, {3200.0, -8.0}, {9000.0, -8.0}}, 0.5)).l;
+    };
+    CHECK (render (false, 7000.0, 6.0) == render (false, 2500.0, 20.0), "High off ignores its controls, to the bit");
+    CHECK (render (true, 7000.0, 6.0) != render (false, 7000.0, 6.0), "High on changes the sound");
+}
+
+TEST (no_overlap)
+{
+    // band 1 at 250 Hz and band 2 at 400 Hz, both 2 octaves wide: they overlap (200 - 500 Hz)
+    auto set = [] (bool noOverlap, double f1, double w1, double f2, double w2) {
+        return [=] (Engine& en) {
+            en.setParam (bandParam (0, kFreq), f1);
+            en.setParam (bandParam (0, kWidth), w1);
+            en.setParam (bandParam (1, kFreq), f2);
+            en.setParam (bandParam (1, kWidth), w2);
+            en.setParam (kNoOverlap, noOverlap ? 1.0 : 0.0);
+        };
+    };
+    const Sig in = tones ({{150.0, -6.0}, {320.0, -6.0}, {700.0, -6.0}, {3000.0, -6.0}}, 0.8);
+    auto render = [&] (const std::function<void (Engine&)>& s) {
+        auto e = engine (s);
+        return run (*e, in).l;
+    };
+    // apart (the defaults: 250 Hz and 3 kHz), No Overlap changes nothing, to the bit
+    CHECK (render (set (true, 250.0, 2.0, 3000.0, 2.0)) == render (set (false, 250.0, 2.0, 3000.0, 2.0)), "bands apart: the same sound");
+    // overlapping: the engine keeps them apart, as smacheratr::resolveOverlaps says
+    const auto kept = render (set (true, 250.0, 2.0, 400.0, 2.0));
+    CHECK (kept != render (set (false, 250.0, 2.0, 400.0, 2.0)), "overlapping: No Overlap moves them");
+    smacheratr::GentlyLayout l;
+    l.on[0] = l.on[1] = true;
+    l.freq[0] = 250.0, l.width[0] = 2.0, l.freq[1] = 400.0, l.width[1] = 2.0;
+    l.freq[kSub] = smacheratr::kSubDefaultHz, l.freq[kHigh] = smacheratr::kHighDefaultHz;
+    smacheratr::resolveOverlaps (l);
+    CHECK (!smacheratr::bandsOverlap (l), "resolved");
+    CHECK (kept == render (set (false, l.freq[0], l.width[0], l.freq[1], l.width[1])), "as if the bands had been set apart");
+    // a band that does not work (off) takes no part
+    auto off2 = [&] (bool noOverlap) {
+        return render ([&] (Engine& en) {
+            set (noOverlap, 250.0, 2.0, 400.0, 2.0) (en);
+            en.setParam (bandParam (1, kOn), 0.0);
+        });
+    };
+    CHECK (off2 (true) == off2 (false), "band 2 off: band 1 stays where it is");
+    // the High band and band 2 overlapping: High's Freq is moved up to where band 2 ends (split at the middle)
+    auto withHigh = [&] (bool noOverlap) {
+        return render ([&] (Engine& en) {
+            set (noOverlap, 250.0, 2.0, 5000.0, 2.0) (en);
+            en.setParam (kHighOn, 1.0);
+            en.setParam (kHighFreq, 4000.0);
+        });
+    };
+    CHECK (withHigh (true) != withHigh (false), "High over band 2: kept apart");
 }
 
 TEST (advanced_thresholds)

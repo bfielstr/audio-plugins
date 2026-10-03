@@ -604,7 +604,7 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
-static_assert (smacheratr::kGentlyBands == 3, "Editor.h sizes Gently's band arrays for three bands");
+static_assert (smacheratr::kGentlyBands == 4, "Editor.h sizes Gently's band arrays for four bands");
 
 void Editor::updateSatAdvanced ()
 {
@@ -614,12 +614,11 @@ void Editor::updateSatAdvanced ()
         return;
     using namespace smacheratr;
     const bool advanced = satHost->plainValue (kClarityAdvanced) >= 0.5;
-    ThresholdSlider::layout (fxColorView, fxThresholds, CRect (236, 34, 526, 226), advanced);
+    ThresholdSlider::layout (fxColorView, fxThresholds, CRect (236, 34, 526, 204), advanced);
     const double on = satHost->plainValue (kClarity);
     for (int k = 0; k < kGentlyBands; ++k)
         if (fxThresholds[k])
-            fxThresholds[k]->setEnabledLook (k == kSubBand ? claritySubOn (on, satHost->plainValue (kClaritySub), satHost->plainValue (kClaritySubRange))
-                                                           : clarityBandOn (on, satHost->plainValue (kGentlyRangeIds[k])));
+            fxThresholds[k]->setEnabledLook (smacheratrBandParams ().works (satHost, k));
     for (size_t i = 0; i < fxSatAdvanced.size (); ++i)
     {
         fxSatAdvanced[i]->setVisible (advanced);
@@ -1418,7 +1417,7 @@ void Editor::buildBody ()
             add (fxShaperView, smacheratr::help::kShaperDisplay);
             // the colour curve and Gently's bands, as in Smacheratr
             fxColorView = new ColorView (
-                CRect (236, 34, 526, 226), h,
+                CRect (236, 34, 526, 204), h,
                 [this] () {
                     auto* b = ctl->getBridge ();
                     return b ? b->sampleRate.load (std::memory_order_relaxed) : 48000.0;
@@ -1429,6 +1428,8 @@ void Editor::buildBody ()
                 });
             add (fxColorView, smacheratr::help::kColorDisplay);
             fxColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
+            // No Overlap, under the colour display (switched on, it splits what overlaps)
+            add (new NoOverlapToggle (CRect (446, 208, 526, 226), h, smacheratrBandParams ()), tip (kClarityNoOverlap));
             add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
             add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
             add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gently"), tip (kClarity));
@@ -1442,7 +1443,7 @@ void Editor::buildBody ()
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
             // Gently: the selected band's controls (every band's are made, one is shown): Frequency, Width
-            // and Range; Sub has a switch, Frequency and Range (no Width)
+            // and Range; Sub and High have a switch, Frequency and Range (no Width)
             rackBandButtons.clear ();
             for (int k = 0; k < kGentlyBands; ++k)
             {
@@ -1453,13 +1454,14 @@ void Editor::buildBody ()
                     add (kn, nullptr); // (recorded for the rack page check)
                     rackBandViews[k].push_back (kn);
                 };
-                if (k == kSubBand)
+                if (!hasWidth (k))
                 {
-                    addKnob (534 + 2 * 58, kClaritySubFreq, "Gently Hz");
-                    auto* sub = new Toggle (CRect (534 + 3 * 58, 130, 534 + 3 * 58 + 52, 148), h, kClaritySub, "Sub");
-                    add (sub, tip (kClaritySub));
-                    rackBandViews[k].push_back (sub);
-                    addKnob (534 + 4 * 58, kClaritySubRange, "Gently dB");
+                    const bool sub = k == kSubBand;
+                    addKnob (534 + 2 * 58, kGentlyFreqIds[k], "Gently Hz");
+                    auto* on = new Toggle (CRect (534 + 3 * 58, 130, 534 + 3 * 58 + 52, 148), h, sub ? kClaritySub : kClarityHigh, sub ? "Sub" : "High");
+                    add (on, tip (sub ? kClaritySub : kClarityHigh));
+                    rackBandViews[k].push_back (on);
+                    addKnob (534 + 4 * 58, kGentlyRangeIds[k], "Gently dB");
                 }
                 else
                 {
@@ -1468,13 +1470,15 @@ void Editor::buildBody ()
                     for (int i = 0; i < 3; ++i)
                         addKnob (534 + (i + 2) * 58, bandIds[i], bandNames[i]);
                 }
-                static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub"};
-                auto* bt = new ActionButton (CRect (534 + k * 54, 194, 584 + k * 54, 212), names[k],
+                static const char* const names[kGentlyBands] = {"1", "2", "Sub", "High"};
+                auto* bt = new ActionButton (CRect (534 + k * 41, 194, 573 + k * 41, 212), names[k],
                                              [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-                bt->setTooltipText (k == 0 ? "Show Gently's first band (green in the display)."
+                bt->setTooltipText (k == 0   ? "Show Gently's first band (green in the display)."
                                     : k == 1 ? "Show Gently's second band (blue: it works once its Range is above 0 dB)."
-                                             : "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; "
-                                               "it works once switched on and its Range is above 0 dB).");
+                                    : k == 2 ? "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; "
+                                               "it works once switched on and its Range is above 0 dB)."
+                                             : "Show Gently's High band (rose: from its Freq, where it starts to taper, to the top of the "
+                                               "spectrum; it works once switched on and its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
             }
@@ -1559,12 +1563,14 @@ void Editor::buildBody ()
         {
             // Gently's own IDs throughout (gently::)
             auto tip = [] (uint32_t id) { return gently::help::forParam (id); };
-            gentlyView = new gently::GentlyView (CRect (8, 8, 470, 226), h, [this, s] () -> const gently::Meters* {
+            gentlyView = new gently::GentlyView (CRect (8, 8, 470, 204), h, [this, s] () -> const gently::Meters* {
                 auto* b = ctl->getBridge ();
                 return b ? &b->rack.gently[(size_t)s] : nullptr;
             });
             add (gentlyView, gently::help::kDisplay);
-            // the bands: a row each (band 1, band 2, Sub), On and its values
+            // No Overlap, under the display (switched on, it splits what overlaps)
+            add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gently::GentlyView::bandParams ()), tip (gently::kNoOverlap));
+            // the bands: a row each (band 1, band 2, Sub, High), On and its values
             const char* heads[5] = {"", "Freq", "Width", "Range", "Thresh"};
             for (int c = 1; c < 5; ++c)
             {
@@ -1575,23 +1581,24 @@ void Editor::buildBody ()
             for (int k = 0; k < gently::kAllBands; ++k)
             {
                 const double y = 22 + k * 24;
-                add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k), k == gently::kSub ? "Sub" : (k == 0 ? "Band 1" : "Band 2")),
+                add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k),
+                                 k == gently::kSub ? "Sub" : k == gently::kHigh ? "High" : (k == 0 ? "Band 1" : "Band 2")),
                      tip (gently::onParam (k)));
                 add (new NumberBox (CRect (540, y, 610, y + 20), h, gently::freqParam (k)), tip (gently::freqParam (k)));
-                if (k != gently::kSub)
+                if (gently::hasWidth (k))
                     add (new NumberBox (CRect (614, y, 684, y + 20), h, gently::bandParam (k, gently::kWidth)), tip (gently::bandParam (k, gently::kWidth)));
                 add (new NumberBox (CRect (688, y, 758, y + 20), h, gently::rangeParam (k)), tip (gently::rangeParam (k)));
                 add (new NumberBox (CRect (762, y, 832, y + 20), h, gently::thresholdParam (k)), tip (gently::thresholdParam (k)));
             }
             // Advanced (the Thresholds and the region Drive work), the Drive; the detector, stereo, mix, output
-            add (new Toggle (CRect (480, 100, 568, 120), h, gently::kAdvanced, "Advanced"), tip (gently::kAdvanced));
-            add (new Toggle (CRect (574, 100, 630, 120), h, gently::kDrive, "Drive"), tip (gently::kDrive));
-            add (new NumberBox (CRect (634, 100, 704, 120), h, gently::kDriveAmount), tip (gently::kDriveAmount));
-            g->addView (new Label (CRect (712, 102, 758, 118), "Stereo", 10.0, false, 2));
-            add (new Choice (CRect (762, 100, 832, 120), h, gently::kStereo), tip (gently::kStereo));
+            add (new Toggle (CRect (480, 122, 568, 142), h, gently::kAdvanced, "Advanced"), tip (gently::kAdvanced));
+            add (new Toggle (CRect (574, 122, 630, 142), h, gently::kDrive, "Drive"), tip (gently::kDrive));
+            add (new NumberBox (CRect (634, 122, 704, 142), h, gently::kDriveAmount), tip (gently::kDriveAmount));
+            g->addView (new Label (CRect (712, 124, 758, 140), "Stereo", 10.0, false, 2));
+            add (new Choice (CRect (762, 122, 832, 142), h, gently::kStereo), tip (gently::kStereo));
             const uint32_t knobs[4] = {gently::kAttack, gently::kRelease, gently::kMix, gently::kOutput};
             for (int i = 0; i < 4; ++i)
-                add (new Knob (knobRect (484 + i * 88, 132), h, knobs[i], nullptr, i == 3), tip (knobs[i]));
+                add (new Knob (knobRect (484 + i * 88, 150), h, knobs[i], nullptr, i == 3), tip (knobs[i]));
             break;
         }
         case kFxSmoothr:

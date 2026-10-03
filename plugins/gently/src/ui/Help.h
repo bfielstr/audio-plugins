@@ -33,12 +33,31 @@ inline const char* forParam (uint32_t id)
         case kSubRange:
             return "The Sub band: the most it turns the sub region down (drag its handle down). 3 dB for every 5 the band is "
                    "over its threshold, up to this. 0 dB: the band does nothing.";
+        case kHighOn:
+            return "The High band on or off (or click its readout in the display): compresses the top of the spectrum "
+                   "(harshness, fizz, sibilance), a shelf from where its cut starts to let go (Freq) up to the very top. Off "
+                   "by default.";
+        case kHighFreq:
+            return "The High band: where it starts to taper off going down, 2 to 16 kHz (7 kHz by default; drag its rose "
+                   "handle sideways). Everything above it, to the very top, is compressed; half as much around half the "
+                   "frequency, nearly nothing an octave below that.";
+        case kHighRange:
+            return "The High band: the most it turns the top down (drag its handle down). 3 dB for every 5 the band is over "
+                   "its threshold, up to this. 0 dB: the band does nothing.";
+        case kHighThreshold:
+            return "Advanced: where the High band starts cutting (its peak level, dB). The slider shows the band's level: "
+                   "brighter above the threshold, where it is being cut.";
+        case kNoOverlap:
+            return "No Overlap: the bands never cover the same frequencies. Dragging or widening a band in the display "
+                   "pushes its neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot "
+                   "move further). Switched on, bands that overlap are split at the middle of the overlap; automation that "
+                   "makes them overlap is kept apart the same way.";
         case kSubThreshold:
             return "Advanced: where the Sub band starts cutting (its peak level, dB). The slider shows the band's level: "
                    "brighter above the threshold, where it is being cut.";
         default: break;
     }
-    if (isBandParam (id) && !isSubParam (id))
+    if (isBandParam (id) && !isSubParam (id) && !isHighParam (id))
         switch ((id - kBandBase) % kBandBlock)
         {
             case kOn: return "Switches the band on or off (or click its name at the top of the display).";
@@ -58,14 +77,19 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "Gently's bands (1 green, 2 blue, Sub amber): each band's region shaded, the most it can cut dashed, the cut it is "
+    "Gently's bands (1 green, 2 blue, Sub amber, High rose): each band's region shaded, the most it can cut dashed, the cut it is "
     "making now filled in, the whole response in white. Behind: the output's spectrum filled, the input's dotted "
     "(tilted 4.5 dB/oct). Drag a handle sideways for the band's frequency, down for its Range; drag an edge, or "
-    "Alt-drag the band, for its width (the Sub band has none); the wheel on a handle (Shift) too. Double-click or "
-    "right-click a handle resets the band. Click a band's readout at the top to switch it on or off.";
+    "Alt-drag the band, for its width (the Sub and High bands have none); the wheel on a handle (Shift) too. Double-click "
+    "or right-click a handle resets the band. Click a band's readout at the top to switch it on or off. With No Overlap "
+    "on, a band pushes its neighbours along.";
 
 constexpr const char* kSubThresholdSlider =
     "Advanced: the Sub band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "
+    "the threshold and being cut. Double-click or right-click: -18 dB.";
+
+constexpr const char* kHighThresholdSlider =
+    "Advanced: the High band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "
     "the threshold and being cut. Double-click or right-click: -18 dB.";
 
 constexpr const char* kThresholdSlider =

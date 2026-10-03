@@ -1,6 +1,7 @@
 // Levlr parameters. IDs are persisted in projects: only ever append. The end saturator's blocks
 // (kTailBase, kTailExtBase, kTailExt2Base) are closed now: the band count and the bands' drives come
-// after them, at 49 (pinned below, so a saturator block that grows can't move them).
+// after them, at 49 (pinned below, so a saturator block that grows can't move them), and the end
+// saturator's fourth block (Gently's High band and No Overlap) after those, at 58.
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -56,10 +57,12 @@ enum ParamId : uint32_t
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
     kBandCount = 49,                                // Bands: how many are in use (a choice: 1 .. 4, 4 by default)
     kDriveBase,                                     // kBands x kDriveBlock: each band's drive
-    kNumParams = kDriveBase + kBands * kDriveBlock
+    kTailExt3Base = kDriveBase + kBands * kDriveBlock, // Gently's High band and No Overlap in the end Smacheratr: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 static_assert (kTailExt2Base + pk::kTailExt2Fields == kBandCount, "the end saturator's blocks end where the band count starts");
-static_assert (kBandCount == 49 && kDriveBase == 50 && kNumParams == 58, "saved IDs: Bands at 49, the drives at 50 .. 57");
+static_assert (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 63,
+               "saved IDs: Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 62");
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 constexpr uint32_t xoverParam (int k) { return kXover + (uint32_t)k; }
@@ -73,11 +76,13 @@ inline int bandsOf (double choicePlain)
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
-           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields);
+           (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields) ||
+           (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields);
 }
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt2Base  ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
+    return id >= kTailExt3Base  ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base)
+           : id >= kTailExt2Base ? pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base)
            : id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase)
                                 : id - kTailBase;
 }

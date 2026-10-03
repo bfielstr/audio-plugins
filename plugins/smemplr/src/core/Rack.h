@@ -79,9 +79,11 @@ int slotAfterChain (const std::function<int (int)>& typeOf);
 // is used) the old saturator stays on and keeps running after the rack, as before.
 void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
-// States from before version 12 (before 11: Gently's Advanced mode too): the places in a rack
-// Smacheratr's block that Gently's later parameters take (Advanced .. Drive Amount, then the Sub band's)
-// held nothing that was used; they get their defaults (Advanced and Sub off: the same sound).
+// States from before version 17 (before 12: the Sub band's too; before 11: Gently's Advanced mode too):
+// the places in a rack Smacheratr's block that Gently's later parameters take (Advanced .. Drive Amount,
+// the Sub band's, then the High band's and No Overlap) held nothing that was used; they get their
+// defaults (Advanced, Sub, High and No Overlap off: the same sound). A Gently slot's High band and No
+// Overlap (17) get theirs the same way.
 void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
 // States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an

@@ -67,8 +67,8 @@ static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
 // ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band, Style, Sub Input) run on into the
-// slot's extension, in order
-constexpr uint32_t kMdAdded = multidyn::kNumParams - multidyn::kXoverSlope;
+// slot's extension, in order (its saturator's fourth block after them is not in the rack either)
+constexpr uint32_t kMdAdded = multidyn::kSatExt3Base - multidyn::kXoverSlope;
 static_assert (kMdAdded == 11 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
 
 int64_t fxIdAt (int type, uint32_t j)
@@ -96,7 +96,7 @@ int64_t fxBlockOf (int type, uint32_t id)
     if (type == kFxMultidyn)
     {
         if (id >= multidyn::kXoverSlope)
-            return id < multidyn::kNumParams ? (int64_t)(kSlotBlock + (id - multidyn::kXoverSlope)) : -1;
+            return id < multidyn::kSatExt3Base ? (int64_t)(kSlotBlock + (id - multidyn::kXoverSlope)) : -1;
         if (id == multidyn::kRmsWindow)
             return multidyn::kSatOn;
         if (id == multidyn::kSoften)
@@ -118,6 +118,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kTailExt2Base, para::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {para::kTailExt3Base, para::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
         {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
     };
@@ -127,23 +128,28 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {multidyn::kSatOn, multidyn::kSatPreLimitThreshold, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {multidyn::kSatExtBase, multidyn::kSatExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {multidyn::kSatExt2Base, multidyn::kSatExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {multidyn::kSatExt3Base, multidyn::kSatExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> widrHidden {
         {widr::kRole, widr::kGroup, "Mix Aware: between Widr plug-ins on different tracks, not inside Smemplr"},
         {widr::kTailBase, widr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {widr::kTailExtBase, widr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {widr::kTailExt2Base, widr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {widr::kTailExt3Base, widr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     static const std::vector<RackHidden> levlrHidden {
         {levlr::kTailBase, levlr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {levlr::kTailExtBase, levlr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {levlr::kTailExt2Base, levlr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {levlr::kTailExt3Base, levlr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
-    static_assert (levlr::kNumParams <= kSlotBlock, "Levlr's parameters must fit a slot's block");
+    // (its saturator's fourth block runs on into the slot's extension: not in the rack)
+    static_assert (levlr::kTailExt3Base <= kSlotBlock && levlr::kNumParams <= kSlotBlockAll, "Levlr's parameters must fit a slot's block");
     static const std::vector<RackHidden> wubrHidden {
         {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {wubr::kTailExt2Base, wubr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {wubr::kTailExt3Base, wubr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         // each band's points and their count: drawn in the shape display (a ShapeView, not a control per value)
         {wubr::bandParam (0, wubr::kPointCount), wubr::bandParam (0, wubr::kPointCount), "the shape display adds and removes points"},
         {wubr::pointParam (0, 0, wubr::kPtX), wubr::pointParam (0, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
@@ -155,12 +161,15 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {smoothr::kTailBase, smoothr::kTailBase + pk::kTailFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
         {smoothr::kTailExtBase, smoothr::kTailExtBase + pk::kTailExtFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
         {smoothr::kTailExt2Base, smoothr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
+        {smoothr::kTailExt3Base, smoothr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
     };
     static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
     static const std::vector<RackHidden> gentlyHidden {
-        {gently::kTailBase, gently::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gently::kTailBase, gently::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gently::kTailExt3Base, gently::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
-    static_assert (gently::kNumParams <= kSlotBlock, "Gently's parameters must fit a slot's block");
+    // (its saturator's fourth block runs on into the slot's extension: not in the rack)
+    static_assert (gently::kTailExt3Base <= kSlotBlock && gently::kNumParams <= kSlotBlockAll, "Gently's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
     };
@@ -321,19 +330,28 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
 
 void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
-    if (version >= 12)
+    if (version >= 17)
         return;
-    const uint32_t first = version < 11 ? smacheratr::kClarityAdvanced : smacheratr::kClaritySub;
+    // Smacheratr's Gently parameters added since the state was saved: before 11 from Advanced on, before
+    // 12 from the Sub band on, before 17 the High band and No Overlap
+    const uint32_t first = version < 11 ? smacheratr::kClarityAdvanced : version < 12 ? smacheratr::kClaritySub : smacheratr::kClarityHigh;
     for (int slot = 0; slot < kRackSlots; ++slot)
     {
         const uint32_t typeId = slotParam (slot, kSlotType);
-        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxSmacheratr)
+        if (!has[typeId])
             continue;
-        for (uint32_t id = first; id < smacheratr::kNumParams; ++id)
-        {
-            norm[slotBlockParam (slot, id)] = smacheratr::defaultNormalized (id);
-            has[slotBlockParam (slot, id)] = true;
-        }
+        const int type = (int)std::lround (toPlain (typeId, norm[typeId]));
+        auto setDefaults = [&] (uint32_t from, uint32_t to, const pk::ParamTable& t) {
+            for (uint32_t id = from; id < to; ++id)
+            {
+                norm[slotBlockParam (slot, id)] = t.defaultNormalized (id);
+                has[slotBlockParam (slot, id)] = true;
+            }
+        };
+        if (type == kFxSmacheratr)
+            setDefaults (first, smacheratr::kNumParams, smacheratr::paramTable ());
+        else if (type == kFxGently && version >= 13) // (Gently came to the rack in 13)
+            setDefaults (gently::kHighOn, gently::kTailExt3Base, gently::paramTable ());
     }
 }
 

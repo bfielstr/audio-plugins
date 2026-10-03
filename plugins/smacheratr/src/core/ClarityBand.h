@@ -6,7 +6,9 @@
 // (flat to the top). A shelf is 1 exactly where it is flat and the complement of a filter that adds up
 // with it to the input (lowPass1 / highPass1), so turning it down (x + (g - 1) band) is a shelving
 // cut of exactly g there (a band alone gets its cut from the two filters' phases cancelling at its
-// centre; a single low- or high-pass does not, so a shelf has to be one of such a pair). The engine turns the band down (x + (g - 1) * band) and the colour display draws it.
+// centre; a single low- or high-pass does not, so a shelf has to be one of such a pair). The Sub and
+// High bands are shelves of their own (subBand, highBand). The engine turns the band down
+// (x + (g - 1) * band) and the colour display draws it.
 // The law that sets the cut is clarityCutDb (Params.h).
 #pragma once
 
@@ -125,6 +127,23 @@ inline ClarityBand subBand (double sr, double taperHz)
     b.lowShelf = true;
     b.highHz = std::clamp (taperHz, 20.0, 100.0);
     b.lp = complementOf (highPass (sr, b.highHz * kCornerOverTaper, 0.5));
+    b.norm = 1.0;
+    return b;
+}
+
+// Gently's High band, the Sub band's mirror: a shelf, flat from `taperHz` up to the very top of the
+// spectrum, its cut letting go below taperHz (within about 1 dB of the full cut there, half of it
+// around half as high, nearly none an octave below that); taperHz is 2 - 16 kHz. It is the complement
+// of a critically damped 12 dB/oct low-pass (which is 0 at Nyquist, so the shelf is the whole Range
+// at the top), so the cut is exactly the Range where the shelf is flat.
+inline ClarityBand highBand (double sr, double taperHz)
+{
+    constexpr double kCornerUnderTaper = 1.14; // the taper point over the low-pass's corner (subBand's, mirrored)
+    ClarityBand b;
+    b.highShelf = true;
+    b.lowHz = std::clamp (taperHz, 2000.0, std::min (16000.0, 0.4 * sr));
+    b.highHz = std::max (b.lowHz * 1.01, std::min (kShelfHighHz, 0.45 * sr)); // (where the display ends it: the band runs on to the top)
+    b.hp = complementOf (lowPass (sr, b.lowHz / kCornerUnderTaper, 0.5));
     b.norm = 1.0;
     return b;
 }
