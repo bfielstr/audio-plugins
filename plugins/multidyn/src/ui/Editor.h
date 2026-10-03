@@ -58,6 +58,7 @@ private:
     VSTGUI::CView* xoverBoxes[3] {};
     pk::Label* subName = nullptr;
     VSTGUI::CView* subBoxes[4] {}; // threshold, ratio, attack, release
+    VSTGUI::CView* subInBox = nullptr;
     VSTGUI::CView* subOutBox = nullptr;
     pk::Label* scStatus = nullptr;
     pk::NumberBox* rmsWindowBox = nullptr; // dimmed with the Peak detector (and in OTT style)

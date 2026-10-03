@@ -224,6 +224,7 @@ void Engine::reset ()
         meters[b] = BandMeter {};
     }
     bands[kSubBand] = BandState {};
+    bands[kSubBand].inGain = dbToGain (p[kSubInput]);
     bands[kSubBand].outGain = dbToGain (p[kSubOutput]);
     meters[kSubBand] = BandMeter {};
     subState = on (p[kSubOn]) ? SubState::In : SubState::Off;
@@ -298,6 +299,7 @@ void Engine::startSub ()
     for (auto& bank : banks)
         bank.resetSub ();
     bands[kSubBand] = BandState {};
+    bands[kSubBand].inGain = dbToGain (p[kSubInput]);
     bands[kSubBand].outGain = dbToGain (p[kSubOutput]);
     subState = SubState::Warming;
     subPos = 0;
@@ -395,7 +397,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     {
         if (b == kSubBand)
         {
-            inTarget[b] = 1.0f;
+            inTarget[b] = dbToGain (p[kSubInput]);
             outTargetB[b] = dbToGain (p[kSubOutput]);
             const double attackMs = std::max (0.01, p[kSubAttack] * timeScale / 3.0);
             const double releaseMs = std::max (0.1, p[kSubRelease] * timeScale / 3.0);

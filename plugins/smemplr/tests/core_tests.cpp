@@ -596,6 +596,14 @@ TEST (rack_multidyn_later_params)
     migrateMultidynInSlots (*st, *has, 14);
     CHECK (std::lround (md.toPlain (multidyn::kStyle, (*st)[style])) == multidyn::kStyleOtt, "version 14: as saved");
     CHECK (md.info (multidyn::kStyle).def == multidyn::kStyleOtt, "a new slot: OTT");
+    // Sub Input: an old slot (before 16) read 0 there (-24 dB) and gets 0 dB; a version 16 slot keeps it
+    const uint32_t subIn = slotBlockParam (3, (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kSubInput));
+    (*st)[subIn] = 0.0;
+    migrateMultidynInSlots (*st, *has, 15);
+    CHECK (std::fabs (md.toPlain (multidyn::kSubInput, (*st)[subIn])) < 1e-9 && (*has)[subIn], "version 15: Sub Input 0 dB");
+    (*st)[subIn] = 0.0;
+    migrateMultidynInSlots (*st, *has, 16);
+    CHECK ((*st)[subIn] == 0.0, "version 16: as saved");
 }
 
 TEST (settings_text_roundtrip)

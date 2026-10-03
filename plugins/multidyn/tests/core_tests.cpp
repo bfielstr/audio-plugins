@@ -167,7 +167,7 @@ TEST (params_roundtrip)
                t.toText (kXoverSlope, kXover6) == "6 dB" && t.toText (kXoverSlope, kXover18) == "18 dB" &&
                t.toText (kXoverSlope, kXover24) == "24 dB" && t.toText (kXoverSlope, kXover96) == "96 dB",
            "Slope: 6 dB .. Brickwall, 24 dB by default; then Soften Color");
-    CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kNumParams == kStyle + 1 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
+    CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kSubInput == kStyle + 1 && kNumParams == kSubInput + 1 && t.info (kSubInput).def == 0.0 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
                t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
            "the Sub band last: off, 40 Hz in 20 .. 100 Hz");
     for (uint32_t id = 0; id < kNumParams; ++id)
@@ -1357,6 +1357,7 @@ TEST (sub_band_off_is_identical)
         b.setParam (kSubRatio, 20.0);
         b.setParam (kSubAttack, 1.0);
         b.setParam (kSubOutput, 12.0);
+        b.setParam (kSubInput, -12.0);
         a.reset ();
         b.reset ();
         const Sig in = mixedSignal (1.0);
@@ -1468,6 +1469,24 @@ TEST (sub_band_compresses_the_sub)
     CHECK (g > 3.0 && g < 6.5, "Sub Output +6 dB: %.2f dB at 25 Hz", g);
     CHECK (e->meter (kSubBand).outputDb > -20.0 && e->meter (kSubBand).outputDb < -8.0, "the Sub band's meter: %.1f dB",
            e->meter (kSubBand).outputDb);
+    // its Input: a level before the compression, as a band's (uncompressed, +6 dB as the Output's)
+    auto subGain = [&] (double inDb, double outDb, double thresh, double ratio) {
+        auto s = neutralEngine (kSr, 3, kXover24);
+        s->setParam (kSubOn, 1.0);
+        s->setParam (kSubThresh, thresh);
+        s->setParam (kSubRatio, ratio);
+        s->setParam (kSubInput, inDb);
+        s->setParam (kSubOutput, outDb);
+        s->reset ();
+        auto o = run (*s, in);
+        return toneDb (o.l, 25.0, 48000, 72000) - toneDb (in.l, 25.0, 48000, 72000);
+    };
+    const double gIn = subGain (6.0, 0.0, 0.0, 1.0);
+    CHECK (std::fabs (gIn - g) < 0.3, "Sub Input +6 dB: %.2f dB (Output +6 dB: %.2f dB)", gIn, g);
+    // ... so it drives the threshold harder: +12 in, -12 out compresses more than 0 / 0
+    const double flat = subGain (0.0, 0.0, -30.0, 4.0), pushed = subGain (12.0, -12.0, -30.0, 4.0);
+    std::printf ("    Sub 4:1 at -30 dB: Input 0 dB %+.2f dB, Input +12 / Output -12 dB %+.2f dB\n", flat, pushed);
+    CHECK (pushed < flat - 3.0, "Sub Input drives the compression: %.2f vs %.2f dB", pushed, flat);
 }
 
 TEST (sub_band_toggle_does_not_click)
@@ -1692,6 +1711,21 @@ TEST (ott_amount_and_controls)
         diff = std::max (diff, std::fabs (gainAt (kStyle, kStyleCharacter, level) - gainAt (kNumParams, 0.0, level)));
     }
     CHECK (diff > 1.0, "Character is a different sound (up to %.2f dB apart)", diff);
+}
+
+TEST (ott_expander_is_capped)
+{
+    // an Above ratio under 1:1 makes OTT's downward branch an expander: its boost stops at the upward cap
+    for (int k = 0; k < 3; ++k)
+    {
+        const double top = ott::makeupShape (k, 1.0) * ott::kMakeup[k] + ott::kUpCap[k];
+        double worst = -1e9;
+        for (double e = -60.0; e <= 24.0; e += 1.0)
+            worst = std::max (worst, ott::gainDb (k, e, 1.0, 1.0, -3.0, 0.0, 0.0));
+        CHECK (worst <= top + 1e-9 && worst > top - 1.0, "band kind %d: at most %.1f dB, %.1f dB", k, top, worst);
+        // and the defaults are unchanged by it
+        CHECK (ott::gainDb (k, -20.0, 1.0, 1.0, 1.0, 0.0, 0.0) < top, "band kind %d: the defaults", k);
+    }
 }
 
 TEST (ott_time_constants)

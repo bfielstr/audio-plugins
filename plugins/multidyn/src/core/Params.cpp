@@ -86,7 +86,8 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kSubRelease, "Sub Release", "Release", 1.0, 3000.0, 200.0, Curve::Log, Disp::Ms));
     t.push_back (real (kSubOutput, "Sub Output Gain", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
     t.push_back (choice (kStyle, "Style", "Style", {"OTT", "Character"}, kStyleOtt));
-    static_assert (kNumParams == kStyle + 1, "the table ends with Style");
+    t.push_back (real (kSubInput, "Sub Input Gain", "Input", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+    static_assert (kNumParams == kSubInput + 1, "the table ends with Sub Input");
     return t;
 }
 

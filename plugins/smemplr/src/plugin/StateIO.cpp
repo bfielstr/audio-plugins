@@ -35,7 +35,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 15: Para's Low-Pass Slope (its slots had one slope for both filters: the low-pass gets it) and Gain Locks
 //     (the high-pass's on unless its gain is above 0 dB, the low-pass's off) in its slots, and its Fade's
 //     range 1 .. 60 semitones (1 .. 36 before: a slot's Fade keeps its semitones)
-constexpr int32 kVersion = 15;
+// 16: Multidyn's Sub Input in its slots (0 dB: older slots read 0 there, -24 dB)
+constexpr int32 kVersion = 16;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -245,7 +246,7 @@ bool readState (IBStream* stream, PluginState& st)
     migrateLevlrInSlots (st.norm, st.has, version);
     // Para's slopes and per-filter drives (13), its low-pass slope, gain locks and Fade range (15)
     migrateParaInSlots (st.norm, st.has, version);
-    // Multidyn's OTT gain staging, slope and Sub band (13)
+    // Multidyn's OTT gain staging, slope and Sub band (13), Style (14), Sub Input (16)
     migrateMultidynInSlots (st.norm, st.has, version);
     if (version < 9)
         moveEndSaturatorIntoRack (st.norm, st.has); // (the rack is what the state has; its saturator after it, into it)
