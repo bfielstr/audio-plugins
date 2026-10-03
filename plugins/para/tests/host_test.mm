@@ -176,7 +176,10 @@ int main (int argc, char** argv)
             auto xOfHz = [] (double hz) {
                 return Editor::kViewLeft + std::log (hz / 20.0) / std::log (1000.0) * (Editor::kViewRight - Editor::kViewLeft);
             };
+            // (held to the display's range, as the display draws a handle: one above its top sits at the top;
+            // aimed above it, a click lands in the header and opens the preset menu, which waits for a choice)
             auto yOfDb = [] (double db) {
+                db = std::clamp (db, -36.0, 18.0);
                 return Editor::kViewTop + (18.0 - db) / 54.0 * (Editor::kViewBottom - Editor::kViewTop - 16.0);
             };
             const double hx = xOfHz (plainOf (rig, kHpFreq)), hy = yOfDb (0.0);
