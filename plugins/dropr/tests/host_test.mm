@@ -102,6 +102,8 @@ int main (int argc, char** argv)
 
         // state round trip
         rig.param (kLength, toNormalized (kLength, 300.0));
+        out.clear ();
+        rig.render (0.05, out, nullptr, hits); // (the processor takes the change with its next block)
         MemoryStream saved;
         CHECK (rig.component->getState (&saved) == kResultOk, "getState");
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
