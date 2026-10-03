@@ -266,6 +266,9 @@ std::vector<ParamInfo> buildTable ()
         add (fl ((ParamId)modLfoParam (l, kModPhase), keep (n + " Phase"), "Phase", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
         add (toggle ((ParamId)modLfoParam (l, kModRetrig), keep (n + " Retrigger"), "Retrig", false));
     }
+    // the filter and pitch envelopes locked to the loop (Engine.cpp: Voice::render)
+    add (choice (kFiltLoopLock, "Filter Env Loop Lock", "Lock", {"Off", "Restart", "Fit"}, kLoopLockOff));
+    add (choice (kPitchLoopLock, "Pitch Env Loop Lock", "Lock", {"Off", "Restart", "Fit"}, kLoopLockOff));
     return t;
 }
 

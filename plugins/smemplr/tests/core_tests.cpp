@@ -903,9 +903,11 @@ TEST (rack_wubr_mapping)
     for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
         CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
     // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
-    // high-pass, then the modulation LFOs), not the rack's, and the IDs run on to kNumParams with no gap
+    // high-pass, the modulation LFOs, the envelopes' Loop Locks), not the rack's, and the IDs run on to
+    // kNumParams with no gap, up to the hidden MIDI parameters
     CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kModLfoBase == kTransHpSlope + 1 &&
-               kNumParams == kModLfoEnd && kNumParams < kMidiPitchBend,
+               kFiltLoopLock == kModLfoEnd && kPitchLoopLock == kFiltLoopLock + 1 && kNumParams == kPitchLoopLock + 1 &&
+               kNumParams <= kMidiPitchBend,
            "kNumParams %u", (unsigned)kNumParams);
     for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
         CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id), "%u is the sampler's", id);
@@ -1575,6 +1577,46 @@ TEST (classic_loop_sustains_and_releases)
     auto rel = run (*e, 24000);
     CHECK (rms (rel.l, 12000, 24000) < 1e-4, "release didn't finish: %f", rms (rel.l, 12000, 24000));
     CHECK (e->activeVoices () == 0, "voices %d", e->activeVoices ());
+}
+
+TEST (envelopes_locked_to_the_loop)
+{
+    // a 1 kHz sine looping over its first 0.25 s, the pitch envelope +12 semitones falling to 0: Off, it
+    // falls once; Restart, it starts again at every pass of the loop; Fit, a decay far longer than a pass
+    // is squeezed into each pass (so it reaches the bottom before every wrap)
+    auto s = sine (1000.0, 1.0, 44100.0);
+    auto freqs = [&] (int lock, double decayMs) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kLength, 0.25);
+        e->setParam (kPitchA, 0.1);
+        e->setParam (kPitchD, decayMs);
+        e->setParam (kPitchS, 0.0);
+        e->setParam (kPitchEnvAmt, 12.0);
+        e->setParam (kPitchLoopLock, lock);
+        e->noteOn (60, 1.0f);
+        auto o = run (*e, 96000); // 2 s
+        std::vector<double> f;
+        for (size_t a = 24000; a + 960 <= o.l.size (); a += 960) // 20 ms windows from 0.5 s
+            f.push_back (freqOf (o.l, a, a + 960));
+        return f;
+    };
+    auto maxOf = [] (const std::vector<double>& v) { return *std::max_element (v.begin (), v.end ()); };
+    auto minOf = [] (const std::vector<double>& v) { return *std::min_element (v.begin (), v.end ()); };
+    const double unit = 1000.0; // the sine at its root (the sample's rate is made up for)
+    const auto off = freqs (kLoopLockOff, 60.0), restart = freqs (kLoopLockRestart, 60.0);
+    std::printf ("    Off: %.0f .. %.0f Hz, Restart: %.0f .. %.0f Hz\n", minOf (off), maxOf (off), minOf (restart), maxOf (restart));
+    CHECK (maxOf (off) < unit * 1.05, "Off: the envelope falls once (%.0f Hz at most after 0.5 s)", maxOf (off));
+    CHECK (maxOf (restart) > unit * 1.25 && minOf (restart) < unit * 1.05, // (20 ms windows average the fast fall)
+           "Restart: up again at every pass (%.0f .. %.0f Hz)", minOf (restart), maxOf (restart));
+    // a 20 s decay: Off, still high after 2 s; Fit, back at the root before each wrap
+    const auto slow = freqs (kLoopLockOff, 20000.0), fit = freqs (kLoopLockFit, 20000.0);
+    std::printf ("    20 s decay: Off %.0f .. %.0f Hz, Fit %.0f .. %.0f Hz\n", minOf (slow), maxOf (slow), minOf (fit), maxOf (fit));
+    CHECK (minOf (slow) > unit * 1.5, "Off: a 20 s decay is still high (%.0f Hz)", minOf (slow));
+    CHECK (minOf (fit) < unit * 1.1 && maxOf (fit) > unit * 1.5, "Fit: the decay fits a pass (%.0f .. %.0f Hz)", minOf (fit), maxOf (fit));
+    // the filter envelope's lock defaults Off as well (old projects keep their sound)
+    CHECK (paramTable ().info (kFiltLoopLock).def == kLoopLockOff && paramTable ().info (kPitchLoopLock).def == kLoopLockOff, "Off by default");
 }
 
 TEST (loop_crossfade_smooths_discontinuity)

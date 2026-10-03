@@ -355,7 +355,7 @@ void WaveformView::draw (CDrawContext* ctx)
         if (loopOn)
         {
             // shaded loop region with a solid brace along the bottom
-            ctx->setFillColor (CColor (120, 200, 120, drag == Handle::LoopBody ? 75 : 55));
+            ctx->setFillColor (CColor (120, 200, 120, drag == Handle::LoopBody || (drag == Handle::LoopRegion && moved) ? 75 : 55));
             ctx->drawRect (region, kDrawFilled);
             ctx->setFrameColor (CColor (120, 200, 120, 150));
             ctx->setLineWidth (1.0);
@@ -496,6 +496,8 @@ WaveformView::Handle WaveformView::hitTest (const CPoint& p, int& sliceIndex) co
             return Handle::LoopEnd;
         if (near (rs) && (lower || !near (fs)))
             return Handle::Start;
+        if (host->plainValue (kLoopOn) >= 0.5 && w.pointInside (p) && p.x > posToX (rs / s->length) && p.x < posToX (le / s->length))
+            return Handle::LoopRegion;
     }
     return Handle::None;
 }
@@ -568,6 +570,7 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
         case Handle::Start: host->beginEdit (kStart); break;
         case Handle::LoopEnd: host->beginEdit (kLength); break;
         case Handle::LoopBody:
+        case Handle::LoopRegion:
         {
             double fs, fe, rs, re, le;
             markerPositions (*s, fs, fe, rs, re, le);
@@ -576,6 +579,13 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
             loopDragLen = le - rs;
             host->beginEdit (kStart);
             host->beginEdit (kLength);
+            // inside the loop: the click auditions (as anywhere in the waveform) until it moves
+            if (h == Handle::LoopRegion && controller->getBridge ())
+            {
+                const int note = (int)std::lround (host->plainValue (kRootKey));
+                controller->getBridge ()->pushPreview (note, 0.8f);
+                previewNote = note;
+            }
             break;
         }
         case Handle::Ruler: break;
@@ -653,6 +663,11 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
         case Handle::FlagEnd: host->setNorm (kSampleEnd, std::max (pos, fs / len + minGap)); break;
         case Handle::Start: host->setNorm (kStart, std::clamp ((pos * len - fs) / (fe - fs), 0.0, 1.0)); break;
         case Handle::LoopEnd: host->setNorm (kLength, std::clamp ((pos * len - rs) / std::max (1.0, fe - fs), 0.0, 1.0)); break;
+        case Handle::LoopRegion:
+            if (!moved)
+                break;
+            stopPreview (); // dragged: a move, not an audition
+            [[fallthrough]];
         case Handle::LoopBody:
         {
             // move the whole loop: it begins at Start, so Start moves with it and Length stays
@@ -697,6 +712,11 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
             host->endEdit (kLength);
             if (!moved) // a click toggles looping
                 host->setOnce (kLoopOn, host->plainValue (kLoopOn) >= 0.5 ? 0.0 : 1.0);
+            break;
+        case Handle::LoopRegion:
+            host->endEdit (kStart);
+            host->endEdit (kLength);
+            stopPreview ();
             break;
         case Handle::Slice:
             if (moved)

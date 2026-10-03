@@ -169,22 +169,28 @@ enum ParamId : uint32_t
     // kModLfoFields, LFO by LFO (modLfoParam); what they modulate is in the state, not in parameters ---
     kModLfoBase,                      // 978
     kModLfoEnd = kModLfoBase + 4 * 5, // 998 (kModLfos * kModLfoFields, checked below)
+    // --- added after 0.9: the filter and pitch envelopes locked to the loop (a LoopLock: Off, Restart at
+    // every pass of the loop, or Fit, restarted and its attack, points and decay stretched to one pass;
+    // Engine.cpp: Voice::render). Not there in older states: Off ---
+    kFiltLoopLock = kModLfoEnd, // 998
+    kPitchLoopLock,             // 999
 
-    // The next free ID (998: the next parameter is "= kModLfoEnd", and kNumParams follows it). New
-    // parameters are appended here, never in a block above: every ID is stored in projects. Only 998 and
-    // 999 are left before the hidden MIDI parameters (1000 .. 1002): the table has every ID from 0 up, so
-    // going past them needs placeholders there. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
+    // The next free ID would be 1000, but that is where the hidden MIDI parameters (1000 .. 1002) are:
+    // the table has every ID from 0 up, so a new parameter goes after them (from 1003), which kNumParams,
+    // the table and every loop over the parameters then learn. New parameters are appended, never in a
+    // block above: every ID is stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
     // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
     // second extension block from here (kRackSlots times the new count, slot by slot), which
     // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
-    kNumParams = kModLfoEnd
+    kNumParams
 };
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
 static_assert (kRackExtEnd == 975 && kTransHpOn == 975 && kTransHpFreq == 976 && kTransHpSlope == 977,
                "stored IDs moved: append, never insert");
 static_assert (kModLfoBase == 978, "stored IDs moved: append, never insert");
-static_assert (kNumParams == 998, "a new parameter: update the next free ID in the comment above (and this)");
+static_assert (kFiltLoopLock == 998 && kPitchLoopLock == 999 && kNumParams == 1000,
+               "a new parameter: update the next free ID in the comment above (and this)");
 
 // The modulation LFOs' parameters: kModLfos LFOs, each a block of kModLfoFields (a new field goes in a
 // block of its own after kModLfoEnd: the blocks follow each other).
@@ -275,6 +281,7 @@ enum WarpMode { kWarpBeatsMode = 0, kWarpTones, kWarpTexture, kWarpRePitch, kWar
 enum FilterType { kLowpass = 0, kHighpass, kBandpass, kNotch, kMorph };
 enum FilterCircuit { kClean = 0, kOSR, kMS2, kSMP, kPRD };
 enum AmpLoop { kAmpLoopNone = 0, kAmpLoopTrigger, kAmpLoopLoop, kAmpLoopBeat, kAmpLoopSync };
+enum LoopLock { kLoopLockOff = 0, kLoopLockRestart, kLoopLockFit };
 enum LfoWave { kSine = 0, kSquare, kTriangle, kSawDown, kSawUp, kRandom };
 enum GlideMode { kGlideOff = 0, kGlideMono, kGlidePorta };
 enum TransHpSlope { kTransHp6 = 0, kTransHp12, kTransHp18, kTransHp24, kTransHp36, kTransHp48 };

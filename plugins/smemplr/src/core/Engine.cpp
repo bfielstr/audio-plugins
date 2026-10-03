@@ -258,6 +258,16 @@ double Voice::remainingOut () const
     return 1e12;
 }
 
+double Voice::loopPassLen (const ParamArray& p) const
+{
+    const auto& r = st.region;
+    const double loopLen = r.loopEnd - r.loopStart;
+    if (!r.loop || loopLen < 1.0)
+        return 0.0;
+    const double fade = !st.warp && st.mode == kModeClassic ? std::min (p[kLoopFade] * loopLen, 0.5 * loopLen) : 0.0;
+    return std::max (1.0, loopLen - fade);
+}
+
 float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double pitchRatio)
 {
     const SampleData& s = *c.sample;
@@ -295,6 +305,7 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
     // the last `fade` samples of the loop blend into its first `fade` samples, so the wrap
     // lands `fade` samples into the loop and the audio is continuous
     const double wrapLen = loopLen - fade;
+    loopWraps = 0;
     for (int i = 0; i < n; ++i)
     {
         if (srcDone)
@@ -313,6 +324,8 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
                 jumpFrom = pos;
                 jumpLen = jumpLeft = std::max (1, (int)(0.005 * sr));
             }
+            else
+                ++loopWraps;
             pos -= wraps * std::max (1.0, wrapLen);
         }
         else if (pos >= r.end)
@@ -377,9 +390,26 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
     const bool mono = c.sample->numChannels < 2;
     const bool filterOn = on (p[kFilterOn]);
     const EnvSettings ampS = envSettingsFor (p, 0);
-    const EnvSettings filtS = envSettingsFor (p, 1);
-    const EnvSettings pitchS = envSettingsFor (p, 2);
+    EnvSettings filtS = envSettingsFor (p, 1);
+    EnvSettings pitchS = envSettingsFor (p, 2);
     const float fsr = (float)sr;
+    // the filter and pitch envelopes locked to the loop: restarted at every pass (Restart), and with Fit
+    // their attack, points and decay stretched (or squeezed) to the length of a pass at the speed the
+    // sample plays (what the release does is the note's, not the loop's: it stays)
+    const int filtLock = idx (p[kFiltLoopLock]), pitchLock = idx (p[kPitchLoopLock]);
+    // (Classic only: the loop is Classic's, read at lastRate; warped playback has its own timing)
+    const double passLen = classic && !st.warp && (filtLock != kLoopLockOff || pitchLock != kLoopLockOff) ? loopPassLen (p) : 0.0;
+    const EnvSettings filtS0 = filtS, pitchS0 = pitchS;
+    auto fit = [] (EnvSettings& s, const EnvSettings& s0, double passMs) {
+        double total = s0.attackMs + s0.decayMs;
+        for (int k = 0; k < s0.points; ++k)
+            total += s0.ptMs[k];
+        const float scale = (float)(passMs / std::max (0.01, total));
+        s.attackMs = s0.attackMs * scale;
+        s.decayMs = s0.decayMs * scale;
+        for (int k = 0; k < s0.points; ++k)
+            s.ptMs[k] = s0.ptMs[k] * scale;
+    };
     const double declickLen = 0.0015 * sr;
     const float fadeInLen = (float)(p[kFadeIn] * 0.001 * sr);
     const float fadeOutLen = (float)(p[kFadeOut] * 0.001 * sr);
@@ -456,6 +486,24 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
         const double ratio = std::exp2 (semis / 12.0);
         const double rem0 = remainingOut ();
         sourceRender (tmpL, tmpR, m, c, ratio);
+        if (passLen > 0.0)
+        {
+            // a pass of the loop just ended: the locked envelopes start again (within this sub-block of
+            // 16 samples: at most 0.4 ms after the wrap)
+            if (loopWraps > 0)
+            {
+                if (filtLock != kLoopLockOff)
+                    filtEnv.retrigger ();
+                if (pitchLock != kLoopLockOff)
+                    pitchEnv.retrigger ();
+            }
+            // a pass at the speed the sample is read now (the pitch, the warp)
+            const double passMs = 1000.0 * passLen / std::max (1e-6, lastRate) / sr;
+            if (filtLock == kLoopLockFit)
+                fit (filtS, filtS0, passMs);
+            if (pitchLock == kLoopLockFit)
+                fit (pitchS, pitchS0, passMs);
+        }
 
         // the high-pass that follows the transposition: what the note is transposed by (not the key
         // played, nor glide or spread), so the sample's own low end moves with the pitch and stays
