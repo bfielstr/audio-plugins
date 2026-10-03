@@ -10,7 +10,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x504F5244; // 'DROP'
-constexpr int32 kVersion = 1;
+// 1: the drawn transient shape (never released); 2: the multiband compressor. A version 1 state loads
+// as the defaults (its parameters meant something else).
+constexpr int32 kVersion = 2;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -44,7 +46,7 @@ bool readState (IBStream* stream, State& st)
         double v = 0.0;
         if (!s.readInt32u (id) || !s.readDouble (v))
             return false;
-        if (id < kNumParams)
+        if (id < kNumParams && version >= 2)
         {
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;

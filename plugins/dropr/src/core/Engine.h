@@ -1,37 +1,68 @@
-// Dropr: a transient designer you draw. Every hit in the audio starts the drawn shape, which sets the
-// level over its Length: the top is 0 dB, the bottom -Depth dB. After the shape it stays at the shape's
-// last level until the next hit (so a shape ending at the top lets everything between hits through).
+// Dropr: a multiband compressor in the style of Minimal Audio's Fuse Compressor, feeding a saturator.
 //
-//   hits: a fast level (peak, 0.1 ms up / 10 ms down) jumping Sensitivity dB over a slow one (50 ms),
-//         above -50 dBFS, at least Retrigger ms apart; both channels together
-//   the audio and the dry signal go through a fixed look-ahead (kLookaheadMs), so the shape can start
-//   up to that long before the hit (Pre): its first part is heard on the hit's attack itself
-//   -> Mix -> Output -> Smacheratr (the optional saturator at the end of every plug-in)
+//   in -> Input gain -> 6-band Linkwitz-Riley tree -> per band: detector -> gain law (Gain.h: downward,
+//   normal or negative ratio, upward) -> attack / release -> the band's gain (its point in the display,
+//   + Tilt + Makeup) -> sum -> Dry/Wet (the dry signal is the input before the Input gain) -> Output
+//   -> Smacheratr (the saturator at the end of every plug-in; on and driven by default)
 //
-// A hit during the shape starts it again; the gain is eased over 0.5 ms so the jump never clicks.
-// The latency (the look-ahead and the end saturator's) never changes.
+// Crossovers: Linkwitz-Riley 24 dB/oct splits (multidyn/src/core/Crossover.h), split[j] separating band
+// j from everything above it; each lower band goes through the all-passes of the crossovers above it,
+// so the bands sum to the all-pass AP0 .. AP4 of the input: flat in level. The dry signal goes through
+// the same all-passes, so any Dry/Wet lines up in phase. The tree always runs all five crossovers:
+// with fewer Bands the top band is the sum of the bands above crossover Bands - 1 (one detector, one
+// gain), so changing Bands only regroups the bands' gains, which are crossfaded over 20 ms. Crossover
+// moves are smoothed (about 20 ms) and the filters retuned every 32 samples.
+// Detector: per band and channel, the band's peak, held for one period of the band's lowest
+// frequency (its lower crossover, 25 Hz for the lowest band) and then falling with a time constant of
+// a quarter of that, so a steady tone in the band reads its peak level without ripple.
+// Channel Link: each channel's level moves towards the louder channel's by the Link (in dB);
+// 100 %: both channels get the same gain. In Mid-Side mode the two channels are mid and side (the bands
+// are split in left / right and turned into mid / side after the split; a Mode change dips the output
+// for 5 ms + 5 ms around the switch).
+// Attack / Release: the band's gain (dB) moves towards the gain law's target with one-pole time
+// constants: Attack while the gain goes down (more reduction or less upward lift), Release while it
+// comes back up: it gets 63 % of the way in that time.
+// Adaptive Time A: the larger the move the gain has to make, the faster both times: they are divided by
+//   1 + 3 A min (1, |target - gain| / 24 dB)
+// so at 100 % a move of 24 dB or more runs 4 times as fast, at 50 % 2.5 times; small moves keep the
+// set times (smooth on steady material, quick on the jumps of a hit). 0 %: always the set times.
+// Latency: the end saturator's only (the crossovers are minimum-phase, there is no look-ahead); it
+// never changes. No allocation in process ().
 #pragma once
 
+#include "Gain.h"
 #include "Params.h"
-#include "Shape.h"
 
+#include "multidyn/src/core/Crossover.h"
 #include "smacheratr/src/core/Tail.h"
 
 #include <array>
 #include <atomic>
-#include <vector>
 
 namespace dropr {
 
 using ParamArray = std::array<double, kNumParams>;
 ParamArray defaultParams ();
 
+constexpr double kLowestBandHz = 25.0; // the lowest band's "lower edge" for its detector's hold
+constexpr double kBandsFadeMs = 20.0, kModeDuckMs = 5.0, kXoverSmoothMs = 20.0;
+
 // For the editor (written by the audio thread once per block).
 struct Meters
 {
-    std::atomic<float> position {1.0f}; // where in the shape the gain is (0 .. 1; 1 after it)
-    std::atomic<float> gainDb {0.0f};   // the gain applied (dB)
-    std::atomic<int> hits {0};          // counts the hits (the editor flashes on a change)
+    std::atomic<int> bands {kMaxBands};
+    std::atomic<float> levelDb[kMaxBands];  // each band's detector level (after the Input gain), the block's peak
+    std::atomic<float> gainDb[kMaxBands];   // the gain law's gain (attack / release applied), the block's lowest
+    std::atomic<float> outDb[kMaxBands];    // the band's level after its gain and makeup, the block's peak
+    Meters ()
+    {
+        for (int k = 0; k < kMaxBands; ++k)
+        {
+            levelDb[k].store (-150.0f);
+            gainDb[k].store (0.0f);
+            outDb[k].store (-150.0f);
+        }
+    }
 };
 
 class Engine
@@ -42,9 +73,7 @@ public:
     void setParam (uint32_t id, double plain)
     {
         p[id] = plain;
-        if (id >= kPointCount && id < kTailBase)
-            shapeDirty = true;
-        else if (id >= kTailExt2Base)
+        if (id >= kTailExt2Base)
             tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
         else if (id >= kTailExtBase)
             tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
@@ -52,29 +81,49 @@ public:
             tail.setParam (id - kTailBase, plain);
     }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return look + tail.latency (); }
+    int latency () const { return tail.latency (); }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
 
+    // the crossovers in use (Hz)
+    double xover (int j) const { return xf[j]; }
+
 private:
+    static constexpr int kChunk = 32;
+    void retune ();
+    void processChunk (const float* inL, const float* inR, float* outL, float* outR, int n);
+
     ParamArray p = defaultParams ();
     double sr = 48000.0;
-    int look = 240;
-    std::vector<float> delay[2]; // the look-ahead (audio and dry)
-    int delayPos = 0;
-    // the gain path: computed when the hit is seen, then delayed by (look - Pre) to meet the audio
-    std::vector<float> gainLine;
-    int gainPos = 0;
-    Shape shape;
-    bool shapeDirty = true;
-    double fastEnv = 0.0, slowEnv = 0.0, fastA = 0.0, fastR = 0.0, slowC = 0.0;
-    int holdOff = 0;
-    double envPos = 1.0; // where in the shape (1: after it)
-    float gain = 1.0f, ease = 1.0f, mix = 1.0f, out = 1.0f, smooth = 0.0f;
-    int hits = 0;
+    // the tree: split[j] separates band j from the rest; ap[j][k] (k > j): band j through crossover k's all-pass
+    multidyn::Lr4Split split[kNumXovers];
+    multidyn::Allpass2 ap[kNumXovers][kNumXovers];
+    multidyn::Allpass2 dryAp[kNumXovers];
+    double xf[kNumXovers] {};
+    bool xfInit = false;
+    double xfCoef = 0.0;
+    struct Band
+    {
+        float env[2] {};       // the held peak (linear)
+        int hold[2] {};        // samples left to hold it
+        float gr[2] {};        // the gain law's gain with attack / release (dB)
+        float mk = 0.0f;       // the band's gain + Tilt + Makeup (dB), smoothed
+        int holdLen = 48;      // one period of the band's lowest frequency
+        float fall = 0.99f;    // the peak's fall after the hold, per sample
+        float mLevel = -150.0f, mGain = 0.0f, mOut = -150.0f; // this block's meter values
+    };
+    Band band[kMaxBands];
+    int nb = kMaxBands;           // bands in use
+    float fadeFrom[kMaxBands][2] {}; // a Bands change: the linear gains each split band had (fading out)
+    int fadePos = 0, fadeLen = 1;    // samples into the fade (fadeLen: done)
+    float lastG[kMaxBands][2] {};    // the gain each split band got last sample
+    int mode = kModeStereo, modeTarget = kModeStereo;
+    float duck = 1.0f, duckStep = 0.01f;
+    float gin = 1.0f, gout = 1.0f, mix = 1.0f, smooth = 0.0f, mkSmooth = 0.0f;
+    float atkC = 0.1f, relC = 0.001f, atkL = 0.0f, relL = 0.0f; // one-pole coefficients and log2 (1 - c)
     Meters* meters = nullptr;
     smacheratr::Tail tail;
 };

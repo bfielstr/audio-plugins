@@ -6,12 +6,54 @@
 
 #include "pluginterfaces/vst/ivstmessage.h"
 
+#include "public.sdk/source/vst/utility/stringconvert.h"
+
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
+#include <string>
 
 namespace dropr {
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
+
+namespace {
+// the Negative Ratio reads "1 : -x" (Params.h: negRatioText)
+class NegRatioParameter : public pk::TableParameter
+{
+public:
+    using pk::TableParameter::TableParameter;
+    void toString (ParamValue n, String128 string) const override
+    {
+        Steinberg::Vst::StringConvert::convert (negRatioText (toPlain (n)), string);
+    }
+    bool fromString (const TChar* string, ParamValue& n) const override
+    {
+        std::string s = Steinberg::Vst::StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (string)));
+        if (const auto colon = s.find (':'); colon != std::string::npos)
+            s = s.substr (colon + 1);
+        s.erase (std::remove (s.begin (), s.end (), '-'), s.end ());
+        double v = kRatioInf;
+        if (s.find ("inf") == std::string::npos)
+        {
+            char* end = nullptr;
+            v = std::strtod (s.c_str (), &end);
+            if (end == s.c_str ())
+                return false;
+        }
+        n = toNormalized (v);
+        return true;
+    }
+};
+} // namespace
+
+Parameter* Controller::makeParameter (uint32_t id)
+{
+    if (id == kNegRatio)
+        return new NegRatioParameter (paramTable (), id);
+    return pk::ControllerBase::makeParameter (id);
+}
 
 tresult PLUGIN_API Controller::terminate ()
 {
