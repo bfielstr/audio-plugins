@@ -17,8 +17,11 @@ push further into the curve than the rest of the sound, so it is not squared off
 the furthest the driven signal can go as blue lines.
 
 **Post Clip** (No Clip / Soft Clip / Hard Clip) clips the output at 0 dB after the curve, so the
-output never exceeds the **Output** level (-36 ... 0 dB). **Dry/Wet** blends in the dry signal; use
-100 % on a return track.
+output never exceeds the **Output** level (-36 ... 0 dB). With **Hard Clip** nothing leaves above
+0 dBFS at all: what comes after the curve's clip could rise over it again (Hi-Quality's downsampling
+filter overshooting the clipped edges by up to 4 dB, Gently's bands, the dry part of a mix, Mid/Side
+going back to left / right: up to 6 dB), so the very end, after Output, is held to 0 dBFS too; only
+those overshoots are cut. **Dry/Wet** blends in the dry signal; use 100 % on a return track.
 
 **Color** (on by default) enables two filters that are applied before the curve and undone
 (inverted) after it. They change how much of each frequency range is saturated without changing the

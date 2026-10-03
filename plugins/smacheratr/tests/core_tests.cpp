@@ -251,6 +251,56 @@ TEST (drive_adds_harmonics_and_the_curve_holds_one)
     CHECK (toneDb (out.l, 3000.0, a, b) < -90.0, "quiet signal is clean: %f dB", toneDb (out.l, 3000.0, a, b));
 }
 
+TEST (hard_clip_never_leaves_above_0_dbfs)
+{
+    // driven into Hard Clip, nothing after the clip takes the output back over 0 dBFS: not Hi-Quality's
+    // downsampling filter, Mid/Side back to left / right, Gently, the dry part of a mix or Output
+    struct Case
+    {
+        bool hiq, ms, gently;
+        double mix, outDb;
+        const char* name;
+    };
+    const Case cases[] = {{true, false, false, 1.0, 0.0, "Hi-Quality"},  {false, true, false, 1.0, 0.0, "Mid/Side"},
+                          {true, true, false, 1.0, 0.0, "both"},         {false, false, true, 1.0, 0.0, "Gently"},
+                          {true, false, false, 0.5, 0.0, "half dry"},    {true, false, false, 1.0, 6.0, "Output +6 dB"}};
+    uint32_t seed = 3;
+    auto rnd = [&] {
+        seed = seed * 1664525u + 1013904223u;
+        return (float)((seed >> 8) / 8388608.0 - 1.0);
+    };
+    const int N = 48000 * 2;
+    std::vector<float> l (N), r (N);
+    for (int i = 0; i < N; ++i)
+    {
+        l[i] = 0.6f * (rnd () + rnd () + rnd ());
+        r[i] = 0.6f * (rnd () + rnd () + rnd ());
+    }
+    for (const Case& c : cases)
+    {
+        for (int post : {(int)kPostOff, (int)kPostHard})
+        {
+            auto e = engine (c.hiq);
+            e->setParam (kDrive, 24.0);
+            e->setParam (kPostClip, post);
+            e->setParam (kMidSide, c.ms ? 1.0 : 0.0);
+            e->setParam (kClarity, c.gently ? 1.0 : 0.0);
+            e->setParam (kDryWet, c.mix);
+            e->setParam (kOutput, c.outDb);
+            std::vector<float> ol (N), orr (N);
+            for (int p = 0; p < N; p += 512)
+                e->process (l.data () + p, r.data () + p, ol.data () + p, orr.data () + p, std::min (512, N - p));
+            float pk = 0.0f;
+            for (int i = 0; i < N; ++i)
+                pk = std::max (pk, std::max (std::fabs (ol[i]), std::fabs (orr[i])));
+            if (post == kPostHard)
+                CHECK (pk <= 1.0f, "%s, Hard Clip: peak %.2f dBFS", c.name, 20.0 * std::log10 (pk));
+            else
+                std::printf ("    %s, no post clip: peak %.2f dBFS\n", c.name, 20.0 * std::log10 (pk));
+        }
+    }
+}
+
 TEST (pre_limiter_holds_transients_before_the_drive)
 {
     // a quiet tone with a loud burst: without the limiter the burst is driven far past the knee
