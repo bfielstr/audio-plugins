@@ -1,6 +1,7 @@
 #include "Editor.h"
 
 #include "FilterView.h"
+#include "GainLock.h"
 #include "Help.h"
 #include "plugin/Controller.h"
 
@@ -31,7 +32,7 @@ namespace {
 constexpr double kKnobW = 56, kKnobH = 64;
 CRect knobRect (double x, double y) { return CRect (x, y, x + kKnobW, y + kKnobH); }
 
-// The slope's drop-down (eleven slopes): the mouse wheel over it also steps through the list, as over a
+// A slope's drop-down (eleven slopes): the mouse wheel over it also steps through the list, as over a
 // knob (up: steeper).
 class ScrollChoice : public Choice
 {
@@ -63,7 +64,9 @@ public:
 };
 } // namespace
 
-Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
+Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c), lockHost (std::make_unique<GainLockHost> (this)) {}
+
+Editor::~Editor () = default;
 
 void Editor::onClose ()
 {
@@ -85,7 +88,9 @@ void Editor::buildUI (CFrame* f)
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
-    view = new FilterView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), this, [c = ctl] () -> Meters* {
+    // the gains, the display's handles and the locks go through lockHost: a locked gain stops at 0 dB
+    GainLockHost* lh = lockHost.get ();
+    view = new FilterView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), lh, [c = ctl] () -> Meters* {
         auto* s = c->getShared ();
         return s ? &s->meters : nullptr;
     });
@@ -100,25 +105,29 @@ void Editor::buildUI (CFrame* f)
         root->addView (p);
         return p;
     };
-    auto* hpP = section (CRect (8, 298, 190, 404), "HIGH-PASS");
+    // each filter's gain with its Gain Lock under it (locked: the gain stops at 0 dB)
+    auto* hpP = section (CRect (8, kRow1Top, 190, kRow1Bottom), "HIGH-PASS");
     bind (hpP, new Knob (knobRect (8, 22), this, kHpFreq, "Freq"));
     bind (hpP, new Knob (knobRect (66, 22), this, kHpRes, "Res"));
-    bind (hpP, new Knob (knobRect (124, 22), this, kHpGain, "Gain"));
-    auto* lpP = section (CRect (196, 298, 378, 404), "LOW-PASS");
+    bind (hpP, new Knob (knobRect (124, 22), lh, kHpGain, "Gain"));
+    bind (hpP, new Toggle (CRect (128, 94, 176, 112), lh, kHpGainLock, "Lock"));
+    auto* lpP = section (CRect (196, kRow1Top, 378, kRow1Bottom), "LOW-PASS");
     bind (lpP, new Knob (knobRect (8, 22), this, kLpFreq, "Freq"));
     lpResKnob = bind (lpP, new Knob (knobRect (66, 22), this, kLpRes, "Res"));
-    bind (lpP, new Knob (knobRect (124, 22), this, kLpGain, "Gain"));
-    auto* spP = section (CRect (384, 298, 752, 404), "SPLIT");
-    spP->addView (new Label (CRect (10, 24, 100, 38), "Slope", 10.5, false, 1));
-    bind (spP, new ScrollChoice (CRect (10, 42, 100, 62), this, kSlope));
-    bind (spP, new Toggle (CRect (10, 70, 100, 88), this, kResLink, "Link Res"));
+    bind (lpP, new Knob (knobRect (124, 22), lh, kLpGain, "Gain"));
+    bind (lpP, new Toggle (CRect (128, 94, 176, 112), lh, kLpGainLock, "Lock"));
+    // the slopes, one per filter, and the resonance link
+    auto* spP = section (CRect (384, kRow1Top, 752, kRow1Bottom), "SPLIT");
+    bind (spP, new ScrollChoice (CRect (10, 22, 100, 56), this, kHpSlope, "HP Slope"));
+    bind (spP, new ScrollChoice (CRect (10, 60, 100, 94), this, kLpSlope, "LP Slope"));
+    bind (spP, new Toggle (CRect (10, 98, 100, 116), this, kResLink, "Link Res"));
     const uint32_t splitIds[4] = {kSplit, kEnvAmount, kEnvAttack, kEnvDecay};
     const char* splitNames[4] = {"Split", "Env", "Attack", "Decay"};
     for (int i = 0; i < 4; ++i)
-        bind (spP, new Knob (knobRect (116 + i * 62, 22), this, splitIds[i], splitNames[i], i < 2));
+        bind (spP, new Knob (knobRect (116 + i * 62, 30), this, splitIds[i], splitNames[i], i < 2));
 
     // second row: movement and output
-    auto* outP = section (CRect (8, 410, 752, 512), "OUTPUT");
+    auto* outP = section (CRect (8, kRow2Top, 752, kRow2Top + 102), "OUTPUT");
     bind (outP, new Knob (knobRect (10, 22), this, kDryWet));
     bind (outP, new Knob (knobRect (72, 22), this, kOutput, nullptr, true));
     outP->addView (new Label (CRect (150, 24, 290, 38), "Movement", 10.5, false, 1));
@@ -135,7 +144,8 @@ void Editor::buildUI (CFrame* f)
     lpDriveKnob = bind (outP, new Knob (knobRect (676, 22), this, kLpDrive, "LP Drive"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 518, 752, 598 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
+    auto* tailPanel = addTailPanel (root, CRect (8, kRow2Top + 108, 752, kRow2Top + 188 + smacheratr::TailDisplays::kHeight), kTailBase,
+                                    kTailExtBase, kTailExt2Base);
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase, kTailExt2Base,
                                                                [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
                                                                [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });

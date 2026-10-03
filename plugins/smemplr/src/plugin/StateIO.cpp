@@ -32,7 +32,10 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     band drives in its slots; Para's slopes (6 .. 96 dB, Brickwall) and a drive per filter in its slots;
 //     Multidyn's OTT gain staging, crossover slope, Soften Color and Sub band in its slots
 // 14: Multidyn's Style in its slots (OTT for new ones; older slots keep Character, their sound)
-constexpr int32 kVersion = 14;
+// 15: Para's Low-Pass Slope (its slots had one slope for both filters: the low-pass gets it) and Gain Locks
+//     (the high-pass's on unless its gain is above 0 dB, the low-pass's off) in its slots, and its Fade's
+//     range 1 .. 60 semitones (1 .. 36 before: a slot's Fade keeps its semitones)
+constexpr int32 kVersion = 15;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -240,7 +243,7 @@ bool readState (IBStream* stream, PluginState& st)
     migrateGentlyInSlots (st.norm, st.has, version);
     // Levlr's Bands and drives (13)
     migrateLevlrInSlots (st.norm, st.has, version);
-    // Para's slopes and per-filter drives (13)
+    // Para's slopes and per-filter drives (13), its low-pass slope, gain locks and Fade range (15)
     migrateParaInSlots (st.norm, st.has, version);
     // Multidyn's OTT gain staging, slope and Sub band (13)
     migrateMultidynInSlots (st.norm, st.has, version);
@@ -281,7 +284,9 @@ void migrateToRack (PluginState& st)
             {
                 case para::kDragGain: return old (kParaDragGain, t, j);
                 case para::kLiquid: return old (kParaLiquid, t, j);
-                case para::kFade: return old (kParaFade, t, j);
+                // (over Fade's old range, as the slot's own then: migrateParaInSlots converts it; never
+                // saved, the old default)
+                case para::kFade: return st.has[kParaFade] ? st.norm[kParaFade] : defaultNormalized (kParaFade);
                 case para::kNotch: return old (kParaNotch, t, j);
                 default: return t.defaultNormalized (j);
             }

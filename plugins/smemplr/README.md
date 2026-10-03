@@ -39,9 +39,10 @@ from a Para plug-in on a track into a para slot and back, or from one slot to an
 effect. Settings of another effect are ignored; the parameters the rack does not use (an effect's own
 end saturator) are left out. Each has its own display and controls:
 
-- **para**: the parallel high-pass / low-pass (with its Vocal movement), its slopes (6 to 96 dB and
-  Brickwall) and a drive for each filter; its envelope is triggered by the notes played here, and its
-  display shows the live spectrum.
+- **para**: the parallel high-pass / low-pass (with its Vocal movement), each filter's slope (6 to 96
+  dB and Brickwall: HP Slope, LP Slope) and Gain Lock (HP Lock, LP Lock: a locked gain stops at 0 dB)
+  beside the display, and a drive for each filter; its envelope is triggered by the notes played here,
+  and its display shows the live spectrum.
 - **multidyn**: the multiband dynamics, with its Style (OTT, a measured model of Xfer's OTT, or
   Character, Multidyn's own; Soft Knee, Peak/RMS, the RMS window and Soften look disabled in OTT,
   where they do nothing), its lanes and band fields, the crossovers' Slope, Soften's Color and the Sub
@@ -62,7 +63,9 @@ end saturator) are left out. Each has its own display and controls:
   the rack: put a smacheratr slot before it for that). Switched off, an effect keeps its latency.
 
 Projects from before 0.7 keep their sound: a para slot's slope stays what it was and its one drive
-becomes both filters' drives, a multidyn slot's gains move into its controls for the OTT gain staging
+becomes both filters' drives; a para slot from before the separate slopes gets its one slope on both
+filters, its high-pass Gain Lock on unless its high-pass gain is above 0 dB (then off), its low-pass
+Gain Lock off, and keeps its Fade in semitones (Para's Fade range grew from 1 .. 36 to 1 .. 60); a multidyn slot's gains move into its controls for the OTT gain staging
 (see Multidyn's README), and a levlr slot keeps 4 bands without drive.
 
 Every control is an automatable parameter (the host shows a slot's values in the units of the effect

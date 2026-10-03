@@ -133,10 +133,10 @@ double FilterView::handleDb (bool hpSide) const
 {
     // the filter's gain plus its resonant peak at the cutoff (the slope's response there: at resonance 0
     // below 0 dB, so the handle sits at the gain), so pulling a handle up shows the resonance
-    const double gainDb = host->plainValue (hpSide ? kHpGain : kLpGain);
+    const double gainDb = gainDbOf (hpSide);
     if (gainDb <= kGainMinDb + 0.01)
         return kMinDb + 1.0;
-    const int slope = (int)std::lround (host->plainValue (kSlope));
+    const int slope = slopeOf (hpSide);
     const double peak = std::abs (filterResponse (slope, hpSide, 1000.0, 1000.0, host->plainValue (resId (hpSide))));
     return std::max (kMinDb + 1.0, gainDb + 20.0 * std::log10 (std::max (1.0, peak)));
 }
@@ -257,7 +257,7 @@ void FilterView::draw (CDrawContext* ctx)
     double hp, lp;
     float hpMul, lpMul;
     effective (hp, lp, hpMul, lpMul);
-    const int slope = (int)std::lround (host->plainValue (kSlope));
+    const int hpSlope = slopeOf (true), lpSlope = slopeOf (false);
     const double resHp = host->plainValue (resId (true)), resLp = host->plainValue (resId (false));
     // the digital filters as they are: the cutoffs clamped like the engine's, and the analog
     // responses read at the warped frequency (bilinear, prewarped at the cutoff), which bends the
@@ -265,7 +265,7 @@ void FilterView::draw (CDrawContext* ctx)
     const double nyquist = 0.5 * rate;
     const double hc = std::clamp (hp, 5.0, 0.49 * rate), lc = std::clamp (lp, 5.0, 0.49 * rate);
     auto warped = [&] (double f, double fc) { return fc * std::tan (M_PI * f / rate) / std::tan (M_PI * fc / rate); };
-    const double hpGain = filterGain (host->plainValue (kHpGain)) * hpMul, lpGain = filterGain (host->plainValue (kLpGain)) * lpMul;
+    const double hpGain = filterGain (gainDbOf (true)) * hpMul, lpGain = filterGain (gainDbOf (false)) * lpMul;
     auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
@@ -279,8 +279,8 @@ void FilterView::draw (CDrawContext* ctx)
                 break;
             const double fh = warped (f, hc), fl = warped (f, lc);
             // each with the polarity the engine sums it with (Slopes.h)
-            const std::complex<double> a = filterResponse (slope, true, fh, hc, resHp) * hpGain,
-                                       b = filterResponse (slope, false, fl, lc, resLp) * lpGain;
+            const std::complex<double> a = filterResponse (hpSlope, true, fh, hc, resHp) * hpGain,
+                                       b = filterResponse (lpSlope, false, fl, lc, resLp) * lpGain;
             const std::complex<double> h = which == 0 ? a : (which == 1 ? b : a + b);
             const CPoint pt (xOfHz (f), yOfDb (20.0 * std::log10 (std::max (1e-6, std::abs (h)))));
             lastX = pt.x;
@@ -444,7 +444,9 @@ void FilterView::onMouseMoveEvent (MouseMoveEvent& e)
         double db = std::max (startGain, kMinDb) - dy * dbPerPx;
         if (db <= kMinDb + 0.5)
             db = kGainMinDb;
-        host->setNorm (gId, host->table ().toNormalized (gId, std::min (db, 12.0)));
+        // with its Gain Lock on, no higher than 0 dB
+        const double top = host->plainValue (gainLockOf (gId)) >= 0.5 ? 0.0 : 12.0;
+        host->setNorm (gId, host->table ().toNormalized (gId, std::min (db, top)));
     }
     invalid ();
     e.consumed = true;

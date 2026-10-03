@@ -12,10 +12,11 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50455252; // 'PERR'
-constexpr int32 kVersion = 4;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 5;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kPerBandDrive = 4;     // 4: a drive per filter, slopes 6 .. 96 dB and Brickwall
+constexpr int32 kSeparateSlopes = 5;   // 5: a slope per filter, the gain locks, Fade 1 .. 60 semitones
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -76,6 +77,20 @@ bool readState (IBStream* stream, State& st)
     // too, the slope its place on the longer list
     if (version < kPerBandDrive)
         upgradeToPerBandDrive (
+            [&] (uint32_t id, double& v) {
+                if (!st.has[id])
+                    return false;
+                v = st.norm[id];
+                return true;
+            },
+            [&] (uint32_t id, double v) {
+                st.norm[id] = v;
+                st.has[id] = true;
+            });
+    // one slope for both filters, no gain locks and Fade up to 36 semitones before: the low-pass gets the
+    // slope, the high-pass's lock is off where its gain was above 0 dB, Fade keeps its semitones
+    if (version < kSeparateSlopes)
+        upgradeToSeparateSlopes (
             [&] (uint32_t id, double& v) {
                 if (!st.has[id])
                     return false;

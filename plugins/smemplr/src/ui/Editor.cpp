@@ -19,6 +19,7 @@
 #include "multidyn/src/ui/DynDisplay.h"
 #include "multidyn/src/ui/Thresholds.h"
 #include "para/src/ui/FilterView.h"
+#include "para/src/ui/GainLock.h"
 #include "para/src/ui/Help.h"
 #include "multidyn/src/ui/Help.h"
 #include "widr/src/ui/GonioView.h"
@@ -1194,6 +1195,7 @@ void Editor::clearBody ()
     rackPageParams.clear ();
     // no view holds a replaced host any more
     retiredHosts.clear ();
+    paraLock.reset ();
     if (fxBody)
         fxBody->invalid ();
 }
@@ -1224,19 +1226,30 @@ void Editor::buildBody ()
         {
             using namespace para;
             auto tip = [] (uint32_t id) { return para::help::forParam (id); };
-            fxFilterView = new FilterView (CRect (8, 8, 470, 226), h, [this, s] () -> para::Meters* {
+            // the gains, the display's handles and the Gain Locks go through a GainLockHost: a locked gain
+            // stops at 0 dB
+            paraLock = std::make_unique<para::GainLockHost> (h);
+            GainLockHost* lh = paraLock.get ();
+            fxFilterView = new FilterView (CRect (8, 8, 396, 226), lh, [this, s] () -> para::Meters* {
                 auto* b = ctl->getBridge ();
                 return b ? &b->rack.para[(size_t)s] : nullptr;
             });
             add (fxFilterView, para::help::kDisplay);
-            add (new Toggle (CRect (380, 30, 462, 48), h, kDragGain, "Drag Gain"), tip (kDragGain));
-            add (new Choice (CRect (480, 8, 570, 26), h, kSlope), tip (kSlope)); // 6 .. 96 dB, Brickwall
-            add (new Segmented (CRect (576, 8, 676, 26), h, kMovement, {"Free", "Vocal"}), tip (kMovement));
-            add (new Toggle (CRect (682, 8, 780, 26), h, kResLink, "Link Res"), tip (kResLink));
+            add (new Toggle (CRect (306, 30, 388, 48), h, kDragGain, "Drag Gain"), tip (kDragGain));
+            // beside the display: each filter's slope (6 .. 96 dB, Brickwall) and Gain Lock
+            add (new Choice (CRect (402, 8, 476, 42), h, kHpSlope, "HP Slope"), tip (kHpSlope));
+            add (new Choice (CRect (402, 46, 476, 80), h, kLpSlope, "LP Slope"), tip (kLpSlope));
+            add (new Toggle (CRect (402, 90, 476, 108), lh, kHpGainLock, "HP Lock"), tip (kHpGainLock));
+            add (new Toggle (CRect (402, 112, 476, 130), lh, kLpGainLock, "LP Lock"), tip (kLpGainLock));
+            add (new Segmented (CRect (480, 8, 580, 26), h, kMovement, {"Free", "Vocal"}), tip (kMovement));
+            add (new Toggle (CRect (586, 8, 684, 26), h, kResLink, "Link Res"), tip (kResLink));
             const uint32_t ids[12] = {kHpFreq, kHpRes, kHpGain, kLpFreq, kLpRes, kLpGain, kSplit, kEnvAmount, kEnvAttack, kEnvDecay, kDryWet, kOutput};
             const char* names[12] = {"HP", "HP Res", "HP Gain", "LP", "LP Res", "LP Gain", "Split", "Env", "Attack", "Decay", "Dry/Wet", "Output"};
             for (int i = 0; i < 12; ++i)
-                add (new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), h, ids[i], names[i], i == 6 || i == 7 || i == 11), tip (ids[i]));
+            {
+                pk::ParamHost* kh = ids[i] == kHpGain || ids[i] == kLpGain ? static_cast<pk::ParamHost*> (lh) : h;
+                add (new Knob (knobRect (480 + (i % 6) * 58, 32 + (i / 6) * 66), kh, ids[i], names[i], i == 6 || i == 7 || i == 11), tip (ids[i]));
+            }
             add (new Knob (knobRect (480, 164), h, kDipStart, "Dip"), tip (kDipStart));
             add (new Knob (knobRect (538, 164), h, kFade, "Fade"), tip (kFade));
             add (new Knob (knobRect (596, 164), h, kLpFloor, "Floor"), tip (kLpFloor));

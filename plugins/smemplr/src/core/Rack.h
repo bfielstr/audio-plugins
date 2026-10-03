@@ -46,8 +46,10 @@ const char* fxName (int type); // "para", ...; "" for Empty
 const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
 // A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
 // added after the rack (RMS Window, Soften) sit where its saturator's are (not used in the rack):
-// the block has room for 62; and Wubr's (79, without its own saturator) run on into the slot's
-// extension. fxBlockTable is the table by block position; fxIdAt and fxBlockOf convert (-1: none).
+// the block has room for 62; Wubr's (79, without its own saturator) run on into the slot's
+// extension; and Para's after its low-pass drive (Low-Pass Slope and the Gain Locks, IDs 62 .. 64) are
+// at block positions 62 .. 64 too, the first of the slot's extension (its block position is its ID
+// throughout). fxBlockTable is the table by block position; fxIdAt and fxBlockOf convert (-1: none).
 const pk::ParamTable& fxBlockTable (int type);
 int64_t fxIdAt (int type, uint32_t block);
 int64_t fxBlockOf (int type, uint32_t id);
@@ -87,7 +89,10 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
 // later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).
 void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 // States from before version 13: a Para slot's slope (one of 12 / 18 / 24 dB then) on the longer list,
-// and its one drive becomes both filters' drives (para::upgradeToPerBandDrive).
+// and its one drive becomes both filters' drives (para::upgradeToPerBandDrive). Then, for states from
+// before version 15 (those too): the low-pass gets the slot's one slope, the high-pass's Gain Lock is on
+// unless its gain is above 0 dB, the low-pass's off, and Fade (1 .. 36 semitones then) keeps its
+// semitones (para::upgradeToSeparateSlopes).
 void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 // States from before version 13: a Levlr slot's Bands and band drives (added in 0.7) read 0 there,
 // which is 1 band: they get their defaults (4 bands, no drive: the same sound).

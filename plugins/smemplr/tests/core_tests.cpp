@@ -423,17 +423,116 @@ TEST (old_para_slots_keep_their_slope_and_drive)
         (*has)[id] = true;
     };
     put (slotParam (1, kSlotType), toNormalized (slotParam (1, kSlotType), (double)kFxPara));
-    put (slotBlockParam (1, para::kSlope), 0.5); // 18 dB
+    put (slotBlockParam (1, para::kHpSlope), 0.5); // 18 dB
     put (slotBlockParam (1, para::kHpDriveOn), 1.0);
     put (slotBlockParam (1, para::kHpDrive), para::toNormalized (para::kHpDrive, 9.0));
+    put (slotBlockParam (1, para::kFade), std::log (12.0) / std::log (36.0)); // 12 semitones over 1 .. 36
     migrateParaInSlots (*st, *has, 12);
-    CHECK (std::lround (para::toPlain (para::kSlope, (*st)[slotBlockParam (1, para::kSlope)])) == para::kSlope18, "18 dB stays 18 dB");
+    CHECK (std::lround (para::toPlain (para::kHpSlope, (*st)[slotBlockParam (1, para::kHpSlope)])) == para::kSlope18, "18 dB stays 18 dB");
     CHECK ((*st)[slotBlockParam (1, para::kLpDriveOn)] == 1.0 &&
                std::fabs (para::toPlain (para::kLpDrive, (*st)[slotBlockParam (1, para::kLpDrive)]) - 9.0) < 1e-9,
            "the low-pass drive is the old drive");
-    const double now = (*st)[slotBlockParam (1, para::kSlope)];
-    migrateParaInSlots (*st, *has, 13);
-    CHECK ((*st)[slotBlockParam (1, para::kSlope)] == now, "a new state is left as it is");
+    // and on through version 15's: the low-pass at the slot's slope too, the high-pass locked (0 dB, never
+    // saved: the default), Fade 12 semitones on the new range
+    CHECK (std::lround (para::toPlain (para::kLpSlope, (*st)[slotBlockParam (1, para::kLpSlope)])) == para::kSlope18 &&
+               (*st)[slotBlockParam (1, para::kHpGainLock)] == 1.0 && (*st)[slotBlockParam (1, para::kLpGainLock)] == 0.0 &&
+               std::fabs (para::toPlain (para::kFade, (*st)[slotBlockParam (1, para::kFade)]) - 12.0) < 1e-9,
+           "the chain through 15: LP slope %f, Fade %f", (*st)[slotBlockParam (1, para::kLpSlope)],
+           para::toPlain (para::kFade, (*st)[slotBlockParam (1, para::kFade)]));
+    const auto now = *st;
+    migrateParaInSlots (*st, *has, 15);
+    CHECK (*st == now, "a new state is left as it is");
+}
+
+TEST (para_slots_separate_slopes_and_gain_locks)
+{
+    // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
+    // at block positions 62 .. 64 (Para's IDs), and map back
+    CHECK (para::kNumParams == 65 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
+           (unsigned)para::kNumParams);
+    for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
+    {
+        const int64_t j = fxBlockOf (kFxPara, id);
+        CHECK (j == (int64_t)id && j >= (int64_t)kSlotBlock && fxIdAt (kFxPara, (uint32_t)j) == (int64_t)id, "para %u at %lld", id, (long long)j);
+        CHECK (slotBlockParam (3, (uint32_t)j) == kRackExtBase + 3 * kSlotExt + (id - kSlotBlock), "in slot 3's extension");
+        CHECK (std::string (fxBlockTable (kFxPara).info ((uint32_t)j).name) == para::paramTable ().info (id).name &&
+                   fxBlockTable (kFxPara).info ((uint32_t)j).def == para::paramTable ().info (id).def,
+               "%s", para::paramTable ().info (id).name);
+    }
+    CHECK (fxIdAt (kFxPara, para::kNumParams) == -1 && fxBlockOf (kFxPara, para::kNumParams) == -1, "nothing after Para's last");
+    // the old fixed Para's Fade (0.5) keeps its range of then, so its saved values keep their meaning
+    CHECK (paramTable ().info (kParaFade).max == 36.0 && paramTable ().info (kParaFade).def == 12.0, "Old Para Vocal Fade 1 .. 36, 12");
+    // they reach the slot's Para: the high-pass alone (the low-pass at -inf, the high-pass at 20 Hz: all of a
+    // 440 Hz sample) at +6 dB plays at 0 dB locked (a new slot's default), at +6 dB unlocked
+    auto s = sine (440.0, 1.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+    auto level = [&] () {
+        e->reset ();
+        e->noteOn (60, 1.0f);
+        const auto o = run (*e, 24000);
+        return rms (o.l, 12000, 24000);
+    };
+    const double dry = level ();
+    loadFx (*e, 1, kFxPara);
+    setFx (*e, 1, para::kHpFreq, 20.0);
+    setFx (*e, 1, para::kLpGain, para::kGainMinDb);
+    setFx (*e, 1, para::kHpGain, 6.0);
+    const double locked = level ();
+    setFx (*e, 1, para::kHpGainLock, 0.0);
+    const double unlocked = level ();
+    CHECK (std::fabs (20.0 * std::log10 (locked / dry)) < 0.3 && std::fabs (20.0 * std::log10 (unlocked / dry) - 6.0) < 0.3,
+           "locked %f dB, unlocked %f dB", 20.0 * std::log10 (locked / dry), 20.0 * std::log10 (unlocked / dry));
+    // the low-pass's own slope: alone (the high-pass at -inf) at 110 Hz, at 6 dB it lets more of 440 Hz through than at 96
+    setFx (*e, 1, para::kHpGain, para::kGainMinDb);
+    setFx (*e, 1, para::kLpGain, 0.0);
+    setFx (*e, 1, para::kLpFreq, 110.0);
+    setFx (*e, 1, para::kLpSlope, para::kSlope6);
+    const double gentle = level ();
+    setFx (*e, 1, para::kLpSlope, para::kSlope96);
+    const double steep = level ();
+    CHECK (20.0 * std::log10 (gentle / dry) > -15.0 && 20.0 * std::log10 (steep / dry) < -80.0, "LP 6 dB %f dB, 96 dB %f dB at two octaves",
+           20.0 * std::log10 (gentle / dry), 20.0 * std::log10 (steep / dry));
+
+    // a Para slot saved in version 13 or 14: one slope (Brickwall), the high-pass at +6 dB, Fade 30 semitones
+    // over 1 .. 36: the low-pass gets Brickwall, the high-pass stays unlocked (nothing gets quieter), the
+    // low-pass unlocked, Fade 30 semitones on the new range
+    for (int version : {13, 14})
+    {
+        auto st = std::make_unique<std::array<double, kNumParams>> ();
+        auto has = std::make_unique<std::array<bool, kNumParams>> ();
+        st->fill (0.0);
+        has->fill (false);
+        auto put = [&] (uint32_t id, double v) {
+            (*st)[id] = v;
+            (*has)[id] = true;
+        };
+        put (slotParam (2, kSlotType), toNormalized (slotParam (2, kSlotType), (double)kFxPara));
+        put (slotBlockParam (2, para::kHpSlope), para::toNormalized (para::kHpSlope, para::kSlopeBrickwall));
+        put (slotBlockParam (2, para::kHpGain), para::toNormalized (para::kHpGain, 6.0));
+        put (slotBlockParam (2, para::kFade), std::log (30.0) / std::log (36.0));
+        put (slotBlockParam (2, para::kHpDriveOn), 1.0);
+        // a slot of another kind is left alone
+        put (slotParam (3, kSlotType), toNormalized (slotParam (3, kSlotType), (double)kFxMsEq));
+        put (slotBlockParam (3, para::kFade), 0.25);
+        migrateParaInSlots (*st, *has, version);
+        CHECK (std::lround (para::toPlain (para::kLpSlope, (*st)[slotBlockParam (2, para::kLpSlope)])) == para::kSlopeBrickwall &&
+                   std::lround (para::toPlain (para::kHpSlope, (*st)[slotBlockParam (2, para::kHpSlope)])) == para::kSlopeBrickwall,
+               "version %d: Brickwall, both", version);
+        CHECK ((*st)[slotBlockParam (2, para::kHpGainLock)] == 0.0 && (*st)[slotBlockParam (2, para::kLpGainLock)] == 0.0 &&
+                   (*has)[slotBlockParam (2, para::kHpGainLock)] && (*has)[slotBlockParam (2, para::kLpGainLock)],
+               "version %d: the boosted high-pass unlocked", version);
+        CHECK (std::fabs (para::toPlain (para::kFade, (*st)[slotBlockParam (2, para::kFade)]) - 30.0) < 1e-9,
+               "version %d: Fade 30 st: %f", version, para::toPlain (para::kFade, (*st)[slotBlockParam (2, para::kFade)]));
+        CHECK ((*st)[slotBlockParam (2, para::kLpDriveOn)] == 0.0 && !(*has)[slotBlockParam (2, para::kLpDriveOn)],
+               "version %d: the per-band drive of 13 is not redone", version);
+        CHECK ((*st)[slotBlockParam (3, para::kFade)] == 0.25 && !(*has)[slotBlockParam (3, para::kHpGainLock)], "the M/S EQ slot untouched");
+        // at 0 dB the high-pass is locked
+        put (slotBlockParam (2, para::kHpGain), para::toNormalized (para::kHpGain, 0.0));
+        put (slotBlockParam (2, para::kFade), std::log (30.0) / std::log (36.0));
+        migrateParaInSlots (*st, *has, version);
+        CHECK ((*st)[slotBlockParam (2, para::kHpGainLock)] == 1.0, "version %d: 0 dB locked", version);
+    }
 }
 
 TEST (rack_multidyn_later_params)

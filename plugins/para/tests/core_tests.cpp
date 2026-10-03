@@ -113,6 +113,13 @@ static double gainAt (Engine& e, double f)
     return toneDb (out.l, f, 24000, 48000) + 12.0;
 }
 
+// Both filters at one slope.
+static void setSlopes (Engine& e, double slope)
+{
+    e.setParam (kHpSlope, slope);
+    e.setParam (kLpSlope, slope);
+}
+
 // ---------------------------------------------------------------------------
 TEST (params)
 {
@@ -131,7 +138,7 @@ TEST (params)
     CHECK (std::fabs (resonanceToQ (0.0) - 0.5) < 1e-9 && std::fabs (resonanceToQ (1.0) - 10.0) < 1e-9, "Q range");
     CHECK (std::fabs (resonanceToQ (0.0, kSlope24) - M_SQRT1_2) < 1e-9 && resonanceToQ (0.0, kSlope18) == 1.0, "base Q");
     CHECK (std::fabs (t.info (kHpFreq).def - 300.0) < 1e-9 && std::fabs (t.info (kLpFreq).def - 100.0) < 1e-9 &&
-               t.info (kSlope).def == (double)kSlope24, "defaults: HP 300 Hz, LP 100 Hz, 24 dB");
+               t.info (kHpSlope).def == (double)kSlope24 && t.info (kLpSlope).def == (double)kSlope24, "defaults: HP 300 Hz, LP 100 Hz, 24 dB");
     CHECK (t.info (kDragGain).def == 0.0 && kHostedParams == kTailBase + pk::kTailFields, "Drag Gain off, after the hosted IDs");
 }
 
@@ -141,7 +148,7 @@ TEST (filters_meeting_sum_flat)
     for (int slope = 0; slope < kNumSlopes; ++slope)
     {
         auto e = engine ();
-        e->setParam (kSlope, slope);
+        setSlopes (*e, slope);
         e->setParam (kHpFreq, 1000.0);
         e->setParam (kLpFreq, 1000.0);
         for (double f : {60.0, 300.0, 1000.0, 3000.0, 12000.0})
@@ -158,11 +165,13 @@ static double modelDb (int slope, bool hp, double f, double fc, double res, doub
     return 20.0 * std::log10 (std::max (1e-15, std::abs (filterResponse (slope, hp, fw, c, res))));
 }
 
-// One filter alone (the other at -inf) at fc, resonance res.
+// One filter alone (the other at -inf) at fc, resonance res; the other filter at another slope (each
+// filter has its own).
 static std::unique_ptr<Engine> single (int slope, bool hp, double fc, double res)
 {
     auto e = engine ();
-    e->setParam (kSlope, slope);
+    e->setParam (hp ? kHpSlope : kLpSlope, slope);
+    e->setParam (hp ? kLpSlope : kHpSlope, (slope + 5) % kNumSlopes);
     e->setParam (hp ? kHpFreq : kLpFreq, fc);
     e->setParam (hp ? kHpRes : kLpRes, res);
     e->setParam (hp ? kLpGain : kHpGain, kGainMinDb);
@@ -173,11 +182,14 @@ static std::unique_ptr<Engine> single (int slope, bool hp, double fc, double res
 TEST (slopes)
 {
     const auto& t = paramTable ();
-    const auto& info = t.info (kSlope);
+    const auto& info = t.info (kHpSlope);
     CHECK (info.choices.size () == (size_t)kNumSlopes && info.def == (double)kSlope24, "%zu slopes, 24 dB by default", info.choices.size ());
+    CHECK (t.info (kLpSlope).choices.size () == (size_t)kNumSlopes && t.info (kLpSlope).def == (double)kSlope24 &&
+               std::string (info.name) == "High-Pass Slope" && std::string (t.info (kLpSlope).name) == "Low-Pass Slope",
+           "the low-pass's slope: the same choices");
     const char* names[kNumSlopes] = {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB", "60 dB", "72 dB", "84 dB", "96 dB", "Brickwall"};
     for (int s = 0; s < kNumSlopes; ++s)
-        CHECK (t.toText (kSlope, s) == names[s], "%d: %s", s, t.toText (kSlope, s).c_str ());
+        CHECK (t.toText (kHpSlope, s) == names[s] && t.toText (kLpSlope, s) == names[s], "%d: %s", s, t.toText (kHpSlope, s).c_str ());
     // the analog model's slope far from the cutoff (a thousandth of it, a thousand times it) is the
     // slope's: its order x 20 log10 (2) dB per octave (6.02 dB a pole, which "6 dB per octave" rounds),
     // both filters. (Far down: 96 dB is -960 dB there, so the levels are not floored.)
@@ -318,7 +330,7 @@ TEST (moving_cutoffs_stay_stable_and_smooth)
     const double inStep = largestStep (in.l, 0);
     auto sweep = [&] (int s, double res, int mode, double hz) {
         auto e = engine ();
-        e->setParam (kSlope, s);
+        setSlopes (*e, s);
         e->setParam (kHpRes, res);
         e->setParam (kLpRes, res);
         e->setParam (kMovement, mode);
@@ -379,7 +391,7 @@ TEST (slope_changes_do_not_click)
         e->setParam (kHpFreq, 700.0);
         e->setParam (kLpFreq, 700.0);
         if (fixedSlope >= 0)
-            e->setParam (kSlope, fixedSlope);
+            setSlopes (*e, fixedSlope);
         e->reset ();
         Sig out;
         out.l.resize (in.l.size ());
@@ -387,7 +399,7 @@ TEST (slope_changes_do_not_click)
         for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 240, ++k)
         {
             if (k % 10 == 0 && fixedSlope < 0)
-                e->setParam (kSlope, (double)((k / 10 * 7) % kNumSlopes)); // jumping around the list
+                setSlopes (*e, (double)((k / 10 * 7) % kNumSlopes)); // jumping around the list
             e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 240);
         }
         return out;
@@ -434,14 +446,14 @@ TEST (notch_between_the_filters)
     CHECK (gainAt (*e, 400.0) < -8.0, "notch: %f dB", gainAt (*e, 400.0));
     CHECK (std::fabs (gainAt (*e, 40.0)) < 0.5 && std::fabs (gainAt (*e, 8000.0)) < 0.5, "outside: %f / %f",
            gainAt (*e, 40.0), gainAt (*e, 8000.0));
-    e->setParam (kSlope, kSlope12);
+    setSlopes (*e, kSlope12);
     const double d12 = gainAt (*e, 400.0);
-    e->setParam (kSlope, kSlope18);
+    setSlopes (*e, kSlope18);
     const double d18 = gainAt (*e, 400.0);
-    e->setParam (kSlope, kSlope24);
+    setSlopes (*e, kSlope24);
     CHECK (d18 < d12 - 3.0 && gainAt (*e, 400.0) < d18 - 3.0, "steeper is deeper: %f / %f / %f", d12, d18, gainAt (*e, 400.0));
     // resonance lifts the edges (12 dB, where the notch settings below were measured)
-    e->setParam (kSlope, kSlope12);
+    setSlopes (*e, kSlope12);
     e->setParam (kHpRes, 0.8);
     CHECK (gainAt (*e, 800.0) > 3.0, "resonance at the high-pass corner: %f", gainAt (*e, 800.0));
     e->setParam (kHpRes, 0.0);
@@ -513,7 +525,7 @@ TEST (linked_resonance)
     auto e = engine ();
     e->setParam (kHpFreq, 822.0);
     e->setParam (kLpFreq, 185.0);
-    e->setParam (kSlope, kSlope12);
+    setSlopes (*e, kSlope12);
     const double flat = gainAt (*e, 185.0);
     e->setParam (kHpRes, 0.8);
     CHECK (std::fabs (gainAt (*e, 185.0) - flat) < 0.5, "unlinked: the low-pass corner is unchanged");
@@ -589,12 +601,13 @@ TEST (meters_for_the_display)
 TEST (vocal_dip_starts_at_dip_start)
 {
     // the high-pass at 300 Hz (the default), the low-pass swept up to 200 Hz (more than an octave past
-    // the 80 Hz Dip Start, more than the default Fade): in Vocal the high-pass is gone, so nothing is
-    // left at 8 kHz; in Free it still passes
+    // the 80 Hz Dip Start, more than a Fade of 12): in Vocal the high-pass is gone, so nothing is left at
+    // 8 kHz; in Free it still passes
     for (int mode : {kFree, kVocal})
     {
         auto e = engine ();
         e->setParam (kMovement, mode);
+        e->setParam (kFade, 12.0);
         std::vector<float> l (480, 0.0f), r (480, 0.0f);
         for (int k = 0; k <= 20; ++k)
         {
@@ -610,7 +623,8 @@ TEST (vocal_dip_starts_at_dip_start)
             CHECK (top > -1.0, "free: the high-pass passes 8 kHz: %f dB", top);
     }
     // the dip starts at Dip Start and dives over Fade: below 80 Hz the high band is untouched, half an
-    // octave past it (113 Hz) it is 3 dB down, with Fade at 3 it is gone a minor third past (95 Hz);
+    // octave past it (113 Hz) with Fade 12 it is 18 dB down (half of the taper's 36, evenly in dB), with
+    // Fade at 3 it is gone a minor third past (95 Hz);
     // the high-pass rises along with the low-pass
     auto at = [] (double lp, double fade, double dip, double& hpHz) {
         Meters m;
@@ -628,7 +642,7 @@ TEST (vocal_dip_starts_at_dip_start)
     CHECK (at (75.0, 12.0, 80.0, hz) > -0.5 && std::fabs (hz - 300.0) < 1.0, "below Dip: untouched (%f dB, HP %.0f Hz)",
            at (75.0, 12.0, 80.0, hz), hz);
     const double half = at (113.1, 12.0, 80.0, hz);
-    CHECK (half < -1.5 && half > -5.0, "half way, equal-power: %f dB (-3 expected)", half);
+    CHECK (std::fabs (half + 18.0) < 1.0, "half way, evenly in dB: %f dB (-18 expected)", half);
     CHECK (std::fabs (12.0 * std::log2 (hz / 300.0) - 6.0) < 0.2, "the high-pass rose with it: %.0f Hz", hz);
     CHECK (at (95.1, 3.0, 80.0, hz) < -40.0, "Fade 3: gone a minor third past Dip (%f dB)", at (95.1, 3.0, 80.0, hz));
     CHECK (at (113.1, 12.0, 200.0, hz) > -0.5, "Dip Start at 200 Hz: not yet (%f dB)", at (113.1, 12.0, 200.0, hz));
@@ -707,10 +721,10 @@ TEST (drive_params)
     for (uint32_t id = 0; id < kNumParams; ++id)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
     CHECK (kHpDriveOn == kTailExtBase + 17 && kTailExt2Base == kHpDriveOn + 3, "the drive's IDs follow the end saturator's block");
-    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kNumParams == kLpDrive + 1 &&
+    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kNumParams == kLpGainLock + 1 &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's), then the low-pass drive, the last");
+           "Gently's Advanced block (the end saturator's), then the low-pass drive, then the low-pass slope and the locks");
     CHECK (std::string (t.info (kHpDriveOn).name) == "High-Pass Drive On" && std::string (t.info (kHpDrive).name) == "High-Pass Drive" &&
                std::string (t.info (kLpDriveOn).name) == "Low-Pass Drive On" && std::string (t.info (kLpDrive).name) == "Low-Pass Drive",
            "one drive per filter");
@@ -724,9 +738,9 @@ TEST (drive_params)
 TEST (old_settings_upgrade)
 {
     // the three slopes of before (12 / 18 / 24 dB, normalized 0 / 0.5 / 1) keep their slope
-    CHECK (std::lround (toPlain (kSlope, slopeFromThreeChoices (0.0))) == kSlope12 &&
-               std::lround (toPlain (kSlope, slopeFromThreeChoices (0.5))) == kSlope18 &&
-               std::lround (toPlain (kSlope, slopeFromThreeChoices (1.0))) == kSlope24,
+    CHECK (std::lround (toPlain (kHpSlope, slopeFromThreeChoices (0.0))) == kSlope12 &&
+               std::lround (toPlain (kHpSlope, slopeFromThreeChoices (0.5))) == kSlope18 &&
+               std::lround (toPlain (kHpSlope, slopeFromThreeChoices (1.0))) == kSlope24,
            "12 / 18 / 24 dB");
     // a setting from before the per-band drive: the one drive (now the high-pass's) goes to the
     // low-pass too, the slope to its place on the list; nothing else changes
@@ -739,13 +753,13 @@ TEST (old_settings_upgrade)
         return v;
     };
     const double amt = toNormalized (kHpDrive, 18.0);
-    auto v = upgrade ({{kSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, amt}, {kDrivePos, 1.0}, {kHpFreq, 0.3}});
-    CHECK (std::lround (toPlain (kSlope, v[kSlope])) == kSlope18, "slope %f", v[kSlope]);
+    auto v = upgrade ({{kHpSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, amt}, {kDrivePos, 1.0}, {kHpFreq, 0.3}});
+    CHECK (std::lround (toPlain (kHpSlope, v[kHpSlope])) == kSlope18, "slope %f", v[kHpSlope]);
     CHECK (v[kLpDriveOn] == 1.0 && v[kLpDrive] == amt && v[kHpDriveOn] == 1.0 && v[kHpDrive] == amt && v[kDrivePos] == 1.0 && v[kHpFreq] == 0.3,
            "drive copied: %f %f", v[kLpDriveOn], v[kLpDrive]);
     // nothing stored (a setting from before the drive): both off at 0 dB, the slope left alone (the default)
     v = upgrade ({{kHpFreq, 0.3}});
-    CHECK (v[kLpDriveOn] == 0.0 && v[kLpDrive] == 0.0 && v[kSlope] == -1.0, "no drive: %f %f, slope %f", v[kLpDriveOn], v[kLpDrive], v[kSlope]);
+    CHECK (v[kLpDriveOn] == 0.0 && v[kLpDrive] == 0.0 && v[kHpSlope] == -1.0, "no drive: %f %f, slope %f", v[kLpDriveOn], v[kLpDrive], v[kHpSlope]);
     // and it sounds the same: Pre, the one drive on the input of both filters is each filter's drive
     // the same (the dry part never driven)
     auto render = [] (bool lpDrive) {
@@ -762,6 +776,214 @@ TEST (old_settings_upgrade)
     const auto both = render (true), hpOnly = render (false);
     CHECK (toneDb (both.l, 330.0, 4800, 14400) > toneDb (hpOnly.l, 330.0, 4800, 14400) + 10.0,
            "the low-pass branch driven too: 330 Hz at %f vs %f dB", toneDb (both.l, 330.0, 4800, 14400), toneDb (hpOnly.l, 330.0, 4800, 14400));
+}
+
+TEST (separate_slopes)
+{
+    // each filter has its own slope: the high-pass at 12 dB and the low-pass at 48 dB, one engine, each
+    // heard alone in turn (the other's gain at -inf): each falls at its own slope (measured over a
+    // quarter octave where it is 40 / 60 dB down)
+    auto e = engine ();
+    e->setParam (kHpSlope, kSlope12);
+    e->setParam (kLpSlope, kSlope48);
+    e->setParam (kHpFreq, 8000.0);
+    e->setParam (kLpFreq, 300.0);
+    auto where = [] (int slope, bool hp, double fc, double target) {
+        double lo = hp ? 1.0 : fc, hi = hp ? fc : 23000.0; // the model is below target at lo (high-pass) / hi (low-pass)
+        for (int k = 0; k < 60; ++k)
+        {
+            const double mid = std::sqrt (lo * hi);
+            const bool below = modelDb (slope, hp, mid, fc, 0.0) < target;
+            (below == hp ? lo : hi) = mid;
+        }
+        return std::sqrt (lo * hi);
+    };
+    e->setParam (kLpGain, kGainMinDb);
+    const double fh = where (kSlope12, true, 8000.0, -40.0);
+    const double hpSlope = 4.0 * (gainAt (*e, fh * std::pow (2.0, 0.25)) - gainAt (*e, fh));
+    CHECK (std::fabs (hpSlope - 12.0) < 0.6, "the high-pass at 12 dB: %.2f dB per octave at %.0f Hz", hpSlope, fh);
+    e->setParam (kLpGain, 0.0);
+    e->setParam (kHpGain, kGainMinDb);
+    const double fl = where (kSlope48, false, 300.0, -60.0);
+    const double lpSlope = 4.0 * (gainAt (*e, fl) - gainAt (*e, fl * std::pow (2.0, 0.25)));
+    CHECK (std::fabs (lpSlope - 48.0) < 2.4, "the low-pass at 48 dB: %.2f dB per octave at %.0f Hz", lpSlope, fl);
+    // and both heard: what comes out is the display's sum of the two (each at its own slope, the high-pass
+    // with its own slope's polarity)
+    e->setParam (kHpGain, 0.0);
+    e->setParam (kHpFreq, 1000.0);
+    e->setParam (kLpFreq, 600.0);
+    for (double f : {100.0, 500.0, 700.0, 1000.0, 2000.0, 8000.0})
+    {
+        const double fw1 = 1000.0 * std::tan (M_PI * f / kSr) / std::tan (M_PI * 1000.0 / kSr);
+        const double fw2 = 600.0 * std::tan (M_PI * f / kSr) / std::tan (M_PI * 600.0 / kSr);
+        const double model = 20.0 * std::log10 (std::abs (filterResponse (kSlope12, true, fw1, 1000.0, 0.0) +
+                                                          filterResponse (kSlope48, false, fw2, 600.0, 0.0)));
+        CHECK (std::fabs (gainAt (*e, f) - model) < 0.3, "the sum at %.0f Hz: %f dB (model %f)", f, gainAt (*e, f), model);
+    }
+}
+
+TEST (one_filters_slope_change_leaves_the_other)
+{
+    // the low-pass's slope jumping around while only the high-pass is heard: the output is the high-pass's,
+    // to the sample, as with the low-pass's slope left alone; and the high-pass's own slope changes, with
+    // both heard, never click
+    auto in = tones ({{150.0, -6.0}, {5000.0, -12.0}}, 1.0);
+    auto render = [&] (uint32_t moving, bool lpHeard, bool change) {
+        auto e = engine ();
+        e->setParam (kHpFreq, 1500.0);
+        e->setParam (kLpFreq, 400.0);
+        if (!lpHeard)
+            e->setParam (kLpGain, kGainMinDb);
+        e->reset ();
+        Sig out;
+        out.l.resize (in.l.size ());
+        out.r.resize (in.r.size ());
+        for (size_t pos = 0, k = 0; pos < in.l.size (); pos += 240, ++k)
+        {
+            if (change && k % 10 == 0)
+                e->setParam (moving, (double)((k / 10 * 7) % kNumSlopes));
+            e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 240);
+        }
+        return out;
+    };
+    const auto fixedOut = render (kLpSlope, false, false), lpMoving = render (kLpSlope, false, true);
+    double worst = 0.0;
+    for (size_t i = 0; i < in.l.size (); ++i)
+        worst = std::max (worst, (double)std::fabs (fixedOut.l[i] - lpMoving.l[i]));
+    CHECK (worst < 1e-6, "the high-pass alone does not hear the low-pass's slope: %g", worst);
+    const double step = largestStep (render (kHpSlope, true, true).l, 4800), inStep = largestStep (in.l, 0);
+    CHECK (step < 1.3 * inStep, "the high-pass's slope changes: largest step %f (the input's %f)", step, inStep);
+}
+
+TEST (gain_lock)
+{
+    const auto& t = paramTable ();
+    CHECK (t.info (kHpGainLock).def == 1.0 && t.info (kLpGainLock).def == 0.0 && std::string (t.info (kHpGainLock).name) == "High-Pass Gain Lock" &&
+               std::string (t.info (kLpGainLock).name) == "Low-Pass Gain Lock",
+           "the high-pass locked by default, the low-pass not");
+    CHECK (t.info (kHpGain).max == 12.0 && t.info (kLpGain).max == 12.0, "gains up to +12 dB");
+    // the parameter mapping (the editor's): a locked gain's normalized value is never above 0 dB's
+    for (uint32_t g : {kHpGain, kLpGain})
+    {
+        const double zero = t.toNormalized (g, 0.0), plus6 = t.toNormalized (g, 6.0), minus6 = t.toNormalized (g, -6.0);
+        CHECK (lockedGainNormalized (g, plus6, true) == zero && lockedGainNormalized (g, plus6, false) == plus6 &&
+                   lockedGainNormalized (g, minus6, true) == minus6 && lockedGainNormalized (g, 1.0, true) == zero,
+               "%s: capped at 0 dB when locked", t.info (g).name);
+        CHECK (gainOfLock (gainLockOf (g)) == g, "lock of a gain");
+    }
+    CHECK (lockedGainDb (6.0, true) == 0.0 && lockedGainDb (6.0, false) == 6.0 && lockedGainDb (-70.0, true) == -70.0, "lockedGainDb");
+    // the engine: a gain of +6 dB plays at 0 dB with its lock on, at +6 off
+    auto e = engine ();
+    e->setParam (kHpFreq, 300.0);
+    e->setParam (kLpFreq, 100.0);
+    e->setParam (kLpGain, kGainMinDb);
+    e->setParam (kHpGain, 6.0);
+    CHECK (std::fabs (gainAt (*e, 8000.0)) < 0.1, "high-pass at +6 dB, locked (the default): %f dB", gainAt (*e, 8000.0));
+    e->setParam (kHpGainLock, 0.0);
+    CHECK (std::fabs (gainAt (*e, 8000.0) - 6.0) < 0.1, "unlocked: %f dB", gainAt (*e, 8000.0));
+    e->setParam (kHpGain, -6.0);
+    e->setParam (kHpGainLock, 1.0);
+    CHECK (std::fabs (gainAt (*e, 8000.0) + 6.0) < 0.1, "a gain below 0 dB is left alone: %f dB", gainAt (*e, 8000.0));
+    e->setParam (kHpGain, kGainMinDb);
+    e->setParam (kLpGain, 9.0);
+    CHECK (std::fabs (gainAt (*e, 30.0) - 9.0) < 0.1, "low-pass at +9 dB, unlocked (the default): %f dB", gainAt (*e, 30.0));
+    e->setParam (kLpGainLock, 1.0);
+    CHECK (std::fabs (gainAt (*e, 30.0)) < 0.1, "locked: %f dB", gainAt (*e, 30.0));
+}
+
+TEST (vocal_fade_curve)
+{
+    // Fade: 30 semitones by default, up to 60
+    const auto& fi = paramTable ().info (kFade);
+    CHECK (fi.def == 30.0 && fi.min == 1.0 && fi.max == 60.0, "Fade %g (%g .. %g)", fi.def, fi.min, fi.max);
+    // evenly in dB: 0 to -36 dB in a straight line over the Fade, then silent at its end
+    auto db = [] (double over, double fade) { return 20.0 * std::log10 (std::max (1e-30, vocalFadeGain (over, fade))); };
+    for (double fade : {30.0, 12.0, 60.0})
+    {
+        CHECK (vocalFadeGain (0.0, fade) == 1.0 && vocalFadeGain (-3.0, fade) == 1.0, "0 dB where it starts");
+        CHECK (std::fabs (db (0.25 * fade, fade) + 9.0) < 1e-6 && std::fabs (db (0.5 * fade, fade) + 18.0) < 1e-6 &&
+                   std::fabs (db (0.75 * fade, fade) + 27.0) < 1e-6,
+               "Fade %g: a quarter / half / three quarters: %f / %f / %f dB", fade, db (0.25 * fade, fade), db (0.5 * fade, fade),
+               db (0.75 * fade, fade));
+        CHECK (std::fabs (db (0.9 * fade, fade) + 32.4) < 1e-6, "90 %%: %f dB", db (0.9 * fade, fade));
+        CHECK (vocalFadeGain (fade, fade) == 0.0 && vocalFadeGain (fade + 5.0, fade) == 0.0, "silent at its end and past it");
+        // smooth: falling all the way, no step anywhere (a ten-thousandth of the Fade moves the gain by
+        // less than 0.1 % of full scale)
+        double worst = 0.0;
+        bool falling = true;
+        for (int k = 1; k <= 10000; ++k)
+        {
+            const double a = vocalFadeGain ((k - 1) * fade / 10000.0, fade), b = vocalFadeGain (k * fade / 10000.0, fade);
+            worst = std::max (worst, a - b);
+            falling &= b <= a;
+        }
+        CHECK (falling && worst < 1e-3, "Fade %g: falls smoothly (largest step %g)", fade, worst);
+    }
+    // the display's push and the engine's use it
+    double hz = 300.0, lz = 80.0 * std::pow (2.0, 15.0 / 12.0);
+    float hm = 0.0f, lm = 0.0f;
+    vocalPush (hz, lz, true, 30.0, 80.0, hm, lm);
+    CHECK (std::fabs (20.0 * std::log10 (hm) + 18.0) < 0.01 && lm == 1.0f, "vocalPush half way: %f dB", 20.0 * std::log10 (hm));
+    // measured: the low-pass 15 semitones past Dip Start, the default Fade (30): the high band is 18 dB down
+    {
+        auto e = engine ();
+        e->setParam (kMovement, kVocal);
+        e->setParam (kLpFreq, lz);
+        const double g = gainAt (*e, 8000.0);
+        CHECK (std::fabs (g + 18.0) < 1.0, "half the default Fade: %f dB (-18 expected)", g);
+    }
+    // sweeping the low-pass slowly up through the whole fade (60 Hz to 40 semitones past Dip Start in 2 s)
+    // never clicks or steps
+    auto in = tones ({{150.0, -6.0}, {1000.0, -12.0}, {5000.0, -18.0}}, 2.0);
+    auto e = engine ();
+    e->setParam (kMovement, kVocal);
+    e->reset ();
+    Sig out;
+    out.l.resize (in.l.size ());
+    out.r.resize (in.r.size ());
+    const double span = 40.0 + 12.0 * std::log2 (80.0 / 60.0); // semitones from 60 Hz
+    for (size_t pos = 0; pos < in.l.size (); pos += 64)
+    {
+        e->setParam (kLpFreq, 60.0 * std::pow (2.0, span / 12.0 * (double)pos / (double)in.l.size ()));
+        e->process (in.l.data () + pos, in.r.data () + pos, out.l.data () + pos, out.r.data () + pos, 64);
+    }
+    const double step = largestStep (out.l, 2400), inStep = largestStep (in.l, 0), hf = clickResidueDb (out.l, 2400);
+    CHECK (step < 1.6 * inStep && hf < -40.0, "the sweep through the fade: largest step %f (the input's %f), %f dB above 12 kHz", step,
+           inStep, hf);
+}
+
+TEST (separate_slopes_upgrade)
+{
+    // a setting from before the separate slopes and the gain locks (after upgradeToPerBandDrive, as the
+    // states do): the low-pass gets the slope, the high-pass's lock is off only where its gain was above
+    // 0 dB, the low-pass's off, Fade keeps its semitones (it was 1 .. 36)
+    auto upgrade = [] (std::vector<std::pair<uint32_t, double>> saved, bool perBand) {
+        std::vector<double> v (kNumParams, -1.0); // -1: not stored
+        for (auto [id, x] : saved)
+            v[id] = x;
+        auto get = [&] (uint32_t id, double& x) { return v[id] >= 0.0 ? (x = v[id], true) : false; };
+        auto set = [&] (uint32_t id, double x) { v[id] = x; };
+        if (perBand)
+            upgradeToPerBandDrive (get, set);
+        upgradeToSeparateSlopes (get, set);
+        return v;
+    };
+    auto oldFade = [] (double semis) { return std::log (semis) / std::log (kFadeOldMax); }; // normalized over 1 .. 36 (log)
+    auto v = upgrade ({{kHpSlope, 0.5}, {kHpGain, toNormalized (kHpGain, 6.0)}, {kFade, oldFade (12.0)}}, true);
+    CHECK (std::lround (toPlain (kHpSlope, v[kHpSlope])) == kSlope18 && std::lround (toPlain (kLpSlope, v[kLpSlope])) == kSlope18,
+           "the old 18 dB, both: %f / %f", v[kHpSlope], v[kLpSlope]);
+    CHECK (v[kHpGainLock] == 0.0 && v[kLpGainLock] == 0.0, "high-pass at +6 dB: unlocked (%f)", v[kHpGainLock]);
+    CHECK (std::fabs (toPlain (kFade, v[kFade]) - 12.0) < 1e-9, "Fade 12 st loads as 12 st: %f", toPlain (kFade, v[kFade]));
+    v = upgrade ({{kHpSlope, toNormalized (kHpSlope, kSlopeBrickwall)}, {kHpGain, toNormalized (kHpGain, -3.0)}, {kFade, oldFade (36.0)}}, false);
+    CHECK (std::lround (toPlain (kLpSlope, v[kLpSlope])) == kSlopeBrickwall && v[kHpGainLock] == 1.0 && v[kLpGainLock] == 0.0,
+           "Brickwall to the low-pass too, -3 dB locked: %f %f", v[kLpSlope], v[kHpGainLock]);
+    CHECK (std::fabs (toPlain (kFade, v[kFade]) - 36.0) < 1e-9 && std::fabs (toPlain (kFade, fadeFromOldRange (oldFade (1.0))) - 1.0) < 1e-9,
+           "the old range's ends: %f", toPlain (kFade, v[kFade]));
+    v = upgrade ({{kHpGain, toNormalized (kHpGain, 0.0)}}, false);
+    CHECK (v[kHpGainLock] == 1.0 && std::lround (toPlain (kLpSlope, v[kLpSlope])) == kSlope24 && std::fabs (toPlain (kFade, v[kFade]) - 12.0) < 1e-9,
+           "0 dB locked; nothing saved: 24 dB, Fade 12 (the old default)");
+    v = upgrade ({}, false);
+    CHECK (v[kHpGainLock] == 1.0, "no gain saved (0 dB, the default): locked");
 }
 
 TEST (drives_per_band)
@@ -1109,7 +1331,7 @@ TEST (performance)
         for (int i = 0; i < 3; ++i)
         {
             auto e = engine ();
-            e->setParam (kSlope, slope);
+            setSlopes (*e, slope);
             e->setParam (kEnvAmount, 12.0);
             e->noteOn (64);
             if (drive)
@@ -1136,8 +1358,8 @@ TEST (performance)
     for (int slope : {kSlope96, kSlopeBrickwall})
     {
         const double t = cpuSecs (true, slope);
-        std::printf ("    CPU: %.2f%% of one core, %s, both drives on\n", 100.0 * t / 10.0, paramTable ().toText (kSlope, slope).c_str ());
-        CHECK (t / 10.0 < 0.05, "too slow at %s", paramTable ().toText (kSlope, slope).c_str ());
+        std::printf ("    CPU: %.2f%% of one core, %s, both drives on\n", 100.0 * t / 10.0, paramTable ().toText (kHpSlope, slope).c_str ());
+        CHECK (t / 10.0 < 0.05, "too slow at %s", paramTable ().toText (kHpSlope, slope).c_str ());
     }
 }
 

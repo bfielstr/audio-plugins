@@ -60,6 +60,12 @@ private:
     enum class Drag { None, Hp, Lp };
     Drag hit (const VSTGUI::CPoint& p) const;
     uint32_t resId (bool hp) const;
+    // a filter's slope, and its gain as it plays (its Gain Lock applied)
+    int slopeOf (bool hp) const { return (int)std::lround (host->plainValue (hp ? kHpSlope : kLpSlope)); }
+    double gainDbOf (bool hp) const
+    {
+        return lockedGainDb (host->plainValue (hp ? kHpGain : kLpGain), host->plainValue (hp ? kHpGainLock : kLpGainLock) >= 0.5);
+    }
     void analyse (const std::vector<float>& x, std::vector<float>& spec);
     double specAt (const std::vector<float>& spec, double f0, double f1) const;
 

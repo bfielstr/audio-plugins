@@ -12,11 +12,21 @@ inline const char* forParam (uint32_t id)
         case kHpRes: return "High-pass resonance. At 0 the two filters can meet without a bump.";
         case kLpFreq: return "Low-pass cutoff.";
         case kLpRes: return "Low-pass resonance.";
-        case kSlope:
-            return "Steepness of both filters: 6 to 96 dB per octave, or Brickwall (80 dB down just past the cutoff). "
-                   "At every slope the two filters meeting at one frequency sum flat. From 36 dB on the resonance "
-                   "peaks as high as at 24 dB; 6 dB and Brickwall get a resonant bell at the cutoff. Click for the "
+        case kHpSlope:
+            return "Steepness of the high-pass: 6 to 96 dB per octave, or Brickwall (80 dB down just past the cutoff). "
+                   "With both slopes the same, the two filters meeting at one frequency sum flat. From 36 dB on the "
+                   "resonance peaks as high as at 24 dB; 6 dB and Brickwall get a resonant bell at the cutoff. Click "
+                   "for the list, or scroll over it.";
+        case kLpSlope:
+            return "Steepness of the low-pass: 6 to 96 dB per octave, or Brickwall (80 dB down just past the cutoff). "
+                   "With both slopes the same, the two filters meeting at one frequency sum flat. Click for the "
                    "list, or scroll over it.";
+        case kHpGainLock:
+            return "Locks the high-pass gain at 0 dB at most: the knob and the display's handle stop at 0 dB, and "
+                   "switching it on brings a higher gain down to 0 dB. On by default.";
+        case kLpGainLock:
+            return "Locks the low-pass gain at 0 dB at most: the knob and the display's handle stop at 0 dB, and "
+                   "switching it on brings a higher gain down to 0 dB.";
         case kSplit:
             return "Moves the two filters apart (positive: high-pass up, low-pass down) or together (negative), in "
                    "semitones around their set frequencies. Automate it, or let the envelope drive it.";
@@ -27,7 +37,7 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Output level.";
         case kMovement:
             return "Free: the filters move independently. Vocal: the filter you moved last leads. A low-pass swept up "
-                   "past Dip takes the high-pass up with it and fades it out (to -inf Fade semitones past Dip), so the "
+                   "past Dip takes the high-pass up with it and fades it out (evenly in dB, to -inf Fade semitones past Dip), so the "
                    "low-pass ends up sweeping alone; a high-pass swept down past the low-pass fades the low-pass out. "
                    "The filter you move also overshoots the way it moves and flows back when it stops: liquid, techy "
                    "Reese movement.";
@@ -35,7 +45,8 @@ inline const char* forParam (uint32_t id)
             return "Vocal: where the dip starts. Once the low-pass rises past this, the high-pass rises with it and "
                    "fades out over Fade.";
         case kFade:
-            return "Vocal: how far past Dip the high-pass takes to fade to -inf (an octave by default, -3 dB half way). "
+            return "Vocal: how far past Dip the pushed filter takes to fade out, in semitones (30 by default, up to 60). "
+                   "It fades evenly in dB, 0 to -36 dB over the Fade (-18 dB half way), and is silent at its end. "
                    "Shorter dives faster.";
         case kLpFloor:
             return "The low-pass never goes below this, whatever Split, the envelope or the movement do, so the sub "
@@ -44,8 +55,12 @@ inline const char* forParam (uint32_t id)
         case kDragGain:
             return "On: dragging a handle in the display up or down moves its gain along with its resonance. Off: "
                    "only the resonance (Alt-drag moves the gain alone).";
-        case kHpGain: return "Level of the high-pass filter's output, down to -inf (only the low-pass is heard).";
-        case kLpGain: return "Level of the low-pass filter's output, down to -inf (only the high-pass is heard).";
+        case kHpGain:
+            return "Level of the high-pass filter's output, down to -inf (only the low-pass is heard), up to +12 dB "
+                   "(0 dB with its Lock on).";
+        case kLpGain:
+            return "Level of the low-pass filter's output, down to -inf (only the high-pass is heard), up to +12 dB "
+                   "(0 dB with its Lock on).";
         case kHpDriveOn:
             return "High-pass drive: Smacheratr's Analog curve (4x oversampled) in the high-pass filter's branch only, "
                    "apart from the saturator at the end. Off, that branch passes untouched.";
@@ -68,7 +83,8 @@ inline const char* forParam (uint32_t id)
 constexpr const char* kDisplay =
     "Orange: the high-pass, blue: the low-pass, white: what you hear (their sum). Behind them the live spectrum of "
     "the input (grey) and the output (light). Drag a handle sideways for its cutoff and up/down for its resonance "
-    "(with Drag Gain on, the gain moves too); Alt-drag for the gain alone (to the bottom: -inf); double-click resets "
+    "(with Drag Gain on, the gain moves too); Alt-drag for the gain alone (to the bottom: -inf; a locked gain stops "
+    "at 0 dB); double-click resets "
     "it. Mouse wheel: resonance (while holding a handle, or with Shift over it). Shift: fine. A handle sits as high "
     "as its resonant peak; the handles follow the tracked note and glow with "
     "the envelope.";

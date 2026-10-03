@@ -55,11 +55,10 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
 
 void Engine::reset ()
 {
-    for (auto& f : sets)
-        f.reset ();
-    cur = 0;
-    sets[0].slope = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
-    slopeFade = 1.0;
+    hpF.hp = true;
+    lpF.hp = false;
+    hpF.reset (slopeOf (kHpSlope));
+    lpF.reset (slopeOf (kLpSlope));
     env = 0.0;
     envRising = false;
     tail.reset ();
@@ -89,34 +88,45 @@ void Engine::reset ()
     liquidSlow = 12.0 * std::log2 (std::max (1.0, leaderLp ? p[kLpFreq] : p[kHpFreq]));
     mix = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
-    hpG = (float)filterGain (p[kHpGain]);
-    lpG = (float)filterGain (p[kLpGain]);
+    hpG = gainTarget (kHpGain, kHpGainLock);
+    lpG = gainTarget (kLpGain, kLpGainLock);
     curHp = rawHp = hpCutoff (p[kHpFreq], offset, split);
     curLp = rawLp = std::max (std::max (1.0, p[kLpFloor]), lpCutoff (p[kLpFreq], offset, split));
-    setCoeffs (sets[0], curHp, curLp, p[kHpRes], lpRes ());
+    setCoeffs (hpF, curHp, p[kHpRes], false);
+    setCoeffs (lpF, curLp, lpRes (), false);
 }
 
-void Engine::setCoeffs (FilterSet& f, double hz, double lz, double hpResonance, double lpResonance)
+void Engine::setCoeffs (SlopeFade& f, double hz, double res, bool both)
 {
-    f.hpC.set (f.slope, hz, hpResonance, sr);
-    f.lpC.set (f.slope, lz, lpResonance, sr);
+    FilterSet& now = f.sets[f.cur];
+    now.c.set (now.slope, hz, res, sr);
+    if (both)
+    {
+        FilterSet& old = f.sets[f.cur ^ 1];
+        old.c.set (old.slope, hz, res, sr);
+    }
 }
 
-void Engine::warmUp (FilterSet& f)
+void Engine::startSlope (SlopeFade& f, int slope)
 {
-    // the filters as they are now, over their inputs of the last 30 ms, oldest first
-    f.reset ();
-    setCoeffs (f, curHp, curLp, p[kHpRes], lpRes ());
-    const SlopeShape& sh = slopeShape (f.slope);
-    const int len = (int)hist[0][0].size ();
+    // the other set takes the new slope; the filter as it is now, run over its input of the last 30 ms
+    // (oldest first), so it fades in settled
+    f.cur ^= 1;
+    FilterSet& n = f.sets[f.cur];
+    n.slope = slope;
+    n.reset ();
+    n.c.set (slope, f.hp ? curHp : curLp, f.hp ? p[kHpRes] : lpRes (), sr);
+    const SlopeShape& sh = slopeShape (slope);
+    const auto& h = hist[f.hp ? 0 : 1];
+    const int len = (int)h[0].size ();
     for (int c = 0; c < 2; ++c)
         for (int k = 0, q = histPos; k < len; ++k)
         {
-            filterTick (sh, f.hpC, f.hp[c], hist[0][c][(size_t)q], true);
-            filterTick (sh, f.lpC, f.lp[c], hist[1][c][(size_t)q], false);
+            filterTick (sh, n.c, n.st[c], h[c][(size_t)q], f.hp);
             if (++q >= len)
                 q = 0;
         }
+    f.fade = 0.0;
 }
 
 // The cutoffs do not follow the notes any more (the notes only trigger the envelope).
@@ -168,14 +178,13 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
 void Engine::processBlock (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
-    const int slopeT = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
     const double hpBase = p[kHpFreq], lpBase = p[kLpFreq];
     const double resHp = p[kHpRes], resLp = lpRes ();
     const double envAmount = p[kEnvAmount];
     const double attackStep = 1.0 / std::max (1.0, p[kEnvAttack] * 0.001 * sr);
     const double decayCoef = std::exp (-1.0 / std::max (1.0, p[kEnvDecay] * 0.001 * sr));
     const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0), outT = dbToGain (p[kOutput]);
-    const float hpGT = (float)filterGain (p[kHpGain]), lpGT = (float)filterGain (p[kLpGain]);
+    const float hpGT = gainTarget (kHpGain, kHpGainLock), lpGT = gainTarget (kLpGain, kLpGainLock);
     const double offsetT = targetOffset ();
     // Vocal movement: the filter whose cutoff moved last leads, and Split swings with its sweep
     const bool vocal = std::lround (p[kMovement]) == kVocal;
@@ -209,19 +218,22 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         duckHold = driveHp.latency () + (int)std::lround (0.002 * sr);
     }
     const bool moving = wantPost != drivePost;
-    // a new slope: the other set of filters starts from silence with it and fades in over this one
-    // (a change during a fade waits for the fade to end)
-    if (slopeT != sets[cur].slope && slopeFade >= 1.0)
+    // a filter's new slope: its other set starts with it and fades in over this one (a change during a
+    // fade waits for the fade to end); each filter on its own
+    for (SlopeFade* f : {&hpF, &lpF})
     {
-        cur ^= 1;
-        sets[cur].slope = slopeT;
-        warmUp (sets[cur]);
-        slopeFade = 0.0;
+        const int slopeT = slopeOf (f->hp ? kHpSlope : kLpSlope);
+        if (slopeT != f->sets[f->cur].slope && f->fade >= 1.0)
+            startSlope (*f, slopeT);
     }
-    FilterSet& now = sets[cur];
-    FilterSet& old = sets[cur ^ 1];
-    const SlopeShape& shNow = slopeShape (now.slope);
-    const SlopeShape& shOld = slopeShape (old.slope);
+    FilterSet& hNow = hpF.sets[hpF.cur];
+    FilterSet& hOld = hpF.sets[hpF.cur ^ 1];
+    FilterSet& lNow = lpF.sets[lpF.cur];
+    FilterSet& lOld = lpF.sets[lpF.cur ^ 1];
+    const SlopeShape& shHNow = slopeShape (hNow.slope);
+    const SlopeShape& shHOld = slopeShape (hOld.slope);
+    const SlopeShape& shLNow = slopeShape (lNow.slope);
+    const SlopeShape& shLOld = slopeShape (lOld.slope);
 
     // the input is copied, as the output may be the same buffer
     std::copy (xl, xl + n, src[0].data ());
@@ -291,7 +303,7 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         // Split raises the high-pass and lowers the low-pass)
         const double swing = vocal ? std::clamp ((lead - liquidSlow) * (leaderLp ? -2.0 : 2.0), -36.0, 36.0) : 0.0;
         split += (p[kSplit] + envAmount * env + swing - split) * semiSmooth;
-        const bool fading = slopeFade < 1.0;
+        const bool hFading = hpF.fade < 1.0, lFading = lpF.fade < 1.0;
         if (i % kCoeffInterval == 0)
         {
             double hz = hpCutoff (hpBase, offset, split), lz = std::max (lpFloor, lpCutoff (lpBase, offset, split));
@@ -302,9 +314,8 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
                 vocalPush (hz, lz, leaderLp, p[kFade], p[kDipStart], hpMulT, lpMulT);
             curHp = hz;
             curLp = lz;
-            setCoeffs (now, hz, lz, resHp, resLp);
-            if (fading)
-                setCoeffs (old, hz, lz, resHp, resLp);
+            setCoeffs (hpF, hz, resHp, hFading);
+            setCoeffs (lpF, lz, resLp, lFading);
         }
         mix += (mixT - mix) * smooth;
         out += (outT - out) * smooth;
@@ -312,22 +323,27 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
         lpMul += (lpMulT - lpMul) * smooth;
         hpG += (hpGT - hpG) * smooth;
         lpG += (lpGT - lpG) * smooth;
-        if (fading)
-            slopeFade = std::min (1.0, slopeFade + slopeStep);
+        if (hFading)
+            hpF.fade = std::min (1.0, hpF.fade + slopeStep);
+        if (lFading)
+            lpF.fade = std::min (1.0, lpF.fade + slopeStep);
 
         float* outs[2] = {yl, yr};
         for (int c = 0; c < 2; ++c)
         {
             // the filters, with the polarity that makes the pair sum flat (see Slopes.h)
             const double hx = hIn[c][i], lx = lIn[c][i];
-            double h = filterTick (shNow, now.hpC, now.hp[c], hx, true);
-            double l = filterTick (shNow, now.lpC, now.lp[c], lx, false);
-            if (fading)
+            double h = filterTick (shHNow, hNow.c, hNow.st[c], hx, true);
+            double l = filterTick (shLNow, lNow.c, lNow.st[c], lx, false);
+            if (hFading)
             {
-                const double ho = filterTick (shOld, old.hpC, old.hp[c], hx, true);
-                const double lo = filterTick (shOld, old.lpC, old.lp[c], lx, false);
-                h = ho + (h - ho) * slopeFade;
-                l = lo + (l - lo) * slopeFade;
+                const double ho = filterTick (shHOld, hOld.c, hOld.st[c], hx, true);
+                h = ho + (h - ho) * hpF.fade;
+            }
+            if (lFading)
+            {
+                const double lo = filterTick (shLOld, lOld.c, lOld.st[c], lx, false);
+                l = lo + (l - lo) * lpF.fade;
             }
             if (drivePost)
             {

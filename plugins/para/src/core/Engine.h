@@ -7,17 +7,21 @@
 // Movement: Free keeps the filters independent. Vocal couples them: the filter that moved last
 // leads. A low-pass leading takes the high-pass with it once it rises past Dip Start (80 Hz by
 // default): the high-pass rises as far as the low-pass has gone past Dip Start (and never sits below
-// it) and fades out, to -inf Fade semitones past Dip Start (an octave by default, equal-power: -3 dB
-// half way), so the low-pass ends up sweeping alone. A high-pass leading pushes the low-pass down
+// it) and fades out, to -inf Fade semitones past Dip Start (30 by default), evenly in dB (vocalFadeGain
+// in Params.h: 0 to -36 dB in a straight line over the Fade, -18 dB half way, silent at its end), so the
+// low-pass ends up sweeping alone. A high-pass leading pushes the low-pass down
 // once it crosses it, fading it from the crossing the same way. Split also swings with the sweep:
 // the leader overshoots in the direction it moves (and the other filter the other way) by as far as
 // it moved in the last ~150 ms, then flows back when it stops; on a Reese that is the liquid, techy
 // movement (this used to be a separate Liquid mode).
 // Floor: the low-pass never goes below Low-Pass Floor (40 Hz by default), whatever Split, the
 // envelope or the swing do, so the sub stays.
-// Slope: 6 to 96 dB per octave or Brickwall, both filters (Slopes.h). A new slope crossfades from the
-// old one (10 ms, both running meanwhile), so switching never clicks; the new filters are first run
-// over the last 30 ms of their input, so they fade in settled.
+// Slopes: 6 to 96 dB per octave or Brickwall, each filter its own (High-Pass Slope, Low-Pass Slope;
+// Slopes.h). A filter's new slope crossfades from its old one (10 ms, both running meanwhile), so
+// switching never clicks; the new filter is first run over the last 30 ms of its input, so it fades in
+// settled. Each filter crossfades on its own. The high-pass's polarity in the sum is its own slope's
+// (Slopes.h): with both slopes the same, the pair meets flat as it always did.
+// Gain Lock, per filter: locked, the filter's gain is capped at 0 dB (whatever the parameter says).
 // Drive, per filter: Smacheratr's Analog curve (DriveStage, oversampled) in the high-pass's branch and in
 // the low-pass's, each on or off with its own amount. Pre: on the filter's input, so the filter shapes
 // what it adds; Post: on its output (before its gain), so the harmonics stay. The dry part of Dry/Wet
@@ -33,6 +37,7 @@
 #include "pluginkit/ScopeBuffer.h"
 #include "smacheratr/src/core/Tail.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <vector>
@@ -71,17 +76,15 @@ inline double lpCutoff (double lpBase, double offsetSemis, double splitSemis)
 
 // Vocal movement, shared with the display (see the top of this file). The low-pass leading: past
 // dipHz the high-pass rises with it and fades, from 0 dB at dipHz to -inf fadeSemis past it (or from
-// the crossing, if the high-pass is set below dipHz), along an equal-power curve (-3 dB half way).
-// The high-pass leading: once it crosses the low-pass, the low-pass sits at its cutoff and fades
-// from the crossing the same way.
+// the crossing, if the high-pass is set below dipHz), evenly in dB (vocalFadeGain, Params.h). The
+// high-pass leading: once it crosses the low-pass, the low-pass sits at its cutoff and fades from the
+// crossing the same way.
 inline void vocalPush (double& hpHz, double& lpHz, bool leaderLp, double fadeSemis, double dipHz, float& hpMul,
                        float& lpMul)
 {
     hpMul = lpMul = 1.0f;
     const double cross = 12.0 * std::log2 (lpHz / hpHz);
-    auto fadeAt = [&] (double over) {
-        return (float)std::cos (0.5 * M_PI * std::fmin (1.0, over / std::fmax (0.5, fadeSemis)));
-    };
+    auto fadeAt = [&] (double over) { return (float)vocalFadeGain (over, fadeSemis); };
     if (leaderLp)
     {
         const double past = 12.0 * std::log2 (lpHz / std::fmax (1.0, dipHz));
@@ -151,25 +154,41 @@ private:
     ParamArray p = defaultParams ();
     double sr = 48000.0;
     int maxBlock = 512;
-    // the filters at one slope; two, so a new slope can fade in over the old one
+    // one filter at one slope (coefficients shared by the channels)
     struct FilterSet
     {
         int slope = kSlope24;
-        FilterCoeffs hpC, lpC;
-        FilterState hp[2], lp[2]; // [channel]
+        FilterCoeffs c;
+        FilterState st[2]; // [channel]
         void reset ()
         {
-            for (int c = 0; c < 2; ++c)
-            {
-                hp[c].reset ();
-                lp[c].reset ();
-            }
+            for (auto& x : st)
+                x.reset ();
         }
     };
-    FilterSet sets[2];
-    int cur = 0;                              // the set of the slope set now
-    double slopeFade = 1.0, slopeStep = 0.0;  // how far the current set has faded in over the other one
-    void setCoeffs (FilterSet& f, double hz, double lz, double qHpRes, double qLpRes);
+    // a filter (the high-pass or the low-pass) at its slope: two sets, so a new slope can fade in over
+    // the old one
+    struct SlopeFade
+    {
+        FilterSet sets[2];
+        int cur = 0;          // the set of the slope set now
+        double fade = 1.0;    // how far the current set has faded in over the other one
+        bool hp = true;
+        void reset (int slope)
+        {
+            for (auto& f : sets)
+                f.reset ();
+            cur = 0;
+            sets[0].slope = slope;
+            fade = 1.0;
+        }
+    };
+    SlopeFade hpF, lpF;
+    double slopeStep = 0.0;
+    int slopeOf (uint32_t id) const { return std::clamp ((int)std::lround (p[id]), 0, kNumSlopes - 1); }
+    float gainTarget (uint32_t gainId, uint32_t lockId) const { return (float)filterGain (lockedGainDb (p[gainId], p[lockId] >= 0.5)); }
+    void setCoeffs (SlopeFade& f, double hz, double res, bool both);
+    void startSlope (SlopeFade& f, int slope); // a new slope fades in (warmed up)
     int lastNote = -1;
     float bend = 0.0f;
     double env = 0.0;
@@ -202,7 +221,6 @@ private:
     // from silence, whose ringing would dip the crossfade)
     std::vector<float> hist[2][2];
     int histPos = 0;
-    void warmUp (FilterSet& f);
     int dryPos = 0;
     std::vector<float> bypassDelay[2];
     int bypassPos = 0;

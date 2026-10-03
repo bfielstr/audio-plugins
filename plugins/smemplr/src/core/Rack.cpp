@@ -33,9 +33,13 @@ double slopeFromThreeChoices (double oldNorm)
 }
 } // namespace mseq
 
-static_assert (kSlotBlock >= para::kNumParams && kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams &&
-                   kSlotBlock >= mseq::kNumParams,
+static_assert (kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams && kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
+// Para in a slot: its own IDs as block positions, all of them; the ones after its low-pass drive (Low-Pass
+// Slope, the Gain Locks) are the first positions of the slot's extension
+static_assert (para::kLpDrive == kSlotBlock - 1 && para::kLpSlope == kSlotBlock && para::kHpGainLock == kSlotBlock + 1 &&
+                   para::kLpGainLock == kSlotBlock + 2 && para::kNumParams <= kSlotBlockAll,
+               "Para's parameters must fit a slot's block and extension (block position = Para's ID)");
 // Wubr in a slot: its own IDs without its end saturator (5 .. 10, 85 .. 101 and its last block,
 // Gently's Advanced mode), in order, then the ones after the saturator's block (Link Rates)
 constexpr uint32_t kWubrBands = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase); // positions before Link Rates
@@ -370,25 +374,29 @@ void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bo
 
 void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
-    if (version >= 13)
+    if (version >= 15)
         return;
     for (int slot = 0; slot < kRackSlots; ++slot)
     {
         const uint32_t typeId = slotParam (slot, kSlotType);
         if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxPara)
             continue;
-        para::upgradeToPerBandDrive (
-            [&] (uint32_t id, double& v) {
-                const uint32_t pid = slotBlockParam (slot, id);
-                if (!has[pid])
-                    return false;
-                v = norm[pid];
-                return true;
-            },
-            [&] (uint32_t id, double v) {
-                norm[slotBlockParam (slot, id)] = v;
-                has[slotBlockParam (slot, id)] = true;
-            });
+        auto get = [&] (uint32_t id, double& v) {
+            const uint32_t pid = slotBlockParam (slot, (uint32_t)fxBlockOf (kFxPara, id));
+            if (!has[pid])
+                return false;
+            v = norm[pid];
+            return true;
+        };
+        auto set = [&] (uint32_t id, double v) {
+            const uint32_t pid = slotBlockParam (slot, (uint32_t)fxBlockOf (kFxPara, id));
+            norm[pid] = v;
+            has[pid] = true;
+        };
+        // before 13: three slopes, one drive; before 15: one slope, no gain locks, Fade up to 36 semitones
+        if (version < 13)
+            para::upgradeToPerBandDrive (get, set);
+        para::upgradeToSeparateSlopes (get, set);
     }
 }
 

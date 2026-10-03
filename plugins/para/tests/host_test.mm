@@ -50,11 +50,12 @@ static InputFn tone (double hz, double amp)
 
 static double plainOf (Rig& rig, uint32_t id) { return toPlain (id, rig.controller->getParamNormalized (id)); }
 
-// A state as Para 0.6 saved it (version 3: three slopes, one drive), with the values given (normalized).
-static bool writeOldState (IBStream* stream, const std::vector<std::pair<uint32_t, double>>& values)
+// A state as an older Para saved it (version 3, Para 0.6: three slopes, one drive; version 4: one slope of
+// both filters, no gain locks, Fade 1 .. 36 semitones), with the values given (normalized).
+static bool writeOldState (IBStream* stream, const std::vector<std::pair<uint32_t, double>>& values, int32 version = 3)
 {
     IBStreamer s (stream, kLittleEndian);
-    bool ok = s.writeInt32 (0x50455252) && s.writeInt32 (3) && s.writeInt32 ((int32)values.size ());
+    bool ok = s.writeInt32 (0x50455252) && s.writeInt32 (version) && s.writeInt32 ((int32)values.size ());
     for (auto [id, v] : values)
         ok = ok && s.writeInt32u (id) && s.writeDouble (v);
     return ok;
@@ -136,12 +137,26 @@ int main (int argc, char** argv)
         // a project from Para 0.6 (18 dB, the one drive on at +12 dB): the slope stays 18 dB and both
         // filters get the drive
         CHECK (rig.applyState ([] (IBStream* s) {
-                   return writeOldState (s, {{kSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, toNormalized (kHpDrive, 12.0)}});
+                   return writeOldState (s, {{kHpSlope, 0.5}, {kHpDriveOn, 1.0}, {kHpDrive, toNormalized (kHpDrive, 12.0)}});
                }),
                "old setState");
-        CHECK (std::lround (plainOf (rig, kSlope)) == kSlope18, "the old 18 dB: %s", paramTable ().toText (kSlope, plainOf (rig, kSlope)).c_str ());
+        CHECK (std::lround (plainOf (rig, kHpSlope)) == kSlope18 && std::lround (plainOf (rig, kLpSlope)) == kSlope18,
+               "the old 18 dB, both filters: %s", paramTable ().toText (kLpSlope, plainOf (rig, kLpSlope)).c_str ());
         CHECK (plainOf (rig, kLpDriveOn) >= 0.5 && std::fabs (plainOf (rig, kLpDrive) - 12.0) < 1e-6 && plainOf (rig, kHpDriveOn) >= 0.5,
                "the old drive in both filters: %.1f dB", plainOf (rig, kLpDrive));
+        // a project from Para 0.8 (version 4: one slope, 48 dB; the high-pass at +6 dB; Fade 12 semitones, normalized
+        // over 1 .. 36): both slopes 48 dB, the high-pass unlocked (it stays at +6 dB), the low-pass unlocked, Fade 12
+        CHECK (rig.applyState ([] (IBStream* s) {
+                   return writeOldState (s,
+                                         {{kHpSlope, toNormalized (kHpSlope, kSlope48)}, {kHpGain, toNormalized (kHpGain, 6.0)},
+                                          {kFade, std::log (12.0) / std::log (36.0)}},
+                                         4);
+               }),
+               "version 4 setState");
+        CHECK (std::lround (plainOf (rig, kHpSlope)) == kSlope48 && std::lround (plainOf (rig, kLpSlope)) == kSlope48, "48 dB, both filters");
+        CHECK (plainOf (rig, kHpGainLock) < 0.5 && plainOf (rig, kLpGainLock) < 0.5 && std::fabs (plainOf (rig, kHpGain) - 6.0) < 1e-6,
+               "the boosted high-pass stays unlocked");
+        CHECK (std::fabs (plainOf (rig, kFade) - 12.0) < 1e-6, "Fade 12 st: %.2f", plainOf (rig, kFade));
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState again");
 
         // editor: screenshot while audio is flowing, then gestures
@@ -176,8 +191,15 @@ int main (int argc, char** argv)
             win.drag (hx2, handleY (), hx2, handleY () - 30);
             CHECK (plainOf (rig, kHpRes) > 0.15, "drag up raises the high-pass resonance: %.2f", plainOf (rig, kHpRes));
             CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the gain stays: %.1f dB", plainOf (rig, kHpGain));
-            // with Drag Gain on, the gain rises with it
+            // with Drag Gain on, the gain rises with it, but no higher than 0 dB with the high-pass's Gain Lock on
+            // (the default); unlocked, above it
             rig.param (kDragGain, 1.0);
+            {
+                const double y0 = handleY ();
+                win.drag (hx2, y0, hx2, y0 - 20);
+                CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "locked: the gain stops at 0 dB (%.1f dB)", plainOf (rig, kHpGain));
+            }
+            rig.param (kHpGainLock, 0.0);
             const double res1 = plainOf (rig, kHpRes);
             const double y1 = handleY ();
             win.drag (hx2, y1, hx2, y1 - 20);
@@ -198,17 +220,33 @@ int main (int argc, char** argv)
                 pump (0.03);
             }
             CHECK (win.savePng (outDir + "/ui_para_vocal.png"), "vocal screenshot");
-            // the drive toggles in OUTPUT (at 8, 410): the high-pass's, then the low-pass's
+            // the drive toggles in OUTPUT (at 8, kRow2Top): the high-pass's, then the low-pass's
             rig.param (kHpDriveOn, 0.0);
             rig.param (kLpDriveOn, 0.0);
             pump (0.05);
-            win.click (8 + 537, 410 + 79);
+            win.click (8 + 537, Editor::kRow2Top + 79);
             CHECK (plainOf (rig, kHpDriveOn) >= 0.5 && plainOf (rig, kLpDriveOn) < 0.5, "HP drive toggle");
-            win.click (8 + 585, 410 + 79);
+            win.click (8 + 585, Editor::kRow2Top + 79);
             CHECK (plainOf (rig, kLpDriveOn) >= 0.5, "LP drive toggle");
-            // the slopes' drop-down (in SPLIT, at 384, 298) shows the slope; set to Brickwall, the display
-            // draws it
-            rig.param (kSlope, toNormalized (kSlope, kSlopeBrickwall));
+            // the Gain Locks under the gains (HIGH-PASS at 8, LOW-PASS at 196, kRow1Top): the low-pass's on brings
+            // its +6 dB down to 0 dB; the high-pass's off, then on again
+            rig.param (kLpGain, toNormalized (kLpGain, 6.0));
+            rig.param (kLpGainLock, 0.0);
+            rig.param (kHpGainLock, 1.0);
+            pump (0.05);
+            win.click (196 + 152, Editor::kRow1Top + 103);
+            CHECK (plainOf (rig, kLpGainLock) >= 0.5 && std::fabs (plainOf (rig, kLpGain)) < 1e-6, "LP lock on: %.1f dB", plainOf (rig, kLpGain));
+            win.click (8 + 152, Editor::kRow1Top + 103);
+            CHECK (plainOf (rig, kHpGainLock) < 0.5, "HP lock toggle");
+            win.click (8 + 152, Editor::kRow1Top + 103);
+            CHECK (plainOf (rig, kHpGainLock) >= 0.5, "HP lock toggle again");
+            // a locked gain's knob (HIGH-PASS's third) dragged up stops at 0 dB
+            win.drag (8 + 152, Editor::kRow1Top + 54, 8 + 152, Editor::kRow1Top + 54 - 120);
+            CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the locked HP gain knob stops at 0 dB: %.1f", plainOf (rig, kHpGain));
+            // the slopes' drop-downs (in SPLIT, at 384, kRow1Top): HP Slope above LP Slope. The low-pass set to
+            // Brickwall, the high-pass to 12 dB: the display draws each with its own
+            rig.param (kHpSlope, toNormalized (kHpSlope, kSlope12));
+            rig.param (kLpSlope, toNormalized (kLpSlope, kSlopeBrickwall));
             rig.param (kMovement, toNormalized (kMovement, kFree));
             for (int i = 0; i < 10; ++i)
             {

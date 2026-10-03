@@ -3,6 +3,7 @@
 #include "Params.h"
 #include "UiKit.h"
 
+#include "para/src/ui/GainLock.h"
 #include "pluginkit/vst/EditorBase.h"
 
 #include <array>
@@ -135,6 +136,9 @@ private:
     // would draw with a deleted host before the next idle otherwise).
     std::array<std::unique_ptr<pk::MappedParamHost>, kRackSlots> slotHosts;
     std::vector<std::unique_ptr<pk::MappedParamHost>> retiredHosts;
+    // the Para page's Gain Locks: in front of its slot's host for the gains (made with the page, dropped
+    // with it)
+    std::unique_ptr<para::GainLockHost> paraLock;
     std::array<int, kRackSlots> slotHostType {}, shownTypes {};
     pk::MappedParamHost* hostFor (int slot);
     bool rackDirty = false;
