@@ -607,7 +607,7 @@ void Voice::renderTail (float* outL, float* outR, int n, bool mono)
 }
 
 //==============================================================================
-Engine::Engine () : p (defaultParams ())
+Engine::Engine () : p (defaultParams ()), base (p)
 {
     voices.resize (kMaxVoices);
     beatBounds.reserve (4096);
@@ -617,6 +617,7 @@ Engine::Engine () : p (defaultParams ())
 void Engine::prepare (double sampleRate, int)
 {
     sr = sampleRate;
+    mod.prepare (sr);
     for (auto& v : voices)
         v.prepare (sr);
     rack.prepare (sr, 512);
@@ -634,6 +635,7 @@ void Engine::reset ()
 {
     rack.reset ();
     tail.reset ();
+    mod.reset ();
     for (auto& v : voices)
         v.hardStop ();
     monoStack.clear ();
@@ -661,6 +663,16 @@ void Engine::setParam (uint32_t id, double plain)
 {
     if (id >= kNumParams)
         return;
+    base[id] = plain;
+    applyParam (id, plain);
+    // a modulated parameter: set again (base and modulation) at the next step
+    for (int i = 0; i < numMods; ++i)
+        if (mods[(size_t)i].target == id)
+            modState[(size_t)i].stale = true;
+}
+
+void Engine::applyParam (uint32_t id, double plain)
+{
     p[id] = plain;
     if (isRackParam (id))
         rack.setParam (id, plain);
@@ -780,6 +792,7 @@ void Engine::noteOn (int note, float velocity)
         return;
     }
     rack.noteOn (note); // Para's envelope follows the sampler's notes
+    mod.noteOn ();      // (the LFOs with Retrig on start again)
     if (!smp)
         return;
     updateSlices ();
@@ -973,7 +986,114 @@ void Engine::makeCtx (const HostInfo& host, BlockCtx& c) const
     c.globalLfoPhase = globalLfoPhase;
 }
 
+void Engine::setModMappings (const ModMapping* list, int count)
+{
+    // the parameters the old mappings moved go back to their own values; a mapping kept (the same LFO
+    // and target) keeps its smoothed offset, so changing a depth glides
+    std::array<ModState, kMaxModMappings> next {};
+    count = std::clamp (count, 0, kMaxModMappings);
+    for (int i = 0; i < count; ++i)
+        for (int j = 0; j < numMods; ++j)
+            if (mods[(size_t)j].lfo == list[i].lfo && mods[(size_t)j].target == list[i].target)
+            {
+                next[(size_t)i] = modState[(size_t)j];
+                next[(size_t)i].stale = true;
+            }
+    for (int j = 0; j < numMods; ++j)
+        if (modState[(size_t)j].on)
+            applyParam (mods[(size_t)j].target, base[mods[(size_t)j].target]);
+    for (int i = 0; i < count; ++i)
+        mods[(size_t)i] = list[i];
+    numMods = count;
+    modState = next;
+}
+
+bool Engine::modWorks (const ModMapping& m) const
+{
+    if (m.lfo < 0 || m.lfo >= kModLfos)
+        return false;
+    if (!isRackParam (m.target))
+        return m.fxType < 0 && canModulate (m.target, kFxEmpty);
+    const int type = rack.type (rackField (m.target).slot);
+    return m.fxType == type && canModulate (m.target, type);
+}
+
+void Engine::modulate (int n)
+{
+    // each mapping's offset glides to depth x its LFO (4 ms); a mapping that stopped working (another
+    // effect in its slot) gives its parameter back its own value
+    const double coef = 1.0 - std::exp (-n / (0.004 * sr));
+    bool restored = false;
+    for (int i = 0; i < numMods; ++i)
+    {
+        const ModMapping& m = mods[(size_t)i];
+        ModState& st = modState[(size_t)i];
+        if (!modWorks (m))
+        {
+            if (st.on)
+            {
+                applyParam (m.target, base[m.target]);
+                restored = true;
+            }
+            st.on = false;
+            continue;
+        }
+        const double target = m.depth * mod.value (m.lfo);
+        st.smooth = st.on ? st.smooth + (target - st.smooth) * coef : target;
+        st.on = true;
+    }
+    // the parameters, each once: its value plus every working mapping's offset, held to its range
+    for (int i = 0; i < numMods; ++i)
+    {
+        ModState& st = modState[(size_t)i];
+        if (!st.on)
+            continue;
+        const uint32_t id = mods[(size_t)i].target;
+        bool first = true;
+        for (int j = 0; j < i && first; ++j)
+            first = !(modState[(size_t)j].on && mods[(size_t)j].target == id);
+        if (!first)
+            continue;
+        double sum = 0.0;
+        bool stale = st.stale || restored;
+        for (int j = i; j < numMods; ++j)
+            if (modState[(size_t)j].on && mods[(size_t)j].target == id)
+            {
+                sum += modState[(size_t)j].smooth;
+                stale = stale || modState[(size_t)j].stale;
+                modState[(size_t)j].stale = false;
+            }
+        const double v = toPlain (id, std::clamp (toNormalized (id, base[id]) + sum, 0.0, 1.0));
+        if (stale || v != st.applied)
+        {
+            applyParam (id, v);
+            st.applied = v;
+        }
+    }
+}
+
 void Engine::render (float* L, float* R, int n, const HostInfo& host)
+{
+    if (numMods == 0)
+    {
+        mod.advance (base.data (), n, host.bpm, host.ppq, host.playing && host.ppqValid);
+        renderStep (L, R, n, host);
+        return;
+    }
+    const double ppqPerSample = (host.bpm > 0.0 ? host.bpm : 120.0) / 60.0 / sr;
+    for (int pos = 0; pos < n;)
+    {
+        const int m = std::min (kModStep, n - pos);
+        HostInfo h = host;
+        h.ppq = host.ppq + pos * ppqPerSample;
+        mod.advance (base.data (), m, h.bpm, h.ppq, h.playing && h.ppqValid);
+        modulate (m);
+        renderStep (L + pos, R + pos, m, h);
+        pos += m;
+    }
+}
+
+void Engine::renderStep (float* L, float* R, int n, const HostInfo& host)
 {
     std::fill (L, L + n, 0.0f);
     std::fill (R, R + n, 0.0f);

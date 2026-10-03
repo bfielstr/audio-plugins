@@ -1,6 +1,7 @@
 // Binary plug-in state: parameters (by ID, normalized) + the sample reference and edits.
 #pragma once
 
+#include "Modulation.h"
 #include "Params.h"
 #include "SampleData.h"
 #include "Slices.h"
@@ -20,6 +21,7 @@ struct PluginState
     SampleOps ops;
     SliceEdits edits;
     bool constantPowerFade = true;
+    ModMap mods; // the modulation LFOs' mappings (version 18; none before)
 };
 
 bool writeState (Steinberg::IBStream* stream, const PluginState& s);

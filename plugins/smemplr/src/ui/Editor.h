@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modulation.h"
 #include "Params.h"
 #include "UiKit.h"
 
@@ -51,13 +52,16 @@ class WaveformView;
 class FilterDisplay;
 class EnvelopeDisplay;
 class MsView;
+class ModOverlay;
+class ModList;
 
 class Editor : public pk::EditorBase
 {
 public:
     // every edit from the editor: Multidyn's thresholds of a band cannot cross
     void setNorm (uint32_t id, double v) override;
-    static constexpr double kWidth = 1110.0;
+    // the modulation section is the column at the right (kModLeft ..)
+    static constexpr double kWidth = 1328.0, kModLeft = 1108.0;
     static constexpr double kHeight = 1012.0;
     // the effects rack at the bottom (also used by the host test): the slots' tabs in chain order (drag
     // one sideways to move the effect) and "+"; the selected slot's controls; its panel
@@ -88,7 +92,35 @@ public:
     bool applySlotSettingsText (int slot, const std::string& text); // false: not this slot's effect
     void showMenu (VSTGUI::CPoint where);
 
+    // --- the modulation (ModView.h; the mappings live in the Bridge, which the state saves) ---
+    ModMap modMap ();                               // the mappings now (none without a processor)
+    bool addMod (int lfo, uint32_t target);         // a new mapping, at kModDropDepth (false: cannot)
+    void removeMod (size_t index);
+    void setModDepth (size_t index, double depth);  // (held to -1 .. 1)
+    // An LFO's handle dragged to `where` (frame coordinates): the control under it is framed; let go
+    // there (drop), the LFO modulates it.
+    void lfoDragged (int lfo, VSTGUI::CPoint where, bool drop);
+    void lfoDragCancelled ();
+    // the parameter a control at `where` is bound to, if an LFO may modulate it (-1: none); its rect
+    int64_t modTargetAt (VSTGUI::CPoint where, VSTGUI::CRect* rect = nullptr);
+    std::string modTargetName (const ModMapping& m);
+    bool modOffsetNow (size_t index, float& offset); // false: not working (or not playing yet)
+    float lfoValueNow (int lfo);
+    float lfoPhaseNow (int lfo);
+    int lfoShapeNow (int lfo);
+    double lfoPhaseOffset (int lfo); // Phase, 0 .. 1
+    static constexpr double kModDropDepth = 0.25;
+
 private:
+    void setMods (ModMap m);
+    void remapMods (const std::array<int, kRackSlots>& newSlot); // the rack's effects moved (Modulation.h)
+    void updateModRings ();
+    ModOverlay* modOverlay = nullptr;
+    ModList* modList = nullptr;
+    std::vector<VSTGUI::CView*> modLive;            // the LFOs' handles and scopes (repainted in idle)
+    std::array<VSTGUI::CView*, kModLfos> modRateKnobs {};
+    uint64_t modListShown = ~0ull; // what the list shows (the mappings' count of changes, which work)
+
     std::set<uint32_t> rackPageParams; // the effect parameters with a control on the current rack page
     void updateVisibility ();
     void updateMdLayout ();

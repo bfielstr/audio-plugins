@@ -26,9 +26,22 @@ inline const char* forParam (uint32_t id)
         case kMsSideGain: return "Level of the side signal (the stereo width).";
         case kMsMidGain: return "Level of the mid signal.";
         case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default).";
-
         default: break;
     }
+    if (isModLfoParam (id))
+        switch ((id - kModLfoBase) % kModLfoFields)
+        {
+            case kModShape:
+                return "The modulation LFO's shape: Sine, Triangle, Saw Up, Saw Down, Square, S&H (a new random value every "
+                       "cycle) or Smooth Random (gliding from one random value to the next).";
+            case kModRate: return "The LFO's speed in Hz, 0.01 to 40 (while Sync is Off).";
+            case kModSync:
+                return "Off: the LFO runs at its Rate in Hz. A note length (1/64 to 8 Bars): it runs at the host's tempo (120 "
+                       "BPM without one), and while the host plays it follows the song position (unless Retrig is on).";
+            case kModPhase: return "Where in its cycle the LFO starts (on Retrig) or is shifted to, 0 to 360 degrees.";
+            default:
+                return "Retrig: every note starts the LFO again at its Phase. Off: it runs freely (synced, with the song).";
+        }
     if (id >= kTailBase)
         return nullptr; // the saturator panel has its own tips
     if (id == kParaDragGain)
@@ -181,6 +194,17 @@ constexpr const char* kHelpButton = "Show or hide these help tooltips.";
 constexpr const char* kLoad = "Load a sample (WAV, AIFF, FLAC or MP3). You can also drop a file on the waveform.";
 constexpr const char* kPrevNext = "Load the previous / next audio file in the same folder.";
 constexpr const char* kMenu = "Sample menu: normalize, reverse, crop, loop fade type, show the file, interface size.";
+constexpr const char* kLfoHandle =
+    "Drag this LFO onto any knob, slider or value of Smemplr (the effects' too) to modulate it: the control gets a "
+    "ring (a line under it if it is not a knob) in the LFO's colour. Drag a knob's ring up or down to change the "
+    "depth, right-click the ring to remove it. Switches and menus cannot be modulated. The host's value stays "
+    "where it is: the LFO moves the sound around it.";
+constexpr const char* kLfoScope = "The LFO's shape over one cycle, and where it is now.";
+constexpr const char* kModList =
+    "What the LFOs modulate, and how far (a share of the control's range, + or -). Drag a depth up or down to "
+    "change it (Shift: fine), double-click it to turn it over; click x or right-click a row to remove it. A "
+    "mapping onto an effect in the rack follows the effect when it moves, goes with it when it is removed, and "
+    "pauses (dimmed) while another effect is in its slot. Up to 24 mappings, saved with the project.";
 constexpr const char* kWarpAs = "Change the Warp As length: -/+ one beat, or halve / double it.";
 
 } // namespace smemplr::help

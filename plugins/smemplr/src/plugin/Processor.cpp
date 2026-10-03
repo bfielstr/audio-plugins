@@ -13,6 +13,8 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 namespace smemplr {
 
@@ -148,6 +150,15 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         engine.setSample (localSample);
     if (bridge->fetchEdits (localEdits, editsGen))
         engine.setSliceEdits (localEdits);
+    if (bridge->fetchMods (localMods, modsGen))
+    {
+        const uint32_t serial = bridge->modsChanged.load (std::memory_order_acquire);
+        if (localMods)
+            engine.setModMappings (localMods->list.data (), (int)localMods->list.size ());
+        else
+            engine.setModMappings (nullptr, 0);
+        bridge->modsPlaying.store (serial, std::memory_order_release);
+    }
 
     if (reloadParams.exchange (false, std::memory_order_acq_rel))
         for (uint32_t id = 0; id < kNumParams; ++id)
@@ -242,6 +253,15 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     while (ei < numEvents)
         apply (events[(size_t)ei++]);
 
+    // the modulation, for the editor's LFOs and modulated controls
+    for (int i = 0; i < kModLfos; ++i)
+    {
+        bridge->lfoValue[(size_t)i].store (engine.modLfoValue (i), std::memory_order_relaxed);
+        bridge->lfoPhase[(size_t)i].store ((float)engine.modLfoPhase (i), std::memory_order_relaxed);
+    }
+    for (int i = 0; i < engine.modMappingCount (); ++i)
+        bridge->modOffset[(size_t)i].store (engine.modWorking (i) ? engine.modOffset (i) : std::numeric_limits<float>::quiet_NaN (), std::memory_order_relaxed);
+
     float heads[Bridge::kMaxPlayheads];
     const int nh = engine.playPositions (heads, Bridge::kMaxPlayheads);
     for (int i = 0; i < nh; ++i)
@@ -276,6 +296,7 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     // The audio thread copies the mirror into the engine at the start of the next block.
     reloadParams.store (true, std::memory_order_release);
     bridge->setEdits (st.edits);
+    bridge->setMods (st.mods); // (a state from before version 18 has none)
     if (!st.samplePath.empty ())
     {
         std::string err;
@@ -300,6 +321,8 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
     st.ops = bridge->sampleOps ();
     if (auto e = bridge->editsNow ())
         st.edits = *e;
+    if (auto m = bridge->modsNow ())
+        st.mods = *m;
     st.constantPowerFade = st.norm[kLoopFadePower] >= 0.5;
     bridge->collectGarbage ();
     return writeState (stream, st) ? kResultOk : kResultFalse;

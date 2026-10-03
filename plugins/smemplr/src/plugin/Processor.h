@@ -57,6 +57,8 @@ private:
     uint32_t sampleGen = 0;
     SliceEditsPtr localEdits;
     uint32_t editsGen = 0;
+    ModMapPtr localMods; // the modulation's mappings (the engine has a copy)
+    uint32_t modsGen = 0;
     std::array<Ev, 2048> events {};
     int numEvents = 0;
     std::vector<float> scratchL, scratchR;

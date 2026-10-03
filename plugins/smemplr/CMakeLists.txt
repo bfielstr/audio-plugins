@@ -8,6 +8,7 @@ add_library(smemplr_core STATIC
     src/core/Warp.cpp
     src/core/Engine.cpp
     src/core/Rack.cpp
+    src/core/Modulation.cpp
 )
 # Other plug-ins reuse the warp engines as "smemplr/src/core/Warp.h"; Smemplr's own code includes src/core directly.
 target_include_directories(smemplr_core PUBLIC ${CMAKE_SOURCE_DIR}/plugins ${CMAKE_SOURCE_DIR}/third_party/dr_libs PRIVATE src/core)
@@ -22,6 +23,16 @@ add_test(NAME smemplr_core COMMAND smemplr_tests)
 if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
+
+# the saved state (plugin/StateIO.cpp) on its own: runs everywhere, beside the core tests
+add_executable(smemplr_state_tests tests/state_tests.cpp src/plugin/StateIO.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp)
+target_include_directories(smemplr_state_tests PRIVATE src src/core)
+target_link_libraries(smemplr_state_tests PRIVATE smemplr_core sdk_common)
+if(APPLE)
+    target_link_libraries(smemplr_state_tests PRIVATE "-framework CoreFoundation") # the SDK's base library uses it
+endif()
+add_test(NAME smemplr_state COMMAND smemplr_state_tests)
 
 pk_add_plugin(Smemplr
     BUNDLE_ID com.bfielstr.vst3.smemplr
@@ -47,6 +58,8 @@ pk_add_plugin(Smemplr
         src/ui/Editor.cpp
         src/ui/MsView.h
         src/ui/MsView.cpp
+        src/ui/ModView.h
+        src/ui/ModView.cpp
         # the other plug-ins' displays, shown in the effects strip
         ${CMAKE_SOURCE_DIR}/plugins/para/src/ui/FilterView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/multidyn/src/ui/DynDisplay.cpp

@@ -165,19 +165,36 @@ enum ParamId : uint32_t
     kTransHpOn = kRackExtEnd, // 975
     kTransHpFreq,             // 976, Hz: the cutoff at 0 semitones
     kTransHpSlope,            // 977, 6 / 12 / 18 / 24 / 36 / 48 dB per octave
+    // --- added in 0.9 (state version 18): the modulation LFOs (Modulation.h), kModLfos blocks of
+    // kModLfoFields, LFO by LFO (modLfoParam); what they modulate is in the state, not in parameters ---
+    kModLfoBase,                      // 978
+    kModLfoEnd = kModLfoBase + 4 * 5, // 998 (kModLfos * kModLfoFields, checked below)
 
-    // The next free ID (978). New parameters are appended here, never in a block above: every ID is
-    // stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
+    // The next free ID (998: the next parameter is "= kModLfoEnd", and kNumParams follows it). New
+    // parameters are appended here, never in a block above: every ID is stored in projects. Only 998 and
+    // 999 are left before the hidden MIDI parameters (1000 .. 1002): the table has every ID from 0 up, so
+    // going past them needs placeholders there. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
     // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
     // second extension block from here (kRackSlots times the new count, slot by slot), which
     // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
-    kNumParams
+    kNumParams = kModLfoEnd
 };
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
 static_assert (kRackExtEnd == 975 && kTransHpOn == 975 && kTransHpFreq == 976 && kTransHpSlope == 977,
                "stored IDs moved: append, never insert");
-static_assert (kNumParams == 978, "a new parameter: update the next free ID in the comment above (and this)");
+static_assert (kModLfoBase == 978, "stored IDs moved: append, never insert");
+static_assert (kNumParams == 998, "a new parameter: update the next free ID in the comment above (and this)");
+
+// The modulation LFOs' parameters: kModLfos LFOs, each a block of kModLfoFields (a new field goes in a
+// block of its own after kModLfoEnd: the blocks follow each other).
+constexpr int kModLfos = 4;
+// Sync is Off (the Rate in Hz) or a note length of the host's tempo (syncDivisionBeats of its index - 1).
+enum ModLfoField : uint32_t { kModShape = 0, kModRate, kModSync, kModPhase, kModRetrig, kModLfoFields };
+static_assert (kModLfoEnd == kModLfoBase + kModLfos * kModLfoFields, "the LFO blocks fill kModLfoBase .. kModLfoEnd");
+constexpr uint32_t modLfoParam (int lfo, uint32_t field) { return kModLfoBase + (uint32_t)lfo * kModLfoFields + field; }
+constexpr bool isModLfoParam (uint32_t id) { return id >= kModLfoBase && id < kModLfoEnd; }
+enum ModShape { kModSine = 0, kModTriangle, kModSawUp, kModSawDown, kModSquare, kModRandom, kModSmoothRandom, kNumModShapes };
 
 constexpr uint32_t slotParam (int slot, uint32_t field) { return kRackBase + (uint32_t)slot * kSlotSize + field; }
 // the parameter of a slot's block position j (0 .. kSlotBlockAll - 1)
