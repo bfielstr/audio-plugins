@@ -46,7 +46,8 @@ way), so it does not click.
 band (band 1, band 2, Sub) at the right edge of the display, with the band's level as Gently measures
 it rising beside it, bright where it is over the threshold (there the band is being cut). The law
 over the threshold stays the same. Drag a slider (Shift: fine); a double-click or right-click puts it
-back to -18 dB. With Advanced off, the Thresholds are kept but not used.
+back to -18 dB. Advanced is on in a new Gently (the Thresholds at -18 dB sound the same as Advanced
+off, so the sliders are there to move); with Advanced off, the Thresholds are kept but not used.
 
 Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB, 12 dB by default): the bands
 as they leave, after their cuts, go through Smacheratr's Analog curve on their own, level-matched

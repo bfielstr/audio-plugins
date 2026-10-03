@@ -27,7 +27,7 @@ std::vector<ParamInfo> buildTable ()
     };
 
     std::vector<ParamInfo> v;
-    v.push_back (toggle (kAdvanced, "Advanced", "Advanced", false));
+    v.push_back (toggle (kAdvanced, "Advanced", "Advanced", true)); // on: the Threshold sliders show (each at -18 dB, the same sound as off)
     v.push_back (like (kDrive, smacheratr::kClarityDrive, "Drive", "Drive", 0.0));
     v.push_back (like (kDriveAmount, smacheratr::kClarityDriveAmount, "Drive Amount", "Amount", 12.0));
     v.push_back (real (kAttack, "Attack", "Attack", 0.5, 100.0, kDefaultAttackMs, Curve::Log, Disp::Ms));

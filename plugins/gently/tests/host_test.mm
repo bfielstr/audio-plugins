@@ -156,6 +156,7 @@ int main (int argc, char** argv)
                             (uint32_t)kSubThreshold})
             rig.param (id, defaultNormalized (id));
         rig.param (kSubOn, 1.0);
+        rig.param (gently::kAdvanced, 0.0); // (Advanced is on by default: off first, the display at its full width, see xOfHz)
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");

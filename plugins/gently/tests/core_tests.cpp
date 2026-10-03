@@ -157,7 +157,7 @@ TEST (parameters_and_defaults)
            "the end saturator's three blocks, one after the other, last");
     CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the last block");
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end Smacheratr off");
-    CHECK (t.info (kAdvanced).def == 0.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced off, Drive off (12 dB)");
+    CHECK (t.info (kAdvanced).def == 1.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced on (the Thresholds show), Drive off (12 dB)");
     CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
     CHECK (t.info (kStereo).def == (double)kStereoLinked && t.info (kMix).def == 1.0 && t.info (kOutput).def == 0.0, "stereo, 100 %%, 0 dB");
     CHECK (t.info (bandParam (0, kOn)).def == 1.0 && t.info (bandParam (0, kFreq)).def == 250.0 && t.info (bandParam (0, kRange)).def == 8.0 &&
@@ -402,7 +402,10 @@ TEST (sub_band)
     CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubRange, 0.0); })) < 1e-4, "Range 0");
     CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubOn, 0.0); })) < 1e-4, "Sub off");
     // Advanced: its Threshold (a -24 dB sub: under -18 without it, the whole Range with the Threshold at -40)
-    const double plain = measure (40.0, -24.0, [] (Engine& en) { en.setParam (kSubThreshold, -40.0); });
+    const double plain = measure (40.0, -24.0, [] (Engine& en) {
+        en.setParam (kAdvanced, 0.0); // (on by default)
+        en.setParam (kSubThreshold, -40.0);
+    });
     const double adv = measure (40.0, -24.0, [] (Engine& en) {
         en.setParam (kAdvanced, 1.0);
         en.setParam (kSubThreshold, -40.0);
