@@ -1,5 +1,6 @@
 #include "Editor.h"
 
+#include "BandPush.h"
 #include "ColorView.h"
 #include "Help.h"
 #include "ShaperView.h"
@@ -59,6 +60,7 @@ void Editor::onClose ()
     for (auto& t : thresholdSliders)
         t = nullptr;
     advancedViews.clear ();
+    noOverlapView = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -118,40 +120,45 @@ void Editor::buildUI (CFrame* f)
                                     }));
 
     // bottom: Gently (one button), a band selector and the selected band's Frequency, Width and Range;
-    // Advanced, and with it the region Drive
+    // Advanced, and with it the region Drive; No Overlap
     auto* cp = new pk::Panel (CRect (8, kGentlyTop, 752, kGentlyTop + 80), "GENTLY");
     root->addView (cp);
     bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gently"));
     clarityBandButtons.clear ();
     for (int k = 0; k < kGentlyBands; ++k)
     {
-        static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub"};
+        static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub", "High"};
         static const char* const tips[kGentlyBands] = {
             "Show Gently's first band (green in the display).",
             "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).",
             "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once switched on "
-            "and its Range is above 0 dB)."};
-        auto* bt = new ActionButton (CRect (96 + k * 52, 30, 144 + k * 52, 50), names[k], [this, k] { showClarityBand (k); },
+            "and its Range is above 0 dB).",
+            "Show Gently's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once switched "
+            "on and its Range is above 0 dB)."};
+        auto* bt = new ActionButton (CRect (92 + k * 46, 30, 136 + k * 46, 50), names[k], [this, k] { showClarityBand (k); },
                                      [this, k] { return clarityBand == k; });
         bt->setTooltipText (tips[k]);
         cp->addView (bt);
         clarityBandButtons.push_back (bt);
-        if (k == kSubBand)
+        if (!hasWidth (k))
         {
-            clarityViews[k].push_back (bind (cp, new Toggle (CRect (254, 30, 306, 50), this, kClaritySub, "Sub")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (312, 10), this, kClaritySubFreq, "Freq")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (374, 10), this, kClaritySubRange, "Range")));
+            // the Sub and High bands: their button, Freq and Range (no width)
+            const bool sub = k == kSubBand;
+            clarityViews[k].push_back (bind (cp, new Toggle (CRect (280, 30, 332, 50), this, sub ? kClaritySub : kClarityHigh, sub ? "Sub" : "High")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (340, 10), this, kGentlyFreqIds[k], "Freq")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (398, 10), this, kGentlyRangeIds[k], "Range")));
             continue;
         }
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (250, 10), this, kClarityFreqIds[k], "Freq")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (312, 10), this, kClarityWidthIds[k], "Width")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (374, 10), this, kClarityRangeIds[k], "Range")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kClarityFreqIds[k], "Freq")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (342, 10), this, kClarityWidthIds[k], "Width")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kClarityRangeIds[k], "Range")));
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     showClarityBand (clarityBand);
     bind (cp, new Toggle (CRect (kGentlyAdvancedX - 8 - 42, 30, kGentlyAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
-    advancedViews.push_back (bind (cp, new Toggle (CRect (548, 30, 610, 50), this, kClarityDrive, "Drive")));
-    advancedViews.push_back (bind (cp, new Knob (knobRect (618, 10), this, kClarityDriveAmount, "Amount")));
+    advancedViews.push_back (bind (cp, new Toggle (CRect (556, 30, 606, 50), this, kClarityDrive, "Drive")));
+    advancedViews.push_back (bind (cp, new Knob (knobRect (610, 10), this, kClarityDriveAmount, "Amount")));
+    noOverlapView = bind (cp, new NoOverlapToggle (CRect (kNoOverlapX - 8 - 34, 30, kNoOverlapX - 8 + 34, 50), this, smacheratrBandParams ()));
     layoutAdvanced ();
 
     applyParamTooltips (&help::forParam);
@@ -188,13 +195,15 @@ void Editor::updateLooks ()
     const bool gently = plainValue (kClarity) >= 0.5;
     for (int k = 0; k < kGentlyBands; ++k)
     {
-        // (the Sub band's Freq and Range, after its switch, also dim while Sub is off)
+        // (the Sub and High bands' Freq and Range, after their switch, also dim while it is off)
+        const uint32_t own = k == kSubBand ? kClaritySub : kClarityHigh;
         for (size_t i = 0; i < clarityViews[k].size (); ++i)
-            clarityViews[k][i]->setEnabledLook (gently && (k != kSubBand || i == 0 || plainValue (kClaritySub) >= 0.5));
+            clarityViews[k][i]->setEnabledLook (gently && (hasWidth (k) || i == 0 || plainValue (own) >= 0.5));
         if (thresholdSliders[k])
-            thresholdSliders[k]->setEnabledLook (k == kSubBand ? claritySubOn (plainValue (kClarity), plainValue (kClaritySub), plainValue (kClaritySubRange))
-                                                            : clarityBandOn (plainValue (kClarity), plainValue (kGentlyRangeIds[k])));
+            thresholdSliders[k]->setEnabledLook (smacheratrBandParams ().works (this, k));
     }
+    if (noOverlapView)
+        noOverlapView->setEnabledLook (gently);
     for (auto* v : advancedViews)
         v->setEnabledLook (gently);
     if (advancedViews.size () == 2)
@@ -208,7 +217,8 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClaritySub || id == kClaritySubRange || id == kClarityDrive)
+    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClaritySub ||
+        id == kClaritySubRange || id == kClarityHigh || id == kClarityHighRange || id == kClarityDrive)
         updateLooks ();
     if (id == kClarityAdvanced)
         layoutAdvanced ();

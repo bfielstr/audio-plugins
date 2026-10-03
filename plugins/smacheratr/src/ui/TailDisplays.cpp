@@ -10,13 +10,12 @@ namespace smacheratr {
 
 using namespace VSTGUI;
 
-TailDisplays::TailDisplays (pk::ParamHost* editor, uint32_t b, uint32_t e, uint32_t e2, ColorView::RateSource r,
-                            ColorView::MeterSource m)
-    : base (b), extBase (e), ext2Base (e2), rate (std::move (r)), meters (std::move (m))
+TailDisplays::TailDisplays (pk::ParamHost* editor, const TailBases& b, ColorView::RateSource r, ColorView::MeterSource m)
+    : bases (b), rate (std::move (r)), meters (std::move (m))
 {
-    host = std::make_unique<pk::MappedParamHost> (editor, paramTable (), [b, e, e2] (uint32_t id) -> int64_t {
+    host = std::make_unique<pk::MappedParamHost> (editor, paramTable (), [b] (uint32_t id) -> int64_t {
         const int f = tailFieldOf (id);
-        return f < 0 ? -1 : (int64_t)tailParamOf ((uint32_t)f, b, e, e2);
+        return f < 0 ? -1 : (int64_t)tailParamOf ((uint32_t)f, b);
     });
 }
 
@@ -34,6 +33,10 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
             bandPicked (k);
     };
     parent->addView (color);
+    // No Overlap, above the colour display's right end
+    noOverlap = new NoOverlapToggle (CRect (area.right - 90, area.top - 22, area.right, area.top - 4), host.get (), smacheratrBandParams ());
+    noOverlap->setTooltipText (help::forParam (kClarityNoOverlap));
+    parent->addView (noOverlap);
     // Gently's Advanced mode: the region Drive and the Threshold sliders, in a strip at the right of
     // the colour display (hidden while Advanced is off)
     driveOn = new pk::Toggle (CRect (0, 0, 1, 1), host.get (), kClarityDrive, "Drive");
@@ -64,8 +67,9 @@ void TailDisplays::updateLooks ()
     const double on = host->plainValue (kClarity);
     for (int k = 0; k < kGentlyBands; ++k)
         if (sliders[k])
-            sliders[k]->setEnabledLook (k == kSubBand ? claritySubOn (on, host->plainValue (kClaritySub), host->plainValue (kClaritySubRange))
-                                                      : clarityBandOn (on, host->plainValue (kClarityRangeIds[k])));
+            sliders[k]->setEnabledLook (smacheratrBandParams ().works (host.get (), k));
+    if (noOverlap)
+        noOverlap->setEnabledLook (on >= 0.5);
     if (driveOn)
         driveOn->setEnabledLook (on >= 0.5);
     if (driveAmount)
@@ -83,20 +87,17 @@ void TailDisplays::idle ()
             s->idle ();
 }
 
-bool TailDisplays::isTailParam (uint32_t id) const
-{
-    return (id >= base && id < base + pk::kTailFields) || (id >= extBase && id < extBase + pk::kTailExtFields) ||
-           (id >= ext2Base && id < ext2Base + pk::kTailExt2Fields);
-}
+bool TailDisplays::isTailParam (uint32_t id) const { return tailFieldIn (id, bases) >= 0; }
 
 void TailDisplays::paramChanged (uint32_t id)
 {
     if (!isTailParam (id))
         return;
-    if (id == ext2Base + pk::kTailExt2Advanced)
+    if (id == bases.ext2Base + pk::kTailExt2Advanced)
         layoutAdvanced ();
     updateLooks ();
-    for (CView* v : {(CView*)shaper, (CView*)color, (CView*)sliders[0], (CView*)sliders[1], (CView*)sliders[2], (CView*)driveOn, (CView*)driveAmount})
+    for (CView* v : {(CView*)shaper, (CView*)color, (CView*)sliders[0], (CView*)sliders[1], (CView*)sliders[2], (CView*)sliders[3],
+                     (CView*)driveOn, (CView*)driveAmount, (CView*)noOverlap})
         if (v)
             v->invalid ();
 }
@@ -109,7 +110,7 @@ void TailDisplays::closed ()
     color = nullptr;
     for (auto& s : sliders)
         s = nullptr;
-    driveOn = driveAmount = nullptr;
+    driveOn = driveAmount = noOverlap = nullptr;
 }
 
 } // namespace smacheratr

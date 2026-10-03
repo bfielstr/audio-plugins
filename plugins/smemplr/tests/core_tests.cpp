@@ -449,7 +449,7 @@ TEST (para_slots_separate_slopes_and_gain_locks)
 {
     // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
     // at block positions 62 .. 64 (Para's IDs), and map back
-    CHECK (para::kNumParams == 65 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
+    CHECK (para::kNumParams == 70 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
            (unsigned)para::kNumParams);
     for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
     {
@@ -538,8 +538,11 @@ TEST (para_slots_separate_slopes_and_gain_locks)
 
 TEST (rack_multidyn_later_params)
 {
-    // Slope, Soften Color and the Sub band sit in the slot's extension, in order, and work there
-    for (uint32_t id = multidyn::kXoverSlope; id < multidyn::kNumParams; ++id)
+    // Slope, Soften Color and the Sub band sit in the slot's extension, in order, and work there (its
+    // saturator's fourth block after them is not in the rack)
+    for (uint32_t id = multidyn::kSatExt3Base; id < multidyn::kNumParams; ++id)
+        CHECK (fxBlockOf (kFxMultidyn, id) == -1, "multidyn %u (its saturator's) is not in the rack", id);
+    for (uint32_t id = multidyn::kXoverSlope; id < multidyn::kSatExt3Base; ++id)
         CHECK (fxBlockOf (kFxMultidyn, id) == (int64_t)(kSlotBlock + id - multidyn::kXoverSlope) &&
                    fxBlockTable (kFxMultidyn).info ((uint32_t)fxBlockOf (kFxMultidyn, id)).def == multidyn::paramTable ().info (id).def,
                "multidyn %u", id);
@@ -645,7 +648,7 @@ TEST (rack_block_mapping)
     for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
     {
         const bool sat = (id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) ||
-                         (id >= multidyn::kSatExtBase && id < multidyn::kXoverSlope);
+                         (id >= multidyn::kSatExtBase && id < multidyn::kXoverSlope) || id >= multidyn::kSatExt3Base;
         CHECK ((fxBlockOf (kFxMultidyn, id) < 0) == sat, "multidyn %u", id);
     }
     const auto& t = fxBlockTable (kFxMultidyn);
@@ -722,6 +725,35 @@ TEST (gently_sub_band_in_slots)
         norm[slotBlockParam (0, smacheratr::kClaritySub)] = 1.0;
         migrateGentlyInSlots (norm, has, 12);
         CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0, "version 12 untouched");
+    }
+    // states from before 17: the High band and No Overlap in a Smacheratr slot and a Gently slot get their
+    // defaults (off), whatever the places held; the Sub band's values from 12 on are kept
+    for (int version : {13, 16, 17})
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        const uint32_t smType = slotParam (0, kSlotType), gType = slotParam (1, kSlotType);
+        norm[smType] = toNormalized (smType, kFxSmacheratr);
+        norm[gType] = toNormalized (gType, kFxGently);
+        has[smType] = has[gType] = true;
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            for (int slot : {0, 1})
+            {
+                norm[slotBlockParam (slot, j)] = 1.0;
+                has[slotBlockParam (slot, j)] = true;
+            }
+        migrateGentlyInSlots (norm, has, version);
+        const bool migrated = version < 17;
+        for (uint32_t id = smacheratr::kClarityHigh; id <= smacheratr::kClarityNoOverlap; ++id)
+            CHECK ((norm[slotBlockParam (0, id)] == smacheratr::defaultNormalized (id)) == migrated, "version %d: Smacheratr %u", version, id);
+        for (uint32_t id = gently::kHighOn; id <= gently::kNoOverlap; ++id)
+            CHECK ((norm[slotBlockParam (1, id)] == gently::defaultNormalized (id)) == migrated, "version %d: Gently %u", version, id);
+        CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0 && norm[slotBlockParam (1, gently::kSubOn)] == 1.0,
+               "version %d: the Sub bands kept", version);
+        if (migrated)
+            CHECK (smacheratr::toPlain (smacheratr::kClarityHigh, norm[slotBlockParam (0, smacheratr::kClarityHigh)]) == 0.0 &&
+                       gently::toPlain (gently::kHighOn, norm[slotBlockParam (1, gently::kHighOn)]) == 0.0,
+                   "version %d: High off", version);
     }
 }
 

@@ -46,10 +46,11 @@ int main ()
         for (uint32_t id = 0; id < kNumParams; ++id)
             wrong += back.has[id] && back.norm[id] == st.norm[id] ? 0 : 1;
         CHECK (wrong == 0, "every parameter back as it was (%d not)", wrong);
-        // the Sub band's and the end saturator's third block among them
+        // the Sub band's, the High band's and the end saturator's last block among them
         CHECK (back.norm[kSubOn] == st.norm[kSubOn] && back.norm[kSubThreshold] == st.norm[kSubThreshold] &&
+                   back.norm[kHighFreq] == st.norm[kHighFreq] && back.norm[kNoOverlap] == st.norm[kNoOverlap] &&
                    back.norm[kNumParams - 1] == st.norm[kNumParams - 1],
-               "the Sub band and the last block");
+               "the Sub band, the High band, No Overlap and the last block");
     }
     // a state with only some parameters (an older layout, or a partial one): the rest at their defaults
     {
@@ -69,6 +70,25 @@ int main ()
                 wrong += !back.has[id] && back.norm[id] == defaultNormalized (id) ? 0 : 1;
         CHECK (back.has[kSubOn] && back.norm[kSubOn] == 1.0 && back.norm[bandParam (1, kFreq)] == 0.25, "the two there");
         CHECK (wrong == 0, "the others at their defaults (%d not)", wrong);
+    }
+    // a state saved before the High band and No Overlap (its 54 parameters, IDs 0 - 53): they load off,
+    // so it sounds as it did
+    {
+        State st;
+        for (uint32_t id = 0; id < kHighOn; ++id)
+        {
+            st.norm[id] = 1.0;
+            st.has[id] = true;
+        }
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "read");
+        CHECK (!back.has[kHighOn] && toPlain (kHighOn, back.norm[kHighOn]) == 0.0 && toPlain (kNoOverlap, back.norm[kNoOverlap]) == 0.0 &&
+                   toPlain (kTailExt3Base + pk::kTailExt3High, back.norm[kTailExt3Base + pk::kTailExt3High]) == 0.0 &&
+                   toPlain (kTailExt3Base + pk::kTailExt3NoOverlap, back.norm[kTailExt3Base + pk::kTailExt3NoOverlap]) == 0.0,
+               "an old state: High and No Overlap off (Gently's and the end saturator's)");
     }
     // a state from a newer Gently: the IDs this one does not know are skipped, the rest read
     {

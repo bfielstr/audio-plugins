@@ -192,6 +192,41 @@ int main (int argc, char** argv)
             CHECK (std::fabs (plainOf (rig, kSubFreq) - 40.0) < 0.1 && std::fabs (plainOf (rig, kSubRange) - 8.0) < 0.01,
                    "a double-click resets the Sub band: %.1f Hz, %.1f dB", plainOf (rig, kSubFreq), plainOf (rig, kSubRange));
 
+            // the High band (on from the host): its handle dragged left 60 px (its Freq falls, down to 2 kHz) and
+            // down 30 px (its Range grows)
+            rig.param (kHighOn, 1.0);
+            pump (0.05);
+            const double hf0 = plainOf (rig, kHighFreq), hr0 = plainOf (rig, kHighRange);
+            const double hx0 = xOfHz (hf0), hy0 = yOfDb (-hr0);
+            win.drag (hx0, hy0, hx0 - 60.0, hy0 + 30.0);
+            pump (0.05);
+            const double hf1 = plainOf (rig, kHighFreq), hr1 = plainOf (rig, kHighRange);
+            CHECK (hf1 < hf0 - 500.0 && hf1 >= 2000.0 && hr1 > hr0 + 2.0, "dragging the High handle: Freq %.0f -> %.0f Hz, Range %.1f -> %.1f dB",
+                   hf0, hf1, hr0, hr1);
+            CHECK (win.savePng (outDir + "/ui_gently_high.png"), "screenshot, the High band");
+            // it now reaches into band 2 (3 kHz, 2 octaves: up to 6 kHz); No Overlap switched on in the editor
+            // splits them at the middle of the overlap, in their parameters
+            auto band2Top = [&] { return plainOf (rig, bandParam (1, kFreq)) * std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth))); };
+            CHECK (band2Top () > plainOf (rig, kHighFreq) * 1.01, "band 2 and High overlap: %.0f / %.0f Hz", band2Top (), plainOf (rig, kHighFreq));
+            win.click (Editor::kNoOverlapLeft + 40.0, Editor::kRowTop + 9.0);
+            pump (0.05);
+            CHECK (plainOf (rig, kNoOverlap) >= 0.5, "No Overlap switched on from the editor");
+            CHECK (band2Top () <= plainOf (rig, kHighFreq) * 1.001, "and they are apart: band 2 up to %.0f Hz, High from %.0f Hz", band2Top (),
+                   plainOf (rig, kHighFreq));
+            // band 2's handle dragged right 80 px: it pushes the High band's Freq up ahead of it
+            {
+                const double f0 = plainOf (rig, kHighFreq);
+                const double bx = xOfHz (plainOf (rig, bandParam (1, kFreq))), by = yOfDb (-plainOf (rig, bandParam (1, kRange)));
+                win.drag (bx, by, bx + 80.0, by);
+                pump (0.05);
+                CHECK (plainOf (rig, kHighFreq) > f0 * 1.2 && band2Top () <= plainOf (rig, kHighFreq) * 1.001,
+                       "band 2 pushes High: %.0f -> %.0f Hz (band 2 up to %.0f Hz)", f0, plainOf (rig, kHighFreq), band2Top ());
+            }
+            CHECK (win.savePng (outDir + "/ui_gently_no_overlap.png"), "screenshot, No Overlap");
+            for (uint32_t id : {(uint32_t)kNoOverlap, (uint32_t)kHighOn, (uint32_t)kHighFreq, (uint32_t)kHighRange, bandParam (1, kFreq),
+                                bandParam (1, kWidth)})
+                rig.param (id, defaultNormalized (id));
+
             // Advanced: a Threshold per band on the sliders at the right of the display, the region Drive
             rig.param (gently::kAdvanced, 1.0);
             rig.param (kDrive, 1.0);

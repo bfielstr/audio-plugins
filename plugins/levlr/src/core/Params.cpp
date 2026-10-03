@@ -45,7 +45,8 @@ std::vector<ParamInfo> buildTable ()
         v.push_back (choice (driveParam (b, kDriveType), keep (n + "Drive Type"), "Type", {"Analog", "Tape", "Tube", "Hard Clip", "Fold"},
                              kDriveAnalog));
     }
-    static_assert (kNumParams == kDriveBase + kBands * kDriveBlock, "the bands' drives are the last block");
+    smacheratr::addTailExt3Params (v, kTailExt3Base);
+    static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the end saturator's fourth block is the last");
     return v;
 }
 

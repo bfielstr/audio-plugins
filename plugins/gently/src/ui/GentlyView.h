@@ -1,23 +1,26 @@
-// Gently's two bands and its Sub band on a frequency display, the way a multiband compressor shows its
+// Gently's two bands, its Sub band and its High band on a frequency display, the way a multiband compressor shows its
 // bands (and the way Smacheratr's colour display shows its Gently): each band's region shaded between
 // its edges, the most it can cut outlined (dashed), the cut it is making right now filled in from the
-// 0 dB line and moving with the audio, a handle at its centre as deep as its Range (Sub's at its Freq,
-// where it starts to taper). The whole response in white (every band at its cut now, with its phase:
+// 0 dB line and moving with the audio, a handle at its centre as deep as its Range (Sub's and High's at
+// their Freq, where they start to taper). The whole response in white (every band at its cut now, with its phase:
 // the curve is what the sound gets). Behind: the input's spectrum (a line) and the output's (filled),
-// so the cut shows between them. Band 1 green, band 2 blue, Sub amber (Smacheratr's colours).
-//   handle, sideways              the band's Frequency (Sub: 20 - 100 Hz)
+// so the cut shows between them. Band 1 green, band 2 blue, Sub amber, High rose (Smacheratr's colours).
+//   handle, sideways              the band's Frequency (Sub: 20 - 100 Hz, High: 2 - 16 kHz)
 //   handle, up / down             its Range (the handle sits at the most it cuts: drag down for more)
-//   band edge, sideways           its Width (the band stays centred; Sub has no width)
+//   band edge, sideways           its Width (the band stays centred; Sub and High have no width)
 //   Alt (Option) + drag on a band, sideways   its Width (right: wider)
 //   wheel on a handle (held, or with Shift)   its Width
 //   double-click / right-click a handle       resets the band's Frequency, Width and Range
-//   the band's readout at the top             switches the band (Sub) on or off
+//   the band's readout at the top             switches the band (Sub, High) on or off
+// With No Overlap on, a band dragged or widened pushes its neighbours' edges along (smacheratr::BandPush),
+// and the bands are drawn where the engine has them (overlaps from automation split).
 #pragma once
 
 #include "../core/Engine.h"
 #include "../core/Params.h"
 
 #include "smacheratr/src/core/ClarityBand.h"
+#include "smacheratr/src/ui/BandPush.h"
 
 #include "pluginkit/ui/Widgets.h"
 
@@ -40,7 +43,8 @@ public:
     using MeterSource = std::function<const Meters* ()>;
 
     GentlyView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
-    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently colours (green, blue, amber)
+    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently colours (green, blue, amber, rose)
+    static const smacheratr::GentlyBandParams& bandParams ();        // where Gently's bands are among its parameters (No Overlap)
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
@@ -56,7 +60,7 @@ public:
     double yOfDb (double db) const;
     double plotTop () const { return getViewSize ().top + 8.0; }
     double plotBottom () const { return getViewSize ().bottom - 16.0; }
-    VSTGUI::CPoint handle (int band) const; // at its centre (Sub: its Freq), as deep as its Range
+    VSTGUI::CPoint handle (int band) const; // at its centre (Sub, High: its Freq), as deep as its Range
     double edgeX (int band, bool high) const;
     VSTGUI::CRect pill (int band) const;     // its name and cut, at the top (a row lower where they would overlap)
     double pillsBottom () const;             // under the lowest readout (the edges start there)
@@ -67,6 +71,7 @@ private:
     int bandUnder (const VSTGUI::CPoint& p) const; // the working band whose region p is in (-1: none)
     bool works (int band) const;
     double sampleRate () const;
+    smacheratr::GentlyLayout layoutNow () const; // where the bands sit (with No Overlap: kept apart, as the engine has them)
     smacheratr::ClarityBand bandNow (int band) const;
     bool live () const;
     void analyse (const std::vector<float>& in, std::vector<float>& spec);
@@ -79,7 +84,8 @@ private:
     int dragBand = 0, hoverBand = -1;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRange = 0.0, startWidth = 0.0;
-    float shownCut[kAllBands] = {0.0f, 0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
+    smacheratr::BandPush push; // No Overlap: the neighbours a drag pushes
+    float shownCut[kAllBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
 
     // the analyser: input and output
     std::vector<float> window, bufIn, bufOut, specIn, specOut;

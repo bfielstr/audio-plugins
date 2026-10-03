@@ -35,7 +35,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kWetLevel, "Wet Level", "Wet", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
         smacheratr::addTailExtParams (v, kTailExtBase, true); // Mid/Side on: it keeps the width when pushed
         smacheratr::addTailExt2Params (v, kTailExt2Base);
-        static_assert (kNumParams == kTailExt2Base + pk::kTailExt2Fields, "Gently's Advanced block is the last");
+        smacheratr::addTailExt3Params (v, kTailExt3Base);
+        static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the tail's fourth block is the last");
         return v;
     }());
     return t;

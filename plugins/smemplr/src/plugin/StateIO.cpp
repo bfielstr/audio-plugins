@@ -37,6 +37,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     (the high-pass's on unless its gain is above 0 dB, the low-pass's off) in its slots, and its Fade's
 //     range 1 .. 60 semitones (1 .. 36 before: a slot's Fade keeps its semitones)
 // 16: Multidyn's Sub Input in its slots (0 dB: older slots read 0 there, -24 dB)
+// 17: Gently's High band and No Overlap in the rack's Smacheratrs and Gentlys (off, their defaults: the
+//     places held nothing that was used)
 // 18: the modulation LFOs' mappings after the loop fade flag (Modulation.h: encodeModMap, behind its
 //     size in bytes); an older state has none
 constexpr int32 kVersion = 18;
@@ -257,7 +259,8 @@ bool readState (IBStream* stream, PluginState& st)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
-    // Gently's Advanced mode (11) and Sub band (12) in the rack's Smacheratrs: defaults (off: the same sound)
+    // Gently's Advanced mode (11), Sub band (12), High band and No Overlap (17) in the rack's Smacheratrs, and the
+    // last two in its Gentlys: defaults (off: the same sound)
     migrateGentlyInSlots (st.norm, st.has, version);
     // Levlr's Bands and drives (13)
     migrateLevlrInSlots (st.norm, st.has, version);

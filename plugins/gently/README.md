@@ -1,12 +1,12 @@
 # Gently
 
 Smacheratr's **Gently** (it was called Clarity) on its own: a gentle dynamic de-muddier and
-de-harsher. Two bands and a Sub band watch their part of the spectrum and turn it down only while it
+de-harsher. Two bands, a Sub band and a High band watch their part of the spectrum and turn it down only while it
 gets loud, so a mix, a bus or a synth keeps its body at normal levels and stops going boomy, muddy or
 harsh when it is pushed. Nothing is cut while a band stays under its threshold. Install instructions
 are in the [top-level README](../../README.md).
 
-The chain: **Input** -> **band 1** -> **band 2** -> **Sub** (each turned down on its own when it is
+The chain: **Input** -> **band 1** -> **band 2** -> **Sub** -> **High** (each turned down on its own when it is
 loud; with Advanced, the region they cut can be driven) -> **Mix** -> **Output** -> **Smacheratr**.
 
 ## The bands
@@ -30,8 +30,27 @@ band that is not cutting leaves the signal exactly as it was, bit for bit.
   of the full cut there, about half of it at twice that, nearly none two octaves up). It has a **Range**
   (8 dB by default) and the same law as the other bands, and no width. It works while it is on and its
   Range is above 0 dB.
+- **High** (rose, off by default): the Sub band's mirror, a shelf for the top of the spectrum
+  (harshness, fizz, sibilance), flat from its **Freq** (2 to 16 kHz, 7 kHz by default) up to the very
+  top, its cut letting go below it (within about 1 dB of the full cut at its Freq, about half of it an
+  octave down, nearly none two octaves down). 7 kHz puts the whole cut on the fizz and sibilance, half
+  of it around 3.5 kHz where harshness starts, and leaves the presence region (1 to 3 kHz) that
+  carries a voice or a lead alone. It has a **Range** (6 dB by default, as band 2) and a Threshold,
+  the same law, and no width. It works while it is on and its Range is above 0 dB; off, Gently is
+  exactly what it was, bit for bit.
 
-The bands work one after the other (band 1, band 2, Sub, as in Smacheratr), each measuring its own
+**No Overlap** (off by default): the bands never cover the same frequencies. Dragging or widening a
+band in the display pushes its neighbours' edges along: a neighbour gets narrower, and once it is as
+narrow as a band can be (0.5 octaves) it moves as a whole; where a neighbour cannot move further (the
+Sub band at 20 Hz, the High band at 16 kHz) the dragged band stops at it. Within one drag the push is
+measured from where the bands were when it began, so dragging back lets them go back. Switched on,
+bands that already overlap are split at the middle of the overlap (on a log axis), each giving up half.
+Only working bands take part. A band covers the octaves between its edges, the Sub band everything
+below its Freq, the High band everything above its Freq. Automation (or a band switched on) that
+makes bands overlap is kept apart the same way in the engine, so they never overlap in the sound
+either; bands that do not overlap are left exactly where they are.
+
+The bands work one after the other (band 1, band 2, Sub, High, as in Smacheratr), each measuring its own
 band. **Attack** (0.5 to 100 ms, 15 ms) and **Release** (20 ms to 2 s, 150 ms) set how fast a band's
 cut follows its level going up and lets go after it (Smacheratr's times by default).
 
@@ -43,7 +62,7 @@ way), so it does not click.
 ## Advanced
 
 **Advanced** gives each band its own **Threshold** instead of the fixed -18 dB: a vertical slider per
-band (band 1, band 2, Sub) at the right edge of the display, with the band's level as Gently measures
+band (band 1, band 2, Sub, High) at the right edge of the display, with the band's level as Gently measures
 it rising beside it, bright where it is over the threshold (there the band is being cut). The law
 over the threshold stays the same. Drag a slider (Shift: fine); a double-click or right-click puts it
 back to -18 dB. Advanced is on in a new Gently (the Thresholds at -18 dB sound the same as Advanced
@@ -59,21 +78,22 @@ oversampled, fades in and out when switched, and a quiet region passes it unchan
 
 The display shows each band as a multiband compressor shows its bands: its region shaded, the most
 it can cut outlined (dashed), the cut it is making now filled in from the 0 dB line and moving with
-the audio, a handle at its centre (Sub: at its Freq) as deep as its Range, and the whole response in
+the audio, a handle at its centre (Sub, High: at their Freq) as deep as its Range, and the whole response in
 white (every band at its cut now, with its phase: the curve is what the sound gets). Behind them, the
 output's spectrum (filled) and the input's (dotted), tilted 4.5 dB/oct so a mix reads level: where
 the input stands above the output, Gently is cutting. The readouts at the top show each band's
 frequency and its cut now.
 
-- Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz), down for its Range.
+- Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz, High: 2 to 16 kHz), down for its Range.
 - Drag a band's edge, or hold Alt / Option and drag the band sideways, for its width (the band stays
-  centred); the mouse wheel on a handle (while you hold it, or with Shift) too. The Sub band has no
-  width.
+  centred); the mouse wheel on a handle (while you hold it, or with Shift) too. The Sub and High
+  bands have no width.
+- With No Overlap on, a band you drag or widen pushes its neighbours along (see above).
 - Double-click or right-click a handle to reset the band (its frequency, width and Range).
 - Click a band's readout at the top to switch the band on or off.
 
-**Mix** (dry / wet: the input, delayed to line up, against Gently's output) and **Output** (+-24 dB,
-before the Smacheratr at the end).
+**No Overlap** (above Mix and Output), **Mix** (dry / wet: the input, delayed to line up, against
+Gently's output) and **Output** (+-24 dB, before the Smacheratr at the end).
 
 **Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB), with
 all its controls, its own Gently included.

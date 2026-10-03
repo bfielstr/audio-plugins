@@ -32,8 +32,9 @@ enum ParamId : uint32_t
     kDryLevel,   // dB (bottom = -inf): the input, in parallel with...
     kWetLevel,   // dB (bottom = -inf): ...what Widr adds (the voices and the reverb)
     kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (the last block)
-    kNumParams = kTailExt2Base + pk::kTailExt2Fields
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 
 enum Character { kTight = 0, kWide, kEpic, kSurround, kNumCharacters };

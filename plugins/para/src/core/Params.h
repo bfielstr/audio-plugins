@@ -54,12 +54,14 @@ enum ParamId : uint32_t
     kLpSlope,    // the low-pass's slope (the same choices as kHpSlope; both filters had kHpSlope's before)
     kHpGainLock, // the high-pass gain never goes above 0 dB (on by default)
     kLpGainLock, // the low-pass gain never goes above 0 dB (off by default)
-    kNumParams
+    // --- after the gain locks ---
+    kTailExt3Base, // Gently's High band and No Overlap in the end Smacheratr: pk::kTailExt3Fields entries (the last block)
+    kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 static_assert (pk::kTailExtFields <= kHpDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 static_assert (pk::kTailExt2Fields == kLpDriveOn - kTailExt2Base, "Gently's Advanced block must fill its room: IDs are persisted");
 static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 60 && kLpDrive == 61 &&
-                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kNumParams == 65,
+                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kTailExt3Base == 65 && kNumParams == 70,
                "Para's IDs are persisted in projects");
 
 // The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.

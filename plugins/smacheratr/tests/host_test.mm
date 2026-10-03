@@ -169,6 +169,24 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kClarityAdvanced) < 0.5, "and Advanced off again");
             rig.param (kClarityDrive, 0.0);
             rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -18.0));
+
+            // the High band (rose, from 7 kHz up) over band 2 (5 kHz, 2 octaves: up to 10 kHz); No Overlap,
+            // switched on in the GENTLY panel, splits them at the middle of the overlap
+            rig.param (kClarityHigh, 1.0);
+            rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
+            rig.param (kClarity2Freq, toNormalized (kClarity2Freq, 5000.0));
+            rig.param (kClarity2Width, toNormalized (kClarity2Width, 2.0));
+            pump (0.05);
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_high.png"), "gently high band screenshot");
+            auto band2Top = [&] { return plainOf (rig, kClarity2Freq) * std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
+            win.click (Editor::kNoOverlapX, gentlyY);
+            pump (0.05);
+            CHECK (plainOf (rig, kClarityNoOverlap) >= 0.5, "No Overlap switched on from the editor");
+            CHECK (band2Top () <= plainOf (rig, kClarityHighFreq) * 1.001 && plainOf (rig, kClarityHighFreq) > 7000.0,
+                   "band 2 and High apart: band 2 up to %.0f Hz, High from %.0f Hz", band2Top (), plainOf (rig, kClarityHighFreq));
+            for (uint32_t id : {(uint32_t)kClarityNoOverlap, (uint32_t)kClarityHigh, (uint32_t)kClarityHighFreq, (uint32_t)kClarity2Freq,
+                                (uint32_t)kClarity2Width, (uint32_t)kClarity2Range})
+                rig.param (id, defaultNormalized (id));
             rig.param (kClarity, 0.0);
             rig.param (kClarity2Range, 0.0);
 

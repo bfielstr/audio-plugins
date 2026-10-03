@@ -27,11 +27,11 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kMidSide, "Mid/Side", "M/S", false));
         v.push_back (toggle (kClarity, "Gently", "Gently", false));
         v.push_back (real (kClarityFreq, "Gently Frequency", "Freq", 20.0, 20000.0, 250.0, Curve::Log, Disp::Hz));
-        v.push_back (real (kClarityWidth, "Gently Width", "Width", 0.5, 4.0, 2.0, Curve::Linear, Disp::Number));
+        v.push_back (real (kClarityWidth, "Gently Width", "Width", kMinWidthOct, kMaxWidthOct, 2.0, Curve::Linear, Disp::Number));
         v.push_back (real (kClarityRange, "Gently Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarity2, "Gently 2 (unused)", "Gently 2", false));
         v.push_back (real (kClarity2Freq, "Gently 2 Frequency", "Freq", 20.0, 20000.0, 3000.0, Curve::Log, Disp::Hz));
-        v.push_back (real (kClarity2Width, "Gently 2 Width", "Width", 0.5, 4.0, 2.0, Curve::Linear, Disp::Number));
+        v.push_back (real (kClarity2Width, "Gently 2 Width", "Width", kMinWidthOct, kMaxWidthOct, 2.0, Curve::Linear, Disp::Number));
         v.push_back (real (kClarity2Range, "Gently 2 Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityAdvanced, "Gently Advanced", "Advanced", false));
         v.push_back (real (kClarityThreshold, "Gently Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
@@ -42,6 +42,12 @@ const ParamTable& paramTable ()
         v.push_back (real (kClaritySubFreq, "Gently Sub Frequency", "Freq", kSubMinHz, kSubMaxHz, kSubDefaultHz, Curve::Log, Disp::Hz));
         v.push_back (real (kClaritySubRange, "Gently Sub Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClaritySubThreshold, "Gently Sub Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
+        // (6 dB of Range: as Gently's second band on the harshness)
+        v.push_back (toggle (kClarityHigh, "Gently High", "High", false));
+        v.push_back (real (kClarityHighFreq, "Gently High Frequency", "Freq", kHighMinHz, kHighMaxHz, kHighDefaultHz, Curve::Log, Disp::Hz));
+        v.push_back (real (kClarityHighRange, "Gently High Range", "Range", 0.0, 24.0, 6.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kClarityHighThreshold, "Gently High Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kClarityNoOverlap, "Gently No Overlap", "No Overlap", false));
         return v;
     }());
     return t;

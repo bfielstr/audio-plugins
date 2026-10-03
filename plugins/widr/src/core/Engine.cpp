@@ -108,6 +108,8 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
         tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
     for (uint32_t f = 0; f < pk::kTailExt2Fields; ++f)
         tail.setParam (pk::kTailFields + pk::kTailExtFields + f, p[kTailExt2Base + f]);
+    for (uint32_t f = 0; f < pk::kTailExt3Fields; ++f)
+        tail.setParam (smacheratr::kTailExt3First + f, p[kTailExt3Base + f]);
     if (meters)
         meters->sampleRate.store ((float)sr);
     xHz = airDb = beyondAmt = srcHpHz = srcLpHz = -1.0;

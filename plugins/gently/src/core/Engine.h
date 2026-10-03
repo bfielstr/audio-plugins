@@ -1,13 +1,16 @@
 // Gently: Smacheratr's Gently on its own, without the saturation curve around it. Up to two bands
 // (smacheratr/src/core/ClarityBand.h: 12 dB/oct below, 6 dB/oct above, around each band's
-// frequency) and the Sub band (a shelf from the very bottom up to where its cut starts to let go:
-// smacheratr::subBand), each a gentle compressor on its region: when the band's level goes over the
+// frequency), the Sub band (a shelf from the very bottom up to where its cut starts to let go:
+// smacheratr::subBand) and the High band (its mirror, a shelf from where its cut starts to let go up
+// to the very top: smacheratr::highBand), each a gentle compressor on its region: when the band's level goes over the
 // threshold (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every
 // 5 over, at most by its Range (smacheratr::clarityCutDb). The bands work one after the other (band 1,
-// band 2, Sub, as in Smacheratr), each measuring its own band: x + (g - 1) * band, so with no cut a
-// band leaves the signal exactly as it was.
+// band 2, Sub, High, as in Smacheratr), each measuring its own band: x + (g - 1) * band, so with no cut
+// a band leaves the signal exactly as it was. With No Overlap on, the working bands are kept apart
+// before they are designed (smacheratr::resolveOverlaps: the editor pushes them apart as they are
+// dragged, so this only acts on automation, or a band switched on, that makes them overlap).
 //
-//   input -> [to mid / side] -> band 1 cut -> band 2 cut -> Sub cut -> [back to left / right] -> delay
+//   input -> [to mid / side] -> band 1 -> band 2 -> Sub -> High (each cut) -> [back to left / right] -> delay
 //                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added
 //         -> Mix (against the input, delayed the same) -> Output -> Smacheratr at the end
 //
@@ -44,7 +47,7 @@ ParamArray defaultParams ();
 struct Meters
 {
     pk::ScopeBuffer<8192> scope;           // mono input (a) and output (b), for the analyser
-    smacheratr::Meters bands;              // each band's cut (clarityDb, clarity2Db, claritySubDb) and level (clarityLevelDb, ...)
+    smacheratr::Meters bands;              // each band's cut (clarityDb, clarity2Db, claritySubDb, clarityHighDb) and level (clarityLevelDb, ...)
     std::atomic<uint32_t> blocks {0};      // counts processed blocks
     std::atomic<float> sampleRate {48000.0f};
 };
@@ -96,13 +99,13 @@ private:
     };
     struct Channel
     {
-        smacheratr::Biquad hp[kAllBands], lp[kAllBands]; // the bands (Sub: its high-pass and low-pass)
+        smacheratr::Biquad hp[kAllBands], lp[kAllBands]; // the bands (Sub, High: their filters as smacheratr::ClarityBand has them)
         smacheratr::Oversampler os;                // the region Drive
         Delay dryDelay, wetDelay;
         void reset ();
     };
     void processChunk (const float* inL, const float* inR, float* outL, float* outR, int n); // n <= kChunk
-    void retune (bool force);
+    void retune (bool force, const bool* works); // works: which bands work (No Overlap keeps those apart)
     void resetBand (int k); // its filters and detectors, from silence
 
     ParamArray p = defaultParams ();
@@ -115,10 +118,10 @@ private:
     float cutDb[2][kAllBands] {}, gBand[2][kAllBands] {};
     int ctrlCountdown = 0;
     float gTarget[2][kAllBands] {};
-    double bandFreq[kAllBands] = {-1.0, -1.0, -1.0}, bandWidth[kAllBands] = {-1.0, -1.0, -1.0};
-    float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f};
+    double bandFreq[kAllBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kAllBands] = {-1.0, -1.0, -1.0, -1.0};
+    float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f, 1.0f};
     // a band runs while it works (on, Range above 0) and, after it stops, until its cut has let go
-    bool running[kAllBands] = {false, false, false};
+    bool running[kAllBands] = {false, false, false, false};
     // how much of Gently is in (1 normally): faded out and back in around a change of stereo mode
     float fx = 1.0f, fxStep = 0.0f;
     int hold = 0; // samples left, faded out, before the new mode starts

@@ -49,7 +49,7 @@ enum TailExtField : uint32_t
     kTailExtFields
 };
 
-// Gently's Advanced mode and its Sub band, a third block each plug-in appends at the very end of its IDs (the
+// Gently's Advanced mode and its Sub band, a third block each plug-in appended at the very end of its IDs (the
 // parameters: smacheratr/src/core/TailExt.h, addTailExt2Params). In smacheratr::Tail::setParam field
 // kTailFields + kTailExtFields + i is this block's field i.
 enum TailExt2Field : uint32_t
@@ -64,6 +64,20 @@ enum TailExt2Field : uint32_t
     kTailExt2SubRange,     // dB
     kTailExt2SubThreshold, // dB
     kTailExt2Fields
+};
+
+// Gently's High band and No Overlap, a fourth block each plug-in appends at the very end of its IDs
+// (the third is closed in: some plug-ins have parameters right after it; the parameters:
+// smacheratr/src/core/TailExt.h, addTailExt3Params). In smacheratr::Tail::setParam field
+// kTailFields + kTailExtFields + kTailExt2Fields + i is this block's field i.
+enum TailExt3Field : uint32_t
+{
+    kTailExt3High = 0,      // Gently's High band on
+    kTailExt3HighFreq,      // Hz, where the High band starts to taper off
+    kTailExt3HighRange,     // dB
+    kTailExt3HighThreshold, // dB
+    kTailExt3NoOverlap,     // Gently's bands never cover the same frequencies
+    kTailExt3Fields
 };
 
 } // namespace pk

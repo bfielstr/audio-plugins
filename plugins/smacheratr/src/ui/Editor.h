@@ -25,8 +25,8 @@ public:
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
     static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 290.0;
     // the GENTLY panel at the bottom: the Gently button at (kGentlyButtonX, kGentlyTop + 40), Advanced
-    // at (kGentlyAdvancedX, kGentlyTop + 40)
-    static constexpr double kGentlyTop = 432.0, kGentlyButtonX = 56.0, kGentlyAdvancedX = 496.0;
+    // at (kGentlyAdvancedX, kGentlyTop + 40), No Overlap at (kNoOverlapX, kGentlyTop + 40)
+    static constexpr double kGentlyTop = 432.0, kGentlyButtonX = 56.0, kGentlyAdvancedX = 516.0, kNoOverlapX = 712.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -50,8 +50,9 @@ private:
     void showClarityBand (int band);
     // Gently's Advanced mode: the Threshold sliders at the right of the colour display, the region
     // Drive's controls in the GENTLY panel (shown while Advanced is on)
-    ThresholdSlider* thresholdSliders[kGentlyBands] = {nullptr, nullptr, nullptr};
+    ThresholdSlider* thresholdSliders[kGentlyBands] = {nullptr, nullptr, nullptr, nullptr};
     std::vector<pk::ParamView*> advancedViews;
+    pk::ParamView* noOverlapView = nullptr; // No Overlap (dim while Gently is off)
     void layoutAdvanced ();
 };
 

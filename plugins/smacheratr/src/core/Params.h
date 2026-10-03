@@ -46,6 +46,16 @@ enum ParamId : uint32_t
     kClaritySubFreq,      // Hz, where the band starts to taper off (20 - 100 Hz)
     kClaritySubRange,     // dB: the most it turns the sub region down
     kClaritySubThreshold, // dB, where it starts cutting (Advanced; without it -18 dB)
+    // Gently's High band, the Sub band's mirror: everything from where it tapers off (HighFreq) up to
+    // the very top of the spectrum, a shelf, compressed like the other bands (for harshness and fizz)
+    kClarityHigh,          // High on (with Gently on, and its Range above 0 dB)
+    kClarityHighFreq,      // Hz, where the band starts to taper off going down (2 - 16 kHz)
+    kClarityHighRange,     // dB: the most it turns the top of the spectrum down
+    kClarityHighThreshold, // dB, where it starts cutting (Advanced; without it -18 dB)
+    // No Overlap: Gently's working bands never cover the same frequencies. The editors push a band's
+    // neighbours along when it is dragged or widened; the engine keeps them apart when automation (or
+    // a band switched on) makes them overlap (resolveOverlaps, NoOverlap.h).
+    kClarityNoOverlap,
 
     kNumParams
 };
@@ -60,14 +70,26 @@ inline constexpr uint32_t kClarityWidthIds[kClarityBands] = {kClarityWidth, kCla
 inline constexpr uint32_t kClarityRangeIds[kClarityBands] = {kClarityRange, kClarity2Range};
 inline constexpr uint32_t kClarityThresholdIds[kClarityBands] = {kClarityThreshold, kClarity2Threshold};
 
-// What the engine works on: the two bands above and the Sub band (band 2 here), with the same Range
-// and Threshold laws. The Sub band has no Width: its shape is subBand (ClarityBand.h).
-constexpr int kGentlyBands = kClarityBands + 1;
+// What the engine works on: the two bands above, the Sub band (band 2 here) and the High band (band
+// 3), with the same Range and Threshold laws. The Sub and High bands have no Width: their shapes are
+// subBand and highBand (ClarityBand.h).
+constexpr int kGentlyBands = kClarityBands + 2;
 constexpr int kSubBand = kClarityBands;
-inline constexpr uint32_t kGentlyFreqIds[kGentlyBands] = {kClarityFreq, kClarity2Freq, kClaritySubFreq};
-inline constexpr uint32_t kGentlyRangeIds[kGentlyBands] = {kClarityRange, kClarity2Range, kClaritySubRange};
-inline constexpr uint32_t kGentlyThresholdIds[kGentlyBands] = {kClarityThreshold, kClarity2Threshold, kClaritySubThreshold};
+constexpr int kHighBand = kClarityBands + 1;
+inline constexpr uint32_t kGentlyFreqIds[kGentlyBands] = {kClarityFreq, kClarity2Freq, kClaritySubFreq, kClarityHighFreq};
+inline constexpr uint32_t kGentlyRangeIds[kGentlyBands] = {kClarityRange, kClarity2Range, kClaritySubRange, kClarityHighRange};
+inline constexpr uint32_t kGentlyThresholdIds[kGentlyBands] = {kClarityThreshold, kClarity2Threshold, kClaritySubThreshold,
+                                                               kClarityHighThreshold};
+// a band (not Sub or High), that has a Width
+constexpr bool hasWidth (int band) { return band < kClarityBands; }
 constexpr double kSubMinHz = 20.0, kSubMaxHz = 100.0, kSubDefaultHz = 40.0;
+// The High band's taper: 2 - 16 kHz, 7 kHz by default. From 7 kHz up is where harshness turns into
+// fizz and sibilance; the cut is half as deep around 3.5 kHz and nearly gone by 2 kHz, so the presence
+// region (1 - 3 kHz) that carries a voice or a lead is left alone while the top is tamed. (The Sub
+// band's 40 Hz is the same distance from the bottom, mirrored.)
+constexpr double kHighMinHz = 2000.0, kHighMaxHz = 16000.0, kHighDefaultHz = 7000.0;
+// a band's Width (octaves between its edges)
+constexpr double kMinWidthOct = 0.5, kMaxWidthOct = 4.0;
 
 // Gently's law (Engine.cpp): a band's cut before the curve is 3 dB for every 5 dB its level (the
 // band's peak level going into the curve, see Engine.h) is over the threshold, a 2.5 : 1 hard knee,
@@ -87,8 +109,9 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 
 // Whether Clarity band k works, from plain values (Clarity on, the band's Range above 0 dB).
 inline bool clarityBandOn (double clarityOn, double rangeDb) { return clarityOn >= 0.5 && rangeDb > 0.0; }
-// The Sub band works while Gently and Sub are on and its Range is above 0 dB.
+// The Sub band works while Gently and Sub are on and its Range is above 0 dB; the High band the same.
 inline bool claritySubOn (double clarityOn, double subOn, double rangeDb) { return subOn >= 0.5 && clarityBandOn (clarityOn, rangeDb); }
+inline bool clarityHighOn (double clarityOn, double highOn, double rangeDb) { return claritySubOn (clarityOn, highOn, rangeDb); }
 
 // Before one Clarity button, band 2 had an On of its own. For a state from then (normalized values):
 // band 2 off -> its Range 0; band 2 on with Clarity off -> Clarity on and band 1's Range 0. Same sound.

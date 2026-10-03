@@ -1,6 +1,7 @@
 #include "Engine.h"
 
 #include "smacheratr/src/core/ClarityBand.h"
+#include "smacheratr/src/core/NoOverlap.h"
 
 #include <algorithm>
 #include <cmath>
@@ -76,7 +77,8 @@ void Engine::prepare (double sampleRate, int maxBlock)
     sr = sampleRate;
     tail.prepare (sr, maxBlock);
     for (uint32_t id = kTailBase; id < kNumParams; ++id)
-        tail.setParam (tailField (id), p[id]);
+        if (isTailParam (id))
+            tail.setParam (tailField (id), p[id]);
     for (auto& c : chan)
     {
         c.os.prepare (sr, kChunk);
@@ -89,7 +91,10 @@ void Engine::prepare (double sampleRate, int maxBlock)
     fxStep = (float)(1.0 / (0.005 * sr));                       // 5 ms out, 5 ms back in
     for (int k = 0; k < kAllBands; ++k)
         bandFreq[k] = bandWidth[k] = -1.0; // the bands are designed for this rate
-    retune (true);
+    bool works[kAllBands];
+    for (int k = 0; k < kAllBands; ++k)
+        works[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
+    retune (true, works);
     if (meters)
         meters->sampleRate.store ((float)sr);
     reset ();
@@ -136,14 +141,26 @@ void Engine::setParam (uint32_t id, double plain)
         tail.setParam (tailField (id), plain);
 }
 
-void Engine::retune (bool force)
+void Engine::retune (bool force, const bool* works)
 {
+    // where the bands sit: as set, or with No Overlap the working ones kept apart
+    smacheratr::GentlyLayout layout;
     for (int k = 0; k < kAllBands; ++k)
     {
-        const double f = p[freqParam (k)], w = k == kSub ? 0.0 : p[bandParam (k, kWidth)]; // (the Sub band has no width)
+        layout.on[k] = works[k];
+        layout.freq[k] = p[freqParam (k)];
+        layout.width[k] = hasWidth (k) ? p[bandParam (k, kWidth)] : 0.0; // (the Sub and High bands have no width)
+    }
+    if (p[kNoOverlap] >= 0.5)
+        smacheratr::resolveOverlaps (layout);
+    for (int k = 0; k < kAllBands; ++k)
+    {
+        const double f = layout.freq[k], w = layout.width[k];
         if (!force && f == bandFreq[k] && w == bandWidth[k])
             continue;
-        const smacheratr::ClarityBand b = k == kSub ? smacheratr::subBand (sr, f) : smacheratr::clarityBand (sr, f, w);
+        const smacheratr::ClarityBand b = k == kSub    ? smacheratr::subBand (sr, f)
+                                          : k == kHigh ? smacheratr::highBand (sr, f)
+                                                       : smacheratr::clarityBand (sr, f, w);
         bandFreq[k] = f;
         bandWidth[k] = w;
         bandNorm[k] = (float)b.norm;
@@ -174,12 +191,13 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     const bool advanced = p[kAdvanced] >= 0.5;
     atk = coeffOfMs (p[kAttack], sr);
     rel = coeffOfMs (p[kRelease], sr);
-    retune (false);
     bool works[kAllBands], anyWorks = false;
     double thresholdDb[kAllBands], rangeDb[kAllBands];
     for (int k = 0; k < kAllBands; ++k)
-    {
         works[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
+    retune (false, works);
+    for (int k = 0; k < kAllBands; ++k)
+    {
         anyWorks |= works[k];
         if (works[k] && !running[k])
         {
@@ -384,6 +402,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         meters->bands.clarity2LevelDb.store (level[1], std::memory_order_relaxed);
         meters->bands.claritySubDb.store (-cut[kSub], std::memory_order_relaxed);
         meters->bands.claritySubLevelDb.store (level[kSub], std::memory_order_relaxed);
+        meters->bands.clarityHighDb.store (-cut[kHigh], std::memory_order_relaxed);
+        meters->bands.clarityHighLevelDb.store (level[kHigh], std::memory_order_relaxed);
         meters->blocks.fetch_add (1, std::memory_order_relaxed);
     }
 }
