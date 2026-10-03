@@ -9,7 +9,7 @@ namespace dropr {
 
 struct SharedMeters
 {
-    Meters meters;                 // where in the shape, the gain, the hit count
+    Meters meters;                 // the bands: levels and gain reduction
     smacheratr::Meters tailMeters; // the saturator at the end of the chain
     std::atomic<int> latency {0};
     std::atomic<double> sampleRate {48000.0};

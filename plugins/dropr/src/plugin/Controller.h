@@ -21,6 +21,9 @@ public:
 
     SharedMeters* getShared () const { return shared; }
 
+protected:
+    Steinberg::Vst::Parameter* makeParameter (uint32_t id) override;
+
 private:
     SharedMeters* shared = nullptr;
 };

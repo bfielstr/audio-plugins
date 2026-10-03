@@ -1,6 +1,6 @@
 #include "Editor.h"
 
-#include "ShapeView.h"
+#include "BandView.h"
 #include "Help.h"
 #include "plugin/Controller.h"
 
@@ -43,6 +43,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 void Editor::onClose ()
 {
     display = nullptr;
+    ratioKnob = negRatioKnob = rangeKnob = nullptr;
     latencyLabel = nullptr;
     tailDisplays.reset ();
 }
@@ -62,31 +63,53 @@ void Editor::buildUI (CFrame* f)
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
-    display = new ShapeView (CRect (8, 40, 752, 300), this,
-                             [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; });
+    display = new BandView (CRect (kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom), this,
+                            [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; });
     display->setTooltipText (help::kDisplay);
     root->addView (display);
 
-    // the shape: how deep, how long, how early
-    auto* shapePanel = new Panel (CRect (8, 308, 360, 424), "SHAPE");
-    root->addView (shapePanel);
-    bind (shapePanel, new Knob (CRect (24, 12, 104, 112), this, kDepth));
-    bind (shapePanel, new Knob (CRect (150, 28, 206, 92), this, kLength));
-    bind (shapePanel, new Knob (CRect (240, 28, 296, 92), this, kPre));
+    // the right column: how many bands, stereo or mid-side, how far the channels are linked
+    auto* side = new Panel (CRect (kSideLeft, kSideTop, 752, kDisplayBottom), "CHANNELS");
+    root->addView (side);
+    side->addView (new Label (CRect (8, 20, 116, 34), "Bands", 10.5));
+    bind (side, new pk::Segmented (CRect (kBandsSelLeft, kBandsSelTop, kBandsSelLeft + kBandsSelW, kBandsSelTop + 20), this, kBands, {"1", "2", "3", "4", "5", "6"}));
+    side->addView (new Label (CRect (8, 62, 116, 76), "Mode", 10.5));
+    bind (side, new pk::Segmented (CRect (8, 76, 116, 96), this, kMode, {"Stereo", "M/S"}));
+    bind (side, new Knob (CRect (34, 108, 90, 172), this, kLink));
 
-    // what counts as a hit
-    auto* hitsPanel = new Panel (CRect (368, 308, 560, 424), "HITS");
-    root->addView (hitsPanel);
-    bind (hitsPanel, new Knob (CRect (24, 28, 80, 92), this, kSensitivity));
-    bind (hitsPanel, new Knob (CRect (104, 28, 160, 92), this, kRetrigger));
+    // the dynamics
+    auto* dyn = new Panel (CRect (kDynLeft, kDynTop, 752, 420), "DYNAMICS");
+    root->addView (dyn);
+    auto col = [] (int i) { return kDynFirst + kDynColumn * i; };
+    auto knobAt = [&] (int i, uint32_t id, bool bipolar = false) {
+        return bind (dyn, new Knob (CRect (col (i), 22, col (i) + 56, 86), this, id, nullptr, bipolar));
+    };
+    knobAt (0, kAdaptive);
+    knobAt (1, kAttack);
+    knobAt (2, kRelease);
+    knobAt (3, kDownThreshold);
+    ratioKnob = knobAt (4, kDownRatio);
+    negRatioKnob = knobAt (4, kNegRatio);
+    bind (dyn, new pk::Toggle (CRect (col (4), kNegToggleTop, col (4) + 56, kNegToggleTop + 16), this, kNegative, "Negative"));
+    rangeKnob = knobAt (5, kRange);
+    knobAt (6, kUpThreshold);
+    knobAt (7, kUpRatio);
+    knobAt (8, kKnee);
+    knobAt (9, kTilt, true);
+    knobAt (10, kMakeup);
 
-    auto* out = new Panel (CRect (568, 308, 752, 424), "OUTPUT");
-    root->addView (out);
-    bind (out, new Knob (CRect (24, 28, 80, 92), this, kMix));
-    bind (out, new Knob (CRect (104, 28, 160, 92), this, kOutput, nullptr, true));
+    // levels: in, dry / wet, out
+    auto* levels = new Panel (CRect (8, 428, 752, 516), "LEVELS");
+    root->addView (levels);
+    bind (levels, new Knob (CRect (24, 20, 80, 84), this, kInput));
+    bind (levels, new Knob (CRect (104, 20, 160, 84), this, kMix));
+    bind (levels, new Knob (CRect (184, 20, 240, 84), this, kOutput, nullptr, true));
+    levels->addView (new Label (CRect (270, 30, 736, 46),
+                                "Dry: the input before the Input gain.  Wet: the bands after their gains.", 10.0));
+    showRatio ();
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 432, 752, 506 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
+    auto* tailPanel = addTailPanel (root, CRect (8, 524, 752, 598 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base);
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, kTailBase, kTailExtBase, kTailExt2Base,
                                                                [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
                                                                [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
@@ -104,6 +127,32 @@ void Editor::paramChanged (uint32_t id)
         tailDisplays->paramChanged (id);
     if (display && id < kTailBase)
         display->invalid ();
+    if (id == kNegative)
+        showRatio ();
+}
+
+std::string Editor::valueText (uint32_t id)
+{
+    if (id == kNegRatio)
+        return negRatioText (plainValue (id));
+    if (id == kTilt)
+    {
+        char buf[32];
+        std::snprintf (buf, sizeof (buf), "%+.1f dB/oct", plainValue (id));
+        return std::fabs (plainValue (id)) < 0.05 ? "0 dB/oct" : buf;
+    }
+    return pk::EditorBase::valueText (id);
+}
+
+void Editor::showRatio ()
+{
+    const bool neg = plainValue (kNegative) >= 0.5;
+    if (ratioKnob)
+        ratioKnob->setVisible (!neg);
+    if (negRatioKnob)
+        negRatioKnob->setVisible (neg);
+    if (rangeKnob)
+        rangeKnob->setEnabledLook (neg);
 }
 
 void Editor::idle ()

@@ -1,4 +1,4 @@
-# Dropr: a transient designer you draw (each hit starts a drawn level shape).
+# Dropr: a 6-band, Fuse-style compressor (downward with normal or negative ratios, upward) feeding a saturator.
 project(Dropr VERSION 0.9.0.0)
 
 add_library(dropr_core STATIC
@@ -31,13 +31,23 @@ pk_add_plugin(Dropr
         src/plugin/Controller.cpp
         src/plugin/Entry.cpp
         src/ui/Help.h
-        src/ui/ShapeView.h
-        src/ui/ShapeView.cpp
+        src/ui/BandView.h
+        src/ui/BandView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )
 target_include_directories(Dropr PRIVATE src)
 target_link_libraries(Dropr PRIVATE dropr_core smacheratr_ui)
+
+# the saved state (plugin/State.cpp) on its own: runs everywhere, beside the core tests
+add_executable(dropr_state_tests tests/state_tests.cpp src/plugin/State.cpp
+    ${vst3sdk_SOURCE_DIR}/public.sdk/source/common/memorystream.cpp)
+target_include_directories(dropr_state_tests PRIVATE src)
+target_link_libraries(dropr_state_tests PRIVATE dropr_core sdk)
+if(APPLE)
+    target_link_libraries(dropr_state_tests PRIVATE "-framework CoreFoundation") # the SDK's base library uses it
+endif()
+add_test(NAME dropr_state COMMAND dropr_state_tests)
 
 pk_add_host_test(dropr_hosttest
     PLUGIN Dropr
