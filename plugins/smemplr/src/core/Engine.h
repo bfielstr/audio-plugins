@@ -120,6 +120,10 @@ private:
     // classic (resampling) playback
     double pos = 0.0, lastRate = 1.0;
     bool srcDone = false;
+    // the loop moved under the playhead (Start automated): the playhead jumps into it, the old place
+    // fading out over a few ms as the new one fades in (where it was, how many samples are left)
+    double jumpFrom = 0.0;
+    int jumpLeft = 0, jumpLen = 1;
     BeatsWarp beats;
     GrainWarp grain;
     PvWarp pv;

@@ -132,6 +132,7 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
     st = s;
     active = true;
     released = killing = sustained = srcDone = gateFading = false;
+    jumpLeft = 0;
     killGain = gateGain = 1.0f;
     elapsed = 0;
     beatAcc = 0.0;
@@ -222,6 +223,9 @@ void Voice::updateLoop (const PlayRegion& r)
     if (source != Source::Classic || st.mode != kModeClassic)
         return;
     st.region.loop = r.loop;
+    // the loop follows Start both ways: moved before where the note started, the region starts there
+    // too (held at the note's start, a Start moved back would leave a loop of a few samples: a beep)
+    st.region.start = std::min (st.region.start, r.loopStart);
     st.region.loopStart = std::max (st.region.start, r.loopStart);
     st.region.loopEnd = std::max (st.region.loopStart + 16.0, std::min (st.region.end, r.loopEnd));
 }
@@ -296,11 +300,18 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
             L[i] = R[i] = 0.0f;
             continue;
         }
-        if (r.loop && loopLen >= 1.0)
+        if (r.loop && loopLen >= 1.0 && pos >= r.loopEnd)
         {
-            int guard = 0;
-            while (pos >= r.loopEnd && ++guard < 64)
-                pos -= wrapLen;
+            const double over = pos - r.loopEnd;
+            const double wraps = std::floor (over / std::max (1.0, wrapLen)) + 1.0;
+            if (over > rate + 1.0 && jumpLeft == 0)
+            {
+                // not a wrap but the loop moved (Start automated) to before the playhead: jump into
+                // it with a short crossfade from where it was
+                jumpFrom = pos;
+                jumpLen = jumpLeft = std::max (1, (int)(0.005 * sr));
+            }
+            pos -= wraps * std::max (1.0, wrapLen);
         }
         else if (pos >= r.end)
         {
@@ -337,6 +348,18 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
             const float g = c.constantPowerFade ? (float)std::sin (x * M_PI * 0.5) : (float)x;
             l *= g;
             rr *= g;
+        }
+        if (jumpLeft > 0)
+        {
+            // the old place fading out under the new one (equal gain: the two are unrelated)
+            const float x = (float)jumpLeft / (float)jumpLen;
+            float l2 = 0.0f, r2 = 0.0f;
+            if (jumpFrom < r.end)
+                rd.read (jumpFrom, l2, r2);
+            l = l * (1.0f - x) + l2 * x;
+            rr = rr * (1.0f - x) + r2 * x;
+            jumpFrom += rate;
+            --jumpLeft;
         }
         L[i] = l;
         R[i] = rr;

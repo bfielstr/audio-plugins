@@ -1588,6 +1588,53 @@ TEST (length_is_the_loop_and_fade_fades_the_start_in)
     CHECK (rms (held.l, 24000, 48000) > hard * 0.9, "then holds the level through the loop (%f)", rms (held.l, 24000, 48000));
 }
 
+TEST (start_moved_back_while_playing_does_not_beep)
+{
+    // Start automated backwards while a note plays (the playhead moving forwards): the loop moves with
+    // it. It used to be held at the note's start while its end moved back with Start, leaving a loop of
+    // 16 samples: a beep at about 2.8 kHz
+    auto s = sine (220.0, 4.0);
+    std::unique_ptr<Engine> e (makeEngine (s));
+    e->setParam (kFilterOn, 0);
+    e->setParam (kLoopOn, 1);
+    e->setParam (kLoopFade, 0.1);
+    e->setParam (kStart, 0.6);
+    e->setParam (kLength, 0.1);
+    e->noteOn (60, 1.0f);
+    std::vector<float> all;
+    auto block = [&] (int frames) {
+        auto o = run (*e, frames);
+        all.insert (all.end (), o.l.begin (), o.l.end ());
+    };
+    block (22050);
+    for (int k = 0; k < 40; ++k)
+    {
+        e->setParam (kStart, 0.6 - 0.5 * (k + 1) / 40.0); // back to 0.1 over about a second
+        block (1102);
+    }
+    block (22050);
+    // a 220 Hz sine's sample-to-sample steps are about 3 % of its level; a beep's are many times that
+    double sq = 0.0, dsq = 0.0, worst = 0.0;
+    const size_t win = 2205;
+    for (size_t a = 22050; a + win < all.size (); a += win)
+    {
+        double w = 0.0, dw = 0.0;
+        for (size_t i = a; i < a + win; ++i)
+        {
+            w += (double)all[i] * all[i];
+            dw += (double)(all[i] - all[i - 1]) * (all[i] - all[i - 1]);
+        }
+        sq += w;
+        dsq += dw;
+        if (w > 1e-6)
+            worst = std::max (worst, std::sqrt (dw / w));
+    }
+    std::printf ("    steps / level: %.3f overall, worst 50 ms %.3f\n", std::sqrt (dsq / std::max (1e-12, sq)), worst);
+    CHECK (worst < 0.2, "no beep while Start moves back: %.3f", worst);
+    CHECK (sq > 1.0, "still playing");
+    CHECK (finite (all), "finite");
+}
+
 TEST (oneshot_trigger_and_gate)
 {
     auto s = sine (300.0, 0.5);
