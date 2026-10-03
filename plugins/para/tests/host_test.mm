@@ -169,6 +169,8 @@ int main (int argc, char** argv)
                 rig.render (0.05, out, nullptr, tone (110.0, 0.4));
                 pump (0.03);
             }
+            std::fprintf (stderr, "  [para] screenshot\n");
+            std::fflush (stderr);
             CHECK (win.savePng (outDir + "/ui_para.png"), "screenshot");
             // the high-pass handle sits at its cutoff
             auto xOfHz = [] (double hz) {
@@ -179,6 +181,8 @@ int main (int argc, char** argv)
             };
             const double hx = xOfHz (plainOf (rig, kHpFreq)), hy = yOfDb (0.0);
             const double f0 = plainOf (rig, kHpFreq);
+            std::fprintf (stderr, "  [para] drag the high-pass handle\n");
+            std::fflush (stderr);
             win.drag (hx, hy, hx + 40, hy);
             CHECK (plainOf (rig, kHpFreq) > f0 * 1.3, "drag raises the high-pass: %.0f -> %.0f", f0, plainOf (rig, kHpFreq));
             // a handle sits as high as its gain plus its resonant peak (the slope's response at the cutoff)
@@ -188,17 +192,23 @@ int main (int argc, char** argv)
             };
             // up / down: the resonance, the gain stays
             const double hx2 = xOfHz (plainOf (rig, kHpFreq));
+            std::fprintf (stderr, "  [para] drag up: resonance\n");
+            std::fflush (stderr);
             win.drag (hx2, handleY (), hx2, handleY () - 30);
             CHECK (plainOf (rig, kHpRes) > 0.15, "drag up raises the high-pass resonance: %.2f", plainOf (rig, kHpRes));
             CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the gain stays: %.1f dB", plainOf (rig, kHpGain));
             // with Drag Gain on, the gain rises with it, but no higher than 0 dB with the high-pass's Gain Lock on
             // (the default); unlocked, above it
+            std::fprintf (stderr, "  [para] Drag Gain, locked\n");
+            std::fflush (stderr);
             rig.param (kDragGain, 1.0);
             {
                 const double y0 = handleY ();
                 win.drag (hx2, y0, hx2, y0 - 20);
                 CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "locked: the gain stops at 0 dB (%.1f dB)", plainOf (rig, kHpGain));
             }
+            std::fprintf (stderr, "  [para] Drag Gain, unlocked\n");
+            std::fflush (stderr);
             rig.param (kHpGainLock, 0.0);
             const double res1 = plainOf (rig, kHpRes);
             const double y1 = handleY ();
@@ -206,11 +216,15 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kHpGain) > 3.0 && plainOf (rig, kHpRes) > res1, "Drag Gain: gain %.1f dB, resonance %.2f",
                    plainOf (rig, kHpGain), plainOf (rig, kHpRes));
             CHECK (win.savePng (outDir + "/ui_para_drag.png"), "drag screenshot");
+            std::fprintf (stderr, "  [para] double-click reset\n");
+            std::fflush (stderr);
             win.click (xOfHz (plainOf (rig, kHpFreq)), handleY (), 2);
             CHECK (std::fabs (plainOf (rig, kHpFreq) - 300.0) < 1e-6 && std::fabs (plainOf (rig, kHpGain)) < 1e-6 &&
                        plainOf (rig, kHpRes) < 1e-6,
                    "double-click resets");
             // Vocal: the low-pass swept above the high-pass pushes it along and fades it
+            std::fprintf (stderr, "  [para] Vocal\n");
+            std::fflush (stderr);
             rig.param (kMovement, toNormalized (kMovement, kVocal));
             rig.param (kLpFreq, toNormalized (kLpFreq, 1200.0));
             for (int i = 0; i < 10; ++i)
@@ -221,6 +235,8 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_para_vocal.png"), "vocal screenshot");
             // the drive toggles in OUTPUT (at 8, kRow2Top): the high-pass's, then the low-pass's
+            std::fprintf (stderr, "  [para] drive toggles\n");
+            std::fflush (stderr);
             rig.param (kHpDriveOn, 0.0);
             rig.param (kLpDriveOn, 0.0);
             pump (0.05);
@@ -230,6 +246,8 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kLpDriveOn) >= 0.5, "LP drive toggle");
             // the Gain Locks under the gains (HIGH-PASS at 8, LOW-PASS at 196, kRow1Top): the low-pass's on brings
             // its +6 dB down to 0 dB; the high-pass's off, then on again
+            std::fprintf (stderr, "  [para] gain locks\n");
+            std::fflush (stderr);
             rig.param (kLpGain, toNormalized (kLpGain, 6.0));
             rig.param (kLpGainLock, 0.0);
             rig.param (kHpGainLock, 1.0);
@@ -241,10 +259,14 @@ int main (int argc, char** argv)
             win.click (8 + 152, Editor::kRow1Top + 103);
             CHECK (plainOf (rig, kHpGainLock) >= 0.5, "HP lock toggle again");
             // a locked gain's knob (HIGH-PASS's third) dragged up stops at 0 dB
+            std::fprintf (stderr, "  [para] locked knob drag\n");
+            std::fflush (stderr);
             win.drag (8 + 152, Editor::kRow1Top + 54, 8 + 152, Editor::kRow1Top + 54 - 120);
             CHECK (std::fabs (plainOf (rig, kHpGain)) < 1e-6, "the locked HP gain knob stops at 0 dB: %.1f", plainOf (rig, kHpGain));
             // the slopes' drop-downs (in SPLIT, at 384, kRow1Top): HP Slope above LP Slope. The low-pass set to
             // Brickwall, the high-pass to 12 dB: the display draws each with its own
+            std::fprintf (stderr, "  [para] slopes screenshot\n");
+            std::fflush (stderr);
             rig.param (kHpSlope, toNormalized (kHpSlope, kSlope12));
             rig.param (kLpSlope, toNormalized (kLpSlope, kSlopeBrickwall));
             rig.param (kMovement, toNormalized (kMovement, kFree));
@@ -256,6 +278,8 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_para_brickwall.png"), "brickwall screenshot");
         }
+        std::fprintf (stderr, "  [para] done\n");
+        std::fflush (stderr);
         rig.stop ();
         return finish ("para host test");
     }

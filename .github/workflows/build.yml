@@ -55,7 +55,8 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        # (a hung test fails after 10 minutes with its output, instead of holding the job for hours)
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 600
 
       - name: Package
         shell: bash
