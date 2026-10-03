@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -10,7 +12,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x474E544C; // 'GNTL'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2;
+constexpr int32 kSubHighRange = 2; // 2: the Sub and High bands (Gently's and the end saturator's) work while their Range is above 0 dB
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +53,14 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // the Sub and High bands had an On (off by default) and their Ranges 8 and 6 dB by default: a band
+    // that was off gets Range 0, one that was on keeps its Range (the same sound); the end saturator's too
+    if (version < kSubHighRange)
+    {
+        smacheratr::subHighStateToRange (st.norm, st.has, kSubOn, kSubRange, kHighOn, kHighRange);
+        st.has[kSubRange] = st.has[kHighRange] = true;
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     }
     return true;
 }

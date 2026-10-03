@@ -86,6 +86,12 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
 // Overlap (17) get theirs the same way.
 void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 19: the Sub and High bands of the rack's Smacheratrs and Gentlys had a
+// button each (off by default) and Ranges of 8 and 6 dB by default; now a band works while its Range is
+// above 0 dB. A band that was off gets Range 0, one that was on keeps its Range (or, not saved, the old
+// default): smacheratr::subHighStateToRange. Same sound.
+void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+
 // States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an
 // "OTT pushed further" then: multidyn::migrateOldBaked moves the difference into its controls) and its
 // later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).

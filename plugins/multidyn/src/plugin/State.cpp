@@ -2,6 +2,8 @@
 
 #include "smacheratr/src/core/Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -16,7 +18,8 @@ constexpr int32 kClarityFullRange = 2; // 2: the end saturator's Clarity Frequen
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kOttDefaults = 4;      // 4: Live's OTT preset's gain staging baked in (Params.h)
 constexpr int32 kStyleAdded = 5;       // 5: Style (OTT for new instances; older states keep Character)
-static_assert (kStateVersion == kStyleAdded);
+constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the saturator (a band works while its Range is above 0)
+static_assert (kStateVersion == kSubHighRange);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -89,6 +92,10 @@ bool readState (IBStream* stream, State& st)
         for (uint32_t id : {(uint32_t)(kSatExtBase + pk::kTailExtClarityFreq)})
             if (st.has[id])
                 st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kSatExt2Base, kSatExt3Base);
     return true;
 }
 

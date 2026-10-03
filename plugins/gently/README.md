@@ -25,19 +25,22 @@ band that is not cutting leaves the signal exactly as it was, bit for bit.
   its region now. A band whose edge reaches an end of the spectrum (its low edge at 20 Hz or below, or
   its high edge at 20 kHz or above) turns into a shelf there: it runs flat past that end instead of
   dipping back up.
-- **Sub** (amber, off by default): a shelf for the sub region, flat from the very bottom of the spectrum
-  up to its **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go (within about 1 dB
-  of the full cut there, about half of it at twice that, nearly none two octaves up). It has a **Range**
-  (8 dB by default) and the same law as the other bands, and no width. It works while it is on and its
-  Range is above 0 dB.
-- **High** (rose, off by default): the Sub band's mirror, a shelf for the top of the spectrum
+- **Sub** (amber): a shelf for the sub region, flat from the very bottom of the spectrum up to its
+  **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go (within about 1 dB of the
+  full cut there, about half of it at twice that, nearly none two octaves up). It has a **Range** and the
+  same law as the other bands, and no width. It has no On button: it is always there, and works while
+  its Range is above 0 dB. Its Range starts at 0 dB, so it cuts nothing until you pull its handle down
+  in the display (or turn its Range up).
+- **High** (rose): the Sub band's mirror, a shelf for the top of the spectrum
   (harshness, fizz, sibilance), flat from its **Freq** (2 to 16 kHz, 7 kHz by default) up to the very
   top, its cut letting go below it (within about 1 dB of the full cut at its Freq, about half of it an
   octave down, nearly none two octaves down). 7 kHz puts the whole cut on the fizz and sibilance, half
   of it around 3.5 kHz where harshness starts, and leaves the presence region (1 to 3 kHz) that
-  carries a voice or a lead alone. It has a **Range** (6 dB by default, as band 2) and a Threshold,
-  the same law, and no width. It works while it is on and its Range is above 0 dB; off, Gently is
-  exactly what it was, bit for bit.
+  carries a voice or a lead alone. It has a **Range** and a Threshold, the same law, and no width. Like
+  the Sub band it has no On button: it starts at Range 0 dB (no cut) and works once its Range is above
+  0 dB; at 0 dB Gently is exactly what it was, bit for bit.
+- Projects saved before the Sub and High bands lost their On buttons sound the same: a band that was
+  off loads with its Range at 0 dB, one that was on keeps its Range.
 
 **No Overlap** (off by default): the bands never cover the same frequencies. Dragging or widening a
 band in the display pushes its neighbours' edges along: a neighbour gets narrower, and once it is as
@@ -46,7 +49,7 @@ Sub band at 20 Hz, the High band at 16 kHz) the dragged band stops at it. Within
 measured from where the bands were when it began, so dragging back lets them go back. Switched on,
 bands that already overlap are split at the middle of the overlap (on a log axis), each giving up half.
 Only working bands take part. A band covers the octaves between its edges, the Sub band everything
-below its Freq, the High band everything above its Freq. Automation (or a band switched on) that
+below its Freq, the High band everything above its Freq. Automation (or a band starting to work) that
 makes bands overlap is kept apart the same way in the engine, so they never overlap in the sound
 either; bands that do not overlap are left exactly where they are.
 
@@ -85,6 +88,7 @@ the input stands above the output, Gently is cutting. The readouts at the top sh
 frequency and its cut now.
 
 - Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz, High: 2 to 16 kHz), down for its Range.
+  The Sub and High handles sit flat at 0 dB until you pull them down; then the band starts cutting.
 - Drag a band's edge, or hold Alt / Option and drag the band sideways, for its width (the band stays
   centred); the mouse wheel on a handle (while you hold it, or with Shift) too. The Sub and High
   bands have no width.

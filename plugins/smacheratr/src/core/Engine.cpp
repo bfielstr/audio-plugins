@@ -271,9 +271,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     bool clarity[kGentlyBands];
     double levelDb[kGentlyBands] = {-120.0, -120.0, -120.0, -120.0};
     for (int k = 0; k < kGentlyBands; ++k)
-        clarity[k] = k == kSubBand    ? claritySubOn (p[kClarity], p[kClaritySub], p[kGentlyRangeIds[k]])
-                     : k == kHighBand ? clarityHighOn (p[kClarity], p[kClarityHigh], p[kGentlyRangeIds[k]])
-                                      : clarityBandOn (p[kClarity], p[kGentlyRangeIds[k]]);
+        clarity[k] = clarityBandOn (p[kClarity], p[kGentlyRangeIds[k]]); // (Sub and High too: no button of their own)
     // where the bands sit: as set, or with No Overlap kept apart (what the editors push is left as it is)
     GentlyLayout layout;
     for (int k = 0; k < kGentlyBands; ++k)

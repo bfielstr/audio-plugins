@@ -152,7 +152,7 @@ TEST (parameters_and_defaults)
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
     CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 63,
            "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 62");
-    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High", "the fourth block");
+    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)", "the fourth block");
     CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
     for (int b = 0; b < kBands; ++b)
         CHECK (t.info (driveParam (b, kDriveDb)).def == 0.0 && t.info (driveParam (b, kDriveDb)).max == kMaxDriveDb &&
@@ -957,6 +957,21 @@ TEST (old_state_migration)
         migrateState (1, n1, h1);
         const int want[3] = {kSlope12, kSlope24, kSlope48};
         CHECK (std::lround (toPlain (kSlope, n1[kSlope])) == want[old], "version 1's slope %d", old);
+    }
+    // version 3: the end saturator's Sub band on (its Range kept), its High band off (Range 0)
+    {
+        double n[kNumParams];
+        bool h[kNumParams];
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            n[id] = 0.5;
+            h[id] = true;
+        }
+        n[kTailExt2Base + pk::kTailExt2Sub] = 1.0;
+        n[kTailExt3Base + pk::kTailExt3High] = 0.0;
+        migrateState (3, n, h);
+        CHECK (n[kTailExt2Base + pk::kTailExt2SubRange] == 0.5 && n[kTailExt3Base + pk::kTailExt3HighRange] == 0.0 && n[kSlope] == 0.5,
+               "version 3: Sub (on) kept, High (off) at 0, the rest as saved");
     }
     // this version's own state is kept as it is
     double n3[kNumParams];

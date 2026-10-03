@@ -24,26 +24,24 @@ inline const char* forParam (uint32_t id)
                    "worked on apart, each with its own detector. Mid or Side: only that one (the other passes).";
         case kMix: return "Dry / wet: the input, delayed to line up, against Gently's output.";
         case kOutput: return "Output level, before the Smacheratr at the end.";
-        case kSubOn:
-            return "The Sub band on or off (or click its readout in the display): compresses the sub region, from the bottom "
-                   "of the spectrum, a shelf, up to where its cut starts to let go (Freq). Off by default.";
+        case kSubOn: return "Unused: the Sub band works while its Range is above 0 dB (it had a button of its own before).";
         case kSubFreq:
             return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its amber handle "
                    "sideways). Everything below it, to the very bottom, is compressed.";
         case kSubRange:
-            return "The Sub band: the most it turns the sub region down (drag its handle down). 3 dB for every 5 the band is "
-                   "over its threshold, up to this. 0 dB: the band does nothing.";
-        case kHighOn:
-            return "The High band on or off (or click its readout in the display): compresses the top of the spectrum "
-                   "(harshness, fizz, sibilance), a shelf from where its cut starts to let go (Freq) up to the very top. Off "
-                   "by default.";
+            return "The Sub band compresses the sub region, from the bottom of the spectrum, a shelf, up to where its cut "
+                   "starts to let go (Freq). Range: the most it turns that region down (drag its amber handle down). 3 dB for "
+                   "every 5 the band is over its threshold, up to this. At 0 dB (the default) the band does nothing.";
+        case kHighOn: return "Unused: the High band works while its Range is above 0 dB (it had a button of its own before).";
         case kHighFreq:
             return "The High band: where it starts to taper off going down, 2 to 16 kHz (7 kHz by default; drag its rose "
                    "handle sideways). Everything above it, to the very top, is compressed; half as much around half the "
                    "frequency, nearly nothing an octave below that.";
         case kHighRange:
-            return "The High band: the most it turns the top down (drag its handle down). 3 dB for every 5 the band is over "
-                   "its threshold, up to this. 0 dB: the band does nothing.";
+            return "The High band compresses the top of the spectrum (harshness, fizz, sibilance), a shelf from where its cut "
+                   "starts to let go (Freq) up to the very top. Range: the most it turns that down (drag its rose handle "
+                   "down). 3 dB for every 5 the band is over its threshold, up to this. At 0 dB (the default) the band does "
+                   "nothing.";
         case kHighThreshold:
             return "Advanced: where the High band starts cutting (its peak level, dB). The slider shows the band's level: "
                    "brighter above the threshold, where it is being cut.";
@@ -81,8 +79,9 @@ constexpr const char* kDisplay =
     "making now filled in, the whole response in white. Behind: the output's spectrum filled, the input's dotted "
     "(tilted 4.5 dB/oct). Drag a handle sideways for the band's frequency, down for its Range; drag an edge, or "
     "Alt-drag the band, for its width (the Sub and High bands have none); the wheel on a handle (Shift) too. Double-click "
-    "or right-click a handle resets the band. Click a band's readout at the top to switch it on or off. With No Overlap "
-    "on, a band pushes its neighbours along.";
+    "or right-click a handle resets the band. Click band 1's or band 2's readout at the top to switch it on or off. The Sub "
+    "and High bands have no switch: they sit flat at 0 dB until you pull their handle down. With No Overlap on, a band "
+    "pushes its neighbours along.";
 
 constexpr const char* kSubThresholdSlider =
     "Advanced: the Sub band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "

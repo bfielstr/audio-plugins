@@ -65,7 +65,7 @@ public:
     void draw (CDrawContext* ctx) override
     {
         const CRect r = getViewSize ();
-        const bool on = bandWorks (host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
+        const bool on = bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
         if (auto p = owned (ctx->createGraphicsPath ()))
         {
             p->addRoundRect (r, 3.0);
@@ -169,14 +169,14 @@ void Editor::buildUI (CFrame* f)
         for (int i = 0; i < 3; ++i)
             bandViews[k].push_back (bind (root, new Knob (knobRect (x + i * 64, kRowTop + 24), this, bandParam (k, knobFields[i]), knobLabels[i])));
     }
-    // the Sub and High bands: their name and where they taper, On, Frequency, Range (no width)
+    // the Sub and High bands: their name and where they taper, Frequency, Range (no width, and no On: a band
+    // works while its Range is above 0 dB)
     for (int k : {kSub, kHigh})
     {
         const double x = k == kSub ? kSubLeft : kHighLeft;
-        auto* h = new BandHeader (CRect (x, kRowTop, x + 96, kRowTop + 18), this, k, rateOf);
+        auto* h = new BandHeader (CRect (x, kRowTop, x + kSubW - 8, kRowTop + 18), this, k, rateOf);
         root->addView (h);
         headers.push_back (h);
-        bind (root, new Toggle (CRect (x + 102, kRowTop - 1, x + kSubW - 8, kRowTop + 19), this, onParam (k), "On"));
         bandViews[k].push_back (bind (root, new Knob (knobRect (x, kRowTop + 24), this, freqParam (k), "Freq")));
         bandViews[k].push_back (bind (root, new Knob (knobRect (x + 64, kRowTop + 24), this, rangeParam (k), "Range")));
     }
@@ -240,9 +240,9 @@ void Editor::updateLooks ()
 {
     for (int k = 0; k < kAllBands; ++k)
     {
-        const bool works = bandWorks (plainValue (onParam (k)), plainValue (rangeParam (k)));
+        const bool works = bandWorks (k, plainValue (onParam (k)), plainValue (rangeParam (k)));
         for (auto* v : bandViews[k])
-            v->setEnabledLook (plainValue (onParam (k)) >= 0.5);
+            v->setEnabledLook (!hasOn (k) || plainValue (onParam (k)) >= 0.5); // (Sub, High: always there to turn up)
         if (sliders[k])
             sliders[k]->setEnabledLook (works);
     }

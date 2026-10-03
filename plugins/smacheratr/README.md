@@ -49,22 +49,25 @@ by the gain), so the cut region gets density and harmonics while the rest of the
 It runs oversampled with the rest when Hi-Quality is on, fades in and out when switched, and does not
 change the latency. With Advanced off, Gently is exactly the Clarity it was before.
 
-**Sub** (a third Gently band, off by default) compresses the sub region: a shelf, flat from the very
+**Sub** (a third Gently band) compresses the sub region: a shelf, flat from the very
 bottom of the spectrum up to its **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go
 (nearly none two octaves up). A Gently band whose edge reaches an end of the spectrum (20 Hz or 20 kHz)
-turns into a shelf there too, running flat past that end instead of dipping back up. It works while Gently and Sub are on and its **Range**
-(8 dB by default) is above 0 dB, with the same law as the other bands (3 dB of cut for every 5 dB over -18 dBFS,
+turns into a shelf there too, running flat past that end instead of dipping back up. It has no button of its own: like band 2 it works while Gently is on and its **Range**
+is above 0 dB, and its Range starts at 0 dB (no cut). It has the same law as the other bands (3 dB of cut for every 5 dB over -18 dBFS,
 or over its **Threshold** in Advanced) and the same region Drive. In the colour display drag its handle sideways
-for the frequency and down for the Range; it has no width. With Sub off Gently is exactly what it was.
+for the frequency and down for the Range (at Range 0 it sits flat at 0 dB, ready to pull down); it has no
+width. At Range 0 Gently is exactly what it was.
 
-**High** (a fourth Gently band, off by default) is the Sub band's mirror for the top of the spectrum
+**High** (a fourth Gently band) is the Sub band's mirror for the top of the spectrum
 (harshness, fizz, sibilance): a shelf, flat from its **Freq** (2 to 16 kHz, 7 kHz by default) up to the
 very top, its cut letting go below it (about half of it an octave down, nearly none two octaves down,
 so at 7 kHz the presence region of 1 to 3 kHz is left alone). It is the complement of a critically
-damped 12 dB/oct low-pass, so its cut is exactly the Range where it is flat. It works while Gently and
-High are on and its **Range** (6 dB by default) is above 0 dB, with the same law, its own **Threshold**
-in Advanced and the same region Drive; its handle in the colour display is rose, with no width. With
-High off Gently is exactly what it was, bit for bit.
+damped 12 dB/oct low-pass, so its cut is exactly the Range where it is flat. Like the Sub band it
+has no button: it works while Gently is on and its **Range** is above 0 dB (0 dB to start with), with the
+same law, its own **Threshold** in Advanced and the same region Drive; its handle in the colour display
+is rose, with no width. At Range 0 Gently is exactly what it was, bit for bit. Projects saved while
+the Sub and High bands had buttons sound the same: a band that was off loads at Range 0, one that was
+on keeps its Range.
 
 **No Overlap** (in the Gently panel, off by default): Gently's working bands never cover the same
 frequencies. Dragging or widening a band in the colour display pushes its neighbours' edges along (a

@@ -92,11 +92,13 @@ inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 
-// The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives.
-constexpr int kStateVersion = 3;
+// The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives; 4: the
+// end saturator's Sub and High bands have no buttons (they work while their Range is above 0 dB).
+constexpr int kStateVersion = 4;
 // Brings the normalized values of a state saved by `version` to this one: version 1's three slopes
-// among the eight; before 3, four bands and every drive off (the sound it was saved with). `has`:
-// the IDs the state had (the rest hold their defaults).
+// among the eight; before 3, four bands and every drive off (the sound it was saved with); before 4,
+// the end saturator's Sub and High bands that were off get Range 0 (smacheratr::subHighStateToRange).
+// `has`: the IDs the state had (the rest hold their defaults).
 void migrateState (int version, double norm[kNumParams], const bool has[kNumParams]);
 // The parameters added after 0.6.0 (Bands and the drives). A host that stored Levlr's parameters
 // without them and reads them as normalized 0 (Smemplr's rack slots) sets each to its default:

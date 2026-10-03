@@ -7,8 +7,8 @@
 //   right handle, sideways        Freq
 //   Gently handle, sideways       a Gently band's frequency (band 2 is drawn blue)
 //   Gently handle, up / down      its Range: the handle sits at the most it cuts, drag down for more
-//   Sub handle (amber; only with Sub on): sideways its Freq (20 - 100 Hz), down its Range; no width
-//   High handle (rose; only with High on): sideways its Freq (2 - 16 kHz), down its Range; no width
+//   Sub handle (amber; at 0 dB while its Range is 0): sideways its Freq (20 - 100 Hz), down its Range; no width
+//   High handle (rose; at 0 dB while its Range is 0): sideways its Freq (2 - 16 kHz), down its Range; no width
 //   Gently band edge, sideways    its width
 //   Alt (Option) + drag on a Gently band, sideways   its width, the band staying centred (right: wider)
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Gently's width
@@ -63,8 +63,8 @@ private:
     Drag hit (const VSTGUI::CPoint& p, int* band = nullptr) const; // band: which Clarity band was hit
     int bandUnder (const VSTGUI::CPoint& p) const;                 // the working band whose region p is in (-1: none)
     double sampleRate () const;
-    bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0; Sub, High: and their own button on)
-    bool clarityShown (int band) const; // its handle is there to grab (Clarity on; Sub, High: and their own button on)
+    bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0; Sub and High the same)
+    bool clarityShown (int band) const; // its handle is there to grab (Clarity on: every band, at 0 dB while its Range is 0)
     GentlyLayout layoutNow () const;     // where the bands sit (with No Overlap: kept apart, as the engine has them)
     ClarityBand bandOf (int band) const; // its shape (Sub: subBand, High: highBand, no width)
 

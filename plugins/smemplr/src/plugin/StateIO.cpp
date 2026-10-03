@@ -41,7 +41,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     places held nothing that was used)
 // 18: the modulation LFOs' mappings after the loop fade flag (Modulation.h: encodeModMap, behind its
 //     size in bytes); an older state has none
-constexpr int32 kVersion = 18;
+// 19: no Sub and High buttons in the rack's Smacheratrs and Gentlys (a band works while its Range is above
+//     0 dB; one that was off gets Range 0)
+constexpr int32 kVersion = 19;
 constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -262,6 +264,8 @@ bool readState (IBStream* stream, PluginState& st)
     // Gently's Advanced mode (11), Sub band (12), High band and No Overlap (17) in the rack's Smacheratrs, and the
     // last two in its Gentlys: defaults (off: the same sound)
     migrateGentlyInSlots (st.norm, st.has, version);
+    // the Sub and High bands without buttons (19): one that was off gets Range 0 (after the defaults above)
+    migrateSubHighInSlots (st.norm, st.has, version);
     // Levlr's Bands and drives (13)
     migrateLevlrInSlots (st.norm, st.has, version);
     // Para's slopes and per-filter drives (13), its low-pass slope, gain locks and Fade range (15)

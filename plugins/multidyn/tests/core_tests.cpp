@@ -170,7 +170,7 @@ TEST (params_roundtrip)
     CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kSubInput == kStyle + 1 && kSatExt3Base == kSubInput + 1 && kNumParams == kSatExt3Base + pk::kTailExt3Fields && t.info (kSubInput).def == 0.0 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
                t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
            "the Sub band, then the built-in Smacheratr's fourth block last: off, 40 Hz in 20 .. 100 Hz");
-    CHECK (std::string (t.info (kSatExt3Base + pk::kTailExt3High).name) == "Saturator Gently High" && t.info (kSatExt3Base + pk::kTailExt3High).def == 0.0 &&
+    CHECK (std::string (t.info (kSatExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" && t.info (kSatExt3Base + pk::kTailExt3High).def == 0.0 &&
                t.info (kSatExt3Base + pk::kTailExt3NoOverlap).def == 0.0,
            "the built-in Smacheratr's Gently High band and No Overlap: off");
     for (uint32_t id = 0; id < kNumParams; ++id)

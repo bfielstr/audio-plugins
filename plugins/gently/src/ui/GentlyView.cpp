@@ -89,7 +89,7 @@ const smacheratr::GentlyBandParams& GentlyView::bandParams ()
         {freqParam (0), freqParam (1), freqParam (kSub), freqParam (kHigh)},
         {bandParam (0, kWidth), bandParam (1, kWidth), -1, -1},
         kNoOverlap,
-        [] (pk::ParamHost* h, int k) { return bandWorks (h->plainValue (onParam (k)), h->plainValue (rangeParam (k))); }};
+        [] (pk::ParamHost* h, int k) { return bandWorks (k, h->plainValue (onParam (k)), h->plainValue (rangeParam (k))); }};
     return bp;
 }
 
@@ -112,7 +112,7 @@ double GentlyView::sampleRate () const
 
 bool GentlyView::works (int band) const
 {
-    return bandWorks (host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
+    return bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
 }
 
 smacheratr::GentlyLayout GentlyView::layoutNow () const
@@ -484,7 +484,7 @@ void GentlyView::draw (CDrawContext* ctx)
     for (int k = 0; k < kAllBands; ++k)
     {
         const CRect p = pill (k);
-        const bool enabled = host->plainValue (onParam (k)) >= 0.5;
+        const bool enabled = !hasOn (k) || host->plainValue (onParam (k)) >= 0.5; // (Sub, High: no switch, only a Range)
         char name[8];
         std::snprintf (name, sizeof (name), k == kSub ? "Sub" : k == kHigh ? "High" : "%d", k + 1);
         char s[64];
@@ -566,9 +566,9 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);
     };
-    // a band's readout: switches it on or off
+    // a band's readout: switches it on or off (the Sub and High bands have no switch: their Range is it)
     for (int k = kAllBands - 1; k >= 0; --k)
-        if (pill (k).pointInside (e.mousePosition))
+        if (hasOn (k) && pill (k).pointInside (e.mousePosition))
         {
             const uint32_t id = onParam (k);
             host->setOnce (id, host->norm (id) >= 0.5 ? 0.0 : 1.0);
@@ -631,7 +631,7 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
         Drag h = hit (e.mousePosition, &k);
         bool onPill = false;
         for (int b = 0; b < kAllBands; ++b)
-            onPill |= pill (b).pointInside (e.mousePosition);
+            onPill |= hasOn (b) && pill (b).pointInside (e.mousePosition); // (the ones a click switches)
         if (onPill)
             h = Drag::None;
         else if (e.modifiers.has (ModifierKey::Alt) && (h != Drag::None ? hasWidth (k) : bandUnder (e.mousePosition) >= 0))

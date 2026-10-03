@@ -7,6 +7,7 @@
 #include "Params.h"
 #include "Shaper.h"
 
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <ctime>
@@ -611,6 +612,73 @@ TEST (clarity_second_band)
     }
 }
 
+TEST (sub_and_high_without_buttons)
+{
+    // the Sub and High bands have no button: they work while Gently is on and their Range is above 0 dB,
+    // and start at 0 (no cut), as band 2
+    const auto& t = paramTable ();
+    CHECK (t.info (kClaritySubRange).def == 0.0 && t.info (kClarityHighRange).def == 0.0, "Sub and High Range: 0 dB by default");
+    CHECK (!claritySubOn (1.0, 0.0) && claritySubOn (1.0, 0.5) && !claritySubOn (0.0, 8.0) && !clarityHighOn (1.0, 0.0) &&
+               clarityHighOn (1.0, 6.0) && !clarityHighOn (0.0, 6.0),
+           "a band works while Gently is on and its Range is above 0 dB");
+    std::vector<pk::ParamInfo> v2, v3;
+    addTailExt2Params (v2, 0);
+    addTailExt3Params (v3, 0);
+    CHECK (v2[pk::kTailExt2SubRange].def == 0.0 && v3[pk::kTailExt3HighRange].def == 0.0, "and in every plug-in's end saturator");
+
+    // a state from before (normalized values): off -> Range 0; on -> its Range, or the old default
+    // (8 dB for Sub, 6 dB for High) when the state has none
+    const double sub8 = toNormalized (kClaritySubRange, 8.0), high6 = toNormalized (kClarityHighRange, 6.0);
+    CHECK (std::fabs (sub8 - 8.0 / 24.0) < 1e-12 && std::fabs (high6 - 6.0 / 24.0) < 1e-12 && kSubRangeBeforeDb == 8.0 &&
+               kHighRangeBeforeDb == 6.0,
+           "the old defaults");
+    struct Case
+    {
+        double on, range;
+        bool hasRange;
+        double want;
+    };
+    for (const Case& c : {Case {0.0, 0.5, true, 0.0}, Case {0.0, 0.0, false, 0.0}, Case {1.0, 0.5, true, 0.5}, Case {1.0, 0.0, false, sub8},
+                          Case {1.0, 0.0, true, 0.0}})
+    {
+        double r = c.range;
+        subHighToRange (c.on, r, c.hasRange, sub8);
+        CHECK (r == c.want, "on %.0f, Range %.2f (%s): %.4f, want %.4f", c.on, c.range, c.hasRange ? "saved" : "missing", r, c.want);
+    }
+    // both bands by their IDs (here Smacheratr's own); a missing button was off
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        norm[kClaritySub] = 1.0, has[kClaritySub] = true; // Sub on, its Range not saved: the old 8 dB
+        norm[kClarityHighRange] = 0.75, has[kClarityHighRange] = true; // High's button not saved (off), a Range
+        subHighStateToRange (norm, has, kClaritySub, kClaritySubRange, kClarityHigh, kClarityHighRange);
+        CHECK (norm[kClaritySubRange] == sub8 && norm[kClarityHighRange] == 0.0, "Sub on: 8 dB; High (off): 0 dB");
+        norm[kClarityHigh] = 1.0, has[kClarityHigh] = true;
+        norm[kClarityHighRange] = 0.75;
+        has[kClarityHighRange] = false; // (a High band on with no Range: the old 6 dB)
+        subHighStateToRange (norm, has, kClaritySub, kClaritySubRange, kClarityHigh, kClarityHighRange);
+        CHECK (norm[kClarityHighRange] == high6, "High on, its Range missing: 6 dB");
+    }
+    // a plug-in's end saturator (its third block at 100, its fourth at 200): the Ranges marked present
+    {
+        std::array<double, 300> norm {};
+        std::array<bool, 300> has {};
+        norm[100 + pk::kTailExt2Sub] = 1.0, has[100 + pk::kTailExt2Sub] = true;
+        norm[100 + pk::kTailExt2SubRange] = 0.5, has[100 + pk::kTailExt2SubRange] = true;
+        norm[200 + pk::kTailExt3High] = 0.0, has[200 + pk::kTailExt3High] = true;
+        norm[200 + pk::kTailExt3HighRange] = 0.5, has[200 + pk::kTailExt3HighRange] = true;
+        tailSubHighToRange (norm, has, 100, 200);
+        CHECK (norm[100 + pk::kTailExt2SubRange] == 0.5 && norm[200 + pk::kTailExt3HighRange] == 0.0 && has[100 + pk::kTailExt2SubRange] &&
+                   has[200 + pk::kTailExt3HighRange],
+               "the tail's Sub (on) keeps its Range, High (off) gets 0");
+        std::array<double, 300> n2 {};
+        std::array<bool, 300> h2 {};
+        tailSubHighToRange (n2, h2, 100, 200); // (a state from before the blocks: both off)
+        CHECK (n2[100 + pk::kTailExt2SubRange] == 0.0 && n2[200 + pk::kTailExt3HighRange] == 0.0 && h2[100 + pk::kTailExt2SubRange],
+               "a state without the blocks: both at 0");
+    }
+}
+
 TEST (tail_has_every_control)
 {
     // the saturator at the end of the other plug-ins: its extended fields reach Smacheratr (here Clarity
@@ -951,7 +1019,7 @@ TEST (gently_bands_at_the_ends_are_shelves)
     e->setParam (kDrive, 12.0);
     e->setParam (kClarity, 1.0);
     e->setParam (kClarityRange, 0.0);
-    e->setParam (kClaritySub, 1.0);
+    e->setParam (kClaritySubRange, 8.0);
     Meters m;
     e->setMeters (&m);
     run (*e, tones ({{10.0, -8.0}}, 1.5));
@@ -982,8 +1050,9 @@ TEST (gently_sub_band)
     }
     const auto& t = paramTable ();
     CHECK (t.info (kClaritySub).def == 0.0 && t.info (kClaritySubFreq).def == 40.0 && t.info (kClaritySubFreq).min == 20.0 &&
-               t.info (kClaritySubFreq).max == 100.0 && t.info (kClaritySubRange).def == 8.0 && t.info (kClaritySubThreshold).def == -18.0,
-           "defaults: off, starts to taper at 40 Hz (20 - 100 Hz), Range 8 dB, Threshold -18 dB");
+               t.info (kClaritySubFreq).max == 100.0 && t.info (kClaritySubRange).def == 0.0 && t.info (kClaritySubThreshold).def == -18.0,
+           "defaults: Range 0 dB (it cuts nothing), starts to taper at 40 Hz (20 - 100 Hz), Threshold -18 dB");
+    CHECK (std::string (t.info (kClaritySub).name) == "Gently Sub (unused)", "the Sub band's old button: unused");
 
     // a 40 Hz bass and a 1 kHz note, driven hard: Sub cuts the bass, not the note, and only while on
     auto in = tones ({{40.0, -8.0}, {1000.0, -14.0}}, 1.5);
@@ -995,9 +1064,8 @@ TEST (gently_sub_band)
         e->setParam (kDrive, 12.0);
         e->setParam (kClarity, gently ? 1.0 : 0.0);
         e->setParam (kClarityRange, 0.0); // the other bands off: only Sub
-        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
         e->setParam (kClaritySubFreq, taper);
-        e->setParam (kClaritySubRange, range);
+        e->setParam (kClaritySubRange, sub ? range : 0.0); // (no button: Range 0 is off)
         auto out = run (*e, in);
         return toneDb (out.l, f, 48000, 72000);
     };
@@ -1017,13 +1085,27 @@ TEST (gently_sub_band)
             e->setParam (kDrive, 12.0);
             e->setParam (kClarity, 1.0);
             e->setParam (kClarityRange, 0.0);
-            e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+            e->setParam (kClaritySubRange, sub ? 8.0 : 0.0);
             return toneDb (run (*e, note).l, 1000.0, 48000, 72000);
         };
         CHECK (noteDb (true) == noteDb (false), "the 1 kHz note is left alone: %.2f vs %.2f dB", noteDb (true), noteDb (false));
     }
     CHECK (measure (false, true, 40.0, 40.0) == subOff, "Gently off: Sub does nothing");
     CHECK (measure (true, true, 40.0, 40.0, nullptr, 0.0) == subOff, "Range 0 dB: Sub does nothing");
+    {
+        // its old button is unused: on with Range 0 nothing, off with a Range the band works
+        auto withButton = [&] (double button, double range) {
+            auto e = engine ();
+            e->setParam (kPreLimit, 0.0);
+            e->setParam (kDrive, 12.0);
+            e->setParam (kClarity, 1.0);
+            e->setParam (kClarityRange, 0.0);
+            e->setParam (kClaritySub, button);
+            e->setParam (kClaritySubRange, range);
+            return toneDb (run (*e, in).l, 40.0, 48000, 72000);
+        };
+        CHECK (withButton (1.0, 0.0) == subOff && withButton (0.0, 8.0) == subOn, "the Sub band's old button does nothing");
+    }
     CHECK (measure (true, true, 40.0, 40.0, nullptr, 3.0) > subOn + 1.0, "a smaller Range cuts less");
 
     // the slider moves where the taper starts: a loud 90 Hz tone is cut with the taper at 100 Hz, much
@@ -1035,7 +1117,7 @@ TEST (gently_sub_band)
         e->setParam (kDrive, 12.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarityRange, 0.0);
-        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+        e->setParam (kClaritySubRange, sub ? 8.0 : 0.0);
         e->setParam (kClaritySubFreq, taper);
         return toneDb (run (*e, in90).l, 90.0, 48000, 72000);
     };
@@ -1043,18 +1125,20 @@ TEST (gently_sub_band)
     std::printf ("    90 Hz: %.1f dB with the taper at 100 Hz, %.1f dB at 25 Hz\n", at100, at25);
     CHECK (at100 < at25 - 3.0, "the slider sets what reaches the band: %.1f dB at 100 Hz, %.1f dB at 25 Hz", at100, at25);
 
-    // Sub off is what Gently was before it: bit for bit, and the bands 1 / 2 do not care about it
-    auto render = [&] (bool sub, double taper) {
+    // Sub at Range 0 is what Gently was before it: bit for bit, and the bands 1 / 2 do not care about it
+    auto render = [&] (bool sub, double taper, double threshold = -18.0) {
         auto e = engine ();
         e->setParam (kDrive, 14.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarity2Range, 6.0);
-        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
+        e->setParam (kClarityAdvanced, 1.0);
+        e->setParam (kClaritySubRange, sub ? 8.0 : 0.0);
         e->setParam (kClaritySubFreq, taper);
+        e->setParam (kClaritySubThreshold, threshold);
         return run (*e, in).l;
     };
-    CHECK (render (false, 40.0) == render (false, 90.0), "Sub off ignores its controls");
-    CHECK (render (true, 40.0) != render (false, 40.0), "Sub on changes the sound");
+    CHECK (render (false, 40.0) == render (false, 90.0, -50.0), "Range 0: Sub ignores its other controls, to the bit");
+    CHECK (render (true, 40.0) != render (false, 40.0), "Sub with a Range changes the sound");
 
     // Advanced: the Sub band's Threshold
     auto cutAt = [&] (double threshold) {
@@ -1065,7 +1149,7 @@ TEST (gently_sub_band)
         e->setParam (kDrive, -6.0); // (a level of about -12 dB)
         e->setParam (kClarity, 1.0);
         e->setParam (kClarityRange, 0.0);
-        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClaritySubRange, 8.0);
         e->setParam (kClarityAdvanced, 1.0);
         e->setParam (kClaritySubThreshold, threshold);
         run (*e, in);
@@ -1079,7 +1163,7 @@ TEST (gently_sub_band)
         e->setParam (kDrive, 12.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarityRange, 0.0);
-        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClaritySubRange, 8.0);
         e->setParam (kClarityAdvanced, 1.0);
         e->setParam (kClarityDrive, 1.0);
         e->setParam (kClarityDriveAmount, 24.0);
@@ -1099,7 +1183,8 @@ TEST (gently_sub_band)
            "Sub's IDs to tail fields");
     std::vector<pk::ParamInfo> v2;
     addTailExt2Params (v2, 200);
-    CHECK (std::string (v2[pk::kTailExt2Sub].name) == "Saturator Gently Sub" && v2[pk::kTailExt2SubFreq].def == 40.0 &&
+    CHECK (std::string (v2[pk::kTailExt2Sub].name) == "Saturator Gently Sub (unused)" && v2[pk::kTailExt2SubFreq].def == 40.0 &&
+               v2[pk::kTailExt2SubRange].def == 0.0 &&
                v2[pk::kTailExt2SubFreq].id == 200 + pk::kTailExt2SubFreq,
            "Sub in the tail's third block");
     auto renderT = [&] (bool sub) {
@@ -1111,7 +1196,7 @@ TEST (gently_sub_band)
         tail.setParam (pk::kTailDrive, 12.0);
         tail.setParam (pk::kTailFields + pk::kTailExtClarity, 1.0);
         tail.setParam (pk::kTailFields + pk::kTailExtClarityRange, 0.0);
-        tail.setParam (ext2Field + pk::kTailExt2Sub, sub ? 1.0 : 0.0);
+        tail.setParam (ext2Field + pk::kTailExt2SubRange, sub ? 8.0 : 0.0);
         Sig out = in;
         for (size_t pos = 0; pos < out.l.size (); pos += 512)
             tail.process (out.l.data () + pos, out.r.data () + pos, (int)std::min<size_t> (512, out.l.size () - pos));
@@ -1157,11 +1242,11 @@ TEST (gently_high_band)
     CHECK (clamped.lowHz == 16000.0, "the taper is held to 16 kHz (%.0f)", clamped.lowHz);
     const auto& t = paramTable ();
     CHECK (t.info (kClarityHigh).def == 0.0 && t.info (kClarityHighFreq).def == 7000.0 && t.info (kClarityHighFreq).min == 2000.0 &&
-               t.info (kClarityHighFreq).max == 16000.0 && t.info (kClarityHighRange).def == 6.0 &&
+               t.info (kClarityHighFreq).max == 16000.0 && t.info (kClarityHighRange).def == 0.0 &&
                t.info (kClarityHighThreshold).def == -18.0 && t.info (kClarityNoOverlap).def == 0.0,
-           "defaults: off, starts to taper at 7 kHz (2 - 16 kHz), Range 6 dB, Threshold -18 dB; No Overlap off");
-    CHECK (std::string (t.info (kClarityHigh).name) == "Gently High" && std::string (t.info (kClarityNoOverlap).name) == "Gently No Overlap",
-           "called Gently High / No Overlap");
+           "defaults: Range 0 dB (it cuts nothing), starts to taper at 7 kHz (2 - 16 kHz), Threshold -18 dB; No Overlap off");
+    CHECK (std::string (t.info (kClarityHigh).name) == "Gently High (unused)" && std::string (t.info (kClarityNoOverlap).name) == "Gently No Overlap",
+           "called Gently High (its old button, unused) / No Overlap");
 
     // a loud 10 kHz fizz and a 500 Hz note, driven hard: High cuts the fizz, not the note
     auto in = tones ({{10000.0, -8.0}, {500.0, -14.0}}, 1.5);
@@ -1173,9 +1258,8 @@ TEST (gently_high_band)
         e->setParam (kDrive, 12.0);
         e->setParam (kClarity, gently ? 1.0 : 0.0);
         e->setParam (kClarityRange, 0.0); // the other bands off: only High
-        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
         e->setParam (kClarityHighFreq, taper);
-        e->setParam (kClarityHighRange, range);
+        e->setParam (kClarityHighRange, high ? range : 0.0); // (no button: Range 0 is off)
         return run (*e, in);
     };
     Meters m;
@@ -1195,7 +1279,7 @@ TEST (gently_high_band)
             e->setParam (kDrive, 12.0);
             e->setParam (kClarity, 1.0);
             e->setParam (kClarityRange, 0.0);
-            e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+            e->setParam (kClarityHighRange, high ? 6.0 : 0.0);
             return toneDb (run (*e, note).l, 500.0, 48000, 72000);
         };
         CHECK (std::fabs (noteDb (true) - noteDb (false)) < 0.05, "the 500 Hz note is left alone: %.2f vs %.2f dB", noteDb (true), noteDb (false));
@@ -1213,7 +1297,7 @@ TEST (gently_high_band)
             e->setParam (kDrive, 12.0);
             e->setParam (kClarity, 1.0);
             e->setParam (kClarityRange, 0.0);
-            e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+            e->setParam (kClarityHighRange, high ? 6.0 : 0.0);
             e->setParam (kClarityHighFreq, taper);
             return toneDb (run (*e, in3).l, 3000.0, 48000, 72000);
         };
@@ -1222,19 +1306,18 @@ TEST (gently_high_band)
         CHECK (at2k < at12k - 3.0, "the slider sets what reaches the band: %.1f dB at 2 kHz, %.1f dB at 12 kHz", at2k, at12k);
     }
 
-    // High off is what Gently was before it: bit for bit, whatever its controls say (with and without
-    // Hi-Quality, the other bands working)
+    // High at Range 0 is what Gently was before it: bit for bit, whatever its other controls say (with
+    // and without Hi-Quality, the other bands working)
     auto in2 = tones ({{80.0, -8.0}, {320.0, -12.0}, {3000.0, -10.0}, {9000.0, -12.0}}, 0.5);
     auto renderAll = [&] (bool hq, bool high, double taper, double range, double threshold) {
         auto e = engine (hq);
         e->setParam (kDrive, 14.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarity2Range, 6.0);
-        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClaritySubRange, 8.0);
         e->setParam (kClarityAdvanced, 1.0);
-        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
         e->setParam (kClarityHighFreq, taper);
-        e->setParam (kClarityHighRange, range);
+        e->setParam (kClarityHighRange, high ? range : 0.0);
         e->setParam (kClarityHighThreshold, threshold);
         return run (*e, in2, 333);
     };
@@ -1243,12 +1326,12 @@ TEST (gently_high_band)
         const Sig plain = renderAll (hq, false, 7000.0, 6.0, -18.0), moved = renderAll (hq, false, 2500.0, 20.0, -50.0);
         CHECK (std::memcmp (plain.l.data (), moved.l.data (), plain.l.size () * sizeof (float)) == 0 &&
                    std::memcmp (plain.r.data (), moved.r.data (), plain.r.size () * sizeof (float)) == 0,
-               "hq %d: High off ignores its controls, to the bit", hq);
-        CHECK (renderAll (hq, true, 7000.0, 6.0, -18.0).l != plain.l, "hq %d: High on changes the sound", hq);
+               "hq %d: High at Range 0 ignores its other controls, to the bit", hq);
+        CHECK (renderAll (hq, true, 7000.0, 6.0, -18.0).l != plain.l, "hq %d: High with a Range changes the sound", hq);
     }
     {
-        // and with High off the engine is the one from before the High band: the same output as with
-        // the High band's parameters at their defaults (which is what an old state loads)
+        // and with High at Range 0 the engine is the one from before the High band: the same output as
+        // with the High band's parameters at their defaults (which is what a new instance has)
         auto e1 = engine (), e2 = engine ();
         for (auto* e : {e1.get (), e2.get ()})
         {
@@ -1257,7 +1340,8 @@ TEST (gently_high_band)
         }
         e2->setParam (kClarityHighFreq, 3000.0);
         e2->setParam (kClarityHighRange, 0.0);
-        CHECK (run (*e1, in2).l == run (*e2, in2).l, "an old state (High at its defaults, off) sounds the same");
+        e2->setParam (kClarityHigh, 1.0); // (its old button: unused)
+        CHECK (run (*e1, in2).l == run (*e2, in2).l, "High at Range 0 (its default) sounds as before it, its old button or not");
     }
 
     // Advanced: the High band's Threshold
@@ -1269,7 +1353,6 @@ TEST (gently_high_band)
         e->setParam (kDrive, -6.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarityRange, 0.0);
-        e->setParam (kClarityHigh, 1.0);
         e->setParam (kClarityHighRange, 8.0);
         e->setParam (kClarityAdvanced, 1.0);
         e->setParam (kClarityHighThreshold, threshold);
@@ -1287,8 +1370,9 @@ TEST (gently_high_band)
            "the High band's and No Overlap's IDs to tail fields");
     std::vector<pk::ParamInfo> v3;
     addTailExt3Params (v3, 300);
-    CHECK (v3.size () == pk::kTailExt3Fields && std::string (v3[pk::kTailExt3High].name) == "Saturator Gently High" &&
+    CHECK (v3.size () == pk::kTailExt3Fields && std::string (v3[pk::kTailExt3High].name) == "Saturator Gently High (unused)" &&
                v3[pk::kTailExt3HighFreq].def == 7000.0 && v3[pk::kTailExt3HighFreq].id == 300 + pk::kTailExt3HighFreq &&
+               v3[pk::kTailExt3HighRange].def == 0.0 &&
                std::string (v3[pk::kTailExt3NoOverlap].name) == "Saturator Gently No Overlap" && v3[pk::kTailExt3NoOverlap].def == 0.0,
            "the tail's fourth block");
     auto renderT = [&] (bool high) {
@@ -1300,7 +1384,7 @@ TEST (gently_high_band)
         tail.setParam (pk::kTailDrive, 12.0);
         tail.setParam (pk::kTailFields + pk::kTailExtClarity, 1.0);
         tail.setParam (pk::kTailFields + pk::kTailExtClarityRange, 0.0);
-        tail.setParam (kTailExt3First + pk::kTailExt3High, high ? 1.0 : 0.0);
+        tail.setParam (kTailExt3First + pk::kTailExt3HighRange, high ? 6.0 : 0.0);
         Sig out = in;
         for (size_t pos = 0; pos < out.l.size (); pos += 512)
             tail.process (out.l.data () + pos, out.r.data () + pos, (int)std::min<size_t> (512, out.l.size () - pos));
@@ -1538,7 +1622,7 @@ TEST (gently_no_overlap_in_the_engine)
         e->setParam (kClarity2Freq, f2);
         e->setParam (kClarity2Width, w2);
         e->setParam (kClarity2Range, 6.0);
-        e->setParam (kClarityHigh, high ? 1.0 : 0.0);
+        e->setParam (kClarityHighRange, high ? 6.0 : 0.0);
         e->setParam (kClarityNoOverlap, noOverlap ? 1.0 : 0.0);
         return run (*e, in, 333).l;
     };

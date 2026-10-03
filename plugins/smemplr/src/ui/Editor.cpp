@@ -1448,7 +1448,8 @@ void Editor::buildBody ()
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
             // Gently: the selected band's controls (every band's are made, one is shown): Frequency, Width
-            // and Range; Sub and High have a switch, Frequency and Range (no Width)
+            // and Range; Sub and High have Frequency and Range (no Width, no switch: a band works while its
+            // Range is above 0 dB)
             rackBandButtons.clear ();
             for (int k = 0; k < kGentlyBands; ++k)
             {
@@ -1461,11 +1462,8 @@ void Editor::buildBody ()
                 };
                 if (!hasWidth (k))
                 {
-                    const bool sub = k == kSubBand;
+                    // (where the other bands have their Frequency and Range; the Width's place stays empty)
                     addKnob (534 + 2 * 58, kGentlyFreqIds[k], "Gently Hz");
-                    auto* on = new Toggle (CRect (534 + 3 * 58, 130, 534 + 3 * 58 + 52, 148), h, sub ? kClaritySub : kClarityHigh, sub ? "Sub" : "High");
-                    add (on, tip (sub ? kClaritySub : kClarityHigh));
-                    rackBandViews[k].push_back (on);
                     addKnob (534 + 4 * 58, kGentlyRangeIds[k], "Gently dB");
                 }
                 else
@@ -1481,9 +1479,9 @@ void Editor::buildBody ()
                 bt->setTooltipText (k == 0   ? "Show Gently's first band (green in the display)."
                                     : k == 1 ? "Show Gently's second band (blue: it works once its Range is above 0 dB)."
                                     : k == 2 ? "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; "
-                                               "it works once switched on and its Range is above 0 dB)."
+                                               "it works once its Range is above 0 dB)."
                                              : "Show Gently's High band (rose: from its Freq, where it starts to taper, to the top of the "
-                                               "spectrum; it works once switched on and its Range is above 0 dB).");
+                                               "spectrum; it works once its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
             }
@@ -1575,7 +1573,8 @@ void Editor::buildBody ()
             add (gentlyView, gently::help::kDisplay);
             // No Overlap, under the display (switched on, it splits what overlaps)
             add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gently::GentlyView::bandParams ()), tip (gently::kNoOverlap));
-            // the bands: a row each (band 1, band 2, Sub, High), On and its values
+            // the bands: a row each (band 1, band 2, Sub, High), On and its values (Sub and High: their name, no
+            // On, they work while their Range is above 0 dB)
             const char* heads[5] = {"", "Freq", "Width", "Range", "Thresh"};
             for (int c = 1; c < 5; ++c)
             {
@@ -1586,9 +1585,10 @@ void Editor::buildBody ()
             for (int k = 0; k < gently::kAllBands; ++k)
             {
                 const double y = 22 + k * 24;
-                add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k),
-                                 k == gently::kSub ? "Sub" : k == gently::kHigh ? "High" : (k == 0 ? "Band 1" : "Band 2")),
-                     tip (gently::onParam (k)));
+                if (gently::hasOn (k))
+                    add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k), k == 0 ? "Band 1" : "Band 2"), tip (gently::onParam (k)));
+                else
+                    g->addView (new Label (CRect (480, y + 2, 536, y + 18), k == gently::kSub ? "Sub" : "High", 10.5, false, 0));
                 add (new NumberBox (CRect (540, y, 610, y + 20), h, gently::freqParam (k)), tip (gently::freqParam (k)));
                 if (gently::hasWidth (k))
                     add (new NumberBox (CRect (614, y, 684, y + 20), h, gently::bandParam (k, gently::kWidth)), tip (gently::bandParam (k, gently::kWidth)));

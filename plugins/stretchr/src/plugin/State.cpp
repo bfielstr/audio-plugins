@@ -4,6 +4,8 @@
 
 #include <cmath>
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -15,9 +17,11 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 4; // 2: the Algorithm choice has 8 entries (Alien)
+constexpr int32 kVersion = 5; // 2: the Algorithm choice has 8 entries (Alien)
                                // 3: the end saturator's Clarity Frequency 20 Hz - 20 kHz
                                // 4: one Clarity button in the end saturator
+                               // 5: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
+constexpr int32 kSubHighRange = 5;
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -96,6 +100,10 @@ bool readState (IBStream* stream, State& st, bool withClip)
         const double index = std::round (st.norm[kAlgorithm] * (kAlgorithmsBefore06 - 1));
         st.norm[kAlgorithm] = toNormalized (kAlgorithm, index);
     }
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     st.hasClip = false;
     st.clip = {};
     if (!withClip)

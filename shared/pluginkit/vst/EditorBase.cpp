@@ -149,39 +149,35 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
         bt->setTooltipText (bandTips[k]);
         p->addView (bt);
         tailBandButtons.push_back (bt);
-        CView* views[3];
+        auto& views = tailBandViews[k];
         if (k < 2)
         {
             const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
             const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
             const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
-            views[0] = bind (p, new NumberBox (row (184, 228, rowB), this, f));
-            views[1] = bind (p, new NumberBox (row (232, 264, rowB), this, w));
-            views[2] = bind (p, new NumberBox (row (268, 306, rowB), this, g));
+            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, f)));
+            views.push_back (bind (p, new NumberBox (row (232, 264, rowB), this, w)));
+            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, g)));
             tip (views[0], "Gently: the centre of this band.");
             tip (views[1], "Gently: this band's width in octaves (or Alt-drag the band in the display).");
             tip (views[2], "Gently: the most this band is turned down; at 0 dB the band does nothing.");
         }
+        // the Sub and High bands: Frequency and Range where the other bands have theirs (no width, and no
+        // button: a band works while its Range is above 0 dB)
         else if (k == 2)
         {
-            views[0] = bind (p, new NumberBox (row (184, 228, rowB), this, ext2Base + kTailExt2SubFreq));
-            views[1] = bind (p, new Toggle (row (232, 264, rowB), this, ext2Base + kTailExt2Sub, "Sub"));
-            views[2] = bind (p, new NumberBox (row (268, 306, rowB), this, ext2Base + kTailExt2SubRange));
+            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext2Base + kTailExt2SubFreq)));
+            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext2Base + kTailExt2SubRange)));
             tip (views[0], "Gently's Sub band: where it starts to taper off.");
-            tip (views[1], "Gently's Sub band on or off (it works once its Range is above 0 dB).");
-            tip (views[2], "Gently's Sub band: the most it turns the sub region down; at 0 dB it does nothing.");
+            tip (views[1], "Gently's Sub band: the most it turns the sub region down; at 0 dB (the default) it does nothing.");
         }
         else
         {
-            views[0] = bind (p, new NumberBox (row (184, 228, rowB), this, ext3Base + kTailExt3HighFreq));
-            views[1] = bind (p, new Toggle (row (232, 264, rowB), this, ext3Base + kTailExt3High, "High"));
-            views[2] = bind (p, new NumberBox (row (268, 306, rowB), this, ext3Base + kTailExt3HighRange));
+            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext3Base + kTailExt3HighFreq)));
+            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext3Base + kTailExt3HighRange)));
             tip (views[0], "Gently's High band: where it starts to taper off, going down (2 to 16 kHz).");
-            tip (views[1], "Gently's High band on or off (it works once its Range is above 0 dB).");
-            tip (views[2], "Gently's High band: the most it turns the top of the spectrum down; at 0 dB it does nothing.");
+            tip (views[1], "Gently's High band: the most it turns the top of the spectrum down; at 0 dB (the default) it does nothing.");
         }
-        for (auto* v : views)
-            tailBandViews[k].push_back (v);
     }
     showTailBand (tailBand);
     // the colour filters' amounts (their button is at the end of the row above)

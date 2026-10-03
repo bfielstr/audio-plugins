@@ -170,9 +170,22 @@ int main (int argc, char** argv)
             rig.param (kClarityDrive, 0.0);
             rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -18.0));
 
+            // the Sub and High bands have no button: a fresh instance has them at Range 0 (no cut), their
+            // handles flat at 0 dB; pulling the High band's handle (7 kHz) down gives it a Range, and it cuts
+            CHECK (plainOf (rig, kClaritySubRange) == 0.0 && plainOf (rig, kClarityHighRange) == 0.0, "Sub and High start at Range 0");
+            {
+                const double gx = Editor::kColorLeft + std::log (7000.0 / 20.0) / std::log (1000.0) * Editor::kColorViewWidth;
+                const double gy = Editor::kColorTop + Editor::kColorViewHeight / 2; // (0 dB)
+                win.drag (gx, gy, gx, gy + 30);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityHighRange) > 2.0 && clarityHighOn (plainOf (rig, kClarity), plainOf (rig, kClarityHighRange)),
+                       "dragging the High handle down: Range %.1f dB, the band works", plainOf (rig, kClarityHighRange));
+            }
+
             // the High band (rose, from 7 kHz up) over band 2 (5 kHz, 2 octaves: up to 10 kHz); No Overlap,
             // switched on in the GENTLY panel, splits them at the middle of the overlap
-            rig.param (kClarityHigh, 1.0);
+            rig.param (kClarityHighRange, toNormalized (kClarityHighRange, 6.0));
+            rig.param (kClarityHighFreq, toNormalized (kClarityHighFreq, 7000.0));
             rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
             rig.param (kClarity2Freq, toNormalized (kClarity2Freq, 5000.0));
             rig.param (kClarity2Width, toNormalized (kClarity2Width, 2.0));
@@ -184,7 +197,7 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kClarityNoOverlap) >= 0.5, "No Overlap switched on from the editor");
             CHECK (band2Top () <= plainOf (rig, kClarityHighFreq) * 1.001 && plainOf (rig, kClarityHighFreq) > 7000.0,
                    "band 2 and High apart: band 2 up to %.0f Hz, High from %.0f Hz", band2Top (), plainOf (rig, kClarityHighFreq));
-            for (uint32_t id : {(uint32_t)kClarityNoOverlap, (uint32_t)kClarityHigh, (uint32_t)kClarityHighFreq, (uint32_t)kClarity2Freq,
+            for (uint32_t id : {(uint32_t)kClarityNoOverlap, (uint32_t)kClarityHighRange, (uint32_t)kClarityHighFreq, (uint32_t)kClarity2Freq,
                                 (uint32_t)kClarity2Width, (uint32_t)kClarity2Range})
                 rig.param (id, defaultNormalized (id));
             rig.param (kClarity, 0.0);

@@ -10,9 +10,10 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 4; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 5; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
+constexpr int32 kSubHighRange = 5;     // 5: no Sub and High buttons (those bands work while their Range is above 0)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -63,6 +64,13 @@ bool readState (IBStream* stream, State& st)
         st.norm[kClarityRange] = r1;
         st.norm[kClarity2Range] = r2;
         st.has[kClarity] = st.has[kClarityRange] = st.has[kClarity2Range] = true;
+    }
+    // the Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB by default: a
+    // band that was off gets Range 0, one that was on keeps its Range (or the old default). Same sound.
+    if (version < kSubHighRange)
+    {
+        smacheratr::subHighStateToRange (st.norm, st.has, kClaritySub, kClaritySubRange, kClarityHigh, kClarityHighRange);
+        st.has[kClaritySubRange] = st.has[kClarityHighRange] = true;
     }
     // Clarity Frequency's range grew (20 - 500 Hz before): a value saved before, in the new range
     if (version < kClarityFullRange)
