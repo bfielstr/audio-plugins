@@ -85,7 +85,7 @@ inline constexpr double kBakedInputDb = 0.0;
 inline constexpr double kBakedOutputDb[4] = {10.3, 5.7, 10.3, 10.3};
 inline constexpr double kBakedMasterDb = 0.0;
 
-// Before the OTT defaults (Multidyn's state version 3 and older, Detonatr's 1; Smemplr's rack slots
+// Before the OTT defaults (Multidyn's state version 3 and older; Smemplr's rack slots
 // saved before it gets them) the baked gains were an "OTT pushed further": Input +5.2 dB, band Outputs +24 / +9.1 / +11.3 / +11.7 dB,
 // Output -7 dB. An old project keeps its sound by moving the difference into its controls.
 inline constexpr double kOldBakedInputDb = 5.2;
