@@ -131,10 +131,10 @@ void Editor::buildUI (CFrame* f)
         static const char* const tips[kGentlyBands] = {
             "Show Gently's first band (green in the display).",
             "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).",
-            "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once switched on "
-            "and its Range is above 0 dB).",
-            "Show Gently's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once switched "
-            "on and its Range is above 0 dB)."};
+            "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; it works once its "
+            "Range is above 0 dB).",
+            "Show Gently's High band (rose: from its Freq, where it starts to taper, to the top of the spectrum; it works once "
+            "its Range is above 0 dB)."};
         auto* bt = new ActionButton (CRect (92 + k * 46, 30, 136 + k * 46, 50), names[k], [this, k] { showClarityBand (k); },
                                      [this, k] { return clarityBand == k; });
         bt->setTooltipText (tips[k]);
@@ -142,11 +142,10 @@ void Editor::buildUI (CFrame* f)
         clarityBandButtons.push_back (bt);
         if (!hasWidth (k))
         {
-            // the Sub and High bands: their button, Freq and Range (no width)
-            const bool sub = k == kSubBand;
-            clarityViews[k].push_back (bind (cp, new Toggle (CRect (280, 30, 332, 50), this, sub ? kClaritySub : kClarityHigh, sub ? "Sub" : "High")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (340, 10), this, kGentlyFreqIds[k], "Freq")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (398, 10), this, kGentlyRangeIds[k], "Range")));
+            // the Sub and High bands: Freq and Range where the other bands have theirs (no width, no button: a
+            // band works while its Range is above 0 dB)
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kGentlyFreqIds[k], "Freq")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kGentlyRangeIds[k], "Range")));
             continue;
         }
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kClarityFreqIds[k], "Freq")));
@@ -195,10 +194,8 @@ void Editor::updateLooks ()
     const bool gently = plainValue (kClarity) >= 0.5;
     for (int k = 0; k < kGentlyBands; ++k)
     {
-        // (the Sub and High bands' Freq and Range, after their switch, also dim while it is off)
-        const uint32_t own = k == kSubBand ? kClaritySub : kClarityHigh;
-        for (size_t i = 0; i < clarityViews[k].size (); ++i)
-            clarityViews[k][i]->setEnabledLook (gently && (hasWidth (k) || i == 0 || plainValue (own) >= 0.5));
+        for (auto* v : clarityViews[k])
+            v->setEnabledLook (gently);
         if (thresholdSliders[k])
             thresholdSliders[k]->setEnabledLook (smacheratrBandParams ().works (this, k));
     }
@@ -217,8 +214,8 @@ void Editor::paramChanged (uint32_t id)
         shaper->invalid ();
     if (color)
         color->invalid ();
-    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClaritySub ||
-        id == kClaritySubRange || id == kClarityHigh || id == kClarityHighRange || id == kClarityDrive)
+    if (id == kPreLimit || id == kColorOn || id == kClarity || id == kClarityRange || id == kClarity2Range || id == kClaritySubRange ||
+        id == kClarityHighRange || id == kClarityDrive)
         updateLooks ();
     if (id == kClarityAdvanced)
         layoutAdvanced ();

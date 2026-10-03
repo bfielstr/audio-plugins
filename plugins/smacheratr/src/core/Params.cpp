@@ -38,14 +38,14 @@ const ParamTable& paramTable ()
         v.push_back (real (kClarity2Threshold, "Gently 2 Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityDrive, "Gently Drive", "Drive", false));
         v.push_back (real (kClarityDriveAmount, "Gently Drive Amount", "Drive", 0.0, 36.0, 12.0, Curve::Linear, Disp::Db));
-        v.push_back (toggle (kClaritySub, "Gently Sub", "Sub", false));
+        // (Sub and High: their buttons are unused, a band works while its Range is above 0 dB, 0 by default)
+        v.push_back (toggle (kClaritySub, "Gently Sub (unused)", "Sub", false));
         v.push_back (real (kClaritySubFreq, "Gently Sub Frequency", "Freq", kSubMinHz, kSubMaxHz, kSubDefaultHz, Curve::Log, Disp::Hz));
-        v.push_back (real (kClaritySubRange, "Gently Sub Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kClaritySubRange, "Gently Sub Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClaritySubThreshold, "Gently Sub Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
-        // (6 dB of Range: as Gently's second band on the harshness)
-        v.push_back (toggle (kClarityHigh, "Gently High", "High", false));
+        v.push_back (toggle (kClarityHigh, "Gently High (unused)", "High", false));
         v.push_back (real (kClarityHighFreq, "Gently High Frequency", "Freq", kHighMinHz, kHighMaxHz, kHighDefaultHz, Curve::Log, Disp::Hz));
-        v.push_back (real (kClarityHighRange, "Gently High Range", "Range", 0.0, 24.0, 6.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kClarityHighRange, "Gently High Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClarityHighThreshold, "Gently High Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityNoOverlap, "Gently No Overlap", "No Overlap", false));
         return v;

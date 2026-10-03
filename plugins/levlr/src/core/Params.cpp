@@ -72,6 +72,11 @@ void migrateState (int version, double norm[kNumParams], const bool has[kNumPara
     if (version < 3)
         for (uint32_t id = kFirstAddedAfter060; id < kEndAddedAfter060; ++id)
             norm[id] = defaultNormalized (id);
+    // before 4 the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8
+    // and 6 dB by default: one that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < 4)
+        smacheratr::subHighStateToRange (norm, has, kTailExt2Base + pk::kTailExt2Sub, kTailExt2Base + pk::kTailExt2SubRange,
+                                         kTailExt3Base + pk::kTailExt3High, kTailExt3Base + pk::kTailExt3HighRange);
 }
 
 } // namespace levlr

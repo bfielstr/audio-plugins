@@ -2,6 +2,8 @@
 
 #include "smacheratr/src/core/Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,9 +14,10 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x52444957; // 'WIDR'
-constexpr int32 kVersion = 3;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 4;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
+constexpr int32 kSubHighRange = 4;     // 4: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -71,6 +74,10 @@ bool readState (IBStream* stream, State& st)
         for (uint32_t id : {(uint32_t)(kTailExtBase + pk::kTailExtClarityFreq)})
             if (st.has[id])
                 st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     return true;
 }
 

@@ -41,14 +41,16 @@ enum ParamId : uint32_t
     kClarityDrive,       // Advanced: saturate the band region Gently works on (Smacheratr's Analog curve)
     kClarityDriveAmount, // dB into the curve for that region (level-matched: denser, not louder)
     // Gently's Sub band: everything from 20 Hz up to where it tapers off (SubFreq), compressed like
-    // the other bands (its own Range and Threshold)
-    kClaritySub,          // Sub on (with Gently on, and its Range above 0 dB)
+    // the other bands (its own Range and Threshold). It works while Gently is on and its Range is above
+    // 0 dB, as band 2 (0 by default: it cuts nothing until it gets a range)
+    kClaritySub,          // unused since the Sub band lost its button: it works while its Range is above 0 dB
     kClaritySubFreq,      // Hz, where the band starts to taper off (20 - 100 Hz)
     kClaritySubRange,     // dB: the most it turns the sub region down
     kClaritySubThreshold, // dB, where it starts cutting (Advanced; without it -18 dB)
     // Gently's High band, the Sub band's mirror: everything from where it tapers off (HighFreq) up to
-    // the very top of the spectrum, a shelf, compressed like the other bands (for harshness and fizz)
-    kClarityHigh,          // High on (with Gently on, and its Range above 0 dB)
+    // the very top of the spectrum, a shelf, compressed like the other bands (for harshness and fizz).
+    // Like the Sub band it works while Gently is on and its Range is above 0 dB (0 by default)
+    kClarityHigh,          // unused since the High band lost its button: it works while its Range is above 0 dB
     kClarityHighFreq,      // Hz, where the band starts to taper off going down (2 - 16 kHz)
     kClarityHighRange,     // dB: the most it turns the top of the spectrum down
     kClarityHighThreshold, // dB, where it starts cutting (Advanced; without it -18 dB)
@@ -109,9 +111,10 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 
 // Whether Clarity band k works, from plain values (Clarity on, the band's Range above 0 dB).
 inline bool clarityBandOn (double clarityOn, double rangeDb) { return clarityOn >= 0.5 && rangeDb > 0.0; }
-// The Sub band works while Gently and Sub are on and its Range is above 0 dB; the High band the same.
-inline bool claritySubOn (double clarityOn, double subOn, double rangeDb) { return subOn >= 0.5 && clarityBandOn (clarityOn, rangeDb); }
-inline bool clarityHighOn (double clarityOn, double highOn, double rangeDb) { return claritySubOn (clarityOn, highOn, rangeDb); }
+// The Sub band works while Gently is on and its Range is above 0 dB, as band 2; the High band the same
+// (their own buttons, kClaritySub and kClarityHigh, are unused: a Range of 0 is what off was).
+inline bool claritySubOn (double clarityOn, double rangeDb) { return clarityBandOn (clarityOn, rangeDb); }
+inline bool clarityHighOn (double clarityOn, double rangeDb) { return clarityBandOn (clarityOn, rangeDb); }
 
 // Before one Clarity button, band 2 had an On of its own. For a state from then (normalized values):
 // band 2 off -> its Range 0; band 2 on with Clarity off -> Clarity on and band 1's Range 0. Same sound.
@@ -124,6 +127,31 @@ inline void clarityToOneButton (double& on1, double& range1, double on2, double&
         on1 = 1.0;
         range1 = 0.0;
     }
+}
+
+// The Sub and High bands' Range defaults while they had a button of their own (8 and 6 dB; 0 now).
+constexpr double kSubRangeBeforeDb = 8.0, kHighRangeBeforeDb = 6.0;
+// Before the Sub and High bands lost their buttons, a band worked while its button was on (and its Range
+// above 0 dB). For a state from then (normalized values): the band off -> its Range 0; on -> its Range as
+// saved, or, when the state has none, the default it read then (oldDefaultNorm: kSubRangeBeforeDb or
+// kHighRangeBeforeDb, normalized). Same sound. `on` is the saved button (a state without it: 0, off,
+// the default then).
+inline void subHighToRange (double on, double& rangeNorm, bool hasRange, double oldDefaultNorm)
+{
+    if (on < 0.5)
+        rangeNorm = 0.0;
+    else if (!hasRange)
+        rangeNorm = oldDefaultNorm;
+}
+// Both bands of a state from then (subHighToRange), its values `norm` and whether it had them `has`
+// indexed by the IDs given: the Sub band's button and Range, the High band's. A button the state does not
+// have was off. Each Range is set (callers that track it mark it as present).
+template <class Norm, class Has>
+inline void subHighStateToRange (Norm& norm, const Has& has, uint32_t subOn, uint32_t subRange, uint32_t highOn, uint32_t highRange)
+{
+    // (Sub and High Range share Smacheratr's 0 - 24 dB law, as do Gently's and every tail's)
+    subHighToRange (has[subOn] ? norm[subOn] : 0.0, norm[subRange], has[subRange], toNormalized (kClaritySubRange, kSubRangeBeforeDb));
+    subHighToRange (has[highOn] ? norm[highOn] : 0.0, norm[highRange], has[highRange], toNormalized (kClarityHighRange, kHighRangeBeforeDb));
 }
 
 // Clarity Frequency covered 20 - 500 Hz (log) at first: a value saved then (normalized), in today's range.

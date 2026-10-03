@@ -52,11 +52,7 @@ double ColorView::sampleRate () const
     return r > 1000.0 ? r : 48000.0;
 }
 
-bool ColorView::clarityShown (int band) const
-{
-    return host->plainValue (kClarity) >= 0.5 && (band != kSubBand || host->plainValue (kClaritySub) >= 0.5) &&
-           (band != kHighBand || host->plainValue (kClarityHigh) >= 0.5);
-}
+bool ColorView::clarityShown (int) const { return host->plainValue (kClarity) >= 0.5; } // (every band, Sub and High too)
 
 GentlyLayout ColorView::layoutNow () const
 {
@@ -203,7 +199,7 @@ void ColorView::draw (CDrawContext* ctx)
     {
         if (!clarity[k])
         {
-            // Gently on (Sub: and Sub on), this band's Range at 0: a dim handle to pull down
+            // Gently on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down
             if (clarityShown (k))
             {
                 const CPoint h = clarityHandle (k);

@@ -165,13 +165,17 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
     };
     static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
     static const std::vector<RackHidden> gentlyHidden {
+        {gently::kSubOn, gently::kSubOn, "unused: the Sub band works while its Range is above 0"},
         {gently::kTailBase, gently::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gently::kHighOn, gently::kHighOn, "unused: the High band works while its Range is above 0"},
         {gently::kTailExt3Base, gently::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     // (its saturator's fourth block runs on into the slot's extension: not in the rack)
     static_assert (gently::kTailExt3Base <= kSlotBlock && gently::kNumParams <= kSlotBlockAll, "Gently's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
+        {smacheratr::kClaritySub, smacheratr::kClaritySub, "unused: the Sub band works while its Range is above 0"},
+        {smacheratr::kClarityHigh, smacheratr::kClarityHigh, "unused: the High band works while its Range is above 0"},
     };
     switch (type)
     {
@@ -352,6 +356,34 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
             setDefaults (first, smacheratr::kNumParams, smacheratr::paramTable ());
         else if (type == kFxGently && version >= 13) // (Gently came to the rack in 13)
             setDefaults (gently::kHighOn, gently::kTailExt3Base, gently::paramTable ());
+    }
+}
+
+void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 19)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId])
+            continue;
+        const int type = (int)std::lround (toPlain (typeId, norm[typeId]));
+        uint32_t subOn, subRange, highOn, highRange;
+        if (type == kFxSmacheratr)
+        {
+            subOn = slotBlockParam (slot, smacheratr::kClaritySub), subRange = slotBlockParam (slot, smacheratr::kClaritySubRange);
+            highOn = slotBlockParam (slot, smacheratr::kClarityHigh), highRange = slotBlockParam (slot, smacheratr::kClarityHighRange);
+        }
+        else if (type == kFxGently)
+        {
+            subOn = slotBlockParam (slot, gently::kSubOn), subRange = slotBlockParam (slot, gently::kSubRange);
+            highOn = slotBlockParam (slot, gently::kHighOn), highRange = slotBlockParam (slot, gently::kHighRange);
+        }
+        else
+            continue; // (the other effects' own saturators are not used in the rack)
+        smacheratr::subHighStateToRange (norm, has, subOn, subRange, highOn, highRange);
+        has[subRange] = has[highRange] = true;
     }
 }
 

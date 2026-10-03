@@ -60,20 +60,21 @@ enum ParamId : uint32_t
     kOutput,       // dB, before the Smacheratr at the end
     kBandBase,                                         // kBands x kBandBlock
     // the Sub band: a shelf, everything from the very bottom up to where its cut starts to let go (
-    // smacheratr::subBand), compressed like the bands; it has no Width
-    kSubOn = kBandBase + kBands * kBandBlock, // off by default, as in Smacheratr
+    // smacheratr::subBand), compressed like the bands; it has no Width, and no button: it works while its
+    // Range is above 0 dB (0 by default, as in Smacheratr)
+    kSubOn = kBandBase + kBands * kBandBlock, // unused since the Sub band lost its button (State.cpp converts older states)
     kSubFreq,                                 // Hz, where the band starts to taper off (20 - 100 Hz)
-    kSubRange,                                // dB, the most it turns the sub region down (0 - 24)
+    kSubRange,                                // dB, the most it turns the sub region down (0 - 24; 0 by default)
     kSubThreshold,                            // dB, where it starts cutting (Advanced; without it -18 dB)
     kTailBase,                                         // the Smacheratr at the end of the chain: pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gently's Advanced mode and Sub band: pk::kTailExt2Fields entries
     // --- after the end saturator's first three blocks ---
     // the High band, the Sub band's mirror: a shelf, everything from where its cut starts to let go up
-    // to the very top (smacheratr::highBand), compressed like the bands; it has no Width
-    kHighOn = kTailExt2Base + pk::kTailExt2Fields, // off by default, as in Smacheratr
+    // to the very top (smacheratr::highBand), compressed like the bands; no Width and no button, as Sub
+    kHighOn = kTailExt2Base + pk::kTailExt2Fields, // unused since the High band lost its button
     kHighFreq,                                     // Hz, where the band starts to taper off going down (2 - 16 kHz)
-    kHighRange,                                    // dB, the most it turns the top down (0 - 24)
+    kHighRange,                                    // dB, the most it turns the top down (0 - 24; 0 by default)
     kHighThreshold,                                // dB, where it starts cutting (Advanced; without it -18 dB)
     kNoOverlap,    // the bands never cover the same frequencies (they push each other: smacheratr/src/core/NoOverlap.h)
     kTailExt3Base, // the end Smacheratr's Gently High band and No Overlap: pk::kTailExt3Fields entries (the last block)
@@ -85,7 +86,8 @@ constexpr double kDefaultAttackMs = 15.0, kDefaultReleaseMs = 150.0;
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 // A band's parameters, counting the Sub band (k == kSub) and the High band (k == kHigh) too. They have
-// no Width.
+// no Width, and their On (kSubOn, kHighOn) is unused (hasOn).
+constexpr bool hasOn (int k) { return k < kBands; }
 constexpr uint32_t onParam (int k) { return k == kSub ? (uint32_t)kSubOn : k == kHigh ? (uint32_t)kHighOn : bandParam (k, kOn); }
 constexpr uint32_t freqParam (int k) { return k == kSub ? (uint32_t)kSubFreq : k == kHigh ? (uint32_t)kHighFreq : bandParam (k, kFreq); }
 constexpr uint32_t rangeParam (int k) { return k == kSub ? (uint32_t)kSubRange : k == kHigh ? (uint32_t)kHighRange : bandParam (k, kRange); }
@@ -110,9 +112,10 @@ inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 
-// Whether a band works (on, and its Range above 0 dB: with no range it would cut nothing); the Sub
-// band the same (its On is Sub).
-inline bool bandWorks (double on, double rangeDb) { return on >= 0.5 && rangeDb > 0.0; }
+// Whether band k works, from plain values: on (its onParam), and its Range above 0 dB (with no range it
+// would cut nothing). The Sub and High bands have no On of their own: they work while their Range is
+// above 0 dB (`on` is ignored), as Smacheratr's.
+inline bool bandWorks (int k, double on, double rangeDb) { return (!hasOn (k) || on >= 0.5) && rangeDb > 0.0; }
 
 // Gently's Threshold sliders are Smacheratr's (smacheratr::ThresholdSlider, bound to Smacheratr's
 // Threshold IDs): the Gently parameter behind Smacheratr parameter `id`, or -1.

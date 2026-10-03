@@ -757,6 +757,56 @@ TEST (gently_sub_band_in_slots)
     }
 }
 
+TEST (sub_high_without_buttons_in_slots)
+{
+    // states from before 19: a rack Smacheratr's and Gently's Sub and High bands that were off get Range 0,
+    // those that were on keep their Range (the same sound); 19 on, nothing changes. Slot 0 Smacheratr,
+    // slot 1 Gently, slot 2 Para (its own saturator is not used in the rack: left alone)
+    for (int version : {17, 18, 19})
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        const int types[3] = {kFxSmacheratr, kFxGently, kFxPara};
+        for (int slot = 0; slot < 3; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            norm[typeId] = toNormalized (typeId, types[slot]);
+            has[typeId] = true;
+            for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            {
+                norm[slotBlockParam (slot, j)] = 0.5;
+                has[slotBlockParam (slot, j)] = true;
+            }
+        }
+        auto set = [&] (int slot, uint32_t id, double v) { norm[slotBlockParam (slot, id)] = v; };
+        set (0, smacheratr::kClaritySub, 0.0), set (0, smacheratr::kClarityHigh, 1.0);
+        set (1, gently::kSubOn, 1.0), set (1, gently::kHighOn, 0.0);
+        const uint32_t paraSub = para::kTailExt2Base + pk::kTailExt2SubRange;
+        set (2, para::kTailExt2Base + pk::kTailExt2Sub, 0.0);
+        migrateSubHighInSlots (norm, has, version);
+        auto at = [&] (int slot, uint32_t id) { return norm[slotBlockParam (slot, id)]; };
+        const bool migrated = version < 19;
+        CHECK (at (0, smacheratr::kClaritySubRange) == (migrated ? 0.0 : 0.5) && at (0, smacheratr::kClarityHighRange) == 0.5,
+               "version %d: Smacheratr's Sub (off) %s, High (on) kept", version, migrated ? "0" : "kept");
+        CHECK (at (1, gently::kSubRange) == 0.5 && at (1, gently::kHighRange) == (migrated ? 0.0 : 0.5),
+               "version %d: Gently's Sub (on) kept, High (off) %s", version, migrated ? "0" : "kept");
+        CHECK (at (2, paraSub) == 0.5, "version %d: Para's own saturator left alone", version);
+    }
+    // and the rack's Smacheratr and Gently pages have no Sub or High buttons: those IDs are not in the rack
+    auto hidden = [] (int type, uint32_t id) {
+        for (const auto& h : rackHiddenParams (type))
+            if (id >= h.first && id <= h.last)
+                return true;
+        return false;
+    };
+    CHECK (hidden (kFxSmacheratr, smacheratr::kClaritySub) && hidden (kFxSmacheratr, smacheratr::kClarityHigh) &&
+               !hidden (kFxSmacheratr, smacheratr::kClaritySubRange) && !hidden (kFxSmacheratr, smacheratr::kClarityHighRange),
+           "Smacheratr: the buttons hidden, the Ranges there");
+    CHECK (hidden (kFxGently, gently::kSubOn) && hidden (kFxGently, gently::kHighOn) && !hidden (kFxGently, gently::kSubRange) &&
+               !hidden (kFxGently, gently::kHighRange) && !hidden (kFxGently, gently::bandParam (0, gently::kOn)),
+           "Gently: the Sub and High On hidden, the Ranges and band 1's On there");
+}
+
 TEST (rack_order_and_widr)
 {
     auto s = sine (440.0, 1.0);

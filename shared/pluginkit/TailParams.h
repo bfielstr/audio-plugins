@@ -59,9 +59,9 @@ enum TailExt2Field : uint32_t
     kTailExt2Threshold2,   // dB, band 2
     kTailExt2Drive,        // drive the band region Gently works on
     kTailExt2DriveAmount,  // dB
-    kTailExt2Sub,          // Gently's Sub band on
+    kTailExt2Sub,          // unused: Gently's Sub band works while its Range is above 0 dB
     kTailExt2SubFreq,      // Hz, where the Sub band starts to taper off
-    kTailExt2SubRange,     // dB
+    kTailExt2SubRange,     // dB (0 by default: the band does nothing)
     kTailExt2SubThreshold, // dB
     kTailExt2Fields
 };
@@ -72,9 +72,9 @@ enum TailExt2Field : uint32_t
 // kTailFields + kTailExtFields + kTailExt2Fields + i is this block's field i.
 enum TailExt3Field : uint32_t
 {
-    kTailExt3High = 0,      // Gently's High band on
+    kTailExt3High = 0,      // unused: Gently's High band works while its Range is above 0 dB
     kTailExt3HighFreq,      // Hz, where the High band starts to taper off
-    kTailExt3HighRange,     // dB
+    kTailExt3HighRange,     // dB (0 by default: the band does nothing)
     kTailExt3HighThreshold, // dB
     kTailExt3NoOverlap,     // Gently's bands never cover the same frequencies
     kTailExt3Fields

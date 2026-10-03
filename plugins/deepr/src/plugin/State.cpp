@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -10,7 +12,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50454544; // 'DEEP'
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2;
+constexpr int32 kSubHighRange = 2; // 2: the end saturator's Sub and High bands work while their Range is above 0 dB
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -50,6 +53,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     return true;
 }
 

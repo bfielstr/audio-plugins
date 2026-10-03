@@ -93,7 +93,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
         bandFreq[k] = bandWidth[k] = -1.0; // the bands are designed for this rate
     bool works[kAllBands];
     for (int k = 0; k < kAllBands; ++k)
-        works[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
+        works[k] = bandWorks (k, p[onParam (k)], p[rangeParam (k)]);
     retune (true, works);
     if (meters)
         meters->sampleRate.store ((float)sr);
@@ -119,7 +119,7 @@ void Engine::reset ()
     for (int k = 0; k < kAllBands; ++k)
     {
         resetBand (k);
-        running[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
+        running[k] = bandWorks (k, p[onParam (k)], p[rangeParam (k)]);
     }
     mode = std::clamp ((int)std::lround (p[kStereo]), 0, kNumStereoModes - 1);
     fx = 1.0f;
@@ -194,7 +194,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     bool works[kAllBands], anyWorks = false;
     double thresholdDb[kAllBands], rangeDb[kAllBands];
     for (int k = 0; k < kAllBands; ++k)
-        works[k] = bandWorks (p[onParam (k)], p[rangeParam (k)]);
+        works[k] = bandWorks (k, p[onParam (k)], p[rangeParam (k)]);
     retune (false, works);
     for (int k = 0; k < kAllBands; ++k)
     {

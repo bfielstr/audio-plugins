@@ -9,6 +9,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <utility>
+#include <vector>
 
 using namespace Steinberg;
 using namespace gently;
@@ -89,6 +91,57 @@ int main ()
                    toPlain (kTailExt3Base + pk::kTailExt3High, back.norm[kTailExt3Base + pk::kTailExt3High]) == 0.0 &&
                    toPlain (kTailExt3Base + pk::kTailExt3NoOverlap, back.norm[kTailExt3Base + pk::kTailExt3NoOverlap]) == 0.0,
                "an old state: High and No Overlap off (Gently's and the end saturator's)");
+    }
+    // a version 1 state (before the Sub and High bands lost their On): a band that was off gets Range 0,
+    // one that was on keeps its Range (or, not saved, the old default: Sub 8 dB, High 6 dB); the end
+    // saturator's the same. The same sound
+    {
+        auto readV1 = [] (const std::vector<std::pair<uint32_t, double>>& values, State& back) {
+            MemoryStream s;
+            {
+                IBStreamer w (&s, kLittleEndian);
+                w.writeInt32 (0x474E544C);
+                w.writeInt32 (1);
+                w.writeInt32 ((int32)values.size ());
+                for (const auto& [id, v] : values)
+                {
+                    w.writeInt32u (id);
+                    w.writeDouble (v);
+                }
+            }
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            return readState (&s, back);
+        };
+        auto plain = [] (const State& st, uint32_t id) { return toPlain (id, st.norm[id]); };
+        const uint32_t tSubOn = kTailExt2Base + pk::kTailExt2Sub, tSubRange = kTailExt2Base + pk::kTailExt2SubRange;
+        const uint32_t tHighOn = kTailExt3Base + pk::kTailExt3High, tHighRange = kTailExt3Base + pk::kTailExt3HighRange;
+        State back;
+        CHECK (readV1 ({{kSubOn, 0.0},
+                        {kSubRange, toNormalized (kSubRange, 12.0)},
+                        {kHighOn, 1.0},
+                        {kHighRange, toNormalized (kHighRange, 10.0)},
+                        {tSubOn, 1.0},
+                        {tSubRange, toNormalized (tSubRange, 5.0)},
+                        {tHighOn, 0.0},
+                        {tHighRange, toNormalized (tHighRange, 9.0)}},
+                       back),
+               "read");
+        CHECK (plain (back, kSubRange) == 0.0 && std::fabs (plain (back, kHighRange) - 10.0) < 1e-9 && back.has[kSubRange],
+               "Sub (off): Range 0; High (on): 10 dB (%.2f / %.2f)", plain (back, kSubRange), plain (back, kHighRange));
+        CHECK (std::fabs (plain (back, tSubRange) - 5.0) < 1e-9 && plain (back, tHighRange) == 0.0,
+               "the end saturator's Sub (on): 5 dB; High (off): 0 (%.2f / %.2f)", plain (back, tSubRange), plain (back, tHighRange));
+        CHECK (!bandWorks (kSub, plain (back, kSubOn), plain (back, kSubRange)) && bandWorks (kHigh, plain (back, kHighOn), plain (back, kHighRange)),
+               "the same bands work");
+        State missing;
+        CHECK (readV1 ({{kSubOn, 1.0}, {kHighOn, 1.0}}, missing), "read");
+        CHECK (std::fabs (plain (missing, kSubRange) - 8.0) < 1e-9 && std::fabs (plain (missing, kHighRange) - 6.0) < 1e-9,
+               "on, their Ranges not saved: the old defaults (%.2f / %.2f)", plain (missing, kSubRange), plain (missing, kHighRange));
+        State none;
+        CHECK (readV1 ({{bandParam (0, kFreq), 0.5}}, none), "read");
+        CHECK (plain (none, kSubRange) == 0.0 && plain (none, kHighRange) == 0.0 && plain (none, tSubRange) == 0.0 &&
+                   plain (none, tHighRange) == 0.0,
+               "nothing saved for them (off by default then): Range 0");
+        CHECK (defaultNormalized (kSubRange) == 0.0 && defaultNormalized (kHighRange) == 0.0, "a new instance: Sub and High at Range 0");
     }
     // a state from a newer Gently: the IDs this one does not know are skipped, the rest read
     {

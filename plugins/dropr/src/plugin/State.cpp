@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,7 +14,9 @@ namespace {
 constexpr int32 kMagic = 0x504F5244; // 'DROP'
 // 1: the drawn transient shape (never released); 2: the multiband compressor. A version 1 state loads
 // as the defaults (its parameters meant something else).
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
+// 3: the end saturator's Sub and High bands work while their Range is above 0 dB (no buttons)
+constexpr int32 kSubHighRange = 3;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -52,6 +56,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     return true;
 }
 

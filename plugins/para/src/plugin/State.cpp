@@ -2,6 +2,8 @@
 
 #include "smacheratr/src/core/Params.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,11 +14,12 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50455252; // 'PERR'
-constexpr int32 kVersion = 5;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 6;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kPerBandDrive = 4;     // 4: a drive per filter, slopes 6 .. 96 dB and Brickwall
 constexpr int32 kSeparateSlopes = 5;   // 5: a slope per filter, the gain locks, Fade 1 .. 60 semitones
+constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -107,6 +110,10 @@ bool readState (IBStream* stream, State& st)
         st.norm[kMovement] = toNormalized (kMovement, kVocal);
         st.has[kMovement] = true;
     }
+    // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
+    // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
+    if (version < kSubHighRange)
+        smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     return true;
 }
 

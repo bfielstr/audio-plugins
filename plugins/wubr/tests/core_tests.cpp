@@ -349,7 +349,7 @@ TEST (defaults_and_the_end_saturator)
     CHECK (t.info (kLinkRate).def == 1.0 && kLinkRate == kTailExtBase + pk::kTailExtFields, "rates linked, after the saturator's block");
     CHECK (kTailExt2Base == kLinkRate + 1, "then Gently's Advanced block");
     CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
-               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High" &&
+               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
            "Gently's Advanced block (the end saturator's) is the last");

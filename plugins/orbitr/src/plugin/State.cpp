@@ -10,6 +10,8 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x5442524F; // 'ORBT'
+// 1: the first (never released before its end saturator's Sub and High bands lost their buttons, so a
+// version 1 state already means "a band works while its Range is above 0 dB": nothing to convert)
 constexpr int32 kVersion = 1;
 } // namespace
 

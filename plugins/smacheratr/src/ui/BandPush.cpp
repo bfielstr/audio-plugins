@@ -13,12 +13,8 @@ const GentlyBandParams& smacheratrBandParams ()
         {kClarityFreq, kClarity2Freq, kClaritySubFreq, kClarityHighFreq},
         {kClarityWidth, kClarity2Width, -1, -1},
         kClarityNoOverlap,
-        [] (pk::ParamHost* h, int k) {
-            const double on = h->plainValue (kClarity), range = h->plainValue (kGentlyRangeIds[k]);
-            return k == kSubBand    ? claritySubOn (on, h->plainValue (kClaritySub), range)
-                   : k == kHighBand ? clarityHighOn (on, h->plainValue (kClarityHigh), range)
-                                    : clarityBandOn (on, range);
-        }};
+        // (every band the same way: Sub and High have no button of their own)
+        [] (pk::ParamHost* h, int k) { return clarityBandOn (h->plainValue (kClarity), h->plainValue (kGentlyRangeIds[k])); }};
     return bp;
 }
 

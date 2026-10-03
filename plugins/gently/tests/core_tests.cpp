@@ -157,7 +157,7 @@ TEST (parameters_and_defaults)
                kHighOn == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields,
            "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block last");
     CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the third block");
-    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High", "the last block");
+    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)", "the last block");
     // every end saturator parameter reaches the tail's field it stands for, and only those are tail parameters
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
@@ -180,10 +180,11 @@ TEST (parameters_and_defaults)
         CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.curve == b.curve, "band %d's Threshold is Smacheratr's", k + 1);
         CHECK (fromSmacheratr (smacheratr::kClarityThresholdIds[k]) == (int64_t)bandParam (k, kThreshold), "slider %d mapped", k + 1);
     }
-    // the Sub band: Smacheratr's, off by default
-    CHECK (t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == smacheratr::kSubDefaultHz && t.info (kSubRange).def == 8.0 &&
+    // the Sub band: Smacheratr's, its Range 0 by default (it cuts nothing until it gets one; no button)
+    CHECK (t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == smacheratr::kSubDefaultHz && t.info (kSubRange).def == 0.0 &&
                t.info (kSubThreshold).def == smacheratr::kClarityThresholdDb,
-           "Sub off, 40 Hz, 8 dB, -18 dB");
+           "Sub at Range 0, 40 Hz, -18 dB");
+    CHECK (!hasOn (kSub) && !hasOn (kHigh) && hasOn (0) && hasOn (1), "Sub and High have no On of their own");
     for (uint32_t id : {(uint32_t)kSubFreq, (uint32_t)kSubRange, (uint32_t)kSubThreshold})
     {
         const auto& a = t.info (id);
@@ -202,11 +203,11 @@ TEST (parameters_and_defaults)
         {0, "Advanced"},          {1, "Drive"},           {2, "Drive Amount"},          {3, "Attack"},
         {4, "Release"},           {5, "Stereo"},          {6, "Mix"},                   {7, "Output"},
         {8, "Band 1 On"},         {9, "Band 1 Frequency"}, {10, "Band 1 Width"},        {11, "Band 1 Range"},
-        {12, "Band 1 Threshold"}, {13, "Band 2 On"},      {17, "Band 2 Threshold"},     {18, "Sub"},
+        {12, "Band 1 Threshold"}, {13, "Band 2 On"},      {17, "Band 2 Threshold"},     {18, "Sub (unused)"},
         {19, "Sub Frequency"},    {20, "Sub Range"},      {21, "Sub Threshold"},        {22, "Saturator"},
         {28, "Saturator Output"}, {45, "Saturator Gently Advanced"}, {53, "Saturator Gently Sub Threshold"},
-        {54, "High"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
-        {58, "No Overlap"},       {59, "Saturator Gently High"}, {63, "Saturator Gently No Overlap"}};
+        {54, "High (unused)"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
+        {58, "No Overlap"},       {59, "Saturator Gently High (unused)"}, {63, "Saturator Gently No Overlap"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
     CHECK (kNumParams == 64, "64 parameters: %u", (unsigned)kNumParams);
@@ -221,7 +222,7 @@ TEST (bands_off_is_the_input_delayed)
     for (int how = 0; how < 3; ++how)
     {
         auto e = engine ([how] (Engine& en) {
-            en.setParam (kSubOn, how == 0 ? 1.0 : 0.0); // (Sub on with its Range at 0, or off)
+            en.setParam (kSubOn, how == 0 ? 1.0 : 0.0); // (the Sub band's old On: unused, its Range 0 is what counts)
             for (int k = 0; k < kAllBands; ++k)
             {
                 if (how == 0)
@@ -366,7 +367,7 @@ TEST (sub_band)
             [&] (Engine& en) {
                 en.setParam (bandParam (0, kOn), 0.0);
                 en.setParam (bandParam (1, kOn), 0.0);
-                en.setParam (kSubOn, 1.0);
+                en.setParam (kSubRange, 8.0); // (the band works once it has a Range)
                 if (set)
                     set (en);
             },
@@ -375,7 +376,7 @@ TEST (sub_band)
         const Sig out = run (*e, in);
         return toneDb (out.l, hz, 36000) - toneDb (in.l, hz, 36000);
     };
-    // off by default: a loud 40 Hz passes (bit for bit: the bands off too)
+    // at Range 0 by default: a loud 40 Hz passes (bit for bit: the bands off too)
     {
         auto e = engine (
             [] (Engine& en) {
@@ -385,9 +386,9 @@ TEST (sub_band)
             kSr, &m);
         const Sig in = tones ({{40.0, -1.0}}, 0.5);
         const double d = diffDelayed (in, run (*e, in), e->latency ());
-        CHECK (d == 0.0 && m.bands.claritySubDb.load () == 0.0f, "Sub off: untouched (%g)", d);
+        CHECK (d == 0.0 && m.bands.claritySubDb.load () == 0.0f, "Sub at its default Range 0: untouched (%g)", d);
     }
-    // on: a loud 40 Hz tone is cut by the Range (8 dB at the band's peak), as the band's maths says
+    // with a Range: a loud 40 Hz tone is cut by the Range (8 dB at the band's peak), as the band's maths says
     const double cut = measure (40.0, -1.0, {});
     const double meter = m.bands.claritySubDb.load ();
     const double expect = bandMathDb (smacheratr::subBand (kSr, smacheratr::kSubDefaultHz), 40.0, 8.0);
@@ -408,9 +409,9 @@ TEST (sub_band)
     const double at100 = measure (90.0, -6.0, [] (Engine& en) { en.setParam (kSubFreq, 100.0); });
     std::printf ("    90 Hz at -6 dB: Sub Freq 20 Hz %.2f dB, 100 Hz %.2f dB\n", at20, at100);
     CHECK (std::fabs (at20) < 1.0 && at100 < -6.0, "the taper point: %.2f / %.2f dB", at20, at100);
-    // the Range at 0 or Sub off: nothing
+    // the Range at 0: nothing; its old On is unused (off, the band still works)
     CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubRange, 0.0); })) < 1e-4, "Range 0");
-    CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubOn, 0.0); })) < 1e-4, "Sub off");
+    CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubOn, 0.0); }) - cut) < 1e-4, "its old On does nothing");
     // Advanced: its Threshold (a -24 dB sub: under -18 without it, the whole Range with the Threshold at -40)
     const double plain = measure (40.0, -24.0, [] (Engine& en) {
         en.setParam (kAdvanced, 0.0); // (on by default)
@@ -427,7 +428,7 @@ TEST (sub_band)
     // with bands 1 and 2 on, a loud sub and a loud low mid: each band cuts its own
     {
         Meters mm;
-        auto e = engine ([] (Engine& en) { en.setParam (kSubOn, 1.0); }, kSr, &mm);
+        auto e = engine ([] (Engine& en) { en.setParam (kSubRange, 8.0); }, kSr, &mm);
         const Sig in = tones ({{40.0, -6.0}, {250.0, -6.0}}, 1.5);
         const Sig out = run (*e, in);
         const double c40 = toneDb (out.l, 40.0, 36000) - toneDb (in.l, 40.0, 36000);
@@ -443,7 +444,7 @@ TEST (sub_band)
         auto e = engine ([on] (Engine& en) {
             en.setParam (bandParam (0, kOn), 0.0);
             en.setParam (bandParam (1, kOn), 0.0);
-            en.setParam (kSubOn, 1.0);
+            en.setParam (kSubRange, 8.0);
             en.setParam (kAdvanced, 1.0);
             en.setParam (kSubThreshold, -40.0);
             en.setParam (kDrive, on ? 1.0 : 0.0);
@@ -466,7 +467,7 @@ TEST (high_band)
             [&] (Engine& en) {
                 en.setParam (bandParam (0, kOn), 0.0);
                 en.setParam (bandParam (1, kOn), 0.0);
-                en.setParam (kHighOn, 1.0);
+                en.setParam (kHighRange, 6.0); // (the band works once it has a Range)
                 if (set)
                     set (en);
             },
@@ -477,10 +478,10 @@ TEST (high_band)
     };
     const auto& t = paramTable ();
     CHECK (t.info (kHighOn).def == 0.0 && t.info (kHighFreq).def == smacheratr::kHighDefaultHz && t.info (kHighFreq).min == 2000.0 &&
-               t.info (kHighFreq).max == 16000.0 && t.info (kHighRange).def == 6.0 && t.info (kHighThreshold).def == -18.0 &&
+               t.info (kHighFreq).max == 16000.0 && t.info (kHighRange).def == 0.0 && t.info (kHighThreshold).def == -18.0 &&
                t.info (kNoOverlap).def == 0.0,
-           "High off at 7 kHz (2 - 16 kHz), Range 6 dB, Threshold -18 dB; No Overlap off");
-    // off by default: a loud 10 kHz passes (bit for bit: the bands off too)
+           "High at Range 0, 7 kHz (2 - 16 kHz), Threshold -18 dB; No Overlap off");
+    // at Range 0 by default: a loud 10 kHz passes (bit for bit: the bands off too)
     {
         auto e = engine (
             [] (Engine& en) {
@@ -490,9 +491,9 @@ TEST (high_band)
             kSr, &m);
         const Sig in = tones ({{10000.0, -1.0}}, 0.5);
         const double d = diffDelayed (in, run (*e, in), e->latency ());
-        CHECK (d == 0.0 && m.bands.clarityHighDb.load () == 0.0f, "High off: untouched (%g)", d);
+        CHECK (d == 0.0 && m.bands.clarityHighDb.load () == 0.0f, "High at its default Range 0: untouched (%g)", d);
     }
-    // on: a loud 10 kHz tone is cut by the Range (6 dB), as the band's maths says
+    // with a Range: a loud 10 kHz tone is cut by the Range (6 dB), as the band's maths says
     const double cut = measure (10000.0, -1.0, {});
     const double meter = m.bands.clarityHighDb.load ();
     const double expect = bandMathDb (smacheratr::highBand (kSr, smacheratr::kHighDefaultHz), 10000.0, 6.0);
@@ -510,26 +511,27 @@ TEST (high_band)
     std::printf ("    3 kHz at -6 dB: High Freq 12 kHz %.2f dB, 2 kHz %.2f dB\n", at12k, at2k);
     CHECK (std::fabs (at12k) < 1.0 && at2k < -4.0, "the taper point: %.2f / %.2f dB", at12k, at2k);
     CHECK (std::fabs (measure (10000.0, -1.0, [] (Engine& en) { en.setParam (kHighRange, 0.0); })) < 1e-4, "Range 0");
-    CHECK (std::fabs (measure (10000.0, -1.0, [] (Engine& en) { en.setParam (kHighOn, 0.0); })) < 1e-4, "High off");
+    CHECK (std::fabs (measure (10000.0, -1.0, [] (Engine& en) { en.setParam (kHighOn, 0.0); }) - cut) < 1e-4, "its old On does nothing");
     // Advanced: its Threshold
     const double adv = measure (10000.0, -24.0, [] (Engine& en) {
         en.setParam (kAdvanced, 1.0);
         en.setParam (kHighThreshold, -40.0);
     });
     CHECK (adv < -4.5 && std::fabs (m.bands.clarityHighDb.load () + 6.0) < 0.01, "the High Threshold works with Advanced (%.2f dB)", adv);
-    // High off is Gently as it was: the same output (to the bit) whatever its other controls say, with
-    // every other band working
-    auto render = [] (bool on, double freq, double range) {
+    // High at Range 0 is Gently as it was: the same output (to the bit) whatever its other controls say
+    // (its old On too), with every other band working
+    auto render = [] (bool on, double freq, double threshold) {
         auto e = engine ([&] (Engine& en) {
-            en.setParam (kSubOn, 1.0);
-            en.setParam (kHighOn, on ? 1.0 : 0.0);
+            en.setParam (kSubRange, 8.0);
+            en.setParam (kHighOn, on ? 0.0 : 1.0); // (unused: the opposite, to show it)
             en.setParam (kHighFreq, freq);
-            en.setParam (kHighRange, range);
+            en.setParam (kHighRange, on ? 6.0 : 0.0);
+            en.setParam (kHighThreshold, threshold);
         });
         return run (*e, tones ({{45.0, -6.0}, {220.0, -6.0}, {3200.0, -8.0}, {9000.0, -8.0}}, 0.5)).l;
     };
-    CHECK (render (false, 7000.0, 6.0) == render (false, 2500.0, 20.0), "High off ignores its controls, to the bit");
-    CHECK (render (true, 7000.0, 6.0) != render (false, 7000.0, 6.0), "High on changes the sound");
+    CHECK (render (false, 7000.0, -18.0) == render (false, 2500.0, -50.0), "High at Range 0 ignores its controls, to the bit");
+    CHECK (render (true, 7000.0, -18.0) != render (false, 7000.0, -18.0), "High with a Range changes the sound");
 }
 
 TEST (no_overlap)
@@ -573,7 +575,7 @@ TEST (no_overlap)
     auto withHigh = [&] (bool noOverlap) {
         return render ([&] (Engine& en) {
             set (noOverlap, 250.0, 2.0, 5000.0, 2.0) (en);
-            en.setParam (kHighOn, 1.0);
+            en.setParam (kHighRange, 6.0);
             en.setParam (kHighFreq, 4000.0);
         });
     };
@@ -801,9 +803,9 @@ TEST (changes_are_click_free)
             case 330: e->setParam (kDrive, 1.0); break;
             case 400: e->setParam (kDrive, 0.0); break;
             case 470: e->setParam (kStereo, kStereoLinked); break;
-            case 520: e->setParam (kSubOn, 1.0); break;
+            case 520: e->setParam (kSubRange, 8.0); break; // (the Sub band starts: it has a Range)
             case 560: e->setParam (kSubFreq, 100.0); break;
-            case 600: e->setParam (kSubOn, 0.0); break;
+            case 600: e->setParam (kSubRange, 0.0); break;
             default: break;
         }
         const int m = (int)std::min ((size_t)block, in.l.size () - pos);
@@ -896,7 +898,7 @@ TEST (fuzz_and_cpu)
         c.setParam (kAdvanced, 1.0);
         c.setParam (bandParam (0, kThreshold), -40.0);
         c.setParam (bandParam (1, kThreshold), -40.0);
-        c.setParam (kSubOn, cs.drive ? 1.0 : 0.0);
+        c.setParam (kSubRange, cs.drive ? 8.0 : 0.0);
         c.setParam (kSubThreshold, -40.0);
         c.setParam (kDrive, cs.drive ? 1.0 : 0.0);
         c.setParam (kStereo, cs.ms ? kMidSide : kStereoLinked);

@@ -127,4 +127,15 @@ constexpr int tailFieldIn (uint32_t id, const TailBases& b)
                                                                        : -1;
 }
 
+// subHighStateToRange for a plug-in's end saturator: a state (norm and has, by the plug-in's IDs) saved
+// before the Sub and High bands lost their buttons, its third block at ext2Base and fourth at ext3Base.
+// The two Ranges are marked as present.
+template <class Norm, class Has>
+inline void tailSubHighToRange (Norm& norm, Has& has, uint32_t ext2Base, uint32_t ext3Base)
+{
+    const uint32_t subRange = ext2Base + pk::kTailExt2SubRange, highRange = ext3Base + pk::kTailExt3HighRange;
+    subHighStateToRange (norm, has, ext2Base + pk::kTailExt2Sub, subRange, ext3Base + pk::kTailExt3High, highRange);
+    has[subRange] = has[highRange] = true;
+}
+
 } // namespace smacheratr

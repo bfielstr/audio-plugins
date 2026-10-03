@@ -47,18 +47,18 @@ std::vector<ParamInfo> buildTable ()
         v.push_back (like (bandParam (b, kThreshold), smacheratr::kClarityThreshold, n + "Threshold", "Thresh",
                            smacheratr::kClarityThresholdDb));
     }
-    // the Sub band: Smacheratr's (off by default)
-    v.push_back (like (kSubOn, smacheratr::kClaritySub, "Sub", "Sub", 0.0));
+    // the Sub band: Smacheratr's (no button, its Range 0 by default: it cuts nothing until it gets one)
+    v.push_back (like (kSubOn, smacheratr::kClaritySub, "Sub (unused)", "Sub", 0.0));
     v.push_back (like (kSubFreq, smacheratr::kClaritySubFreq, "Sub Frequency", "Freq", smacheratr::kSubDefaultHz));
-    v.push_back (like (kSubRange, smacheratr::kClaritySubRange, "Sub Range", "Range", 8.0));
+    v.push_back (like (kSubRange, smacheratr::kClaritySubRange, "Sub Range", "Range", 0.0));
     v.push_back (like (kSubThreshold, smacheratr::kClaritySubThreshold, "Sub Threshold", "Thresh", smacheratr::kClarityThresholdDb));
     pk::addTailParams (v, kTailBase);
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
-    // the High band and No Overlap: Smacheratr's (off by default)
-    v.push_back (like (kHighOn, smacheratr::kClarityHigh, "High", "High", 0.0));
+    // the High band and No Overlap: Smacheratr's (the High band as the Sub band, No Overlap off)
+    v.push_back (like (kHighOn, smacheratr::kClarityHigh, "High (unused)", "High", 0.0));
     v.push_back (like (kHighFreq, smacheratr::kClarityHighFreq, "High Frequency", "Freq", smacheratr::kHighDefaultHz));
-    v.push_back (like (kHighRange, smacheratr::kClarityHighRange, "High Range", "Range", 6.0));
+    v.push_back (like (kHighRange, smacheratr::kClarityHighRange, "High Range", "Range", 0.0));
     v.push_back (like (kHighThreshold, smacheratr::kClarityHighThreshold, "High Threshold", "Thresh", smacheratr::kClarityThresholdDb));
     v.push_back (like (kNoOverlap, smacheratr::kClarityNoOverlap, "No Overlap", "No Overlap", 0.0));
     smacheratr::addTailExt3Params (v, kTailExt3Base);

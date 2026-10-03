@@ -51,24 +51,26 @@ inline const char* forParam (uint32_t id)
                    "display, with the band's level beside them) and the region it cuts can be driven (Drive). Off, Gently "
                    "works exactly as before: its bands start cutting at -18 dB.";
         case kClaritySub:
-            return "Gently's Sub band on or off: compresses the sub region, as a shelf from the very bottom of the "
-                   "spectrum up to where its cut starts to let go (Freq). Needs Gently on and a Range above 0 dB.";
+            return "Unused: Gently's Sub band works while its Range is above 0 dB (it had a button of its own before).";
         case kClaritySubFreq:
             return "Gently Sub: where the band starts to taper off, 20 to 100 Hz (40 Hz by default). Everything below it, "
                    "to the very bottom, is compressed.";
         case kClaritySubRange:
-            return "Gently Sub: the most it turns the sub region down before the curve (after it, half as much). 8 dB by "
-                   "default, 0 to 24 dB; at 0 dB the band does nothing.";
+            return "Gently's Sub band (amber in the display): compresses the sub region, as a shelf from the very bottom of the "
+                   "spectrum up to where its cut starts to let go (Freq). Range is the most it turns that region down before "
+                   "the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; pull its "
+                   "handle down in the display, or turn this up, and it starts cutting.";
         case kClarityHigh:
-            return "Gently's High band on or off: compresses the top of the spectrum (harshness, fizz, sibilance), as a shelf "
-                   "from where its cut starts to let go (Freq) up to the very top. Needs Gently on and a Range above 0 dB.";
+            return "Unused: Gently's High band works while its Range is above 0 dB (it had a button of its own before).";
         case kClarityHighFreq:
             return "Gently High: where the band starts to taper off going down, 2 to 16 kHz (7 kHz by default: the cut is half "
                    "as deep around half that, and nearly gone an octave below, so the presence region is left alone). "
                    "Everything above it, to the very top, is compressed.";
         case kClarityHighRange:
-            return "Gently High: the most it turns the top of the spectrum down before the curve (after it, half as much). 6 dB "
-                   "by default, 0 to 24 dB; at 0 dB the band does nothing.";
+            return "Gently's High band (rose in the display): compresses the top of the spectrum (harshness, fizz, sibilance), "
+                   "as a shelf from where its cut starts to let go (Freq) up to the very top. Range is the most it turns that "
+                   "down before the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; "
+                   "pull its handle down in the display, or turn this up, and it starts cutting.";
         case kClarityNoOverlap:
             return "Gently's bands never cover the same frequencies: dragging or widening a band in the display pushes its "
                    "neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot move further). "
@@ -106,6 +108,6 @@ constexpr const char* kColorDisplay =
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "With Gently on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
     "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub (amber) and High (rose) bands "
-    "have no width. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
+    "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
 
 } // namespace smacheratr::help

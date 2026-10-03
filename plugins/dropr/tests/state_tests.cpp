@@ -85,6 +85,32 @@ int main ()
         CHECK (readState (&s, back), "read partial");
         CHECK (back.norm[kDownThreshold] == 0.25 && back.norm[kRelease] == defaultNormalized (kRelease), "partial: the rest at the defaults");
     }
+    // a version 2 state (before the end saturator's Sub and High bands lost their buttons): the Sub band
+    // was on (its Range kept), the High band off (Range 0). The same sound
+    {
+        const uint32_t subOn = kTailExt2Base + pk::kTailExt2Sub, subRange = kTailExt2Base + pk::kTailExt2SubRange;
+        const uint32_t highOn = kTailExt3Base + pk::kTailExt3High, highRange = kTailExt3Base + pk::kTailExt3HighRange;
+        MemoryStream s;
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x504F5244);
+            w.writeInt32 (2);
+            w.writeInt32 (4);
+            const std::pair<uint32, double> values[4] = {
+                {subOn, 1.0}, {subRange, toNormalized (subRange, 5.0)}, {highOn, 0.0}, {highRange, toNormalized (highRange, 9.0)}};
+            for (const auto& [id, v] : values)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (v);
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a version 2 state reads");
+        CHECK (std::fabs (toPlain (subRange, back.norm[subRange]) - 5.0) < 1e-9 && toPlain (highRange, back.norm[highRange]) == 0.0,
+               "Sub (on): 5 dB, High (off): 0 (%.2f / %.2f)", toPlain (subRange, back.norm[subRange]), toPlain (highRange, back.norm[highRange]));
+        CHECK (defaultNormalized (subRange) == 0.0 && defaultNormalized (highRange) == 0.0, "new: both at Range 0");
+    }
     // not Dropr's
     {
         MemoryStream s;
