@@ -2,9 +2,43 @@
 
 A multiband dynamics processor modelled on Ableton Live's **Multiband Dynamics** (Live manual §29.26):
 upward and downward compression *and* expansion on **1 to 4** independent frequency bands, each
-with an upper (Above) and lower (Below) threshold. Install instructions are in the [top-level README](../../README.md).
+with an upper (Above) and lower (Below) threshold. Two styles: **OTT**, a measured model of Xfer's
+OTT, and **Character**, Multidyn's own smoother sound. Install instructions are in the [top-level README](../../README.md).
 
 ![Multidyn](../../docs/multidyn/ui_multidyn.png)
+
+## Style: OTT or Character
+
+**Style** (top bar, OTT by default) picks how each band's dynamics work.
+
+**OTT** is a model of Xfer Records' free OTT (measured from version 1.3.1), the plug-in that Live's
+"OTT" preset became: fast and grainy like it. Its constants and laws are David Braun's fit to
+measurements of the OTT binary, published as `co.xfer_ott` in Faust's `compressors.lib`
+(MIT licence, https://github.com/grame-cncm/faustlibraries/pull/257); its static curves match the
+plug-in to about 0.03 dB, program material to about 0.1 dB (median). Each band follows its stereo
+mean square with a one-pole envelope (OTT's fixed attack, a release that follows Time), and OTT's gain
+law: upward compression at about 4 : 1 below its knee up to a cap of about 36 dB, an infinite ratio
+above its downward knee, soft knees, OTT's makeup gain and a gain floor. Amount is OTT's Depth and
+Time is OTT's Time. The lowest band plays OTT's low band, the top band its high band, any between its
+mid band (one band alone: the mid band). At the defaults it is OTT; the band controls move it from
+there:
+
+- a band's **Below / Above threshold** moves OTT's upward / downward knee by as much as it moved from
+  its default;
+- the **Below / Above ratio** scales that branch's strength by (1 - 1/r) against the default ratio's
+  (1 : 1 turns the branch off);
+- **Attack / Release** scale OTT's times by the same factor they moved from their defaults;
+- the band **Output** trims after OTT's makeup (the baked preset gains are Character's).
+
+**Peak/RMS**, the **RMS Window**, **Soft Knee**, **Soften** and the transient guard are Character's and
+do nothing in OTT style (their controls look disabled); Soften's **Color**, Pre-Limit, the side-chain,
+the crossovers (24 dB: OTT's Linkwitz-Riley 4), the Sub band and the Smacheratr work in both. The
+display's block numbers show OTT's gain over its makeup.
+
+**Character** is Multidyn's own sound, described below. Projects saved before Style existed (and
+Smemplr rack slots saved before it) open in Character, so they sound as they did.
+
+Not affiliated with or endorsed by Xfer Records.
 
 ## How it works
 
@@ -23,7 +57,7 @@ because the envelope works on the level, how fast the gain moves also depends on
 is past the threshold. Upward compression never lifts a signal past the Below threshold, so hits
 after silence don't jump.
 
-**Default settings** are Live's Multiband Dynamics **"OTT"** preset (the sound Xfer's OTT gets
+**Default settings** are OTT style with Live's Multiband Dynamics **"OTT"** preset (the sound Xfer's OTT gets
 close to): 3 bands split at 88.3 Hz and 2.5 kHz (8 kHz for a fourth), Below -40.8 / -41.8 / -40.8 dB
 and Above -33.8 / -30.2 / -35.5 dB, 1 : 4.17 below and 1 : 66.7 above on every band, OTT's
 attack/release times (47.8 / 22.4 / 13.5 ms, 282 / 282 / 132 ms), Amount and Time 100 %, Soft Knee
@@ -39,7 +73,7 @@ the Output -7 dB, every band Input +5.2 dB, and so on), so it sounds the same; o
 now go past a control's range (e.g. a band 1 Output above +10.3 dB) stops at its end. The new
 settings below start where an old project was: 24 dB crossovers, Color and the Sub band off.
 
-**Character**: detection is smooth (the RMS Window, 50 ms by default, and a rounded onset), the knee
+**Character** style: detection is smooth (the RMS Window, 50 ms by default, and a rounded onset), the knee
 is wide (12 dB) and the release slows down up to 3x the deeper the gain change, so it moves like a
 character compressor rather than grabbing peaks.
 
@@ -97,12 +131,15 @@ lanes; then the per-band **Input** knobs, the lanes, the per-band **Output** kno
 controls on the right.
 
 - **Bands** (top): 1, 2, 3 or 4 bands; 1 makes Multidyn a single full-range processor.
+- **Style** (top): OTT or Character (see above). In OTT style Soft Knee, Peak/RMS, the RMS Window
+  and Soften look disabled: they only work in Character.
 - **Value fields** beside each lane: Below threshold and ratio (left), Above threshold and ratio and
   Att/Rel (right). Drag a field up/down (Shift: fine), double-click to reset.
 - **Display**: thin bars = input level, thick bars = output level. Drag a block edge to move a
   threshold; drag inside a block up (louder) or down (quieter) to set its ratio. **Cmd/Ctrl** = all
   bands, **Alt/Option** = Above and Below together, **Shift** = fine, **double-click** = 1:1. The
-  number in a block is the gain it applies at its extreme (silence for Below, 0 dB for Above).
+  number in a block is the gain it applies at its extreme (silence for Below, 0 dB for Above; in OTT
+  style OTT's gain there, over its makeup).
 - **Global**: Output, Time (scales all attack/release times), Amount (0% = every ratio acts as
   1:1), Soften and its **Color** on the right; Soft Knee, Peak/RMS detection and the RMS Window
   under the display, with the crossovers' **Slope** (a menu) and the **Sub** band's On and
@@ -111,6 +148,6 @@ controls on the right.
   (drag its edge for the Threshold, inside it for the Ratio, double-click for 1:1), its Threshold,
   Ratio, Attack and Release fields beside it, and its Output as a field in the Output column.
 - **Side-chain**: route another track into inputs 3/4 in REAPER; On, Gain, Dry/Wet (detector blend)
-  and Listen.
+  and Listen; the status line under the Slope row says whether a signal is routed.
 
 Every control is an automatable parameter; hover any control for help (**?** toggles tooltips).

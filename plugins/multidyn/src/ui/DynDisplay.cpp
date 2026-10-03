@@ -114,6 +114,7 @@ void DynDisplay::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
 
     const int n = bands ();
+    const bool ottStyle = std::lround (host->plainValue (kStyle)) == kStyleOtt; // the bands (not the Sub band) run OTT's law
     for (int k = 0; k < lanes (); ++k) // the bands, then the Sub band
     {
         const int b = k < n ? k : kSubBand;
@@ -162,8 +163,21 @@ void DynDisplay::draw (CDrawContext* ctx)
         const CColor tc = dim ? theme::kTextDim : theme::kText;
         const bool knee = host->plainValue (kSoftKnee) >= 0.5;
         const double amount = host->plainValue (kAmount);
-        const double belowMax = ids.sub ? 0.0 : std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
-        const double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
+        double belowMax = ids.sub ? 0.0 : std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
+        double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
+        if (ottStyle && !ids.sub)
+        {
+            // OTT style (Ott.h, as Engine.cpp sets it up): the gain over OTT's makeup at silence / 0 dB
+            // of the band's mean square, the makeup (like the baked output gains) not counted
+            const auto& t = paramTable ();
+            auto strength = [] (double r, double r0) { return (1.0 - 1.0 / std::max (1e-3, r)) / (1.0 - 1.0 / r0); };
+            const int kind = ott::bandKind (b, n);
+            const double up = strength (rb, t.info (ids.belowR).def), down = strength (ra, t.info (ids.aboveR).def);
+            const double upShift = tb - t.info (ids.belowT).def, downShift = ta - t.info (ids.aboveT).def;
+            const double makeup = ott::makeupShape (kind, amount) * ott::kMakeup[kind];
+            belowMax = std::max (0.0, ott::gainDb (kind, -120.0, amount, up, down, upShift, downShift) - makeup);
+            aboveMax = std::min (0.0, ott::gainDb (kind, 0.0, amount, up, down, upShift, downShift) - makeup);
+        }
         if (std::fabs (belowMax) >= 0.05 && xb - g.left > 50)
             text (ctx, gainText (belowMax), CRect (g.left + 4, g.bottom - 14, g.left + 60, g.bottom - 1), tc, 9.5, kLeftText, true);
         if (std::fabs (aboveMax) >= 0.05 && g.right - xa > 50)

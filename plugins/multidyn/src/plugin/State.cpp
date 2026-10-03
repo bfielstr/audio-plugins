@@ -15,7 +15,8 @@ constexpr int32 kMagic = 0x4d44594e; // 'MDYN'
 constexpr int32 kClarityFullRange = 2; // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kOttDefaults = 4;      // 4: Live's OTT preset's gain staging baked in (Params.h)
-static_assert (kStateVersion == kOttDefaults);
+constexpr int32 kStyleAdded = 5;       // 5: Style (OTT for new instances; older states keep Character)
+static_assert (kStateVersion == kStyleAdded);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -55,6 +56,12 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // before Style: Multidyn's own sound, Character
+    if (version < kStyleAdded)
+    {
+        st.norm[kStyle] = toNormalized (kStyle, kStyleCharacter);
+        st.has[kStyle] = true;
     }
     // the baked gains were the old ones: the difference moves into the gain controls (a missing one was
     // at its default, 0 dB, which is also where it is now)

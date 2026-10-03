@@ -120,6 +120,7 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
 // The defaults are a four-band upward-compression preset; most tests start from a neutral device.
 static void neutralize (Engine& e)
 {
+    e.setParam (kStyle, kStyleCharacter); // (these tests are Character's; OTT style has its own below)
     e.setParam (kOutput, -kBakedMasterDb); // cancel the baked gains
     e.setParam (kMode, kBase);
     e.setParam (kPreLimit, 0.0);
@@ -166,7 +167,7 @@ TEST (params_roundtrip)
                t.toText (kXoverSlope, kXover6) == "6 dB" && t.toText (kXoverSlope, kXover18) == "18 dB" &&
                t.toText (kXoverSlope, kXover24) == "24 dB" && t.toText (kXoverSlope, kXover96) == "96 dB",
            "Slope: 6 dB .. Brickwall, 24 dB by default; then Soften Color");
-    CHECK (kSubOn == kSoftenColor + 1 && kNumParams == kSubOutput + 1 && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
+    CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kNumParams == kStyle + 1 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
                t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
            "the Sub band last: off, 40 Hz in 20 .. 100 Hz");
     for (uint32_t id = 0; id < kNumParams; ++id)
@@ -436,6 +437,7 @@ TEST (transient_guard_after_a_quiet_passage)
     // guard sees it coming through the look-ahead, so it starts where it goes on
     Engine e;
     e.prepare (kSr, 512);
+    e.setParam (kStyle, kStyleCharacter); // (the guard is Character's)
     e.setParam (kSatOn, 0.0);
     const size_t n = (size_t)(kSr * 2.0), hitAt = (size_t)kSr;
     Sig in;
@@ -836,6 +838,7 @@ static OldGains oldGains (int variant)
 }
 static void setOldProject (Engine& e, int variant)
 {
+    e.setParam (kStyle, kStyleCharacter); // an old project opens in Character
     struct D
     {
         double below, belowRatio, above, aboveRatio, attack, release;
@@ -1591,6 +1594,139 @@ TEST (performance)
         std::printf ("    CPU: %.2f%% of one core (4 bands + side-chain: %s)\n", 100.0 * heaviest, s.name);
     }
     CHECK (heaviest < 0.3, "too slow"); // (about 20 % on CI's macOS machines, 16 % here)
+}
+
+// ---------------------------------------------------------------------------
+// OTT style (Ott.h): the default, a model of Xfer's OTT
+
+// solo: only that band (of the three) is heard. (With all bands working, a
+// tone's crossover leakage into a quiet neighbour gets that band's full upward lift, as in OTT: the
+// model was measured one band at a time, so a band's own curve is measured that way too.)
+static std::unique_ptr<Engine> ottEngine (int solo = -1)
+{
+    auto e = std::make_unique<Engine> ();
+    e->prepare (kSr, 512);
+    e->setParam (kSatOn, 0.0);
+    if (solo >= 0)
+        e->setParam (bandParam (solo, kBandSolo), 1.0);
+    e->reset ();
+    return e;
+}
+
+// the level OTT's detector settles at on a steady sine (its one-pole on the mean square, attack faster
+// than release, rides a little above the mean): dB
+static double ottDetectorDb (int kind, double hz, double peakDb)
+{
+    const double a = std::pow (10.0, peakDb / 20.0);
+    const double ca = 1.0 - std::exp (-1.0 / (ott::kAttack[kind] * kSr)), cr = 1.0 - std::exp (-1.0 / (ott::releaseSec (kind, 100.0) * kSr));
+    double env = 0.0, sum = 0.0;
+    const int n = (int)kSr, from = n / 2;
+    for (int i = 0; i < n; ++i)
+    {
+        const double x = a * std::sin (2.0 * M_PI * hz * i / kSr), x2 = x * x;
+        env += (x2 > env ? ca : cr) * (x2 - env);
+        if (i >= from)
+            sum += 10.0 * std::log10 (std::max (env, 1e-20));
+    }
+    return sum / (n - from);
+}
+
+TEST (ott_static_curve)
+{
+    // a steady tone in each band settles at OTT's gain for its mean square (a sine's: its peak level
+    // - 3 dB), with every control at its default; from silence up to full scale
+    struct Probe
+    {
+        double hz;
+        int kind;
+    };
+    for (Probe pr : {Probe {45.0, 0}, Probe {700.0, 1}, Probe {8000.0, 2}})
+        for (double level : {-80.0, -60.0, -48.0, -40.0, -30.0, -20.0, -10.0, 0.0})
+        {
+            auto e = ottEngine (pr.kind);
+            auto in = sine (pr.hz, level, 1.0);
+            auto out = run (*e, in);
+            const double got = rmsDb (out.l, 36000, 48000) - rmsDb (in.l, 36000, 48000);
+            const double want = ott::gainDb (pr.kind, ottDetectorDb (pr.kind, pr.hz, level), 1.0, 1.0, 1.0, 0.0, 0.0);
+            CHECK (std::fabs (got - want) < 0.6, "%.0f Hz at %.0f dB: %.2f dB (OTT: %.2f dB)", pr.hz, level, got, want);
+        }
+    // the law itself at a few points: a quiet band lifted to the cap (plus makeup), a loud one cut hard
+    CHECK (std::fabs (ott::gainDb (1, -120.0, 1.0, 1.0, 1.0, 0.0, 0.0) - (ott::kMakeup[1] + ott::kUpCap[1])) < 0.01, "the upward cap");
+    CHECK (ott::gainDb (1, 20.0, 1.0, 1.0, 1.0, 0.0, 0.0) == ott::kFloor[1], "far over full scale: down to the floor");
+    CHECK (std::fabs (ott::gainDb (1, -40.0, 0.0, 1.0, 1.0, 0.0, 0.0)) < 1e-12, "Depth 0: nothing");
+}
+
+TEST (ott_amount_and_controls)
+{
+    auto gainAt = [] (uint32_t id, double v, double level) {
+        auto e = ottEngine (1);
+        if (id != kNumParams)
+            e->setParam (id, v);
+        auto in = sine (700.0, level, 1.0);
+        auto out = run (*e, in);
+        return rmsDb (out.l, 36000, 48000) - rmsDb (in.l, 36000, 48000);
+    };
+    // Amount 0: the bands (all of them) sum flat (OTT's Depth 0)
+    for (double level : {-60.0, -20.0})
+    {
+        auto e = ottEngine ();
+        e->setParam (kAmount, 0.0);
+        auto in = sine (700.0, level, 1.0);
+        auto out = run (*e, in);
+        const double g = rmsDb (out.l, 36000, 48000) - rmsDb (in.l, 36000, 48000);
+        CHECK (std::fabs (g) < 0.05, "Amount 0 at %.0f dB: %.3f dB", level, g);
+    }
+    // a band's Below threshold moves OTT's upward knee: 10 dB lower lifts a -60 dB tone 7.5 dB less
+    const double base = gainAt (kNumParams, 0.0, -60.0);
+    const double lower = gainAt (bandParam (1, kBelowThresh), -41.8 - 10.0, -60.0);
+    CHECK (std::fabs ((base - lower) - 10.0 * ott::kUpSlope[1]) < 0.6, "Below 10 dB lower: %.2f dB less lift", base - lower);
+    // the Above ratio at 1:1 switches the downward branch off: a loud tone is no longer pulled down
+    CHECK (gainAt (bandParam (1, kAboveRatio), 1.0, -10.0) > gainAt (kNumParams, 0.0, -10.0) + 15.0, "Above 1:1: no downward compression");
+    // band Output trims after OTT's makeup
+    CHECK (std::fabs (gainAt (bandParam (1, kBandOutput), -6.0, -30.0) - (gainAt (kNumParams, 0.0, -30.0) - 6.0)) < 0.1, "band Output trims");
+    // Character keeps Multidyn's own sound: it differs from OTT on the same tones
+    double diff = 0.0;
+    for (double level : {-60.0, -45.0, -30.0, -15.0})
+    {
+        std::printf ("    %.0f dB: OTT %.2f dB, Character %.2f dB\n", level, gainAt (kNumParams, 0.0, level), gainAt (kStyle, kStyleCharacter, level));
+        diff = std::max (diff, std::fabs (gainAt (kStyle, kStyleCharacter, level) - gainAt (kNumParams, 0.0, level)));
+    }
+    CHECK (diff > 1.0, "Character is a different sound (up to %.2f dB apart)", diff);
+}
+
+TEST (ott_time_constants)
+{
+    // a 700 Hz tone stepping from -50 dB up to -10 dB: OTT's mid band catches it within its 6 ms attack
+    // (a few time constants: 30 ms); back down, its release (31 ms at Time 100 %) takes a few hundred ms over
+    // 40 dB; Time 400 % releases about four times slower
+    auto settle = [] (double time, bool up) {
+        auto e = ottEngine (1);
+        e->setParam (kTime, time);
+        const size_t n = (size_t)(4.0 * kSr), step = (size_t)(1.0 * kSr);
+        Sig in;
+        in.l.resize (n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            const bool loud = up ? i >= step : i < step;
+            in.l[i] = (float)(std::pow (10.0, (loud ? -10.0 : -50.0) / 20.0) * std::sin (2.0 * M_PI * 700.0 * i / kSr));
+        }
+        in.r = in.l;
+        auto out = run (*e, in);
+        const double target = rmsDb (out.l, n - 4800, n) - rmsDb (in.l, n - 4800, n);
+        // the time until the gain is within 1 dB of where it ends
+        const size_t win = 96; // 2 ms
+        for (size_t a = step; a + win < n; a += win)
+            if (std::fabs ((rmsDb (out.l, a, a + win) - rmsDb (in.l, a, a + win)) - target) < 1.0)
+                return 1000.0 * (a - step) / kSr;
+        return 1e9;
+    };
+    const double attackMs = settle (1.0, true), releaseMs = settle (1.0, false), slowMs = settle (4.0, false);
+    std::printf ("    settles: %.0f ms up, %.0f ms down (Time 100 %%), %.0f ms down (Time 400 %%)\n", attackMs, releaseMs, slowMs);
+    CHECK (attackMs < 40.0, "the attack is OTT's few ms: %.0f ms", attackMs);
+    // a 40 dB drop: the mean square falls 4.3 dB per time constant (31 ms at Time 100 %), and the gain is
+    // within 1 dB once it is within about 1.3 dB: about nine of them
+    CHECK (releaseMs > 200.0 && releaseMs < 350.0, "the release is OTT's: %.0f ms", releaseMs);
+    CHECK (slowMs > 3.0 * releaseMs, "Time 400 %% releases about four times slower: %.0f vs %.0f ms", slowMs, releaseMs);
 }
 
 int main (int argc, char** argv)

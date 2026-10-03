@@ -219,7 +219,8 @@ void Engine::reset ()
     {
         bands[b] = BandState {};
         bands[b].inGain = dbToGain (p[bandParam (b, kBandInput)] + kBakedInputDb);
-        bands[b].outGain = dbToGain (p[bandParam (b, kBandOutput)] + kBakedOutputDb[b]);
+        const bool ott = std::lround (p[kStyle]) == kStyleOtt; // (OTT style: its own makeup, no baked gains)
+        bands[b].outGain = dbToGain (p[bandParam (b, kBandOutput)] + (ott ? 0.0 : kBakedOutputDb[b]));
         meters[b] = BandMeter {};
     }
     bands[kSubBand] = BandState {};
@@ -372,6 +373,7 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const float outTarget = dbToGain (p[kOutput] + kBakedMasterDb), scTarget = dbToGain (p[kScGain]);
     const int slopeT = std::clamp ((int)std::lround (p[kXoverSlope]), 0, kNumXoverSlopes - 1);
     const bool wantSub = on (p[kSubOn]);
+    const bool ottStyle = std::lround (p[kStyle]) == kStyleOtt;
     syncSaturator ();
     syncColor ();
 
@@ -422,6 +424,30 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         ra[b] = p[bandParam (b, kAboveRatio)];
         tb[b] = p[bandParam (b, kBelowThresh)];
         rb[b] = p[bandParam (b, kBelowRatio)];
+    }
+    // OTT style (Ott.h): each band's kind, envelope coefficients and how far its controls moved it
+    int ottKind[kAll] {};
+    double ottAtk[kAll] {}, ottRel[kAll] {}, ottUp[kAll] {}, ottDown[kAll] {}, ottUpShift[kAll] {}, ottDownShift[kAll] {};
+    if (ottStyle)
+    {
+        const auto& t = paramTable ();
+        auto def = [&t] (int b, int f) { return t.info (bandParam (b, f)).def; };
+        auto strength = [] (double r, double r0) { return (1.0 - 1.0 / std::max (1e-3, r)) / (1.0 - 1.0 / r0); };
+        for (int b = 0; b < kNumBands; ++b)
+        {
+            const int k = ott::bandKind (b, nBands);
+            ottKind[b] = k;
+            const double atkSec = ott::kAttack[k] * p[bandParam (b, kAttack)] / def (b, kAttack);
+            const double relSec = ott::releaseSec (k, 100.0 * p[kTime]) * p[bandParam (b, kRelease)] / def (b, kRelease);
+            ottAtk[b] = 1.0 - std::exp (-1.0 / (std::max (1e-5, atkSec) * sr));
+            ottRel[b] = 1.0 - std::exp (-1.0 / (std::max (1e-4, relSec) * sr));
+            ottUp[b] = strength (rb[b], def (b, kBelowRatio));
+            ottDown[b] = strength (ra[b], def (b, kAboveRatio));
+            ottUpShift[b] = tb[b] - def (b, kBelowThresh);
+            ottDownShift[b] = ta[b] - def (b, kAboveThresh);
+            // OTT's makeup replaces the preset gains baked in for Character
+            outTargetB[b] = dbToGain (p[bandParam (b, kBandOutput)]);
+        }
     }
     // skip the gain computers when nothing would happen (ratio 1:1 everywhere or amount 0)
     bool neutral[kAll];
@@ -562,7 +588,26 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                     st.limGain = 1.0f;
                 float g = 1.0f;
                 float wl = xl, wr = xr; // what the gain applies to (Soften reshapes it)
-                if (!neutral[b])
+                if (!neutral[b] && ottStyle && b != kSubBand)
+                {
+                    // OTT style: the band's stereo mean square, enveloped, into OTT's gain law (Ott.h)
+                    const float dlv = xl * (1.0f - scMix) + scBand[b][0] * scMix;
+                    const float drv = xr * (1.0f - scMix) + scBand[b][1] * scMix;
+                    const double x2 = 0.5 * ((double)dlv * dlv + (double)drv * drv);
+                    st.ottEnv += (x2 > st.ottEnv ? ottAtk[b] : ottRel[b]) * (x2 - st.ottEnv);
+                    if (st.ottEnv < 1e-30)
+                        st.ottEnv = 0.0;
+                    const double e = 10.0 * std::log10 (std::max (st.ottEnv, 1e-20));
+                    const int k = ottKind[b];
+                    const double gDb = ott::gainDb (k, e, amount, ottUp[b], ottDown[b], ottUpShift[b], ottDownShift[b]);
+                    // the meters: the dynamic part (what is over OTT's makeup)
+                    const double makeup = ott::makeupShape (k, amount) * ott::kMakeup[k];
+                    st.belowDb = (float)std::max (0.0, gDb - makeup);
+                    st.aboveDb = (float)std::min (0.0, gDb - makeup);
+                    g = dbToGain ((float)gDb);
+                    st.liftLp[0][0] = st.liftLp[0][1] = st.liftLp[1][0] = st.liftLp[1][1] = 0.0f;
+                }
+                else if (!neutral[b])
                 {
                     // detector: the band itself, the side-chain band, or a blend of both
                     const float dlv = xl * (1.0f - scMix) + scBand[b][0] * scMix;

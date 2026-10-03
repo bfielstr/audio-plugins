@@ -42,8 +42,11 @@ end saturator) are left out. Each has its own display and controls:
 - **para**: the parallel high-pass / low-pass (with its Vocal movement), its slopes (6 to 96 dB and
   Brickwall) and a drive for each filter; its envelope is triggered by the notes played here, and its
   display shows the live spectrum.
-- **multidyn**: the multiband dynamics, with its lanes and band fields, the crossovers' Slope, Soften's
-  Color and the Sub band (on, where it tapers, and its own lane while it is on).
+- **multidyn**: the multiband dynamics, with its Style (OTT, a measured model of Xfer's OTT, or
+  Character, Multidyn's own; Soft Knee, Peak/RMS, the RMS window and Soften look disabled in OTT,
+  where they do nothing), its lanes and band fields, the crossovers' Slope, Soften's Color and the Sub
+  band (on, where it tapers, and its own lane while it is on). A new slot starts in OTT; slots saved
+  before Style existed open in Character, so they keep their sound.
 - **m/s eq**: a high-pass on the side signal (default 150 Hz) tapers the sides so the low end is mono
   below the cutoff, plus side and mid levels; live meters. Its slope: 6, 12, **24** (default), 36, 48,
   60, 72, 84 or 96 dB per octave (Butterworth above 6 dB, -3 dB at the cutoff), or **Brickwall** (a

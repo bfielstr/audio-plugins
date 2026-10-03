@@ -76,6 +76,7 @@ void Editor::onClose ()
     display = nullptr;
     scStatus = nullptr;
     rmsWindowBox = nullptr;
+    softKneeToggle = detectorSeg = softenKnob = nullptr;
     for (int b = 0; b < kMaxBands; ++b)
     {
         nameLabels[b] = nullptr;
@@ -104,7 +105,9 @@ void Editor::buildUI (CFrame* f)
     root->addView (new Label (CRect (12, 6, 150, 28), "multidyn", 14.0, true));
     root->addView (new Label (CRect (160, 6, 205, 28), "Bands", 10.5, false, 2));
     bind (root, new Segmented (CRect (210, 7, 330, 27), this, kBands, {"1", "2", "3", "4"}));
-    scStatus = new Label (CRect (344, 6, 560, 28), "", 10.5);
+    root->addView (new Label (CRect (kStyleLeft - 42, 6, kStyleLeft - 4, 28), "Style", 10.5, false, 2));
+    bind (root, new Segmented (CRect (kStyleLeft, kStyleTop, kStyleRight, kStyleTop + 20), this, kStyle, {"OTT", "Character"}));
+    scStatus = new Label (CRect (8, kScStatusTop, 342, kScStatusTop + 16), "", 9.5);
     root->addView (new pk::PresetBar (CRect (570, 6, 778, 28), ctl));
     scStatus->setDim (true);
     root->addView (scStatus);
@@ -157,12 +160,12 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kGlobalColLeft, 40), this, kOutput, nullptr, true));
     bind (root, new Knob (knobRect (kGlobalColLeft, 114), this, kTime));
     bind (root, new Knob (knobRect (kGlobalColLeft, 188), this, kAmount));
-    bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
+    softenKnob = bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
     bind (root, new Toggle (CRect (kGlobalColLeft, kColorTop, kGlobalColLeft + 60, kColorTop + 18), this, kSoftenColor, "Color"));
 
     // bottom row
-    bind (root, new Toggle (CRect (8, 352, 96, 372), this, kSoftKnee, "Soft Knee"));
-    bind (root, new Segmented (CRect (104, 352, 184, 372), this, kDetector, {"Peak", "RMS"}));
+    softKneeToggle = bind (root, new Toggle (CRect (8, 352, 96, 372), this, kSoftKnee, "Soft Knee"));
+    detectorSeg = bind (root, new Segmented (CRect (104, 352, 184, 372), this, kDetector, {"Peak", "RMS"}));
     auto* rl = new Label (CRect (190, 354, 250, 370), "Window", 9.5, true, 2);
     rl->setDim (true);
     root->addView (rl);
@@ -195,7 +198,7 @@ void Editor::buildUI (CFrame* f)
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
-    rmsWindowBox->setEnabledLook (std::lround (plainValue (kDetector)) == kRms);
+    updateLooks ();
     idle ();
 }
 
@@ -280,8 +283,19 @@ void Editor::paramChanged (uint32_t id)
         display->invalid ();
     if (id == kBands || id == kSubOn)
         updateLayout ();
-    if (id == kDetector && rmsWindowBox)
-        rmsWindowBox->setEnabledLook (std::lround (plainValue (kDetector)) == kRms);
+    if (id == kDetector || id == kStyle)
+        updateLooks ();
+}
+
+void Editor::updateLooks ()
+{
+    // OTT style (Engine.h): Peak/RMS, the RMS Window, Soft Knee and Soften do nothing there
+    const bool character = std::lround (plainValue (kStyle)) == kStyleCharacter;
+    for (pk::ParamView* v : {softKneeToggle, detectorSeg, softenKnob})
+        if (v)
+            v->setEnabledLook (character);
+    if (rmsWindowBox)
+        rmsWindowBox->setEnabledLook (character && std::lround (plainValue (kDetector)) == kRms);
 }
 
 void Editor::idle ()

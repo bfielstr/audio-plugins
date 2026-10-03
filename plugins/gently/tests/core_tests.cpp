@@ -392,12 +392,12 @@ TEST (sub_band)
     CHECK (std::fabs (high) < 0.01 && m.bands.claritySubDb.load () == 0.0f, "1 kHz untouched: %.3f dB", high);
     const double quiet = measure (40.0, -24.0, {});
     CHECK (std::fabs (quiet) < 0.01, "a quiet sub untouched: %.3f dB", quiet);
-    // the Freq sets where it tapers: a loud 90 Hz tone is left alone with the band ending at 20 Hz, cut
-    // with it reaching 100 Hz
+    // the Freq sets where it tapers: a loud 90 Hz tone is nearly left alone with the shelf tapering at
+    // 20 Hz (its tail, two octaves up), cut with it reaching 100 Hz
     const double at20 = measure (90.0, -6.0, [] (Engine& en) { en.setParam (kSubFreq, 20.0); });
     const double at100 = measure (90.0, -6.0, [] (Engine& en) { en.setParam (kSubFreq, 100.0); });
     std::printf ("    90 Hz at -6 dB: Sub Freq 20 Hz %.2f dB, 100 Hz %.2f dB\n", at20, at100);
-    CHECK (std::fabs (at20) < 0.05 && at100 < -3.0, "the taper point: %.2f / %.2f dB", at20, at100);
+    CHECK (std::fabs (at20) < 1.0 && at100 < -6.0, "the taper point: %.2f / %.2f dB", at20, at100);
     // the Range at 0 or Sub off: nothing
     CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubRange, 0.0); })) < 1e-4, "Range 0");
     CHECK (std::fabs (measure (40.0, -1.0, [] (Engine& en) { en.setParam (kSubOn, 0.0); })) < 1e-4, "Sub off");

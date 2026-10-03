@@ -1,6 +1,6 @@
 // Gently: Smacheratr's Gently on its own, without the saturation curve around it. Up to two bands
 // (smacheratr/src/core/ClarityBand.h: 12 dB/oct below, 6 dB/oct above, around each band's
-// frequency) and the Sub band (from 20 Hz up to where it starts to taper off, 12 dB/oct above that:
+// frequency) and the Sub band (a shelf from the very bottom up to where its cut starts to let go:
 // smacheratr::subBand), each a gentle compressor on its region: when the band's level goes over the
 // threshold (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every
 // 5 over, at most by its Range (smacheratr::clarityCutDb). The bands work one after the other (band 1,

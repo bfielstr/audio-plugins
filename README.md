@@ -1,4 +1,4 @@
-# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -6,7 +6,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | Plug-in | What it is | Modelled on |
 |---|---|---|
 | [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gently, smoothr, any order, any number) and an output scope | Ableton Live's Simpler |
-| [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain | Ableton Live's Multiband Dynamics |
+| [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain; an OTT style (a measured model of Xfer's OTT) and its own Character style | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
 | [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, Gently (a band compressor against mud and harshness, with thresholds and a region drive in its Advanced mode), soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
@@ -17,6 +17,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Smoothr**](plugins/smoothr/README.md) | A limiter that puts a smooth low end before the last dB of loudness: slow gain on the lows and fast on the highs (a linear-phase split), a true-peak ceiling, a scrolling gain-reduction history; Smacheratr feeding it, and Character, a dip in the low mids that opens when they get loud | a mastering limiter with a FabFilter Pro-L-style history |
 | [**Deepr**](plugins/deepr/README.md) | Makes a bass or reese sound deeper by contrast: dips the low mids only while the sub plays, folds the sub to mono; no latency of its own; Smacheratr at the end | psychoacoustic bass contrast |
 | [**Gently**](plugins/gently/README.md) | Smacheratr's Gently on its own: a gentle dynamic de-muddier / de-harsher, two bands and a Sub band that turn their region down only while it is loud, with a live display of the cuts over the spectrum; Advanced: a Threshold per band on vertical sliders and a drive for the region it cuts; Smacheratr at the end | a dynamic EQ / multiband compressor display |
+| [**Dropr**](plugins/dropr/README.md) | A transient designer you draw: every hit in the audio starts a level shape you draw (up to 8 points, curves), dropping the hit by up to 60 dB and bringing it back over the Length; a 5 ms look-ahead so the shape can start before the hit; Smacheratr at the end | a drawable transient shaper / ShaperBox-style volume envelope triggered by transients |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
@@ -101,6 +102,7 @@ plugins/levlr   four-band levels        same structure
 plugins/smoothr low-end-first limiter   same structure
 plugins/deepr   bass depth by contrast  same structure
 plugins/gently  gentle de-mud / de-harsh same structure
+plugins/dropr   drawn transient shaper  same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

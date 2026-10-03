@@ -29,12 +29,8 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
 }
 constexpr double kHandleRadius = 5.0;
 CColor clarityColor (int band, uint8_t alpha = 255) { return ColorView::bandColor (band, alpha); }
-// Clarity's gain at a frequency for a cut (dB) at the band's peak: the band scaled by its response
-double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb)
-{
-    const double m = std::pow (10.0, clarityBandDb (b, hz, sr) / 20.0);
-    return 20.0 * std::log10 (std::max (1e-6, 1.0 - (1.0 - std::pow (10.0, cutDb / 20.0)) * m));
-}
+// Clarity's gain at a frequency for a cut (dB) at the band's peak (with the band's phase, as it sounds)
+double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb) { return clarityCutAtDb (b, hz, sr, cutDb); }
 } // namespace
 
 CColor ColorView::bandColor (int band, uint8_t alpha)

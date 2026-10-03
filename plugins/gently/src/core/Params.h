@@ -54,7 +54,7 @@ enum ParamId : uint32_t
     kMix,          // dry / wet
     kOutput,       // dB, before the Smacheratr at the end
     kBandBase,                                         // kBands x kBandBlock
-    // the Sub band: everything from 20 Hz up to where it starts to taper off (12 dB/oct above that,
+    // the Sub band: a shelf, everything from the very bottom up to where its cut starts to let go (
     // smacheratr::subBand), compressed like the bands; it has no Width
     kSubOn = kBandBase + kBands * kBandBlock, // off by default, as in Smacheratr
     kSubFreq,                                 // Hz, where the band starts to taper off (20 - 100 Hz)

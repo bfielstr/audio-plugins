@@ -300,6 +300,8 @@ void Editor::onClose ()
     mdSubName = mdSubOut = nullptr;
     for (auto& v : mdSubBoxes)
         v = nullptr;
+    mdCharViews.clear ();
+    mdRmsWindow = nullptr;
     waveform = nullptr;
     filterDisplay = nullptr;
     envDisplay = nullptr;
@@ -678,6 +680,9 @@ void Editor::paramChanged (uint32_t id)
             if (ctl->slotType (slot) == kFxMultidyn &&
                 (field == kSlotParams + multidyn::kBands || field == kSlotParams + (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kSubOn)))
                 updateMdLayout ();
+            if (ctl->slotType (slot) == kFxMultidyn &&
+                (field == kSlotParams + (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kDetector) || field == kSlotParams + (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kStyle)))
+                updateMdLooks ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxSmacheratr)
                 updateSatAdvanced ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxWubr)
@@ -781,6 +786,18 @@ void Editor::updateMdLayout ()
     }
     if (frame)
         frame->invalid ();
+}
+
+void Editor::updateMdLooks ()
+{
+    if (!mdLayoutHost)
+        return;
+    // Multidyn's OTT style (its Engine.h): Soft Knee, Peak/RMS, the RMS Window and Soften do nothing there
+    const bool character = std::lround (mdLayoutHost->plainValue (multidyn::kStyle)) == multidyn::kStyleCharacter;
+    for (auto* v : mdCharViews)
+        v->setEnabledLook (character);
+    if (mdRmsWindow)
+        mdRmsWindow->setEnabledLook (character && std::lround (mdLayoutHost->plainValue (multidyn::kDetector)) == multidyn::kRms);
 }
 
 void Editor::setFxTab (int t)
@@ -1172,6 +1189,8 @@ void Editor::clearBody ()
     mdSubName = mdSubOut = nullptr;
     for (auto& v : mdSubBoxes)
         v = nullptr;
+    mdCharViews.clear ();
+    mdRmsWindow = nullptr;
     rackPageParams.clear ();
     // no view holds a replaced host any more
     retiredHosts.clear ();
@@ -1255,9 +1274,14 @@ void Editor::buildBody ()
                     mdBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)),
                                          tip (bandParam (b, fields[i])));
             }
+            // the Style: OTT (a model of Xfer's OTT) or Character (Multidyn's own)
+            auto* stl = new Label (CRect (608, 10, 640, 24), "Style", 9.5, true, 0);
+            stl->setDim (true);
+            g->addView (stl);
+            add (new Segmented (CRect (644, 8, 776, 26), h, kStyle, {"OTT", "Character"}), tip (kStyle));
             add (new Segmented (CRect (608, 32, 716, 50), h, kBands, {"1", "2", "3", "4"}), tip (kBands));
-            add (new Toggle (CRect (722, 32, 830, 50), h, kSoftKnee, "Soft Knee"), tip (kSoftKnee));
-            add (new Segmented (CRect (608, 56, 700, 74), h, kDetector, {"Peak", "RMS"}), tip (kDetector));
+            mdCharViews.push_back (static_cast<ParamView*> (add (new Toggle (CRect (722, 32, 830, 50), h, kSoftKnee, "Soft Knee"), tip (kSoftKnee))));
+            mdCharViews.push_back (static_cast<ParamView*> (add (new Segmented (CRect (608, 56, 700, 74), h, kDetector, {"Peak", "RMS"}), tip (kDetector))));
             add (new Toggle (CRect (706, 56, 776, 74), h, kPreLimit, "Pre-Lim"), tip (kPreLimit));
             add (new NumberBox (CRect (780, 56, 830, 74), h, kPreLimitCeiling), tip (kPreLimitCeiling));
             auto* sp = new Label (CRect (608, 80, 830, 92), "Splits", 9.5, true, 1);
@@ -1268,14 +1292,14 @@ void Editor::buildBody ()
             add (new Knob (knobRect (608, 114), h, kAmount), tip (kAmount));
             add (new Knob (knobRect (664, 114), h, kTime), tip (kTime));
             add (new Knob (knobRect (720, 114), h, kOutput, nullptr, true), tip (kOutput));
-            add (new Knob (knobRect (776, 114), h, kSoften), tip (kSoften));
+            mdCharViews.push_back (static_cast<ParamView*> (add (new Knob (knobRect (776, 114), h, kSoften), tip (kSoften))));
             // the crossovers' slope; Soften's Color; the RMS window; the Sub band (on, where it tapers)
             add (new Choice (CRect (608, 182, 690, 200), h, kXoverSlope), tip (kXoverSlope));
             add (new Toggle (CRect (694, 182, 754, 200), h, kSoftenColor, "Color"), tip (kSoftenColor));
             auto* rl = new Label (CRect (758, 184, 790, 198), "RMS", 9.5, true, 2);
             rl->setDim (true);
             g->addView (rl);
-            add (new NumberBox (CRect (792, 182, 834, 200), h, kRmsWindow), tip (kRmsWindow));
+            mdRmsWindow = static_cast<ParamView*> (add (new NumberBox (CRect (792, 182, 834, 200), h, kRmsWindow), tip (kRmsWindow)));
             add (new Toggle (CRect (608, 206, 660, 224), h, kSubOn, "Sub"), tip (kSubOn));
             add (new NumberBox (CRect (664, 206, 740, 224), h, kSubFreq), tip (kSubFreq));
             // the Sub band's lane (placed by updateMdLayout)
@@ -1288,6 +1312,7 @@ void Editor::buildBody ()
                 mdSubBoxes[i] = add (new NumberBox (none, h, subFields[i], i < 2 ? above : pk::theme::kTextBright), tip (subFields[i]));
             mdLayoutHost = h;
             updateMdLayout ();
+            updateMdLooks ();
             break;
         }
         case kFxMsEq:

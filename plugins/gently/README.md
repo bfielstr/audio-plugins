@@ -22,12 +22,14 @@ band that is not cutting leaves the signal exactly as it was, bit for bit.
 - **Band 2** (blue): the upper mids, the harshness: 3 kHz, 2 octaves wide, Range 6 dB.
 - **On**, **Freq** (20 Hz to 20 kHz), **Width** (0.5 to 4 octaves between the band's edges) and
   **Range** (0 to 24 dB; at 0 dB the band does nothing) for each. The band's name shows the edges of
-  its region now.
-- **Sub** (amber, off by default): the sub region, from the bottom of the spectrum (20 Hz, a
-  12 dB/oct high-pass that also keeps DC and rumble out of its level) up to where it starts to taper
-  off, its **Freq** (20 to 100 Hz, 40 Hz by default; 1 dB down there), falling away at 12 dB/oct above
-  that. It has a **Range** (8 dB by default) and the same law as the other bands, and no width. It
-  works while it is on and its Range is above 0 dB.
+  its region now. A band whose edge reaches an end of the spectrum (its low edge at 20 Hz or below, or
+  its high edge at 20 kHz or above) turns into a shelf there: it runs flat past that end instead of
+  dipping back up.
+- **Sub** (amber, off by default): a shelf for the sub region, flat from the very bottom of the spectrum
+  up to its **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go (within about 1 dB
+  of the full cut there, about half of it at twice that, nearly none two octaves up). It has a **Range**
+  (8 dB by default) and the same law as the other bands, and no width. It works while it is on and its
+  Range is above 0 dB.
 
 The bands work one after the other (band 1, band 2, Sub, as in Smacheratr), each measuring its own
 band. **Attack** (0.5 to 100 ms, 15 ms) and **Release** (20 ms to 2 s, 150 ms) set how fast a band's
