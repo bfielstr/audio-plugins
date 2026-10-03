@@ -121,6 +121,10 @@ inline const char* forParam (uint32_t id)
                    "ignores note-off until the cycle ends). Beat / Sync: restart every Rate (Sync locks to the bar grid).";
         case kAmpLoopTime: return "Loop / Trigger: time to return from the sustain level to the start before restarting.";
         case kAmpLoopRate: return "Beat / Sync: how often the envelope restarts.";
+        case kFiltLoopLock:
+        case kPitchLoopLock:
+            return "Lock the envelope to the loop (Classic, Loop on). Restart: it starts again at every pass of "
+                   "the loop. Fit: it also stretches its attack, points and decay to one pass.";
         case kLfoOn: return "Switch the LFO on or off.";
         case kLfoWave: return "LFO waveform.";
         case kLfoSync: return "Rate in Hz, or synced to the host tempo.";

@@ -121,6 +121,12 @@ private:
     // classic (resampling) playback
     double pos = 0.0, lastRate = 1.0;
     bool srcDone = false;
+    // passes of the loop finished (wraps to its start) in the last sourceRender: the envelopes locked to
+    // the loop restart on them (see render)
+    int loopWraps = 0;
+    // one pass of the loop in the source's samples (its length less the crossfade the wrap skips), 0 when
+    // it does not loop
+    double loopPassLen (const ParamArray& p) const;
     // the loop moved under the playhead (Start automated): the playhead jumps into it, the old place
     // fading out over a few ms as the new one fades in (where it was, how many samples are left)
     double jumpFrom = 0.0;

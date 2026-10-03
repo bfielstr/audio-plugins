@@ -486,12 +486,17 @@ void Editor::buildUI (CFrame* f)
         envTabs[t] = new Group (CRect (0, 206, 318, 306));
         ep->addView (envTabs[t]);
         const uint32_t base = t == 0 ? kAmpA : (t == 1 ? kFiltA : kPitchA);
+        // (the filter and pitch tabs sit 4 px higher: their Loop Lock goes under the Amount)
+        const double ky = t == 0 ? 8 : 4;
         for (uint32_t i = 0; i < 4; ++i)
-            bind (envTabs[t], new Knob (knobRect (8 + i * 58, 8), this, base + i));
+            bind (envTabs[t], new Knob (knobRect (8 + i * 58, ky), this, base + i));
         if (t == 1)
-            bind (envTabs[t], new Knob (knobRect (240, 8), this, kFilterEnvAmt, "Amount", true));
+            bind (envTabs[t], new Knob (knobRect (240, ky), this, kFilterEnvAmt, "Amount", true));
         if (t == 2)
-            bind (envTabs[t], new Knob (knobRect (240, 8), this, kPitchEnvAmt, "Amount", true));
+            bind (envTabs[t], new Knob (knobRect (240, ky), this, kPitchEnvAmt, "Amount", true));
+        // locked to the loop: Off, Restart at every pass, or Fit (restarted, stretched to a pass)
+        if (t > 0)
+            bind (envTabs[t], new Choice (CRect (240, 68, 310, 99), this, t == 1 ? kFiltLoopLock : kPitchLoopLock, "Loop Lock"));
     }
     bind (envTabs[0], new Choice (CRect (240, 8, 310, 42), this, kAmpLoopMode, "Loop"));
     ampLoopTime = bind (envTabs[0], new Knob (CRect (248, 44, 304, 100), this, kAmpLoopTime, "Time"));

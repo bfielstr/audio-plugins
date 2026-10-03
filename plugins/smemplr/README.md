@@ -18,7 +18,7 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | Slice editing: double-click adds a slice (white) or removes one; drag to move; Alt-click toggles manual/auto | ✓ |
 | **Warp** in every mode, locked to host tempo: Beats (Preserve, Transient Loop Mode, Envelope), Tones (Grain Size), Texture (Grain Size, Flux), Re-Pitch, Complex, Complex Pro (Formants, Envelope); "Warp as" with ÷2 / ×2 | ✓ (own algorithms, see below) |
 | **Filter**: LP / HP / BP / Notch / Morph, 12/24 dB, circuits Clean / OSR / MS2 / SMP / PRD, Drive, Morph, Vel / Key / Env / LFO modulation, draggable response curve | ✓ |
-| **Envelopes**: Amp / Filter / Pitch ADSR with draggable displays; amp loop modes None / Trigger / Loop / Beat / Sync with Time / Rate | ✓ plus up to 6 extra breakpoints (double-click) and per-segment curves (Shift+drag), all automatable |
+| **Envelopes**: Amp / Filter / Pitch ADSR with draggable displays; amp loop modes None / Trigger / Loop / Beat / Sync with Time / Rate | ✓ plus up to 6 extra breakpoints (double-click) and per-segment curves (Shift+drag), all automatable; the Filter and Pitch envelopes' **Loop Lock** (Classic, Loop on): **Restart** starts the envelope again at every pass of the loop, **Fit** also stretches its attack, breakpoints and decay to exactly one pass (at the speed the note plays); Off by default |
 | **LFO**: Sine / Square / Triangle / Saw Down / Saw Up / Random, Hz or tempo sync, Attack, Retrigger + Offset, Key, → Volume / Pitch / Pan / Filter, per voice | ✓ |
 | **Global**: Pan, Random Pan, Spread (2 detuned voices L/R, decided at note-on), Volume, Vel→Vol, Transpose ±48, Detune ±50 ct, pitch bend (range adjustable, default ±5), Glide (mono legato) / Portamento (poly) + Time | ✓ plus a high-pass that follows the transposition (**HP**, see below) |
 | Context menu: Normalize, Reverse, Crop, constant-power fade toggle, Show in Finder | ✓ (all non-destructive; the file on disk is never changed) |
@@ -138,7 +138,7 @@ file; the file is what gets loaded. A temporary file (a render the DAW deletes l
 Documents/bfielstr/Samples first.
 
 Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
-the waveform, audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
+the waveform (the shaded loop above it drags too; a click there still auditions), audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
 ◀ ▶ step through the samples in the current folder, zoom (Cmd/Alt + scroll, or drag the ruler
 vertically) and pan (scroll, or drag the ruler horizontally), live playheads, resizable UI (drag
 the window corner, or Menu → Interface Size).

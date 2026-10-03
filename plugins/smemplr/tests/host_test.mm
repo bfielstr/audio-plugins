@@ -183,6 +183,18 @@ static void uiInteraction (Rig& rig)
     CHECK (std::fabs (plain (smemplr::kLength) - lengthBefore) < 0.004, "the loop keeps its length while moving (%f vs %f)",
            plain (smemplr::kLength), lengthBefore);
     CHECK (plain (smemplr::kLoopOn) >= 0.5, "dragging must not toggle the loop");
+    // ... and from anywhere inside the shaded loop, above the bar: back where it was
+    {
+        const double regionX = wx (newRs + 0.5 * (le - rs)), regionY = barY - 80;
+        win.mouseDown (regionX, regionY);
+        win.mouseDrag (regionX - 40, regionY);
+        win.mouseDrag (regionX - 84, regionY);
+        win.mouseUp (regionX - 84, regionY);
+        const double backRs = 0.1 + plain (smemplr::kStart) * 0.7;
+        CHECK (std::fabs (backRs - rs) < 0.004, "dragging inside the loop moved it back to %f (want %f)", backRs, rs);
+        CHECK (std::fabs (plain (smemplr::kLength) - lengthBefore) < 0.004 && plain (smemplr::kLoopOn) >= 0.5,
+               "the region drag keeps the length and the loop on");
+    }
 
     // --- envelope display: shift-drag bends a curve, double-click adds / removes breakpoints ---
     // amp envelope plot area in the editor: x 402..688, y 476..606

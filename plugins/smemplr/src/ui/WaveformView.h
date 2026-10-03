@@ -41,7 +41,9 @@ public:
     }
 
 private:
-    enum class Handle { None, FlagStart, FlagEnd, Start, LoopEnd, LoopBody, Slice, Ruler, Preview };
+    // LoopRegion: inside the shaded loop (Loop on), above its bar: a drag moves the loop like the bar, a click
+    // auditions as anywhere else in the waveform
+    enum class Handle { None, FlagStart, FlagEnd, Start, LoopEnd, LoopBody, Slice, Ruler, Preview, LoopRegion };
 
     SamplePtr sample () const;
     VSTGUI::CRect waveArea () const;
