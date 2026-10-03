@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace smemplr {
 
@@ -36,7 +37,10 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     (the high-pass's on unless its gain is above 0 dB, the low-pass's off) in its slots, and its Fade's
 //     range 1 .. 60 semitones (1 .. 36 before: a slot's Fade keeps its semitones)
 // 16: Multidyn's Sub Input in its slots (0 dB: older slots read 0 there, -24 dB)
-constexpr int32 kVersion = 16;
+// 18: the modulation LFOs' mappings after the loop fade flag (Modulation.h: encodeModMap, behind its
+//     size in bytes); an older state has none
+constexpr int32 kVersion = 18;
+constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {
@@ -78,6 +82,8 @@ bool writeState (IBStream* stream, const PluginState& st)
          s.writeBool (st.ops.normalize);
     ok = ok && writeDoubles (s, st.edits.manual) && writeDoubles (s, st.edits.suppressed);
     ok = ok && s.writeBool (st.constantPowerFade);
+    const std::vector<uint8_t> mods = encodeModMap (st.mods);
+    ok = ok && s.writeInt32 ((int32)mods.size ()) && s.writeRaw (mods.data (), (int32)mods.size ()) == (int32)mods.size ();
     return ok;
 }
 
@@ -116,6 +122,17 @@ bool readState (IBStream* stream, PluginState& st)
     bool cp = true;
     if (s.readBool (cp))
         st.constantPowerFade = cp;
+    // the modulation's mappings (none before version 18; a state cut short there keeps the rest)
+    st.mods.list.clear ();
+    int32 modBytes = 0;
+    if (version >= kModsSince && s.readInt32 (modBytes) && modBytes > 0 && modBytes <= (1 << 20))
+    {
+        std::vector<uint8_t> raw ((size_t)modBytes);
+        if (s.readRaw (raw.data (), modBytes) == modBytes)
+            decodeModMap (raw.data (), raw.size (), st.mods);
+        else
+            st.mods.list.clear ();
+    }
     // 0.1.x stored the loop fade type outside the parameters.
     if (!st.has[kLoopFadePower])
     {

@@ -252,6 +252,20 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kTransHpFreq, "Transpose HP Frequency", "HP Freq", 10.0, 200.0, 20.0, Curve::Log, Disp::Hz));
     add (choice (kTransHpSlope, "Transpose HP Slope", "HP Slope", {"6 dB", "12 dB", "18 dB", "24 dB", "36 dB", "48 dB"},
                  kTransHp24));
+    // the modulation LFOs (what they modulate is in the state: Modulation.h). Sync is Off (Rate in Hz) or a
+    // note length of the host's tempo.
+    std::vector<const char*> syncNames {"Off"};
+    syncNames.insert (syncNames.end (), kSyncDivisionNames.begin (), kSyncDivisionNames.end ());
+    for (int l = 0; l < kModLfos; ++l)
+    {
+        const std::string n = "Mod LFO " + std::to_string (l + 1);
+        add (choice ((ParamId)modLfoParam (l, kModShape), keep (n + " Shape"), "Shape",
+                     {"Sine", "Triangle", "Saw Up", "Saw Down", "Square", "S&H", "Smooth Random"}, kModSine));
+        add (fl ((ParamId)modLfoParam (l, kModRate), keep (n + " Rate"), "Rate", 0.01, 40.0, 1.0, Curve::Log, Disp::Hz));
+        add (choice ((ParamId)modLfoParam (l, kModSync), keep (n + " Sync"), "Sync", syncNames, 0));
+        add (fl ((ParamId)modLfoParam (l, kModPhase), keep (n + " Phase"), "Phase", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
+        add (toggle ((ParamId)modLfoParam (l, kModRetrig), keep (n + " Retrigger"), "Retrig", false));
+    }
     return t;
 }
 

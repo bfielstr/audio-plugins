@@ -5,6 +5,7 @@
 #include "Envelope.h"
 #include "Filter.h"
 #include "Lfo.h"
+#include "Modulation.h"
 #include "Params.h"
 #include "Rack.h"
 #include "SampleData.h"
@@ -167,8 +168,23 @@ public:
     const SamplePtr& sample () const { return smp; }
 
     void setParam (uint32_t id, double plain);
+    // what plays: the parameter's value with its modulation (param) or without (baseParam)
     double param (uint32_t id) const { return p[id]; }
+    double baseParam (uint32_t id) const { return base[id]; }
     const ParamArray& params () const { return p; }
+
+    // The modulation LFOs' mappings (Modulation.h; copied, at most kMaxModMappings). While there are any,
+    // render works in steps of kModStep samples, the mapped parameters set anew at each (their
+    // modulation smoothed over a few ms); without any it renders as it always has.
+    static constexpr int kModStep = 32;
+    void setModMappings (const ModMapping* list, int count);
+    int modMappingCount () const { return numMods; }
+    // For the editor: an LFO's value and phase, and a mapping's offset (normalized, as it plays; 0
+    // while it does not work: its slot holds another effect)
+    float modLfoValue (int lfo) const { return mod.value (lfo); }
+    double modLfoPhase (int lfo) const { return mod.phase (lfo); }
+    float modOffset (int mapping) const { return mapping < numMods && modState[(size_t)mapping].on ? (float)modState[(size_t)mapping].smooth : 0.0f; }
+    bool modWorking (int mapping) const { return mapping < numMods && modState[(size_t)mapping].on; }
 
     void setPitchBend (float bipolar)
     {
@@ -205,11 +221,27 @@ private:
     void killGroup (int group);
     void updateSlices ();
     void makeCtx (const HostInfo& host, BlockCtx& c) const;
+    void renderStep (float* L, float* R, int n, const HostInfo& host);
+    void applyParam (uint32_t id, double plain); // to what plays (setParam: the base value too)
+    bool modWorks (const ModMapping& m) const;
+    void modulate (int n);                        // the mapped parameters for the next n samples
     void renderEffects (float* L, float* R, int n, const HostInfo& host);
     bool regionFor (int note, PlayRegion& r) const;
     void computeBeatBounds (const PlayRegion& r);
 
     ParamArray p;
+    ParamArray base; // the parameters without their modulation
+    Modulator mod;
+    std::array<ModMapping, kMaxModMappings> mods {};
+    int numMods = 0;
+    struct ModState
+    {
+        double smooth = 0.0;  // the offset, smoothed
+        double applied = 0.0; // the value last set (by the first mapping of a target)
+        bool stale = true;    // set it anew (the base value changed, or it was never set)
+        bool on = false;      // working (its offset follows the LFO)
+    };
+    std::array<ModState, kMaxModMappings> modState {};
     SamplePtr smp;
     SliceEditsPtr edits;
     SliceList slices;

@@ -6,6 +6,7 @@
 #include "Params.h"
 #include "UiKit.h"
 #include "MsView.h"
+#include "ModView.h"
 #include "Rack.h"
 #include "WaveformView.h"
 #include "plugin/Controller.h"
@@ -260,6 +261,10 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
+    modOverlay = nullptr;
+    modList = nullptr;
+    modLive.clear ();
+    modRateKnobs.fill (nullptr);
     fxRow = fxCtl = fxBody = nullptr;
     fxDropMark = nullptr;
     tabSlots.clear ();
@@ -330,11 +335,12 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Toggle (CRect (750, 6, 810, 28), this, kWarp, "WARP"));
     hostLabel = new Label (CRect (820, 6, 1014, 28), "", 10.5, false, 2);
     root->addView (hostLabel);
-    root->addView (tip (new ActionButton (CRect (1022, 6, 1044, 28), "?", [this] { setTooltipsEnabled (!ctl->uiShowTips); },
+    // (at the right edge, over the modulation column)
+    root->addView (tip (new ActionButton (CRect (kWidth - 88, 6, kWidth - 66, 28), "?", [this] { setTooltipsEnabled (!ctl->uiShowTips); },
                                           [this] { return ctl->uiShowTips; }),
                         help::kHelpButton));
-    root->addView (tip (new ActionButton (CRect (1050, 6, 1102, 28), "Menu", [this] {
-                            CPoint p (1050, 28);
+    root->addView (tip (new ActionButton (CRect (kWidth - 60, 6, kWidth - 8, 28), "Menu", [this] {
+                            CPoint p (kWidth - 60, 28);
                             showMenu (p);
                         }),
                         help::kMenu));
@@ -556,7 +562,41 @@ void Editor::buildUI (CFrame* f)
     scope->setTooltipText (help::kScope);
     root->addView (scope);
 
+    // ---- the modulation (the column at the right): four LFOs, each with a handle to drag onto a control,
+    // and the list of what they modulate ----
+    auto* mp = new Panel (CRect (kModLeft, 38, kWidth - 8, kFxPanelTop + 234), "MODULATION");
+    root->addView (mp);
+    modLive.clear ();
+    for (int l = 0; l < kModLfos; ++l)
+    {
+        const double y = 24 + l * 120;
+        if (l > 0)
+        {
+            auto* line = new Group (CRect (8, y - 6, 204, y - 5));
+            line->setBackgroundColor (theme::kPanelEdge);
+            mp->addView (line);
+        }
+        modLive.push_back (tip (new LfoHandle (CRect (8, y, 66, y + 40), l, this), help::kLfoHandle));
+        mp->addView (modLive.back ());
+        bind (mp, new Choice (CRect (72, y, 204, y + 18), this, modLfoParam (l, kModShape)));
+        bind (mp, new Choice (CRect (72, y + 22, 140, y + 40), this, modLfoParam (l, kModSync)));
+        bind (mp, new Toggle (CRect (144, y + 22, 204, y + 40), this, modLfoParam (l, kModRetrig), "Retrig"));
+        modRateKnobs[(size_t)l] = bind (mp, new Knob (knobRect (8, y + 46), this, modLfoParam (l, kModRate)));
+        bind (mp, new Knob (knobRect (66, y + 46), this, modLfoParam (l, kModPhase)));
+        modLive.push_back (tip (new LfoScope (CRect (126, y + 50, 204, y + 104), l, this), help::kLfoScope));
+        mp->addView (modLive.back ());
+    }
+    mp->addView (new Label (CRect (8, 506, 204, 520), "MAPPINGS", 10.0, true));
+    modList = new ModList (CRect (8, 524, 204, 524 + kMaxModMappings * ModList::kRow), this);
+    modList->setTooltipText (help::kModList);
+    mp->addView (modList);
+    modListShown = ~0ull;
+
     applyParamTooltips (&help::forParam);
+
+    // over everything: the modulation on the controls (and the control an LFO is dragged over)
+    modOverlay = new ModOverlay (CRect (0, 0, kWidth, kHeight), this);
+    root->addView (modOverlay);
 
     updateVisibility ();
     rebuildRack ();
@@ -715,6 +755,8 @@ void Editor::paramChanged (uint32_t id)
         case kWarpBeats: updateVisibility (); break;
         default: break;
     }
+    if (isModLfoParam (id) && (id - kModLfoBase) % kModLfoFields == kModSync)
+        updateVisibility ();
 }
 
 void Editor::bridgeChanged ()
@@ -875,6 +917,11 @@ void Editor::removeFx (int slot)
         return;
     // the page's views go first: the slots' effects change under them (and with them their hosts)
     clearBody ();
+    // its modulation goes, the mappings of the ones after it move up with them
+    std::array<int, kRackSlots> moved;
+    for (int s = 0; s < kRackSlots; ++s)
+        moved[(size_t)s] = s < slot ? s : (s == slot ? -1 : s - 1);
+    remapMods (moved);
     // the ones after it move up, so the chain stays in order without gaps; the last one used is emptied
     for (int s = slot; s < kRackSlots; ++s)
         if (s + 1 < kRackSlots && (ctl->slotType (s + 1) != kFxEmpty || ctl->slotType (s) != kFxEmpty))
@@ -895,8 +942,13 @@ void Editor::moveFx (int from, int to)
     std::array<double, kSlotValues> moving;
     for (uint32_t k = 0; k < kSlotValues; ++k)
         moving[k] = norm (slotValueParam (from, k));
-    // the slots between move over by one, towards where it was; then it takes its new place
+    // the slots between move over by one, towards where it was; then it takes its new place (and the
+    // modulation goes along)
     const int dir = to > from ? 1 : -1;
+    std::array<int, kRackSlots> moved;
+    for (int s = 0; s < kRackSlots; ++s)
+        moved[(size_t)s] = s == from ? to : ((dir > 0 && s > from && s <= to) || (dir < 0 && s >= to && s < from) ? s - dir : s);
+    remapMods (moved);
     for (int s = from; s != to; s += dir)
         copySlot (s + dir, s);
     for (uint32_t k = 0; k < kSlotValues; ++k)
@@ -923,6 +975,11 @@ void Editor::duplicateFx (int from, int at)
         copy[k] = norm (slotValueParam (from, k));
     for (int s = free; s > at; --s)
         copySlot (s - 1, s);
+    // (the copy is not modulated; the ones that moved up keep their modulation)
+    std::array<int, kRackSlots> moved;
+    for (int s = 0; s < kRackSlots; ++s)
+        moved[(size_t)s] = s >= at && s < free ? s + 1 : s;
+    remapMods (moved);
     for (uint32_t k = 0; k < kSlotValues; ++k)
         if (norm (slotValueParam (at, k)) != copy[k])
             setOnce (slotValueParam (at, k), copy[k]);
@@ -1711,13 +1768,219 @@ void Editor::updateVisibility ()
     const int lm = (int)std::lround (plainValue (kAmpLoopMode));
     ampLoopTime->setVisible (lm == kAmpLoopTrigger || lm == kAmpLoopLoop);
     ampLoopRate->setVisible (lm == kAmpLoopBeat || lm == kAmpLoopSync);
+    // a synced modulation LFO's Rate (Hz) does nothing
+    for (int l = 0; l < kModLfos; ++l)
+        if (auto* k = dynamic_cast<ParamView*> (modRateKnobs[(size_t)l]))
+            k->setEnabledLook (std::lround (plainValue (modLfoParam (l, kModSync))) == 0);
 
     if (auto* f = frame)
         f->invalid ();
 }
 
+// --- the modulation -----------------------------------------------------------------------------------
+ModMap Editor::modMap ()
+{
+    auto* b = ctl->getBridge ();
+    auto m = b ? b->modsNow () : nullptr;
+    return m ? *m : ModMap {};
+}
+
+void Editor::setMods (ModMap m)
+{
+    if (auto* b = ctl->getBridge ())
+    {
+        b->setMods (std::move (m));
+        ctl->markDirty ();
+        if (modList)
+            modList->invalid ();
+        updateModRings ();
+    }
+}
+
+bool Editor::addMod (int lfo, uint32_t target)
+{
+    const int type = isRackParam (target) ? ctl->slotType (rackField (target).slot) : kFxEmpty;
+    if (!ctl->getBridge () || !canModulate (target, type))
+        return false;
+    ModMap m = modMap ();
+    if (!addMapping (m, lfo, target, kModDropDepth, modFxTypeFor (target, type)))
+        return false;
+    setMods (std::move (m));
+    return true;
+}
+
+void Editor::removeMod (size_t index)
+{
+    ModMap m = modMap ();
+    if (removeMapping (m, index))
+        setMods (std::move (m));
+}
+
+void Editor::setModDepth (size_t index, double depth)
+{
+    ModMap m = modMap ();
+    if (index >= m.list.size ())
+        return;
+    depth = std::clamp (depth, -1.0, 1.0);
+    if (m.list[index].depth == depth)
+        return;
+    m.list[index].depth = depth;
+    setMods (std::move (m));
+}
+
+void Editor::remapMods (const std::array<int, kRackSlots>& newSlot)
+{
+    ModMap m = modMap ();
+    const auto before = m.list;
+    remapSlots (m, newSlot);
+    if (m.list != before)
+        setMods (std::move (m));
+}
+
+namespace {
+// every ParamView shown, with its rect in frame coordinates (the topmost last)
+void forEachParamView (CViewContainer* c, CPoint offset, const std::function<void (pk::ParamView*, const CRect&)>& fn)
+{
+    c->forEachChild ([&] (CView* v) {
+        if (!v->isVisible () || dynamic_cast<ModOverlay*> (v))
+            return;
+        CRect r = v->getViewSize ();
+        r.offset (offset.x, offset.y);
+        if (auto* cc = v->asViewContainer ())
+            forEachParamView (cc, r.getTopLeft (), fn);
+        else if (auto* pv = dynamic_cast<pk::ParamView*> (v))
+            fn (pv, r);
+    });
+}
+} // namespace
+
+int64_t Editor::modTargetAt (CPoint where, CRect* rect)
+{
+    if (!frame)
+        return -1;
+    int64_t found = -1;
+    CRect at;
+    forEachParamView (frame, CPoint (0, 0), [&] (pk::ParamView* pv, const CRect& r) {
+        if (r.pointInside (where))
+        {
+            found = pv->sourceParamId ();
+            at = r;
+        }
+    });
+    if (found < 0 || found >= kNumParams)
+        return -1;
+    const uint32_t id = (uint32_t)found;
+    if (!canModulate (id, isRackParam (id) ? ctl->slotType (rackField (id).slot) : kFxEmpty))
+        return -1;
+    if (rect)
+        *rect = at;
+    return found;
+}
+
+void Editor::lfoDragged (int lfo, CPoint where, bool drop)
+{
+    CRect r;
+    const int64_t id = modTargetAt (where, &r);
+    if (drop)
+    {
+        if (modOverlay)
+            modOverlay->setDragTarget (CRect (), lfo);
+        if (id >= 0)
+            addMod (lfo, (uint32_t)id);
+        return;
+    }
+    if (modOverlay)
+        modOverlay->setDragTarget (id >= 0 ? r : CRect (), lfo);
+}
+
+void Editor::lfoDragCancelled ()
+{
+    if (modOverlay)
+        modOverlay->setDragTarget (CRect (), 0);
+}
+
+std::string Editor::modTargetName (const ModMapping& m)
+{
+    if (!isRackParam (m.target))
+        return paramInfo (m.target).name;
+    const RackField rf = rackField (m.target);
+    const int type = m.fxType >= 0 ? m.fxType : ctl->slotType (rf.slot);
+    const uint32_t j = rf.field - kSlotParams;
+    const auto& t = fxBlockTable (type);
+    std::string name = "FX " + std::to_string (rf.slot + 1) + " " + fxName (type);
+    if (rf.field >= kSlotParams && j < t.size ())
+        name += std::string (" ") + t.info (j).name;
+    return name;
+}
+
+bool Editor::modOffsetNow (size_t index, float& offset)
+{
+    auto* b = ctl->getBridge ();
+    if (!b || index >= (size_t)kMaxModMappings || b->modsPlaying.load () != b->modsChanged.load ())
+        return false;
+    offset = b->modOffset[index].load (std::memory_order_relaxed);
+    return !std::isnan (offset);
+}
+
+float Editor::lfoValueNow (int lfo)
+{
+    auto* b = ctl->getBridge ();
+    return b ? b->lfoValue[(size_t)lfo].load (std::memory_order_relaxed) : 0.0f;
+}
+
+float Editor::lfoPhaseNow (int lfo)
+{
+    auto* b = ctl->getBridge ();
+    return b ? b->lfoPhase[(size_t)lfo].load (std::memory_order_relaxed) : 0.0f;
+}
+
+int Editor::lfoShapeNow (int lfo) { return (int)std::lround (plainValue (modLfoParam (lfo, kModShape))); }
+
+double Editor::lfoPhaseOffset (int lfo) { return plainValue (modLfoParam (lfo, kModPhase)) / 360.0; }
+
+void Editor::updateModRings ()
+{
+    if (!modOverlay || !frame)
+        return;
+    const ModMap m = modMap ();
+    std::vector<ModRing> rings;
+    if (!m.list.empty ())
+        forEachParamView (frame, CPoint (0, 0), [&] (pk::ParamView* pv, const CRect& r) {
+            const int64_t id = pv->sourceParamId ();
+            if (id < 0)
+                return;
+            ModRing g;
+            for (size_t i = 0; i < m.list.size (); ++i)
+                if (m.list[i].target == (uint32_t)id)
+                    g.maps.push_back (i);
+            if (g.maps.empty ())
+                return;
+            g.r = r;
+            g.knob = dynamic_cast<pk::Knob*> (pv) != nullptr;
+            g.target = (uint32_t)id;
+            rings.push_back (std::move (g));
+        });
+    modOverlay->setRings (std::move (rings));
+}
+
 void Editor::idle ()
 {
+    for (auto* v : modLive)
+        v->invalid ();
+    if (auto* b = ctl->getBridge (); b && modList)
+    {
+        // the list again when the mappings change, or which of them work (dimmed while paused)
+        uint64_t shown = (uint64_t)b->modsChanged.load () << 32;
+        float off;
+        for (size_t i = 0; i < (size_t)kMaxModMappings; ++i)
+            shown ^= modOffsetNow (i, off) ? 1ull << i : 0ull;
+        if (shown != modListShown)
+        {
+            modListShown = shown;
+            modList->invalid ();
+        }
+    }
+    updateModRings ();
     if (waveform)
         waveform->idle ();
     if (scope)

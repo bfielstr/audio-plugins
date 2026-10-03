@@ -24,6 +24,9 @@ struct ParamHost
     virtual void setNorm (uint32_t id, double v) = 0; // inside a gesture
     virtual void endEdit (uint32_t id) = 0;
     virtual std::string valueText (uint32_t id) = 0;
+    // The plug-in's own parameter behind `id` (a host in front of another one maps it; -1: none). Smemplr's
+    // editor finds what a control is bound to this way (its modulation's drag and drop).
+    virtual int64_t sourceParam (uint32_t id) { return id; }
     void setOnce (uint32_t id, double v)
     {
         beginEdit (id);
@@ -64,6 +67,11 @@ public:
             in->endEdit ((uint32_t)m);
     }
     std::string valueText (uint32_t id) override { return tbl.toText (id, plainValue (id)); }
+    int64_t sourceParam (uint32_t id) override
+    {
+        const int64_t m = idOf (id);
+        return m < 0 ? -1 : in->sourceParam ((uint32_t)m);
+    }
 
 private:
     ParamHost* in;
@@ -83,6 +91,7 @@ class ParamView : public VSTGUI::CView
 public:
     ParamView (const VSTGUI::CRect& r, ParamHost* h, uint32_t id) : CView (r), host (h), param (id) {}
     uint32_t paramId () const { return param; }
+    int64_t sourceParamId () const { return host->sourceParam (param); } // (ParamHost::sourceParam)
     void setEnabledLook (bool e)
     {
         if (e != enabledLook)

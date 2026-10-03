@@ -3,6 +3,7 @@
 #include "Fft.h"
 #include "Filter.h"
 #include "Interp.h"
+#include "Modulation.h"
 #include "Params.h"
 #include "Rack.h"
 #include "SampleData.h"
@@ -870,9 +871,9 @@ TEST (rack_wubr_mapping)
     for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
         CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
     // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
-    // high-pass), not the rack's, and the IDs run on to kNumParams with no gap
-    CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kNumParams == kTransHpSlope + 1 &&
-               kNumParams < kMidiPitchBend,
+    // high-pass, then the modulation LFOs), not the rack's, and the IDs run on to kNumParams with no gap
+    CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kModLfoBase == kTransHpSlope + 1 &&
+               kNumParams == kModLfoEnd && kNumParams < kMidiPitchBend,
            "kNumParams %u", (unsigned)kNumParams);
     for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
         CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id), "%u is the sampler's", id);
@@ -3001,6 +3002,335 @@ TEST (far_transpose_cpu_and_memory)
     CHECK (at48 < 25.0 && hp48 < 30.0, "too slow: %.1f%% / %.1f%%", at48, hp48);
     // (read the old way, at the sample's rate, 8 complex voices at +48 took about 290%, complex pro 360%)
     CHECK (pv48 < 110.0 && pro48 < 130.0, "the vocoder too slow at +48: %.1f%% / %.1f%%", pv48, pro48);
+}
+
+// --- the modulation LFOs (Modulation.h) -------------------------------------------------------------
+
+TEST (mod_lfo_shapes)
+{
+    // each shape at a few phases: Sine, Triangle (0 at the start, up first), the saws, Square (high first),
+    // S&H holding its value, Smooth Random gliding from the last value to this cycle's
+    auto near = [] (float a, float b) { return std::fabs (a - b) < 1e-5f; };
+    CHECK (near (modShape (kModSine, 0.0, 0, 0), 0.0f) && near (modShape (kModSine, 0.25, 0, 0), 1.0f) &&
+               near (modShape (kModSine, 0.75, 0, 0), -1.0f),
+           "sine");
+    CHECK (near (modShape (kModTriangle, 0.0, 0, 0), 0.0f) && near (modShape (kModTriangle, 0.25, 0, 0), 1.0f) &&
+               near (modShape (kModTriangle, 0.5, 0, 0), 0.0f) && near (modShape (kModTriangle, 0.75, 0, 0), -1.0f),
+           "triangle");
+    CHECK (near (modShape (kModSawUp, 0.0, 0, 0), -1.0f) && near (modShape (kModSawUp, 0.5, 0, 0), 0.0f) &&
+               near (modShape (kModSawDown, 0.0, 0, 0), 1.0f) && near (modShape (kModSawDown, 0.75, 0, 0), -0.5f),
+           "saws");
+    CHECK (near (modShape (kModSquare, 0.1, 0, 0), 1.0f) && near (modShape (kModSquare, 0.6, 0, 0), -1.0f), "square");
+    CHECK (near (modShape (kModRandom, 0.1, 0.3f, -0.4f), -0.4f) && near (modShape (kModRandom, 0.9, 0.3f, -0.4f), -0.4f), "S&H");
+    CHECK (near (modShape (kModSmoothRandom, 0.0, 0.3f, -0.4f), 0.3f) && near (modShape (kModSmoothRandom, 0.5, 0.3f, -0.4f), -0.05f) &&
+               std::fabs (modShape (kModSmoothRandom, 0.999999, 0.3f, -0.4f) + 0.4f) < 1e-4f,
+           "smooth random");
+    // every shape stays in -1 .. 1, the random ones too (over many cycles)
+    Modulator m;
+    m.prepare (kHostSr);
+    m.reset ();
+    for (int shape = 0; shape < kNumModShapes; ++shape)
+    {
+        ParamArray p = defaultParams ();
+        p[modLfoParam (0, kModShape)] = shape;
+        p[modLfoParam (0, kModRate)] = 37.0;
+        float lo = 2.0f, hi = -2.0f;
+        for (int i = 0; i < 48000 / 32; ++i)
+        {
+            m.advance (p.data (), 32, 120.0, 0.0, false);
+            lo = std::min (lo, m.value (0));
+            hi = std::max (hi, m.value (0));
+        }
+        CHECK (lo >= -1.0f && hi <= 1.0f && hi - lo > 1.0f, "shape %d: %f .. %f", shape, lo, hi);
+    }
+}
+
+TEST (mod_lfo_rates_and_sync)
+{
+    // rising zero crossings of a sine LFO over a second (and a step: the last one is a second in), in
+    // steps of 32 samples
+    auto cycles = [] (ParamArray p, double bpm, bool playing, int lfo = 0) {
+        Modulator m;
+        m.prepare (kHostSr);
+        m.reset ();
+        int n = 0;
+        float last = 0.0f;
+        double ppq = 0.0;
+        for (int i = 0; i <= 48000 / 32; ++i)
+        {
+            m.advance (p.data (), 32, bpm, ppq, playing);
+            ppq += 32 * (bpm > 0.0 ? bpm : 120.0) / 60.0 / kHostSr;
+            const float v = m.value (lfo);
+            n += i > 0 && last < 0.0f && v >= 0.0f ? 1 : 0;
+            last = v;
+        }
+        return n;
+    };
+    ParamArray p = defaultParams ();
+    CHECK (paramInfo (modLfoParam (0, kModRate)).def == 1.0 && std::lround (paramInfo (modLfoParam (0, kModSync)).def) == 0,
+           "an LFO starts free at 1 Hz");
+    p[modLfoParam (0, kModRate)] = 3.0;
+    CHECK (cycles (p, 120.0, false) == 3, "3 Hz: %d", cycles (p, 120.0, false));
+    p[modLfoParam (2, kModRate)] = 7.0;
+    CHECK (cycles (p, 120.0, false, 2) == 7, "LFO 3 at 7 Hz: %d", cycles (p, 120.0, false, 2));
+    // synced: Sync is Off, then the note lengths (1/4 is index 9 + 1), the Rate does not count
+    p[modLfoParam (0, kModSync)] = 10.0;
+    CHECK (paramTable ().toText (modLfoParam (0, kModSync), 10.0) == "1/4", "1/4: %s",
+           paramTable ().toText (modLfoParam (0, kModSync), 10.0).c_str ());
+    CHECK (cycles (p, 120.0, false) == 2, "1/4 at 120 BPM: %d", cycles (p, 120.0, false));
+    CHECK (cycles (p, 60.0, false) == 1, "1/4 at 60 BPM: %d", cycles (p, 60.0, false));
+    CHECK (cycles (p, 180.0, true) == 3, "1/4 at 180 BPM, playing: %d", cycles (p, 180.0, true));
+    CHECK (cycles (p, 0.0, false) == 2, "no tempo: 120 BPM: %d", cycles (p, 0.0, false));
+    p[modLfoParam (0, kModSync)] = 14.0; // 1/2
+    CHECK (cycles (p, 120.0, false) == 1, "1/2 at 120 BPM: %d", cycles (p, 120.0, false));
+    // while the host plays, a synced LFO follows the song position: at beat 17.25 a 1/4 LFO is a quarter
+    // of the way through its cycle (a sine at its top), however it got there
+    {
+        ParamArray q = defaultParams ();
+        q[modLfoParam (1, kModSync)] = 10.0;
+        Modulator m;
+        m.prepare (kHostSr);
+        m.reset ();
+        m.advance (q.data (), 32, 120.0, 17.25, true);
+        CHECK (std::fabs (m.value (1) - 1.0f) < 1e-4f && std::fabs (m.phase (1) - 0.25) < 1e-9, "song position: %f (phase %f)",
+               m.value (1), m.phase (1));
+        // with Phase at 90 degrees the same place reads half way
+        q[modLfoParam (1, kModPhase)] = 90.0;
+        m.advance (q.data (), 32, 120.0, 17.25, true);
+        CHECK (std::fabs (m.phase (1) - 0.5) < 1e-9, "phase offset: %f", m.phase (1));
+    }
+    // Retrig: a note starts the LFO again at its Phase (only the LFOs with Retrig on)
+    {
+        ParamArray q = defaultParams ();
+        q[modLfoParam (0, kModRetrig)] = 1.0;
+        q[modLfoParam (0, kModPhase)] = 90.0;
+        q[modLfoParam (0, kModRate)] = 0.37;
+        q[modLfoParam (1, kModRate)] = 0.37;
+        Modulator m;
+        m.prepare (kHostSr);
+        m.reset ();
+        for (int i = 0; i < 1000; ++i)
+            m.advance (q.data (), 32, 120.0, 0.0, false);
+        const double before1 = m.phase (1);
+        m.noteOn ();
+        m.advance (q.data (), 32, 120.0, 0.0, false);
+        CHECK (std::fabs (m.value (0) - 1.0f) < 1e-5f && std::fabs (m.phase (0) - 0.25) < 1e-9, "retriggered at 90 degrees: %f", m.value (0));
+        CHECK (std::fabs (m.phase (1) - before1 - 0.37 * 32 / kHostSr) < 1e-9, "LFO 2 (no Retrig) kept running: %f -> %f", before1, m.phase (1));
+    }
+    // S&H: one value per cycle
+    {
+        ParamArray q = defaultParams ();
+        q[modLfoParam (0, kModShape)] = kModRandom;
+        q[modLfoParam (0, kModRate)] = 10.0;
+        Modulator m;
+        m.prepare (kHostSr);
+        m.reset ();
+        int changes = 0;
+        float last = 0.0f;
+        for (int i = 0; i < 48000 / 32; ++i)
+        {
+            m.advance (q.data (), 32, 120.0, 0.0, false);
+            changes += i > 0 && m.value (0) != last ? 1 : 0;
+            last = m.value (0);
+        }
+        CHECK (changes >= 9 && changes <= 10, "S&H at 10 Hz changed %d times in a second", changes);
+    }
+}
+
+TEST (mod_mapping_edits)
+{
+    ModMap m;
+    CHECK (addMapping (m, 0, kFilterFreq, 0.5, -1) && addMapping (m, 1, kFilterFreq, -0.25, -1), "two LFOs on one target");
+    CHECK (!addMapping (m, 0, kFilterFreq, 0.9, -1) && m.list.size () == 2 && m.list[0].depth == 0.5, "the same LFO twice: refused");
+    CHECK (!addMapping (m, kModLfos, kVolume, 0.5, -1) && !addMapping (m, 0, kNumParams, 0.5, -1), "no such LFO / parameter");
+    CHECK (addMapping (m, 2, kVolume, 3.0, -1) && m.list.back ().depth == 1.0, "depth held to -1 .. 1");
+    CHECK (removeMapping (m, 0) && m.list.size () == 2 && m.list[0].lfo == 1 && !removeMapping (m, 5), "remove");
+    ModMap full;
+    for (int i = 0; i < kMaxModMappings; ++i)
+        CHECK (addMapping (full, i % kModLfos, (uint32_t)(kAmpA + i / kModLfos), 0.1, -1), "mapping %d", i);
+    CHECK (!addMapping (full, 0, kVolume, 0.1, -1) && (int)full.list.size () == kMaxModMappings, "at most %d", kMaxModMappings);
+
+    // what may be modulated: numbers, not switches, menus, a slot's Type / On, the LFOs themselves
+    CHECK (canModulate (kFilterFreq, kFxEmpty) && canModulate (kTranspose, kFxEmpty) && canModulate (kVolume, kFxEmpty), "numbers");
+    CHECK (!canModulate (kFilterOn, kFxEmpty) && !canModulate (kMode, kFxEmpty) && !canModulate (kVoices, kFxEmpty), "switches and menus");
+    CHECK (!canModulate (modLfoParam (0, kModRate), kFxEmpty) && !canModulate (kTailBase + pk::kTailDrive, kFxEmpty) &&
+               !canModulate (kFxParaBase + para::kHpFreq, kFxEmpty) && !canModulate (kNumParams, kFxEmpty),
+           "the LFOs, the old parameters");
+    const uint32_t hp = slotBlockParam (2, (uint32_t)fxBlockOf (kFxPara, para::kHpFreq));
+    CHECK (canModulate (hp, kFxPara) && !canModulate (hp, kFxEmpty) && !canModulate (slotParam (2, kSlotType), kFxPara) &&
+               !canModulate (slotParam (2, kSlotOn), kFxPara),
+           "a slot's values (while it holds an effect), not its Type or On");
+    CHECK (!canModulate (slotBlockParam (2, (uint32_t)fxBlockOf (kFxPara, para::kMovement)), kFxPara), "a slot's menu");
+    CHECK (modFxTypeFor (hp, kFxPara) == kFxPara && modFxTypeFor (kVolume, kFxPara) == -1, "fxType");
+
+    // the rack's effects move: their mappings follow, a removed effect's go
+    ModMap r;
+    addMapping (r, 0, slotBlockParam (1, 3), 0.5, kFxPara);
+    addMapping (r, 1, slotBlockParam (2, kSlotBlock + 2), 0.5, kFxWubr); // (in the slot's extension)
+    addMapping (r, 2, kVolume, 0.5, -1);
+    std::array<int, kRackSlots> moved;
+    for (int s = 0; s < kRackSlots; ++s)
+        moved[(size_t)s] = s;
+    moved[1] = -1; // removed: the ones after it move up
+    for (int s = 2; s < kRackSlots; ++s)
+        moved[(size_t)s] = s - 1;
+    remapSlots (r, moved);
+    CHECK (r.list.size () == 2 && r.list[0].target == slotBlockParam (1, kSlotBlock + 2) && r.list[1].target == kVolume,
+           "after removing slot 2: %zu, %u", r.list.size (), r.list.empty () ? 0u : r.list[0].target);
+}
+
+TEST (mod_mappings_as_bytes)
+{
+    ModMap m;
+    addMapping (m, 0, kFilterFreq, 0.375, -1);
+    addMapping (m, 3, slotBlockParam (7, kSlotBlock + 5), -0.125, kFxWubr);
+    const auto b = encodeModMap (m);
+    ModMap back;
+    CHECK (decodeModMap (b.data (), b.size (), back) && back.list.size () == 2 && back.list[0] == m.list[0] && back.list[1] == m.list[1],
+           "round trip");
+    CHECK (!decodeModMap (b.data (), b.size () - 3, back) && back.list.empty (), "cut short in an entry");
+    CHECK (!decodeModMap (b.data (), 8, back) && back.list.empty (), "cut short in the header");
+    ModMap none;
+    const auto e = encodeModMap (none);
+    CHECK (decodeModMap (e.data (), e.size (), back) && back.list.empty (), "none");
+    // a later format with longer entries: the fields known are read, the rest skipped
+    std::vector<uint8_t> longer;
+    auto put32 = [&] (uint32_t v) {
+        for (int i = 0; i < 4; ++i)
+            longer.push_back ((uint8_t)(v >> (8 * i)));
+    };
+    put32 (2);
+    put32 (2);
+    put32 (24);
+    for (int i = 0; i < 2; ++i)
+    {
+        longer.insert (longer.end (), b.begin () + 12 + i * 20, b.begin () + 12 + (i + 1) * 20);
+        put32 (0xDEADBEEF);
+    }
+    CHECK (decodeModMap (longer.data (), longer.size (), back) && back.list.size () == 2 && back.list[1] == m.list[1], "longer entries");
+    // a parameter this version does not know is dropped
+    ModMap future;
+    future.list.push_back ({1, kNumParams + 40, 0.5, -1});
+    future.list.push_back ({1, kVolume, 0.5, -1});
+    const auto f = encodeModMap (future);
+    CHECK (decodeModMap (f.data (), f.size (), back) && back.list.size () == 1 && back.list[0].target == kVolume, "unknown target dropped");
+}
+
+TEST (mod_applied_and_clamped)
+{
+    std::unique_ptr<Engine> e (makeEngine (sine (220.0, 1.0)));
+    auto norm = [&] (uint32_t id) { return toNormalized (id, e->param (id)); };
+    e->setParam (kFilterFreq, toPlain (kFilterFreq, 0.5));
+    e->setParam (modLfoParam (0, kModShape), kModSquare);
+    e->setParam (modLfoParam (0, kModRate), 1.0);
+    ModMapping m {0, kFilterFreq, 0.25, -1};
+    e->setModMappings (&m, 1);
+    e->noteOn (60, 1.0f);
+    run (*e, Engine::kModStep);
+    // the square is high in its first half: the cutoff a quarter of its range up, the base value where it was
+    CHECK (std::fabs (norm (kFilterFreq) - 0.75) < 1e-9 && std::fabs (toNormalized (kFilterFreq, e->baseParam (kFilterFreq)) - 0.5) < 1e-9,
+           "modulated %f, base %f", norm (kFilterFreq), toNormalized (kFilterFreq, e->baseParam (kFilterFreq)));
+    CHECK (e->modWorking (0) && std::fabs (e->modOffset (0) - 0.25f) < 1e-6f, "offset %f", e->modOffset (0));
+    // half a second on, low: it glides there (a step of half the range at once would click)
+    run (*e, 24000 - 2 * Engine::kModStep);
+    const double justBefore = norm (kFilterFreq);
+    run (*e, 2 * Engine::kModStep);
+    const double justAfter = norm (kFilterFreq);
+    CHECK (std::fabs (justBefore - 0.75) < 1e-6 && justAfter > 0.26 && justAfter < 0.74, "the edge glides: %f -> %f", justBefore, justAfter);
+    run (*e, 4800);
+    CHECK (std::fabs (norm (kFilterFreq) - 0.25) < 1e-6, "low half: %f", norm (kFilterFreq));
+    // the host moves the parameter: the modulation goes on around the new value
+    e->setParam (kFilterFreq, toPlain (kFilterFreq, 0.4));
+    run (*e, Engine::kModStep);
+    CHECK (std::fabs (norm (kFilterFreq) - 0.15) < 1e-6, "around the new value: %f", norm (kFilterFreq));
+    // held to the range: the square low and a depth of -1 from 0.9 stops at the top (the mapping of the
+    // same LFO and target before glides there: changing a depth does not jump); LFO 2's square and a full
+    // depth take the volume to its top or bottom
+    e->setParam (kFilterFreq, toPlain (kFilterFreq, 0.9));
+    e->setParam (modLfoParam (1, kModShape), kModSquare);
+    ModMapping deep[2] = {{0, kFilterFreq, -1.0, -1}, {1, kVolume, 1.0, -1}};
+    e->setModMappings (deep, 2);
+    run (*e, Engine::kModStep);
+    CHECK (norm (kFilterFreq) < 0.9, "a new depth glides: %f", norm (kFilterFreq));
+    run (*e, 960);
+    CHECK (norm (kFilterFreq) == 1.0 && e->param (kVolume) == (e->modLfoValue (1) > 0.0f ? paramInfo (kVolume).max : paramInfo (kVolume).min),
+           "held to the range: %f, volume %f", norm (kFilterFreq), e->param (kVolume));
+    // two LFOs on one parameter add up
+    ModMapping two[2] = {{0, kFilterFreq, 0.1, -1}, {1, kFilterFreq, -0.3, -1}};
+    e->setParam (kFilterFreq, toPlain (kFilterFreq, 0.5));
+    e->setParam (modLfoParam (1, kModShape), kModSine);
+    e->setParam (modLfoParam (1, kModRate), 0.1);
+    e->setModMappings (two, 2);
+    run (*e, 4800);
+    const double both = norm (kFilterFreq);
+    const double want = 0.5 + e->modOffset (0) + e->modOffset (1);
+    CHECK (std::fabs (both - want) < 1e-6 && std::fabs (e->modOffset (1) + 0.3 * e->modLfoValue (1)) < 1e-3, "two mappings: %f (want %f)",
+           both, want);
+    // the mappings gone, the parameters are their own values again
+    e->setModMappings (nullptr, 0);
+    CHECK (std::fabs (norm (kFilterFreq) - 0.5) < 1e-12 && e->param (kVolume) == e->baseParam (kVolume), "unmapped: %f, volume %f",
+           norm (kFilterFreq), e->param (kVolume));
+    run (*e, 4800);
+    CHECK (std::fabs (norm (kFilterFreq) - 0.5) < 1e-12, "stays unmapped: %f", norm (kFilterFreq));
+}
+
+TEST (mod_rack_mappings)
+{
+    // a mapping onto a rack slot's value modulates the effect there; another effect in the slot pauses it
+    std::unique_ptr<Engine> e (makeEngine (sine (220.0, 1.0)));
+    loadFx (*e, 1, kFxPara);
+    const uint32_t hp = slotBlockParam (1, (uint32_t)fxBlockOf (kFxPara, para::kHpFreq));
+    e->setParam (hp, 0.3);
+    e->setParam (modLfoParam (2, kModShape), kModSquare);
+    ModMapping m {2, hp, 0.2, kFxPara};
+    e->setModMappings (&m, 1);
+    run (*e, Engine::kModStep);
+    CHECK (std::fabs (e->param (hp) - 0.5) < 1e-9 && e->modWorking (0), "para's high-pass: %f", e->param (hp));
+    loadFx (*e, 1, kFxLevlr);
+    e->setParam (hp, 0.3);
+    run (*e, Engine::kModStep);
+    CHECK (!e->modWorking (0) && e->param (hp) == 0.3, "another effect: paused, %f", e->param (hp));
+    loadFx (*e, 1, kFxPara);
+    e->setParam (hp, 0.3);
+    run (*e, Engine::kModStep);
+    CHECK (e->modWorking (0) && std::fabs (e->param (hp) - 0.5) < 1e-9, "para back: resumed, %f", e->param (hp));
+    // a mapping onto a slot's menu does nothing (the effect never sees it change)
+    const uint32_t movement = slotBlockParam (1, (uint32_t)fxBlockOf (kFxPara, para::kMovement));
+    const double before = e->param (movement);
+    ModMapping menu {2, movement, 1.0, kFxPara};
+    e->setModMappings (&menu, 1);
+    run (*e, 4800);
+    CHECK (!e->modWorking (0) && e->param (movement) == before, "a menu: %f", e->param (movement));
+}
+
+TEST (mod_without_mappings_changes_nothing)
+{
+    // with no mapping the LFOs' settings (and the LFOs running) change nothing: what an old project plays
+    auto s = brightSaw (300, 1.0);
+    auto render = [&] (bool touch) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 1.0);
+        if (touch)
+            for (int l = 0; l < kModLfos; ++l)
+            {
+                e->setParam (modLfoParam (l, kModShape), kModSmoothRandom);
+                e->setParam (modLfoParam (l, kModRate), 13.0);
+                e->setParam (modLfoParam (l, kModRetrig), 1.0);
+            }
+        e->noteOn (60, 1.0f);
+        Out a = run (*e, 6000, {}, 333);
+        // mappings that were there and are gone leave nothing behind either
+        if (touch)
+        {
+            ModMapping m {0, kFilterFreq, 0.8, -1};
+            e->setModMappings (&m, 1);
+            e->setModMappings (nullptr, 0);
+        }
+        Out b = run (*e, 6000, {}, 333);
+        a.l.insert (a.l.end (), b.l.begin (), b.l.end ());
+        return a.l;
+    };
+    CHECK (render (false) == render (true), "the LFOs change the sound with nothing mapped");
 }
 
 TEST (performance)

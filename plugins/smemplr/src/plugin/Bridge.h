@@ -10,6 +10,7 @@
 #include "pluginkit/RtShared.h"
 #include "pluginkit/ScopeBuffer.h"
 
+#include "Modulation.h"
 #include "Rack.h"
 
 #include "smacheratr/src/core/Engine.h"
@@ -56,14 +57,24 @@ public:
     }
     SliceEditsPtr editsNow () { return edits.latest (); }
 
+    // --- the modulation LFOs' mappings (the editor edits them, the state saves them) ---
+    void setMods (ModMap m)
+    {
+        mods.publish (std::make_shared<const ModMap> (std::move (m)));
+        modsChanged.fetch_add (1);
+    }
+    ModMapPtr modsNow () { return mods.latest (); }
+
     // --- realtime side -----------------------------------------------------------
     bool fetchSample (SamplePtr& local, uint32_t& gen) { return samples.fetch (local, gen); }
     bool fetchEdits (SliceEditsPtr& local, uint32_t& gen) { return edits.fetch (local, gen); }
+    bool fetchMods (ModMapPtr& local, uint32_t& gen) { return mods.fetch (local, gen); }
 
     void collectGarbage ()
     {
         samples.collectGarbage ();
         edits.collectGarbage ();
+        mods.collectGarbage ();
     }
 
     // Audition notes from the editor (single producer / single consumer).
@@ -84,6 +95,12 @@ public:
     static constexpr int kScopeSize = 65536;
     pk::ScopeBuffer<kScopeSize> outScope; // the final output
     std::atomic<double> sampleRate {48000.0};
+    // the modulation as it plays (audio thread -> editor): the LFOs' values and phases, each mapping's
+    // offset (normalized; NaN while it does not work), and the mappings those are for (modsChanged's
+    // count when the processor took them: the editor shows the offsets once they are its own)
+    std::array<std::atomic<float>, kModLfos> lfoValue {}, lfoPhase {};
+    std::array<std::atomic<float>, kMaxModMappings> modOffset {};
+    std::atomic<uint32_t> modsChanged {0}, modsPlaying {0};
 
 private:
     ~Bridge () = default;
@@ -91,6 +108,7 @@ private:
     std::atomic<int> refs {1};
     RtShared<SampleData> samples;
     RtShared<SliceEdits> edits;
+    RtShared<ModMap> mods;
 
     mutable std::mutex infoMutex;
     std::string path, error;

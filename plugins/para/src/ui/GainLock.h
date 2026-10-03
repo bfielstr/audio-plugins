@@ -35,6 +35,7 @@ public:
     }
     void endEdit (uint32_t id) override { in->endEdit (id); }
     std::string valueText (uint32_t id) override { return in->valueText (id); }
+    int64_t sourceParam (uint32_t id) override { return in->sourceParam (id); }
 
 private:
     pk::ParamHost* in;

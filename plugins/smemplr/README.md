@@ -81,6 +81,34 @@ end saturator**: once the last slot is free, click it to move the saturator into
 parameters stay in the host's list, named "Old End Saturator ...", so old automation still loads.)
 The M/S EQ slopes of older projects (6 / 12 / 24 dB) stay what they were.
 
+**Modulation** (the column at the right): four LFOs that can move any knob, slider or value field of
+Smemplr, the effects in the rack included. Each LFO has a **Shape** (Sine, Triangle, Saw Up, Saw Down,
+Square, S&H: a new random value every cycle, or Smooth Random: gliding from one random value to the
+next), a **Rate** in Hz (0.01 to 40), **Sync** (Off, or a note length from 1/64 to 8 Bars at the host's
+tempo, 120 BPM when the host gives none; while the host plays, a synced LFO follows the song position,
+so the same place in the bar always sounds the same), a **Phase** (0 to 360 degrees) and **Retrig**
+(every note starts the LFO again at its Phase). These are ordinary automatable parameters
+("Mod LFO 1 Rate" and so on).
+
+To modulate a control, **drag the LFO's handle** (the "LFO 1" button) onto it: the control is framed in
+the LFO's colour while you are over one that can be modulated, and let go there, the mapping is made
+with a depth of +25 %. A modulated knob gets a ring in the LFO's colour showing how far the LFO moves it
+from its value (a dot shows where it is now); any other control gets a line under it. **Drag a knob's
+ring** up or down to change the depth (Shift: fine), **right-click the ring** to remove the mapping (a
+right-click on the knob itself still resets the knob, as everywhere in the suite). The **MAPPINGS**
+list shows every mapping as LFO, parameter and depth: drag a depth up or down to change it, double-click
+it to turn it over (+ / -), click its **x** or right-click the row to remove it. Several LFOs can move
+the same control (their depths add up); switches and menus cannot be modulated, nor can the LFOs
+themselves. Up to 24 mappings.
+
+The depth is a share of the control's whole range (-100 % to +100 %), added to the control's own value
+and held to its range. The host's value is never changed: automation and the control show the
+parameter itself, and the LFO moves the sound around it, updated every 32 samples and smoothed over a
+few milliseconds so it does not zipper. A mapping onto an effect in the rack belongs to that effect: it
+moves with it when the effect is dragged to another place, goes when the effect is removed, and pauses
+(dimmed in the list) while another effect is loaded into its slot. The mappings are saved with the
+project and in presets; projects from before them load with none and sound exactly as before.
+
 **Root Note** (Global panel): the note on which the sample plays at its own pitch (C3 by default).
 **Voices** defaults to 1.
 

@@ -760,6 +760,59 @@ int main (int argc, char** argv)
         uiInteraction (rig);
         rig.stop ();
 
+        // the modulation: drag LFO 1's handle onto the filter frequency knob, drag its ring for the depth,
+        // remove it from the list; the mappings are saved with the state and load back
+        {
+            auto stateMods = [&] {
+                MemoryStream s;
+                rig.component->getState (&s);
+                s.seek (0, IBStream::kIBSeekSet, nullptr);
+                smemplr::PluginState b;
+                smemplr::readState (&s, b);
+                return b.mods;
+            };
+            applyState (rig, baseState (wav));
+            rig.start ();
+            CHECK (stateMods ().list.empty (), "no mappings to start with");
+            const double freqBefore = rig.controller->getParamNormalized (smemplr::kFilterFreq);
+            EditorWindow win (rig.controller);
+            CHECK (win.ok (), "editor (modulation)");
+            // LFO 1's handle: the modulation panel (at kModLeft, 38) at 8, 24 .. 66, 64; the knob at 16..72 x 624..688
+            const double hx = smemplr::Editor::kModLeft + 37, hy = 38 + 44;
+            win.drag (hx, hy, 44, 650);
+            pump (0.1);
+            auto mods = stateMods ();
+            CHECK (mods.list.size () == 1 && mods.list[0].lfo == 0 && mods.list[0].target == smemplr::kFilterFreq &&
+                       std::fabs (mods.list[0].depth - smemplr::Editor::kModDropDepth) < 1e-9,
+                   "dropped on the filter frequency: %zu mappings", mods.list.size ());
+            // modulation plays around the parameter, which stays where it is
+            rig.note (60, 1.0f);
+            rig.render (0.3, out);
+            rig.note (60, 0.0f);
+            CHECK (rig.controller->getParamNormalized (smemplr::kFilterFreq) == freqBefore, "the host's value moved");
+            // its ring (the dial's centre 44, 656, radius 17; the ring at 22): dragged up 50 px, 25 % more
+            win.drag (44 - 22, 656, 44 - 22, 606);
+            pump (0.1);
+            mods = stateMods ();
+            CHECK (mods.list.size () == 1 && std::fabs (mods.list[0].depth - (smemplr::Editor::kModDropDepth + 0.25)) < 0.02,
+                   "ring drag: depth %f", mods.list.empty () ? 0.0 : mods.list[0].depth);
+            // a state with it loads it back (and an old one has none)
+            auto withMod = baseState (wav);
+            smemplr::addMapping (withMod.mods, 3, smemplr::kVolume, -0.5, -1);
+            rig.stop ();
+            applyState (rig, withMod);
+            rig.start ();
+            pump (0.1);
+            mods = stateMods ();
+            CHECK (mods.list.size () == 1 && mods.list[0].lfo == 3 && mods.list[0].target == smemplr::kVolume && mods.list[0].depth == -0.5,
+                   "loaded: %zu mappings", mods.list.size ());
+            // the list's row 1 (the list at kModLeft + 8, 38 + 524), its x at the right: removed
+            win.click (smemplr::Editor::kModLeft + 204 - 7, 38 + 524 + 8);
+            pump (0.1);
+            CHECK (stateMods ().list.empty (), "removed from the list");
+            rig.stop ();
+        }
+
         // breakpoint envelope + loop-off screenshot
         {
             auto st5 = baseState (wav);
@@ -791,9 +844,9 @@ int main (int argc, char** argv)
             ViewRect r (0, 0, 1665, 900);
             CHECK (v->canResize () == kResultTrue, "resizable");
             v->checkSizeConstraint (&r);
-            // the editor keeps its aspect ratio (1110 x 1012 with the effects rack)
-            CHECK (std::abs (r.getWidth () * 1012 - r.getHeight () * 1110) < 1110, "aspect %dx%d", r.getWidth (),
-                   r.getHeight ());
+            // the editor keeps its aspect ratio (1328 x 1012 with the effects rack and the modulation)
+            const double w = smemplr::Editor::kWidth, h = smemplr::Editor::kHeight;
+            CHECK (std::abs (r.getWidth () * h - r.getHeight () * w) < w, "aspect %dx%d", r.getWidth (), r.getHeight ());
             v->release ();
         }
 
