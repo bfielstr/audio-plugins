@@ -24,7 +24,8 @@ enum { kLow = 0, kMid = 1, kHigh = 2 }; // with three bands
 
 static void set (State& st, uint32_t id, double plain);
 
-// The defaults are Live's OTT preset; audio checks start from a neutral device.
+// The defaults are Live's OTT preset in OTT style; audio checks start from a neutral device in
+// Character style (the curves they measure are Character's).
 static State baseState ()
 {
     State st;
@@ -46,6 +47,7 @@ static State baseState ()
     set (st, multidyn::kOutput, -kBakedMasterDb);
     set (st, kPreLimit, 0.0);
     set (st, kMode, kBase);
+    set (st, kStyle, kStyleCharacter);
     return st;
 }
 
@@ -102,6 +104,7 @@ int main (int argc, char** argv)
         CHECK (std::lround (plainOf (rig, kXoverSlope)) == kXover24 && plainOf (rig, kSoftenColor) < 0.5 && plainOf (rig, kSubOn) < 0.5 &&
                    std::fabs (plainOf (rig, kSubFreq) - 40.0) < 1e-6,
                "24 dB crossovers, Soften Color off, the Sub band off at 40 Hz");
+        CHECK (std::lround (plainOf (rig, kStyle)) == kStyleOtt, "a fresh instance is in OTT style");
 
         // --- an old state (version 3: the gains around the old baked ones) sounds the same: its gains move ---
         {
@@ -120,7 +123,7 @@ int main (int argc, char** argv)
                 readState (&s, got);
                 return got;
             };
-            const State v3 = roundTrip (3), v4 = roundTrip (kStateVersion);
+            const State v3 = roundTrip (3), v4 = roundTrip (4), v5 = roundTrip (kStateVersion);
             auto plain = [] (const State& st, uint32_t id) { return toPlain (id, st.norm[id]); };
             CHECK (std::fabs (plain (v3, bandParam (0, kBandOutput)) - 13.7) < 1e-6 && std::fabs (plain (v3, bandParam (1, kBandOutput)) - 5.4) < 1e-6 &&
                        std::fabs (plain (v3, bandParam (2, kBandInput)) - 5.2) < 1e-6 && std::fabs (plain (v3, multidyn::kOutput) + 7.0) < 1e-6,
@@ -128,12 +131,19 @@ int main (int argc, char** argv)
                    plain (v3, bandParam (1, kBandOutput)), plain (v3, multidyn::kOutput));
             CHECK (std::fabs (plain (v4, bandParam (0, kBandOutput))) < 1e-9 && std::fabs (plain (v4, bandParam (1, kBandOutput)) - 2.0) < 1e-9,
                    "version 4 loads as it is");
+            CHECK (std::fabs (plain (v5, bandParam (0, kBandOutput))) < 1e-9 && std::fabs (plain (v5, bandParam (1, kBandOutput)) - 2.0) < 1e-9,
+                   "version %d loads as it is", (int)kStateVersion);
+            // Style: before version 5 Multidyn's own sound, Character; now as saved (here not saved: the default, OTT)
+            CHECK (std::lround (plain (v3, kStyle)) == kStyleCharacter && std::lround (plain (v4, kStyle)) == kStyleCharacter,
+                   "versions 3 and 4 load in Character style");
+            CHECK (std::lround (plain (v5, kStyle)) == kStyleOtt, "version %d: Style as saved (OTT)", (int)kStateVersion);
             CHECK (std::lround (plain (v3, kXoverSlope)) == kXover24 && plain (v3, kSubOn) < 0.5 && plain (v3, kSoftenColor) < 0.5,
                    "the new parameters where an old project was");
             // through the plug-in: the controller shows the migrated value
             CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, old, 3); }), "old state applied");
             CHECK (std::fabs (plainOf (rig, bandParam (0, kBandOutput)) - 13.7) < 1e-6, "controller: band 1 Output %.2f",
                    plainOf (rig, bandParam (0, kBandOutput)));
+            CHECK (std::lround (plainOf (rig, kStyle)) == kStyleCharacter, "controller: an old state in Character style");
         }
 
         // --- downward compression through the plug-in (single band, peak, hard knee) ---
@@ -186,6 +196,7 @@ int main (int argc, char** argv)
         CHECK (std::fabs (back.norm[bandParam (0, kAboveRatio)] - toNormalized (bandParam (0, kAboveRatio), 10.0)) < 1e-9,
                "automated ratio saved");
         CHECK (std::fabs (back.norm[kBands] - toNormalized (kBands, 3)) < 1e-9, "band count saved");
+        CHECK (std::lround (toPlain (kStyle, back.norm[kStyle])) == kStyleCharacter, "Style saved");
 
         // --- the Sub band and Soften's Color through the plug-in: the latency stays; a loud 30 Hz tone
         // is turned down by the Sub band, the new settings are saved ---
@@ -403,6 +414,14 @@ int main (int argc, char** argv)
             // the Sub band off again: its lane goes
             win.click (Editor::kSubOnLeft + 24, Editor::kRow2Top + 10);
             CHECK (plainOf (rig, kSubOn) < 0.5, "Sub band off");
+            // 11. the Style in the top bar (OTT | Character): OTT greys the Character-only controls
+            const double styleSeg = (Editor::kStyleRight - Editor::kStyleLeft) / 2.0;
+            win.click (Editor::kStyleLeft + styleSeg * 0.5, Editor::kStyleTop + 10);
+            CHECK (std::lround (plainOf (rig, kStyle)) == kStyleOtt, "OTT style selected");
+            pump (0.3);
+            CHECK (win.savePng (outDir + "/ui_multidyn_ott_style.png"), "screenshot: OTT style");
+            win.click (Editor::kStyleLeft + styleSeg * 1.5, Editor::kStyleTop + 10);
+            CHECK (std::lround (plainOf (rig, kStyle)) == kStyleCharacter, "Character style selected");
         }
         rig.stop ();
         return finish ("multidyn host test");

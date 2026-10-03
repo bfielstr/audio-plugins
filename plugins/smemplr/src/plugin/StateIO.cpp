@@ -31,7 +31,8 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 13: Gently and Smoothr in the rack: the slot type's choice has two more entries; Levlr's Bands and
 //     band drives in its slots; Para's slopes (6 .. 96 dB, Brickwall) and a drive per filter in its slots;
 //     Multidyn's OTT gain staging, crossover slope, Soften Color and Sub band in its slots
-constexpr int32 kVersion = 13;
+// 14: Multidyn's Style in its slots (OTT for new ones; older slots keep Character, their sound)
+constexpr int32 kVersion = 14;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
 {

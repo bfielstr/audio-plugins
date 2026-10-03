@@ -62,10 +62,10 @@ static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
                    multidyn::kSatExtBase == kSlotBlock + 2,
                "Multidyn grew: give its new parameters places in the block");
-// ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band) run on into the
+// ... and the ones after its saturator's blocks (Slope, Soften Color, the Sub band, Style) run on into the
 // slot's extension, in order
 constexpr uint32_t kMdAdded = multidyn::kNumParams - multidyn::kXoverSlope;
-static_assert (kMdAdded == 9 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
+static_assert (kMdAdded == 10 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multidyn's later parameters must fit a slot's extension");
 
 int64_t fxIdAt (int type, uint32_t j)
 {
@@ -335,13 +335,19 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
 
 void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
-    if (version >= 13)
+    if (version >= 14)
         return;
     const auto& md = multidyn::paramTable ();
     for (int slot = 0; slot < kRackSlots; ++slot)
     {
         const uint32_t typeId = slotParam (slot, kSlotType);
         if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxMultidyn)
+            continue;
+        // before Style (14): Multidyn's own sound, Character (new slots get OTT)
+        const uint32_t styleJ = (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kStyle);
+        norm[slotBlockParam (slot, styleJ)] = md.toNormalized (multidyn::kStyle, multidyn::kStyleCharacter);
+        has[slotBlockParam (slot, styleJ)] = true;
+        if (version >= 13)
             continue;
         // by Multidyn's IDs: what the slot has (its later parameters were not there: defaults)
         std::array<double, multidyn::kNumParams> v;
@@ -351,6 +357,7 @@ void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bo
             const bool stored = j >= 0 && id < multidyn::kXoverSlope && has[slotBlockParam (slot, (uint32_t)j)];
             v[id] = stored ? norm[slotBlockParam (slot, (uint32_t)j)] : md.defaultNormalized (id);
         }
+        v[multidyn::kStyle] = md.toNormalized (multidyn::kStyle, multidyn::kStyleCharacter);
         multidyn::migrateOldBaked (v.data ());
         for (uint32_t id = 0; id < multidyn::kNumParams; ++id)
             if (const int64_t j = fxBlockOf (kFxMultidyn, id); j >= 0)

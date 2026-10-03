@@ -26,17 +26,22 @@ inline const char* forParam (uint32_t id)
         case kSatDrive: return "Gain into the built-in saturator's Analog curve (after its pre-limiter).";
         case kSatPostClip: return "Clip the saturator's output at 0 dB (Soft: Analog Clip curve, Hard: digital).";
         case kSatMix: return "Dry/wet of the built-in saturator.";
-        case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold.";
-        case kDetector: return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients.";
+        case kStyle:
+            return "OTT: a measured model of Xfer's OTT, fast and grainy like it; the band controls move it from OTT's own "
+                   "settings, Amount is its Depth and Time its Time. Character: Multidyn's own, smoother sound, with Peak/RMS, "
+                   "Soft Knee and Soften. New instances start in OTT; projects saved before Style existed open in Character.";
+        case kSoftKnee: return "Soft Knee: processing starts gradually as the level approaches a threshold. Character style only.";
+        case kDetector:
+            return "Peak reacts to short peaks. RMS reacts to average level and ignores very short transients. Character style only.";
         case kRmsWindow:
             return "RMS detector: how long a stretch of audio the level is averaged over. Short follows the audio closely, "
-                   "long is smoother and lets transients through. 50 ms by default.";
+                   "long is smoother and lets transients through. 50 ms by default. Character style only.";
         case kSoften:
             return "Keeps a squashed top band from sounding noisy and grainy. The closer the top band's Below threshold is "
                    "to its Above threshold, the more the hiss and air that upward compression lifts is softened (a low-pass "
                    "that reaches down to 3.5 kHz, and up to 6 dB less of it, on the lifted part only), and the gain "
                    "changes are rounded off. Fully at work 6 dB apart or closer "
-                   "(the defaults), nothing happens 18 dB or more apart.";
+                   "(the defaults), nothing happens 18 dB or more apart. Character style only (its Color works in both).";
         case kBands: return "Number of frequency bands (1 = a single full-range processor).";
         case kXover1: return "Crossover between bands 1 and 2.";
         case kXover2: return "Crossover between bands 2 and 3.";

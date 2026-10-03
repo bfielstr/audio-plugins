@@ -49,14 +49,18 @@ enum ParamId : uint32_t
     kSubAttack,  // ms
     kSubRelease, // ms
     kSubOutput,  // dB, its level after the compression
+    kStyle,      // OTT (a model of Xfer's OTT, see Ott.h) / Character (Multidyn's own, see Engine.h)
     kNumParams
 };
 
 // pinned: IDs are persisted (the Smacheratr blocks before them have a fixed size now)
 static_assert (kSatExt2Base == 81 && kXoverSlope == 90 && kSoftenColor == 91, "Slope and Soften Color are 90 and 91");
 static_assert (kSubOn == 92 && kSubFreq == 93 && kSubThresh == 94 && kSubRatio == 95 && kSubAttack == 96 && kSubRelease == 97 &&
-                   kSubOutput == 98 && kNumParams == 99,
+                   kSubOutput == 98,
                "the Sub band is 92 .. 98");
+static_assert (kStyle == 99 && kNumParams == 100, "Style is 99");
+
+enum Style { kStyleOtt = 0, kStyleCharacter };
 
 constexpr int kMaxBands = 4;
 constexpr int kNumBands = kMaxBands;

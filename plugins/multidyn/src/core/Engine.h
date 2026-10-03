@@ -58,11 +58,22 @@
 // down to 3.5 kHz as Soften goes up) and turned down (up to 6 dB), the gain changes are rounded off
 // (up to 10 ms) and the knee widens (up to 12 dB more), so a squashed top band stops sounding
 // noisy and grainy; what the band had before the lift passes untouched.
+// Style (kStyle): OTT, the default, runs each band's dynamics as a model of Xfer's OTT (Ott.h): a
+// one-pole on the band's mean square, OTT's fixed attack and Time-following release, its soft knees,
+// makeup, upward gain cap and gain floor, Amount as OTT's Depth and Time as OTT's Time. The band
+// controls move it from there: a band's Below / Above threshold moves OTT's upward / downward knee by
+// as much as it moved from its default, the Below / Above ratio scales the branch's strength
+// ((1 - 1/r) against the default's), Attack / Release scale OTT's times by the same factor, and the band
+// Output trims after OTT's makeup (the baked preset gains are Character's). Peak/RMS, the RMS Window,
+// Soft Knee, Soften and the transient guard are Character's and do nothing in OTT style; Pre-Limit,
+// the side-chain, the crossovers (24 dB: OTT's Linkwitz-Riley 4) and the Sub band work in both.
+// Character is Multidyn's own sound described above; projects saved before Style existed open in it.
 // Saturator: a built-in Smacheratr after the Output gain (the usual chain), always in the path
 // with its dry/wet at zero when off, so its oversampling latency is constant too.
 #pragma once
 
 #include "Crossover.h"
+#include "Ott.h"
 #include "Params.h"
 
 #include "smacheratr/src/core/Tail.h" // the end-of-chain saturator (and Soften's Color: its Engine)
@@ -130,6 +141,7 @@ private:
         float envAbove = -120.0f, envBelow = -120.0f; // level envelopes (dB)
         float envAbove2 = -120.0f, envBelow2 = -120.0f; // second stage (Character)
         float rms = 0.0f, peak = 0.0f;
+        double ottEnv = 0.0; // OTT style: the band's mean square, enveloped
         float liftLp[2][2] {}; // Soften: the lifted part's low-pass (two one-poles per channel)
         float inGain = 1.0f, outGain = 1.0f; // smoothed linear gains
         float meterIn = 0.0f, meterOut = 0.0f;

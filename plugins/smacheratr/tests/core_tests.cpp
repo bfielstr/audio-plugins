@@ -879,21 +879,46 @@ TEST (performance)
 // ---------------------------------------------------------------------------
 // Gently's Sub band: the bottom of the spectrum up to where it tapers off (20 - 100 Hz)
 
+TEST (gently_bands_at_the_ends_are_shelves)
+{
+    // a band reaching an end of the spectrum runs flat past it instead of dipping back up
+    auto db = [] (const ClarityBand& b, double hz) { return clarityBandDb (b, hz, kSr); };
+    const ClarityBand mid = clarityBand (kSr, 250.0, 2.0), low = clarityBand (kSr, 40.0, 2.0), high = clarityBand (kSr, 12000.0, 2.0);
+    CHECK (!mid.lowShelf && !mid.highShelf && db (mid, 20.0) < -15.0 && db (mid, 10000.0) < -15.0, "a band in the middle: a bell");
+    CHECK (low.lowShelf && !low.highShelf && std::fabs (db (low, 5.0)) < 0.5 && std::fabs (db (low, 20.0)) < 0.5,
+           "its low edge at 20 Hz or below: a low shelf, flat to the bottom (%.2f dB at 5 Hz)", db (low, 5.0));
+    CHECK (high.highShelf && !high.lowShelf && std::fabs (db (high, 20000.0)) < 0.5 && db (high, 3000.0) < -6.0,
+           "its high edge at 20 kHz or above: a high shelf, flat to the top (%.2f dB at 20 kHz)", db (high, 20000.0));
+    // and the engine compresses a 10 Hz rumble with the Sub band (a shelf now), which it no longer filtered out
+    auto e = engine ();
+    e->setParam (kPreLimit, 0.0);
+    e->setParam (kDrive, 12.0);
+    e->setParam (kClarity, 1.0);
+    e->setParam (kClarityRange, 0.0);
+    e->setParam (kClaritySub, 1.0);
+    Meters m;
+    e->setMeters (&m);
+    run (*e, tones ({{10.0, -8.0}}, 1.5));
+    CHECK (m.claritySubDb.load () < -3.0, "a 10 Hz rumble is in the Sub band (%.1f dB cut)", m.claritySubDb.load ());
+}
+
 TEST (gently_sub_band)
 {
-    // the band's shape: flat from 20 Hz to the slider's frequency, then 12 dB/oct down
+    // the band's shape: a shelf, flat from the bottom up to the slider's frequency, where its cut starts
+    // to let go (as it sounds: with the band's phase)
     for (double taper : {20.0, 40.0, 100.0})
     {
         const ClarityBand b = subBand (kSr, taper);
         auto db = [&] (double hz) { return clarityBandDb (b, hz, kSr); };
         double peak = -200.0;
-        for (double hz = 10.0; hz < 400.0; hz *= 1.02)
+        for (double hz = 1.0; hz < 400.0; hz *= 1.02)
             peak = std::max (peak, db (hz));
-        CHECK (std::fabs (peak) < 0.05, "taper %.0f Hz: peaks at 0 dB (%.2f)", taper, peak);
-        CHECK (db (taper) > -2.0 && db (taper) < 0.0, "taper %.0f Hz: still within 2 dB of the peak where it starts to taper (%.2f dB)", taper, db (taper));
-        CHECK (db (4.0 * taper) < -14.0, "taper %.0f Hz: 12 dB/oct above it (%.1f dB at %.0f Hz)", taper, db (4.0 * taper), 4.0 * taper);
-        CHECK (db (1000.0) < -30.0, "taper %.0f Hz: 1 kHz is out (%.1f dB)", taper, db (1000.0));
-        CHECK (db (1.0) < -30.0, "taper %.0f Hz: DC and rumble are out (%.1f dB at 1 Hz)", taper, db (1.0));
+        CHECK (peak > 0.0 && peak < 1.5, "taper %.0f Hz: a little rise under the corner, under 1.5 dB (%.2f)", taper, peak);
+        auto cut = [&] (double hz) { return clarityCutAtDb (b, hz, kSr, -8.0); };
+        CHECK (std::fabs (cut (1.0) + 8.0) < 0.05, "taper %.0f Hz: a shelf, the whole cut at the bottom (%.2f dB at 1 Hz)", taper, cut (1.0));
+        CHECK (cut (taper) < -6.8 && cut (taper) > -9.5, "taper %.0f Hz: within about 1 dB of the cut at the taper (%.2f dB)", taper, cut (taper));
+        CHECK (cut (4.0 * taper) > -1.5, "taper %.0f Hz: two octaves up, nearly none (%.2f dB)", taper, cut (4.0 * taper));
+        CHECK (cut (1000.0) > -0.2, "taper %.0f Hz: 1 kHz untouched (%.2f dB)", taper, cut (1000.0));
     }
     {
         const ClarityBand b = subBand (kSr, 100.0);
@@ -945,23 +970,22 @@ TEST (gently_sub_band)
     CHECK (measure (true, true, 40.0, 40.0, nullptr, 0.0) == subOff, "Range 0 dB: Sub does nothing");
     CHECK (measure (true, true, 40.0, 40.0, nullptr, 3.0) > subOn + 1.0, "a smaller Range cuts less");
 
-    // the slider moves where the taper starts: a 90 Hz tone is in the band with 100 Hz, mostly out with 25 Hz
+    // the slider moves where the taper starts: a loud 90 Hz tone is cut with the taper at 100 Hz, much
+    // less with it at 25 Hz
     auto in90 = tones ({{90.0, -8.0}}, 1.5);
-    auto cut90 = [&] (double taper) {
-        Meters mm;
+    auto cut90 = [&] (double taper, bool sub) {
         auto e = engine ();
-        e->setMeters (&mm);
         e->setParam (kPreLimit, 0.0);
         e->setParam (kDrive, 12.0);
         e->setParam (kClarity, 1.0);
         e->setParam (kClarityRange, 0.0);
-        e->setParam (kClaritySub, 1.0);
+        e->setParam (kClaritySub, sub ? 1.0 : 0.0);
         e->setParam (kClaritySubFreq, taper);
-        run (*e, in90);
-        return (double)mm.claritySubDb.load ();
+        return toneDb (run (*e, in90).l, 90.0, 48000, 72000);
     };
-    CHECK (cut90 (100.0) < cut90 (25.0) - 1.5, "the slider sets what reaches the band: %.1f dB at 100 Hz, %.1f dB at 25 Hz", cut90 (100.0),
-           cut90 (25.0));
+    const double off90 = cut90 (100.0, false), at100 = cut90 (100.0, true) - off90, at25 = cut90 (25.0, true) - off90;
+    std::printf ("    90 Hz: %.1f dB with the taper at 100 Hz, %.1f dB at 25 Hz\n", at100, at25);
+    CHECK (at100 < at25 - 3.0, "the slider sets what reaches the band: %.1f dB at 100 Hz, %.1f dB at 25 Hz", at100, at25);
 
     // Sub off is what Gently was before it: bit for bit, and the bands 1 / 2 do not care about it
     auto render = [&] (bool sub, double taper) {

@@ -1,5 +1,5 @@
 # Stretchr: clip pitch/time editor with REAPER-style stretch algorithms.
-project(Stretchr VERSION 0.7.0.0)
+project(Stretchr VERSION 0.8.0.0)
 
 add_library(stretchr_core STATIC
     src/core/Params.cpp

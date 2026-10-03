@@ -487,6 +487,16 @@ TEST (rack_multidyn_later_params)
            "band 2's Output moved by %.2f dB", after - before);
     const uint32_t slope = slotBlockParam (3, (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kXoverSlope));
     CHECK ((*st)[slope] == md.defaultNormalized (multidyn::kXoverSlope) && (*has)[slope], "the slope's default (24 dB)");
+    // Style: an old slot (before 14) keeps Multidyn's own sound, Character; a new slot is OTT
+    const uint32_t style = slotBlockParam (3, (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kStyle));
+    CHECK (std::lround (md.toPlain (multidyn::kStyle, (*st)[style])) == multidyn::kStyleCharacter && (*has)[style], "version 12: Character");
+    (*st)[style] = md.defaultNormalized (multidyn::kStyle);
+    migrateMultidynInSlots (*st, *has, 13);
+    CHECK (std::lround (md.toPlain (multidyn::kStyle, (*st)[style])) == multidyn::kStyleCharacter, "version 13: Character");
+    (*st)[style] = md.defaultNormalized (multidyn::kStyle);
+    migrateMultidynInSlots (*st, *has, 14);
+    CHECK (std::lround (md.toPlain (multidyn::kStyle, (*st)[style])) == multidyn::kStyleOtt, "version 14: as saved");
+    CHECK (md.info (multidyn::kStyle).def == multidyn::kStyleOtt, "a new slot: OTT");
 }
 
 TEST (settings_text_roundtrip)

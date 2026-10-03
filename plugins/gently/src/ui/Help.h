@@ -26,10 +26,10 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Output level, before the Smacheratr at the end.";
         case kSubOn:
             return "The Sub band on or off (or click its readout in the display): compresses the sub region, from the bottom "
-                   "of the spectrum (20 Hz) up to where it starts to taper off (Freq), 12 dB/oct above that. Off by default.";
+                   "of the spectrum, a shelf, up to where its cut starts to let go (Freq). Off by default.";
         case kSubFreq:
             return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its amber handle "
-                   "sideways). Everything below it, down to 20 Hz, is compressed.";
+                   "sideways). Everything below it, to the very bottom, is compressed.";
         case kSubRange:
             return "The Sub band: the most it turns the sub region down (drag its handle down). 3 dB for every 5 the band is "
                    "over its threshold, up to this. 0 dB: the band does nothing.";

@@ -46,9 +46,10 @@ by the gain), so the cut region gets density and harmonics while the rest of the
 It runs oversampled with the rest when Hi-Quality is on, fades in and out when switched, and does not
 change the latency. With Advanced off, Gently is exactly the Clarity it was before.
 
-**Sub** (a third Gently band, off by default) compresses the sub region: the band runs from the bottom of
-the spectrum (20 Hz) up to where it starts to taper off, set with its **Freq** from 20 to 100 Hz (40 Hz by
-default), and falls away at 12 dB/oct above that. It works while Gently and Sub are on and its **Range**
+**Sub** (a third Gently band, off by default) compresses the sub region: a shelf, flat from the very
+bottom of the spectrum up to its **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go
+(nearly none two octaves up). A Gently band whose edge reaches an end of the spectrum (20 Hz or 20 kHz)
+turns into a shelf there too, running flat past that end instead of dipping back up. It works while Gently and Sub are on and its **Range**
 (8 dB by default) is above 0 dB, with the same law as the other bands (3 dB of cut for every 5 dB over -18 dBFS,
 or over its **Threshold** in Advanced) and the same region Drive. In the colour display drag its handle sideways
 for the frequency and down for the Range; it has no width. With Sub off Gently is exactly what it was.

@@ -17,7 +17,9 @@ class DynDisplay;
 // fields between the lanes), the Input knobs, the lanes with their Below / Above / Att/Rel value
 // fields, the Output knobs, and the global Output / Time / Amount / Soften (and Soften's Color) on the
 // right. The Sub band, when on, is a lane at the bottom (its Above and Att/Rel fields, its Output as a
-// field); its On and Frequency sit in the bottom row with the crossovers' Slope.
+// field); its On and Frequency sit in the bottom row with the crossovers' Slope. The Style (OTT /
+// Character) sits in the top bar after the band count; in OTT style the controls only Character uses
+// (Soft Knee, Peak/RMS, the RMS Window, Soften) look disabled.
 class Editor : public pk::EditorBase
 {
 public:
@@ -30,6 +32,9 @@ public:
     static constexpr double kRow2Top = 382.0;
     static constexpr double kSlopeLeft = 50.0, kSubOnLeft = 150.0, kSubFreqLeft = 204.0;
     static constexpr double kColorTop = 330.0;
+    // the top bar's Style selector (OTT | Character); the side-chain status line under the second row
+    static constexpr double kStyleLeft = 378.0, kStyleRight = 498.0, kStyleTop = 7.0;
+    static constexpr double kScStatusTop = 404.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -43,6 +48,7 @@ private:
     void onClose () override;
     void updateLayout ();
     void showMenu (VSTGUI::CPoint where);
+    void updateLooks (); // the Character-only controls in OTT style; the RMS Window with the Peak detector
 
     Controller* ctl;
     DynDisplay* display = nullptr;
@@ -54,7 +60,8 @@ private:
     VSTGUI::CView* subBoxes[4] {}; // threshold, ratio, attack, release
     VSTGUI::CView* subOutBox = nullptr;
     pk::Label* scStatus = nullptr;
-    pk::NumberBox* rmsWindowBox = nullptr; // dimmed with the Peak detector
+    pk::NumberBox* rmsWindowBox = nullptr; // dimmed with the Peak detector (and in OTT style)
+    pk::ParamView *softKneeToggle = nullptr, *detectorSeg = nullptr, *softenKnob = nullptr; // Character only
 };
 
 } // namespace multidyn
