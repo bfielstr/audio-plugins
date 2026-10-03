@@ -1,4 +1,4 @@
-# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr, Orbitr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
@@ -18,6 +18,7 @@ Steinberg VST3 SDK and VSTGUI. MIT licensed.
 | [**Deepr**](plugins/deepr/README.md) | Makes a bass or reese sound deeper by contrast: dips the low mids only while the sub plays, folds the sub to mono; no latency of its own; Smacheratr at the end | psychoacoustic bass contrast |
 | [**Gently**](plugins/gently/README.md) | Smacheratr's Gently on its own: a gentle dynamic de-muddier / de-harsher, two bands and a Sub band that turn their region down only while it is loud, with a live display of the cuts over the spectrum; Advanced: a Threshold per band on vertical sliders and a drive for the region it cuts; Smacheratr at the end | a dynamic EQ / multiband compressor display |
 | [**Dropr**](plugins/dropr/README.md) | A 6-band compressor feeding a saturator: +30 dB into a -72 dB threshold, ratios past 1 : inf into negative ones (louder in, quieter out, down to a floor), Adaptive Time, upward compression, Tilt, Stereo / Mid-Side with Channel Link; a display with draggable crossovers, band gains and thresholds and live gain reduction; Smacheratr on and driven at the end | Minimal Audio's Fuse Compressor (its negative-ratio snare trick) |
+| [**Orbitr**](plugins/orbitr/README.md) | A Doppler swarm: 1 to 16 virtual sources orbiting or swarming round you, each heard through its own delay line, so its pitch follows its speed towards or away from you (true Doppler), with a floor reflection and a view of the orbs from above; "Liquid Debris"-like by default (Detonatr's Motion stage on its own); Smacheratr at the end | Tonsturm SpinTracer (in its spirit, not affiliated) |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
@@ -103,6 +104,7 @@ plugins/smoothr low-end-first limiter   same structure
 plugins/deepr   bass depth by contrast  same structure
 plugins/gently  gentle de-mud / de-harsh same structure
 plugins/dropr   multiband compressor    same structure
+plugins/orbitr  doppler swarm           same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,
                    VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
