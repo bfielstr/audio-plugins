@@ -250,9 +250,10 @@ static void uiInteraction (Rig& rig)
         return tips;
     };
     CHECK (tipsOn (), "help tooltips default to on");
-    win.click (1033, 17);
+    const double helpX = smemplr::Editor::kWidth - 77; // the ? button, at the top right (Editor.cpp)
+    win.click (helpX, 17);
     CHECK (!tipsOn (), "the ? button should switch help off");
-    win.click (1033, 17);
+    win.click (helpX, 17);
     CHECK (tipsOn (), "and back on");
 
     // drag the sample start flag (waveform x 8..1102) to the middle
