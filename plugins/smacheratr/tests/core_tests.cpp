@@ -253,9 +253,9 @@ TEST (drive_adds_harmonics_and_the_curve_holds_one)
     CHECK (toneDb (out.l, 3000.0, a, b) < -90.0, "quiet signal is clean: %f dB", toneDb (out.l, 3000.0, a, b));
 }
 
-TEST (hard_clip_never_leaves_above_0_dbfs)
+TEST (post_clip_never_leaves_above_0_dbfs)
 {
-    // driven into Hard Clip, nothing after the clip takes the output back over 0 dBFS: not Hi-Quality's
+    // driven into Soft or Hard Clip, nothing after the clip takes the output back over 0 dBFS: not Hi-Quality's
     // downsampling filter, Mid/Side back to left / right, Gently, the dry part of a mix or Output
     struct Case
     {
@@ -280,7 +280,7 @@ TEST (hard_clip_never_leaves_above_0_dbfs)
     }
     for (const Case& c : cases)
     {
-        for (int post : {(int)kPostOff, (int)kPostHard})
+        for (int post : {(int)kPostOff, (int)kPostSoft, (int)kPostHard})
         {
             auto e = engine (c.hiq);
             e->setParam (kDrive, 24.0);
@@ -295,8 +295,9 @@ TEST (hard_clip_never_leaves_above_0_dbfs)
             float pk = 0.0f;
             for (int i = 0; i < N; ++i)
                 pk = std::max (pk, std::max (std::fabs (ol[i]), std::fabs (orr[i])));
-            if (post == kPostHard)
-                CHECK (pk <= 1.0f, "%s, Hard Clip: peak %.2f dBFS", c.name, 20.0 * std::log10 (pk));
+            if (post != kPostOff)
+                CHECK (pk <= 1.0f, "%s, %s Clip: peak %.2f dBFS", c.name, post == kPostHard ? "Hard" : "Soft",
+                       20.0 * std::log10 (pk));
             else
                 std::printf ("    %s, no post clip: peak %.2f dBFS\n", c.name, 20.0 * std::log10 (pk));
         }

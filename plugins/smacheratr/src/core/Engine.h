@@ -73,7 +73,7 @@ public:
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
     // (Hard Clip's ceiling at the very end: see Engine.cpp)
-    void hardCeiling (float* outL, float* outR, int n) const;
+    void clipCeiling (float* outL, float* outR, int n) const;
 
     // Optional destination for level snapshots (may be null).
     void setMeters (Meters* m) { meters = m; }

@@ -141,13 +141,13 @@ float Engine::shapeChain (Channel& c, float v, bool color, int post) const
     return (float)d;
 }
 
-void Engine::hardCeiling (float* yl, float* yr, int n) const
+void Engine::clipCeiling (float* yl, float* yr, int n) const
 {
-    // Hard Clip: nothing leaves above 0 dBFS. The clip after the curve (in the oversampled path) is
-    // the sound; what comes after it can rise above it again (Hi-Quality's downsampling filter
+    // Soft and Hard Clip: nothing leaves above 0 dBFS. The clip after the curve (in the oversampled
+    // path) is the sound, soft or hard; what comes after it can rise above it again (Hi-Quality's downsampling filter
     // overshooting the clipped edges, Gently's band filters, the dry part of a mix, Output, Mid/Side
     // back to left / right), so the very end is held to 0 dBFS too: only those overshoots are cut.
-    if ((int)std::lround (p[kPostClip]) != kPostHard)
+    if ((int)std::lround (p[kPostClip]) == kPostOff)
         return;
     for (int i = 0; i < n; ++i)
     {
@@ -219,7 +219,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             yl[i] = m + s;
             yr[i] = m - s;
         }
-        hardCeiling (yl, yr, n); // (mid and side each held to 0 dB add up to twice that in a channel)
+        clipCeiling (yl, yr, n); // (mid and side each held to 0 dB add up to twice that in a channel)
         return;
     }
     if (wetIdle)
@@ -451,7 +451,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
     }
     if (!inMs)
-        hardCeiling (yl, yr, n);
+        clipCeiling (yl, yr, n);
     if (meters)
     {
         meters->inPeak.store (inPk, std::memory_order_relaxed);

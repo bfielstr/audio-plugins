@@ -15,7 +15,7 @@ inline const char* forParam (uint32_t id)
         case kPreLimitThreshold: return "Level the pre-limiter holds the input to, before the drive.";
         case kPostClip:
             return "No Clip, or clips the output at 0 dB after the curve (Soft: the Analog curve again, Hard: a "
-                   "digital clip), so the output never exceeds the Output level. Useful with negative Color amounts.";
+                   "digital clip), so the output never exceeds the Output level, and nothing leaves above 0 dBFS. Useful with negative Color amounts.";
         case kColorOn:
             return "Enables the colour filters: an EQ applied before the curve and undone after it, so it changes "
                    "how much of each frequency range is saturated, not the balance of the output.";
