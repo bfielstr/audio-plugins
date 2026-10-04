@@ -1,16 +1,16 @@
-# Orbitr
+# orbitr
 
-Orbitr turns a sound into a swarm. It plays the sound through 1 to 16 virtual sources, the orbs, that
+orbitr turns a sound into a swarm. It plays the sound through 1 to 16 virtual sources, the orbs, that
 fly around you. Each orb bends in pitch as it moves towards or away from you, the way a passing car
 does, and gets louder as it comes close, so a plain sound becomes a moving, shimmering, liquid cloud.
 Reach for it on pads, FX, risers, vocal chops and anything that should move around the listener.
 Install instructions are in the [top-level README](../../README.md).
 
-![Orbitr](../../docs/orbitr/ui_orbitr.png)
+![orbitr](../../docs/orbitr/ui_orbitr.png)
 
 ## How to use it
 
-1. Put Orbitr on a track. By default 6 orbs swarm 3 m ahead of you at 18 m/s, mixed 50 / 50 with the
+1. Put orbitr on a track. By default 6 orbs swarm 3 m ahead of you at 18 m/s, mixed 50 / 50 with the
    input.
 2. Raise **Speed** for more pitch bend, lower **Distance** to bring the swarm closer, and pick
    **Orbit** for circles instead of **Swarm**.
@@ -50,11 +50,11 @@ between).
 The display shows the orbs from above, with their trails: you at the bottom, facing up, the swarm's ball
 ahead at the Distance, rings every metre (every 5 m when far).
 
-**Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
 ## Latency
 
-The delays are taken relative to the centre: a source at the centre is 10 ms late, so Orbitr's own
+The delays are taken relative to the centre: a source at the centre is 10 ms late, so orbitr's own
 latency is a constant 10 ms (480 samples at 48 kHz) whatever the settings; the input in Mix and Dry/Wet
 is delayed as much. With the end saturator's (always in the path, so it never changes) it is reported to
 the host for automatic compensation.

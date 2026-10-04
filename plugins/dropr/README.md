@@ -1,17 +1,17 @@
-# Dropr
+# dropr
 
-Dropr slams a sound flat in six bands and drives the result into a saturator. Everything over a very
-low threshold is pulled to one level, then made up and pushed into Smacheratr, so quiet tails and
+dropr slams a sound flat in six bands and drives the result into a saturator. Everything over a very
+low threshold is pulled to one level, then made up and pushed into smacheratr, so quiet tails and
 room come right up and the whole sound gets dense and heavy. With negative ratios, louder input comes
 out quieter: on a snare the snap is clamped down below the body, and the body comes up, heavily
 saturated. Reach for it for aggressive drums, crushed parallel buses and sound design. Install
 instructions are in the [top-level README](../../README.md).
 
-![Dropr](../../docs/dropr/ui_dropr.png)
+![dropr](../../docs/dropr/ui_dropr.png)
 
 ## How to use it
 
-1. Put Dropr on a drum or a bus. The defaults are already the crushed, saturated sound.
+1. Put dropr on a drum or a bus. The defaults are already the crushed, saturated sound.
 2. Blend it back with **Dry/Wet**, or use it on a parallel bus.
 3. Shape the result in the display: drag a band's gain point up or down, the threshold lines up or
    down, the crossovers sideways. **Release** and **Adaptive** set how it breathes.
@@ -22,7 +22,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 **Input** gain → six bands (Linkwitz-Riley crossovers) → per band: detector → downward and upward
 compression → attack / release → the band's gain + **Tilt** + **Makeup** → the bands summed →
-**Dry/Wet** → **Output** → **Smacheratr** (on and driven by default).
+**Dry/Wet** → **Output** → **smacheratr** (on and driven by default).
 
 ## Defaults
 
@@ -31,7 +31,7 @@ compression → attack / release → the band's gain + **Tilt** + **Makeup** →
   6 ms, **Release** 350 ms, **Adaptive** 50 %, **Knee** 0 dB.
 - Upward compression off (**Up Ratio** 1 : 1, **Up Thr** -48 dB), **Link** 100 %, **Mode** **Stereo**.
 - Every band's gain +12 dB, **Tilt** 0, **Makeup** +48 dB, **Dry/Wet** 100 %, **Output** 0 dB.
-- **Smacheratr** on: Drive +18 dB, Hard Clip (which holds the very end to 0 dBFS), Pre-Limit off.
+- **smacheratr** on: Drive +18 dB, Hard Clip (which holds the very end to 0 dBFS), Pre-Limit off.
 
 With these, everything over -102 dBFS at the input is brought to one level (the floor, -84 dB after the
 Input gain), +60 dB of gain brings it to about -24 dB per band, and the saturator does the rest. On the
@@ -94,7 +94,7 @@ Right-click or double-click a handle, point or line to reset it.
   the bands so any blend lines up in phase.
 - **Output** (±24 dB): after the blend, before the saturator.
 
-**Smacheratr** (bottom panel): the saturator at the end of the chain, with all its controls.
+**smacheratr** (bottom panel): the saturator at the end of the chain, with all its controls.
 
 ## The gain law
 
@@ -134,5 +134,5 @@ there is no look-ahead. It never changes and is reported to the host for automat
 
 ## Older projects
 
-Dropr's first version (a drawn transient shape) was never in a release. A project saved with it opens
+dropr's first version (a drawn transient shape) was never in a release. A project saved with it opens
 with the defaults above.

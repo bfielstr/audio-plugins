@@ -1,16 +1,16 @@
-# Wubr
+# wubr
 
-Wubr moves two EQ bands with shapes you draw. A band's level or its frequency (or both) follows the
+wubr moves two EQ bands with shapes you draw. A band's level or its frequency (or both) follows the
 shape, so you get wubs, pumps, wobbles and sweeps, locked to the song or running free. In Envelope mode
 the shapes run once, fired by a MIDI note or by a hit in the audio. Reach for it to make a bass wobble,
 add rhythmic movement to a pad, duck a band in time with the kick, or sweep a resonance on every hit.
 Install instructions are in the [top-level README](../../README.md).
 
-![Wubr](../../docs/wubr/ui_wubr.png)
+![wubr](../../docs/wubr/ui_wubr.png)
 
 ## How to use it
 
-1. Put Wubr on a track. Both bands are on and already sweeping their centres, but at **Gain** 0 dB a
+1. Put wubr on a track. Both bands are on and already sweeping their centres, but at **Gain** 0 dB a
    sweep changes nothing: drag a band's handle up or down in the band display to hear it.
 2. Draw the movement in each band's **Shape**: drag points, bend lines, add or remove points.
 3. Set the speed with **Rate** (**Sync** to the song or **Free** in Hz), or switch **Mode** to
@@ -40,7 +40,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
     go of the last note plays the rest of the shape. **Transient**: a hit in the audio starts them
     (**Sens**: how far it must jump over the recent level); they hold until the next hit.
 - **Dry/Wet** and **Output**.
-- **Smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
+- **smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
   and displays (off by default, Drive 0 dB).
 
 ![Envelope mode](../../docs/wubr/ui_wubr_envelope.png)
@@ -51,4 +51,4 @@ It shows both bands as they are right now. Drag a band's handle sideways for its
 down for its gain; drag its edges (or use the wheel, or Alt + drag the band sideways) for its width.
 Both bands' shapes are shown too, band 1 above band 2.
 
-Wubr is also in Smemplr's effects rack.
+wubr is also in smemplr's effects rack.

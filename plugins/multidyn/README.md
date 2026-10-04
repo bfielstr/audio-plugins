@@ -1,16 +1,16 @@
-# Multidyn
+# multidyn
 
-Multidyn controls the dynamics of 1 to 4 frequency bands at once. In each band it can hold loud parts
+multidyn controls the dynamics of 1 to 4 frequency bands at once. In each band it can hold loud parts
 down and bring quiet parts up, so a sound gets denser, louder and more detailed, or it can do the
 opposite and open the dynamics up. Reach for it to make a synth, a drum bus or a vocal sound big and
 in your face, to tame one band that pokes out, or to duck a band from a side-chain. Install
 instructions are in the [top-level README](../../README.md).
 
-![Multidyn](../../docs/multidyn/ui_multidyn.png)
+![multidyn](../../docs/multidyn/ui_multidyn.png)
 
 ## How to use it
 
-1. Put Multidyn on a track. It starts in the **OTT** style with three bands, already doing the loud,
+1. Put multidyn on a track. It starts in the **OTT** style with three bands, already doing the loud,
    squashed multiband sound.
 2. Turn **Amount** down to blend the effect back, and **Time** to make it faster or slower.
 3. For finer work, drag the blocks in the display: a block's edge moves its threshold, dragging inside
@@ -18,7 +18,7 @@ instructions are in the [top-level README](../../README.md).
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
 
-![Multidyn in OTT style](../../docs/multidyn/ui_multidyn_ott_style.png)
+![multidyn in OTT style](../../docs/multidyn/ui_multidyn_ott_style.png)
 
 ## How the bands work
 
@@ -61,10 +61,10 @@ the defaults it is plain OTT; the band controls move it from there:
 
 **Peak/RMS**, the **RMS Window**, **Soft Knee**, **Soften** and the transient guard only work in
 Character and look disabled in OTT. Soften's **Color**, Pre-Limit, the side-chain, the crossovers (24
-dB: Linkwitz-Riley 4 in OTT), the Sub band and the Smacheratr work in both. In OTT the display's block
+dB: Linkwitz-Riley 4 in OTT), the Sub band and the smacheratr work in both. In OTT the display's block
 numbers show the gain over the makeup.
 
-**Character** is Multidyn's own sound. Detection is smooth (the RMS Window, 50 ms by default, and a
+**Character** is multidyn's own sound. Detection is smooth (the RMS Window, 50 ms by default, and a
 rounded onset), the knee is wide (12 dB) and the release slows down up to 3x the deeper the gain
 change, so it moves smoothly rather than grabbing peaks.
 
@@ -85,7 +85,7 @@ The **Split** column on the left holds the band names (**Low**, **Mid**, **High*
 **S** (solo), with the crossover frequency fields between the lanes. Then come each band's **Input**
 knob, the lanes, each band's **Output** knob, and the global controls on the right.
 
-- **Bands** (top): 1, 2, 3 or 4. 1 makes Multidyn a single full-range processor.
+- **Bands** (top): 1, 2, 3 or 4. 1 makes multidyn a single full-range processor.
 - **Style** (top): **OTT** or **Character** (see above).
 - **Value fields** beside each lane: Below threshold and ratio (left), Above threshold and ratio and
   **Att/Rel** (right). Drag a field up or down (Shift: fine), double-click to reset.
@@ -110,7 +110,7 @@ part of the signal that upward compression lifts is low-passed and turned down, 
 are rounded off, so a squashed top band stops sounding noisy and grainy.
 
 **Color** (under Soften, off by default) pushes the highs into a soft saturation curve (a peak at 5 kHz
-into Smacheratr's Analog curve, taken back down after it), so the loud highs that upward compression
+into smacheratr's Analog curve, taken back down after it), so the loud highs that upward compression
 brings up come out rounder. Its amount follows Soften: 15 % at 0, 35 % at 100 %. Switching it
 crossfades over 20 ms, so it never clicks, and the latency never changes (off, the output is the plain
 signal, to the bit).
@@ -146,7 +146,7 @@ exactly what it is without it. Switched on or off it fades over 30 ms; the laten
 
 ![The Sub band](../../docs/multidyn/ui_multidyn_sub.png)
 
-**Smacheratr** (bottom panel, end of the chain): the saturator every plug-in here can end with, after
+**smacheratr** (bottom panel, end of the chain): the saturator every plug-in here can end with, after
 the Output gain. Off by default, Drive 0 dB.
 
 Every control is an automatable parameter.
@@ -158,7 +158,7 @@ their own, so the latency (218 samples at 48 kHz) never changes. It is reported 
 
 ## Older projects
 
-Projects saved before Style existed (and Smemplr rack slots saved before it) open in Character, so they
+Projects saved before Style existed (and smemplr rack slots saved before it) open in Character, so they
 sound as they did.
 
 Up to version 0.6 the defaults were a more extreme setting, with its gain staging built in (input +5.2
@@ -173,5 +173,5 @@ band off.
 The OTT style's constants and laws are David Braun's fit to measurements of Xfer Records' OTT,
 published as `co.xfer_ott` in the Faust libraries' `compressors.lib` under the MIT licence
 (https://github.com/grame-cncm/faustlibraries/pull/257). The licence text is in
-[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md). OTT is a product of Xfer Records; Multidyn is
+[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md). OTT is a product of Xfer Records; multidyn is
 not affiliated with or endorsed by Xfer Records.

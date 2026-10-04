@@ -1,21 +1,21 @@
-# Para
+# para
 
-Para runs a high-pass and a low-pass filter side by side and adds them together. Set together they
+para runs a high-pass and a low-pass filter side by side and adds them together. Set together they
 change nothing; pull them apart and a notch opens between them, which you can sweep, widen, fire from
 MIDI notes, or drive. The **Vocal** movement makes one filter lead and fade the other out, for liquid,
 talking bass movement. Reach for it on basses and reese sounds, for filter sweeps and transitions, or
 to scoop the middle out of a sound. Install instructions are in the
 [top-level README](../../README.md).
 
-![Para](../../docs/para/ui_para.png)
+![para](../../docs/para/ui_para.png)
 
 ## How to use it
 
-1. Put Para on a track. By default the high-pass sits at 300 Hz over the low-pass at 100 Hz, which
+1. Put para on a track. By default the high-pass sits at 300 Hz over the low-pass at 100 Hz, which
    leaves a notch between them.
 2. Drag the handles in the display: sideways for the cutoff, up and down for the resonance. With **Drag
    Gain** on (the button on the display) the gain moves with the handle; Alt-drag moves the gain alone.
-3. Automate **Split** or the cutoffs for movement, or route MIDI to Para and set **Env** to open and
+3. Automate **Split** or the cutoffs for movement, or route MIDI to para and set **Env** to open and
    close the notch on every note. Try **Movement**: **Vocal** while you sweep.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -58,7 +58,7 @@ slope: first order at 6 dB, Linkwitz-Riley at 12, 24 and 36 to 96 dB, a quadratu
     is silent at the end and past it. The gain is smoothed (20 ms), so a sweep never steps. Split also
     swings with the sweep: the filter you move overshoots the way it moves and flows back when it
     stops. **Floor**: the low-pass never goes below it (40 Hz by default), so the sub stays.
-- **Drive** (in OUTPUT): a drive in each filter's branch, Smacheratr's Analog curve, 4x oversampled.
+- **Drive** (in OUTPUT): a drive in each filter's branch, smacheratr's Analog curve, 4x oversampled.
   Each has its own switch (**HP**, **LP**) and amount (**HP Drive**, **LP Drive**: 0 to +36 dB into the
   curve), so the lows and the highs saturate apart (a loud bass does not bend the top) or only one of
   them does. **Pre** (the default) drives each filter's input, so the filter shapes what its drive adds
@@ -67,7 +67,7 @@ slope: first order at 6 dB, Linkwitz-Riley at 12, 24 and 36 to 96 dB, a quadratu
   small amount on or off, Pre or Post (37 samples at 48 kHz), so the latency never changes; moving them
   between Pre and Post fades the sound out and back in for about 10 ms. Both drives on, stereo, take
   about 1.5 % of a core.
-- **Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+- **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
 ![The Vocal movement](../../docs/para/ui_para_vocal.png)
 
@@ -85,7 +85,7 @@ shows it.
 ![Brickwall slopes](../../docs/para/ui_para_brickwall.png)
 
 The cutoffs do not follow the notes: MIDI notes only trigger the Split envelope (route MIDI to the
-plug-in for that). Para is also in Smemplr's effects rack.
+plug-in for that). para is also in smemplr's effects rack.
 
 ## Older projects
 

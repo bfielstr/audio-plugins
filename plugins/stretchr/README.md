@@ -1,26 +1,26 @@
-# Stretchr
+# stretchr
 
-Stretchr changes the pitch and timing of a piece of audio on a track. Record a part into it, then
+stretchr changes the pitch and timing of a piece of audio on a track. Record a part into it, then
 transpose it, speed it up or slow it down, move single notes in time with stretch markers, bend the
 pitch with a drawn envelope or shift the formants. Reach for it to fix the timing of a take, tune a
 phrase, fit a loop to the song, or stretch a sound into a pad. It works as a normal insert effect in
 any VST3 host, so you can freeze or bounce the result in place, or drag the rendered audio straight
 onto a track. Install instructions are in the [top-level README](../../README.md).
 
-![Stretchr](../../docs/stretchr/docs.png)
+![stretchr](../../docs/stretchr/docs.png)
 
 ## How to use it
 
-A plug-in cannot read the clips on the host's timeline, so Stretchr keeps its own copy of the audio:
+A plug-in cannot read the clips on the host's timeline, so stretchr keeps its own copy of the audio:
 
-1. **Capture**: put Stretchr on the track, click **Capture**, and play the part you want to edit.
+1. **Capture**: put stretchr on the track, click **Capture**, and play the part you want to edit.
    Recording stops when the transport stops or loops (or click **Stop**). The clip remembers where on
    the timeline it was recorded. Or click **Load...** (or drop an audio file on it): the file is placed
    at the playhead. **To Playhead** moves the clip to the playhead later; **Clear** removes it.
 2. **Edit**: choose an algorithm, set Pitch, Formant and Speed, drag stretch markers and draw the pitch
    envelope. The clip is re-rendered in the background (a 1-minute clip takes about a second); a thin
    bar under the waveform shows progress.
-3. **Play**: while the transport plays, Stretchr outputs the rendered clip in place of the track's
+3. **Play**: while the transport plays, stretchr outputs the rendered clip in place of the track's
    audio. With **Trigger** on **Play** (the default) the clip starts the moment the host starts playing,
    from wherever the playhead is; on **Timeline** it plays where it sits on the timeline. Outside the
    clip the track passes through, or is muted (see **Outside Clip**). No latency of its own.
@@ -111,7 +111,7 @@ envelope and stretch markers for changes over time.
 | **Trigger** | **Play**: the clip starts when the host starts playing. **Timeline**: it plays where it sits |
 | **Outside Clip** | **Thru** or **Mute** the track's audio outside the clip |
 
-## Smacheratr
+## smacheratr
 
 The bottom panel is the saturator every plug-in here can end with (off, Drive 0 dB). It adds 1.7 ms
 of latency, reported to the host, which keeps the clip aligned.

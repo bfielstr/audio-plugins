@@ -1,16 +1,16 @@
-# Widr
+# widr
 
-Widr makes a part very wide, the big left-centre-right spread you hear in film and trailer mixes,
+widr makes a part very wide, the big left-centre-right spread you hear in film and trailer mixes,
 while the mix still holds up in mono. Reach for it on pads, leads, vocal doubles, FX and anything that
-should fill the sides without washing out the centre. Every Widr in a project knows about the others,
+should fill the sides without washing out the centre. Every widr in a project knows about the others,
 so a mix full of them shares out the stereo field instead of stacking width in the same place. Install
 instructions are in the [top-level README](../../README.md).
 
-![Widr](../../docs/widr/ui_widr.png)
+![widr](../../docs/widr/ui_widr.png)
 
 ## How to use it
 
-1. Put Widr on a track and pick a **Character**: **Tight**, **Wide**, **Epic** or **Surround**.
+1. Put widr on a track and pick a **Character**: **Tight**, **Wide**, **Epic** or **Surround**.
 2. Set **Width** (or drag an end of the lit arc on the stage). Raise **Space** for a room around the
    voices.
 3. With several Widrs in a project, give each a **Role** (**Anchor**, **Support**, **Wide**, **Ambient**)
@@ -21,7 +21,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 ## How it works
 
 Width that is only a side signal (L - R) sounds like a diffuse, phasey wall around the whole sound. The
-separation in film mixes comes from different material on each side of a dry centre. So Widr builds two
+separation in film mixes comes from different material on each side of a dry centre. So widr builds two
 **voices** from the mid, one on the left and one on the right, each played a little differently, like a
 double-tracked part, and a little later than the centre, so the centre keeps its place in front. The two
 voices are unrelated to each other, so folding to mono only adds a little energy and nothing cancels.
@@ -53,7 +53,7 @@ voices are unrelated to each other, so folding to mono only adds a little energy
 - **Mono Below** (150 Hz by default): below it the output is mono. The side goes through an 8th-order
   Linkwitz-Riley high-pass and the mid through the matching all-pass, so the low end is centred and mid
   and side stay in phase above it (more than 80 dB of side rejection two octaves down).
-- **Guard** (Mono Guard): in 24 third-octave bands Widr measures the mid, the side and what the voices
+- **Guard** (Mono Guard): in 24 third-octave bands widr measures the mid, the side and what the voices
   add to each. Per band it keeps the mono fold from gaining more than about 1.2 dB (at 100 %) and the
   side from getting too close to the mid. 0 % sets no limit.
 
@@ -63,12 +63,12 @@ fed band-limited, with its own left and right outputs going to the voices), **De
 
 **MIX**: **Role**, **Aware** (Mix Aware), **Group**, **Mono Check** (listens to L + R) and **Output**.
 
-**Dry** and **Wet** (the sliders under the panels): the input and what Widr adds (the voices and the
+**Dry** and **Wet** (the sliders under the panels): the input and what widr adds (the voices and the
 reverb), in parallel, each from -inf to +6 dB.
 
 ## Sharing the stereo field
 
-Every Widr publishes, once per block, its role, group, width, Space and its side and mid energy in 24
+Every widr publishes, once per block, its role, group, width, Space and its side and mid energy in 24
 bands, and reads the other Widrs of its **Group** (1 to 8):
 
 - **Role**: Anchor > Support > Wide > Ambient. With others around, the role also pulls the width (an
@@ -82,19 +82,19 @@ bands, and reads the other Widrs of its **Group** (1 to 8):
 
 The header says **Alone** or **3 in group 1**. Instances see each other only when the host runs them in
 **one process**, the default in REAPER and Live. With REAPER's *run as separate process* or bridging,
-Bitwig's sandboxing and the like, every Widr is alone and works as a standalone widener. Widr never
+Bitwig's sandboxing and the like, every widr is alone and works as a standalone widener. widr never
 uses the network.
 
 ## Display
 
-The **Stage** shows the stereo field from above: you at the bottom, the speakers at the sides, this Widr
+The **Stage** shows the stereo field from above: you at the bottom, the speakers at the sides, this widr
 as a lit (cinnabar) arc whose angle is its width and whose distance is its Space, and the others of the
-group as dashed copper arcs (*Widr 2 · Wide*). Drag an end of the lit arc for Width, drag up or down for
+group as dashed copper arcs (*widr 2 · Wide*). Drag an end of the lit arc for Width, drag up or down for
 Space, double-click to reset them, Shift for fine steps. The strip under it shows the width kept per
 band (outlined where it gives way to the group). On the right: a **Goniometer** of the output (mono is
 a vertical line) and a **CORRELATION** meter (+1 mono, 0 unrelated, below 0 it cancels in mono).
 
-**Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). Here it
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). Here it
 saturates the mid and the side apart, so pushing it does not narrow the image.
 
 ## Latency
