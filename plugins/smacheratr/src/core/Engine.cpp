@@ -49,6 +49,7 @@ void Engine::prepare (double sampleRate, int mb)
 {
     sr = sampleRate;
     maxBlock = std::max (1, mb);
+    prepared = true;
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
     lmAtk = 1.0 - std::exp (-1.0 / (0.015 * sr));
     lmRel = 1.0 - std::exp (-1.0 / (0.15 * sr));
@@ -127,7 +128,7 @@ void Engine::applyOversampling ()
 
 void Engine::publishLatency ()
 {
-    if (meters)
+    if (meters && prepared) // (before prepare the oversampler has no filters yet: nothing to tell)
         meters->latency.store (latencyAt (osFactor), std::memory_order_relaxed);
 }
 

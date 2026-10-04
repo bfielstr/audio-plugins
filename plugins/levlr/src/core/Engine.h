@@ -138,7 +138,7 @@ private:
     float pre[kBands][2][kChunk] {}, dry[kBands][2][kChunk] {}, wet[kBands][2][kChunk] {}, mix[kBands][kChunk] {};
     float levelD[kChunk] {};
     smacheratr::Tail tail;
-    bool hasTail = true;
+    bool hasTail = true, prepared = false;
     Meters* meters = nullptr;
 };
 
