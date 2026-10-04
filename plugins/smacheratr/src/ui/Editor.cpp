@@ -134,7 +134,9 @@ void Editor::buildUI (CFrame* f)
             "Range is above 0 dB).",
             "Show Gentlr's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once "
             "its Range is above 0 dB)."};
-        auto* bt = new ActionButton (CRect (92 + k * 46, 30, 136 + k * 46, 50), names[k], [this, k] { showClarityBand (k); },
+        // (Band 1 and Band 2 wider than Sub and High, for their longer names)
+        static const double left[kGentlrBands] = {92, 145, 198, 241}, right[kGentlrBands] = {142, 195, 238, 281};
+        auto* bt = new ActionButton (CRect (left[k], 30, right[k], 50), names[k], [this, k] { showClarityBand (k); },
                                      [this, k] { return clarityBand == k; });
         bt->setTooltipText (tips[k]);
         cp->addView (bt);
@@ -143,22 +145,25 @@ void Editor::buildUI (CFrame* f)
         {
             // the Sub and High bands: Freq and Range where the other bands have theirs (no width, no button: a
             // band works while its Range is above 0 dB)
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kGentlrFreqIds[k], "Freq")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kGentlrRangeIds[k], "Range")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (292, 10), this, kGentlrFreqIds[k], "Freq")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (412, 10), this, kGentlrRangeIds[k], "Range")));
             continue;
         }
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kClarityFreqIds[k], "Freq")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (342, 10), this, kClarityWidthIds[k], "Width")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kClarityRangeIds[k], "Range")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (292, 10), this, kClarityFreqIds[k], "Freq")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (352, 10), this, kClarityWidthIds[k], "Width")));
+        clarityViews[k].push_back (bind (cp, new Knob (knobRect (412, 10), this, kClarityRangeIds[k], "Range")));
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     showClarityBand (clarityBand);
     cp->addView (new Label (CRect (92, 54, 132, 74), "Slope", 10.5));
-    slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 46, 54, kSlopeX - 8 + 46, 74), this, kClaritySlope));
-    bind (cp, new Toggle (CRect (kGentlrAdvancedX - 8 - 42, 30, kGentlrAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
-    advancedViews.push_back (bind (cp, new Toggle (CRect (556, 30, 606, 50), this, kClarityDrive, "Drive")));
-    advancedViews.push_back (bind (cp, new Knob (knobRect (610, 10), this, kClarityDriveAmount, "Amount")));
-    noOverlapView = bind (cp, new NoOverlapToggle (CRect (kNoOverlapX - 8 - 34, 30, kNoOverlapX - 8 + 34, 50), this, smacheratrBandParams ()));
+    slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 50, 54, kSlopeX - 8 + 50, 74), this, kClaritySlope));
+    // how the bands sit together: Advanced, No Overlap under it (both columns 82 wide)
+    bind (cp, new Toggle (CRect (kGentlrAdvancedX - 8 - 41, 30, kGentlrAdvancedX - 8 + 41, 50), this, kClarityAdvanced, "Advanced"));
+    noOverlapView = bind (cp, new NoOverlapToggle (CRect (kNoOverlapX - 8 - 41, kNoOverlapY - kGentlrTop - 10, kNoOverlapX - 8 + 41,
+                                                          kNoOverlapY - kGentlrTop + 10),
+                                                   this, smacheratrBandParams ()));
+    advancedViews.push_back (bind (cp, new Toggle (CRect (566, 30, 616, 50), this, kClarityDrive, "Drive")));
+    advancedViews.push_back (bind (cp, new Knob (knobRect (622, 10), this, kClarityDriveAmount, "Amount")));
     layoutAdvanced ();
 
     applyParamTooltips (&help::forParam);

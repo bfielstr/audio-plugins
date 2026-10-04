@@ -58,6 +58,9 @@ end saturator) are left out. Each has its own display and controls:
   Mid/Side, colour, post clip). Slots saved before the High band (state version 17) load with it and No Overlap off.
   The Sub and High bands have no buttons (here and in gentlr slots): they work while their Range is above 0 dB and
   start at 0 dB; slots saved before that (state version 19) load with a band that was off at Range 0.
+  Gentlr's glue works in the display as in Smacheratr (drag a band's edge onto a neighbour's to glue
+  them, click the link icon on the border to detach them; here and in gentlr slots); slots saved before
+  glue (state version 21) load with nothing glued.
 - **widr**: the stereo widener with its left and right voices (it works alone here: the group
   awareness needs its own plug-in instances).
 - **wubr**, **levlr** (with Bands and each band's Drive and curve), **gentlr** (its two bands, Sub

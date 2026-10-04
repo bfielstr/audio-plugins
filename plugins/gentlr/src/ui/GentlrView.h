@@ -12,8 +12,15 @@
 //   wheel on a handle (held, or with Shift)   its Width
 //   double-click / right-click a handle       resets the band's Frequency, Width and Range
 //   the band's readout at the top             switches the band (Sub, High) on or off
+//   a band edge (or the Sub or High handle) dragged onto a neighbour's edge (within a few pixels it
+//   snaps)                        the two are glued at that border when the drag ends: a link icon sits
+//                                 on it, at the bottom of the display
+//   link icon, click              detaches the two (lit cinnabar: glued), or glues two that touch (copper)
+//   a glued border dragged        both edges move: one band widens as the other narrows (for the Sub and
+//                                 High bands their Freq is the border); a glued band moved drags its
+//                                 neighbour's edge along
 // With No Overlap on, a band dragged or widened pushes its neighbours' edges along (smacheratr::BandPush),
-// and the bands are drawn where the engine has them (overlaps from automation split).
+// and the bands are drawn where the engine has them (glued borders held, overlaps from automation split).
 #pragma once
 
 #include "../core/Engine.h"
@@ -64,6 +71,9 @@ public:
     double edgeX (int band, bool high) const;
     VSTGUI::CRect pill (int band) const;     // its name and cut, at the top (a row lower where they would overlap)
     double pillsBottom () const;             // under the lowest readout (the edges start there)
+    // the glue link icons: where each sits (on its border, at the bottom), and the one at p (-1: none)
+    int links (smacheratr::GlueBorder out[kAllBands], VSTGUI::CPoint at[kAllBands]) const;
+    int linkAt (const VSTGUI::CPoint& p, smacheratr::GlueBorder* b = nullptr) const;
 
 private:
     enum class Drag { None, Handle, Low, High, Width };
@@ -84,7 +94,8 @@ private:
     int dragBand = 0, hoverBand = -1;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRange = 0.0, startWidth = 0.0;
-    smacheratr::BandPush push; // No Overlap: the neighbours a drag pushes
+    smacheratr::BandPush push; // No Overlap and glue: the neighbours a drag pushes or drags along, the edge it snaps
+    int hoverLink = -1;        // the link icon under the mouse, lit brighter
     float shownCut[kAllBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
 
     // the analyser: input and output

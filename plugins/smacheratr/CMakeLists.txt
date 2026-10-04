@@ -65,6 +65,12 @@ if(APPLE)
 endif()
 add_test(NAME smacheratr_state COMMAND smacheratr_state_tests)
 
+# the editors' glue and No Overlap edits (ui/BandPush.cpp) on a plain parameter host: runs everywhere
+add_executable(smacheratr_bandpush_tests tests/bandpush_tests.cpp)
+target_include_directories(smacheratr_bandpush_tests PRIVATE src)
+target_link_libraries(smacheratr_bandpush_tests PRIVATE smacheratr_ui)
+add_test(NAME smacheratr_bandpush COMMAND smacheratr_bandpush_tests)
+
 pk_add_host_test(smacheratr_hosttest
     PLUGIN Smacheratr
     SOURCES tests/host_test.mm src/plugin/State.cpp

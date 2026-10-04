@@ -53,6 +53,11 @@ inline const char* forParam (uint32_t id)
                    "move further). Switched on, bands that overlap are split at the middle of the overlap; automation that "
                    "makes them overlap is kept apart the same way.";
         case kSlope: return smacheratr::help::kSlope;
+        case kGlue12:
+        case kGlueSub1:
+        case kGlueSub2:
+        case kGlue1High:
+        case kGlue2High: return smacheratr::help::kGlue;
         case kSubThreshold:
             return "Advanced: where the Sub band starts cutting (its peak level, dB). The slider shows the band's level: "
                    "brighter above the threshold, where it is being cut.";
@@ -84,7 +89,9 @@ constexpr const char* kDisplay =
     "Alt-drag the band, for its width (the Sub and High bands have none); the wheel on a handle (Shift) too. Double-click "
     "or right-click a handle resets the band. Click band 1's or band 2's readout at the top to switch it on or off. The Sub "
     "and High bands have no switch: they sit flat at 0 dB until you pull their handle down. With No Overlap on, a band "
-    "pushes its neighbours along.";
+    "pushes its neighbours along. Drag a band's edge (or the Sub or High handle) onto its neighbour's edge (it snaps) and "
+    "the two glue: a link icon sits on the border at the bottom, lit while glued; click it to detach them, or to glue two "
+    "bands that touch.";
 
 constexpr const char* kSubThresholdSlider =
     "Advanced: the Sub band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "

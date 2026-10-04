@@ -86,6 +86,20 @@ further (Sub at 20 Hz, High at 16 kHz) the dragged band stops at it. Switched on
 are split at the middle of the overlap. The engine keeps the bands apart the same way when automation
 makes them overlap, and leaves bands that do not overlap exactly as they are.
 
+**Glue** (nothing glued by default): drag a Gentlr band's edge (or the Sub or High band's handle) onto
+its neighbour's edge in the colour display; within a few pixels it snaps onto it, and when you let go
+the two are glued at that border. A small link icon sits on the border near the bottom of the
+display, copper where two bands only touch and lit cinnabar while they are glued. While glued,
+dragging the shared border moves both edges (one band gets wider as the other narrows; for the Sub and
+High bands their Freq is the border), and moving one band drags its neighbour's edge along. Click the
+link icon to detach them (they stay where they are), or click it on two bands that touch to glue
+them. Band 1 and band 2, the Sub band and either band, and either band and the High band can glue,
+each pair a parameter of its own (Gentlr Glue 1 / 2, and so on), saved with the project; the engine
+holds a glued border under automation too (the lower band leads, the High band leads the band under
+it). Where automation makes glue and No Overlap disagree, No Overlap wins. The end saturator in the
+other plug-ins has the same glue (its parameters in a block of their own at the end of each plug-in's
+list). Projects saved before glue load with nothing glued and sound the same.
+
 **Menu**: **Hi-Quality** runs the curve 4x oversampled (two linear-phase half-band stages) to keep
 aliasing down; **Pre-DC Filter** removes DC offset before the curve; **Mid/Side** saturates the mid
 and the side apart, so the side is driven by its own, lower level and a wide sound stays wide when

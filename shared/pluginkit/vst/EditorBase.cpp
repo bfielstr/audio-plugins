@@ -228,7 +228,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gentlr")),
          "Gentlr: a compressor on up to four bands (the Sub band from the bottom, the High band to the top), so a hard-pushed drive does not go muddy or "
          "harsh (each band's shape: the Slope, at the right of the title). A band works while its Range is above 0 dB.");
-    tip (bind (p, new Toggle (row (64, 124, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
+    tip (bind (p, new Toggle (row (64, 132, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
          "Gentlr's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
          "for the region it cuts. Off, Gentlr starts cutting at -18 dB, as it always did.");
     for (auto& v : tailBandViews)
@@ -241,7 +241,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
         "Show Gentlr's High band: from its Freq, where it starts to taper, to the top of the spectrum."};
     for (int k = 0; k < 4; ++k)
     {
-        auto* bt = new ActionButton (row (128 + k * 14, 140 + k * 14, rowB), bandNames[k], [this, k] { showTailBand (k); },
+        auto* bt = new ActionButton (row (136 + k * 21, 154 + k * 21, rowB), bandNames[k], [this, k] { showTailBand (k); },
                                      [this, k] { return tailBand == k; });
         bt->setTooltipText (bandTips[k]);
         p->addView (bt);
@@ -252,9 +252,9 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
             const uint32_t f = extBase + (k == 0 ? kTailExtClarityFreq : kTailExtClarity2Freq);
             const uint32_t w = extBase + (k == 0 ? kTailExtClarityWidth : kTailExtClarity2Width);
             const uint32_t g = extBase + (k == 0 ? kTailExtClarityRange : kTailExtClarity2Range);
-            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, f)));
-            views.push_back (bind (p, new NumberBox (row (232, 264, rowB), this, w)));
-            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, g)));
+            views.push_back (bind (p, new NumberBox (row (221, 277, rowB), this, f)));
+            views.push_back (bind (p, new NumberBox (row (281, 313, rowB), this, w)));
+            views.push_back (bind (p, new NumberBox (row (317, 361, rowB), this, g)));
             tip (views[0], "Gentlr: the centre of this band.");
             tip (views[1], "Gentlr: this band's width in octaves (or Alt-drag the band in the display).");
             tip (views[2], "Gentlr: the most this band is turned down; at 0 dB the band does nothing.");
@@ -263,29 +263,29 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
         // button: a band works while its Range is above 0 dB)
         else if (k == 2)
         {
-            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext2Base + kTailExt2SubFreq)));
-            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext2Base + kTailExt2SubRange)));
+            views.push_back (bind (p, new NumberBox (row (221, 277, rowB), this, ext2Base + kTailExt2SubFreq)));
+            views.push_back (bind (p, new NumberBox (row (317, 361, rowB), this, ext2Base + kTailExt2SubRange)));
             tip (views[0], "Gentlr's Sub band: where it starts to taper off.");
             tip (views[1], "Gentlr's Sub band: the most it turns the sub region down; at 0 dB (the default) it does nothing.");
         }
         else
         {
-            views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext3Base + kTailExt3HighFreq)));
-            views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext3Base + kTailExt3HighRange)));
+            views.push_back (bind (p, new NumberBox (row (221, 277, rowB), this, ext3Base + kTailExt3HighFreq)));
+            views.push_back (bind (p, new NumberBox (row (317, 361, rowB), this, ext3Base + kTailExt3HighRange)));
             tip (views[0], "Gentlr's High band: where it starts to taper off, going down (2 to 16 kHz).");
             tip (views[1], "Gentlr's High band: the most it turns the top of the spectrum down; at 0 dB (the default) it does nothing.");
         }
     }
     showTailBand (tailBand);
     // the colour filters' amounts (their button is at the end of the row above)
-    tip (bind (p, new NumberBox (row (312, 350, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
-    tip (bind (p, new NumberBox (row (353, 391, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
-    tip (bind (p, new NumberBox (row (394, 444, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
-    tip (bind (p, new NumberBox (row (447, 480, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
-    tip (bind (p, new Knob (CRect (490, y + 4, 546, y + 68), this, base + kTailDrive, nullptr, true)),
+    tip (bind (p, new NumberBox (row (365, 406, rowB), this, extBase + kTailExtColorLo)), "Colour: the low shelf amount.");
+    tip (bind (p, new NumberBox (row (409, 450, rowB), this, extBase + kTailExtColorHi)), "Colour: the peak amount.");
+    tip (bind (p, new NumberBox (row (453, 509, rowB), this, extBase + kTailExtColorFreq)), "Colour: the peak's frequency.");
+    tip (bind (p, new NumberBox (row (512, 546, rowB), this, extBase + kTailExtColorWidth)), "Colour: the peak's width.");
+    tip (bind (p, new Knob (CRect (552, y + 4, 608, y + 68), this, base + kTailDrive, nullptr, true)),
          "Gain into the Analog curve (0 dB: only peaks past half scale are shaped).");
-    tip (bind (p, new Knob (CRect (552, y + 4, 608, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
-    tip (bind (p, new Knob (CRect (614, y + 4, 670, y + 68), this, extBase + kTailExtOutput)), "Output level of the saturator.");
+    tip (bind (p, new Knob (CRect (612, y + 4, 668, y + 68), this, base + kTailMix)), "Dry/wet of the saturator.");
+    tip (bind (p, new Knob (CRect (672, y + 4, 728, y + 68), this, extBase + kTailExtOutput)), "Output level of the saturator.");
     return p;
 }
 

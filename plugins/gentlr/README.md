@@ -61,6 +61,23 @@ below its Freq, the High band everything above its Freq. Automation (or a band s
 makes bands overlap is kept apart the same way in the engine, so they never overlap in the sound
 either; bands that do not overlap are left exactly where they are.
 
+**Glue** (nothing glued by default): two neighbouring bands can be held at a shared border. Drag a
+band's edge (or the Sub or High band's handle) onto its neighbour's edge in the display: within a few
+pixels it snaps onto it, and when you let go the two are glued there. A small link icon sits on the
+border at the bottom of the display, copper where two bands only touch and lit cinnabar while they
+are glued. While glued, dragging the shared border moves both edges together (one band gets wider as
+the other gets narrower; for the Sub and High bands their Freq is the border), and moving one band
+drags its neighbour's edge along (a neighbour wider than 4 octaves or narrower than 0.5 moves as a
+whole). Click the link icon to detach the two (they stay where they are and move on their own again),
+or click it on two bands that touch to glue them. The pairs that can glue are band 1 and band 2, the
+Sub band and either band, and either band and the High band (the Sub and High bands never meet).
+Each pair is a parameter of its own (Glue 1 / 2, Glue Sub / 1, Glue Sub / 2, Glue 1 / High, Glue 2 /
+High), saved with the project; a glue holds while its two bands work and are neighbours along the
+spectrum. The engine holds a glued border under automation too: the lower band leads (the band above
+follows with its low edge), except that the High band's Freq leads the band under it. Glue and No
+Overlap work together; where automation makes them disagree, No Overlap wins. Projects saved before
+glue load with nothing glued and sound the same.
+
 The bands work one after the other (band 1, band 2, Sub, High, as in Smacheratr), each measuring its own
 band. **Attack** (0.5 to 100 ms, 15 ms) and **Release** (20 ms to 2 s, 150 ms) set how fast a band's
 cut follows its level going up and lets go after it (Smacheratr's times by default).
@@ -101,6 +118,8 @@ frequency and its cut now.
   centred); the mouse wheel on a handle (while you hold it, or with Shift) too. The Sub and High
   bands have no width.
 - With No Overlap on, a band you drag or widen pushes its neighbours along (see above).
+- Drag a band's edge onto a neighbour's to glue the two; click the link icon on a border to detach
+  them, or to glue two bands that touch (see Glue above).
 - Double-click or right-click a handle to reset the band (its frequency, width and Range).
 - Click a band's readout at the top to switch the band on or off.
 

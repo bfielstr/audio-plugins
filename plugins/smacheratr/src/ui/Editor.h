@@ -24,10 +24,12 @@ public:
     // layout (also used by the host test)
     static constexpr double kShaperLeft = 8.0, kShaperTop = 68.0, kShaperWidth = 300.0, kShaperHeight = 190.0;
     static constexpr double kColorLeft = 316.0, kColorTop = 40.0, kColorViewWidth = 436.0, kColorViewHeight = 290.0;
-    // the GENTLR panel at the bottom: the Gentlr button at (kGentlrButtonX, kGentlrTop + 40), Advanced
-    // at (kGentlrAdvancedX, kGentlrTop + 40), No Overlap at (kNoOverlapX, kGentlrTop + 40), the Slope under
-    // the band buttons at (kSlopeX, kGentlrTop + 64)
-    static constexpr double kGentlrTop = 432.0, kGentlrButtonX = 56.0, kGentlrAdvancedX = 516.0, kNoOverlapX = 712.0, kSlopeX = 182.0;
+    // the GENTLR panel at the bottom, in groups with room between them: the Gentlr button at
+    // (kGentlrButtonX, kGentlrTop + 40); the band buttons beside it with the Slope under them at (kSlopeX,
+    // kGentlrTop + 64); the shown band's Freq, Width and Range knobs; Advanced at (kGentlrAdvancedX,
+    // kGentlrTop + 40) with No Overlap under it at (kNoOverlapX, kNoOverlapY); the region Drive last
+    static constexpr double kGentlrTop = 432.0, kGentlrButtonX = 56.0, kGentlrAdvancedX = 527.0, kSlopeX = 194.0;
+    static constexpr double kNoOverlapX = kGentlrAdvancedX, kNoOverlapY = kGentlrTop + 64.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

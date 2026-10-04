@@ -93,6 +93,7 @@ const smacheratr::GentlrBandParams& GentlrView::bandParams ()
         {freqParam (0), freqParam (1), freqParam (kSub), freqParam (kHigh)},
         {bandParam (0, kWidth), bandParam (1, kWidth), -1, -1},
         kNoOverlap,
+        {kGlue12, kGlueSub1, kGlueSub2, kGlue1High, kGlue2High},
         [] (pk::ParamHost* h, int k) { return bandWorks (k, h->plainValue (onParam (k)), h->plainValue (rangeParam (k))); }};
     return bp;
 }
@@ -119,12 +120,29 @@ bool GentlrView::works (int band) const
     return bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
 }
 
-smacheratr::GentlrLayout GentlrView::layoutNow () const
+smacheratr::GentlrLayout GentlrView::layoutNow () const { return smacheratr::shownLayout (host, bandParams ()); }
+
+int GentlrView::links (smacheratr::GlueBorder out[kAllBands], CPoint at[kAllBands]) const
 {
-    smacheratr::GentlrLayout l = smacheratr::readLayout (host, bandParams ());
-    if (host->plainValue (kNoOverlap) >= 0.5)
-        smacheratr::resolveOverlaps (l);
-    return l;
+    const int n = smacheratr::linkBorders (host, bandParams (), out);
+    for (int i = 0; i < n; ++i)
+        at[i] = CPoint (xOfHz (std::exp2 (out[i].at)), plotBottom () - 10.0);
+    return n;
+}
+
+int GentlrView::linkAt (const CPoint& p, smacheratr::GlueBorder* b) const
+{
+    smacheratr::GlueBorder borders[kAllBands];
+    CPoint at[kAllBands];
+    const int n = links (borders, at);
+    for (int i = 0; i < n; ++i)
+        if (std::hypot (p.x - at[i].x, p.y - at[i].y) <= smacheratr::kLinkRadius + 1.0)
+        {
+            if (b)
+                *b = borders[i];
+            return i;
+        }
+    return -1;
 }
 
 ClarityBand GentlrView::bandNow (int band) const
@@ -480,6 +498,18 @@ void GentlrView::draw (CDrawContext* ctx)
         pk::draw::handle (ctx, h, rad, hot, on[k]);
     }
 
+    // the glue links on the borders where two bands touch (lit while glued), and where a dragged edge
+    // sits snapped (it glues there when the drag ends)
+    {
+        smacheratr::GlueBorder borders[kAllBands];
+        CPoint at[kAllBands];
+        const int n = links (borders, at);
+        for (int i = 0; i < n; ++i)
+            smacheratr::drawLink (ctx, at[i], borders[i].glued, hoverLink == i);
+        if (push.active () && push.snapped () >= 0)
+            smacheratr::drawLink (ctx, CPoint (xOfHz (std::exp2 (push.snappedAt ())), plotBottom () - 10.0), true, true);
+    }
+
     // the readouts: the band's name, its frequency and its cut now (a click switches the band)
     for (int k = 0; k < kAllBands; ++k)
     {
@@ -566,6 +596,14 @@ void GentlrView::onMouseDownEvent (MouseDownEvent& e)
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);
     };
+    // a link icon: glues or detaches the two bands at its border
+    smacheratr::GlueBorder link {};
+    if (!right && linkAt (e.mousePosition, &link) >= 0)
+    {
+        smacheratr::toggleGlue (host, bandParams (), link);
+        done ();
+        return;
+    }
     // a band's readout: switches it on or off (the Sub and High bands have no switch: their Range is it)
     for (int k = kAllBands - 1; k >= 0; --k)
         if (hasOn (k) && pill (k).pointInside (e.mousePosition))
@@ -605,16 +643,22 @@ void GentlrView::onMouseDownEvent (MouseDownEvent& e)
         return;
     }
     down = e.mousePosition;
+    // (No Overlap: first splits what overlaps; an edge within 6 px of a neighbour's snaps onto it)
+    const double snap = 6.0 * std::log2 (kMaxHz / kMinHz) / std::max (1.0, getViewSize ().getWidth ());
     if (drag == Drag::Handle)
     {
         host->beginEdit (freq);
         host->beginEdit (range);
-        push.begin (host, bandParams (), k, {freq, range}); // (No Overlap: first splits what overlaps)
+        push.begin (host, bandParams (), k, {freq, range}, smacheratr::BandPush::Grab::Body, snap);
     }
     else
     {
         host->beginEdit (width);
-        push.begin (host, bandParams (), k, {width});
+        push.begin (host, bandParams (), k, {width},
+                    drag == Drag::Low    ? smacheratr::BandPush::Grab::LowEdge
+                    : drag == Drag::High ? smacheratr::BandPush::Grab::HighEdge
+                                         : smacheratr::BandPush::Grab::Width,
+                    snap);
     }
     startFreq = host->plainValue (freq);
     startRange = host->plainValue (range);
@@ -627,6 +671,19 @@ void GentlrView::onMouseMoveEvent (MouseMoveEvent& e)
 {
     if (drag == Drag::None)
     {
+        const int link = linkAt (e.mousePosition);
+        if (link != hoverLink)
+        {
+            hoverLink = link;
+            invalid ();
+        }
+        if (link >= 0)
+        {
+            if (auto* f = getFrame ())
+                f->setCursor (kCursorHand);
+            setHover (-1);
+            return;
+        }
         int k = -1;
         Drag h = hit (e.mousePosition, &k);
         bool onPill = false;
@@ -677,7 +734,7 @@ void GentlrView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag == Drag::None)
         return;
-    push.end (host);
+    push.end (host, bandParams ()); // (an edge left snapped on a neighbour's: glued)
     if (drag == Drag::Handle)
     {
         host->endEdit (freqParam (dragBand));
@@ -703,6 +760,7 @@ void GentlrView::onMouseExitEvent (MouseExitEvent& e)
         f->setCursor (kCursorDefault);
     if (drag == Drag::None)
         setHover (-1);
+    hoverLink = -1;
     e.consumed = true;
 }
 

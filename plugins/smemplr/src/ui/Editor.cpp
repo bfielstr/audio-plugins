@@ -1423,6 +1423,9 @@ void Editor::buildBody ()
                 });
             add (fxColorView, smacheratr::help::kColorDisplay);
             fxColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
+            // (Gentlr's glue switches are the display's link icons: a click glues or detaches two bands)
+            for (uint32_t id : kClarityGlueIds)
+                rackPageParams.insert (id);
             // No Overlap, under the colour display (switched on, it splits what overlaps)
             add (new NoOverlapToggle (CRect (446, 208, 526, 226), h, smacheratrBandParams ()), tip (kClarityNoOverlap));
             // the bands' Slope, left of it
@@ -1435,8 +1438,8 @@ void Editor::buildBody ()
             add (new Choice (CRect (482, 8, 580, 26), h, kPostClip), tip (kPostClip));
             add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
             add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
-            add (new Toggle (CRect (716, 8, 770, 26), h, kColorOn, "Color"), tip (kColorOn));
-            add (new Toggle (CRect (774, 8, 834, 26), h, kClarityAdvanced, "Advanced"), tip (kClarityAdvanced));
+            add (new Toggle (CRect (716, 8, 766, 26), h, kColorOn, "Color"), tip (kColorOn));
+            add (new Toggle (CRect (770, 8, 834, 26), h, kClarityAdvanced, "Advanced"), tip (kClarityAdvanced));
             const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
@@ -1569,6 +1572,9 @@ void Editor::buildBody ()
                 return b ? &b->rack.gentlr[(size_t)s] : nullptr;
             });
             add (gentlrView, gentlr::help::kDisplay);
+            // (its glue switches are the display's link icons: a click glues or detaches two bands)
+            for (uint32_t id : gentlr::kGlueIds)
+                rackPageParams.insert (id);
             // No Overlap, under the display (switched on, it splits what overlaps)
             add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gentlr::GentlrView::bandParams ()), tip (gentlr::kNoOverlap));
             // the bands' Slope (bands 1 and 2), beside it

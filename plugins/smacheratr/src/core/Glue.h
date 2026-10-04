@@ -24,6 +24,7 @@
 //                 edge lands exactly on it, and the two glue when the drag ends ("glue on touch").
 //   glueBorders   the borders between neighbours that touch, glued or not: where the displays draw
 //                 the link icons (a click glues or detaches).
+//   neighbourOf, gluedAt   which band is next to a band along the spectrum, and whether they are glued.
 // The engines run applyGlue before No Overlap's resolveOverlaps; where the two disagree (automation
 // moving a third band onto a glued pair) No Overlap wins, it is the one that promises something.
 #pragma once
@@ -96,6 +97,24 @@ inline bool on (const bool* glued, int a, int b)
 }
 
 } // namespace glue
+
+// The working band next to band k along the spectrum of `l` (above it, or below), or -1.
+inline int neighbourOf (const GentlrLayout& l, int k, bool above)
+{
+    int order[kGentlrBands];
+    const int n = noOverlap::orderOf (l, order, l);
+    for (int p = 0; p < n; ++p)
+        if (order[p] == k)
+            return above ? (p + 1 < n ? order[p + 1] : -1) : (p > 0 ? order[p - 1] : -1);
+    return -1;
+}
+
+// Band k's edge above (its high edge, or below: its low edge) is glued to its neighbour there.
+inline bool gluedAt (const GentlrLayout& l, int k, bool above, const bool glued[kGluePairs])
+{
+    const int j = neighbourOf (l, k, above);
+    return j >= 0 && glue::on (glued, k, j);
+}
 
 // The engines (and the displays): the working bands glued to a neighbour keep their shared border
 // equal (glued[g]: switch g, GluePair's order). Bands that are not glued, or whose border is already
