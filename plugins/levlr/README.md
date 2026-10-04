@@ -1,17 +1,17 @@
-# Levlr
+# levlr
 
-Levlr splits the sound into up to four bands that sit side by side, and gives each band its own level
+levlr splits the sound into up to four bands that sit side by side, and gives each band its own level
 and its own saturator. Lift the lows, dip the low mids, add grit only to the highs, or push one band
-hard while the others stay clean, then drive the lot into the Smacheratr at the end. Reach for it as a
+hard while the others stay clean, then drive the lot into the smacheratr at the end. Reach for it as a
 broad tone shaper on a bass, a drum bus or a full mix, or when you want to saturate one part of the
 spectrum without touching the rest. Install instructions are in the
 [top-level README](../../README.md).
 
-![Levlr](../../docs/levlr/ui_levlr.png)
+![levlr](../../docs/levlr/ui_levlr.png)
 
 ## How to use it
 
-1. Put Levlr on a track. It starts with 4 bands split at 120 Hz, 1 kHz and 6 kHz, all at 0 dB.
+1. Put levlr on a track. It starts with 4 bands split at 120 Hz, 1 kHz and 6 kHz, all at 0 dB.
 2. Drag a band up or down in the display for its level; drag the line between two bands sideways to move
    that crossover. Use **Bands** for fewer bands.
 3. Turn up a band's **Drive** and pick its **Type** to saturate that band alone.
@@ -31,7 +31,7 @@ with **Bands** next to Slope.
   count are left out and hidden. Changing the count crossfades over 20 ms.
 - **Drive** and **Type**, per band: a saturator after the band's level. Drive is 0 to 36 dB; at 0 dB it
   is off and the band stays clean. The types:
-  - **Analog**: Smacheratr's curve, clean up to half scale, then a soft knee.
+  - **Analog**: smacheratr's curve, clean up to half scale, then a soft knee.
   - **Tape**: soft all the way, odd harmonics.
   - **Tube**: leans to one side, so the top squashes first and it adds even harmonics, the second above
     all (its DC is filtered out).
@@ -49,7 +49,7 @@ with **Bands** next to Slope.
   bands softly, so a band's lift spills a little into its neighbours), 96 the most (and the cleanest
   split). Changing it fades out and back in over a few milliseconds.
 - **Output**.
-- **Smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
+- **smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
   and displays (off by default, Pre-Limit on).
 
 ![Three bands, two of them driven](../../docs/levlr/ui_levlr_3_bands.png)
@@ -82,7 +82,7 @@ stay in time.
 
 The drives' oversampling delays every band, driven or not, so the latency is the same whatever the
 drives, their types and Bands are: 37 samples at 48 kHz (59 at 44.1 kHz, 14 at 96 kHz), plus the end
-Smacheratr's. It is reported to the host. With every drive off the output is the undriven output bit
+smacheratr's. It is reported to the host. With every drive off the output is the undriven output bit
 for bit, only that much later.
 
 ## Older projects

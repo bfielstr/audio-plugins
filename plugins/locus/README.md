@@ -1,13 +1,13 @@
-# Locus
+# locus
 
-Locus cleans up or thickens the low end. Turn **Contrast** up and the main bass notes and kick hits
+locus cleans up or thickens the low end. Turn **Contrast** up and the main bass notes and kick hits
 come forward while the mud between them drops away, for a clearer, punchier low end. Turn it down and
 the low end evens out, for more weight and sustain. The level of the range stays steady either way, so
 you hear the change in focus, not a change in loudness. Reach for it on a bass, a kick and bass bus or
 a full mix whose bottom end sounds woolly or thin. Install instructions are in the
 [top-level README](../../README.md).
 
-![Locus](../../docs/locus/ui_locus.png)
+![locus](../../docs/locus/ui_locus.png)
 
 ## How to use it
 
@@ -16,13 +16,13 @@ a full mix whose bottom end sounds woolly or thin. Install instructions are in t
 2. Turn **Contrast** up for clarity and punch, or down for weight and density. Drag up or down inside
    the range in the display to do the same.
 3. Pick **Punchy** for transients and impact, or **Smooth** for sustain and weight. **Solo** plays only
-   the range, so you can hear what Locus is working on.
+   the range, so you can hear what locus is working on.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
 
 ## How it works
 
-Locus splits the low end into dozens of narrow bands (about 12 Hz each) and compares each band's level
+locus splits the low end into dozens of narrow bands (about 12 Hz each) and compares each band's level
 with its neighbourhood: the level of nearby bands over the recent past. A compressor compares against a
 fixed threshold instead.
 
@@ -41,7 +41,7 @@ The display shows the input spectrum (a faint copper body), the output (a bright
 applied per band. Drag the range edges to move them, drag inside the range sideways to move it or up and
 down to set Contrast, and double-click to reset Contrast.
 
-**Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
 ## Latency
 

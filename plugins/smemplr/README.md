@@ -1,16 +1,16 @@
-# Smemplr
+# smemplr
 
-Smemplr turns a sample into an instrument. Drop in a one-shot, a loop or a whole phrase and play it
+smemplr turns a sample into an instrument. Drop in a one-shot, a loop or a whole phrase and play it
 from your keyboard: loop a part of it as a pad, play it once as a hit, or chop it into slices across
 the keys. It can follow the song tempo, and it has a filter, envelopes, LFOs and an effects rack, so a
 single track can go from raw sample to finished sound. Install instructions are in the
 [top-level README](../../README.md).
 
-![Smemplr](../../docs/smemplr/ui_classic.png)
+![smemplr](../../docs/smemplr/ui_classic.png)
 
 ## How to use it
 
-1. Put Smemplr on an instrument track and **drop a sample** on the waveform: a clip dragged out of
+1. Put smemplr on an instrument track and **drop a sample** on the waveform: a clip dragged out of
    REAPER or Ableton Live, or a file from Finder / Explorer. Or click **Load** in the header (also
    **Load Sample...** in the waveform's right-click menu), and use ◀ ▶ to step through the other samples
    in the same folder.
@@ -23,7 +23,7 @@ single track can go from raw sample to finished sound. Install instructions are 
 Point at any control for help in the info box at the bottom of the window (**?** in the header also
 switches on hover tooltips).
 
-![Smemplr in Classic mode with the loop](../../docs/smemplr/ui_classic_loop.png)
+![smemplr in Classic mode with the loop](../../docs/smemplr/ui_classic_loop.png)
 
 ## Playing the sample
 
@@ -42,7 +42,7 @@ slice or to the end of the region. Slices are mapped chromatically from C1 (MIDI
 adds a slice (a solid line; automatic slices are dashed) or removes one, drag moves one, Alt-click
 switches a slice between manual and automatic.
 
-![Smemplr in Slicing mode](../../docs/smemplr/ui_slicing.png)
+![smemplr in Slicing mode](../../docs/smemplr/ui_slicing.png)
 
 **Warp**, in every mode, locks the sample to the host tempo. **Warp Mode**: **Beats** (**Preserve**,
 **Loop Mode**, **Envelope**), **Tones** (**Grain Size**), **Texture** (**Grain Size**, **Flux**),
@@ -102,7 +102,7 @@ simply goes below the audible range. **HP Slope**: 6 or 18 dB (-3 dB at the cuto
 
 **Transposing far up stays clean.** A sample read many times faster than real time (+48 semitones reads
 16 samples for each one played) would fold its top octaves down as aliasing. When a sample loads,
-Smemplr makes band-limited copies of it at 1/2 to 1/64 of its rate (about as much memory again), and a
+smemplr makes band-limited copies of it at 1/2 to 1/64 of its rate (about as much memory again), and a
 fast read takes the copy that suits its speed, crossfading into the next over the last quarter octave
 before it, so a bend, glide or LFO moves smoothly across them. Up to +9 semitones the sample itself is
 read. Complex and Complex Pro pick their copy when the note starts (with room for about an octave of
@@ -111,7 +111,7 @@ bend up); Complex Pro still takes its formants from the sample itself.
 ## Modulation
 
 The MODULATION column on the right has four LFOs that can move any knob, slider or value field of
-Smemplr, the effects in the rack included. Each LFO has a **Shape** (**Sine**, **Triangle**, **Saw Up**,
+smemplr, the effects in the rack included. Each LFO has a **Shape** (**Sine**, **Triangle**, **Saw Up**,
 **Saw Down**, **Square**, **S&H**: a new random value every cycle, or **Smooth Random**: gliding from one
 random value to the next), a **Rate** in Hz (0.01 to 40), **Sync** (**Off**, or a note length from 1/64
 to 8 bars at the host tempo, 120 BPM when the host gives none; while the host plays, a synced LFO
@@ -144,7 +144,7 @@ and in presets.
 ## The effects rack
 
 At the bottom: after the sampler, up to 8 effects in any order, and the same effect as many times as
-you like. A new Smemplr starts with **smacheratr** in the first slot (on, Drive 0 dB, Pre-Limit on). It
+you like. A new smemplr starts with **smacheratr** in the first slot (on, Drive 0 dB, Pre-Limit on). It
 is a slot like any other, so you can move it, switch it off or remove it.
 
 - **+** adds an effect at the end of the chain. The tabs show the chain from left to right.
@@ -153,18 +153,18 @@ is a slot like any other, so you can move it, switch it off or remove it.
   go on. **Alt-click** (Option-click) a tab removes that effect.
 - For the selected effect: **On**, **Remove**, and **Copy** / **Paste**. Copy and Paste use the same
   text as each effect's own plug-in (its **Menu → Copy Settings / Paste Settings**), so settings go from
-  a Para on a track into a **para** slot and back, or from one slot to another of the same effect.
+  a para on a track into a **para** slot and back, or from one slot to another of the same effect.
   Settings of a different effect are ignored.
 
 ![The rack after Ctrl-dragging a copy of an effect](../../docs/smemplr/ui_fx_after_duplicate.png)
 
 The slots, named as the tabs show them:
 
-- **para**: Para's parallel high-pass and low-pass with its Vocal movement, **HP Slope** / **LP Slope**
+- **para**: para's parallel high-pass and low-pass with its Vocal movement, **HP Slope** / **LP Slope**
   (6 to 96 dB and Brickwall), **HP Lock** / **LP Lock** (a locked gain stops at 0 dB) and a drive for
-  each filter. Its envelope is triggered by the notes played in Smemplr, and its display shows the live
+  each filter. Its envelope is triggered by the notes played in smemplr, and its display shows the live
   spectrum.
-- **multidyn**: Multidyn with its **Style** (**OTT** or **Character**; Soft Knee, Peak/RMS, the RMS
+- **multidyn**: multidyn with its **Style** (**OTT** or **Character**; Soft Knee, Peak/RMS, the RMS
   window and Soften look disabled in OTT, where they do nothing), its lanes and band fields, the
   crossovers' **Slope**, Soften's **Color** and the **Sub** band. A new slot starts in OTT.
 - **m/s eq**: a high-pass on the side signal (150 Hz by default) so the low end is mono below the
@@ -173,17 +173,17 @@ The slots, named as the tabs show them:
   cutoff within 0.05 dB, about -40 dB a tenth below it, -70 dB at 0.8 x). The mouse wheel on the
   display's handle (while holding it, or with Shift) steps through them. The mid is never filtered, so
   the mono sum is untouched.
-- **smacheratr**: the full saturator: Pre-Limit, Gentlr with its two bands, Sub and High bands,
+- **smacheratr**: the full saturator: Pre-Limit, gentlr with its two bands, Sub and High bands,
   **Slope**, **No Overlap**, glue and Advanced mode, Mid/Side, colour and post clip.
 - **widr**: the stereo widener with its left and right voices. In the rack it works alone: sharing the
-  stereo field needs Widr's own plug-in instances.
-- **wubr**: Wubr's two drawn bands.
-- **levlr**: Levlr's bands, each with its Drive and Type.
-- **gentlr**: Gentlr's two bands, Sub and High bands on its display, a row of values for each, **Band
+  stereo field needs widr's own plug-in instances.
+- **wubr**: wubr's two drawn bands.
+- **levlr**: levlr's bands, each with its Drive and Type.
+- **gentlr**: gentlr's two bands, Sub and High bands on its display, a row of values for each, **Band
   Slope**, **No Overlap**, glue, **Advanced** and its region Drive. In gentlr and smacheratr slots the
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag
   a band's edge onto a neighbour's to glue them; click the link icon on the border to detach them.
-- **smoothr**: Smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
+- **smoothr**: smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
   off in the rack: put a smacheratr slot before it for that.
 
 Every control is an automatable parameter (the host shows a slot's values in the units of the effect
@@ -193,24 +193,24 @@ it to change the time span).
 
 ## Notes and limits
 
-- The warp algorithms are Smemplr's own. They are tempo-accurate and tested. Manual warp markers are
+- The warp algorithms are smemplr's own. They are tempo-accurate and tested. Manual warp markers are
   not supported, since there is no clip to take them from.
-- The filter circuits are Smemplr's own models: hard-clipped and soft-clipped state-variable filters
+- The filter circuits are smemplr's own models: hard-clipped and soft-clipped state-variable filters
   and ladder variants.
-- Samples are referenced by path in the project, like most samplers. If a file moves, Smemplr shows
+- Samples are referenced by path in the project, like most samplers. If a file moves, smemplr shows
   "Missing" but keeps the reference, so it is not lost when you save.
 - No MPE yet.
 
 ## Older projects
 
-Smemplr was called Smempler, and Simplr before 0.5.0; projects and presets carry over.
+smemplr was called smempler, and simplr before 0.5.0; projects and presets carry over.
 
-- Projects from 0.5 keep their Para, Multidyn and M/S EQ: they load into the first rack slots.
+- Projects from 0.5 keep their para, multidyn and M/S EQ: they load into the first rack slots.
 - Before 0.7: a para slot keeps its slope and its one drive becomes both filters' drives. A para slot
   from before the separate slopes gets its one slope on both filters, its HP Lock on unless its
   high-pass gain was above 0 dB, its LP Lock off, and keeps its Fade in semitones. A multidyn slot's
-  gains move into its controls for the OTT gain staging (see [Multidyn](../multidyn/README.md)), and a
-  levlr slot keeps 4 bands without drive. Multidyn slots saved before Style existed open in Character.
+  gains move into its controls for the OTT gain staging (see [multidyn](../multidyn/README.md)), and a
+  levlr slot keeps 4 bands without drive. multidyn slots saved before Style existed open in Character.
 - Before 0.9 a fixed end saturator sat after the rack. Projects saved with it on load with a
   smacheratr slot at the end of their chain instead (the first free slot after the last effect, with
   the same settings); projects with it off get nothing added. If such a project's rack is full, the old
@@ -225,6 +225,6 @@ Smemplr was called Smempler, and Simplr before 0.5.0; projects and presets carry
 
 ## Credits
 
-Smemplr is released under the MIT licence (see [LICENSE](../../LICENSE)). It builds on the Steinberg
+smemplr is released under the MIT licence (see [LICENSE](../../LICENSE)). It builds on the Steinberg
 VST 3 SDK (MIT), VSTGUI (BSD 3-clause) and dr_libs by David Reed (public domain / MIT-0); see
 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).

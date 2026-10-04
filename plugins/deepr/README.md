@@ -1,16 +1,16 @@
-# Deepr
+# deepr
 
-Deepr makes a bass or a reese sound deeper without making it louder. While the sub plays, it dips the
+deepr makes a bass or a reese sound deeper without making it louder. While the sub plays, it dips the
 low mids just above it, so the sub becomes the strongest part of each note; between notes the low mids
 come back. It also folds the sub to mono, so detuned layers stop cancelling each other down there. Reach
-for it when a bass sounds big on its own but thin or boxy in the mix. Deepr adds no latency of its own.
+for it when a bass sounds big on its own but thin or boxy in the mix. deepr adds no latency of its own.
 Install instructions are in the [top-level README](../../README.md).
 
-![Deepr](../../docs/deepr/ui_deepr.png)
+![deepr](../../docs/deepr/ui_deepr.png)
 
 ## How to use it
 
-1. Put Deepr on the bass. Set **Split** where the sub ends (100 Hz by default).
+1. Put deepr on the bass. Set **Split** where the sub ends (100 Hz by default).
 2. Set **Thresh** so the dip starts when the sub plays. **Listen** **Sub** helps: it plays the sub band
    alone.
 3. Set how deep the dip goes with **Depth**, and where with **Dip** and **Width**. **Listen** **Cut**
@@ -20,7 +20,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 ## Controls
 
-Deepr splits the signal at **Split** into the sub and the rest. The sub's level is the key: while it
+deepr splits the signal at **Split** into the sub and the rest. The sub's level is the key: while it
 plays, the low mids of the rest are dipped; when it stops, they come back.
 
 **DIP**
@@ -47,7 +47,7 @@ plays, the low mids of the rest are dipped; when it stops, they come back.
 With Depth at 0 the output is flat at every frequency: the split and the sum make an all-pass, and the
 dry signal goes through the same all-pass so any Mix lines up.
 
-**Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
 ## Why it sounds deeper
 
@@ -58,6 +58,6 @@ driving the sub any harder. Between notes the low mids of everything else are le
 
 ## Latency
 
-None of Deepr's own: everything runs sample by sample (IIR filters and an envelope follower). The only
+None of deepr's own: everything runs sample by sample (IIR filters and an envelope follower). The only
 latency is the end saturator's, about 1.7 ms, which is always in the path so it never changes. It is
 reported to the host for automatic compensation.

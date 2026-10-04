@@ -1,18 +1,18 @@
-# Smoothr
+# smoothr
 
-Smoothr is a limiter for the master or a bus that makes a track louder while keeping its low end smooth
+smoothr is a limiter for the master or a bus that makes a track louder while keeping its low end smooth
 and clean. A plain limiter pulls its gain down in a millisecond or two for every peak and lets it back
 up in tens of milliseconds, well inside one period of a bass note (20 ms at 50 Hz): the bass comes out
-multiplied by a wobbling gain, rough on held notes and pumping under every kick and snare. Smoothr gives
+multiplied by a wobbling gain, rough on held notes and pumping under every kick and snare. smoothr gives
 the lows a slow gain of their own and lets the highs take the fast peaks. Reach for it as the last
 plug-in on a bass-heavy master or a low-end bus. Install instructions are in the
 [top-level README](../../README.md).
 
-![Smoothr](../../docs/smoothr/ui_smoothr.png)
+![smoothr](../../docs/smoothr/ui_smoothr.png)
 
 ## How to use it
 
-1. Put Smoothr last on the master or a bus. Set **Ceiling** (-1 dB by default) to the highest peak you
+1. Put smoothr last on the master or a bus. Set **Ceiling** (-1 dB by default) to the highest peak you
    want out.
 2. Turn **Input** up until it is as loud as you want. Watch the History display: the lows' reduction is
    cinnabar, the highs' pale copper.
@@ -21,7 +21,7 @@ plug-in on a bass-heavy master or a low-end bus. Install instructions are in the
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
 
-The chain: **Input** -> **Smacheratr** (saturation first, on and mild) -> **Character** (a dip in the
+The chain: **Input** -> **smacheratr** (saturation first, on and mild) -> **Character** (a dip in the
 low mids when they get loud) -> the limiter -> the ceiling.
 
 ## LIMITER
@@ -49,8 +49,8 @@ low mids when they get loud) -> the limiter -> the ceiling.
 ## CHARACTER
 
 A dip in the low mids, somewhere in 80 to 250 Hz, just before the limiter, that only opens when the low
-mids get loud. It is Gentlr at work: it listens through Gentlr's band (run twice, so only the low mids
-open it, not a loud bass or a loud upper mid), sets its cut with Gentlr's law (3 dB for every 5 dB the
+mids get loud. It is gentlr at work: it listens through gentlr's band (run twice, so only the low mids
+open it, not a loud bass or a loud upper mid), sets its cut with gentlr's law (3 dB for every 5 dB the
 band is over -18 dBFS), and cuts through a resonant band-pass so the dip has no bump either side of it.
 Turned up, the dip gets deeper (up to 6 dB), wider (0.9 to 1.5 octaves) and slides down (175 to 140
 Hz). At 0 it is off and the signal passes bit for bit; 30 % by default.
@@ -60,10 +60,10 @@ up, they stop eating the limiter's headroom, so the limiter has to pull the lows
 often. It sits after the saturator, so it also catches the harmonics the saturator adds there (a 55 Hz
 bass's third is at 165 Hz).
 
-## Smacheratr (before the limiter)
+## smacheratr (before the limiter)
 
 Saturation first, then limiting: the Analog curve rounds the tops of the peaks, so the limiter has less
-to catch. All of Smacheratr's controls and displays, before the limiter. On by default and mild:
+to catch. All of smacheratr's controls and displays, before the limiter. On by default and mild:
 **Drive** 0 dB (the curve only shapes what goes over half scale), **Dry/Wet** 50 %, **Pre-Limit** off (it
 is a fast full-band limiter, the very thing that roughens the lows; the limiter after it does that job
 smoothly). Off, it only delays the signal, so the latency never changes.
@@ -98,7 +98,7 @@ What the tests measure: a 55 Hz sine pushed 10 dB over a -1 dB ceiling comes out
 against 2.4 % for a plain 1.5 ms look-ahead limiter with the same release (40 Hz: 0.07 % against 3.5 %).
 A 56 Hz bass with kick clicks pushed to +12 dB: the sidebands the clicks put around the bass are 29 to 30
 dB under it at Smooth 50 %, against 14 to 15 dB for the plain limiter turned to the same loudness (60 to
-76 dB under at 100 %). The price: on dense material pushed hard Smoothr is quieter than a plain limiter
+76 dB under at 100 %). The price: on dense material pushed hard smoothr is quieter than a plain limiter
 (a loud little mix pushed 9 dB in: 1.7 dB quieter at 50 %, the same at 100 %).
 
 ## Latency

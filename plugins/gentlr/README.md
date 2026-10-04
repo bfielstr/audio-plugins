@@ -1,6 +1,6 @@
-# Gentlr
+# gentlr
 
-Gentlr keeps a mix clear by turning down mud and harshness only while they build up. It watches four
+gentlr keeps a mix clear by turning down mud and harshness only while they build up. It watches four
 regions of the spectrum (the low mids, the upper mids, the sub and the top) and turns each one down only
 while it gets loud. At normal levels the sound keeps all its body and bite; when a chord, a bass note or
 a pushed synth piles up in one region, that region is pulled back. Reach for it on a mix, a bus or a
@@ -8,13 +8,13 @@ synth that sounds fine quietly but goes boomy, muddy or harsh when it gets busy 
 while a band stays under its threshold. Install instructions are in the
 [top-level README](../../README.md).
 
-![Gentlr](../../docs/gentlr/ui_gentlr.png)
+![gentlr](../../docs/gentlr/ui_gentlr.png)
 
-Gentlr was called Gently before 0.12. It is the same Gentlr that Smacheratr has built in.
+gentlr was called gently before 0.12. It is the same gentlr that smacheratr has built in.
 
 ## How to use it
 
-1. Put Gentlr on a track or a bus. **Band 1** (on the mud, 250 Hz) and **Band 2** (on the harshness, 3
+1. Put gentlr on a track or a bus. **Band 1** (on the mud, 250 Hz) and **Band 2** (on the harshness, 3
    kHz) are already working.
 2. Play the loudest part. In the display, the lit cinnabar areas show what each band is cutting right
    now. Drag a band's handle sideways to move it and down for more **Range** (the most it may cut).
@@ -25,7 +25,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 The chain: **Input** -> **Band 1** -> **Band 2** -> **Sub** -> **High** (each turned down on its own
 when it is loud; with Advanced, the region they cut can be driven) -> **Mix** -> **Output** ->
-**Smacheratr**.
+**smacheratr**.
 
 ## The bands
 
@@ -53,7 +53,7 @@ was, bit for bit.
   or a lead alone. It has a **Range**, the same law, and no width.
 - The Sub and High bands have no **On** button. They are always there and start at Range 0 dB, so they
   cut nothing until you pull their handle down in the display (or turn their Range up). At Range 0 dB
-  Gentlr sounds exactly as it does without them, bit for bit.
+  gentlr sounds exactly as it does without them, bit for bit.
 
 ![The High band](../../docs/gentlr/ui_gentlr_high.png)
 
@@ -75,7 +75,7 @@ Sub, High), each measuring its own band.
 
 **Stereo**: **Stereo** (left and right share one detector per band, so the image stays put),
 **Mid/Side** (the mid and the side are worked on apart, each with its own detectors), **Mid** or
-**Side** (only that one; the other passes). A change of mode fades Gentlr out and back in (5 ms each
+**Side** (only that one; the other passes). A change of mode fades gentlr out and back in (5 ms each
 way), so it does not click.
 
 ## No Overlap
@@ -121,12 +121,12 @@ bottom of the display: copper where two bands only touch, lit cinnabar while the
 band (Band 1, Band 2, Sub, High) at the right edge of the display, with the band's level rising beside
 it, bright where it is over the threshold (there the band is being cut). The law over the threshold
 stays the same. Drag a slider (Shift: fine); a double-click or right click puts it back to -18 dB.
-Advanced is on in a new Gentlr (the Thresholds at -18 dB sound the same as Advanced off, so the sliders
+Advanced is on in a new gentlr (the Thresholds at -18 dB sound the same as Advanced off, so the sliders
 are there to move). With Advanced off, the Thresholds are kept but not used.
 
 Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB, 12 dB by default): the bands as
-they leave, after their cuts, go through Smacheratr's Analog curve on their own, level-matched and added
-back, so the region Gentlr works on gets denser and gains harmonics without getting louder, while the
+they leave, after their cuts, go through smacheratr's Analog curve on their own, level-matched and added
+back, so the region gentlr works on gets denser and gains harmonics without getting louder, while the
 rest of the sound stays clean. It runs 4x oversampled, fades in and out when switched, and a quiet region
 passes it unchanged.
 
@@ -138,7 +138,7 @@ The display shows each band's region shaded, the most it can cut outlined (dashe
 now lit (cinnabar) from the 0 dB line and moving with the audio, a handle at its centre (Sub, High: at
 their Freq) as deep as its Range, and the whole response as the bright line (every band at its cut now,
 with its phase: the curve is what the sound gets). Behind them, the output's spectrum (filled) and the
-input's (dotted), tilted 4.5 dB/oct so a mix reads level: where the input stands above the output, Gentlr
+input's (dotted), tilted 4.5 dB/oct so a mix reads level: where the input stands above the output, gentlr
 is cutting. The readouts at the top show each band's frequency and its cut now.
 
 - Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz, High: 2 to 16 kHz), down for its
@@ -152,13 +152,13 @@ is cutting. The readouts at the top show each band's frequency and its cut now.
 - Double-click or right-click a handle to reset the band (its frequency, width and Range).
 - Click Band 1's or Band 2's readout at the top to switch the band on or off.
 
-**No Overlap**, **Mix** (dry / wet: the input, delayed to line up, against Gentlr's output) and
-**Output** (±24 dB, before the Smacheratr at the end) sit at the right of the controls.
+**No Overlap**, **Mix** (dry / wet: the input, delayed to line up, against gentlr's output) and
+**Output** (±24 dB, before the smacheratr at the end) sit at the right of the controls.
 
-**Smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB), with all
-its controls, its own Gentlr included.
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB), with all
+its controls, its own gentlr included.
 
-Gentlr is also in Smemplr's effects rack.
+gentlr is also in smemplr's effects rack.
 
 ## Latency
 
