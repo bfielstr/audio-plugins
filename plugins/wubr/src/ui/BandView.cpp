@@ -156,7 +156,7 @@ void BandView::draw (CDrawContext* ctx)
                 ctx->drawLine (CPoint (edgeX (b, high), all.top + 20), CPoint (edgeX (b, high), all.bottom - 16));
         }
         // the range the shape covers
-        ctx->setLineStyle (theme::kDashed);
+        ctx->setLineStyle (theme::dashed ());
         ctx->setLineWidth (1.0);
         ctx->setFrameColor (bandColor (b, on ? 120 : 50));
         if (target != kTargetFreq)

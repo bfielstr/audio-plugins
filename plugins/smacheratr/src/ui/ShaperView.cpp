@@ -79,7 +79,7 @@ void ShaperView::draw (CDrawContext* ctx)
             ctx->drawRect (CRect (all.left, all.top, xOf (-ceil), all.bottom), kDrawFilled);
             ctx->drawRect (CRect (xOf (ceil), all.top, all.right, all.bottom), kDrawFilled);
             ctx->setFrameColor (theme::kCopperPale);
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
             ctx->drawLine (CPoint (xOf (-ceil), all.top), CPoint (xOf (-ceil), all.bottom));
             ctx->drawLine (CPoint (xOf (ceil), all.top), CPoint (xOf (ceil), all.bottom));
             ctx->setLineStyle (kLineSolid);

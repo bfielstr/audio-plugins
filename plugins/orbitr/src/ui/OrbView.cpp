@@ -73,7 +73,7 @@ void OrbView::draw (CDrawContext* ctx)
     }
     // the swarm's ball: a dashed copper contour
     ctx->setFrameColor (theme::kCopper);
-    ctx->setLineStyle (theme::kDashed);
+    ctx->setLineStyle (theme::dashed ());
     ctx->drawEllipse (CRect (px (-radius), py (distance + radius), px (radius), py (distance - radius)), kDrawStroked);
     ctx->setLineStyle (kLineSolid);
     // the listener (a head with ears, facing up), drawn as an outline in the text colour

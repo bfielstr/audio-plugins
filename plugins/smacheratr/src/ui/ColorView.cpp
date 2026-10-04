@@ -236,7 +236,7 @@ void ColorView::draw (CDrawContext* ctx)
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (clarityColor (k, 110));
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
             ctx->drawGraphicsPath (range, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }

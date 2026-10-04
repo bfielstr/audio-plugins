@@ -306,7 +306,7 @@ void FilterView::draw (CDrawContext* ctx)
         ctx->setLineWidth (width);
         ctx->setFrameColor (stroke);
         if (dashed)
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
         ctx->setLineStyle (kLineSolid);
     };

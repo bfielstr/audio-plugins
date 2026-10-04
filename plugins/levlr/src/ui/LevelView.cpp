@@ -311,7 +311,7 @@ void LevelView::draw (CDrawContext* ctx)
         }
         else
         {
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (theme::kCopper);
         }

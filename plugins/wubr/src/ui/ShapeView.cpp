@@ -82,7 +82,7 @@ void ShapeView::draw (CDrawContext* ctx)
     if (envelope)
     {
         const double hx = xOf (s.holdX ());
-        ctx->setLineStyle (theme::kDashed);
+        ctx->setLineStyle (theme::dashed ());
         ctx->setFrameColor (theme::kCopperPale);
         ctx->drawLine (CPoint (hx, all.top), CPoint (hx, all.bottom));
         ctx->setLineStyle (kLineSolid);

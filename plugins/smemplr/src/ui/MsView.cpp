@@ -89,7 +89,7 @@ void MsView::draw (CDrawContext* ctx)
     const int slope = (int)std::lround (host->plainValue (mseq::kSlope));
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (theme::withAlpha (kMidColor, alpha));
-    ctx->setLineStyle (theme::kDashed);
+    ctx->setLineStyle (theme::dashed ());
     ctx->drawLine (CPoint (pr.left, yOfDb (midDb)), CPoint (pr.right, yOfDb (midDb)));
     ctx->setLineStyle (kLineSolid);
     text (ctx, "mid", CRect (pr.right - 40, yOfDb (midDb) - 13, pr.right - 4, yOfDb (midDb) - 1), kMidColor, 9.0, kRightText);
