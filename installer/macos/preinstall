@@ -1,0 +1,76 @@
+#!/bin/sh
+# Runs (as root) before a part of the macOS installer is installed. build-pkg.sh copies it into each
+# component package next to an "actions.txt" that lists what to clear away, one bundle per line:
+#
+#   replace Gentlr   the plug-in this package installs: the copy in /Library/.../VST3/bfielstr is
+#                    removed (a package only adds files, so files an older version had would stay),
+#                    and copies of ours elsewhere that would show up as a second copy in the host
+#   retire Gently    a bundle the suite renamed: our copies under the old name are removed
+#
+# "Elsewhere" is the top of the VST3 folder (where very old installers put the bundles) and the
+# logged-in user's own VST3 folder (where scripts/install.sh puts them): a host scans both, so the same
+# plug-in would be listed twice. Outside our own vendor folder only bundles whose moduleinfo.json names
+# us as the vendor are touched.
+#
+# Installer passes: $1 package path, $2 install location, $3 target volume ("/" normally).
+# For testing on any system: PLUGINS_TEST_USER_HOME=<dir> stands in for the logged-in user's home.
+set -u
+
+here="$(cd "$(dirname "$0")" && pwd)"
+vol="${3:-/}"
+vol="${vol%/}" # "/" becomes "", so paths below start with "/Library"
+system_root="$vol/Library/Audio/Plug-Ins/VST3"
+vendor="bfielstr"
+
+user_home=""
+if [ -n "${PLUGINS_TEST_USER_HOME:-}" ]; then
+    user_home="$PLUGINS_TEST_USER_HOME"
+elif [ -z "$vol" ]; then
+    # only for an install on the startup disk: the user logged in at the screen
+    console_user="$(stat -f%Su /dev/console 2>/dev/null || true)"
+    case "$console_user" in
+        "" | root | loginwindow | _mbsetupuser) ;;
+        *) user_home="$(dscl . -read "/Users/$console_user" NFSHomeDirectory 2>/dev/null | awk '{print $2}')" ;;
+    esac
+fi
+user_root=""
+[ -n "$user_home" ] && user_root="$user_home/Library/Audio/Plug-Ins/VST3"
+
+# True if the bundle at $1 was made by us (older builds named the vendor "Simplr").
+is_ours() {
+    grep -qE '"Vendor": *"(bfielstr|Simplr)"' "$1/Contents/Resources/moduleinfo.json" 2>/dev/null
+}
+
+remove() { # bundle reason
+    echo "Removing $1 ($2)"
+    rm -rf "$1"
+}
+
+remove_if_ours() { # bundle reason
+    if [ -d "$1" ] && is_ours "$1"; then
+        remove "$1" "$2"
+    fi
+}
+
+[ -f "$here/actions.txt" ] || exit 0
+while read -r action name; do
+    [ -n "$name" ] || continue
+    case "$action" in
+        replace)
+            if [ -e "$system_root/$vendor/$name.vst3" ]; then
+                remove "$system_root/$vendor/$name.vst3" "older version"
+            fi
+            remove_if_ours "$system_root/$name.vst3" "old copy outside the $vendor folder"
+            if [ -n "$user_root" ]; then
+                remove_if_ours "$user_root/$vendor/$name.vst3" "copy for one user, now installed for all users"
+                remove_if_ours "$user_root/$name.vst3" "copy for one user, now installed for all users"
+            fi
+            ;;
+        retire)
+            for dir in "$system_root/$vendor" "$system_root" ${user_root:+"$user_root/$vendor"} ${user_root:+"$user_root"}; do
+                remove_if_ours "$dir/$name.vst3" "renamed"
+            done
+            ;;
+    esac
+done <"$here/actions.txt"
+exit 0
