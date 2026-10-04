@@ -18,21 +18,18 @@ public:
     void down (const float* in, float* out, int n); // in: 2n samples
 
 private:
-    struct Fir
-    {
-        std::vector<float> hist;
-        int pos = 0, mask = 0;
-        void resize (int taps);
-        void reset ();
-        void push (float x)
-        {
-            hist[(size_t)pos] = x;
-            pos = (pos + 1) & mask;
-        }
-        float run (const std::vector<float>& h) const;
-    };
-    std::vector<float> h;
-    Fir upFir, downFir;
+    // The FIR runs at the 2x rate, but up-sampling feeds it a zero every other sample and down-sampling
+    // keeps every other output: each output is worked out only from the samples that count (the even
+    // taps against the input for the up-sampler's even outputs, the odd taps for its odd ones; the down-
+    // sampler's input split into its even and odd samples), four outputs at a time in one SIMD register.
+    // Every output is the same sum, in the same order, of the same products as the plain FIR's (the
+    // zeros it adds change nothing), so the result is that FIR's to the bit.
+    static constexpr int kChunk = 64; // input samples per pass
+    std::vector<float> h, hEven, hOdd;
+    int hist = 0; // samples of history each buffer keeps (2k for 4k + 1 taps)
+    std::vector<float> upBuf, evenBuf, oddBuf; // hist samples of history, then a chunk
+    void upChunk (const float* in, float* out, int n);
+    void downChunk (const float* in, float* out, int n);
 };
 
 class Oversampler

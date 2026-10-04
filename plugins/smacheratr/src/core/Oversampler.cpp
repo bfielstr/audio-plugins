@@ -1,5 +1,7 @@
 #include "Oversampler.h"
 
+#include "pluginkit/Simd.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -20,34 +22,6 @@ double besselI0 (double x)
     return sum;
 }
 } // namespace
-
-void Halfband2x::Fir::resize (int taps)
-{
-    int n = 1;
-    while (n < taps)
-        n <<= 1;
-    hist.assign ((size_t)n, 0.0f);
-    mask = n - 1;
-    pos = 0;
-}
-
-void Halfband2x::Fir::reset ()
-{
-    std::fill (hist.begin (), hist.end (), 0.0f);
-    pos = 0;
-}
-
-float Halfband2x::Fir::run (const std::vector<float>& h) const
-{
-    float acc = 0.0f;
-    int i = (pos - 1) & mask; // most recent sample
-    for (float tap : h)
-    {
-        acc += tap * hist[(size_t)i];
-        i = (i - 1) & mask;
-    }
-    return acc;
-}
 
 void Halfband2x::design (double passEdge, double attenDb, int maxTaps)
 {
@@ -74,35 +48,107 @@ void Halfband2x::design (double passEdge, double attenDb, int maxTaps)
     }
     for (auto& v : h)
         v = (float)(v / sum);
-    upFir.resize (n);
-    downFir.resize (n);
+    hEven.clear ();
+    hOdd.clear ();
+    for (int m = 0; m < n; ++m)
+        (m % 2 ? hOdd : hEven).push_back (h[(size_t)m]);
+    hist = (n - 1) / 2;
+    for (auto* b : {&upBuf, &evenBuf, &oddBuf})
+        b->assign ((size_t)(hist + kChunk), 0.0f);
 }
 
 void Halfband2x::reset ()
 {
-    upFir.reset ();
-    downFir.reset ();
+    for (auto* b : {&upBuf, &evenBuf, &oddBuf})
+        std::fill (b->begin (), b->end (), 0.0f);
 }
 
 void Halfband2x::up (const float* in, float* out, int n)
 {
-    for (int i = 0; i < n; ++i)
-    {
-        upFir.push (2.0f * in[i]);
-        out[2 * i] = upFir.run (h);
-        upFir.push (0.0f);
-        out[2 * i + 1] = upFir.run (h);
-    }
+    for (int pos = 0; pos < n; pos += kChunk)
+        upChunk (in + pos, out + 2 * pos, std::min (kChunk, n - pos));
 }
 
 void Halfband2x::down (const float* in, float* out, int n)
 {
+    for (int pos = 0; pos < n; pos += kChunk)
+        downChunk (in + 2 * pos, out + pos, std::min (kChunk, n - pos));
+}
+
+void Halfband2x::upChunk (const float* in, float* out, int n)
+{
+    // u: the input (times 2: the zeros halve the level), hist samples back first. The FIR's output
+    // after the input sample i is sum_m h[m] x[2i - m] over the zero-stuffed x: the even taps against
+    // u[i], u[i - 1] ..; after the zero that follows it, the odd taps against the same.
+    float* u = upBuf.data () + hist;
+    for (int i = 0; i < n; ++i)
+        u[i] = 2.0f * in[i];
+    const int ne = (int)hEven.size (), no = (int)hOdd.size ();
+    const float* he = hEven.data ();
+    const float* ho = hOdd.data ();
+    int i = 0;
+    for (; i + 4 <= n; i += 4)
+    {
+        pk::F4 e = pk::F4::set1 (0.0f), o = pk::F4::set1 (0.0f);
+        for (int m = 0; m < ne; ++m)
+            e = e + pk::F4::set1 (he[m]) * pk::F4::load (u + i - m);
+        for (int m = 0; m < no; ++m)
+            o = o + pk::F4::set1 (ho[m]) * pk::F4::load (u + i - m);
+        alignas (16) float ev[4], od[4];
+        e.store (ev);
+        o.store (od);
+        for (int l = 0; l < 4; ++l)
+        {
+            out[2 * (i + l)] = ev[l];
+            out[2 * (i + l) + 1] = od[l];
+        }
+    }
+    for (; i < n; ++i)
+    {
+        float e = 0.0f, o = 0.0f;
+        for (int m = 0; m < ne; ++m)
+            e = e + he[m] * u[i - m];
+        for (int m = 0; m < no; ++m)
+            o = o + ho[m] * u[i - m];
+        out[2 * i] = e;
+        out[2 * i + 1] = o;
+    }
+    std::copy (u + n - hist, u + n, upBuf.data ()); // the history for the next chunk
+}
+
+void Halfband2x::downChunk (const float* in, float* out, int n)
+{
+    // out[i] = sum_m h[m] x[2i - m], m from 0 up: the even taps against the even samples xe[i - m/2],
+    // the odd ones against the odd samples xo[i - (m+1)/2] (the one before this pair and further back)
+    float* xe = evenBuf.data () + hist;
+    float* xo = oddBuf.data () + hist;
     for (int i = 0; i < n; ++i)
     {
-        downFir.push (in[2 * i]);
-        out[i] = downFir.run (h);
-        downFir.push (in[2 * i + 1]);
+        xe[i] = in[2 * i];
+        xo[i] = in[2 * i + 1];
     }
+    const int taps = (int)h.size ();
+    const float* hh = h.data ();
+    int i = 0;
+    for (; i + 4 <= n; i += 4)
+    {
+        pk::F4 acc = pk::F4::set1 (0.0f);
+        for (int m = 0; m < taps; ++m)
+        {
+            const float* x = m % 2 ? xo + i - (m + 1) / 2 : xe + i - m / 2;
+            acc = acc + pk::F4::set1 (hh[m]) * pk::F4::load (x);
+        }
+        acc.store (out + i);
+    }
+    for (; i < n; ++i)
+    {
+        float acc = 0.0f;
+        for (int m = 0; m < taps; ++m)
+            acc = acc + hh[m] * (m % 2 ? xo[i - (m + 1) / 2] : xe[i - m / 2]);
+        out[i] = acc;
+    }
+    std::copy (xe + n - hist, xe + n, evenBuf.data ());
+    std::copy (xo + n - hist, xo + n, oddBuf.data ());
 }
 
 void Oversampler::prepare (double sr, int maxBlock)

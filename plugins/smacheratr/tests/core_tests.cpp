@@ -137,6 +137,138 @@ static std::unique_ptr<Engine> engine (bool hiQuality = true)
 }
 
 // ---------------------------------------------------------------------------
+// The half-band stage as it was before it went polyphase (Oversampler.cpp): the plain FIR at the 2x
+// rate over a ring buffer, the up-sampler fed a zero every other sample. Kept as the reference.
+class RefHalfband
+{
+public:
+    void design (double passEdge, double attenDb, int maxTaps)
+    {
+        auto besselI0 = [] (double x) {
+            double sum = 1.0, term = 1.0;
+            const double hx = x * 0.5;
+            for (int k = 1; k < 64; ++k)
+            {
+                term *= (hx / k) * (hx / k);
+                sum += term;
+                if (term < 1e-14 * sum)
+                    break;
+            }
+            return sum;
+        };
+        const double df = std::max (0.005, 0.5 - passEdge);
+        const double beta = attenDb > 50.0   ? 0.1102 * (attenDb - 8.7)
+                            : attenDb >= 21.0 ? 0.5842 * std::pow (attenDb - 21.0, 0.4) + 0.07886 * (attenDb - 21.0)
+                                              : 0.0;
+        int n = (int)std::ceil ((attenDb - 8.0) / (2.285 * 2.0 * M_PI * df)) + 1;
+        n = std::clamp (n, 5, maxTaps);
+        n = 4 * ((n + 2) / 4) + 1;
+        h.assign ((size_t)n, 0.0f);
+        const int M = (n - 1) / 2;
+        const double i0b = besselI0 (beta);
+        double sum = 0.0;
+        for (int m = 0; m < n; ++m)
+        {
+            const double t = m - M;
+            const double sinc = t == 0.0 ? 1.0 : std::sin (M_PI * 0.5 * t) / (M_PI * 0.5 * t);
+            const double r = 2.0 * m / (n - 1) - 1.0;
+            const double w = besselI0 (beta * std::sqrt (std::max (0.0, 1.0 - r * r))) / i0b;
+            h[(size_t)m] = (float)(0.5 * sinc * w);
+            sum += h[(size_t)m];
+        }
+        for (auto& v : h)
+            v = (float)(v / sum);
+        int size = 1;
+        while (size < n)
+            size <<= 1;
+        for (auto* b : {&upHist, &downHist})
+            b->assign ((size_t)size, 0.0f);
+        mask = size - 1;
+    }
+    void up (const float* in, float* out, int n)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            push (upHist, upPos, 2.0f * in[i]);
+            out[2 * i] = run (upHist, upPos);
+            push (upHist, upPos, 0.0f);
+            out[2 * i + 1] = run (upHist, upPos);
+        }
+    }
+    void down (const float* in, float* out, int n)
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            push (downHist, downPos, in[2 * i]);
+            out[i] = run (downHist, downPos);
+            push (downHist, downPos, in[2 * i + 1]);
+        }
+    }
+
+private:
+    void push (std::vector<float>& b, int& pos, float x)
+    {
+        b[(size_t)pos] = x;
+        pos = (pos + 1) & mask;
+    }
+    float run (const std::vector<float>& b, int pos) const
+    {
+        float acc = 0.0f;
+        int i = (pos - 1) & mask;
+        for (float tap : h)
+        {
+            acc += tap * b[(size_t)i];
+            i = (i - 1) & mask;
+        }
+        return acc;
+    }
+    std::vector<float> h, upHist, downHist;
+    int mask = 0, upPos = 0, downPos = 0;
+};
+
+TEST (oversampler_matches_plain_fir)
+{
+    // the polyphase half-band stages compute what the plain FIR computed (the same sums in the same
+    // order: on x86 to the bit), for blocks of every length, at every rate
+    double worst = 0.0;
+    for (double sr : {44100.0, 48000.0, 96000.0, 192000.0})
+    {
+        const double pass = std::min (20000.0, 0.46 * sr);
+        for (double edge : {pass / sr, pass / (2.0 * sr)}) // Oversampler's two stages
+        {
+            Halfband2x a;
+            RefHalfband b;
+            a.design (edge, 80.0, 257);
+            b.design (edge, 80.0, 257);
+            a.reset ();
+            uint32_t seed = 9;
+            std::vector<float> x (600), u1 (1200), u2 (1200), d1 (600), d2 (600);
+            for (int blk = 0; blk < 40; ++blk)
+            {
+                const int n = blk % 5 == 0 ? 1 : (blk % 5 == 1 ? 3 : (blk % 5 == 2 ? 64 : (blk % 5 == 3 ? 257 : 600)));
+                for (int i = 0; i < n; ++i)
+                {
+                    seed = seed * 1664525u + 1013904223u;
+                    x[(size_t)i] = (float)((int32_t)seed / 2147483648.0);
+                }
+                a.up (x.data (), u1.data (), n);
+                b.up (x.data (), u2.data (), n);
+                for (int i = 0; i < 2 * n; ++i)
+                {
+                    worst = std::max (worst, (double)std::fabs (u1[(size_t)i] - u2[(size_t)i]));
+                    u1[(size_t)i] = u2[(size_t)i] = std::tanh (2.0f * u2[(size_t)i]); // something in between
+                }
+                a.down (u1.data (), d1.data (), n);
+                b.down (u2.data (), d2.data (), n);
+                for (int i = 0; i < n; ++i)
+                    worst = std::max (worst, (double)std::fabs (d1[(size_t)i] - d2[(size_t)i]));
+            }
+        }
+    }
+    std::printf ("    largest difference %.3g\n", worst);
+    CHECK (worst < 1e-6, "%g", worst);
+}
+
 TEST (params)
 {
     const auto& t = paramTable ();
