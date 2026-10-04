@@ -109,6 +109,33 @@ public:
     bool sustained = false;
 
 private:
+    // A playhead of the classic (resampling) playback: where it reads and the loop it plays. The loop
+    // moved while the note plays (the mouse, automation of Start / Length): the playhead finishes its
+    // pass of the loop as it was, then goes on at the start of the loop where it is by then, through
+    // the loop's own crossfade (renderClassic).
+    struct ClassicHead
+    {
+        PlayRegion region;                      // what plays (its loop: this pass's)
+        double liveStart = 0.0, liveEnd = 0.0;  // where the loop is now (follow)
+        double nextStart = 0.0, nextEnd = 0.0;  // the loop this pass ends into: the live one, held once the crossfade into it has begun
+        double pos = 0.0;
+        bool done = false;
+        bool wrapped = false; // a pass has ended (the loop's head fades in on the first pass only)
+        // passes of the loop finished in the last render: the envelopes locked to the loop restart on them
+        int wraps = 0;
+        // the playhead past the loop when it came on (Loop switched on behind it), or a pass ending into a
+        // moved loop without a crossfade (Fade off, warped): it jumps, the old place fading out over a few
+        // ms as the new one fades in (where it was, how many samples are left)
+        double jumpFrom = 0.0;
+        int jumpLeft = 0, jumpLen = 1;
+
+        void start (const PlayRegion& r);
+        // the loop as the parameters have it now (its start held at or after the region's: Voice::updateLoop)
+        void follow (const PlayRegion& r);
+    };
+    // renders a playhead at `rate` source samples per output sample (no more than 16)
+    void renderClassic (ClassicHead& h, float* L, float* R, int n, const BlockCtx& c, double rate) const;
+
     float sourceRender (float* L, float* R, int n, const BlockCtx& c, double pitchRatio);
     double remainingOut () const; // output samples until the region end (large if looping)
     double lastSrcPerOut = 1.0;
@@ -118,19 +145,13 @@ private:
     Source source = Source::Classic;
     double sr = 44100.0;
 
-    // classic (resampling) playback
-    double pos = 0.0, lastRate = 1.0;
+    // classic (resampling) playback (its region also holds the warped sources' region and loop flag)
+    ClassicHead head;
+    double lastRate = 1.0;
     bool srcDone = false;
-    // passes of the loop finished (wraps to its start) in the last sourceRender: the envelopes locked to
-    // the loop restart on them (see render)
-    int loopWraps = 0;
     // one pass of the loop in the source's samples (its length less the crossfade the wrap skips), 0 when
     // it does not loop
     double loopPassLen (const ParamArray& p) const;
-    // the loop moved under the playhead (Start automated): the playhead jumps into it, the old place
-    // fading out over a few ms as the new one fades in (where it was, how many samples are left)
-    double jumpFrom = 0.0;
-    int jumpLeft = 0, jumpLen = 1;
     // the note over, the filter ringing out (fed silence, fading over 30 ms): see render
     bool tailing = false;
     int tailLeft = 0, tailLen = 1;

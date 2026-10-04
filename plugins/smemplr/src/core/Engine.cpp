@@ -132,7 +132,7 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
     st = s;
     active = true;
     released = killing = sustained = srcDone = gateFading = false;
-    jumpLeft = 0;
+    head.start (s.region);
     tailing = false;
     tailLeft = 0;
     killGain = gateGain = 1.0f;
@@ -146,10 +146,7 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
     lastRate = 1.0;
 
     if (!s.warp || s.warpMode == kWarpRePitch)
-    {
         source = Source::Classic;
-        pos = s.region.start;
-    }
     else if (s.warpMode == kWarpBeatsMode)
     {
         source = Source::Beats;
@@ -220,16 +217,38 @@ void Voice::glideTo (int newNote, double newPitchBase, double glideMs)
     glideStep = samples > 1.0 ? std::fabs (glideOffset) / samples : 1e9;
 }
 
+void Voice::ClassicHead::start (const PlayRegion& r)
+{
+    region = r;
+    liveStart = nextStart = r.loopStart;
+    liveEnd = nextEnd = r.loopEnd;
+    pos = r.start;
+    done = wrapped = false;
+    wraps = 0;
+    jumpLeft = 0;
+}
+
+void Voice::ClassicHead::follow (const PlayRegion& r)
+{
+    region.loop = r.loop;
+    // the loop follows Start both ways: moved before where the note started, the region starts there
+    // too (held at the note's start, a Start moved back would leave a loop of a few samples: a beep)
+    region.start = std::min (region.start, r.loopStart);
+    liveStart = std::max (region.start, r.loopStart);
+    liveEnd = std::max (liveStart + 16.0, std::min (region.end, r.loopEnd));
+    // not looping, there is no pass to finish: the loop (for when Loop comes on) is where it is now
+    if (!r.loop)
+    {
+        region.loopStart = nextStart = liveStart;
+        region.loopEnd = nextEnd = liveEnd;
+    }
+}
+
 void Voice::updateLoop (const PlayRegion& r)
 {
     if (source != Source::Classic || st.mode != kModeClassic)
         return;
-    st.region.loop = r.loop;
-    // the loop follows Start both ways: moved before where the note started, the region starts there
-    // too (held at the note's start, a Start moved back would leave a loop of a few samples: a beep)
-    st.region.start = std::min (st.region.start, r.loopStart);
-    st.region.loopStart = std::max (st.region.start, r.loopStart);
-    st.region.loopEnd = std::max (st.region.loopStart + 16.0, std::min (st.region.end, r.loopEnd));
+    head.follow (r);
 }
 
 double Voice::displayPos () const
@@ -239,18 +258,18 @@ double Voice::displayPos () const
         case Source::Beats: return beats.displayPos ();
         case Source::Grain: return grain.displayPos ();
         case Source::Pv: return pv.displayPos ();
-        default: return pos;
+        default: return head.pos;
     }
 }
 
 double Voice::remainingOut () const
 {
-    const auto& r = st.region;
+    const auto& r = head.region;
     if (r.loop)
         return 1e12;
     switch (source)
     {
-        case Source::Classic: return (r.end - pos) / std::max (1e-9, lastRate);
+        case Source::Classic: return (r.end - head.pos) / std::max (1e-9, lastRate);
         case Source::Beats: return (r.end - beats.virtualPos ()) / std::max (1e-9, lastSrcPerOut);
         case Source::Grain: return (r.end - grain.virtualPos ()) / std::max (1e-9, lastSrcPerOut);
         case Source::Pv: return (r.end - pv.virtualPos ()) / std::max (1e-9, lastSrcPerOut);
@@ -260,7 +279,7 @@ double Voice::remainingOut () const
 
 double Voice::loopPassLen (const ParamArray& p) const
 {
-    const auto& r = st.region;
+    const auto& r = head.region;
     const double loopLen = r.loopEnd - r.loopStart;
     if (!r.loop || loopLen < 1.0)
         return 0.0;
@@ -295,20 +314,53 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
 
     const double rate = st.warp ? pitchRatio * c.srcPerOut : pitchRatio * c.srcRate;
     lastRate = rate;
+    renderClassic (head, L, R, n, c, rate);
+    srcDone = head.done;
+    return 1.0f;
+}
+
+void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const BlockCtx& c, double rate) const
+{
     // band-limited at any speed (the sample's levels when it is read fast)
-    const SampleReader rd (s, rate);
-    const auto& r = st.region;
-    const double loopLen = r.loopEnd - r.loopStart;
-    double fade = 0.0;
-    if (r.loop && !st.warp && st.mode == kModeClassic)
-        fade = std::min ((*c.p)[kLoopFade] * loopLen, 0.5 * loopLen);
+    const SampleReader rd (*c.sample, rate);
+    auto& r = h.region;
+    double& pos = h.pos;
+    const double fadeShare = (*c.p)[kLoopFade];
+    const bool fades = !st.warp && st.mode == kModeClassic;
     // the last `fade` samples of the loop blend into its first `fade` samples, so the wrap
     // lands `fade` samples into the loop and the audio is continuous
-    const double wrapLen = loopLen - fade;
-    loopWraps = 0;
+    double loopLen = 0.0, fade = 0.0, wrapLen = 0.0;
+    auto setup = [&] {
+        loopLen = r.loopEnd - r.loopStart;
+        fade = r.loop && fades ? std::min (fadeShare * loopLen, 0.5 * loopLen) : 0.0;
+        wrapLen = loopLen - fade;
+    };
+    setup ();
+    // The loop this pass ends into: where it is now, unless the crossfade into it has begun (moved
+    // again during the crossfade, it waits for the next pass). Moved: the playhead finishes this pass,
+    // the loop's last samples crossfading into the moved loop's head as they would into its own (over
+    // as long a crossfade as the moved loop has room for), and goes on there; without a crossfade, it
+    // jumps with a short one (5 ms) from where it was. Moved again and again within a pass, it goes to
+    // wherever the loop is when the pass ends.
+    if (!(fade > 1.0 && pos > r.loopEnd - fade && pos < r.loopEnd))
+    {
+        h.nextStart = h.liveStart;
+        h.nextEnd = h.liveEnd;
+    }
+    bool moved = r.loop && (h.nextStart != r.loopStart || h.nextEnd != r.loopEnd);
+    double xf = moved ? std::min (fade, 0.5 * (h.nextEnd - h.nextStart)) : 0.0;
+    const int jumpSamples = std::max (1, (int)(0.005 * sr));
+    auto adoptNext = [&] {
+        r.loopStart = h.nextStart;
+        r.loopEnd = h.nextEnd;
+        setup ();
+        moved = false;
+        xf = 0.0;
+    };
+    h.wraps = 0;
     for (int i = 0; i < n; ++i)
     {
-        if (srcDone)
+        if (h.done)
         {
             L[i] = R[i] = 0.0f;
             continue;
@@ -316,31 +368,57 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
         if (r.loop && loopLen >= 1.0 && pos >= r.loopEnd)
         {
             const double over = pos - r.loopEnd;
-            const double wraps = std::floor (over / std::max (1.0, wrapLen)) + 1.0;
-            if (over > rate + 1.0 && jumpLeft == 0)
+            if (over > rate + 1.0 && h.jumpLeft == 0)
             {
-                // not a wrap but the loop moved (Start automated) to before the playhead: jump into
-                // it with a short crossfade from where it was
-                jumpFrom = pos;
-                jumpLen = jumpLeft = std::max (1, (int)(0.005 * sr));
+                // not a wrap but the playhead past the loop (Loop switched on behind it): jump into it
+                // with a short crossfade from where it was
+                h.jumpFrom = pos;
+                h.jumpLen = h.jumpLeft = jumpSamples;
+                if (moved)
+                {
+                    adoptNext ();
+                    pos = r.loopStart + fade;
+                }
+                else
+                    pos -= (std::floor (over / std::max (1.0, wrapLen)) + 1.0) * std::max (1.0, wrapLen);
             }
             else
-                ++loopWraps;
-            pos -= wraps * std::max (1.0, wrapLen);
+            {
+                ++h.wraps;
+                h.wrapped = true;
+                if (!moved)
+                    pos -= (std::floor (over / std::max (1.0, wrapLen)) + 1.0) * std::max (1.0, wrapLen);
+                else
+                {
+                    // the pass is over: on at the moved loop's start (as far in as the crossfade took it)
+                    const double into = xf > 1.0 ? xf : 0.0;
+                    if (into <= 0.0)
+                    {
+                        h.jumpFrom = pos;
+                        h.jumpLen = h.jumpLeft = jumpSamples;
+                    }
+                    adoptNext ();
+                    pos = r.loopStart + into + over;
+                    if (pos >= r.loopEnd)
+                        pos = r.loopStart + std::fmod (pos - r.loopStart, std::max (1.0, loopLen));
+                }
+            }
         }
         else if (pos >= r.end)
         {
-            srcDone = true;
+            h.done = true;
             L[i] = R[i] = 0.0f;
             continue;
         }
         float l, rr;
         rd.read (pos, l, rr);
-        if (fade > 1.0 && pos > r.loopEnd - fade)
+        if (moved ? xf > 1.0 && pos > r.loopEnd - xf : fade > 1.0 && pos > r.loopEnd - fade)
         {
-            const double x = (pos - (r.loopEnd - fade)) / fade;
+            // the loop's end crossfading into its head (or into the head of the loop it moved to)
+            const double zone = moved ? xf : fade;
+            const double x = (pos - (r.loopEnd - zone)) / zone;
             float l2, r2;
-            rd.read (pos - wrapLen, l2, r2);
+            rd.read (moved ? h.nextStart + (pos - (r.loopEnd - zone)) : pos - wrapLen, l2, r2);
             float ga, gb;
             if (c.constantPowerFade)
             {
@@ -357,30 +435,29 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
         }
         // the loop's head fades in on the first pass as well, the way it enters on every wrap, so
         // the note does not start abruptly (after a wrap the position is always past the head)
-        if (fade > 1.0 && pos < r.loopStart + fade)
+        if (fade > 1.0 && !h.wrapped && pos < r.loopStart + fade)
         {
             const double x = std::max (0.0, (pos - r.loopStart) / fade);
             const float g = c.constantPowerFade ? (float)std::sin (x * M_PI * 0.5) : (float)x;
             l *= g;
             rr *= g;
         }
-        if (jumpLeft > 0)
+        if (h.jumpLeft > 0)
         {
             // the old place fading out under the new one (equal gain: the two are unrelated)
-            const float x = (float)jumpLeft / (float)jumpLen;
+            const float x = (float)h.jumpLeft / (float)h.jumpLen;
             float l2 = 0.0f, r2 = 0.0f;
-            if (jumpFrom < r.end)
-                rd.read (jumpFrom, l2, r2);
+            if (h.jumpFrom < r.end)
+                rd.read (h.jumpFrom, l2, r2);
             l = l * (1.0f - x) + l2 * x;
             rr = rr * (1.0f - x) + r2 * x;
-            jumpFrom += rate;
-            --jumpLeft;
+            h.jumpFrom += rate;
+            --h.jumpLeft;
         }
         L[i] = l;
         R[i] = rr;
         pos += rate;
     }
-    return 1.0f;
 }
 
 void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
@@ -490,7 +567,7 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
         {
             // a pass of the loop just ended: the locked envelopes start again (within this sub-block of
             // 16 samples: at most 0.4 ms after the wrap)
-            if (loopWraps > 0)
+            if (head.wraps > 0)
             {
                 if (filtLock != kLoopLockOff)
                     filtEnv.retrigger ();

@@ -2072,6 +2072,89 @@ TEST (start_moved_back_while_playing_does_not_beep)
     CHECK (finite (all), "finite");
 }
 
+TEST (moved_loop_hands_over_after_its_pass)
+{
+    // A 220 Hz sine looping over 0.4 .. 0.8 s of 4 s; while the playhead is in it, the loop moves (Start
+    // and Length automated, as the mouse moves them): the playhead finishes its pass of the old loop,
+    // then goes on in the new one through the loop's crossfade (or, without one, a short crossfade from
+    // where it was), with no click. Moved back behind the playhead it used to jump at once.
+    auto s = sine (220.0, 4.0);
+    struct Move
+    {
+        double at, start, length; // seconds into the note, the new Start / Length (shares of the 4 s)
+    };
+    auto play = [&] (double fade, std::vector<Move> moves, double& lastInOld, double& firstInNew, double& worstStep,
+                     bool& strayed, double newA, double newB) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kLoopFade, fade);
+        e->setParam (kStart, 0.1);
+        e->setParam (kLength, 0.1);
+        e->noteOn (60, 1.0f);
+        lastInOld = firstInNew = -1.0;
+        worstStep = 0.0;
+        strayed = false;
+        float prev = 0.0f;
+        size_t m = 0;
+        const int block = 64;
+        for (int k = 0; k * block < (int)(kHostSr * 1.2); ++k)
+        {
+            const double t = k * block / kHostSr;
+            while (m < moves.size () && moves[m].at <= t)
+            {
+                e->setParam (kStart, moves[m].start);
+                e->setParam (kLength, moves[m].length);
+                ++m;
+            }
+            auto o = run (*e, block);
+            for (size_t i = 0; i < o.l.size (); ++i)
+            {
+                if (k > 0 || i > 0)
+                    worstStep = std::max (worstStep, (double)std::fabs (o.l[i] - prev));
+                prev = o.l[i];
+            }
+            float pos = 0.0f;
+            if (e->playPositions (&pos, 1) != 1)
+                continue;
+            const double sec = pos * 4.0;
+            const bool inOld = sec >= 0.4 - 1e-3 && sec <= 0.8 + 1e-3, inNew = sec >= newA - 1e-3 && sec <= newB + 1e-3;
+            if (firstInNew < 0.0 && inOld)
+                lastInOld = t;
+            else if (inNew && firstInNew < 0.0 && t > 0.15)
+                firstInNew = t;
+            else if (!inNew && firstInNew >= 0.0)
+                strayed = true; // back out of the new loop
+            if (!inOld && !inNew)
+                strayed = true;
+        }
+    };
+    // the sine's own steps are at most 0.5 * 2 pi * 220 / 48000 = 0.0144; a click is many times that
+    const double sineStep = 0.5 * 2.0 * M_PI * 220.0 / kHostSr;
+    for (double fade : {0.1, 0.0})
+    {
+        double lastOld, firstNew, worst;
+        bool strayed;
+        // at 0.2 s (the playhead at 0.6 s) the loop moves to 2.4 .. 2.8 s: it plays on to 0.8 s first (its
+        // last 40 ms crossfading into the new loop's head, with Fade), 0.2 s later, then the new loop
+        play (fade, {{0.2, 0.6, 0.1}}, lastOld, firstNew, worst, strayed, 2.4, 2.8);
+        std::printf ("    fade %.1f, moved later: old loop until %.3f s, new from %.3f s, worst step %.4f\n", fade, lastOld, firstNew, worst);
+        const double passEnd = 0.4; // seconds into the note: the first pass, 0.4 .. 0.8 s
+        CHECK (lastOld > passEnd - 0.01 && lastOld < passEnd + 0.005 && firstNew > 0.0 && firstNew < passEnd + 0.01 && !strayed,
+               "fade %.1f: the pass ends (%.3f s, want %.3f) before the new loop (%.3f s)", fade, lastOld, passEnd, firstNew);
+        CHECK (worst < sineStep * 2.5, "fade %.1f: no click at the handover (%.4f, the sine's steps %.4f)", fade, worst, sineStep);
+        // moved back behind the playhead (to 0 .. 0.2 s): it used to jump at once; now it finishes the pass
+        play (fade, {{0.2, 0.0, 0.05}}, lastOld, firstNew, worst, strayed, 0.0, 0.2);
+        CHECK (lastOld > passEnd - 0.01 && firstNew > 0.0 && firstNew < passEnd + 0.01 && !strayed && worst < sineStep * 2.5,
+               "fade %.1f, moved back: old until %.3f s, new from %.3f s, worst step %.4f", fade, lastOld, firstNew, worst);
+        // moved three times within the pass (and resized): it goes where the loop is when the pass ends
+        play (fade, {{0.12, 0.3, 0.1}, {0.2, 0.0, 0.1}, {0.28, 0.5, 0.15}}, lastOld, firstNew, worst, strayed, 2.0, 2.6);
+        CHECK (lastOld > passEnd - 0.01 && firstNew > 0.0 && firstNew < passEnd + 0.01 && !strayed && worst < sineStep * 2.5,
+               "fade %.1f, moved three times: old until %.3f s, new (the last place) from %.3f s, worst step %.4f", fade,
+               lastOld, firstNew, worst);
+    }
+}
+
 TEST (low_pass_does_not_click_when_a_deep_note_stops)
 {
     // a deep note through the low-pass at a low cutoff: a new note taking over (one voice) and the
