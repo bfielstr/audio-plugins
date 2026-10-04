@@ -33,12 +33,13 @@ CColor clarityColor (int band, uint8_t alpha = 255) { return ColorView::bandColo
 double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb) { return clarityCutAtDb (b, hz, sr, cutDb); }
 } // namespace
 
+// One colour for every Gently band (docs/THEME.md allows one metal and one energy colour): pale copper
+// for their regions, edges, outlines and labels. The bands are told apart by where they sit and by
+// their names (1, 2, Sub, High); the cut each makes right now is drawn in cinnabar by the views.
 CColor ColorView::bandColor (int band, uint8_t alpha)
 {
-    return band == 0   ? CColor (120, 210, 140, alpha)
-           : band == 1 ? CColor (130, 170, 255, alpha)
-           : band == 2 ? CColor (255, 176, 64, alpha)
-                       : CColor (240, 120, 170, alpha);
+    (void)band;
+    return theme::withAlpha (theme::kCopperPale, alpha);
 }
 
 ColorView::ColorView (const CRect& r, pk::ParamHost* h, RateSource rs, MeterSource ms)
@@ -126,7 +127,7 @@ void ColorView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const bool on = host->plainValue (kColorOn) >= 0.5;
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
@@ -135,7 +136,7 @@ void ColorView::draw (CDrawContext* ctx)
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), all.top), CPoint (xOfHz (f), all.bottom));
         if (major)
         {
@@ -146,7 +147,7 @@ void ColorView::draw (CDrawContext* ctx)
     }
     for (double db : {-12.0, 0.0, 12.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
     }
 
@@ -164,7 +165,7 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawRect (CRect (x0, all.top, x1, all.bottom), kDrawFilled);
         ctx->setLineWidth (1.0);
         const bool edgeActive = dragBand == k && (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth);
-        ctx->setFrameColor (clarityColor (k, edgeActive ? 200 : 90));
+        ctx->setFrameColor (edgeActive ? theme::kEnergyLive : clarityColor (k, 90));
         ctx->drawLine (CPoint (x0, all.top), CPoint (x0, all.bottom));
         ctx->drawLine (CPoint (x1, all.top), CPoint (x1, all.bottom));
     }
@@ -185,10 +186,11 @@ void ColorView::draw (CDrawContext* ctx)
         }
         path->addLine (CPoint (all.right, yOfDb (0.0)));
         path->closeSubpath ();
-        ctx->setFillColor (on ? CColor (255, 164, 40, 40) : CColor (120, 120, 120, 20));
+        // the colour filters' response: a faint copper body under a text-coloured trace (dim when off)
+        ctx->setFillColor (on ? theme::withAlpha (theme::kCopper, 40) : theme::withAlpha (theme::kLineDim, 60));
         ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
-        ctx->setLineWidth (1.6);
-        ctx->setFrameColor (on ? theme::kCurve : theme::kTextDim);
+        ctx->setLineWidth (1.0);
+        ctx->setFrameColor (on ? theme::kText : theme::kTextDim);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 
@@ -202,13 +204,7 @@ void ColorView::draw (CDrawContext* ctx)
             // Gently on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down
             if (clarityShown (k))
             {
-                const CPoint h = clarityHandle (k);
-                const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
-                ctx->setFillColor (clarityColor (k, 70));
-                ctx->drawEllipse (hr, kDrawFilled);
-                ctx->setLineWidth (1.2);
-                ctx->setFrameColor (clarityColor (k, 150));
-                ctx->drawEllipse (hr, kDrawStroked);
+                pk::draw::handle (ctx, clarityHandle (k), kHandleRadius, false, false);
             }
             continue;
         }
@@ -240,17 +236,18 @@ void ColorView::draw (CDrawContext* ctx)
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (clarityColor (k, 110));
-            ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
+            ctx->setLineStyle (theme::kDashed);
             ctx->drawGraphicsPath (range, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }
         if (shownCut[k] < -0.05f)
             if (auto live = gainPath (shownCut[k], true))
             {
-                ctx->setFillColor (clarityColor (k, 90));
+                // the cut it makes now: the lit part of the display
+                ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 70));
                 ctx->drawGraphicsPath (live, CDrawContext::kPathFilled);
-                ctx->setLineWidth (1.8);
-                ctx->setFrameColor (clarityColor (k));
+                ctx->setLineWidth (1.0);
+                ctx->setFrameColor (theme::kEnergyLive);
                 ctx->drawGraphicsPath (live, CDrawContext::kPathStroked);
             }
         const CPoint h = clarityHandle (k);
@@ -261,34 +258,21 @@ void ColorView::draw (CDrawContext* ctx)
         const double pw = 160.0, px = std::clamp (h.x - pw / 2, all.left + 4, all.right - pw - 4);
         const double py = all.top + 36 + 20 * pills++;
         const CRect pill (px, py, px + pw, py + 16);
-        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 220) : k == 1 ? CColor (22, 28, 44, 220) : k == kSubBand ? CColor (44, 32, 16, 220) : CColor (44, 20, 32, 220));
+        // the band's name in the pill tells it apart: a well behind the text in a copper outline
+        ctx->setFillColor (theme::withAlpha (theme::kWell, 220));
         ctx->drawRect (pill, kDrawFilled);
-        ctx->setFrameColor (clarityColor (k, 160));
-        ctx->setLineWidth (1.0);
-        ctx->drawRect (pill, kDrawStroked);
-        text (ctx, cb, pill, clarityColor (k), 9.5, kCenterText, true);
-        const CRect hr (h.x - kHandleRadius - 1, h.y - kHandleRadius - 1, h.x + kHandleRadius + 1, h.y + kHandleRadius + 1);
-        ctx->setFillColor (clarityColor (k));
-        ctx->drawEllipse (hr, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (theme::kTextBright);
-        ctx->drawEllipse (hr, kDrawStroked);
+        pk::draw::outline (ctx, pill, theme::kCopper, 0);
+        text (ctx, cb, pill, theme::kCopperPale, 9.5, kCenterText, true);
+        pk::draw::handle (ctx, h, kHandleRadius + 1, drag != Drag::None && dragBand == k);
     }
 
     // handles
     for (const CPoint& h : {loHandle (), hiHandle ()})
-    {
-        const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
-        ctx->setFillColor (on ? theme::kTextBright : theme::kTextDim);
-        ctx->drawEllipse (hr, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (on ? theme::kAccent : theme::kKnobTrack);
-        ctx->drawEllipse (hr, kDrawStroked);
-    }
+        pk::draw::handle (ctx, h, kHandleRadius, false, on);
 
     // labels
     text (ctx, on ? "COLOR" : "COLOR  (off)", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18),
-          on ? theme::kTextBright : theme::kTextDim, 10.5, kLeftText, true);
+          on ? theme::kCopperPale : theme::kTextDim, 10.5, kLeftText, true);
     char buf[96];
     std::snprintf (buf, sizeof (buf), "Lo %s   Hi %s @ %s", host->valueText (kColorLo).c_str (),
                    host->valueText (kColorHi).c_str (), host->valueText (kColorFreq).c_str ());

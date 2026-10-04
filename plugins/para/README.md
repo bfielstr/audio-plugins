@@ -69,8 +69,8 @@ if it was never changed, and so its fade's length, though the fade's shape is no
 above instead of the equal-power curve of before, which held near 0 dB longer and plunged at the
 end).
 
-The display shows the high-pass (orange), the low-pass (blue) and what you hear (white), over live
-spectra of the input (grey) and the output (light). The curves are the digital filters as they
+The display shows the high-pass (a solid copper line, HP), the low-pass (dashed, LP) and what you
+hear (the bright line), over live spectra of the input (dim) and the output (copper). The curves are the digital filters as they
 are (they bend near the top of the spectrum). A handle sits at its cutoff, as high as its resonant
 peak: drag it sideways for the cutoff and up/down for the **resonance**; with **Drag Gain** on (the
 button on the display) the gain moves with it; Alt-drag moves the gain alone (to the bottom: -inf);

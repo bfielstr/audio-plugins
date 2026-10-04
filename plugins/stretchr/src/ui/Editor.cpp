@@ -43,10 +43,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 
@@ -59,19 +57,16 @@ public:
     {
         const CRect r = getViewSize ();
         ctx->setDrawMode (kAntiAliasing | kNonIntegralMode);
-        ctx->setFillColor (pressed ? pk::theme::kAccentDim : pk::theme::kControlBg);
-        ctx->drawRect (r, kDrawFilled);
-        ctx->setFrameColor (pk::theme::kAccent);
-        ctx->setLineWidth (1.0);
-        ctx->drawRect (r, kDrawStroked);
+        // outlined like the kit's buttons: copper, cinnabar while it is being dragged out
+        pk::draw::outline (ctx, r, pressed ? pk::theme::kEnergyLive : pk::theme::kCopper);
         // grip dots
-        ctx->setFillColor (pk::theme::kAccent);
+        ctx->setFillColor (pk::theme::kCopperPale);
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 2; ++j)
                 ctx->drawEllipse (CRect (r.left + 7 + j * 4, r.top + 7 + i * 4, r.left + 9.5 + j * 4, r.top + 9.5 + i * 4),
                                   kDrawFilled);
         ctx->setFont (pk::theme::font (10.5));
-        ctx->setFontColor (pk::theme::kTextBright);
+        ctx->setFontColor (pk::theme::kText);
         ctx->drawString ("Drag to DAW", CRect (r.left + 16, r.top, r.right, r.bottom), kCenterText, true);
     }
     void onMouseDownEvent (MouseDownEvent& e) override

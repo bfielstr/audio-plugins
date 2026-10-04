@@ -20,7 +20,9 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-const CColor kMidColor (110, 165, 255), kSideColor (255, 164, 40);
+// the mid level a dashed pale copper line, the side's response a text-coloured line over a faint copper
+// body (told apart by style and by their labels); the live level bars lit cinnabar
+const CColor kMidColor = theme::kCopperPale, kSideColor = theme::kText;
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size,
            CHoriTxtAlign a = kCenterText, bool bold = false)
@@ -59,7 +61,7 @@ void MsView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize (), pr = plot ();
     const bool on = true; // (the rack slot has its own On)
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
@@ -68,7 +70,7 @@ void MsView::draw (CDrawContext* ctx)
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), pr.top), CPoint (xOfHz (f), pr.bottom));
         char buf[16];
         std::snprintf (buf, sizeof (buf), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -76,7 +78,7 @@ void MsView::draw (CDrawContext* ctx)
     }
     for (double db : {-24.0, -12.0, 0.0, 12.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (pr.left, yOfDb (db)), CPoint (pr.right, yOfDb (db)));
     }
 
@@ -85,9 +87,12 @@ void MsView::draw (CDrawContext* ctx)
     const double midDb = host->plainValue (mseq::kMidGain), sideDb = host->plainValue (mseq::kSideGain);
     const double hz = host->plainValue (mseq::kSideHp);
     const int slope = (int)std::lround (host->plainValue (mseq::kSlope));
-    ctx->setLineWidth (2.0);
-    ctx->setFrameColor (CColor (kMidColor.red, kMidColor.green, kMidColor.blue, alpha));
+    ctx->setLineWidth (1.0);
+    ctx->setFrameColor (theme::withAlpha (kMidColor, alpha));
+    ctx->setLineStyle (theme::kDashed);
     ctx->drawLine (CPoint (pr.left, yOfDb (midDb)), CPoint (pr.right, yOfDb (midDb)));
+    ctx->setLineStyle (kLineSolid);
+    text (ctx, "mid", CRect (pr.right - 40, yOfDb (midDb) - 13, pr.right - 4, yOfDb (midDb) - 1), kMidColor, 9.0, kRightText);
     if (auto path = owned (ctx->createGraphicsPath ()))
     {
         const int steps = 320; // fine enough for the Brickwall's drop
@@ -99,25 +104,22 @@ void MsView::draw (CDrawContext* ctx)
         }
         path->addLine (CPoint (pr.right, pr.bottom));
         path->closeSubpath ();
-        ctx->setFillColor (CColor (kSideColor.red, kSideColor.green, kSideColor.blue, (uint8_t)(on ? 40 : 16)));
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, (uint8_t)(on ? 34 : 14)));
         ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
-        ctx->setLineWidth (1.8);
-        ctx->setFrameColor (CColor (kSideColor.red, kSideColor.green, kSideColor.blue, alpha));
+        ctx->setLineWidth (1.0);
+        ctx->setFrameColor (theme::withAlpha (kSideColor, alpha));
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
     const CPoint h = handle ();
-    ctx->setFillColor (CColor (kSideColor.red, kSideColor.green, kSideColor.blue, alpha));
-    ctx->drawEllipse (CRect (h.x - 6, h.y - 6, h.x + 6, h.y + 6), kDrawFilled);
-    ctx->setLineWidth (1.5);
-    ctx->setFrameColor (theme::kTextBright);
-    ctx->drawEllipse (CRect (h.x - 6, h.y - 6, h.x + 6, h.y + 6), kDrawStroked);
+    pk::draw::handle (ctx, h, 6, dragging);
+    text (ctx, "side", CRect (h.x + 9, h.y - 7, h.x + 49, h.y + 7), theme::kCopperPale, 9.0, kLeftText);
 
     // live levels: mid and side peaks (dBFS, -60 .. 0)
     const CRect meters (pr.right + 6, pr.top + 16, all.right - 4, pr.bottom);
     auto bar = [&] (int k, float level, const CColor& c, const char* name) {
         const double w = (meters.getWidth () - 4) / 2;
         const CRect slot (meters.left + k * (w + 4), meters.top, meters.left + k * (w + 4) + w, meters.bottom);
-        ctx->setFillColor (theme::kControlBg);
+        ctx->setFillColor (theme::kLineDim);
         ctx->drawRect (slot, kDrawFilled);
         const double db = level > 1e-6f ? 20.0 * std::log10 (level) : -60.0;
         const double frac = std::clamp ((db + 60.0) / 60.0, 0.0, 1.0);
@@ -125,14 +127,14 @@ void MsView::draw (CDrawContext* ctx)
         ctx->drawRect (CRect (slot.left, slot.bottom - slot.getHeight () * frac, slot.right, slot.bottom), kDrawFilled);
         text (ctx, name, CRect (slot.left - 2, pr.top, slot.right + 2, pr.top + 14), theme::kTextDim, 9.0);
     };
-    bar (0, shownMid, kMidColor, "M");
-    bar (1, shownSide, kSideColor, "S");
+    bar (0, shownMid, theme::kEnergyLive, "M");
+    bar (1, shownSide, theme::kEnergyLive, "S");
 
     char buf[128];
     std::snprintf (buf, sizeof (buf), "%s   Side HP %s  %s  Side %s  Mid %s", on ? "MID / SIDE" : "MID / SIDE (off)",
                    host->valueText (mseq::kSideHp).c_str (), host->valueText (mseq::kSlope).c_str (),
                    host->valueText (mseq::kSideGain).c_str (), host->valueText (mseq::kMidGain).c_str ());
-    text (ctx, buf, CRect (pr.left + 6, pr.top + 4, pr.right - 6, pr.top + 18), on ? theme::kTextBright : theme::kTextDim, 10.0,
+    text (ctx, buf, CRect (pr.left + 6, pr.top + 4, pr.right - 6, pr.top + 18), on ? theme::kText : theme::kTextDim, 10.0,
           kLeftText, true);
     ctx->setLineWidth (1.0);
     ctx->resetClipRect ();

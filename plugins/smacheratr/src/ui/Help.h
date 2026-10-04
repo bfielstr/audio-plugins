@@ -41,7 +41,7 @@ inline const char* forParam (uint32_t id)
         case kClarity2Freq: return "Gently band 2: the centre of its band.";
         case kClarity2Width: return "Gently band 2: the band's width in octaves.";
         case kClarity2Range:
-            return "Gently band 2 (blue in the display): the most it turns its band down. At 0 dB (the default) the band "
+            return "Gently band 2 (marked 2 in the display): the most it turns its band down. At 0 dB (the default) the band "
                    "does nothing; give it a range to use it on a second muddy or harsh spot.";
         case kClarityRange:
             return "Gently: the most it turns its band down before the curve (after it, half as much). 8 dB by default, "
@@ -56,7 +56,7 @@ inline const char* forParam (uint32_t id)
             return "Gently Sub: where the band starts to taper off, 20 to 100 Hz (40 Hz by default). Everything below it, "
                    "to the very bottom, is compressed.";
         case kClaritySubRange:
-            return "Gently's Sub band (amber in the display): compresses the sub region, as a shelf from the very bottom of the "
+            return "Gently's Sub band (marked Sub in the display): compresses the sub region, as a shelf from the very bottom of the "
                    "spectrum up to where its cut starts to let go (Freq). Range is the most it turns that region down before "
                    "the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; pull its "
                    "handle down in the display, or turn this up, and it starts cutting.";
@@ -67,7 +67,7 @@ inline const char* forParam (uint32_t id)
                    "as deep around half that, and nearly gone an octave below, so the presence region is left alone). "
                    "Everything above it, to the very top, is compressed.";
         case kClarityHighRange:
-            return "Gently's High band (rose in the display): compresses the top of the spectrum (harshness, fizz, sibilance), "
+            return "Gently's High band (marked High in the display): compresses the top of the spectrum (harshness, fizz, sibilance), "
                    "as a shelf from where its cut starts to let go (Freq) up to the very top. Range is the most it turns that "
                    "down before the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; "
                    "pull its handle down in the display, or turn this up, and it starts cutting.";
@@ -100,14 +100,14 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kShaperDisplay =
     "The Analog curve: input left to right, output bottom to top, with the clipping points at +-1. The bright part "
-    "shows where the driven signal sits on the curve; with Pre-Limit on, the blue lines are the furthest it can go. "
+    "shows where the driven signal sits on the curve; with Pre-Limit on, the dashed lines are the furthest it can go. "
     "Drag up/down to set Drive, double-click to reset it. Shift: fine.";
 
 constexpr const char* kColorDisplay =
     "The colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "With Gently on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
-    "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub (amber) and High (rose) bands "
+    "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub and High bands (named in their readouts) "
     "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
 
 } // namespace smacheratr::help

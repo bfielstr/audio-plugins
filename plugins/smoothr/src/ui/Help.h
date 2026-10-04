@@ -37,9 +37,9 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "The last five seconds: the output (dark), what the limiter took off its input (lighter, above it), and the gain "
-    "reduction hanging from the top, the lows' (orange) apart from the highs' (red). Smoothr keeps the orange line "
-    "smooth and lets the red one take the fast peaks. The dashed line is the ceiling. At the right: the input and "
+    "The last five seconds: the output (copper), what the limiter took off its input (lighter, above it), and the gain "
+    "reduction hanging from the top, the lows' (cinnabar, solid) apart from the highs' (pale copper, dashed). Smoothr keeps "
+    "the lows' line smooth and lets the highs' take the fast peaks. The dashed line is the ceiling. At the right: the input and "
     "output meters, and the reduction now; click them to clear the holds.";
 
 } // namespace smoothr::help

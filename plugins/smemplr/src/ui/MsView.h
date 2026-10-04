@@ -1,5 +1,5 @@
-// The mid/side EQ: the mid level (blue line) and the side high-pass with its level (orange), with
-// live mid and side level bars on the right.
+// The mid/side EQ: the mid level (a dashed line) and the side high-pass with its level (a solid line
+// and its handle), with live mid and side level bars on the right.
 //   drag the handle sideways   side high-pass frequency
 //   drag the handle up / down  side gain
 //   mouse wheel                the slope (6 .. 96 dB, Brickwall), while holding the handle or with Shift

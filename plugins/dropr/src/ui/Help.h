@@ -32,7 +32,7 @@ inline const char* forParam (uint32_t id)
         case kAttack: return "How fast a band's gain goes down when the level rises (the time it takes to get 63 % of the way).";
         case kRelease: return "How fast a band's gain comes back up when the level falls (63 % of the way in this time).";
         case kDownThreshold:
-            return "Above this level the bands are turned down (the orange line in the display; drag it).";
+            return "Above this level the bands are turned down (the solid threshold line in the display; drag it).";
         case kDownRatio:
             return "Downward ratio, 1 : 1 (nothing) to 1 : inf (nothing gets over the threshold). "
                    "Turn on Negative for ratios beyond infinity.";
@@ -46,7 +46,7 @@ inline const char* forParam (uint32_t id)
         case kRange:
             return "Negative mode's floor: how far below the downward threshold the output may be pushed (the dotted line).";
         case kUpThreshold:
-            return "Below this level the bands are turned up (the green line in the display; drag it).";
+            return "Below this level the bands are turned up (the dashed threshold line in the display; drag it).";
         case kUpRatio:
             return "Upward ratio: below the upward threshold quiet sounds are brought up, 1 : 1 (off) to 1 : inf "
                    "(up to the threshold). At most 30 dB.";
@@ -62,8 +62,8 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kDisplay =
     "The bands across the spectrum. Drag a crossover handle sideways to move it, a band's point up or down "
-    "for its gain, the orange (downward) or green (upward) threshold line up or down. Right-click or "
+    "for its gain, the solid (downward) or dashed (upward) threshold line up or down. Right-click or "
     "double-click one to reset it. Bars per band: its level after the Input gain (dim), after its gain "
-    "(bright), and in red the gain reduction from 0 dB.";
+    "(lit), and outlined between them the gain reduction from 0 dB.";
 
 } // namespace dropr::help

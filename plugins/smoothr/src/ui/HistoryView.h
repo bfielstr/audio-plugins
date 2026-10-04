@@ -1,8 +1,9 @@
 // Smoothr's display: what the limiter did over the last few seconds, scrolling right to left, and the
 // level meters beside it.
-//   history   the output's peaks (a dark body) and above them what the limiter took off the input
+//   history   the output's peaks (a copper body) and above them what the limiter took off the input
 //             (lighter), filled up from the bottom; the gain reduction hanging from the top, the
-//             lows' (orange) and the highs' (red) apart, on the same dB scale; the ceiling as a line
+//             lows' (cinnabar, solid) and the highs' (pale copper, dashed) apart, on the same dB scale;
+//             the ceiling as a dashed line
 //   meters    the input into the limiter (L, R), the output (L, R) with their peak holds, and the
 //             reduction now on the lows and the highs. A click on the meters clears the holds.
 #pragma once

@@ -1,6 +1,7 @@
 #include "PresetBar.h"
 
 #include "pluginkit/ui/Theme.h"
+#include "pluginkit/ui/Widgets.h"
 #include "pluginkit/vst/Presets.h"
 
 #include "vstgui/lib/cdrawcontext.h"
@@ -10,6 +11,7 @@
 #include "vstgui/lib/controls/coptionmenu.h"
 #include "vstgui/lib/events.h"
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -26,25 +28,23 @@ PresetBar::PresetBar (const CRect& r, ControllerBase* c) : CView (r), ctl (c)
 void PresetBar::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
-    auto path = owned (ctx->createGraphicsPath ());
-    ctx->setFillColor (theme::kControlBg);
-    if (path)
-    {
-        path->addRoundRect (r, 3.0);
-        ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
-    }
-    else
-        ctx->drawRect (r, kDrawFilled);
+    // a field like the kit's Choice: a well in a thin copper outline, the name in text colour (text dim
+    // with no preset), a stroked chevron for the caret
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (r, kDrawFilled);
+    draw::outline (ctx, r, theme::kCopper);
     const std::string& name = ctl->presetName ();
     CRect t = r;
     t.inset (8, 0);
     t.right -= 10;
     ctx->setFont (theme::font (10.5, !name.empty ()));
-    ctx->setFontColor (name.empty () ? theme::kTextDim : theme::kTextBright);
+    ctx->setFontColor (name.empty () ? theme::kTextDim : theme::kText);
     ctx->drawString (name.empty () ? "Presets" : name.c_str (), t, kLeftText, true);
-    const double cx = r.right - 10, cy = r.getCenter ().y;
-    ctx->setFillColor (theme::kTextDim);
-    ctx->drawPolygon ({CPoint (cx - 3.5, cy - 2), CPoint (cx + 3.5, cy - 2), CPoint (cx, cy + 2.5)}, kDrawFilled);
+    const double cx = std::floor (r.right - 10) + 0.5, cy = std::floor (r.getCenter ().y) + 0.5;
+    ctx->setLineWidth (1.0);
+    ctx->setFrameColor (theme::kCopperPale);
+    ctx->drawLine (CPoint (cx - 3, cy - 1.5), CPoint (cx, cy + 1.5));
+    ctx->drawLine (CPoint (cx, cy + 1.5), CPoint (cx + 3, cy - 1.5));
 }
 
 void PresetBar::onMouseDownEvent (MouseDownEvent& e)

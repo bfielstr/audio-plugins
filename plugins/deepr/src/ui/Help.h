@@ -29,7 +29,7 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "Amber: the sub band (drag its edge to set Split). Dashed: the dip at full Depth; filled: the dip it is making now. "
+    "Shaded copper: the sub band (drag its edge to set Split). Dashed: the dip at full Depth; lit (cinnabar): the dip it is making now. "
     "Drag the handle sideways for Dip Freq, up/down for Depth; the mouse wheel while you hold it (or with Shift over it), or Alt-drag sideways, for Dip Width. "
     "Right: the sub's level with the Threshold (drag it) and the range where the dip deepens. "
     "Double-click or right-click resets. Shift: fine.";

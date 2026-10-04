@@ -21,8 +21,10 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-const CColor kSub (255, 176, 64);  // the sub band (amber)
-const CColor kDip (90, 150, 255);  // the dip (blue: a cut, as everywhere in the suite)
+// The sub band is structure (a copper region and split line); the dip is the processing, so it is the
+// one lit thing: cinnabar while it cuts, a dashed copper outline for the most it can cut.
+const CColor kSub = theme::kCopper;
+const CColor kDip = theme::kEnergyLive;
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size,
            CHoriTxtAlign a = kCenterText, bool bold = false)
@@ -101,9 +103,9 @@ void DeeprView::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     const CRect pr = plot ();
     const CRect mr = meter ();
-    ctx->setFillColor (theme::kBackground);
+    ctx->setFillColor (theme::kGround);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (CRect (pr.left, pr.top, pr.right, pr.bottom), kDrawFilled);
     ctx->drawRect (mr, kDrawFilled);
     ctx->setClipRect (all);
@@ -113,7 +115,7 @@ void DeeprView::draw (CDrawContext* ctx)
     for (double f : {30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0, 800.0, 1000.0})
     {
         const bool major = f == 50.0 || f == 100.0 || f == 500.0 || f == 1000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), pr.top), CPoint (xOfHz (f), pr.bottom));
         char buf[16];
         std::snprintf (buf, sizeof (buf), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -122,7 +124,7 @@ void DeeprView::draw (CDrawContext* ctx)
     }
     for (double db = -12.0; db <= 0.0; db += 3.0)
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (70, 70, 76) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (pr.left, yOfDb (db)), CPoint (pr.right, yOfDb (db)));
         char buf[16];
         std::snprintf (buf, sizeof (buf), "%.0f", db);
@@ -132,13 +134,12 @@ void DeeprView::draw (CDrawContext* ctx)
     // the sub band
     const double split = host->plainValue (kSplit);
     const double xs = xOfHz (split);
-    ctx->setFillColor (withAlpha (kSub, 34));
+    ctx->setFillColor (withAlpha (kSub, 26));
     ctx->drawRect (CRect (pr.left, pr.top, xs, pr.bottom), kDrawFilled);
-    ctx->setLineWidth (2.0);
-    ctx->setFrameColor (drag == Drag::Split ? theme::kTextBright : kSub);
-    ctx->drawLine (CPoint (xs, pr.top), CPoint (xs, pr.bottom));
     ctx->setLineWidth (1.0);
-    text (ctx, "sub", CRect (pr.left, pr.bottom - 18, xs, pr.bottom - 4), kSub, 10.0);
+    ctx->setFrameColor (drag == Drag::Split ? theme::kEnergyLive : kSub); // held: lit
+    ctx->drawLine (CPoint (xs, pr.top), CPoint (xs, pr.bottom));
+    text (ctx, "SUB", CRect (pr.left, pr.bottom - 18, xs, pr.bottom - 4), theme::kCopperPale, 9.5);
 
     // the dip: dashed at full Depth, filled with the dip it is making now
     const double sr = sampleRate ();
@@ -175,8 +176,8 @@ void DeeprView::draw (CDrawContext* ctx)
     if (depth > 0.01)
         if (auto full = dipPath (-depth, false))
         {
-            ctx->setFrameColor (withAlpha (kDip, 150));
-            ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
+            ctx->setFrameColor (theme::kCopper);
+            ctx->setLineStyle (theme::kDashed);
             ctx->drawGraphicsPath (full, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }
@@ -184,9 +185,9 @@ void DeeprView::draw (CDrawContext* ctx)
     if (working)
         if (auto live = dipPath (shownCut, true))
         {
-            ctx->setFillColor (withAlpha (kDip, 90));
+            ctx->setFillColor (withAlpha (kDip, 70));
             ctx->drawGraphicsPath (live, CDrawContext::kPathFilled);
-            ctx->setLineWidth (1.6);
+            ctx->setLineWidth (1.0);
             ctx->setFrameColor (kDip);
             ctx->drawGraphicsPath (live, CDrawContext::kPathStroked);
             ctx->setLineWidth (1.0);
@@ -195,16 +196,13 @@ void DeeprView::draw (CDrawContext* ctx)
     // the handle, at the full depth
     const CPoint hp = handle ();
     const bool held = drag == Drag::Handle || drag == Drag::Width;
-    const CRect hr (hp.x - 6, hp.y - 6, hp.x + 6, hp.y + 6);
-    ctx->setFillColor (held ? theme::kTextBright : theme::kAccent);
-    ctx->drawEllipse (hr, kDrawFilled);
-    ctx->setFrameColor (theme::kWaveBg);
-    ctx->drawEllipse (hr, kDrawStroked);
+    pk::draw::handle (ctx, hp, 6, held);
 
     // readout
     char buf[96];
     std::snprintf (buf, sizeof (buf), "Dip %.1f dB  @ %.0f Hz", (double)shownCut, dipHz);
-    text (ctx, buf, CRect (pr.left + 44, pr.top + 4, pr.left + 300, pr.top + 20), working ? theme::kTextBright : theme::kText, 11.0, kLeftText, true);
+    // the readout lights cinnabar while the dip is cutting
+    text (ctx, buf, CRect (pr.left + 44, pr.top + 4, pr.left + 300, pr.top + 20), working ? theme::kEnergyLive : theme::kText, 11.0, kLeftText, true);
     std::snprintf (buf, sizeof (buf), "Depth %.1f dB   Width %.1f oct", depth, host->plainValue (kDipWidth));
     text (ctx, buf, CRect (pr.left + 44, pr.top + 20, pr.left + 300, pr.top + 34), theme::kTextDim, 9.5, kLeftText);
 
@@ -213,25 +211,27 @@ void DeeprView::draw (CDrawContext* ctx)
     const double bar = mr.left + 10, barR = mr.right - 10;
     for (double db = -48.0; db <= -12.0; db += 12.0)
     {
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (mr.left + 2, yOfLevel (db)), CPoint (mr.right - 2, yOfLevel (db)));
     }
-    ctx->setFillColor (withAlpha (kDip, working ? 110 : 40));
+    // the key region a faint copper band (brighter while the dip works); the sub's level a meter bar,
+    // energy idle at rest and live while it pushes the dip
+    ctx->setFillColor (withAlpha (theme::kCopper, working ? 70 : 30));
     ctx->drawRect (CRect (mr.left + 2, yOfLevel (th + kKeyRangeDb), mr.right - 2, yOfLevel (th)), kDrawFilled);
     if (shownSub > kMeterMinDb)
     {
-        ctx->setFillColor (withAlpha (kSub, working ? 255 : 190));
+        ctx->setFillColor (working ? theme::kEnergyLive : theme::kEnergyIdle);
         ctx->drawRect (CRect (bar, yOfLevel (shownSub), barR, yOfLevel (kMeterMinDb)), kDrawFilled);
     }
     const double yt = yOfLevel (th);
-    ctx->setLineWidth (2.0);
-    ctx->setFrameColor (drag == Drag::Threshold ? theme::kTextBright : theme::kText);
+    ctx->setLineWidth (1.5);
+    ctx->setFrameColor (drag == Drag::Threshold ? theme::kEnergyLive : theme::kText);
     ctx->drawLine (CPoint (mr.left + 2, yt), CPoint (mr.right - 2, yt));
     ctx->setLineWidth (1.0);
     std::snprintf (buf, sizeof (buf), "%.0f", th);
     const bool labelBelow = yt - 14 < mr.top;
     text (ctx, buf, labelBelow ? CRect (mr.left, yt + 2, mr.right, yt + 14) : CRect (mr.left, yt - 14, mr.right, yt - 2),
-          theme::kTextBright, 9.5);
+          theme::kText, 9.5);
     text (ctx, "sub dB", CRect (mr.left - 6, mr.bottom, mr.right, mr.bottom + kAxisHeight), theme::kTextDim, 9.0);
     ctx->resetClipRect ();
 }

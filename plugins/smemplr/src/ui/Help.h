@@ -178,11 +178,11 @@ inline const char* forParam (uint32_t id)
     return nullptr;
 }
 
-constexpr const char* kScope = "The final output (after every effect): left bright, right dim, 0 dBFS in red. Click to change the time span.";
+constexpr const char* kScope = "The final output (after every effect): left bright, right dim, 0 dBFS in cinnabar. Click to change the time span.";
 
 constexpr const char* kWaveform =
-    "Waveform. Drag the orange flags to set the sample region. Classic: drag the white markers for Start / Length, "
-    "click the green loop bar to switch looping on or off, drag it to move the loop, drag its edges to resize. "
+    "Waveform. Drag the flags to set the sample region. Classic: drag the bright markers for Start / Length, "
+    "click the loop bar (lit while looping) to switch looping on or off, drag it to move the loop, drag its edges to resize. "
     "Slicing: double-click to add or remove a slice, drag to move, Alt-click to toggle manual/auto. Click the "
     "waveform to audition. Scroll or drag the ruler to pan; Cmd/Alt + scroll or drag the ruler vertically to zoom. "
     "Drop an audio file here to load it, from a file browser or straight from a DAW (a clip dragged out of REAPER or "

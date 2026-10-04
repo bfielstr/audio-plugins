@@ -35,10 +35,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 

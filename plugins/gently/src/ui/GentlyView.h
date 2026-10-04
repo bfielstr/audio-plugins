@@ -1,10 +1,10 @@
 // Gently's two bands, its Sub band and its High band on a frequency display, the way a multiband compressor shows its
 // bands (and the way Smacheratr's colour display shows its Gently): each band's region shaded between
-// its edges, the most it can cut outlined (dashed), the cut it is making right now filled in from the
+// its edges, the most it can cut outlined (dashed), the cut it is making right now lit (cinnabar) from the
 // 0 dB line and moving with the audio, a handle at its centre as deep as its Range (Sub's and High's at
-// their Freq, where they start to taper). The whole response in white (every band at its cut now, with its phase:
+// their Freq, where they start to taper). The whole response in the text colour (every band at its cut now, with its phase:
 // the curve is what the sound gets). Behind: the input's spectrum (a line) and the output's (filled),
-// so the cut shows between them. Band 1 green, band 2 blue, Sub amber, High rose (Smacheratr's colours).
+// so the cut shows between them. One colour for all bands: each is named in its readout at the top.
 //   handle, sideways              the band's Frequency (Sub: 20 - 100 Hz, High: 2 - 16 kHz)
 //   handle, up / down             its Range (the handle sits at the most it cuts: drag down for more)
 //   band edge, sideways           its Width (the band stays centred; Sub and High have no width)
@@ -43,7 +43,7 @@ public:
     using MeterSource = std::function<const Meters* ()>;
 
     GentlyView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
-    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently colours (green, blue, amber, rose)
+    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently band colour (one for all bands)
     static const smacheratr::GentlyBandParams& bandParams ();        // where Gently's bands are among its parameters (No Overlap)
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;

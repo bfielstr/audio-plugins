@@ -37,10 +37,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 } // namespace
@@ -89,7 +87,7 @@ void Editor::buildUI (CFrame* f)
     {
         auto* bt = new ActionButton (CRect (8 + b * 72, kRowTop, 76 + b * 72, kRowTop + 22), b == 0 ? "Band 1" : "Band 2",
                                      [this, b] { showBand (b); }, [this, b] { return shown == b; });
-        bt->setTooltipText (b == 0 ? "Show band 1 (green)." : "Show band 2 (blue).");
+        bt->setTooltipText (b == 0 ? "Show band 1 (marked 1 in the display)." : "Show band 2 (marked 2 in the display).");
         root->addView (bt);
         bandButtons.push_back (bt);
     }

@@ -18,9 +18,11 @@ namespace theme = pk::theme;
 
 namespace {
 constexpr double kPointRadius = 5.0, kPad = 10.0;
+// one colour for both bands (docs/THEME.md): pale copper; the title names the band
 CColor bandColor (int band, uint8_t alpha = 255)
 {
-    return band == 0 ? CColor (120, 210, 140, alpha) : CColor (130, 170, 255, alpha);
+    (void)band;
+    return theme::withAlpha (theme::kCopperPale, alpha);
 }
 } // namespace
 
@@ -60,18 +62,18 @@ void ShapeView::idle ()
 void ShapeView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
     for (int i = 0; i <= 8; ++i)
     {
-        ctx->setFrameColor (i % 4 == 0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (i % 4 == 0 ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOf (i / 8.0), all.top), CPoint (xOf (i / 8.0), all.bottom));
     }
     for (double y : {-1.0, -0.5, 0.0, 0.5, 1.0})
     {
-        ctx->setFrameColor (y == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (y == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOf (y)), CPoint (all.right, yOf (y)));
     }
     const Shape s = shape ();
@@ -80,12 +82,12 @@ void ShapeView::draw (CDrawContext* ctx)
     if (envelope)
     {
         const double hx = xOf (s.holdX ());
-        ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
-        ctx->setFrameColor (CColor (255, 230, 120, 160));
+        ctx->setLineStyle (theme::kDashed);
+        ctx->setFrameColor (theme::kCopperPale);
         ctx->drawLine (CPoint (hx, all.top), CPoint (hx, all.bottom));
         ctx->setLineStyle (kLineSolid);
         ctx->setFont (theme::font (9.5, true));
-        ctx->setFontColor (CColor (255, 230, 120));
+        ctx->setFontColor (theme::kCopperPale);
         ctx->drawString ("hold", CRect (hx + 3, all.top + 2, hx + 60, all.top + 14), kLeftText, true);
     }
     // the shape, filled from the middle
@@ -101,7 +103,7 @@ void ShapeView::draw (CDrawContext* ctx)
         }
         path->addLine (CPoint (xOf (1.0), yOf (0.0)));
         path->closeSubpath ();
-        ctx->setFillColor (bandColor (band, 40));
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, 40));
         ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
     }
     if (auto line = owned (ctx->createGraphicsPath ()))
@@ -116,28 +118,28 @@ void ShapeView::draw (CDrawContext* ctx)
             else
                 line->addLine (pt);
         }
-        ctx->setLineWidth (2.0);
-        ctx->setFrameColor (c);
+        ctx->setLineWidth (1.5);
+        ctx->setFrameColor (theme::kText); // the shape: a text-coloured trace over a faint copper body
         ctx->drawGraphicsPath (line, CDrawContext::kPathStroked);
     }
-    // where the band is now
+    // where the band is now: a cinnabar playhead and dot
     const double px = xOf (shownPos);
     ctx->setLineWidth (1.0);
-    ctx->setFrameColor (CColor (255, 255, 255, 70));
+    ctx->setFrameColor (theme::withAlpha (theme::kEnergyLive, 150));
     ctx->drawLine (CPoint (px, all.top), CPoint (px, all.bottom));
     const CPoint now (px, yOf (shownValue));
-    ctx->setFillColor (theme::kPlayhead);
+    ctx->setFillColor (theme::kEnergyLive);
     ctx->drawEllipse (CRect (now.x - 3.5, now.y - 3.5, now.x + 3.5, now.y + 3.5), kDrawFilled);
-    // the points
+    // the points (the hold point with a pale copper centre)
     for (int i = 0; i < s.n; ++i)
     {
         const CPoint pt (xOf (s.p[(size_t)i].x), yOf (s.p[(size_t)i].y));
-        const CRect r (pt.x - kPointRadius, pt.y - kPointRadius, pt.x + kPointRadius, pt.y + kPointRadius);
-        ctx->setFillColor (envelope && i == s.hold ? CColor (255, 230, 120) : theme::kTextBright);
-        ctx->drawEllipse (r, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (c);
-        ctx->drawEllipse (r, kDrawStroked);
+        pk::draw::handle (ctx, pt, kPointRadius, false);
+        if (envelope && i == s.hold)
+        {
+            ctx->setFillColor (c);
+            ctx->drawEllipse (CRect (pt.x - 2.0, pt.y - 2.0, pt.x + 2.0, pt.y + 2.0), kDrawFilled);
+        }
     }
     ctx->setFont (theme::font (10.5, true));
     ctx->setFontColor (c);

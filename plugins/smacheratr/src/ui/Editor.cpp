@@ -37,10 +37,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 } // namespace
@@ -129,11 +127,11 @@ void Editor::buildUI (CFrame* f)
     {
         static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub", "High"};
         static const char* const tips[kGentlyBands] = {
-            "Show Gently's first band (green in the display).",
-            "Show Gently's second band (blue in the display; it works once its Range is above 0 dB).",
-            "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; it works once its "
+            "Show Gently's first band (Gently in the display).",
+            "Show Gently's second band (Gently 2 in the display; it works once its Range is above 0 dB).",
+            "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once its "
             "Range is above 0 dB).",
-            "Show Gently's High band (rose: from its Freq, where it starts to taper, to the top of the spectrum; it works once "
+            "Show Gently's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once "
             "its Range is above 0 dB)."};
         auto* bt = new ActionButton (CRect (92 + k * 46, 30, 136 + k * 46, 50), names[k], [this, k] { showClarityBand (k); },
                                      [this, k] { return clarityBand == k; });

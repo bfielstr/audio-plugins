@@ -1,5 +1,5 @@
-// An oscilloscope of a stereo signal: left in the accent colour, right dimmer, the 0 dBFS lines in
-// red so clipping and squared-off peaks stand out. Click to change the time span; spans up to
+// An oscilloscope of a stereo signal: left bright (text colour), right dim (copper), the 0 dBFS lines
+// in cinnabar so clipping and squared-off peaks stand out. Click to change the time span; spans up to
 // 50 ms trigger on a rising zero crossing so periodic waves stand still.
 #pragma once
 

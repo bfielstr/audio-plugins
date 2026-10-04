@@ -14,7 +14,7 @@ highlighted, so you can see when the saturation starts. Drag it up or down to se
 **Pre-Limit** (on by default) is a look-ahead limiter in front of the drive: the input is
 held at its **threshold** (default -6 dB), and the drive is applied after it. A transient then cannot
 push further into the curve than the rest of the sound, so it is not squared off; the display shows
-the furthest the driven signal can go as blue lines.
+the furthest the driven signal can go as dashed lines.
 
 **Post Clip** (No Clip / Soft Clip / Hard Clip) clips the output at 0 dB after the curve, so the
 output never exceeds the **Output** level (-36 ... 0 dB). With **Soft Clip** and **Hard Clip** nothing
@@ -65,7 +65,7 @@ so at 7 kHz the presence region of 1 to 3 kHz is left alone). It is the compleme
 damped 12 dB/oct low-pass, so its cut is exactly the Range where it is flat. Like the Sub band it
 has no button: it works while Gently is on and its **Range** is above 0 dB (0 dB to start with), with the
 same law, its own **Threshold** in Advanced and the same region Drive; its handle in the colour display
-is rose, with no width. At Range 0 Gently is exactly what it was, bit for bit. Projects saved while
+has no width. At Range 0 Gently is exactly what it was, bit for bit. Projects saved while
 the Sub and High bands had buttons sound the same: a band that was off loads at Range 0, one that was
 on keeps its Range.
 

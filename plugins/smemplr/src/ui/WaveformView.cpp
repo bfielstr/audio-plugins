@@ -151,10 +151,14 @@ void WaveformView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect w = waveArea ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setFillColor (theme::kHeader);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (rulerArea (), kDrawFilled);
+    // the ruler's base line: a dim hairline, its copper ticks rising from it
+    ctx->setLineWidth (1.0);
+    ctx->setFrameColor (theme::kLineDim);
+    ctx->drawLine (CPoint (rulerArea ().left, rulerArea ().bottom - 0.5), CPoint (rulerArea ().right, rulerArea ().bottom - 0.5));
 
     auto s = sample ();
     auto* bridge = controller->getBridge ();
@@ -194,7 +198,7 @@ void WaveformView::draw (CDrawContext* ctx)
                 const double x = posToX (nfs + b * beatLen);
                 if (x < w.left - 1 || x > w.right + 1)
                     continue;
-                ctx->setFrameColor (theme::kTextDim);
+                ctx->setFrameColor (theme::kCopper);
                 ctx->drawLine (CPoint (x, rr.bottom - 5), CPoint (x, rr.bottom));
                 char buf[32];
                 if (b % 4 == 0)
@@ -222,7 +226,7 @@ void WaveformView::draw (CDrawContext* ctx)
                 const double x = posToX (t / s->seconds ());
                 if (x < w.left - 1 || x > w.right + 1)
                     continue;
-                ctx->setFrameColor (theme::kTextDim);
+                ctx->setFrameColor (theme::kCopper);
                 ctx->drawLine (CPoint (x, rr.bottom - 5), CPoint (x, rr.bottom));
                 char buf[32];
                 if (step >= 1.0)
@@ -245,7 +249,7 @@ void WaveformView::draw (CDrawContext* ctx)
                 const double x = posToX (nfs + b * beatLen);
                 if (x < w.left || x > w.right)
                     continue;
-                ctx->setFrameColor (b % 4 == 0 ? CColor (70, 70, 76) : theme::kGrid);
+                ctx->setFrameColor (b % 4 == 0 ? theme::kGridMajor : theme::kGridMinor);
                 ctx->drawLine (CPoint (x, w.top), CPoint (x, w.bottom));
             }
     }
@@ -258,7 +262,7 @@ void WaveformView::draw (CDrawContext* ctx)
     {
         const double mid = w.top + laneH * (c + 0.5);
         const double scale = laneH * 0.46 / std::max (0.05f, std::min (1.0f, s->peakAbs));
-        ctx->setFrameColor (CColor (45, 45, 48));
+        ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (w.left, mid), CPoint (w.right, mid));
         const float* d = s->data (c);
         ctx->setLineWidth (1.0);
@@ -272,7 +276,7 @@ void WaveformView::draw (CDrawContext* ctx)
             {
                 const CPoint pt (posToX (i / len), mid - d[i] * scale);
                 const bool inside = i >= fs && i <= fe;
-                ctx->setFrameColor (inside ? theme::kWave : theme::kWaveOutside);
+                ctx->setFrameColor (inside ? theme::kCopper : theme::kLineDim);
                 if (i > a)
                     ctx->drawLine (prev, pt);
                 prev = pt;
@@ -310,7 +314,7 @@ void WaveformView::draw (CDrawContext* ctx)
                 }
             }
             const double midPos = (a + b) * 0.5;
-            ctx->setFrameColor (midPos >= fs && midPos <= fe ? theme::kWave : theme::kWaveOutside);
+            ctx->setFrameColor (midPos >= fs && midPos <= fe ? theme::kCopper : theme::kLineDim);
             ctx->drawLine (CPoint (x + 0.5, mid - hi * scale - 0.5), CPoint (x + 0.5, mid - lo * scale + 0.5));
         }
     }
@@ -323,7 +327,7 @@ void WaveformView::draw (CDrawContext* ctx)
         x1 = std::min (x1, w.right);
         if (x1 > x0)
         {
-            ctx->setFillColor (CColor (0, 0, 0, alpha));
+            ctx->setFillColor (theme::withAlpha (theme::kWell, alpha));
             ctx->drawRect (CRect (x0, w.top, x1, w.bottom), kDrawFilled);
         }
     };
@@ -354,31 +358,33 @@ void WaveformView::draw (CDrawContext* ctx)
         const CRect barClip (std::max (w.left, bar.left), bar.top, std::min (w.right, bar.right), bar.bottom);
         if (loopOn)
         {
-            // shaded loop region with a solid brace along the bottom
-            ctx->setFillColor (CColor (120, 200, 120, drag == Handle::LoopBody || (drag == Handle::LoopRegion && moved) ? 75 : 55));
+            // the active region: a faint cinnabar shade, a cinnabar line along its top and edges, and the
+            // brace along the bottom an outlined cinnabar bar with LOOP in the text colour
+            ctx->setFillColor (theme::withAlpha (theme::kLoop, drag == Handle::LoopBody || (drag == Handle::LoopRegion && moved) ? 40 : 26));
             ctx->drawRect (region, kDrawFilled);
-            ctx->setFrameColor (CColor (120, 200, 120, 150));
+            ctx->setFrameColor (theme::withAlpha (theme::kLoop, 170));
             ctx->setLineWidth (1.0);
             ctx->drawLine (CPoint (region.left, region.top + 0.5), CPoint (region.right, region.top + 0.5));
-            ctx->setFillColor (theme::kLoop);
+            ctx->setFillColor (theme::withAlpha (theme::kLoop, 60));
             ctx->drawRect (barClip, kDrawFilled);
+            pk::draw::outline (ctx, barClip, theme::kLoop, 0);
             vline (xs, theme::kLoop, 1.5);
             vline (xl, theme::kLoop, 1.5);
-            drawText (ctx, "LOOP", barClip, CColor (20, 40, 20), 9.0, kCenterText, true);
+            drawText (ctx, "LOOP", barClip, theme::kText, 9.0, kCenterText, true);
         }
         else
         {
-            // the loop that would play, dimmed: click the bar to switch looping on
-            ctx->setFillColor (CColor (120, 200, 120, 14));
+            // the loop that would play, unlit: a faint copper shade, the brace outlined in energy idle
+            // (click the bar to switch looping on)
+            ctx->setFillColor (theme::withAlpha (theme::kCopper, 12));
             ctx->drawRect (region, kDrawFilled);
-            ctx->setFillColor (CColor (120, 200, 120, 60));
-            ctx->drawRect (barClip, kDrawFilled);
-            drawText (ctx, "loop off (click)", barClip, CColor (160, 200, 160), 9.0, kCenterText);
+            pk::draw::outline (ctx, barClip, theme::kEnergyIdle, 0);
+            drawText (ctx, "loop off (click)", barClip, theme::kTextDim, 9.0, kCenterText);
         }
-        // Start and Length (the loop's end)
-        vline (xs, CColor (255, 255, 255, 150));
-        vline (xl, CColor (255, 255, 255, 150));
-        ctx->setFillColor (CColor (255, 255, 255, 170));
+        // Start and Length (the loop's end): text-coloured lines with small pointers at the foot
+        vline (xs, theme::withAlpha (theme::kText, 150));
+        vline (xl, theme::withAlpha (theme::kText, 150));
+        ctx->setFillColor (theme::withAlpha (theme::kText, 190));
         ctx->drawPolygon ({CPoint (xs, w.bottom - 10), CPoint (xs + 7, w.bottom - 5), CPoint (xs, w.bottom)}, kDrawFilled);
         ctx->drawPolygon ({CPoint (xl, w.bottom - 10), CPoint (xl - 7, w.bottom - 5), CPoint (xl, w.bottom)}, kDrawFilled);
     }
@@ -395,16 +401,22 @@ void WaveformView::draw (CDrawContext* ctx)
             if (i == hoverSlice)
             {
                 const double xn = posToX ((i + 1 < sl.count ? sl.pos[i + 1] : fe) / len);
-                ctx->setFillColor (CColor (70, 150, 255, 28));
+                ctx->setFillColor (theme::withAlpha (theme::kCopper, 24));
                 ctx->drawRect (CRect (std::max (x, w.left), w.top, std::min (xn, w.right), w.bottom), kDrawFilled);
             }
-            vline (x, sl.manual[i] ? theme::kSliceManual : theme::kSliceAuto, i == dragSlice ? 2.0 : 1.0);
+            // a manual slice a solid text-coloured line, an automatic one dashed pale copper; the one
+            // being dragged cinnabar
+            const bool held = drag == Handle::Slice && i == dragSlice;
+            if (!sl.manual[i] && !held)
+                ctx->setLineStyle (theme::kDashed);
+            vline (x, held ? theme::kEnergyLive : (sl.manual[i] ? theme::kSliceManual : theme::kCopperPale), held ? 1.5 : 1.0);
+            ctx->setLineStyle (kLineSolid);
             if (x >= w.left - 2 && x <= w.right)
             {
                 char buf[16];
                 std::snprintf (buf, sizeof (buf), "%d", i + 1);
                 drawText (ctx, buf, CRect (x + 3, w.top + 2, x + 40, w.top + 14),
-                          sl.manual[i] ? theme::kSliceManual : theme::kSliceAuto, 9.5);
+                          sl.manual[i] ? theme::kSliceManual : theme::kCopperPale, 9.5);
             }
         }
     }
@@ -412,10 +424,11 @@ void WaveformView::draw (CDrawContext* ctx)
     // --- flags -------------------------------------------------------------------
     for (double x : {xfs, xfe})
     {
-        vline (x, theme::kAccent, 1.5);
+        // the play range's flags: pale copper (structure the user sets; the loop and playheads are lit)
+        vline (x, theme::kCopperPale, 1.5);
         if (x >= w.left - 8 && x <= w.right + 8)
         {
-            ctx->setFillColor (theme::kAccent);
+            ctx->setFillColor (theme::kCopperPale);
             const bool left = x == xfs;
             ctx->drawPolygon ({CPoint (x, w.top), CPoint (x + (left ? 9 : -9), w.top), CPoint (x + (left ? 9 : -9), w.top + 6),
                                CPoint (x, w.top + 10)},
@@ -433,9 +446,9 @@ void WaveformView::draw (CDrawContext* ctx)
 
     // --- overview strip ----------------------------------------------------------
     CRect ov (all.left, all.bottom - kOverview, all.right, all.bottom);
-    ctx->setFillColor (CColor (38, 38, 40));
+    ctx->setFillColor (theme::kPanel);
     ctx->drawRect (ov, kDrawFilled);
-    ctx->setFillColor (viewLen < 0.999 ? theme::kAccentDim : CColor (60, 60, 64));
+    ctx->setFillColor (viewLen < 0.999 ? theme::withAlpha (theme::kCopper, 130) : theme::kLineDim); // the part in view
     ctx->drawRect (CRect (ov.left + viewStart * ov.getWidth (), ov.top + 1,
                           ov.left + (viewStart + viewLen) * ov.getWidth (), ov.bottom - 1),
                    kDrawFilled);
@@ -445,8 +458,8 @@ void WaveformView::draw (CDrawContext* ctx)
     std::snprintf (info, sizeof (info), "%s   %.3f s   %d Hz   %s", s->name.c_str (), s->seconds (),
                    (int)s->sampleRate, s->numChannels > 1 ? "Stereo" : "Mono");
     const CRect rr = rulerArea ();
-    ctx->setFillColor (theme::kHeader);
-    ctx->drawRect (CRect (rr.right - 330, rr.top, rr.right, rr.bottom), kDrawFilled);
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (CRect (rr.right - 330, rr.top, rr.right, rr.bottom - 1), kDrawFilled);
     drawText (ctx, info, CRect (rr.right - 326, rr.top, rr.right - 6, rr.bottom - 1), theme::kTextDim, 9.5,
               kRightText);
     ctx->resetClipRect ();

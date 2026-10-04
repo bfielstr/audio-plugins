@@ -73,10 +73,10 @@ Widr never uses the network.
 ## Display
 
 The **STAGE** shows the stereo field from above: you at the bottom, the speakers at the sides, this
-Widr as an orange arc whose angle is its width and whose distance is its Space, the others of the
-group in grey (*Widr 2 · Wide*). Drag an end of the orange arc for Width, drag up or down for Space,
+Widr as a lit (cinnabar) arc whose angle is its width and whose distance is its Space, the others of
+the group as dashed copper arcs (*Widr 2 · Wide*). Drag an end of the lit arc for Width, drag up or down for Space,
 double-click to reset them, Shift for fine steps. The strip under it shows the width kept per band
-(blue where it gives way to the group). On the right: a **goniometer** of the output (mono is a
+(outlined where it gives way to the group). On the right: a **goniometer** of the output (mono is a
 vertical line) and a **correlation** meter (+1 mono, 0 unrelated, below 0 it cancels in mono).
 
 **Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB). Here

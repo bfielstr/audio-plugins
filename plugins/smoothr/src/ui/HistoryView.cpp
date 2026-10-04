@@ -17,8 +17,11 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-// as in most limiter displays: the output a solid body, what the limiter took off the input lighter above it
-const CColor kInFill (128, 133, 142, 150), kOutFill (70, 75, 84), kOutLine (150, 156, 168), kCeilingLine (255, 230, 120, 170);
+// as in most limiter displays: the output a solid body (copper, with a pale copper edge), what the
+// limiter took off the input a lighter warm grey above it; the ceiling a dashed pale copper line. The
+// reductions are the lit part: the lows' cinnabar and solid, the highs' pale copper and dashed.
+const CColor kInFill = theme::withAlpha (theme::kTextDim, 70), kInSolid = theme::kTextDim, kOutFill = theme::withAlpha (theme::kCopper, 110),
+             kOutLine = theme::kCopperPale, kCeilingLine = theme::kCopperPale;
 constexpr double kFallDbPerIdle = 24.0 / 30.0; // the bars fall 24 dB a second (idle runs about 30 times a second)
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
@@ -41,8 +44,8 @@ std::string dbText (double db, bool sign = false)
 }
 } // namespace
 
-CColor HistoryView::lowColor (uint8_t alpha) { return CColor (255, 164, 40, alpha); }
-CColor HistoryView::highColor (uint8_t alpha) { return CColor (238, 82, 76, alpha); }
+CColor HistoryView::lowColor (uint8_t alpha) { return theme::withAlpha (theme::kEnergyLive, alpha); }
+CColor HistoryView::highColor (uint8_t alpha) { return theme::withAlpha (theme::kCopperPale, alpha); }
 
 HistoryView::HistoryView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m)) {}
 
@@ -129,15 +132,11 @@ void HistoryView::onMouseDownEvent (MouseDownEvent& e)
 void HistoryView::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
-    if (auto p = owned (ctx->createGraphicsPath ()))
-    {
-        p->addRoundRect (r, 5.0);
-        ctx->setFillColor (theme::kWaveBg);
-        ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-        ctx->setFrameColor (theme::kPanelEdge);
-        ctx->setLineWidth (1.0);
-        ctx->drawGraphicsPath (p, CDrawContext::kPathStroked);
-    }
+    // a display well in a dim hairline with copper corner brackets
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (r, kDrawFilled);
+    pk::draw::outline (ctx, r, theme::kLineDim, 0);
+    pk::draw::brackets (ctx, r, 6, theme::kCopper);
     drawHistory (ctx);
     drawMeters (ctx);
 }
@@ -150,16 +149,30 @@ void HistoryView::drawHistory (CDrawContext* ctx)
     // the header: what is what, and the reduction now
     {
         double x = r.left + 10.0;
-        auto key = [&] (const CColor& c, const char* name, double w) {
-            ctx->setFillColor (c);
-            ctx->drawRect (CRect (x, r.top + 7.0, x + 10.0, r.top + 15.0), kDrawFilled);
+        // each key a sample of how its trace is drawn: a swatch, or a short (dashed) line
+        auto key = [&] (const CColor& c, const char* name, double w, int line = 0) {
+            if (line == 0)
+            {
+                ctx->setFillColor (c);
+                ctx->drawRect (CRect (x, r.top + 7.0, x + 10.0, r.top + 15.0), kDrawFilled);
+            }
+            else
+            {
+                ctx->setFrameColor (c);
+                ctx->setLineWidth (1.5);
+                if (line == 2)
+                    ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {2.0, 1.4}));
+                ctx->drawLine (CPoint (x, r.top + 11.5), CPoint (x + 11.0, r.top + 11.5));
+                ctx->setLineStyle (kLineSolid);
+                ctx->setLineWidth (1.0);
+            }
             text (ctx, name, CRect (x + 14.0, r.top + 2.0, x + w, r.top + 20.0), theme::kText, 10.0, kLeftText);
             x += w;
         };
-        key (CColor (128, 133, 142), "input", 56.0);
+        key (kInSolid, "input", 56.0);
         key (kOutFill, "output", 60.0);
-        key (lowColor (), "reduction on the lows", 138.0);
-        key (highColor (), "on the highs", 90.0);
+        key (lowColor (), "reduction on the lows", 138.0, 1);
+        key (highColor (), "on the highs", 90.0, 2);
         const double lo = have > 0 ? grLow[(size_t)have - 1] : 0.0, hi = have > 0 ? grHigh[(size_t)have - 1] : 0.0;
         text (ctx, "lows " + dbText (-lo) + " dB", CRect (p.right - 190.0, r.top + 2.0, p.right - 96.0, r.top + 20.0), lowColor (), 10.5,
               kRightText, true);
@@ -172,7 +185,7 @@ void HistoryView::drawHistory (CDrawContext* ctx)
     for (double db = 0.0; db >= -kRangeDb; db -= 6.0)
     {
         const double y = std::floor (yOfDb (db)) + 0.5;
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (p.left, y), CPoint (p.right, y));
         if (db > -kRangeDb)
             text (ctx, dbText (db), CRect (p.right - 30.0, y + 1.0, p.right - 3.0, y + 13.0), theme::kTextDim, 9.0, kRightText);
@@ -185,7 +198,7 @@ void HistoryView::drawHistory (CDrawContext* ctx)
         ctx->setClipRect (p);
         auto xOf = [&] (int i) { return p.right - (double)(n - 1 - i); };
         // filled from the bottom (levels) or hanging from the top (reductions)
-        auto area = [&] (const std::vector<float>& v, bool level, const CColor& fill, const CColor* line) {
+        auto area = [&] (const std::vector<float>& v, bool level, const CColor& fill, const CColor* line, bool dashed = false) {
             auto path = owned (ctx->createGraphicsPath ());
             auto edge = owned (ctx->createGraphicsPath ());
             if (!path || !edge)
@@ -209,15 +222,18 @@ void HistoryView::drawHistory (CDrawContext* ctx)
             if (line)
             {
                 ctx->setFrameColor (*line);
-                ctx->setLineWidth (1.5);
+                ctx->setLineWidth (1.0);
+                if (dashed)
+                    ctx->setLineStyle (theme::kDashed);
                 ctx->drawGraphicsPath (edge, CDrawContext::kPathStroked);
+                ctx->setLineStyle (kLineSolid);
             }
         };
         area (inPk, true, kInFill, nullptr);
         area (outPk, true, kOutFill, &kOutLine);
         const CColor hiLine = highColor (), loLine = lowColor ();
-        area (grHigh, false, highColor (34), &hiLine);
-        area (grLow, false, lowColor (40), &loLine);
+        area (grHigh, false, highColor (22), &hiLine, true);
+        area (grLow, false, lowColor (50), &loLine);
         ctx->restoreGlobalState ();
     }
     else
@@ -232,7 +248,7 @@ void HistoryView::drawHistory (CDrawContext* ctx)
     ctx->drawLine (CPoint (p.left, yc), CPoint (p.right, yc));
     ctx->setLineStyle (kLineSolid);
     const CRect tag (p.left + 4.0, yc + 2.0, p.left + 84.0, yc + 15.0);
-    ctx->setFillColor (CColor (22, 22, 22, 200));
+    ctx->setFillColor (theme::withAlpha (theme::kWell, 200));
     ctx->drawRect (tag, kDrawFilled);
     text (ctx, "ceiling " + dbText (ceilDb) + " dB", tag, kCeilingLine, 9.0);
 }
@@ -244,7 +260,7 @@ void HistoryView::drawMeters (CDrawContext* ctx)
     auto yOf = [&] (double db) { return top + std::clamp (-db / kRangeDb, 0.0, 1.0) * (bottom - top); };
     const double w = 12.0, gap = 2.0;
     auto bar = [&] (double x, double db, bool fromTop, const CColor& c) {
-        ctx->setFillColor (theme::kControlBg);
+        ctx->setFillColor (theme::kLineDim); // the meter bed (thin bars on a dim track)
         ctx->drawRect (CRect (x, top, x + w, bottom), kDrawFilled);
         const double y = yOf (fromTop ? -db : db);
         ctx->setFillColor (c);
@@ -253,19 +269,19 @@ void HistoryView::drawMeters (CDrawContext* ctx)
         else
             ctx->drawRect (CRect (x, y, x + w, bottom), kDrawFilled);
     };
-    // over the ceiling: the input bars turn the reduction's colour above it
+    // over the ceiling: the input bars turn peak colour above it (the part the limiter takes off)
     const double ceilDb = host->plainValue (kCeiling);
     const double x0 = m.left, x1 = x0 + 2 * w + gap + 8.0, x2 = x1 + 2 * w + gap + 8.0;
     for (int c = 0; c < 2; ++c)
     {
         const double x = x0 + c * (w + gap);
-        bar (x, barIn[c], false, CColor (128, 133, 142));
+        bar (x, barIn[c], false, kInSolid);
         if (barIn[c] > ceilDb)
         {
-            ctx->setFillColor (highColor (200));
+            ctx->setFillColor (theme::kEnergyPeak);
             ctx->drawRect (CRect (x, yOf (barIn[c]), x + w, yOf (ceilDb)), kDrawFilled);
         }
-        bar (x1 + c * (w + gap), barOut[c], false, CColor (190, 196, 206));
+        bar (x1 + c * (w + gap), barOut[c], false, theme::kEnergyLive);
     }
     bar (x2, barLow, true, lowColor ());
     bar (x2 + w + gap, barHigh, true, highColor ());
@@ -281,7 +297,7 @@ void HistoryView::drawMeters (CDrawContext* ctx)
                                : CRect (x - 6.0, m.top, x + 2 * w + gap + 6.0, top - 2.0);
         text (ctx, s, rr, c, 9.0);
     };
-    label (x0, dbText (holdIn), holdIn > ceilDb ? highColor () : theme::kText, false);
+    label (x0, dbText (holdIn), holdIn > ceilDb ? theme::kEnergyPeak : theme::kText, false);
     label (x1, dbText (holdOut), theme::kText, false);
     label (x2, holdGr > 0.05 ? dbText (-holdGr) : "0.0", theme::kText, false);
     label (x0, "IN", theme::kTextDim, true);

@@ -38,10 +38,10 @@ Frequency across (20 Hz to 20 kHz), dB up (+36 dB to -96 dB).
   least a sixth of an octave from its neighbours).
 - **Gain points**: one per band at its centre, with a smooth curve through them; the height is the
   band's gain plus Tilt (Makeup comes on top). Drag a point up or down.
-- **Thresholds**: the downward threshold (orange) and the upward one (green, dim while its ratio is
-  1 : 1) as horizontal lines; drag them up or down. In Negative mode the floor is drawn dotted.
-- **Meters**, per band: its level after the Input gain (dim blue), its gain reduction hanging from
-  0 dB (red, with the number at the top) and its level after its gain (bright blue).
+- **Thresholds**: the downward threshold (a solid line) and the upward one (dashed, dim while its ratio
+  is 1 : 1) as horizontal lines; drag them up or down. In Negative mode the floor is drawn dotted.
+- **Meters**, per band: its level after the Input gain (dim), its gain reduction hanging from 0 dB
+  (an outlined bar, with the number at the top) and its level after its gain (lit).
 
 Right-click or double-click a handle, point or line to reset it.
 

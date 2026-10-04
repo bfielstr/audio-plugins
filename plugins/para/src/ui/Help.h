@@ -81,8 +81,8 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "Orange: the high-pass, blue: the low-pass, white: what you hear (their sum). Behind them the live spectrum of "
-    "the input (grey) and the output (light). Drag a handle sideways for its cutoff and up/down for its resonance "
+    "Solid copper line: the high-pass (HP), dashed: the low-pass (LP), the bright line: what you hear (their sum). "
+    "Behind them the live spectrum of the input (dim) and the output (copper). Drag a handle sideways for its cutoff and up/down for its resonance "
     "(with Drag Gain on, the gain moves too); Alt-drag for the gain alone (to the bottom: -inf; a locked gain stops "
     "at 0 dB); double-click resets "
     "it. Mouse wheel: resonance (while holding a handle, or with Shift over it). Shift: fine. A handle sits as high "

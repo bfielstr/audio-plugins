@@ -22,7 +22,8 @@ against an absolute threshold like a compressor does.
   untouched (bit-exact apart from the latency).
 - **Solo** plays only the range.
 
-The display shows the input spectrum (grey), the output (orange) and the gain applied per band.
+The display shows the input spectrum (a faint copper body), the output (a bright line) and the gain applied
+per band.
 Drag the range edges to move them, drag inside the range sideways to move it or up/down to set
 Contrast, and double-click to reset Contrast.
 

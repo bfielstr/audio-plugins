@@ -33,7 +33,8 @@ using pk::Toggle;
 namespace {
 constexpr double kKnobW = 56, kKnobH = 64;
 CRect knobRect (double x, double y) { return CRect (x, y, x + kKnobW, y + kKnobH); }
-const CColor kBelowColor (255, 170, 60), kAboveColor (110, 165, 255);
+// the Below and Above value fields: told apart by their columns (one text colour, docs/THEME.md)
+const CColor kBelowColor = pk::theme::kText, kAboveColor = pk::theme::kText;
 
 void place (CView* v, const CRect& r)
 {
@@ -60,10 +61,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 } // namespace
@@ -144,7 +143,7 @@ void Editor::buildUI (CFrame* f)
         const int fields[6] = {kBelowThresh, kBelowRatio, kAboveThresh, kAboveRatio, kAttack, kRelease};
         for (int i = 0; i < 6; ++i)
             valueBoxes[b][i] = bind (root, new NumberBox (none, this, bandParam (b, fields[i]),
-                                                          i < 2 ? kBelowColor : (i < 4 ? kAboveColor : pk::theme::kTextBright)));
+                                                          i < 2 ? kBelowColor : (i < 4 ? kAboveColor : pk::theme::kText)));
     }
     for (int x = 0; x < kMaxBands - 1; ++x)
         xoverBoxes[x] = bind (root, new NumberBox (none, this, (uint32_t)(kXover1 + x)));
@@ -153,7 +152,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (subName);
     const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
     for (int i = 0; i < 4; ++i)
-        subBoxes[i] = bind (root, new NumberBox (none, this, subFields[i], i < 2 ? kAboveColor : pk::theme::kTextBright));
+        subBoxes[i] = bind (root, new NumberBox (none, this, subFields[i], i < 2 ? kAboveColor : pk::theme::kText));
     subInBox = bind (root, new NumberBox (none, this, kSubInput));
     subOutBox = bind (root, new NumberBox (none, this, kSubOutput));
 

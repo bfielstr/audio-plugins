@@ -5,8 +5,8 @@ low mids, saturate the highs, push the lot into the Smacheratr at the end. The c
 phase turns around each one; that turn is part of the sound (there is no linear-phase mode).
 
 - **Bands**: 1 to 4 (4 by default), how many are in use: N bands use the first N-1 crossovers, and the last
-  band in use reaches to 20 kHz (1: no split at all, the input as it is). The bands (1 red, 2 amber, 3 green,
-  4 blue) sit side by side from 20 Hz up: band 1 ends where band 2 starts, and so on. Each has a **Gain**
+  band in use reaches to 20 kHz (1: no split at all, the input as it is). The bands (numbered at the top of
+  the display) sit side by side from 20 Hz up: band 1 ends where band 2 starts, and so on. Each has a **Gain**
   (-24 to +24 dB), **Mute** and **Solo** (a soloed band is heard even when muted; with several soloed, all of
   them are). The bands past the count are left out (their level, mute, solo and drive), and their columns
   are hidden in the editor and the display. Changing the count crossfades over 20 ms.
@@ -35,8 +35,8 @@ phase turns around each one; that turn is part of the sound (there is no linear-
 Below the display each band in use has a column: its name and range, Gain, Mute, Solo, then Drive and
 Type (dimmed while Drive is at 0 dB). Bands is next to Slope.
 
-The display shows the bands in use as coloured columns, each filled to its level (a driven band has a tag
-with its type and Drive at its foot), the whole response in white (the bands' filters added up as the engine adds them, so the steps between levels look as they
+The display shows the bands in use as numbered columns, each filled to its level (a driven band has a tag
+with its type and Drive at its foot), the whole response as the bright line (the bands' filters added up as the engine adds them, so the steps between levels look as they
 sound) and the output's spectrum behind (tilted 4.5 dB/oct around 1 kHz, so a mix reads level).
 
 - Drag a band up or down for its level (Shift: fine); drag the line between two bands sideways to move

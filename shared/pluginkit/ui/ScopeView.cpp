@@ -16,7 +16,9 @@ using namespace VSTGUI;
 
 namespace {
 constexpr double kRange = 1.25; // amplitude shown at the top and bottom edges
-const CColor kClipLine (210, 70, 70, 150);
+// the 0 dBFS lines: cinnabar, half-lit (they mark where clipping starts; the peak readout turns peak
+// colour when it is reached)
+constexpr CColor kClipLine = theme::withAlpha (theme::kEnergyLive, 150);
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a,
            bool bold = false)
@@ -30,13 +32,13 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
 ScopeView::ScopeView (const CRect& rect, Reader rd, std::function<double ()> sr, int cap, std::string t)
 : CView (rect), reader (std::move (rd)), rate (std::move (sr)), capacity (std::max (64, cap)), title (std::move (t))
 {
-    setTooltipText ("The final output: left bright, right dim, 0 dBFS in red. Click to change the time span.");
+    setTooltipText ("The final output: left bright, right dim, 0 dBFS in cinnabar. Click to change the time span.");
 }
 
 void ScopeView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     const CRect plot (all.left + 4, all.top + 20, all.right - 4, all.bottom - 4);
@@ -44,9 +46,9 @@ void ScopeView::draw (CDrawContext* ctx)
 
     // grid: the centre, half scale and the 0 dBFS lines
     ctx->setLineWidth (1.0);
-    ctx->setFrameColor (CColor (58, 58, 64));
+    ctx->setFrameColor (theme::kGridZero);
     ctx->drawLine (CPoint (plot.left, yOf (0.0)), CPoint (plot.right, yOf (0.0)));
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kGridMinor);
     for (double v : {-0.5, 0.5})
         ctx->drawLine (CPoint (plot.left, yOf (v)), CPoint (plot.right, yOf (v)));
     ctx->setFrameColor (kClipLine);
@@ -107,15 +109,17 @@ void ScopeView::draw (CDrawContext* ctx)
     };
     if (got > 0)
     {
-        channel (r, CColor (120, 170, 230, 60), CColor (120, 170, 230, 140));
-        channel (l, CColor (255, 164, 40, 80), theme::kAccent);
+        // the right channel dim (a copper trace over a faint dim-line body), the left bright (a text-coloured
+        // trace over a faint copper body): told apart by brightness, as the tooltip says
+        channel (r, theme::withAlpha (theme::kLineDim, 110), theme::withAlpha (theme::kCopper, 170));
+        channel (l, theme::withAlpha (theme::kCopper, 60), theme::withAlpha (theme::kText, 210));
     }
     else
         text (ctx, "no output yet", plot, theme::kTextDim, 10.0, kCenterText);
 
     // labels
     char buf[48];
-    text (ctx, title, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kTextBright, 10.0, kLeftText, true);
+    text (ctx, title, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kText, 10.0, kLeftText, true);
     const double ms = kSpanMs[spanIndex];
     std::snprintf (buf, sizeof (buf), ms >= 1000.0 ? "%.0f s" : "%.0f ms", ms >= 1000.0 ? ms / 1000.0 : ms);
     text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kTextDim, 9.5, kRightText);
@@ -125,7 +129,7 @@ void ScopeView::draw (CDrawContext* ctx)
             std::snprintf (buf, sizeof (buf), "peak -inf dBFS");
         else
             std::snprintf (buf, sizeof (buf), "peak %.1f dBFS", 20.0 * std::log10 (peak));
-        text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 60, all.top + 17), peak >= 0.999f ? kClipLine : theme::kTextDim,
+        text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 60, all.top + 17), peak >= 0.999f ? theme::kEnergyPeak : theme::kTextDim,
               9.5, kCenterText);
     }
     ctx->resetClipRect ();
