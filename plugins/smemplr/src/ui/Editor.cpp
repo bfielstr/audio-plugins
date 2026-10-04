@@ -342,6 +342,19 @@ void Editor::buildUI (CFrame* f)
     // loop's drags snap to and its step
     bind (root, new Toggle (CRect (836, 39, 874, 53), this, kGridOn, "Grid"));
     bind (root, new Choice (CRect (878, 39, 936, 53), this, kGridSize));
+    // ... and the view's own: zoom to the loop (or the flags) and back, and the waveform's height
+    auto* zoomButton = new ActionButton (CRect (946, 39, 990, 53), "Zoom", [this] {
+        if (waveform)
+            waveform->toggleZoomToSelection ();
+    },
+                                         [this] { return waveform && waveform->zoomedToSelection (); });
+    root->addView (titled (zoomButton, "Zoom to Selection", help::kZoomSelection));
+    auto* heightSlider = new WaveHeightSlider (CRect (996, 39, 1098, 53), waveform);
+    root->addView (titled (heightSlider, "Waveform Height", help::kWaveHeight));
+    waveform->onViewChanged = [zoomButton, heightSlider] {
+        zoomButton->invalid ();
+        heightSlider->invalid ();
+    };
 
     // ---- sample row -------------------------------------------------------------
     auto* sp = new Panel (CRect (8, 306, 1102, 404), "SAMPLE");

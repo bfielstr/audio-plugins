@@ -189,7 +189,8 @@ constexpr const char* kWaveform =
     "Waveform. Drag the flags to set the sample region. Classic: drag the bright markers for Start / Length, "
     "click the loop bar (lit while looping) to switch looping on or off, drag it to move the loop, drag its edges to resize. "
     "Slicing: double-click to add or remove a slice, drag to move, Alt-click to toggle manual/auto. Click the "
-    "waveform to audition. Scroll or drag the ruler to pan; Cmd/Alt + scroll or drag the ruler vertically to zoom. "
+    "waveform to audition. Scroll or drag the ruler to pan; Cmd + scroll or drag the ruler vertically to zoom; "
+    "double-click the ruler (or click Zoom) to zoom to the loop and back. Alt + scroll makes the waveform taller. "
     "Drop an audio file here to load it, from a file browser or straight from a DAW (a clip dragged out of REAPER or "
     "Live; a temporary file is copied to Documents/bfielstr/Samples first). Right-click for the sample menu.";
 constexpr const char* kEnvelope =
@@ -214,6 +215,12 @@ constexpr const char* kModList =
     "change it (Shift: fine), double-click it to turn it over; click x or right-click a row to remove it. A "
     "mapping onto an effect in the rack follows the effect when it moves, goes with it when it is removed, and "
     "pauses (dimmed) while another effect is in its slot. Up to 24 mappings, saved with the project.";
+constexpr const char* kZoomSelection =
+    "Zoom to selection: the waveform zooms to the loop (Classic with Loop on) or to the region between the flags. "
+    "Click again (or double-click the ruler) to see the whole sample.";
+constexpr const char* kWaveHeight =
+    "The waveform's height: makes quiet parts easier to see (the drawing only, the sound does not change). Drag "
+    "sideways or use the mouse wheel, Alt + scroll over the waveform, double-click to reset.";
 constexpr const char* kWarpAs = "Change the Warp As length: -/+ one beat, or halve / double it.";
 
 } // namespace smemplr::help

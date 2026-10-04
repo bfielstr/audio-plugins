@@ -45,8 +45,21 @@ public:
     {
         viewStart = 0.0;
         viewLen = 1.0;
+        setZoomedToSelection (false);
         invalid ();
     }
+    // Zoom to selection: the view zooms to the loop (Classic with Loop on) or to the flagged region
+    // (start flag .. end flag), with a little room each side; again, back to the whole sample. Any other
+    // zoom or scroll leaves it. A double-click on the ruler does the same.
+    void toggleZoomToSelection ();
+    bool zoomedToSelection () const { return zoomedSel; }
+    // The waveform's height: a vertical zoom of the drawing only (1 .. kMaxHeight; Alt + scroll, or the
+    // editor's Height slider). View state, not saved.
+    static constexpr double kMaxHeight = 16.0;
+    double waveHeight () const { return heightZoom; }
+    void setWaveHeight (double h);
+    // told when the zoom to selection or the height changes (the editor's buttons show them)
+    std::function<void ()> onViewChanged;
 
 private:
     // LoopRegion: inside the shaded loop (Loop on), above its bar: a drag moves the loop like the bar, a click
@@ -72,9 +85,13 @@ private:
     // length snaps (the loop's end dragged), the start stays where it is
     void setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart = false);
 
+    void setZoomedToSelection (bool z);
+
     Controller* controller;
     ParamHost* host;
     double viewStart = 0.0, viewLen = 1.0;
+    bool zoomedSel = false;
+    double heightZoom = 1.0;
     Handle drag = Handle::None;
     int dragSlice = -1;
     bool dragSliceManual = false;
@@ -95,6 +112,25 @@ private:
     pk::CachedLayer layer;
     void paint (VSTGUI::CDrawContext* ctx, bool playheads);
     VSTGUI::CRect playheadStrip (float pos) const;
+};
+
+// The waveform's Height (WaveformView::setWaveHeight): a small bar slider over the ruler, x1 .. x16 on a
+// log scale. Drag sideways (Shift: fine), the mouse wheel steps it, a double-click (or right-click) puts
+// it back to x1.
+class WaveHeightSlider : public VSTGUI::CView
+{
+public:
+    WaveHeightSlider (const VSTGUI::CRect& r, WaveformView* w) : CView (r), wave (w) {}
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+    void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
+    void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
+    void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
+
+private:
+    WaveformView* wave;
+    bool dragging = false;
+    double startX = 0.0, startValue = 0.0; // (startValue: log2 of the height)
 };
 
 } // namespace smemplr
