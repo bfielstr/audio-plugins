@@ -87,6 +87,14 @@ shows it.
 The cutoffs do not follow the notes: MIDI notes only trigger the Split envelope (route MIDI to the
 plug-in for that). para is also in smemplr's effects rack.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Filter*: Narrow Notch, Vocal Movement, Wide Scoop. Save your own with **Save
+As...** (a category and tags are optional), filter the menu by tag, and use **Save as Default** to
+make every new para start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Older projects
 
 - Projects saved with the three slopes of before (12 / 18 / 24 dB) keep their slope.

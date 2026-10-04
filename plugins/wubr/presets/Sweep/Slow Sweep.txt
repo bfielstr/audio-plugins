@@ -1,0 +1,5 @@
+# wubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, slow, pad
+comment: Band 1 sweeps slowly, free running; band 2 off.
+Band 1 Rate = 0.1 Hz
+Band 2 On = Off

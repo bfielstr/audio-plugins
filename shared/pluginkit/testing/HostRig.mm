@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+#include <unistd.h>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -25,6 +26,13 @@ int gFail = 0, gChecks = 0;
 void initHost ()
 {
     setvbuf (stdout, nullptr, _IONBF, 0);
+    // an empty preset folder of its own: a default saved on this computer (Save as Default) must not
+    // change what a new instance starts from in the tests
+    if (!std::getenv ("PK_PRESETS_DIR"))
+    {
+        const std::string dir = std::string (NSTemporaryDirectory ().UTF8String) + "pk-hosttest-presets-" + std::to_string ((long)getpid ());
+        setenv ("PK_PRESETS_DIR", dir.c_str (), 1);
+    }
     [NSApplication sharedApplication];
     auto* hostApp = new HostApplication ();
     PluginContextFactory::instance ().setPluginContext (hostApp);
@@ -333,6 +341,47 @@ int countNonAutomatable (IEditController* controller)
             ++n;
     }
     return n;
+}
+
+std::vector<std::string> presetMenu (IEditController* controller)
+{
+    std::vector<std::string> out;
+    FUnknownPtr<IConnectionPoint> cp (controller);
+    if (!cp)
+        return out;
+    // pk::presets::kMsgMenu: the controller answers on the message itself
+    auto msg = owned (new HostMessage ());
+    msg->setMessageID ("pk.preset.menu");
+    cp->notify (msg);
+    const void* data = nullptr;
+    uint32 size = 0;
+    if (msg->getAttributes ()->getBinary ("items", data, size) != kResultOk || !data)
+        return out;
+    std::string cur;
+    for (const char* p = (const char*)data; p < (const char*)data + size; ++p)
+        if (*p == '\n')
+        {
+            out.push_back (cur);
+            cur.clear ();
+        }
+        else
+            cur += *p;
+    return out;
+}
+
+void checkPresetMenu (IEditController* controller)
+{
+    const auto items = presetMenu (controller);
+    PK_CHECK (!items.empty () && items[0] == "Init", "the Presets menu starts with Init (%zu entries)", items.size ());
+    auto has = [&] (const char* t) { return std::find (items.begin (), items.end (), std::string (t)) != items.end (); };
+    for (const char* t : {"Save", "Save As...", "Rename...", "Edit Tags...", "Delete...", "Save as Default", "Load Default", "Reset Default",
+                          "Load Preset File...", "Tags/All"})
+        PK_CHECK (has (t), "the Presets menu has %s", t);
+    // at least one factory preset: an entry inside a category sub-menu other than Tags
+    bool factory = false;
+    for (const auto& i : items)
+        factory = factory || (i.find ('/') != std::string::npos && i.rfind ("Tags", 0) != 0);
+    PK_CHECK (factory, "the Presets menu lists factory presets");
 }
 
 } // namespace pk::testing

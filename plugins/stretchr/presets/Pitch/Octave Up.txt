@@ -1,0 +1,4 @@
+# stretchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pitch, octave
+comment: An octave up.
+Pitch = 12 st

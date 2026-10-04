@@ -5,7 +5,6 @@
 #include "public.sdk/source/vst/vstpresetfile.h"
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 
@@ -17,14 +16,6 @@ using namespace Steinberg::Vst;
 namespace fs = std::filesystem;
 
 namespace {
-const char* kExtension = ".vstpreset";
-
-std::string envOr (const char* name, const char* fallback)
-{
-    const char* v = std::getenv (name);
-    return v && *v ? v : fallback;
-}
-
 bool readAll (IBStream* s, TSize offset, TSize size, std::vector<char>& out)
 {
     out.assign ((size_t)std::max<TSize> (0, size), 0);
@@ -35,78 +26,16 @@ bool readAll (IBStream* s, TSize offset, TSize size, std::vector<char>& out)
     int32 got = 0;
     return s->read (out.data (), (int32)size, &got) == kResultOk && got == size;
 }
-} // namespace
 
-namespace {
-// <presets>/bfielstr: where the suite's preset folders are
-fs::path suiteFolder ()
+std::vector<FactoryFile>& factoryRegistry ()
 {
-    fs::path base;
-#if defined(_WIN32)
-    std::string home = envOr ("USERPROFILE", "");
-    if (home.empty ())
-        home = envOr ("HOMEDRIVE", "") + envOr ("HOMEPATH", "");
-    base = fs::path (home) / "Documents" / "VST3 Presets";
-#elif defined(__APPLE__)
-    base = fs::path (envOr ("HOME", "")) / "Library" / "Audio" / "Presets";
-#else
-    base = fs::path (envOr ("HOME", "")) / ".vst3" / "presets";
-#endif
-    return base / "bfielstr";
+    static std::vector<FactoryFile> files;
+    return files;
 }
 } // namespace
-
-std::string userFolder (const char* pluginName)
-{
-    const fs::path folder = suiteFolder () / pluginName;
-    std::error_code ec;
-    fs::create_directories (folder, ec);
-    return fs::is_directory (folder, ec) ? folder.string () : std::string ();
-}
-
-std::string userFolder (const char* pluginName, const char* formerName)
-{
-    if (!formerName || !*formerName)
-        return userFolder (pluginName);
-    std::error_code ec;
-    const fs::path base = suiteFolder ();
-    const bool fresh = !fs::exists (base / pluginName, ec);
-    const std::string folder = userFolder (pluginName);
-    if (fresh && !folder.empty () && fs::is_directory (base / formerName, ec))
-        fs::copy (base / formerName, folder, fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
-    return folder;
-}
-
-std::vector<Entry> list (const std::string& folder)
-{
-    std::vector<Entry> out;
-    std::error_code ec;
-    if (folder.empty () || !fs::is_directory (folder, ec))
-        return out;
-    for (const auto& e : fs::directory_iterator (folder, ec))
-    {
-        if (!e.is_regular_file (ec))
-            continue;
-        std::string ext = e.path ().extension ().string ();
-        std::transform (ext.begin (), ext.end (), ext.begin (), [] (unsigned char c) { return (char)std::tolower (c); });
-        if (ext == kExtension)
-            out.push_back ({e.path ().stem ().string (), e.path ().string ()});
-    }
-    std::sort (out.begin (), out.end (), [] (const Entry& a, const Entry& b) { return a.name < b.name; });
-    return out;
-}
-
-std::string nameOf (const std::string& path) { return fs::path (path).stem ().string (); }
-
-std::string withExtension (const std::string& path)
-{
-    std::string ext = fs::path (path).extension ().string ();
-    std::transform (ext.begin (), ext.end (), ext.begin (), [] (unsigned char c) { return (char)std::tolower (c); });
-    return ext == kExtension ? path : path + kExtension;
-}
 
 bool write (const std::string& path, const FUID& classId, const std::vector<char>& component,
-            const std::vector<char>& controller)
+            const std::vector<char>& controller, const Meta* meta)
 {
     IBStream* file = FileStream::open (path.c_str (), "wb");
     if (!file)
@@ -118,7 +47,9 @@ bool write (const std::string& path, const FUID& classId, const std::vector<char
         ctrl.write ((void*)controller.data (), (int32)controller.size (), nullptr);
     comp.seek (0, IBStream::kIBSeekSet, nullptr);
     ctrl.seek (0, IBStream::kIBSeekSet, nullptr);
-    const bool ok = PresetFile::savePreset (file, classId, &comp, controller.empty () ? nullptr : &ctrl);
+    const std::string xml = meta ? metaToXml (*meta) : std::string ();
+    const bool ok = PresetFile::savePreset (file, classId, &comp, controller.empty () ? nullptr : &ctrl,
+                                            meta ? xml.c_str () : nullptr, meta ? (int32)xml.size () : -1);
     file->release ();
     return ok;
 }
@@ -143,6 +74,63 @@ bool read (const std::string& path, const FUID& classId, std::vector<char>& comp
     }
     file->release ();
     return ok;
+}
+
+Meta readMeta (const std::string& path)
+{
+    Meta m;
+    std::string xml;
+    if (readMetaXml (path, xml))
+        metaFromXml (xml, m);
+    return m;
+}
+
+bool rewriteMeta (const std::string& path, const FUID& classId, const Meta& meta)
+{
+    std::vector<char> component, controller;
+    if (!read (path, classId, component, controller))
+        return false;
+    // a new file beside it, then over it: a failed write leaves the preset as it was
+    const std::string tmp = path + ".tmp";
+    if (!write (tmp, classId, component, controller, &meta))
+    {
+        std::error_code ec;
+        fs::remove (tmp, ec);
+        return false;
+    }
+    std::error_code ec;
+    fs::rename (tmp, path, ec);
+    if (ec)
+    {
+        fs::remove (tmp, ec);
+        return false;
+    }
+    return true;
+}
+
+bool registerFactory (const FactoryFile* files, int count)
+{
+    auto& reg = factoryRegistry ();
+    for (int i = 0; i < count; ++i)
+        reg.push_back (files[i]);
+    return true;
+}
+
+const std::vector<FactoryFile>& factoryFiles () { return factoryRegistry (); }
+
+bool applyDefault (AudioEffect& fx, const FUID& classId, const char* pluginName)
+{
+    if (!pluginName || !*pluginName)
+        return false;
+    const std::string path = defaultPresetPath (pluginName);
+    std::error_code ec;
+    if (path.empty () || !fs::is_regular_file (path, ec))
+        return false;
+    std::vector<char> component, controller;
+    if (!read (path, classId, component, controller) || component.empty ())
+        return false;
+    MemoryStream state (component.data (), (TSize)component.size ());
+    return fx.setState (&state) == kResultOk;
 }
 
 bool handleProcessorMessage (AudioEffect& fx, IMessage* message)

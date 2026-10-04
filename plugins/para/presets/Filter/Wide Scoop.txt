@@ -1,0 +1,5 @@
+# para factory preset (format: shared/pluginkit/PresetStore.h)
+tags: scoop, notch, bass
+comment: The filters far apart: the middle scooped out.
+High-Pass Frequency = 1 kHz
+Low-Pass Frequency = 150 Hz

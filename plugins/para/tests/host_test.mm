@@ -74,6 +74,7 @@ int main (int argc, char** argv)
         if (gFail)
             return finish ("para host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams + 1, "param count (+ hidden pitch bend)");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus");
 
         State st = baseState ();

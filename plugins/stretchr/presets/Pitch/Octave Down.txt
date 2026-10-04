@@ -1,0 +1,5 @@
+# stretchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pitch, octave, formants
+comment: An octave down with the formants kept.
+Pitch = -12 st
+Preserve Formants = On

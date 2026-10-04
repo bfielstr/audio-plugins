@@ -1,0 +1,5 @@
+# para factory preset (format: shared/pluginkit/PresetStore.h)
+tags: notch, subtle
+comment: The filters close together: a narrow notch.
+High-Pass Frequency = 500 Hz
+Low-Pass Frequency = 350 Hz

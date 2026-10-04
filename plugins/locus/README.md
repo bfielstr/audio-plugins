@@ -43,6 +43,13 @@ down to set Contrast, and double-click to reset Contrast.
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Low End*: Punchy, Thick. Save your own with **Save As...** (a category and tags
+are optional), filter the menu by tag, and use **Save as Default** to make every new locus start
+from the current settings. The menu is described in the [top-level README](../../README.md#presets).
+
 ## Latency
 
 About 87 ms (4096 samples at 48 kHz for the analysis, plus the saturator's 1.7 ms), reported to the

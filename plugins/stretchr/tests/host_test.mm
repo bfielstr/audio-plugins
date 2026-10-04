@@ -95,6 +95,7 @@ int main (int argc, char** argv)
             return finish ("stretchr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.start (), "start");
         // the only latency is the end-of-chain saturator's (constant, even when it is off)
         const size_t lat = rig.processor->getLatencySamples ();

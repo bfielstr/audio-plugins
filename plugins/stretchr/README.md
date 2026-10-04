@@ -116,6 +116,14 @@ envelope and stretch markers for changes over time.
 The bottom panel is the saturator every plug-in here can end with (off, Drive 0 dB). It adds 1.7 ms
 of latency, reported to the host, which keeps the clip aligned.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Pitch*: Octave Down, Octave Up; *Time*: Half Speed. Save your own with **Save
+As...** (a category and tags are optional), filter the menu by tag, and use **Save as Default** to
+make every new stretchr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Limits
 
 - Stereo in and out. Captures up to about 45 minutes at 48 kHz. The project stores the clip audio, so

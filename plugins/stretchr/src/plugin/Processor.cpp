@@ -40,6 +40,7 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
         return r;
     addAudioInput (STR16 ("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
+    pk::presets::applyDefault (*this, kProcessorUID, "Stretchr"); // Save as Default (a project's setState comes after)
     return kResultOk;
 }
 

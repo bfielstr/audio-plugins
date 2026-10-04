@@ -65,6 +65,7 @@ int main (int argc, char** argv)
             return finish ("locus host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");

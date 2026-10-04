@@ -128,6 +128,14 @@ Advanced off, every band starts cutting at -18 dB.
   a wide sound stays wide when you push the drive. (widr's end saturator always works this way.)
 - **Interface Size**, **Copy Settings** / **Paste Settings**.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Saturation*: Crunch, Soft Clip, Warmth. Save your own with **Save As...** (a
+category and tags are optional), filter the menu by tag, and use **Save as Default** to make every
+new smacheratr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 About 1.7 ms (83 samples at 48 kHz: the pre-limiter's 1 ms look-ahead plus the oversampling), the same

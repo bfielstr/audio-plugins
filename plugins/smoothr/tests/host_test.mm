@@ -71,6 +71,7 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (rig.component->getBusCount (kEvent, smoothr::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
         CHECK (latency > 0 && latency < 48000 / 20, "latency %u samples", (unsigned)latency);

@@ -1,0 +1,6 @@
+# smemplr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: drums, one-shot
+comment: Plays the whole sample once per note.
+Playback Mode = One-Shot
+Loop On = Off
+Voices = 4

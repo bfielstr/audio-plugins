@@ -108,6 +108,7 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         // the Sub and High bands have no On: a fresh instance has them at Range 0 (no cut)
         CHECK (plainOf (rig, kSubRange) == 0.0 && plainOf (rig, kHighRange) == 0.0, "Sub and High start at Range 0: %.1f / %.1f dB",
                plainOf (rig, kSubRange), plainOf (rig, kHighRange));

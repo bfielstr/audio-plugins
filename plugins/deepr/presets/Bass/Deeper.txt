@@ -1,0 +1,5 @@
+# deepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, deep
+comment: A stronger dip for a sub that has to lead.
+Depth = 9 dB
+Release = 200 ms

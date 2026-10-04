@@ -1,0 +1,6 @@
+# wubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: wobble, sync, triplet
+comment: Band 1 wobbles in eighth-note triplets; band 2 off.
+Band 1 Rate Mode = Sync
+Band 1 Sync Rate = 1/8T
+Band 2 On = Off

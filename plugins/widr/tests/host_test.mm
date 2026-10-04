@@ -93,6 +93,7 @@ int main (int argc, char** argv)
             return finish ("widr host test");
         CHECK (a.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (a.controller) == 0, "non-automatable parameters");
+        checkPresetMenu (a.controller); // Init first, Save as Default, factory presets
         CHECK (a.start () && b.start (), "start");
         const uint32 latency = a.processor->getLatencySamples ();
         CHECK (latency > 0 && latency < 200, "latency reported %u", latency);

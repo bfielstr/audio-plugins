@@ -101,6 +101,14 @@ dB under it at Smooth 50 %, against 14 to 15 dB for the plain limiter turned to 
 76 dB under at 100 %). The price: on dense material pushed hard smoothr is quieter than a plain limiter
 (a loud little mix pushed 9 dB in: 1.7 dB quieter at 50 %, the same at 100 %).
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Bus*: Bass Bus; *Master*: Gentle, Loud. Save your own with **Save As...** (a
+category and tags are optional), filter the menu by tag, and use **Save as Default** to make every
+new smoothr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 Constant, 1051 samples at 48 kHz (21.9 ms): the split 404, the lows' look-ahead 479, the highs' 71 and

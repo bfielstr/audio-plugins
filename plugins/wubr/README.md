@@ -52,3 +52,11 @@ down for its gain; drag its edges (or use the wheel, or Alt + drag the band side
 Both bands' shapes are shown too, band 1 above band 2.
 
 wubr is also in smemplr's effects rack.
+
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Sweep*: Slow Sweep; *Wobble*: Quarter Wobble, Triplet Wobble. Save your own with
+**Save As...** (a category and tags are optional), filter the menu by tag, and use **Save as
+Default** to make every new wubr start from the current settings. The menu is described in the
+[top-level README](../../README.md#presets).

@@ -1,0 +1,5 @@
+# levlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: warm, bass, saturation
+comment: Tape drive on the lowest band only.
+Band 1 Drive = 6 dB
+Band 1 Drive Type = Tape

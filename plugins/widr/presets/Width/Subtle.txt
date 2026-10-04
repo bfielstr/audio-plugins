@@ -1,0 +1,5 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: subtle, width
+comment: A little wider, almost no space.
+Width = 130 %
+Space = 5 %

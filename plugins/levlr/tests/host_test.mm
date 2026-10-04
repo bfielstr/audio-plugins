@@ -69,6 +69,7 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.start (), "start");
 
         // at the defaults (every band at 0 dB, saturator off) a tone keeps its level

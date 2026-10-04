@@ -1,0 +1,4 @@
+# smacheratr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: warm, subtle
+comment: A little drive into the pre-limiter.
+Drive = 6 dB

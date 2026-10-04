@@ -1,0 +1,7 @@
+# dropr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: drums, softer
+comment: Less input and makeup gain, a lighter drive and no negative ratio.
+Input = 18 dB
+Makeup = 36 dB
+Negative Ratio = Off
+Saturator Drive = 9 dB

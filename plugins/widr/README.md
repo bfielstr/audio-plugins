@@ -97,6 +97,14 @@ a vertical line) and a **CORRELATION** meter (+1 mono, 0 unrelated, below 0 it c
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). Here it
 saturates the mid and the side apart, so pushing it does not narrow the image.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Width*: Ambient Pad, Epic, Subtle. Save your own with **Save As...** (a category
+and tags are optional), filter the menu by tag, and use **Save as Default** to make every new widr
+start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 About 1.8 ms (85 samples at 48 kHz, the saturator's, the same whether it is on or off), reported to the

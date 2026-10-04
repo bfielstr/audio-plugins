@@ -1,0 +1,5 @@
+# smoothr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, bus, smooth
+comment: Smoother lows for a bass or low-end bus.
+Input = 4 dB
+Smooth = 80 %

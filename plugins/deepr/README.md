@@ -56,6 +56,14 @@ listener hears as a bass's weight is largely the sub against the low mids. Dippi
 while the sub plays makes the sub the loudest part of each note, without raising the track's level or
 driving the sub any harder. Between notes the low mids of everything else are left alone.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Bass*: Deeper, Reese, Subtle. Save your own with **Save As...** (a category and
+tags are optional), filter the menu by tag, and use **Save as Default** to make every new deepr
+start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 None of deepr's own: everything runs sample by sample (IIR filters and an envelope follower). The only

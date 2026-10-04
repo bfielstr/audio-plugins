@@ -78,6 +78,14 @@ bands are taps on it, so a new count crossfades between two sets of taps that ar
 driven band goes through its curve at 4x; the clean bands are delayed by the same amount, so the bands
 stay in time.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Tone*: Gritty Highs, Smile, Warm Lows. Save your own with **Save As...** (a
+category and tags are optional), filter the menu by tag, and use **Save as Default** to make every
+new levlr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 The drives' oversampling delays every band, driven or not, so the latency is the same whatever the

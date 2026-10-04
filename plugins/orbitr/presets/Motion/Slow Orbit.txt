@@ -1,0 +1,6 @@
+# orbitr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: slow, orbit, pad
+comment: Four orbs circling slowly.
+Pattern = Orbit
+Orbs = 4
+Speed = 4

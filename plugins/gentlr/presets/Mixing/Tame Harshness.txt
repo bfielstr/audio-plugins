@@ -1,0 +1,7 @@
+# gentlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: mix, harsh, upper mids
+comment: Only the upper-mid band: turns 3.5 kHz down when it gets sharp.
+Band 1 Range = 0 dB
+Band 2 Frequency = 3.5 kHz
+Band 2 Width = 1.5
+Band 2 Range = 6 dB

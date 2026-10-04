@@ -151,6 +151,14 @@ the Output gain. Off by default, Drive 0 dB.
 
 Every control is an automatable parameter.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Dynamics*: Gentle, OTT, OTT Light. Save your own with **Save As...** (a category
+and tags are optional), filter the menu by tag, and use **Save as Default** to make every new
+multidyn start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 Every band always runs through the 1 ms look-ahead, and the saturator's and Color's oversampling add

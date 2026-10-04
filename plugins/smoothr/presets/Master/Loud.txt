@@ -1,0 +1,5 @@
+# smoothr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: master, loud
+comment: More input, a higher ceiling.
+Input = 8 dB
+Ceiling = -0.3 dB

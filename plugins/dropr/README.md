@@ -127,6 +127,14 @@ from what is left, and so on. Each lower band goes through the all-passes of the
 so with no compression the bands add up to the input exactly in level (shifted in phase). A moved
 crossover glides there over about 20 ms.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Drums*: Less Crushed, Parallel Blend. Save your own with **Save As...** (a
+category and tags are optional), filter the menu by tag, and use **Save as Default** to make every
+new dropr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 Only the end saturator's (about 1.8 ms at 48 kHz, always in the path): the crossovers add none and

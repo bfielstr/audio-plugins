@@ -43,6 +43,7 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
         return r;
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
     addEventInput (STR16 ("Event In"), 1);
+    pk::presets::applyDefault (*this, kProcessorUID, "Smemplr"); // Save as Default (a project's setState comes after)
     return kResultOk;
 }
 

@@ -54,6 +54,7 @@ int main (int argc, char** argv)
         if (gFail)
             return finish ("wubr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus (the envelope's MIDI trigger)");
         CHECK (rig.start (), "start");
         // measured below: band 1 alone moving its gain, synced at 1/4 (the defaults sweep both bands' centres at 0 dB)

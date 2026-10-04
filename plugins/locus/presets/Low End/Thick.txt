@@ -1,0 +1,5 @@
+# locus factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, weight, sustain
+comment: An evened-out low end with more weight.
+Contrast = -40 %
+Mode = Smooth

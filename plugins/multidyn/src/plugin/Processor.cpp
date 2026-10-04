@@ -40,6 +40,7 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
     addAudioInput (STR16 ("Stereo In"), SpeakerArr::kStereo);
     addAudioInput (STR16 ("Sidechain"), SpeakerArr::kStereo, kAux, 0); // inactive until the host routes it
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
+    pk::presets::applyDefault (*this, kProcessorUID, "Multidyn"); // Save as Default (a project's setState comes after)
     return kResultOk;
 }
 

@@ -1,0 +1,4 @@
+# multidyn factory preset (format: shared/pluginkit/PresetStore.h)
+tags: ott, upward, subtle
+comment: The same squash blended in at a third.
+Amount = 35 %

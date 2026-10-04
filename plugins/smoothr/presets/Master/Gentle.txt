@@ -1,0 +1,5 @@
+# smoothr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: master, gentle
+comment: A couple of dB of limiting.
+Input = 2 dB
+Ceiling = -1 dB
