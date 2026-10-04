@@ -1,0 +1,10 @@
+# orbitr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: grains, cloud, pad
+comment: Ten orbs swarming slowly, each a cloud of long, scattered grains.
+Orbs = 10
+Speed = 6
+Grains = On
+Grain Size = 160 ms
+Grain Density = 3
+Grain Scatter = 60 %
+Mix = 70 %

@@ -22,6 +22,8 @@ void Engine::prepare (double sampleRate, int maxBlock)
     sr = sampleRate;
     for (uint32_t id = 0; id < kTailBase; ++id)
         applyMotion (id, p[id]);
+    for (uint32_t id = kGrains; id < kNumParams; ++id)
+        applyMotion (id, p[id]);
     motion.prepare (sr, maxBlock);
     dry.prepare (motion.latency ());
     tail.prepare (sr, maxBlock);
@@ -56,6 +58,11 @@ void Engine::applyMotion (uint32_t id, double v)
         case kRandom: motion.setRandomness (v); break;
         case kFloor: motion.setFloor (v >= 0.5); break;
         case kMix: motion.setMix (v); break;
+        case kGrains: motion.setGrains (v >= 0.5); break;
+        case kGrainSize: motion.setGrainSize (v); break;
+        case kGrainDensity: motion.setGrainDensity (v); break;
+        case kGrainScatter: motion.setGrainScatter (v); break;
+        case kGrainPitch: motion.setGrainPitch (v); break;
         default: break;
     }
 }
@@ -65,7 +72,9 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kTailExt4Base)
+    if (id >= kGrains)
+        applyMotion (id, plain);
+    else if (id >= kTailExt4Base)
         tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
     else if (id >= kTailExt3Base)
         tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
@@ -108,11 +117,13 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         constexpr auto rx = std::memory_order_relaxed;
         const int k = motion.orbs ();
         meters->orbs.store (k, rx);
+        meters->grains.store (motion.grainsOn (), rx);
         for (int i = 0; i < k; ++i)
         {
             const auto o = motion.orbPosition (i);
             meters->orbX[(size_t)i].store ((float)o.x, rx);
             meters->orbY[(size_t)i].store ((float)o.y, rx);
+            meters->orbGrain[(size_t)i].store (motion.grainLevel (i), rx);
         }
         meters->distance.store ((float)motion.currentDistance (), rx);
         meters->radius.store ((float)motion.currentRadius (), rx);

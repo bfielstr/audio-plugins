@@ -22,6 +22,17 @@
 //
 // Latency: the delays are taken relative to the centre (the delay of a source at the centre is
 // 10 ms): a fixed 10 ms, the effect's latency; the input in the mix is delayed as much.
+//
+// Grains (off by default; off, the orbs play the input as above, sample for sample as before Grains):
+// each orb plays a stream of grains instead of the input, and its own delay lines carry that stream,
+// so its Doppler, pan, level and floor reflection apply to the grains as to the input. A grain is
+// Grain Size long, Hann windowed, read from the recent input (up to 1.25 s back) at its own speed
+// (Grain Pitch: 2^(st / 12)). Orb k's slice of the input starts k / Orbs x 0.5 s back (the orbs
+// spread over the last half second), each grain Scatter x 0.5 s further back at random, and its
+// start in time jumps by up to Scatter / 2 of the gap between grains. An orb starts a grain every
+// Grain Size / Density samples (Density 2: each grain overlaps the next by half, and with no
+// Scatter and Pitch the windows sum to 1: the orb plays its slice untouched); its grains are scaled
+// by sqrt (2 / Density) above Density 2. Switching Grains crossfades over 30 ms.
 #pragma once
 
 #include "Dsp.h"
@@ -53,6 +64,15 @@ public:
     void setRandomness (double r);
     void setFloor (bool on) { floor = on; }
     void setMix (double m) { mix = (float)std::clamp (m, 0.0, 1.0); }
+    // Grains
+    static constexpr int kMaxGrains = 12;                                  // per orb (Density 8 needs 8, Scatter's jitter a few more)
+    static constexpr double kSliceSpan = 0.5, kScatterSpan = 0.5;          // s: the orbs' slices' spread, Scatter's reach
+    static constexpr double kMinGrainMs = 10.0, kMaxGrainMs = 500.0, kMaxDensity = 8.0, kMaxPitch = 12.0;
+    void setGrains (bool on) { grains = on; }
+    void setGrainSize (double ms) { grainMs = std::clamp (ms, kMinGrainMs, kMaxGrainMs); }
+    void setGrainDensity (double x) { density = std::clamp (x, 0.05, kMaxDensity); }
+    void setGrainScatter (double s) { scatter = std::clamp (s, 0.0, 1.0); }
+    void setGrainPitch (double st) { grainPitch = std::clamp (st, -kMaxPitch, kMaxPitch); }
 
     void process (float* l, float* r, int n);
 
@@ -65,6 +85,9 @@ public:
     Vec orbPosition (int k) const { return position (k, 0.0); }
     double currentDistance () const { return dSm; }
     double currentRadius () const { return rSm; }
+    bool grainsOn () const { return grainPath; }
+    // orb k's newest grain's window now (0 .. 1; 0 without Grains), for the display
+    float grainLevel (int k) const;
 
 private:
     struct Orb
@@ -84,6 +107,11 @@ private:
     Vec position (int k, double ago) const; // where orb k was `ago` seconds back
     void updateRates ();
     void retarget (); // the taps' targets for the next kStep samples
+    void processPlain (float* l, float* r, int n);  // the orbs play the input
+    void processGrains (float* l, float* r, int n); // the orbs play their grains (and while Grains fades in or out)
+    void startGrains ();                            // Grains switched on: the orbs' lines take over from the input's
+    void startGrain (int k);
+    float cloud (int k); // orb k's grains' next sample
     double sr = 48000.0;
     int baseDelay = 480, numOrbs = 6, pattern = kSwarm;
     double speed = 18.0, distance = 3.0, radius = 2.0, spread = 0.8, randomness = 0.6;
@@ -94,7 +122,33 @@ private:
     std::array<std::array<Tap, 4>, kMaxOrbs> taps {}; // left, right, left floor, right floor
     std::vector<float> buf; // the input, mono
     int mask = 0, writePos = 0, stepLeft = 0;
+    std::vector<float> hist; // the input again, on a longer line: what the grains read
+    int histMask = 0, histPos = 0;
     dsp::Delay dry;
+    // Grains
+    struct Grain
+    {
+        double back = 0.0;  // samples behind the write position
+        double phase = 0.0; // 0 .. 1 through the window
+        double phaseStep = 0.0;
+        double drift = 0.0; // 1 - the grain's speed: back's change per sample
+        float amp = 0.0f;
+        bool on = false;
+    };
+    struct GrainOrb
+    {
+        std::array<Grain, kMaxGrains> g {};
+        double wait = 0.0; // samples to its next grain
+        uint32_t rng = 1;
+        int newest = -1;
+    };
+    bool grains = false, grainPath = false;
+    double grainMs = 80.0, density = 2.0, scatter = 0.3, grainPitch = 0.0;
+    float gMix = 0.0f, gMixStep = 0.001f; // the grains against the input in the orbs' lines (the 30 ms crossfade)
+    int quiet = 0;                         // samples since the crossfade reached the input (Grains off)
+    double histMax = 0.0;                  // samples: the furthest back a grain may read
+    std::array<GrainOrb, kMaxOrbs> grainOrbs {};
+    std::vector<float> orbBuf; // each orb's line: kMaxOrbs x (mask + 1), what its taps read with Grains
 };
 
 } // namespace orbitr

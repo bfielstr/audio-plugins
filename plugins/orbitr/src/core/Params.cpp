@@ -31,7 +31,13 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
-        static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last");
+        // Grains: off by default (then the orbs play the input, as before them)
+        v.push_back (toggle (kGrains, "Grains", "Grains", false));
+        v.push_back (real (kGrainSize, "Grain Size", "Size", 10.0, 500.0, 80.0, Curve::Log, Disp::Ms));
+        v.push_back (real (kGrainDensity, "Grain Density", "Density", 0.1, 8.0, 2.0, Curve::Log, Disp::Number));
+        v.push_back (percent (kGrainScatter, "Grain Scatter", "Scatter", 0.3));
+        v.push_back (real (kGrainPitch, "Grain Pitch", "Pitch", -12.0, 12.0, 0.0, Curve::Linear, Disp::Semis));
+        static_assert (kNumParams == kGrainPitch + 1, "the grains' Pitch is the last");
         return v;
     }());
     return t;

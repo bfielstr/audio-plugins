@@ -41,11 +41,13 @@ void OrbView::idle ()
     orbs = std::clamp (m->orbs.load (std::memory_order_relaxed), 0, Motion::kMaxOrbs);
     distance = m->distance.load (std::memory_order_relaxed);
     radius = m->radius.load (std::memory_order_relaxed);
+    grains = m->grains.load (std::memory_order_relaxed);
     trailPos = (trailPos + 1) % kTrail;
     for (int k = 0; k < orbs; ++k)
     {
         x[k] = m->orbX[(size_t)k].load (std::memory_order_relaxed);
         y[k] = m->orbY[(size_t)k].load (std::memory_order_relaxed);
+        grain[k] = m->orbGrain[(size_t)k].load (std::memory_order_relaxed);
         tx[k][trailPos] = x[k];
         ty[k][trailPos] = y[k];
     }
@@ -119,11 +121,27 @@ void OrbView::draw (CDrawContext* ctx)
         }
         ctx->setLineWidth (1.0);
         ctx->setFillColor (kOrbColor);
-        ctx->drawEllipse (CRect (px (x[k]) - 4, py (y[k]) - 4, px (x[k]) + 4, py (y[k]) + 4), kDrawFilled);
+        const double ox = px (x[k]), oy = py (y[k]);
+        if (grains)
+        {
+            // a grain cloud: a faint ring, the orb swelling with its newest grain
+            const double g = 2.5 + 3.5 * std::clamp ((double)grain[k], 0.0, 1.0);
+            CColor rc = kOrbColor;
+            rc.alpha = 110;
+            ctx->setFrameColor (rc);
+            ctx->drawEllipse (CRect (ox - 7, oy - 7, ox + 7, oy + 7), kDrawStroked);
+            ctx->drawEllipse (CRect (ox - g, oy - g, ox + g, oy + g), kDrawFilled);
+        }
+        else
+            ctx->drawEllipse (CRect (ox - 4, oy - 4, ox + 4, oy + 4), kDrawFilled);
     }
-    char buf[96];
-    std::snprintf (buf, sizeof (buf), "ORBS FROM ABOVE  %d, %s, %.0f m/s", orbs, host->plainValue (kPattern) >= 0.5 ? "swarm" : "orbit",
-                   host->plainValue (kSpeed));
+    char buf[128];
+    if (grains)
+        std::snprintf (buf, sizeof (buf), "ORBS FROM ABOVE  %d, %s, %.0f m/s, grains of %.0f ms", orbs,
+                       host->plainValue (kPattern) >= 0.5 ? "swarm" : "orbit", host->plainValue (kSpeed), host->plainValue (kGrainSize));
+    else
+        std::snprintf (buf, sizeof (buf), "ORBS FROM ABOVE  %d, %s, %.0f m/s", orbs, host->plainValue (kPattern) >= 0.5 ? "swarm" : "orbit",
+                       host->plainValue (kSpeed));
     text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kCopperPale, 10.0, kLeftText, true);
     text (ctx, "you", CRect (cx + 12, ly - 6, cx + 60, ly + 8), theme::kTextDim, 9.0);
     ctx->resetClipRect ();
