@@ -2257,7 +2257,11 @@ TEST (playheads_spread_and_channels)
     // Spread 0: both playheads in the centre, the same in both channels (both regions together)
     {
         Out o = play (2, 0.0, -1, false);
-        CHECK (o.l == o.r && rms (o.l, 4800) > 0.2, "centred: the same both sides (%f)", rms (o.l, 4800));
+        // (to rounding: MSVC may compute the two channels' identical arithmetic in a different order)
+        double most = 0.0;
+        for (size_t i = 0; i < o.l.size (); ++i)
+            most = std::max (most, (double)std::fabs (o.l[i] - o.r[i]));
+        CHECK (most < 1e-6 && rms (o.l, 4800) > 0.2, "centred: the same both sides (%g apart, rms %f)", most, rms (o.l, 4800));
     }
     // the filter and the envelope are the voice's: a low-pass at 200 Hz takes the 1200 Hz playhead (right)
     // down far more than the 300 Hz one, and both end with the note's release
