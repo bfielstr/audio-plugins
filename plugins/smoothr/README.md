@@ -86,8 +86,8 @@ job smoothly). Off, it only delays the signal, so the latency never changes.
 
 ## The display
 
-The last five seconds, scrolling: the output (a dark body) and above it what the limiter took off its
-input (lighter), filled up from the bottom, and the gain reduction hanging from the top on the same dB scale: the lows' (orange)
-apart from the highs' (red). The dashed line is the ceiling. At the right: the input and output meters
-(the input turns red over the ceiling) with their peak holds, and the reduction now on the lows and
+The last five seconds, scrolling: the output (a copper body) and above it what the limiter took off its
+input (lighter), filled up from the bottom, and the gain reduction hanging from the top on the same dB scale: the lows' (cinnabar,
+solid) apart from the highs' (pale copper, dashed). The dashed line is the ceiling. At the right: the input and output meters
+(the input lights its peak colour over the ceiling) with their peak holds, and the reduction now on the lows and
 the highs; click them to clear the holds.

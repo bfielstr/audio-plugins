@@ -39,10 +39,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 
@@ -56,7 +54,7 @@ std::string hzText (double hz)
     return buf;
 }
 
-// A band's name in its colour and the range it covers now (from the crossovers as the engine uses them).
+// A band's name and the range it covers now (from the crossovers as the engine uses them).
 class BandHeader : public CView
 {
 public:
@@ -67,14 +65,10 @@ public:
     void draw (CDrawContext* ctx) override
     {
         const CRect r = getViewSize ();
-        if (auto p = owned (ctx->createGraphicsPath ()))
-        {
-            p->addRoundRect (r, 3.0);
-            ctx->setFillColor (LevelView::bandColor (band, 34));
-            ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-        }
-        ctx->setFillColor (LevelView::bandColor (band));
-        ctx->drawRect (CRect (r.left, r.top + 3, r.left + 3, r.bottom - 3), kDrawFilled);
+        // a header as linework: a ticked dim rule under it and a short copper tick at the left (no plate)
+        pk::draw::tickRule (ctx, r.left, r.right, r.bottom - 1, pk::theme::kLineDim, 8);
+        ctx->setFillColor (pk::theme::kCopper);
+        ctx->drawRect (CRect (r.left, r.top + 4, r.left + 2, r.bottom - 5), kDrawFilled);
         double set[kCrossovers], xo[kCrossovers];
         for (int k = 0; k < kCrossovers; ++k)
             set[k] = host->plainValue (xoverParam (k));

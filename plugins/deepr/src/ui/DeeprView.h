@@ -1,4 +1,4 @@
-// Deepr's display: the low end on a log axis (20 Hz - 2 kHz), the sub band shaded amber below Split,
+// Deepr's display: the low end on a log axis (20 Hz - 2 kHz), the sub band shaded copper below Split,
 // the dip's curve (dashed at full Depth, filled with the dip it is making now) and, at the right, the
 // sub's level with the Threshold and the range where the dip deepens.
 //   Split line, sideways                    Split

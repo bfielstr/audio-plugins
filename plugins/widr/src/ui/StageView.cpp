@@ -20,7 +20,10 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-const CColor kOther (150, 152, 158), kYield (110, 165, 255);
+// this instance's arc is lit (cinnabar, solid), the group's other members dashed copper with pale
+// copper labels; in the band strip the width kept is lit, what was given to the group a pale copper
+// outline above it
+const CColor kOther = theme::kCopper, kOtherLabel = theme::kCopperPale, kYield = theme::kCopperPale;
 const char* kRoleNames[kNumRoles] = {"Anchor", "Support", "Wide", "Ambient"};
 constexpr double kDeg = M_PI / 180.0;
 
@@ -75,7 +78,7 @@ void StageView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect f = field ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     const CPoint c = listener ();
@@ -95,25 +98,28 @@ void StageView::draw (CDrawContext* ctx)
             else
                 ring->addLine (pt);
         }
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMajor);
         ctx->drawGraphicsPath (ring, CDrawContext::kPathStroked);
     }
     const double rSpk = radiusFor (0.55);
     for (int side : {-1, 1})
     {
         const CPoint spk (c.x + side * rSpk * std::sin (30.0 * kDeg), c.y - rSpk * std::cos (30.0 * kDeg));
-        ctx->setFrameColor (CColor (58, 58, 64));
+        // the speakers drawn as outlines (a square cabinet with its cone), the listener a ring
+        ctx->setFrameColor (theme::kGridMajor);
         ctx->drawLine (c, spk);
-        ctx->setFillColor (CColor (70, 70, 76));
+        ctx->setFillColor (theme::kWell);
         ctx->drawRect (CRect (spk.x - 7, spk.y - 7, spk.x + 7, spk.y + 7), kDrawFilled);
-        ctx->setFillColor (theme::kWaveBg);
-        ctx->drawEllipse (CRect (spk.x - 4, spk.y - 4, spk.x + 4, spk.y + 4), kDrawFilled);
+        pk::draw::outline (ctx, CRect (std::round (spk.x) - 7, std::round (spk.y) - 7, std::round (spk.x) + 7, std::round (spk.y) + 7),
+                           theme::kCopper, 0);
+        ctx->setFrameColor (theme::kCopper);
+        ctx->drawEllipse (CRect (spk.x - 4, spk.y - 4, spk.x + 4, spk.y + 4), kDrawStroked);
     }
-    ctx->setFillColor (theme::kTextDim);
-    ctx->drawEllipse (CRect (c.x - 5, c.y - 5, c.x + 5, c.y + 5), kDrawFilled);
+    ctx->setFrameColor (theme::kTextDim);
+    ctx->drawEllipse (CRect (c.x - 5, c.y - 5, c.x + 5, c.y + 5), kDrawStroked);
 
     // the arcs: the others first, this one on top
-    auto arc = [&] (double width, double space, const CColor& col, double lineWidth) {
+    auto arc = [&] (double width, double space, const CColor& col, double lineWidth, bool dashed = false) {
         auto path = owned (ctx->createGraphicsPath ());
         const double a = angleFor (width), r = radiusFor (space);
         for (int i = 0; i <= 48; ++i)
@@ -127,7 +133,10 @@ void StageView::draw (CDrawContext* ctx)
         }
         ctx->setLineWidth (lineWidth);
         ctx->setFrameColor (col);
+        if (dashed)
+            ctx->setLineStyle (theme::kDashed);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+        ctx->setLineStyle (kLineSolid);
         const double t = a * kDeg;
         return CPoint (c.x + r * std::sin (t), c.y - r * std::cos (t));
     };
@@ -139,19 +148,13 @@ void StageView::draw (CDrawContext* ctx)
     for (const auto& m : shown)
         if (!m.self)
         {
-            const CPoint e = arc (m.width, m.space, CColor (kOther.red, kOther.green, kOther.blue, 170), 3.0);
-            text (ctx, label (m), CRect (e.x + 6, e.y - 8, e.x + 130, e.y + 6), kOther, 9.5, kLeftText);
+            const CPoint e = arc (m.width, m.space, kOther, 1.5, true);
+            text (ctx, label (m), CRect (e.x + 6, e.y - 8, e.x + 130, e.y + 6), kOtherLabel, 9.5, kLeftText);
         }
     const double w = host->plainValue (kWidth), sp = host->plainValue (kSpace);
-    const CColor glow (theme::kAccent.red, theme::kAccent.green, theme::kAccent.blue, 50);
-    arc (w, sp, glow, 12.0);
-    const CPoint e = arc (w, sp, theme::kAccent, 4.0);
+    const CPoint e = arc (w, sp, theme::kEnergyLive, 2.0);
     for (bool right : {false, true})
-    {
-        const CPoint h = arcEnd (right);
-        ctx->setFillColor (theme::kAccent);
-        ctx->drawEllipse (CRect (h.x - 5, h.y - 5, h.x + 5, h.y + 5), kDrawFilled);
-    }
+        pk::draw::handle (ctx, arcEnd (right), 5, drag != Drag::None);
     int number = 1;
     for (const auto& m : shown)
         if (m.self)
@@ -159,18 +162,18 @@ void StageView::draw (CDrawContext* ctx)
     Member me;
     me.number = number;
     me.role = (int)std::lround (host->plainValue (kRole));
-    text (ctx, label (me), CRect (e.x + 8, e.y - 8, e.x + 140, e.y + 6), theme::kAccent, 10.0, kLeftText, true);
+    text (ctx, label (me), CRect (e.x + 8, e.y - 8, e.x + 140, e.y + 6), theme::kText, 10.0, kLeftText, true);
 
     // what the numbers are
     char buf[96];
     std::snprintf (buf, sizeof (buf), "Width %s   Space %s", host->valueText (kWidth).c_str (), host->valueText (kSpace).c_str ());
-    text (ctx, buf, CRect (f.left + 8, f.top + 4, f.right - 8, f.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    text (ctx, buf, CRect (f.left + 8, f.top + 4, f.right - 8, f.top + 18), theme::kText, 10.5, kLeftText, true);
     text (ctx, "L", CRect (f.left + 8, c.y - 14, f.left + 20, c.y), theme::kTextDim, 9.5, kLeftText);
     text (ctx, "R", CRect (f.right - 20, c.y - 14, f.right - 8, c.y), theme::kTextDim, 9.5, kRightText);
 
-    // the band strip: gain on the generated side per band (blue: given way to the group)
+    // the band strip: gain on the generated side per band (outlined: given way to the group)
     const CRect s = strip ();
-    ctx->setFillColor (CColor (28, 28, 30));
+    ctx->setFillColor (theme::kPanel);
     ctx->drawRect (s, kDrawFilled);
     const double bw = s.getWidth () / kBands, barTop = s.top + 4.0, barBottom = s.bottom - 14.0;
     const double monoBelow = host->plainValue (kMonoBelow);
@@ -178,26 +181,29 @@ void StageView::draw (CDrawContext* ctx)
     {
         const double x0 = s.left + k * bw + 1.5, x1 = s.left + (k + 1) * bw - 1.5;
         const double hgt = barBottom - barTop;
-        ctx->setFillColor (theme::kControlBg);
+        ctx->setFillColor (theme::kLineDim); // the meter bed
         ctx->drawRect (CRect (x0, barTop, x1, barBottom), kDrawFilled);
         if (bandHighHz (k) <= monoBelow)
             continue; // mono below: nothing generated
         const float g = std::clamp (gains[(size_t)k], 0.0f, 1.0f), y = std::clamp (yields[(size_t)k], 0.0f, 1.0f);
-        ctx->setFillColor (theme::kAccent);
+        ctx->setFillColor (theme::kEnergyLive);
         ctx->drawRect (CRect (x0, barBottom - hgt * g, x1, barBottom), kDrawFilled);
         if (y < 0.98f)
         {
-            // what the group took: from the gain up to where it would be without yielding
+            // what the group took: from the gain up to where it would be without yielding, outlined
             const double top = std::min (1.0, (double)g / std::max (0.05f, y));
-            ctx->setFillColor (kYield);
-            ctx->drawRect (CRect (x0, barBottom - hgt * top, x1, barBottom - hgt * g), kDrawFilled);
+            const CRect yr (x0, barBottom - hgt * top, x1, barBottom - hgt * g);
+            ctx->setFillColor (theme::kWell);
+            ctx->drawRect (yr, kDrawFilled);
+            if (yr.getHeight () >= 2.0)
+                pk::draw::outline (ctx, yr, kYield, 0);
         }
     }
     const std::pair<int, const char*> ticks[] = {{0, "100"}, {9, "800"}, {18, "6.4k"}};
     for (const auto& [k, name] : ticks)
         text (ctx, name, CRect (s.left + k * bw + 2, s.bottom - 13, s.left + k * bw + 42, s.bottom - 1), theme::kTextDim, 9.0,
               kLeftText);
-    text (ctx, "bands: orange = width kept, blue = given to the group", CRect (f.right - 290, f.top + 4, f.right - 8, f.top + 18),
+    text (ctx, "bands: lit = width kept, outlined = given to the group", CRect (f.right - 290, f.top + 4, f.right - 8, f.top + 18),
           theme::kTextDim, 9.0, kRightText);
     if (shown.size () <= 1)
         text (ctx, "Alone: no other Widr in this group (instances in other processes cannot be seen)",

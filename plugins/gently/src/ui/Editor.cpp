@@ -37,10 +37,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (pk::theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (pk::theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 
@@ -54,7 +52,7 @@ std::string hzText (double hz)
     return buf;
 }
 
-// A band's name in its colour and the edges of its region now (the Sub and High bands: where they start to taper).
+// A band's name and the edges of its region now (the Sub and High bands: where they start to taper).
 class BandHeader : public CView
 {
 public:
@@ -66,18 +64,15 @@ public:
     {
         const CRect r = getViewSize ();
         const bool on = bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
-        if (auto p = owned (ctx->createGraphicsPath ()))
-        {
-            p->addRoundRect (r, 3.0);
-            ctx->setFillColor (GentlyView::bandColor (band, on ? 34 : 14));
-            ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-        }
-        ctx->setFillColor (GentlyView::bandColor (band, on ? 255 : 90));
-        ctx->drawRect (CRect (r.left, r.top + 3, r.left + 3, r.bottom - 3), kDrawFilled);
+        // a header as linework: a ticked dim rule under it, and a lamp at the left, lit while the band
+        // works (idle otherwise); the name in pale copper (text dim while it does not work)
+        pk::draw::tickRule (ctx, r.left, r.right, r.bottom - 1, pk::theme::kLineDim, 8);
+        ctx->setFillColor (on ? pk::theme::kEnergyLive : pk::theme::kEnergyIdle);
+        ctx->drawRect (CRect (r.left, r.top + 4, r.left + 2, r.bottom - 5), kDrawFilled);
         char name[16];
         std::snprintf (name, sizeof (name), band == kSub ? "SUB" : band == kHigh ? "HIGH" : "BAND %d", band + 1);
         ctx->setFont (pk::theme::font (10.5, true));
-        ctx->setFontColor (GentlyView::bandColor (band, on ? 255 : 130));
+        ctx->setFontColor (on ? pk::theme::kCopperPale : pk::theme::kTextDim);
         ctx->drawString (name, CRect (r.left + 9, r.top, r.right, r.bottom), kLeftText, true);
         ctx->setFont (pk::theme::font (9.5));
         ctx->setFontColor (on ? pk::theme::kText : pk::theme::kTextDim);

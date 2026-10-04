@@ -60,8 +60,8 @@ Notes:
 
 ## Editing
 
-The waveform is drawn on the output timeline (after stretching). Blue segments are slowed down,
-orange ones sped up; the speed of each segment is shown on top.
+The waveform is drawn on the output timeline (after stretching). Copper-tinted segments are slowed
+down, cinnabar-tinted ones sped up; the speed of each segment is shown on top.
 
 **Stretch mode**
 - Double-click to add a marker; double-click a marker to remove it.

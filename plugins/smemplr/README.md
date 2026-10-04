@@ -15,7 +15,7 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 | **Classic** mode: start/end flags, Start / Length, Loop on/off, loop Fade (constant-power or linear), Snap to zero crossings, Gain, Voices (1–32) with subtle voice stealing, Retrig | ✓ (Loop is on by default and begins at Start; **Length** is the loop's length and never shortens the sample, which plays to the end flag; what does not play is dimmed. **Fade**, off by default, crossfades the loop's end into its start and also fades the start in on the first pass) |
 | **One-Shot** mode: monophonic, Trigger / Gate, Fade In / Fade Out, Snap | ✓ |
 | **Slicing** mode: Slice by Transient (Sensitivity, ≤64) / Beat (Division) / Region / Manual; Mono / Poly / Thru playback; Trigger / Gate; fades per slice or to region end; slices mapped chromatically from C1 (MIDI 36) | ✓ |
-| Slice editing: double-click adds a slice (white) or removes one; drag to move; Alt-click toggles manual/auto | ✓ |
+| Slice editing: double-click adds a slice (a solid line; automatic ones are dashed) or removes one; drag to move; Alt-click toggles manual/auto | ✓ |
 | **Warp** in every mode, locked to host tempo: Beats (Preserve, Transient Loop Mode, Envelope), Tones (Grain Size), Texture (Grain Size, Flux), Re-Pitch, Complex, Complex Pro (Formants, Envelope); "Warp as" with ÷2 / ×2 | ✓ (own algorithms, see below) |
 | **Filter**: LP / HP / BP / Notch / Morph, 12/24 dB, circuits Clean / OSR / MS2 / SMP / PRD, Drive, Morph, Vel / Key / Env / LFO modulation, draggable response curve | ✓ |
 | **Envelopes**: Amp / Filter / Pitch ADSR with draggable displays; amp loop modes None / Trigger / Loop / Beat / Sync with Time / Rate | ✓ plus up to 6 extra breakpoints (double-click) and per-segment curves (Shift+drag), all automatable; the Filter and Pitch envelopes' **Loop Lock** (Classic, Loop on): **Restart** starts the envelope again at every pass of the loop, **Fit** also stretches its attack, breakpoints and decay to exactly one pass (at the speed the note plays); Off by default |
@@ -29,7 +29,7 @@ Steinberg VST3 SDK + VSTGUI. It's aimed at REAPER, and works in any VST3 host on
 effect as many times as you like. A new Smemplr starts with **smacheratr** in the first slot (on,
 with Smacheratr's own defaults: Drive 0 dB, Pre-Limit on); it is a slot like any other, so it can be
 moved, switched off or removed. **+** adds an effect at the end of the chain; the tabs show the chain
-left to right: click a tab to show that effect, **drag a tab sideways** to move the effect (an orange
+left to right: click a tab to show that effect, **drag a tab sideways** to move the effect (a cinnabar
 bar shows where it will land; the effects in between move over); **Ctrl-drag** (Cmd on macOS) puts a copy
 of it, with its settings, in the gap you let go on (the ones after it move up one); **Alt-click** a tab
 (Option-click) removes that effect. For the selected one, **On**, **Remove** (the ones after it move

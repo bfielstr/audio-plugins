@@ -28,11 +28,11 @@ void label (CDrawContext* ctx, const std::string& s, const CRect& r, const CColo
 
 void background (CDrawContext* ctx, const CRect& r)
 {
-    ctx->setFillColor (theme::kWaveBg);
+    // a display well in a dim hairline with copper corner brackets
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
-    ctx->setFrameColor (theme::kPanelEdge);
-    ctx->setLineWidth (1.0);
-    ctx->drawRect (r, kDrawStroked);
+    pk::draw::outline (ctx, r, theme::kLineDim, 0);
+    pk::draw::brackets (ctx, r, 4, theme::kCopper);
 }
 
 
@@ -71,12 +71,12 @@ void FilterDisplay::draw (CDrawContext* ctx)
         ctx->setLineWidth (1.0);
         for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
         {
-            ctx->setFrameColor (f == 100.0 || f == 1000.0 || f == 10000.0 ? CColor (60, 60, 64) : theme::kGrid);
+            ctx->setFrameColor (f == 100.0 || f == 1000.0 || f == 10000.0 ? theme::kGridMajor : theme::kGridMinor);
             ctx->drawLine (CPoint (xOf (f), a.top), CPoint (xOf (f), a.bottom));
         }
         for (double db : {12.0, 0.0, -12.0, -24.0, -36.0})
         {
-            ctx->setFrameColor (db == 0.0 ? CColor (70, 70, 76) : theme::kGrid);
+            ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
             ctx->drawLine (CPoint (a.left, yOf (db)), CPoint (a.right, yOf (db)));
         }
         FilterSettings fs;
@@ -98,7 +98,8 @@ void FilterDisplay::draw (CDrawContext* ctx)
             }
             path->addLine (CPoint (a.right, a.bottom));
             path->closeSubpath ();
-            ctx->setFillColor (on ? CColor (255, 164, 40, 45) : CColor (120, 120, 120, 30));
+            // the response: a faint copper body under a text-coloured trace (dim when the filter is off)
+            ctx->setFillColor (on ? theme::withAlpha (theme::kCopper, 40) : theme::withAlpha (theme::kLineDim, 70));
             ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
             auto line = owned (ctx->createGraphicsPath ());
             for (int i = 0; i <= n; ++i)
@@ -110,13 +111,13 @@ void FilterDisplay::draw (CDrawContext* ctx)
                 else
                     line->addLine (pt);
             }
-            ctx->setLineWidth (1.5);
-            ctx->setFrameColor (on ? theme::kCurve : theme::kTextDim);
+            ctx->setLineWidth (1.0);
+            ctx->setFrameColor (on ? theme::kText : theme::kTextDim);
             ctx->drawGraphicsPath (line, CDrawContext::kPathStroked);
         }
         const double cx = xOf (std::clamp ((double)fs.cutoff, 20.0, 20000.0));
         const double cy = yOf (filterResponseDb (fs, fs.cutoff));
-        ctx->setFillColor (on ? theme::kTextBright : theme::kTextDim);
+        ctx->setFillColor (on ? theme::kEnergyLive : theme::kTextDim); // the cutoff: a cinnabar marker
         ctx->drawEllipse (CRect (cx - 3.5, cy - 3.5, cx + 3.5, cy + 3.5), kDrawFilled);
         std::string info = host->valueText (kFilterFreq) + "   Res " + host->valueText (kFilterRes);
         if (!circuitSupported (fs.type, fs.circuit))
@@ -131,9 +132,10 @@ void FilterDisplay::draw (CDrawContext* ctx)
     {
         const CRect t = toggleRect (i);
         const bool sel = (i == 1) == showEnv;
-        ctx->setFillColor (sel ? theme::kKnobTrack : theme::kControlBg);
-        ctx->drawRect (t, kDrawFilled);
-        label (ctx, i == 0 ? "Freq" : "Env", t, sel ? theme::kTextBright : theme::kTextDim, 9.5, kCenterText);
+        // the page tabs: the shown one outlined in copper with its label in the text colour
+        if (sel)
+            pk::draw::outline (ctx, t, theme::kCopper);
+        label (ctx, i == 0 ? "Freq" : "Env", t, sel ? theme::kText : theme::kTextDim, 9.5, kCenterText);
     }
 }
 
@@ -276,7 +278,7 @@ void EnvelopeDisplay::drawAdsr (CDrawContext* ctx, const CRect& a, ParamHost* ho
 {
     const Geometry g = geometry (host, which, a);
     ctx->setLineWidth (1.0);
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kGridMinor);
     for (double v : {0.25, 0.5, 0.75})
     {
         const double yy = a.bottom - v * a.getHeight ();
@@ -296,12 +298,13 @@ void EnvelopeDisplay::drawAdsr (CDrawContext* ctx, const CRect& a, ParamHost* ho
             path->addLine (CPoint (p0.x + (p1.x - p0.x) * u, p0.y + (p1.y - p0.y) * envCurve (u, c)));
         }
     }
-    ctx->setLineWidth (1.5);
-    ctx->setFrameColor (dim ? theme::kTextDim : theme::kCurve);
+    // the envelope a text-coloured trace (text dim when it is not used)
+    ctx->setLineWidth (1.0);
+    ctx->setFrameColor (dim ? theme::kTextDim : theme::kText);
     ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
 
     // sustain section markers
-    ctx->setFrameColor (CColor (255, 255, 255, 40));
+    ctx->setFrameColor (theme::withAlpha (theme::kCopper, 110));
     for (int s = 1; s < g.count; ++s)
         if (g.pts[s].kind == kDecay || g.pts[s].kind == kHold)
             ctx->drawLine (CPoint (g.pts[s].p.x, a.top), CPoint (g.pts[s].p.x, a.bottom));
@@ -314,7 +317,8 @@ void EnvelopeDisplay::drawAdsr (CDrawContext* ctx, const CRect& a, ParamHost* ho
             continue;
         const CPoint p = g.pts[s].p;
         const double r = kind == kBreak ? 3.0 : 3.5;
-        ctx->setFillColor (dim ? theme::kTextDim : (kind == kBreak ? theme::kAccent : theme::kTextBright));
+        // the stage points in the text colour; the added break points cinnabar (squares)
+        ctx->setFillColor (dim ? theme::kTextDim : (kind == kBreak ? theme::kEnergyLive : theme::kText));
         if (kind == kBreak)
             ctx->drawRect (CRect (p.x - r, p.y - r, p.x + r, p.y + r), kDrawFilled);
         else
@@ -342,7 +346,7 @@ void EnvelopeDisplay::draw (CDrawContext* ctx)
         title += "  " + host->valueText (kPitchEnvAmt);
     label (ctx, title, CRect (r.left + 6, r.top + 3, r.right - 6, r.top + 16), theme::kTextDim, 10.0);
     if (!status.empty ())
-        label (ctx, status, CRect (r.left + 6, r.top + 3, r.right - 8, r.top + 16), theme::kAccent, 10.0, kRightText);
+        label (ctx, status, CRect (r.left + 6, r.top + 3, r.right - 8, r.top + 16), theme::kEnergyLive, 10.0, kRightText);
     if (dim)
         label (ctx, "One-Shot/Slicing use Fade In/Out instead", CRect (r.left, r.bottom - 18, r.right - 8, r.bottom - 4),
                theme::kTextDim, 10.0, kRightText);

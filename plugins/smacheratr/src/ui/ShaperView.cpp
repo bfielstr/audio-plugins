@@ -52,7 +52,7 @@ double ShaperView::yOf (double out) const
 void ShaperView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
@@ -60,11 +60,11 @@ void ShaperView::draw (CDrawContext* ctx)
     ctx->setLineWidth (1.0);
     for (double v : {-1.0, 0.0, 1.0})
     {
-        ctx->setFrameColor (v == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (v == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (xOf (v), all.top), CPoint (xOf (v), all.bottom));
         ctx->drawLine (CPoint (all.left, yOf (v)), CPoint (all.right, yOf (v)));
     }
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kGridMinor);
     ctx->drawLine (CPoint (xOf (-kRange), yOf (-kRange)), CPoint (xOf (kRange), yOf (kRange)));
 
     // the pre-limiter's ceiling as the drive sees it: nothing reaches past these lines
@@ -74,13 +74,16 @@ void ShaperView::draw (CDrawContext* ctx)
         const double ceil = std::pow (10.0, (host->plainValue (kPreLimitThreshold) + host->plainValue (kDrive)) / 20.0);
         if (ceil < kRange)
         {
-            ctx->setFillColor (CColor (90, 150, 255, 18));
+            // the region past the ceiling faintly shaded copper, the ceiling itself dashed pale copper
+            ctx->setFillColor (theme::withAlpha (theme::kCopper, 18));
             ctx->drawRect (CRect (all.left, all.top, xOf (-ceil), all.bottom), kDrawFilled);
             ctx->drawRect (CRect (xOf (ceil), all.top, all.right, all.bottom), kDrawFilled);
-            ctx->setFrameColor (CColor (110, 165, 255, 170));
+            ctx->setFrameColor (theme::kCopperPale);
+            ctx->setLineStyle (theme::kDashed);
             ctx->drawLine (CPoint (xOf (-ceil), all.top), CPoint (xOf (-ceil), all.bottom));
             ctx->drawLine (CPoint (xOf (ceil), all.top), CPoint (xOf (ceil), all.bottom));
-            text (ctx, "limit", CRect (xOf (ceil) + 3, all.bottom - 30, xOf (ceil) + 60, all.bottom - 18), CColor (110, 165, 255), 9.0,
+            ctx->setLineStyle (kLineSolid);
+            text (ctx, "limit", CRect (xOf (ceil) + 3, all.bottom - 30, xOf (ceil) + 60, all.bottom - 18), theme::kCopperPale, 9.0,
                   kLeftText);
         }
     }
@@ -89,7 +92,7 @@ void ShaperView::draw (CDrawContext* ctx)
     const double reach = std::min ((double)shownIn, kRange);
     if (reach > 0.005)
     {
-        ctx->setFillColor (CColor (255, 164, 40, 22));
+        ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 24)); // signal present: a faint cinnabar
         ctx->drawRect (CRect (xOf (-reach), all.top, xOf (reach), all.bottom), kDrawFilled);
     }
 
@@ -112,12 +115,13 @@ void ShaperView::draw (CDrawContext* ctx)
         ctx->setFrameColor (c);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     };
-    curve (-kRange, kRange, theme::kCurve, 1.6);
+    // the curve a thin copper line; the part the signal reaches lit in cinnabar
+    curve (-kRange, kRange, theme::kCopper, 1.0);
     if (reach > 0.005)
-        curve (-reach, reach, theme::kTextBright, 2.6);
+        curve (-reach, reach, theme::kEnergyLive, 2.0);
 
     // labels
-    text (ctx, "Analog", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    text (ctx, "Analog", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kText, 10.5, kLeftText, true);
     char buf[80];
     if (limiting)
         std::snprintf (buf, sizeof (buf), "Drive %s after Pre-Limit %s", host->valueText (kDrive).c_str (),
@@ -125,22 +129,23 @@ void ShaperView::draw (CDrawContext* ctx)
     else
         std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
-    // Gently at work: how far each band is turned down before the curve (band 2 in blue, under band 1)
+    // Gently at work: how far each band is turned down before the curve (band 2 under band 1, each
+    // named; the cut as a lit cinnabar bar on a dim track)
     int rowsShown = 0;
     for (int k = 0; k < kClarityBands; ++k)
     {
         if (!clarityBandOn (host->plainValue (kClarity), host->plainValue (kClarityRangeIds[k])))
             continue;
-        const CColor c = k == 0 ? CColor (120, 210, 140) : CColor (130, 170, 255);
+        const CColor c = theme::kCopperPale;
         const double range = std::max (1.0, host->plainValue (kClarityRangeIds[k]));
         const double cut = std::clamp (-(double)(k == 0 ? shownClarity : shownClarity2), 0.0, range);
         std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Gently" : "Gently 2", -cut);
         const double top = all.top + 4 + 24 * rowsShown++;
         text (ctx, buf, CRect (all.right - 130, top, all.right - 6, top + 14), c, 9.5, kRightText, true);
         const CRect bar (all.right - 86, top + 17, all.right - 6, top + 21);
-        ctx->setFillColor (CColor (255, 255, 255, 20));
+        ctx->setFillColor (theme::kLineDim);
         ctx->drawRect (bar, kDrawFilled);
-        ctx->setFillColor (c);
+        ctx->setFillColor (theme::kEnergyLive);
         ctx->drawRect (CRect (bar.right - bar.getWidth () * cut / range, bar.top, bar.right, bar.bottom), kDrawFilled);
     }
     if (shownIn > 1e-4f)

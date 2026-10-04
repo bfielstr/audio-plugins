@@ -59,38 +59,37 @@ void ThresholdSlider::draw (CDrawContext* ctx)
     const CRect r = getViewSize ();
     const CRect t = track ();
     const bool on = enabledLook;
-    ctx->setFillColor (theme::kWaveBg);
+    // a meter bed: a well in a thin outline (copper; cinnabar while dragged), the band's name on top
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
-    ctx->setFrameColor (dragging ? ColorView::bandColor (band, 200) : theme::kPanelEdge);
-    ctx->setLineWidth (1.0);
-    ctx->drawRect (r, kDrawStroked);
-    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? ColorView::bandColor (band) : theme::kTextDim,
+    pk::draw::outline (ctx, r, dragging ? theme::kEnergyLive : (on ? theme::kCopper : theme::kLineDim), 0);
+    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? theme::kCopperPale : theme::kTextDim,
           10.0, true);
 
-    // the level: dim below the threshold, bright above it (the part being cut)
+    // the level as a meter: energy idle below the threshold, lit live above it (the part being cut)
     const double thr = host->plainValue (param);
     const double yThr = yOfDb (thr), yLevel = yOfDb (shownDb);
     const CRect bar (t.left + 2, t.top, t.right - 2, t.bottom);
-    ctx->setFillColor (theme::kControlBg);
+    ctx->setFillColor (theme::kPanel);
     ctx->drawRect (bar, kDrawFilled);
     if (shownDb > host->table ().info (param).min)
     {
-        ctx->setFillColor (on ? ColorView::bandColor (band, 110) : CColor (90, 90, 90, 110));
+        ctx->setFillColor (on ? theme::kEnergyIdle : theme::kLineDim);
         ctx->drawRect (CRect (bar.left, std::max (yLevel, yThr), bar.right, bar.bottom), kDrawFilled);
         if (yLevel < yThr)
         {
-            ctx->setFillColor (on ? ColorView::bandColor (band) : theme::kTextDim);
+            ctx->setFillColor (on ? theme::kEnergyLive : theme::kEnergyIdle);
             ctx->drawRect (CRect (bar.left, yLevel, bar.right, yThr), kDrawFilled);
         }
     }
     // a tick every 12 dB
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kCopper);
     for (double db = -48.0; db < 0.0; db += 12.0)
         ctx->drawLine (CPoint (t.left, yOfDb (db)), CPoint (t.left + 3, yOfDb (db)));
 
     // the threshold: a line across and a handle on it
     ctx->setLineWidth (1.5);
-    ctx->setFrameColor (on ? theme::kTextBright : theme::kTextDim);
+    ctx->setFrameColor (dragging ? theme::kEnergyLive : (on ? theme::kText : theme::kTextDim));
     ctx->drawLine (CPoint (r.left + 1, yThr), CPoint (r.right - 1, yThr));
     ctx->setLineWidth (1.0);
     if (auto path = owned (ctx->createGraphicsPath ()))
@@ -99,12 +98,12 @@ void ThresholdSlider::draw (CDrawContext* ctx)
         path->addLine (CPoint (r.right - 7, yThr));
         path->addLine (CPoint (r.right - 1, yThr + 4));
         path->closeSubpath ();
-        ctx->setFillColor (on ? theme::kTextBright : theme::kTextDim);
+        ctx->setFillColor (dragging ? theme::kEnergyLive : (on ? theme::kText : theme::kTextDim));
         ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
     }
     char buf[16];
     std::snprintf (buf, sizeof (buf), "%.0f", thr);
-    text (ctx, buf, CRect (r.left, r.bottom - 15, r.right, r.bottom - 1), dragging ? theme::kAccent : (on ? theme::kText : theme::kTextDim),
+    text (ctx, buf, CRect (r.left, r.bottom - 15, r.right, r.bottom - 1), dragging ? theme::kEnergyLive : (on ? theme::kText : theme::kTextDim),
           9.5);
 }
 

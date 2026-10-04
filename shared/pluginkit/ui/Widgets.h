@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/ccolor.h"
 #include "vstgui/lib/cview.h"
@@ -12,7 +13,39 @@
 #include <string>
 #include <vector>
 
+namespace VSTGUI {
+class CDrawContext;
+}
+
 namespace pk {
+
+// The theme's shared drawing (docs/THEME.md): thin 1 px copper linework, outlines instead of fills, one
+// energy colour for what is lit. Plug-in views use these so their own buttons and frames match the kit's.
+namespace draw {
+// A 1 px outline of `r` on the pixel grid, with a small corner radius (0: square).
+void outline (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const VSTGUI::CColor& c, double radius = 2.0);
+// Corner brackets: an L of `len` px at each corner of `r`.
+void brackets (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, double len, const VSTGUI::CColor& c);
+// A horizontal hairline from x0 to x1 with 3 px ticks every `step` px (a section divider).
+void tickRule (VSTGUI::CDrawContext* ctx, double x0, double x1, double y, const VSTGUI::CColor& c, double step = 8.0);
+// A button's lamp: a short 2 px bar above the bottom edge of `r`.
+void marker (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const VSTGUI::CColor& c);
+struct ButtonState
+{
+    bool lit = false;     // on / selected: the lamp lights, the label turns text colour and bold
+    bool lamp = true;     // draw the lamp (off: a plain push button)
+    bool pressed = false; // held or dragged: a cinnabar outline
+    bool enabled = true;
+};
+// An outlined button with a centred label (Toggle, ActionButton and the plug-ins' own tabs).
+void button (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const std::string& label, ButtonState s);
+// A drag handle in a display: a well-filled ring of radius `r`, pale copper; held or selected
+// (`active`) it lights cinnabar with a centre dot. Its element off (`enabled` false): plain copper.
+void handle (VSTGUI::CDrawContext* ctx, const VSTGUI::CPoint& c, double r, bool active, bool enabled = true);
+// The editor window's background: ground, a well header band of `headerHeight` over a ticked divider,
+// and a thin copper frame with corner brackets.
+void window (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, double headerHeight = 34.0);
+} // namespace draw
 
 struct ParamHost
 {
@@ -150,7 +183,7 @@ private:
 class NumberBox : public ParamView
 {
 public:
-    NumberBox (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, VSTGUI::CColor color = VSTGUI::CColor (240, 240, 240));
+    NumberBox (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, VSTGUI::CColor color = theme::kText);
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;

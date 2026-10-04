@@ -1,4 +1,5 @@
-// Low-end spectrum: input (grey), output (orange) and the gain applied per band (bottom strip),
+// Low-end spectrum: input (a faint copper body), output (a text-coloured line) and the gain applied
+// per band (bottom strip, cinnabar),
 // with the focus range shaded.
 //   drag a range edge             move Low / High
 //   drag inside the range         left/right moves the whole range, up/down sets Contrast

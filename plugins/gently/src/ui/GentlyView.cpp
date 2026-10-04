@@ -22,7 +22,10 @@ namespace theme = pk::theme;
 using smacheratr::ClarityBand;
 
 namespace {
-const CColor kSpecFill (205, 208, 216, 30), kSpecLine (215, 218, 226, 80), kSpecIn (215, 218, 226, 60), kCurve (238, 238, 244);
+// the output spectrum a faint copper body with a copper trace, the input a dashed text-dim trace, the
+// whole response a text-coloured line; the cuts being made now are the lit part (cinnabar)
+const CColor kSpecFill = theme::withAlpha (theme::kCopper, 34), kSpecLine = theme::withAlpha (theme::kCopper, 170),
+             kSpecIn = theme::withAlpha (theme::kTextDim, 130), kCurve = theme::kText;
 constexpr double kHandleRadius = 5.0, kEdgeGrab = 4.0;
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
@@ -297,7 +300,7 @@ void GentlyView::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     const double top = plotTop (), bot = plotBottom ();
     const double sr = sampleRate ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
@@ -324,7 +327,7 @@ void GentlyView::draw (CDrawContext* ctx)
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), top), CPoint (xOfHz (f), bot));
         char b[16];
         std::snprintf (b, sizeof (b), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -332,7 +335,7 @@ void GentlyView::draw (CDrawContext* ctx)
     }
     for (double db : {0.0, -6.0, -12.0, -18.0, -24.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (70, 70, 76) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
         char b[8];
         std::snprintf (b, sizeof (b), "%.0f", db);
@@ -427,25 +430,26 @@ void GentlyView::draw (CDrawContext* ctx)
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (bandColor (k, 120));
-            ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
+            ctx->setLineStyle (theme::kDashed);
             ctx->drawGraphicsPath (rp, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }
         if (shownCut[k] < -0.05f)
             if (auto lp = gainPath ([&] (double hz) { return toDb (bandGain (b, hz, sr, shownCut[k])); }, true))
             {
-                ctx->setFillColor (bandColor (k, 90));
+                // the cut it makes now: the lit part of the display
+                ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 70));
                 ctx->drawGraphicsPath (lp, CDrawContext::kPathFilled);
-                ctx->setLineWidth (1.8);
-                ctx->setFrameColor (bandColor (k));
+                ctx->setLineWidth (1.0);
+                ctx->setFrameColor (theme::kEnergyLive);
                 ctx->drawGraphicsPath (lp, CDrawContext::kPathStroked);
             }
         // (Sub, High: no edges to drag; their regions run to the ends of the display)
         if (!hasWidth (k))
             continue;
         const bool edgeHot = dragBand == k && (drag == Drag::Low || drag == Drag::High || drag == Drag::Width);
-        ctx->setLineWidth (edgeHot ? 2.0 : 1.0);
-        ctx->setFrameColor (bandColor (k, edgeHot ? 220 : 100));
+        ctx->setLineWidth (edgeHot ? 1.5 : 1.0);
+        ctx->setFrameColor (edgeHot ? theme::kEnergyLive : bandColor (k, 100));
         for (double x : {xOfHz (b.lowHz), xOfHz (b.highHz)})
             ctx->drawLine (CPoint (x, edgeTop), CPoint (x, bot));
     }
@@ -461,7 +465,7 @@ void GentlyView::draw (CDrawContext* ctx)
             },
             false))
     {
-        ctx->setLineWidth (1.6);
+        ctx->setLineWidth (1.0);
         ctx->setFrameColor (kCurve);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
@@ -472,12 +476,7 @@ void GentlyView::draw (CDrawContext* ctx)
         const CPoint h = handle (k);
         const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k);
         const double rad = kHandleRadius + (on[k] ? 1.0 : 0.0);
-        const CRect hr (h.x - rad, h.y - rad, h.x + rad, h.y + rad);
-        ctx->setFillColor (on[k] ? bandColor (k) : bandColor (k, 70));
-        ctx->drawEllipse (hr, kDrawFilled);
-        ctx->setLineWidth (hot ? 2.0 : 1.5);
-        ctx->setFrameColor (on[k] ? theme::kTextBright : bandColor (k, 150));
-        ctx->drawEllipse (hr, kDrawStroked);
+        pk::draw::handle (ctx, h, rad, hot, on[k]);
     }
 
     // the readouts: the band's name, its frequency and its cut now (a click switches the band)
@@ -492,12 +491,12 @@ void GentlyView::draw (CDrawContext* ctx)
             std::snprintf (s, sizeof (s), "%s   %s   %.1f dB", name, host->valueText (freqParam (k)).c_str (), (double)shownCut[k]);
         else
             std::snprintf (s, sizeof (s), "%s   %s   %s", name, host->valueText (freqParam (k)).c_str (), enabled ? "no range" : "off");
-        ctx->setFillColor (k == 0 ? CColor (20, 36, 26, 225) : k == 1 ? CColor (22, 28, 44, 225) : k == kSub ? CColor (44, 32, 16, 225) : CColor (44, 20, 32, 225));
+        // the band's name tells it apart (one theme colour for all bands): a well behind the text, a
+        // copper outline (dim line while the band does not work)
+        ctx->setFillColor (theme::withAlpha (theme::kWell, 225));
         ctx->drawRect (p, kDrawFilled);
-        ctx->setFrameColor (bandColor (k, on[k] ? 170 : 80));
-        ctx->setLineWidth (1.0);
-        ctx->drawRect (p, kDrawStroked);
-        text (ctx, s, p, on[k] ? bandColor (k) : bandColor (k, 130), 9.5, kCenterText, true);
+        pk::draw::outline (ctx, p, on[k] ? theme::kCopper : theme::kLineDim, 0);
+        text (ctx, s, p, on[k] ? theme::kCopperPale : theme::kTextDim, 9.5, kCenterText, true);
     }
     ctx->setLineWidth (1.0);
     ctx->resetClipRect ();

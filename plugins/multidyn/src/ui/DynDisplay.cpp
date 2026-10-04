@@ -27,16 +27,17 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->drawString (s.c_str (), r, a, true);
 }
 
-// Orange when the block is made louder, blue when quieter. Above: ratio > 1 is quieter
-// (compression); Below: ratio > 1 is louder (upward compression).
+// A block made louder is shaded cinnabar (it adds energy), one made quieter copper; deeper the stronger
+// the ratio. Above: ratio > 1 is quieter (compression); Below: ratio > 1 is louder (upward compression).
+// At 1:1 (no processing) a barely-there copper shade.
 CColor blockColor (double ratio, bool below, bool dim)
 {
     if (std::fabs (ratio - 1.0) < 1e-3)
-        return CColor (255, 255, 255, (uint8_t)(dim ? 8 : 16));
+        return theme::withAlpha (theme::kCopper, (uint8_t)(dim ? 8 : 14));
     const double amount = std::clamp (std::fabs (std::log2 (ratio)) / 3.0, 0.15, 1.0);
-    const uint8_t alpha = (uint8_t)(dim ? 25 : 40 + 110 * amount);
+    const uint8_t alpha = (uint8_t)(dim ? 22 : 30 + 90 * amount);
     const bool louder = below ? ratio > 1.0 : ratio < 1.0;
-    return louder ? CColor (255, 150, 40, alpha) : CColor (70, 130, 235, alpha);
+    return theme::withAlpha (louder ? theme::kEnergyLive : theme::kCopper, alpha);
 }
 
 std::string gainText (double db)
@@ -110,7 +111,7 @@ void DynDisplay::draw (CDrawContext* ctx)
     text (ctx, "Above", CRect (gr + 4, all.top, gr + 76, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
     text (ctx, "Att/Rel", CRect (gr + 84, all.top, all.right - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
     ctx->setLineWidth (1.0);
-    ctx->setFrameColor (theme::kPanelEdge);
+    ctx->setFrameColor (theme::kLineDim);
     ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
 
     const int n = bands ();
@@ -120,7 +121,7 @@ void DynDisplay::draw (CDrawContext* ctx)
         const int b = k < n ? k : kSubBand;
         const LaneIds ids = laneIds (b);
         const CRect lane = laneRect (b), g = graphRect (b);
-        ctx->setFillColor (theme::kWaveBg);
+        ctx->setFillColor (theme::kWell);
         ctx->drawRect (g, kDrawFilled);
         const bool active = host->plainValue (ids.active) >= 0.5;
         const bool dim = !active;
@@ -132,7 +133,7 @@ void DynDisplay::draw (CDrawContext* ctx)
 
         // grid
         ctx->setLineWidth (1.0);
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMinor);
         for (double db = -70.0; db <= -10.0; db += 10.0)
             ctx->drawLine (CPoint (xOf (db), g.top), CPoint (xOf (db), g.bottom));
 
@@ -141,8 +142,9 @@ void DynDisplay::draw (CDrawContext* ctx)
         ctx->drawRect (CRect (g.left, g.top, xb, g.bottom), kDrawFilled);
         ctx->setFillColor (blockColor (ra, false, dim));
         ctx->drawRect (CRect (xa, g.top, g.right, g.bottom), kDrawFilled);
-        ctx->setLineWidth (2.0);
-        ctx->setFrameColor (dim ? theme::kTextDim : theme::kTextBright);
+        // the thresholds: pale copper lines (copper when the band is bypassed)
+        ctx->setLineWidth (1.5);
+        ctx->setFrameColor (dim ? theme::kCopper : theme::kCopperPale);
         if (!ids.sub)
             ctx->drawLine (CPoint (xb, g.top), CPoint (xb, g.bottom));
         ctx->drawLine (CPoint (xa, g.top), CPoint (xa, g.bottom));
@@ -153,9 +155,10 @@ void DynDisplay::draw (CDrawContext* ctx)
             const double top = g.top + 6, bottom = g.bottom - 16;
             const double mh = std::max (4.0, (bottom - top) * 0.5);
             const double my = (top + bottom) / 2 - mh / 2 + 2;
-            ctx->setFillColor (dim ? theme::kKnobTrack : theme::kAccent);
+            // the output lit (energy live; energy idle when bypassed), the input a thin text-coloured bar
+            ctx->setFillColor (dim ? theme::kEnergyIdle : theme::kEnergyLive);
             ctx->drawRect (CRect (g.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
-            ctx->setFillColor (CColor (240, 240, 240, dim ? 90 : 220));
+            ctx->setFillColor (theme::withAlpha (theme::kText, dim ? 90 : 210));
             ctx->drawRect (CRect (g.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
         }
 

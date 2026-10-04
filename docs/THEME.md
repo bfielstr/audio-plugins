@@ -1,7 +1,7 @@
 # Visual theme: aged copper + cinnabar
 
 Design context for the plugin suite's UI, shared with the portfolio site so both read as one world.
-This is a reference only: no plugin code follows it yet.
+The plugins follow it (see Status at the end); `shared/pluginkit/ui/Theme.h` holds the values.
 
 ## The idea in one paragraph
 
@@ -100,7 +100,7 @@ Safety limits (photosensitivity):
 ## Values for code
 
 As `VSTGUI::CColor (r, g, b)`, with the constant in `shared/pluginkit/ui/Theme.h` each would replace.
-The mapping is a suggestion: nothing in the plugin code has been changed.
+This is the mapping `Theme.h` now uses: the old names remain as aliases of the role constants.
 
 ```text
 role          hex       CColor             Theme.h constant(s)
@@ -119,8 +119,8 @@ energy-peak   #ffb08a   (255, 176, 138)    kPlayhead, clip / overload
 
 Notes for this codebase:
 
-- `Theme.h` currently uses several hues (orange accent, blue auto-slices, green loop, yellow playhead). This
-  theme has one energy colour, so those distinctions need another carrier: line style (solid / dashed),
+- `Theme.h` used several hues (orange accent, blue auto-slices, green loop, yellow playhead). This
+  theme has one energy colour, so those distinctions now have another carrier: line style (solid / dashed),
   position, a small glyph or label, or idle / live / peak brightness.
 - `theme::font()` uses the platform UI face. Archivo and JetBrains Mono would have to be bundled and
   registered with VSTGUI to match the type described above; until then, keep the platform face and apply
@@ -132,3 +132,28 @@ Notes for this codebase:
 Copied from the portfolio repo (`docs/THEME.md` there). The portfolio is mid-way through adopting this
 palette; its `src/theme/palette.ts` is the intended single source of truth. If the panel, pale-copper or
 dim-text values there differ slightly from this file after contrast checks, that file wins.
+
+All the plugins now follow this theme (October 2026):
+
+- `shared/pluginkit/ui/Theme.h` has a constant for every role (`kGround`, `kPanel`, `kWell`, `kLineDim`,
+  `kCopper`, `kCopperPale`, `kText`, `kTextDim`, `kEnergyIdle`, `kEnergyLive`, `kEnergyPeak`), three grid
+  weights (`kGridMinor`, `kGridMajor`, `kGridZero`), the suite's dashed line style (`kDashed`) and
+  `withAlpha`. The old names are kept as aliases, mapped as in the table above.
+- The shared controls are linework: knobs are a copper tick scale and body circle with a cinnabar value
+  arc on a dim track; toggles, buttons and tabs are copper outlines with a lamp (energy idle off,
+  energy live on); value boxes sit in a copper bracket with their units dim; panels are hairline frames
+  with copper corner brackets and a ticked title rule; the editor window has a copper frame with nested
+  corner brackets over a ticked header divider. Display handles are rings that light cinnabar while held.
+- In the displays, distinctions that used hue are carried by line style (solid / dashed, and for
+  Smemplr's four LFOs solid / dashed / dotted / dash-dot), brightness (copper / pale copper / text,
+  idle / live / peak), position and labels. Cuts and gain reduction being made, meters, the loop
+  region, orbs and modulation are the lit parts; clipping and overload use the peak colour.
+
+Not done yet:
+
+- Bundling Archivo and JetBrains Mono (the platform face is still used; panel titles are uppercase, but
+  VSTGUI has no letter spacing, so labels are not tracked).
+- The procedural glyphs.
+- All motion: power-on stutter, pulses along lines, hover and focus pulses. Nothing animates beyond what
+  the meters and displays already did, so the photosensitivity limits are met trivially.
+- Keyboard focus rings: the custom controls take no keyboard focus yet, so there is nothing to outline.

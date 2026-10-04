@@ -1,9 +1,9 @@
 // The stage, seen from above: the listener at the bottom, the speakers at +-30 degrees, and every
 // Widr of the group as an arc whose angle is its width and whose distance is its depth (Space):
-// this one in orange, the others in grey ("Widr 2 · Wide"). Beyond 100 % the arc passes the
-// speakers. Under it, this instance's gain per band after the Mono Guard and the group (blue where
+// this one lit in cinnabar, the others dashed copper ("Widr 2 · Wide"). Beyond 100 % the arc passes the
+// speakers. Under it, this instance's gain per band after the Mono Guard and the group (outlined where
 // it gives way to the others), dim below Mono Below.
-//   drag an end of the orange arc   Width
+//   drag an end of the lit arc      Width
 //   drag up / down elsewhere        Space
 //   double-click                    reset Width and Space
 //   Shift                           fine

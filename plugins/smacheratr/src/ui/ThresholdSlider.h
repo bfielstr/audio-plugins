@@ -1,7 +1,7 @@
 // Gently's Threshold for one band (Advanced mode) as a vertical slider, with the band's level next to
 // it: the level Gently measures in the band (its peak level going into the curve) rises from the
-// bottom in the band's colour, brighter where it is over the threshold (there the band is being cut);
-// the threshold is the white line with the handle.
+// bottom as a meter, energy idle below the threshold and lit cinnabar over it (there the band is being
+// cut); the threshold is the text-coloured line with the handle.
 //   drag up / down              the Threshold (Shift: fine)
 //   double-click or right-click reset it (-18 dB: where Gently starts without Advanced)
 //   mouse wheel                 step it

@@ -5,10 +5,10 @@
 //   left handle, up / down        Amt Lo
 //   right handle, up / down       Amt Hi
 //   right handle, sideways        Freq
-//   Gently handle, sideways       a Gently band's frequency (band 2 is drawn blue)
+//   Gently handle, sideways       a Gently band's frequency (each band named in its readout)
 //   Gently handle, up / down      its Range: the handle sits at the most it cuts, drag down for more
-//   Sub handle (amber; at 0 dB while its Range is 0): sideways its Freq (20 - 100 Hz), down its Range; no width
-//   High handle (rose; at 0 dB while its Range is 0): sideways its Freq (2 - 16 kHz), down its Range; no width
+//   Sub handle (at 0 dB while its Range is 0): sideways its Freq (20 - 100 Hz), down its Range; no width
+//   High handle (at 0 dB while its Range is 0): sideways its Freq (2 - 16 kHz), down its Range; no width
 //   Gently band edge, sideways    its width
 //   Alt (Option) + drag on a Gently band, sideways   its width, the band staying centred (right: wider)
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Gently's width
@@ -48,7 +48,7 @@ public:
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle (); // follows Gently's cut
     std::function<void (int)> onBandPicked; // a Gently band's handle or edge was grabbed
-    // Gently band k's colour: green, blue for the second, amber for Sub, rose for High (also its Threshold slider's)
+    // Gently band k's colour: pale copper for every band (they are told apart by place and name)
     static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255);
 
     double xOfHz (double hz) const;

@@ -54,7 +54,7 @@ void SpectrumView::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     const CRect pr = plot ();
     const CRect strip (all.left, pr.bottom + 14, all.right, all.bottom);
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     auto yOf = [&] (double db) { return pr.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * pr.getHeight (); };
@@ -65,7 +65,7 @@ void SpectrumView::draw (CDrawContext* ctx)
     for (double f : {30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0, 1000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 50.0 || f == 500.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), pr.top), CPoint (xOfHz (f), strip.bottom));
         char buf[16];
         std::snprintf (buf, sizeof (buf), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -74,23 +74,25 @@ void SpectrumView::draw (CDrawContext* ctx)
     }
     for (double db = -84; db <= -12; db += 12)
     {
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (pr.left, yOf (db)), CPoint (pr.right, yOf (db)));
     }
-    ctx->setFrameColor (CColor (70, 70, 76));
+    ctx->setFrameColor (theme::kGridZero);
     ctx->drawLine (CPoint (strip.left, strip.getCenter ().y), CPoint (strip.right, strip.getCenter ().y));
 
     // focus range
     const double lo = host->plainValue (kLowFreq), hi = std::max (host->plainValue (kHighFreq), lo * 1.05);
     const double xl = xOfHz (lo), xh = xOfHz (hi);
     const double contrast = host->plainValue (kContrast);
-    ctx->setFillColor (contrast >= 0 ? CColor (255, 164, 40, (uint8_t)(18 + 40 * contrast)) : CColor (90, 150, 255, (uint8_t)(18 - 40 * contrast)));
+    // the range a faint copper shade, deeper the stronger the Contrast either way (its sign is in the
+    // readout and in the gain strip's bars, up or down); its edges pale copper, cinnabar while dragged
+    ctx->setFillColor (theme::withAlpha (theme::kCopper, (uint8_t)(14 + 36 * std::fabs (contrast))));
     ctx->drawRect (CRect (xl, all.top, xh, all.bottom), kDrawFilled);
-    ctx->setLineWidth (2.0);
-    ctx->setFrameColor (theme::kAccent);
-    ctx->drawLine (CPoint (xl, all.top), CPoint (xl, all.bottom));
-    ctx->drawLine (CPoint (xh, all.top), CPoint (xh, all.bottom));
     ctx->setLineWidth (1.0);
+    ctx->setFrameColor (drag == Drag::Low || drag == Drag::Range ? theme::kEnergyLive : theme::kCopperPale);
+    ctx->drawLine (CPoint (xl, all.top), CPoint (xl, all.bottom));
+    ctx->setFrameColor (drag == Drag::High || drag == Drag::Range ? theme::kEnergyLive : theme::kCopperPale);
+    ctx->drawLine (CPoint (xh, all.top), CPoint (xh, all.bottom));
 
     // spectra
     const int n = (int)shownIn.size ();
@@ -135,8 +137,9 @@ void SpectrumView::draw (CDrawContext* ctx)
                 ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
             }
         };
-        curve (shownIn, true, CColor (150, 155, 165, 70), 1.0);
-        curve (shownOut, false, theme::kCurve, 1.6);
+        // the input a faint copper body, the output a text-coloured trace
+        curve (shownIn, true, theme::withAlpha (theme::kCopper, 60), 1.0);
+        curve (shownOut, false, theme::kText, 1.0);
         // per-band gain as bars in the bottom strip
         for (int k = 1; k < n; ++k)
         {
@@ -147,7 +150,8 @@ void SpectrumView::draw (CDrawContext* ctx)
             if (std::fabs (g) < 0.05)
                 continue;
             const double x = xOfHz (hz);
-            ctx->setFillColor (g < 0 ? CColor (90, 150, 255, 200) : CColor (255, 164, 40, 220));
+            // the gain being applied: lit (cinnabar), a boost up from the centre line, a cut down from it
+            ctx->setFillColor (theme::kEnergyLive);
             ctx->drawRect (CRect (x - 1.5, std::min (yGain (0), yGain (g)), x + 1.5, std::max (yGain (0), yGain (g))), kDrawFilled);
         }
     }
@@ -157,7 +161,7 @@ void SpectrumView::draw (CDrawContext* ctx)
     text (ctx, "gain per band", CRect (strip.left + 6, strip.top, strip.left + 140, strip.top + 12), theme::kTextDim, 9.0, kLeftText);
     char buf[64];
     std::snprintf (buf, sizeof (buf), "Contrast %s", host->valueText (kContrast).c_str ());
-    text (ctx, buf, CRect (xl + 6, all.top + 4, std::max (xh - 6, xl + 130), all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    text (ctx, buf, CRect (xl + 6, all.top + 4, std::max (xh - 6, xl + 130), all.top + 18), theme::kText, 10.5, kLeftText, true);
     ctx->resetClipRect ();
 }
 

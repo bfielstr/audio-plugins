@@ -15,10 +15,26 @@ namespace smemplr {
 
 using namespace VSTGUI;
 
+// Modulation is energy: every LFO draws in cinnabar (docs/THEME.md has one energy colour), lit while it
+// moves its target and idle otherwise. The four LFOs are told apart by line style (modLineStyle) and by
+// their numbers.
 CColor modColor (int lfo)
 {
-    static const CColor colors[kModLfos] = {CColor (80, 200, 255), CColor (255, 105, 200), CColor (130, 220, 110), CColor (185, 145, 255)};
-    return colors[(size_t)std::clamp (lfo, 0, kModLfos - 1)];
+    (void)lfo;
+    return theme::kEnergyLive;
+}
+
+CLineStyle modLineStyle (int lfo)
+{
+    // in units of the line width (VSTGUI scales dashes by it): 1 solid, 2 dashed, 3 dotted, 4 dash-dot
+    using LS = CLineStyle;
+    switch (std::clamp (lfo, 0, kModLfos - 1))
+    {
+        case 1: return LS (LS::kLineCapButt, LS::kLineJoinMiter, 0.0, {3.0, 2.0});
+        case 2: return LS (LS::kLineCapButt, LS::kLineJoinMiter, 0.0, {1.0, 1.5});
+        case 3: return LS (LS::kLineCapButt, LS::kLineJoinMiter, 0.0, {4.0, 1.5, 1.0, 1.5});
+        default: return LS (LS::kLineCapButt);
+    }
 }
 
 namespace {
@@ -73,13 +89,13 @@ CPoint LfoHandle::toFrame (CPoint p) const
 void LfoHandle::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
-    const CColor c = modColor (lfo);
-    const CColor fill = pressed ? withAlpha (c, 70) : theme::kControlBg;
-    roundRect (ctx, r, 4.0, &fill, &c, 1.5);
+    // an outlined grip like the kit's buttons (cinnabar while held); its value bar at the foot is drawn
+    // in the LFO's line style, the key to its rings on the controls it modulates
+    pk::draw::outline (ctx, r, pressed ? theme::kEnergyLive : theme::kCopper, 3.0);
     char buf[16];
     std::snprintf (buf, sizeof (buf), "LFO %d", lfo + 1);
     ctx->setFont (theme::font (11.0, true));
-    ctx->setFontColor (theme::kTextBright);
+    ctx->setFontColor (theme::kText);
     ctx->drawString (buf, CRect (r.left, r.top + 3, r.right, r.top + 18), kCenterText, true);
     // the grip (drag me), and the LFO's value as a bar from the middle
     ctx->setFillColor (theme::kTextDim);
@@ -89,8 +105,15 @@ void LfoHandle::draw (CDrawContext* ctx)
                               kDrawFilled);
     const double v = std::clamp ((double)ed->lfoValueNow (lfo), -1.0, 1.0);
     const double mid = r.getCenter ().x, half = r.getWidth () / 2 - 6;
-    ctx->setFillColor (c);
-    ctx->drawRect (CRect (std::min (mid, mid + v * half), r.bottom - 7, std::max (mid, mid + v * half) + 1, r.bottom - 4), kDrawFilled);
+    ctx->setFrameColor (theme::kLineDim); // the bar's track, the whole swing
+    ctx->setLineWidth (1.0);
+    ctx->drawLine (CPoint (mid - half, r.bottom - 5.0), CPoint (mid + half, r.bottom - 5.0));
+    ctx->setFrameColor (modColor (lfo));
+    ctx->setLineWidth (2.0);
+    ctx->setLineStyle (modLineStyle (lfo));
+    ctx->drawLine (CPoint (mid, r.bottom - 5.0), CPoint (mid + v * half + (v >= 0 ? 1.0 : 0.0), r.bottom - 5.0));
+    ctx->setLineStyle (kLineSolid);
+    ctx->setLineWidth (1.0);
 }
 
 void LfoHandle::onMouseDownEvent (MouseDownEvent& e)
@@ -140,9 +163,9 @@ void LfoHandle::onMouseCancelEvent (MouseCancelEvent& e)
 void LfoScope::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kGridZero);
     ctx->setLineWidth (1.0);
     ctx->drawLine (CPoint (r.left, r.getCenter ().y), CPoint (r.right, r.getCenter ().y));
     const int shape = ed->lfoShapeNow (lfo);
@@ -158,9 +181,9 @@ void LfoScope::draw (CDrawContext* ctx)
         return modShape (shape, x + phaseOffset, 0.0f, 0.0f);
     };
     const double h = r.getHeight () / 2 - 4;
-    const CColor c = modColor (lfo);
-    ctx->setFrameColor (withAlpha (c, 200));
-    ctx->setLineWidth (1.5);
+    // the shape a pale copper trace; where the LFO is now, a cinnabar dot
+    ctx->setFrameColor (theme::kCopperPale);
+    ctx->setLineWidth (1.0);
     CPoint last;
     const int n = (int)r.getWidth ();
     for (int i = 0; i <= n; ++i)
@@ -177,7 +200,7 @@ void LfoScope::draw (CDrawContext* ctx)
     const double ph = shape >= kModRandom ? 1.0 : ed->lfoPhaseNow (lfo) - phaseOffset;
     const double x = r.left + (ph - std::floor (ph) + (shape >= kModRandom ? 0.999 : 0.0)) * r.getWidth ();
     const double y = r.getCenter ().y - std::clamp ((double)ed->lfoValueNow (lfo), -1.0, 1.0) * h;
-    ctx->setFillColor (theme::kTextBright);
+    ctx->setFillColor (modColor (lfo));
     ctx->drawEllipse (CRect (x - 3, y - 3, x + 3, y + 3), kDrawFilled);
 }
 
@@ -258,20 +281,25 @@ void ModOverlay::draw (CDrawContext* ctx)
                 const bool working = ed->modOffsetNow (g.maps[k], off);
                 const double rad = ringRadius (dial, k);
                 const CRect rr (c.x - rad, c.y - rad, c.x + rad, c.y + rad);
-                ctx->setLineWidth (2.0);
-                ctx->setFrameColor (withAlpha (theme::kKnobTrack, 160));
+                // a dim track, and the depth in the LFO's line style: lit while it moves the
+                // parameter, energy idle otherwise
+                ctx->setLineWidth (1.0);
+                ctx->setFrameColor (theme::kLineDim);
                 ctx->drawArc (rr, 135.0f, 405.0f, kDrawStroked);
                 const double a0 = knobAngle (base), a1 = knobAngle (base + m.depth);
-                ctx->setFrameColor (withAlpha (modColor (m.lfo), working ? 255 : 90));
+                ctx->setLineWidth (2.0);
+                ctx->setFrameColor (working ? modColor (m.lfo) : theme::kEnergyIdle);
+                ctx->setLineStyle (modLineStyle (m.lfo));
                 if (std::fabs (a1 - a0) > 0.5)
                     ctx->drawArc (rr, (float)std::min (a0, a1), (float)std::max (a0, a1), kDrawStroked);
+                ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapRound));
             }
             if (any)
             {
                 // where the parameter is now, on the inner ring
                 const double ang = knobAngle (now) * M_PI / 180.0, rad = ringRadius (dial, 0);
                 const CPoint p (c.x + std::cos (ang) * rad, c.y + std::sin (ang) * rad);
-                ctx->setFillColor (theme::kTextBright);
+                ctx->setFillColor (theme::kText);
                 ctx->drawEllipse (CRect (p.x - 2.5, p.y - 2.5, p.x + 2.5, p.y + 2.5), kDrawFilled);
             }
         }
@@ -287,13 +315,17 @@ void ModOverlay::draw (CDrawContext* ctx)
                 float off;
                 const bool working = ed->modOffsetNow (g.maps[k], off);
                 const double x0 = g.r.left + base * w, x1 = g.r.left + std::clamp (base + m.depth, 0.0, 1.0) * w;
-                ctx->setFillColor (withAlpha (modColor (m.lfo), working ? 255 : 90));
-                ctx->drawRect (CRect (std::min (x0, x1), y + 2.0 * k, std::max (x0, x1) + 1, y + 2.0 * k + 2), kDrawFilled);
+                // a 2 px line in the LFO's line style (where the rectangle used to be)
+                ctx->setLineWidth (2.0);
+                ctx->setFrameColor (working ? modColor (m.lfo) : theme::kEnergyIdle);
+                ctx->setLineStyle (modLineStyle (m.lfo));
+                ctx->drawLine (CPoint (std::min (x0, x1), y + 2.0 * k + 1), CPoint (std::max (x0, x1) + 1, y + 2.0 * k + 1));
+                ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapRound));
             }
             if (any)
             {
                 const double x = g.r.left + now * w;
-                ctx->setFillColor (theme::kTextBright);
+                ctx->setFillColor (theme::kText);
                 ctx->drawRect (CRect (x - 1, y - 2, x + 1, y + 2.0 * g.maps.size () + 1), kDrawFilled);
             }
         }
@@ -303,9 +335,10 @@ void ModOverlay::draw (CDrawContext* ctx)
     {
         CRect r = dragRect;
         r.extend (2, 2);
+        // the drop target: a cinnabar selection outline, offset from the control, over a faint tint
         const CColor c = modColor (dragLfo);
-        const CColor fill = withAlpha (c, 40);
-        roundRect (ctx, r, 4.0, &fill, &c, 2.0);
+        const CColor fill = withAlpha (c, 30);
+        roundRect (ctx, r, 3.0, &fill, &c, 1.5);
     }
 }
 
@@ -393,7 +426,7 @@ CRect crossPart (const CRect& row) { return CRect (row.right - 14, row.top, row.
 void ModList::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
     const ModMap map = ed->modMap ();
     if (map.list.empty ())
@@ -412,24 +445,24 @@ void ModList::draw (CDrawContext* ctx)
             break;
         if (i % 2 == 1)
         {
-            ctx->setFillColor (CColor (30, 30, 32));
+            ctx->setFillColor (withAlpha (theme::kCopper, 12));
             ctx->drawRect (row, kDrawFilled);
         }
         float off;
         const bool working = ed->modOffsetNow (i, off);
-        const CColor c = modColor (m.lfo);
-        ctx->setFillColor (c);
-        ctx->drawRect (CRect (row.left + 3, row.top + 4, row.left + 13, row.bottom - 4), kDrawFilled);
+        // the LFO's number in an outlined chip, lit while it is moving its target
+        pk::draw::outline (ctx, CRect (row.left + 3, row.top + 3, row.left + 14, row.bottom - 3), working ? modColor (m.lfo) : theme::kEnergyIdle,
+                           0);
         char buf[48];
         std::snprintf (buf, sizeof (buf), "%d", m.lfo + 1);
         ctx->setFont (theme::font (9.0, true));
-        ctx->setFontColor (CColor (20, 20, 20));
+        ctx->setFontColor (theme::kText);
         ctx->drawString (buf, CRect (row.left + 3, row.top + 2, row.left + 13, row.bottom - 2), kCenterText, true);
         ctx->setFont (theme::font (10.0));
         ctx->setFontColor (working ? theme::kText : theme::kTextDim);
         ctx->drawString (ed->modTargetName (m).c_str (), CRect (row.left + 17, row.top, depthPart (row).left - 2, row.bottom), kLeftText, true);
         std::snprintf (buf, sizeof (buf), "%+.0f %%", m.depth * 100.0);
-        ctx->setFontColor (editing && editRow == i ? theme::kAccent : (working ? theme::kTextBright : theme::kTextDim));
+        ctx->setFontColor (editing && editRow == i ? theme::kEnergyLive : (working ? theme::kText : theme::kTextDim));
         ctx->drawString (buf, depthPart (row), kRightText, true);
         ctx->setFontColor (theme::kTextDim);
         ctx->drawString ("x", crossPart (row), kCenterText, true);

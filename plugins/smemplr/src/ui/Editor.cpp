@@ -83,10 +83,8 @@ public:
     using CViewContainer::CViewContainer;
     void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
     {
-        ctx->setFillColor (theme::kBackground);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), kDrawFilled);
-        ctx->setFillColor (theme::kHeader);
-        ctx->drawRect (CRect (0, 0, getViewSize ().getWidth (), 34), kDrawFilled);
+        // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
+        pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
 };
 
@@ -109,28 +107,12 @@ public:
     void draw (CDrawContext* ctx) override
     {
         const CRect r = getViewSize ();
-        const bool lit = active && active ();
-        const CColor fill = dragging && !copying ? theme::kAccentDim : (pressed ? theme::kKnobTrack : (lit ? theme::kControlOn : theme::kControlBg));
-        if (auto path = VSTGUI::owned (ctx->createGraphicsPath ()))
-        {
-            path->addRoundRect (r, 3.0);
-            ctx->setFillColor (fill);
-            ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
-            if (dragging)
-            {
-                ctx->setFrameColor (theme::kAccent);
-                ctx->setLineWidth (1.0);
-                ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
-            }
-        }
-        else
-        {
-            ctx->setFillColor (fill);
-            ctx->drawRect (r, kDrawFilled);
-        }
-        ctx->setFont (theme::font (10.5, lit));
-        ctx->setFontColor (lit && !dragging ? CColor (20, 20, 20) : theme::kText);
-        ctx->drawString ((dragging && copying ? "+ " + text : text).c_str (), r, kCenterText, true);
+        // an outlined tab like the kit's buttons: the shown slot's lamp lit; held or dragged, a
+        // cinnabar outline (a copy being dragged reads "+ name")
+        pk::draw::ButtonState s;
+        s.lit = active && active ();
+        s.pressed = pressed || dragging;
+        pk::draw::button (ctx, r, dragging && copying ? "+ " + text : text, s);
     }
 
     void onMouseDownEvent (MouseDownEvent& e) override
@@ -401,7 +383,7 @@ void Editor::buildUI (CFrame* f)
 
     // warp section
     auto* divider = new Group (CRect (700, 8, 701, 92));
-    divider->setBackgroundColor (theme::kPanelEdge);
+    divider->setBackgroundColor (theme::kLineDim);
     sp->addView (divider);
     warpOffGroup = new Group (CRect (706, 0, 1094, 98));
     sp->addView (warpOffGroup);
@@ -578,7 +560,7 @@ void Editor::buildUI (CFrame* f)
         if (l > 0)
         {
             auto* line = new Group (CRect (8, y - 6, 204, y - 5));
-            line->setBackgroundColor (theme::kPanelEdge);
+            line->setBackgroundColor (theme::kLineDim);
             mp->addView (line);
         }
         modLive.push_back (tip (new LfoHandle (CRect (8, y, 66, y + 40), l, this), help::kLfoHandle));
@@ -1157,7 +1139,7 @@ void Editor::rebuildRack ()
         fxRow->addView (add);
     }
     auto* mark = new Group (CRect (0, 0, 3, 20));
-    mark->setBackgroundColor (theme::kAccent);
+    mark->setBackgroundColor (theme::kEnergyLive);
     mark->setMouseEnabled (false);
     mark->setVisible (false);
     fxRow->addView (mark);
@@ -1335,7 +1317,7 @@ void Editor::buildBody ()
             auto* io = new Label (CRect (8, 8, 108, 22), "In / Out", 9.5, true, 1);
             io->setDim (true);
             g->addView (io);
-            const CColor below (255, 170, 60), above (110, 165, 255);
+            const CColor below = pk::theme::kText, above = pk::theme::kText; // (told apart by their columns)
             const int fields[6] = {kBelowThresh, kBelowRatio, kAboveThresh, kAboveRatio, kAttack, kRelease};
             for (int b = 0; b < 4; ++b)
             {
@@ -1346,7 +1328,7 @@ void Editor::buildBody ()
                 mdIn[b] = add (new NumberBox (none, h, bandParam (b, kBandInput)), tip (bandParam (b, kBandInput)));
                 mdOut[b] = add (new NumberBox (none, h, bandParam (b, kBandOutput)), tip (bandParam (b, kBandOutput)));
                 for (int i = 0; i < 6; ++i)
-                    mdBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kTextBright)),
+                    mdBoxes[b][i] = add (new NumberBox (none, h, bandParam (b, fields[i]), i < 2 ? below : (i < 4 ? above : pk::theme::kText)),
                                          tip (bandParam (b, fields[i])));
             }
             // the Style: OTT (a model of Xfer's OTT) or Character (Multidyn's own)
@@ -1385,7 +1367,7 @@ void Editor::buildBody ()
             mdSubOut = add (new NumberBox (none, h, kSubOutput), tip (kSubOutput));
             const uint32_t subFields[4] = {kSubThresh, kSubRatio, kSubAttack, kSubRelease};
             for (int i = 0; i < 4; ++i)
-                mdSubBoxes[i] = add (new NumberBox (none, h, subFields[i], i < 2 ? above : pk::theme::kTextBright), tip (subFields[i]));
+                mdSubBoxes[i] = add (new NumberBox (none, h, subFields[i], i < 2 ? above : pk::theme::kText), tip (subFields[i]));
             mdLayoutHost = h;
             updateMdLayout ();
             updateMdLooks ();
@@ -1398,7 +1380,7 @@ void Editor::buildBody ()
                 m = b ? b->rack.msMid[(size_t)s].load () : 0.0f;
                 sd = b ? b->rack.msSide[(size_t)s].load () : 0.0f;
             });
-            add (msView, "Blue: the mid level. Orange: the side high-pass and level. Drag the handle sideways for the cutoff, "
+            add (msView, "Dashed: the mid level. Solid, with the handle: the side high-pass and level. Drag the handle sideways for the cutoff, "
                          "up/down for the side level, the mouse wheel for the slope (while holding the handle, or with Shift); "
                          "double-click or right click resets. Right: live mid and side levels.");
             g->addView (new Label (CRect (480, 8, 520, 26), "Slope", 10.5, false, 2));
@@ -1476,11 +1458,11 @@ void Editor::buildBody ()
                 static const char* const names[kGentlyBands] = {"1", "2", "Sub", "High"};
                 auto* bt = new ActionButton (CRect (534 + k * 41, 194, 573 + k * 41, 212), names[k],
                                              [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-                bt->setTooltipText (k == 0   ? "Show Gently's first band (green in the display)."
-                                    : k == 1 ? "Show Gently's second band (blue: it works once its Range is above 0 dB)."
-                                    : k == 2 ? "Show Gently's Sub band (amber: from the bottom of the spectrum, it starts to taper at its Freq; "
+                bt->setTooltipText (k == 0   ? "Show Gently's first band (Gently in the display)."
+                                    : k == 1 ? "Show Gently's second band (Gently 2 in the display: it works once its Range is above 0 dB)."
+                                    : k == 2 ? "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; "
                                                "it works once its Range is above 0 dB)."
-                                             : "Show Gently's High band (rose: from its Freq, where it starts to taper, to the top of the "
+                                             : "Show Gently's High band (from its Freq, where it starts to taper, to the top of the "
                                                "spectrum; it works once its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
@@ -1648,7 +1630,7 @@ void Editor::buildBody ()
             {
                 auto* bt = new ActionButton (CRect (8 + b * 60, 8, 64 + b * 60, 26), b == 0 ? "Band 1" : "Band 2",
                                              [this, b] { showWubrBand (b); }, [this, b] { return wubrBand == b; });
-                bt->setTooltipText (b == 0 ? "Show band 1's controls (green)." : "Show band 2's controls (blue).");
+                bt->setTooltipText (b == 0 ? "Show band 1's controls (marked 1 in the display)." : "Show band 2's controls (marked 2 in the display).");
                 g->addView (bt);
                 wubrBandButtons.push_back (bt);
             }

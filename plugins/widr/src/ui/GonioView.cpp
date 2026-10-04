@@ -34,7 +34,7 @@ GonioView::GonioView (const CRect& rect, MeterSource m) : CView (rect), meters (
 void GonioView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     const CRect g (all.left, all.top, all.right, all.bottom - kMeter);
@@ -43,7 +43,7 @@ void GonioView::draw (CDrawContext* ctx)
 
     // axes: M vertical, S horizontal, L and R on the diagonals
     ctx->setLineWidth (1.0);
-    ctx->setFrameColor (theme::kGrid);
+    ctx->setFrameColor (theme::kGridMajor);
     ctx->drawLine (CPoint (c.x, c.y - half), CPoint (c.x, c.y + half));
     ctx->drawLine (CPoint (c.x - half, c.y), CPoint (c.x + half, c.y));
     const double d = half * M_SQRT1_2;
@@ -56,7 +56,7 @@ void GonioView::draw (CDrawContext* ctx)
 
     // the dots, scaled to the level so quiet material still fills the scope
     const double scale = half / std::max (0.02f, level * 2.5f);
-    ctx->setFillColor (CColor (theme::kAccent.red, theme::kAccent.green, theme::kAccent.blue, 110));
+    ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 110)); // the signal lights the scope
     for (int i = 0; i < count; ++i)
     {
         const double m = (l[(size_t)i] + r[(size_t)i]) * M_SQRT1_2, s = (l[(size_t)i] - r[(size_t)i]) * M_SQRT1_2;
@@ -71,13 +71,15 @@ void GonioView::draw (CDrawContext* ctx)
     char buf[16];
     std::snprintf (buf, sizeof (buf), "%+.2f", correlation);
     text (ctx, buf, CRect (all.left + 8, all.bottom - kMeter + 4, all.right - 8, all.bottom - kMeter + 18),
-          correlation < 0.0f ? CColor (240, 90, 80) : theme::kTextBright, 10.0, kRightText, true);
-    ctx->setFillColor (theme::kControlBg);
+          correlation < 0.0f ? theme::kEnergyLive : theme::kText, 10.0, kRightText, true);
+    // the meter bed dim, its left half (out of phase) in energy idle; the needle text-coloured, cinnabar
+    // while the correlation is negative (the readout says it too)
+    ctx->setFillColor (theme::kLineDim);
     ctx->drawRect (mr, kDrawFilled);
-    ctx->setFillColor (CColor (120, 50, 45)); // the left half: out of phase
+    ctx->setFillColor (theme::kEnergyIdle); // the left half: out of phase
     ctx->drawRect (CRect (mr.left, mr.top, mr.getCenter ().x, mr.bottom), kDrawFilled);
     const double x = mr.left + (correlation + 1.0) * 0.5 * mr.getWidth ();
-    ctx->setFillColor (correlation < 0.0f ? CColor (240, 90, 80) : theme::kAccent);
+    ctx->setFillColor (correlation < 0.0f ? theme::kEnergyLive : theme::kText);
     ctx->drawRect (CRect (x - 2.0, mr.top - 3.0, x + 2.0, mr.bottom + 3.0), kDrawFilled);
     for (int k = 0; k < 3; ++k)
     {

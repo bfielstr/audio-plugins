@@ -19,9 +19,13 @@ namespace theme = pk::theme;
 
 namespace {
 constexpr double kHandleRadius = 5.0;
+// One colour for both bands (docs/THEME.md): pale copper. The bands are told apart by the numbers at
+// their handles and by brightness: the selected band a text-coloured curve and a lit handle, the other
+// a copper curve.
 CColor bandColor (int band, uint8_t alpha = 255)
 {
-    return band == 0 ? CColor (120, 210, 140, alpha) : CColor (130, 170, 255, alpha);
+    (void)band;
+    return theme::withAlpha (theme::kCopperPale, alpha);
 }
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
            bool bold = false)
@@ -88,14 +92,14 @@ void BandView::idle ()
 void BandView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), all.top), CPoint (xOfHz (f), all.bottom));
         if (major)
         {
@@ -106,7 +110,7 @@ void BandView::draw (CDrawContext* ctx)
     }
     for (double db : {-12.0, 0.0, 12.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
     }
 
@@ -147,12 +151,12 @@ void BandView::draw (CDrawContext* ctx)
         if (on)
         {
             ctx->setLineWidth (1.0);
-            ctx->setFrameColor (bandColor (b, drag == b && dragEdge ? 200 : (b == selected ? 90 : 45)));
+            ctx->setFrameColor (drag == b && dragEdge ? theme::kEnergyLive : bandColor (b, b == selected ? 90 : 45));
             for (bool high : {false, true})
                 ctx->drawLine (CPoint (edgeX (b, high), all.top + 20), CPoint (edgeX (b, high), all.bottom - 16));
         }
         // the range the shape covers
-        ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
+        ctx->setLineStyle (theme::kDashed);
         ctx->setLineWidth (1.0);
         ctx->setFrameColor (bandColor (b, on ? 120 : 50));
         if (target != kTargetFreq)
@@ -170,24 +174,19 @@ void BandView::draw (CDrawContext* ctx)
         const double nowHz = on && live () ? shownFreq[b] : freq, nowDb = on && live () ? shownDb[b] : gain;
         if (auto p = curve (nowHz, nowDb, q, true))
         {
-            ctx->setFillColor (bandColor (b, on ? 60 : 20));
+            ctx->setFillColor (theme::withAlpha (theme::kCopper, on ? (b == selected ? 48 : 28) : 14));
             ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-            ctx->setLineWidth (b == selected ? 2.0 : 1.4);
-            ctx->setFrameColor (bandColor (b, a));
+            ctx->setLineWidth (b == selected ? 1.5 : 1.0);
+            ctx->setFrameColor (!on ? theme::kLineDim : (b == selected ? theme::kText : theme::kCopper));
             ctx->drawGraphicsPath (p, CDrawContext::kPathStroked);
         }
         const CPoint h = handle (b);
-        const CRect hr (h.x - kHandleRadius - 1, h.y - kHandleRadius - 1, h.x + kHandleRadius + 1, h.y + kHandleRadius + 1);
-        ctx->setFillColor (bandColor (b, a));
-        ctx->drawEllipse (hr, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (b == selected ? theme::kTextBright : CColor (0, 0, 0, 160));
-        ctx->drawEllipse (hr, kDrawStroked);
+        pk::draw::handle (ctx, h, kHandleRadius + 1, b == selected, on);
         char buf[48];
         std::snprintf (buf, sizeof (buf), "%d", b + 1);
-        text (ctx, buf, CRect (h.x - 20, h.y - 22, h.x + 20, h.y - 8), bandColor (b, a), 9.5, kCenterText, true);
+        text (ctx, buf, CRect (h.x - 20, h.y - 22, h.x + 20, h.y - 8), on ? bandColor (b) : theme::kTextDim, 9.5, kCenterText, true);
     }
-    text (ctx, "BANDS", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    text (ctx, "BANDS", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kCopperPale, 10.5, kLeftText, true);
     ctx->setLineWidth (1.0);
     ctx->resetClipRect ();
 }

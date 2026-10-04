@@ -20,7 +20,8 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-const CColor kSpecFill (205, 208, 216, 34), kSpecLine (215, 218, 226, 95), kCurve (238, 238, 244);
+// the output spectrum a faint copper body with a copper trace; the whole response a text-coloured line
+const CColor kSpecFill = theme::withAlpha (theme::kCopper, 34), kSpecLine = theme::withAlpha (theme::kCopper, 170), kCurve = theme::kText;
 constexpr double kEdgeGrab = 5.0; // pixels either side of a crossover's line
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
@@ -73,16 +74,12 @@ void fft (std::vector<std::complex<float>>& a)
 }
 } // namespace
 
-// warm to cool, low to high
+// One colour for every band (docs/THEME.md: one metal, one energy colour): pale copper. The bands are
+// told apart by their place on the frequency axis and their numbers at the top of each column.
 CColor LevelView::bandColor (int band, uint8_t alpha)
 {
-    switch (band)
-    {
-        case 0: return CColor (240, 112, 92, alpha);
-        case 1: return CColor (250, 184, 64, alpha);
-        case 2: return CColor (120, 210, 140, alpha);
-        default: return CColor (110, 165, 255, alpha);
-    }
+    (void)band;
+    return theme::withAlpha (theme::kCopperPale, alpha);
 }
 
 LevelView::LevelView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
@@ -230,7 +227,7 @@ void LevelView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const double top = plotTop (), bot = plotBottom ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
 
@@ -246,7 +243,7 @@ void LevelView::draw (CDrawContext* ctx)
     for (int b = 0; b < bands; ++b)
     {
         const bool hot = hoverBand == b || (drag == Drag::Band && dragIndex == b);
-        ctx->setFillColor (bandColor (b, hot ? 24 : 12));
+        ctx->setFillColor (bandColor (b, hot ? 22 : (b % 2 ? 12 : 6))); // every other column a shade lighter
         ctx->drawRect (CRect (bandLeft (b), all.top, bandRight (b), bot), kDrawFilled);
     }
 
@@ -255,7 +252,7 @@ void LevelView::draw (CDrawContext* ctx)
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), top), CPoint (xOfHz (f), bot));
         char b[16];
         std::snprintf (b, sizeof (b), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -263,7 +260,7 @@ void LevelView::draw (CDrawContext* ctx)
     }
     for (double db : {-24.0, -12.0, 0.0, 12.0, 24.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (64, 64, 70) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
         char b[8];
         std::snprintf (b, sizeof (b), db > 0 ? "+%.0f" : "%.0f", db);
@@ -305,16 +302,18 @@ void LevelView::draw (CDrawContext* ctx)
         const bool hot = hoverBand == b || (drag == Drag::Band && dragIndex == b);
         if (heard)
         {
-            ctx->setFillColor (bandColor (b, hot ? 90 : 62));
+            // the level: a faint pale-copper body from 0 dB and a pale copper line (cinnabar while held
+            // or hovered); a band not heard: a dashed copper line
+            ctx->setFillColor (bandColor (b, hot ? 56 : 36));
             ctx->drawRect (CRect (l, std::min (y, y0), r, std::max (y, y0) + (std::fabs (y - y0) < 1.0 ? 1.0 : 0.0)), kDrawFilled);
-            ctx->setLineWidth (hot ? 2.5 : 2.0);
-            ctx->setFrameColor (bandColor (b));
+            ctx->setLineWidth (1.5);
+            ctx->setFrameColor (hot ? theme::kEnergyLive : bandColor (b));
         }
         else
         {
-            ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt, CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0}));
-            ctx->setLineWidth (1.5);
-            ctx->setFrameColor (bandColor (b, 90));
+            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineWidth (1.0);
+            ctx->setFrameColor (theme::kCopper);
         }
         ctx->drawLine (CPoint (l, y), CPoint (r, y));
         ctx->setLineStyle (kLineSolid);
@@ -326,7 +325,7 @@ void LevelView::draw (CDrawContext* ctx)
             else
                 std::snprintf (s, sizeof (s), "%+.1f dB", db);
             const double ty = db >= 0.0 ? y - 16.0 : y + 3.0;
-            text (ctx, s, CRect (l, ty, r, ty + 13.0), bandColor (b, heard ? 255 : 130), 10.0, kCenterText, hot);
+            text (ctx, s, CRect (l, ty, r, ty + 13.0), heard ? bandColor (b) : theme::kTextDim, 10.0, kCenterText, hot);
         }
         const double drive = plain (driveParam (b, kDriveDb));
         if (drive > 0.0 && r - l > 30.0)
@@ -341,16 +340,10 @@ void LevelView::draw (CDrawContext* ctx)
                 std::snprintf (s, sizeof (s), "%s", kShort[type]);
             const double w = std::min (r - l - 8.0, 8.0 + 6.2 * (double)std::strlen (s)), cx = 0.5 * (l + r);
             const CRect tag (cx - 0.5 * w, bot - 32.0, cx + 0.5 * w, bot - 18.0);
-            if (auto p = owned (ctx->createGraphicsPath ()))
-            {
-                p->addRoundRect (tag, 3.0);
-                ctx->setFillColor (CColor (22, 22, 22, 200));
-                ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-                ctx->setLineWidth (1.0);
-                ctx->setFrameColor (bandColor (b, heard ? 200 : 90));
-                ctx->drawGraphicsPath (p, CDrawContext::kPathStroked);
-            }
-            text (ctx, s, tag, bandColor (b, heard ? 255 : 130), 9.5, kCenterText, true);
+            ctx->setFillColor (theme::withAlpha (theme::kWell, 200));
+            ctx->drawRect (tag, kDrawFilled);
+            pk::draw::outline (ctx, tag, heard ? theme::kCopper : theme::kLineDim);
+            text (ctx, s, tag, heard ? bandColor (b) : theme::kTextDim, 9.5, kCenterText, true);
         }
     }
 
@@ -372,7 +365,7 @@ void LevelView::draw (CDrawContext* ctx)
                 path->addLine (pt);
             started = true;
         }
-        ctx->setLineWidth (1.6);
+        ctx->setLineWidth (1.0);
         ctx->setFrameColor (kCurve);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
@@ -382,20 +375,20 @@ void LevelView::draw (CDrawContext* ctx)
     {
         const double x = xOfHz (xo[k]);
         const bool hot = hoverEdge == k || (drag == Drag::Edge && dragIndex == k);
-        ctx->setLineWidth (hot ? 2.0 : 1.0);
-        ctx->setFrameColor (CColor (225, 225, 232, hot ? 235 : 130));
+        // a copper line with an outlined grip (a well inside), both cinnabar while held or hovered
+        const CColor lc = hot ? theme::kEnergyLive : theme::kCopper;
+        ctx->setLineWidth (1.0);
+        ctx->setFrameColor (lc);
         ctx->drawLine (CPoint (x, all.top + kChipTop + kChipH + 4.0), CPoint (x, bot));
         const double mid = 0.5 * (top + bot);
-        if (auto grip = owned (ctx->createGraphicsPath ()))
-        {
-            grip->addRoundRect (CRect (x - 4.0, mid - 14.0, x + 4.0, mid + 14.0), 3.0);
-            ctx->setFillColor (CColor (210, 210, 220, hot ? 250 : 170));
-            ctx->drawGraphicsPath (grip, CDrawContext::kPathFilled);
-        }
+        const CRect grip (std::round (x) - 4.0, mid - 14.0, std::round (x) + 5.0, mid + 14.0);
+        ctx->setFillColor (theme::kWell);
+        ctx->drawRect (grip, kDrawFilled);
+        pk::draw::outline (ctx, grip, lc);
         const CRect label (x - 30.0, bot - 15.0, x + 30.0, bot - 2.0);
-        ctx->setFillColor (CColor (22, 22, 22, 210));
+        ctx->setFillColor (theme::withAlpha (theme::kWell, 210));
         ctx->drawRect (label, kDrawFilled);
-        text (ctx, hzText (xo[k]), label, hot ? theme::kTextBright : theme::kText, 9.5, kCenterText, hot);
+        text (ctx, hzText (xo[k]), label, theme::kText, 9.5, kCenterText, hot);
     }
 
     // the band numbers, and M / S
@@ -410,14 +403,10 @@ void LevelView::draw (CDrawContext* ctx)
             if (c.isEmpty ())
                 continue;
             const bool lit = plain (bandParam (b, solo ? kSolo : kMute)) >= 0.5;
-            const CColor on = solo ? CColor (240, 204, 70) : CColor (228, 84, 72);
-            if (auto p = owned (ctx->createGraphicsPath ()))
-            {
-                p->addRoundRect (c, 3.0);
-                ctx->setFillColor (lit ? on : theme::kControlBg);
-                ctx->drawGraphicsPath (p, CDrawContext::kPathFilled);
-            }
-            text (ctx, solo ? "S" : "M", c, lit ? CColor (20, 20, 20) : theme::kText, 9.5, kCenterText, true);
+            // outlined chips (too small for a lamp): on, the outline and the letter light cinnabar; mute
+            // and solo are told apart by their letters
+            pk::draw::outline (ctx, c, lit ? theme::kEnergyLive : theme::kCopper);
+            text (ctx, solo ? "S" : "M", c, lit ? theme::kEnergyLive : theme::kCopperPale, 9.5, kCenterText, true);
         }
     }
     ctx->setLineWidth (1.0);

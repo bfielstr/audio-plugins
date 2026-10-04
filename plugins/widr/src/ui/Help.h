@@ -48,9 +48,9 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kStage =
-    "The stage from above: you at the bottom, the speakers at the sides. Orange: this Widr (the angle is its width, "
-    "the distance its Space); grey: the other Widrs in the group. Bottom strip: the width kept per band (blue = given "
-    "to the group). Drag an end of the orange arc for Width, drag up/down for Space, double-click to reset. Shift: "
+    "The stage from above: you at the bottom, the speakers at the sides. Lit (cinnabar): this Widr (the angle is its width, "
+    "the distance its Space); dashed copper: the other Widrs in the group. Bottom strip: the width kept per band (outlined = given "
+    "to the group). Drag an end of the lit arc for Width, drag up/down for Space, double-click to reset. Shift: "
     "fine.";
 
 constexpr const char* kGonio =

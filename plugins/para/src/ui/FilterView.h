@@ -1,7 +1,8 @@
-// The two filters and their sum, in the style of a morphing EQ display: the high-pass in orange,
-// the low-pass in blue, the sum in white, with a handle at each cutoff. Behind them, live spectra of
-// the input (grey) and the output (light), so you can see the notch working; the handles move with
-// the tracked note and the envelope, and the envelope level shows at the top right.
+// The two filters and their sum, in the style of a morphing EQ display: the high-pass a solid copper
+// line, the low-pass a dashed one, the sum in the text colour, with a labelled handle at each cutoff.
+// Behind them, live spectra of the input (dim) and the output (copper), so you can see the notch
+// working; the handles move with the tracked note and the envelope (a cinnabar halo), and the
+// envelope level shows at the top right.
 // A handle sits at its filter's cutoff, as high as the resonant peak (plus the filter's gain).
 //   drag a handle sideways   cutoff
 //   drag a handle up / down  resonance, and the gain too with Drag Gain on

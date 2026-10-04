@@ -21,12 +21,16 @@ namespace theme = pk::theme;
 
 namespace {
 constexpr double kPointRadius = 5.0, kGrab = 5.0;
-const CColor kLevel (90, 150, 255);   // the band's level
-const CColor kReduce (255, 90, 80);   // gain reduction
-const CColor kDown (255, 164, 40);    // the downward threshold
-const CColor kUp (120, 200, 120);     // the upward threshold
-const CColor kCurve (240, 240, 240);  // the gain points and their curve
-const CColor kXover (150, 150, 165);  // crossover handles
+// One energy colour (docs/THEME.md): the meters carry it (the level in energy idle, the level after the
+// gain lit live), the gain reduction is a pale copper outline lane hanging from 0 dB; the thresholds are
+// pale copper lines told apart by style (downward solid, upward dashed) and by their labels.
+const CColor kLevel = theme::kEnergyIdle;     // the band's level
+const CColor kLevelOut = theme::kEnergyLive;  // the band's level after the gain
+const CColor kReduce = theme::kCopperPale;    // gain reduction
+const CColor kDown = theme::kCopperPale;      // the downward threshold (solid)
+const CColor kUp = theme::kCopperPale;        // the upward threshold (dashed)
+const CColor kCurve = theme::kText;           // the gain points' curve
+const CColor kXover = theme::kCopper;         // crossover handles
 
 CColor withAlpha (CColor c, uint8_t a)
 {
@@ -219,7 +223,7 @@ void BandView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect pr = plot ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
@@ -235,7 +239,7 @@ void BandView::draw (CDrawContext* ctx)
         const double x0 = xOfHz (bandLow (f, k)), x1 = xOfHz (bandHigh (f, k, n));
         if (k % 2 == 1)
         {
-            ctx->setFillColor (CColor (255, 255, 255, 8));
+            ctx->setFillColor (withAlpha (theme::kCopper, 12));
             ctx->drawRect (CRect (x0, pr.top, x1, pr.bottom), kDrawFilled);
         }
     }
@@ -244,7 +248,7 @@ void BandView::draw (CDrawContext* ctx)
     for (double hz : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const double x = xOfHz (hz);
-        ctx->setFrameColor (theme::kGrid);
+        ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (x, pr.top), CPoint (x, pr.bottom));
         std::snprintf (buf, sizeof (buf), hz >= 1000.0 ? "%.0fk" : "%.0f", hz >= 1000.0 ? hz / 1000.0 : hz);
         text (ctx, buf, CRect (x - 20, pr.bottom + 3, x + 20, pr.bottom + 3 + kAxisBottom), theme::kTextDim, 9.5);
@@ -252,7 +256,7 @@ void BandView::draw (CDrawContext* ctx)
     for (double db = kTopDb; db >= kBottomDb - 0.1; db -= 12.0)
     {
         const double y = yOfDb (db);
-        ctx->setFrameColor (std::fabs (db) < 0.1 ? CColor (70, 70, 78) : theme::kGrid);
+        ctx->setFrameColor (std::fabs (db) < 0.1 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (pr.left, y), CPoint (pr.right, y));
         std::snprintf (buf, sizeof (buf), "%+.0f", db);
         text (ctx, std::fabs (db) < 0.1 ? "0" : buf, CRect (all.left + 1, y - 7, pr.left - 4, y + 7), theme::kTextDim, 9.0, kRightText);
@@ -263,21 +267,24 @@ void BandView::draw (CDrawContext* ctx)
     {
         const double x0 = xOfHz (bandLow (f, k)), x1 = xOfHz (bandHigh (f, k, n));
         const double w = x1 - x0, mx = 0.5 * (x0 + x1);
-        // three lanes: the level (dim), the gain reduction (red, from 0 dB down), the level after the gain (bright)
+        // three lanes: the level (energy idle), the gain reduction (a pale copper outline, from 0 dB
+        // down), the level after the gain (energy live)
         const double lane = std::max (3.0, std::min (16.0, w * 0.2));
         if (shownLevel[k] > kBottomDb)
         {
-            ctx->setFillColor (withAlpha (kLevel, 70));
+            ctx->setFillColor (kLevel);
             ctx->drawRect (CRect (mx - 1.5 * lane, yOfDb (shownLevel[k]), mx - 0.5 * lane, pr.bottom), kDrawFilled);
         }
         if (shownGain[k] < -0.05f)
         {
-            ctx->setFillColor (withAlpha (kReduce, 150));
-            ctx->drawRect (CRect (mx - 0.5 * lane + 1, yOfDb (0.0), mx + 0.5 * lane - 1, yOfDb (shownGain[k])), kDrawFilled);
+            const CRect gr (mx - 0.5 * lane + 1, yOfDb (0.0), mx + 0.5 * lane - 1, yOfDb (shownGain[k]));
+            ctx->setFillColor (withAlpha (kReduce, 40));
+            ctx->drawRect (gr, kDrawFilled);
+            pk::draw::outline (ctx, gr, kReduce, 0);
         }
         if (shownOut[k] > kBottomDb)
         {
-            ctx->setFillColor (withAlpha (kLevel, 170));
+            ctx->setFillColor (kLevelOut);
             ctx->drawRect (CRect (mx + 0.5 * lane, yOfDb (shownOut[k]), mx + 1.5 * lane, pr.bottom), kDrawFilled);
         }
         std::snprintf (buf, sizeof (buf), "%.1f", (double)std::min (0.0f, shownGain[k]));
@@ -304,14 +311,17 @@ void BandView::draw (CDrawContext* ctx)
     };
     const bool downHot = drag.what == Target::DownThreshold || hover.what == Target::DownThreshold;
     const bool upHot = drag.what == Target::UpThreshold || hover.what == Target::UpThreshold;
-    hline (upT, withAlpha (kUp, upOn ? (upHot ? 255 : 200) : (upHot ? 160 : 70)), upHot ? 2.0 : 1.5, false);
-    hline (downT, withAlpha (kDown, downHot ? 255 : 210), downHot ? 2.0 : 1.5, false);
+    // held or hovered, a threshold lights cinnabar; the upward one is dashed (dim line while it is off)
+    ctx->setLineStyle (theme::kDashed);
+    hline (upT, upHot ? theme::kEnergyLive : (upOn ? kUp : theme::kLineDim), 1.0, false);
+    ctx->setLineStyle (kLineSolid);
+    hline (downT, downHot ? theme::kEnergyLive : kDown, downHot ? 1.5 : 1.0, false);
     if (neg)
-        hline (downT - host->plainValue (kRange), withAlpha (kDown, 110), 1.0, true);
+        hline (downT - host->plainValue (kRange), withAlpha (theme::kCopper, 170), 1.0, true);
     auto tag = [&] (const char* s, double db, CColor c, bool right) {
         const double w = 7.0 + 5.6 * (double)std::strlen (s), y = yOfDb (db);
         const CRect box = right ? CRect (pr.right - w - 2, y - 14, pr.right - 2, y - 1) : CRect (pr.left + 2, y - 14, pr.left + 2 + w, y - 1);
-        ctx->setFillColor (withAlpha (theme::kWaveBg, 200));
+        ctx->setFillColor (withAlpha (theme::kWell, 200));
         ctx->drawRect (box, kDrawFilled);
         text (ctx, s, box, c, 9.5);
     };
@@ -320,10 +330,10 @@ void BandView::draw (CDrawContext* ctx)
     if (neg)
     {
         std::snprintf (buf, sizeof (buf), "floor %.1f dB", downT - host->plainValue (kRange));
-        tag (buf, downT - host->plainValue (kRange), withAlpha (kDown, 170), true);
+        tag (buf, downT - host->plainValue (kRange), theme::kTextDim, true);
     }
     std::snprintf (buf, sizeof (buf), upOn ? "Up %.1f dB" : "Up %.1f dB (off)", upT);
-    tag (buf, upT, withAlpha (kUp, upOn ? 230 : 130), false);
+    tag (buf, upT, upOn ? kUp : theme::kTextDim, false);
 
     // crossover handles
     for (int j = 0; j + 1 < n; ++j)
@@ -331,14 +341,12 @@ void BandView::draw (CDrawContext* ctx)
         const double x = xOfHz (f[j]);
         const bool hot = (drag.what == Target::Xover || hover.what == Target::Xover) &&
                          (drag.what == Target::Xover ? drag.index : hover.index) == j;
-        ctx->setFrameColor (withAlpha (kXover, hot ? 255 : 150));
-        ctx->setLineWidth (hot ? 2.0 : 1.0);
+        ctx->setFrameColor (hot ? theme::kEnergyLive : withAlpha (kXover, 170));
         ctx->drawLine (CPoint (x, pr.top), CPoint (x, pr.bottom));
-        ctx->setLineWidth (1.0);
-        ctx->setFillColor (hot ? theme::kTextBright : kXover);
-        ctx->drawRect (CRect (x - 3, pr.bottom - 14, x + 3, pr.bottom), kDrawFilled);
+        // the grip at the foot: an outlined tab, lit while held or hovered
+        pk::draw::outline (ctx, CRect (x - 3, pr.bottom - 14, x + 4, pr.bottom), hot ? theme::kEnergyLive : kXover, 0);
         if (hot)
-            text (ctx, hzText (f[j]), CRect (x - 40, pr.bottom - 28, x + 40, pr.bottom - 16), theme::kTextBright, 9.5);
+            text (ctx, hzText (f[j]), CRect (x - 40, pr.bottom - 28, x + 40, pr.bottom - 16), theme::kText, 9.5);
     }
 
     // the gain points and the curve through them
@@ -359,31 +367,24 @@ void BandView::draw (CDrawContext* ctx)
             else
                 line->addLine (q);
         }
-        ctx->setLineWidth (2.0);
-        ctx->setFrameColor (withAlpha (kCurve, 200));
-        ctx->drawGraphicsPath (line, CDrawContext::kPathStroked);
         ctx->setLineWidth (1.0);
+        ctx->setFrameColor (withAlpha (kCurve, 220));
+        ctx->drawGraphicsPath (line, CDrawContext::kPathStroked);
     }
     for (int k = 0; k < n; ++k)
     {
         const CPoint q (px[(size_t)k], yOfDb (py[(size_t)k]));
         const bool hot = (drag.what == Target::Point && drag.index == k) || (hover.what == Target::Point && hover.index == k);
-        const CRect r (q.x - kPointRadius, q.y - kPointRadius, q.x + kPointRadius, q.y + kPointRadius);
-        ctx->setFillColor (hot ? kDown : theme::kTextBright);
-        ctx->drawEllipse (r, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (theme::kWaveBg);
-        ctx->drawEllipse (r, kDrawStroked);
-        ctx->setLineWidth (1.0);
+        pk::draw::handle (ctx, q, kPointRadius, hot);
         if (hot)
         {
             std::snprintf (buf, sizeof (buf), "Band %d  %+.1f dB", k + 1, host->plainValue (kBandGain1 + (uint32_t)k));
-            text (ctx, buf, CRect (q.x - 60, q.y - 22, q.x + 60, q.y - 8), theme::kTextBright, 9.5);
+            text (ctx, buf, CRect (q.x - 60, q.y - 22, q.x + 60, q.y - 8), theme::kText, 9.5);
         }
     }
 
     // title and readouts
-    text (ctx, "BANDS", CRect (all.left + 6, all.top + 4, all.left + 80, all.top + 18), kLevel, 10.5, kLeftText, true);
+    text (ctx, "BANDS", CRect (all.left + 6, all.top + 4, all.left + 80, all.top + 18), theme::kCopperPale, 10.5, kLeftText, true);
     if (neg)
         std::snprintf (buf, sizeof (buf), "Ratio %s   floor %.1f dB   Input %+.1f dB   Makeup %+.1f dB", negRatioText (host->plainValue (kNegRatio)).c_str (),
                        downT - host->plainValue (kRange), host->plainValue (kInput), host->plainValue (kMakeup));

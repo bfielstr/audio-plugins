@@ -25,10 +25,12 @@ namespace {
 constexpr double kRuler = 18.0;
 constexpr double kProgress = 4.0;
 constexpr double kGrab = 6.0;
-const CColor kStretchTint (70, 150, 255);
-const CColor kSqueezeTint (255, 164, 40);
-const CColor kPitchLine (120, 210, 140);
-const CColor kRec (230, 70, 60);
+// slowed-down segments a copper tint, sped-up ones a faint cinnabar (and each segment's speed is
+// written on it); the pitch envelope a text-coloured line; capture is live (cinnabar)
+const CColor kStretchTint = pk::theme::kCopper;
+const CColor kSqueezeTint = pk::theme::kEnergyLive;
+const CColor kPitchLine = pk::theme::kText;
+const CColor kRec = pk::theme::kEnergyLive;
 
 class FileDropTarget : public DropTargetAdapter, public NonAtomicReferenceCounted
 {
@@ -217,9 +219,9 @@ void ClipView::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
     ctx->setDrawMode (kAntiAliasing | kNonIntegralMode);
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
-    ctx->setFillColor (theme::kHeader);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (CRect (r.left, r.top, r.right, r.top + kRuler), kDrawFilled);
     const CRect p = plotArea ();
 
@@ -240,7 +242,7 @@ void ClipView::draw (CDrawContext* ctx)
             std::snprintf (buf, sizeof (buf), "Recording  %s", formatTime (s->capturedSeconds (), 0.1).c_str ());
             drawText (ctx, buf, p, kRec, 14.0, kCenterText, true);
         }
-        ctx->setFrameColor (cap ? kRec : theme::kPanelEdge);
+        ctx->setFrameColor (cap ? kRec : theme::kLineDim);
         ctx->setLineWidth (1.0);
         ctx->drawRect (r, kDrawStroked);
         return;
@@ -269,16 +271,16 @@ void ClipView::draw (CDrawContext* ctx)
             const double x = timeToX (t);
             if (x < p.left || x > p.right)
                 continue;
-            ctx->setFrameColor (theme::kGrid);
+            ctx->setFrameColor (theme::kGridMinor);
             ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
-            ctx->setFrameColor (theme::kTextDim);
+            ctx->setFrameColor (theme::kCopper);
             ctx->drawLine (CPoint (x, r.top + kRuler - 5), CPoint (x, r.top + kRuler));
             drawText (ctx, formatTime (t, step), CRect (x + 3, r.top + 1, x + 80, r.top + kRuler - 2), theme::kTextDim,
                       9.5);
         }
     }
 
-    // segment tints: blue where the audio is slowed down, orange where it is sped up
+    // segment tints: copper where the audio is slowed down, cinnabar where it is sped up
     for (size_t i = 0; i + 1 < c.markers.size (); ++i)
     {
         const double t0 = map.outAt (c.markers[i].src), t1 = map.outAt (c.markers[i + 1].src);
@@ -287,13 +289,13 @@ void ClipView::draw (CDrawContext* ctx)
         if (x1 <= x0 || std::fabs (std::log (st)) < 0.01)
             continue;
         const double amount = std::min (1.0, std::fabs (std::log2 (st)) / 2.0);
-        ctx->setFillColor (withAlpha (st > 1.0 ? kStretchTint : kSqueezeTint, (uint8_t)(14 + 40 * amount)));
+        ctx->setFillColor (withAlpha (st > 1.0 ? kStretchTint : kSqueezeTint, (uint8_t)(st > 1.0 ? 14 + 40 * amount : 10 + 30 * amount)));
         ctx->drawRect (CRect (x0, p.top, x1, p.bottom), kDrawFilled);
     }
 
     // outside the clip
     {
-        ctx->setFillColor (CColor (0, 0, 0, 90));
+        ctx->setFillColor (withAlpha (theme::kWell, 150));
         const double xs = timeToX (0.0), xe = timeToX (outLen);
         if (xs > p.left)
             ctx->drawRect (CRect (p.left, p.top, std::min (xs, p.right), p.bottom), kDrawFilled);
@@ -308,7 +310,7 @@ void ClipView::draw (CDrawContext* ctx)
         const double mid = p.getCenter ().y, half = p.getHeight () * 0.5 - 6.0;
         const double norm = 0.95 / std::max (0.02f, a.peakAbs);
         const int bs = a.peaks.blockSize;
-        ctx->setFrameColor (editMode == kPitchMode ? withAlpha (theme::kWave, 120) : theme::kWave);
+        ctx->setFrameColor (editMode == kPitchMode ? withAlpha (theme::kCopper, 120) : theme::kCopper);
         ctx->setLineWidth (1.0);
         for (double x = std::floor (p.left); x < p.right; x += 1.0)
         {
@@ -354,11 +356,11 @@ void ClipView::draw (CDrawContext* ctx)
         if (x < p.left - 8 || x > p.right + 8)
             continue;
         const bool hot = stretchMode && (int)i == (drag == Drag::Marker ? dragIndex : hoverIndex);
-        CColor col = i == 0 ? theme::kTextDim : (hot ? theme::kAccent : theme::kTextBright);
+        CColor col = i == 0 ? theme::kTextDim : (hot ? theme::kEnergyLive : theme::kCopperPale);
         if (!stretchMode)
             col = withAlpha (col, 90);
         ctx->setFrameColor (col);
-        ctx->setLineWidth (hot ? 2.0 : 1.0);
+        ctx->setLineWidth (hot ? 1.5 : 1.0);
         ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
         ctx->setFillColor (col);
         ctx->drawPolygon ({CPoint (x - 5, p.top), CPoint (x + 5, p.top), CPoint (x, p.top + 8)}, kDrawFilled);
@@ -376,7 +378,7 @@ void ClipView::draw (CDrawContext* ctx)
             std::snprintf (buf, sizeof (buf), speed < 10.0 ? "%.1f %%" : "%.0f %%", speed);
             const double cx = std::clamp ((x0 + x1) * 0.5, p.left + 24.0, p.right - 24.0);
             drawText (ctx, buf, CRect (cx - 40, p.top + 2, cx + 40, p.top + 16),
-                      std::fabs (speed - 100.0) < 0.5 ? theme::kTextDim : theme::kTextBright, 10.0, kCenterText);
+                      std::fabs (speed - 100.0) < 0.5 ? theme::kTextDim : theme::kText, 10.0, kCenterText);
         }
 
     // pitch envelope
@@ -387,7 +389,7 @@ void ClipView::draw (CDrawContext* ctx)
         {
             for (double g : {-24.0, -12.0, 12.0, 24.0})
             {
-                ctx->setFrameColor (theme::kGrid);
+                ctx->setFrameColor (theme::kGridMinor);
                 ctx->setLineWidth (1.0);
                 const double y = semisToY (g);
                 ctx->drawLine (CPoint (p.left, y), CPoint (p.right, y));
@@ -395,12 +397,12 @@ void ClipView::draw (CDrawContext* ctx)
                 std::snprintf (buf, sizeof (buf), "%+.0f", g);
                 drawText (ctx, buf, CRect (p.left + 3, y - 12, p.left + 40, y), theme::kTextDim, 9.0);
             }
-            ctx->setFrameColor (withAlpha (kPitchLine, 60));
+            ctx->setFrameColor (theme::kGridZero);
             ctx->drawLine (CPoint (p.left, semisToY (0.0)), CPoint (p.right, semisToY (0.0)));
         }
         const double xs = std::max (p.left, timeToX (0.0)), xe = std::min (p.right, timeToX (outLen));
         ctx->setFrameColor (line);
-        ctx->setLineWidth (2.0);
+        ctx->setLineWidth (1.5);
         CPoint prevPt;
         bool have = false;
         for (double x = xs; x <= xe; x += 2.0)
@@ -419,13 +421,13 @@ void ClipView::draw (CDrawContext* ctx)
                 if (pt.x < p.left - 6 || pt.x > p.right + 6)
                     continue;
                 const bool hot = (int)i == (drag == Drag::Point ? dragIndex : hoverIndex);
-                ctx->setFillColor (hot ? theme::kAccent : kPitchLine);
+                ctx->setFillColor (hot ? theme::kEnergyLive : kPitchLine);
                 ctx->drawEllipse (CRect (pt.x - 4.5, pt.y - 4.5, pt.x + 4.5, pt.y + 4.5), kDrawFilled);
                 if (hot)
                 {
                     char buf[32];
                     std::snprintf (buf, sizeof (buf), "%+.2f st", c.pitch[i].semis);
-                    drawText (ctx, buf, CRect (pt.x + 8, pt.y - 20, pt.x + 90, pt.y - 6), theme::kTextBright, 10.0);
+                    drawText (ctx, buf, CRect (pt.x + 8, pt.y - 20, pt.x + 90, pt.y - 6), theme::kText, 10.0);
                 }
             }
     }
@@ -447,7 +449,7 @@ void ClipView::draw (CDrawContext* ctx)
     // render progress / capture
     if (s && s->rendering.load ())
     {
-        ctx->setFillColor (theme::kAccentDim);
+        ctx->setFillColor (theme::kEnergyLive);
         ctx->drawRect (CRect (r.left, r.bottom - kProgress, r.left + r.getWidth () * s->progress.load (), r.bottom),
                        kDrawFilled);
     }
@@ -460,7 +462,7 @@ void ClipView::draw (CDrawContext* ctx)
             std::snprintf (buf, sizeof (buf), "Recording  %s", formatTime (s->capturedSeconds (), 0.1).c_str ());
         drawText (ctx, buf, CRect (p.left, p.bottom - 22, p.right - 8, p.bottom - 4), kRec, 11.0, kRightText, true);
     }
-    ctx->setFrameColor (cap ? kRec : theme::kPanelEdge);
+    ctx->setFrameColor (cap ? kRec : theme::kLineDim);
     ctx->setLineWidth (1.0);
     ctx->drawRect (r, kDrawStroked);
 }

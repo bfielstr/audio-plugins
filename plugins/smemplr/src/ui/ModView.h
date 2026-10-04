@@ -6,6 +6,7 @@
 #include "Modulation.h"
 
 #include "vstgui/lib/ccolor.h"
+#include "vstgui/lib/clinestyle.h"
 #include "vstgui/lib/cview.h"
 
 #include <cstdint>
@@ -16,8 +17,10 @@ namespace smemplr {
 
 class Editor;
 
-// each LFO's colour (its handle, its rings and its rows in the list)
+// each LFO's colour (its handle, its rings and its rows in the list: cinnabar for all of them) and its
+// line style (solid, dashed, dotted, dash-dot), which tells the LFOs apart on the rings
 VSTGUI::CColor modColor (int lfo);
+VSTGUI::CLineStyle modLineStyle (int lfo);
 
 // "LFO n": press and drag it onto a control; the overlay frames the control it would modulate.
 class LfoHandle : public VSTGUI::CView

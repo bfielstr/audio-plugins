@@ -52,7 +52,7 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kDisplay =
     "The bands in use side by side, each at its level (its drive, when on, tagged at the foot), with the whole "
-    "response (white) and the output's spectrum behind (tilted 4.5 dB/oct, so a mix looks level). Drag a band up or down for its level (Shift: fine); drag a "
+    "response (the bright line) and the output's spectrum behind (tilted 4.5 dB/oct, so a mix looks level). Drag a band up or down for its level (Shift: fine); drag a "
     "line between two bands sideways to move that crossover. Double-click or right-click resets a band's level or a "
     "crossover's frequency. M and S at the top of a band mute and solo it. The mouse wheel: a band's level, or the "
     "slope on a crossover.";

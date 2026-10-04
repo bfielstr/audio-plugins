@@ -20,9 +20,12 @@ using namespace VSTGUI;
 namespace theme = pk::theme;
 
 namespace {
-// the palette of the other devices: orange and blue as in Multidyn, the sum in white
-const CColor kHpColor (255, 164, 40), kLpColor (110, 165, 255);
-const CColor kSpecIn (120, 124, 134, 40), kSpecOutFill (205, 208, 216, 38), kSpecOutLine (215, 218, 226, 110);
+// The two filters are copper traces told apart by line style (high-pass solid, low-pass dashed) and by
+// the HP / LP labels at their handles; the sum is the text-coloured line. The input spectrum a dim
+// body, the output a faint copper body with a copper trace; the envelope lights the handles' halos.
+const CColor kHpColor = theme::kCopper, kLpColor = theme::kCopper;
+const CColor kSpecIn = theme::withAlpha (theme::kLineDim, 150), kSpecOutFill = theme::withAlpha (theme::kCopper, 34),
+             kSpecOutLine = theme::withAlpha (theme::kCopper, 170);
 constexpr double kHandleRadius = 6.0;
 constexpr int kPoints = 200; // along the frequency axis
 
@@ -194,7 +197,7 @@ void FilterView::draw (CDrawContext* ctx)
 {
     trackLeader ();
     const CRect all = getViewSize ();
-    ctx->setFillColor (theme::kWaveBg);
+    ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     ctx->setClipRect (all);
     const double plotBottom = all.bottom - 16.0;
@@ -204,7 +207,7 @@ void FilterView::draw (CDrawContext* ctx)
     for (double f : {50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0, 10000.0})
     {
         const bool major = f == 100.0 || f == 1000.0 || f == 10000.0;
-        ctx->setFrameColor (major ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (major ? theme::kGridMajor : theme::kGridMinor);
         ctx->drawLine (CPoint (xOfHz (f), all.top), CPoint (xOfHz (f), plotBottom));
         char buf[16];
         std::snprintf (buf, sizeof (buf), f >= 1000 ? "%.0fk" : "%.0f", f >= 1000 ? f / 1000 : f);
@@ -212,14 +215,14 @@ void FilterView::draw (CDrawContext* ctx)
     }
     for (double db : {-24.0, -12.0, 0.0, 12.0})
     {
-        ctx->setFrameColor (db == 0.0 ? CColor (58, 58, 64) : theme::kGrid);
+        ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
         char buf[8];
         std::snprintf (buf, sizeof (buf), "%.0f", db);
         text (ctx, buf, CRect (all.left + 2, yOfDb (db) - 12, all.left + 30, yOfDb (db)), theme::kTextDim, 9.0, kLeftText);
     }
 
-    // live spectra: input (grey) and output (blue), on their own scale (0 dBFS at the top)
+    // live spectra: input (a dim body) and output (copper), on their own scale (0 dBFS at the top)
     if (haveSpectrum)
     {
         auto ySpec = [&] (double db) {
@@ -266,7 +269,7 @@ void FilterView::draw (CDrawContext* ctx)
     const double hc = std::clamp (hp, 5.0, 0.49 * rate), lc = std::clamp (lp, 5.0, 0.49 * rate);
     auto warped = [&] (double f, double fc) { return fc * std::tan (M_PI * f / rate) / std::tan (M_PI * fc / rate); };
     const double hpGain = filterGain (gainDbOf (true)) * hpMul, lpGain = filterGain (gainDbOf (false)) * lpMul;
-    auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width) {
+    auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width, bool dashed = false) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
             return;
@@ -302,12 +305,15 @@ void FilterView::draw (CDrawContext* ctx)
         }
         ctx->setLineWidth (width);
         ctx->setFrameColor (stroke);
+        if (dashed)
+            ctx->setLineStyle (theme::kDashed);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+        ctx->setLineStyle (kLineSolid);
     };
-    const CColor hpFill (255, 164, 40, 30), lpFill (110, 165, 255, 30);
-    curve (0, kHpColor, &hpFill, 1.4);
-    curve (1, kLpColor, &lpFill, 1.4);
-    curve (2, theme::kTextBright, nullptr, 2.2);
+    const CColor hpFill = theme::withAlpha (theme::kCopper, 22), lpFill = theme::withAlpha (theme::kCopper, 22);
+    curve (0, kHpColor, &hpFill, 1.0);
+    curve (1, kLpColor, &lpFill, 1.0, true);
+    curve (2, theme::kText, nullptr, 1.5);
 
     // handles, with a halo that grows with the envelope
     for (int k = 0; k < 2; ++k)
@@ -318,50 +324,49 @@ void FilterView::draw (CDrawContext* ctx)
             // pushed by Vocal: a line up to the leader and how far it has faded
             const CPoint h = k == 0 ? hpHandle () : lpHandle (), lead = k == 0 ? lpHandle () : hpHandle ();
             ctx->setLineWidth (1.0);
-            ctx->setFrameColor (CColor (200, 200, 200, 90));
+            ctx->setFrameColor (theme::withAlpha (theme::kCopper, 150));
             ctx->drawLine (lead, h);
             char fade[40];
             if (mul < 1e-3f)
                 std::snprintf (fade, sizeof (fade), "%s pushed: -inf", k == 0 ? "HP" : "LP");
             else
                 std::snprintf (fade, sizeof (fade), "%s pushed: %.0f dB", k == 0 ? "HP" : "LP", 20.0 * std::log10 (mul));
-            text (ctx, fade, CRect (h.x + 10, h.y - 7, h.x + 130, h.y + 7), k == 0 ? kHpColor : kLpColor, 9.5, kLeftText);
+            text (ctx, fade, CRect (h.x + 10, h.y - 7, h.x + 130, h.y + 7), theme::kCopperPale, 9.5, kLeftText);
         }
     }
     for (int k = 0; k < 2; ++k)
     {
         const CPoint h = k == 0 ? hpHandle () : lpHandle ();
         const float fadeMul = k == 0 ? hpMul : lpMul;
-        const CColor base = k == 0 ? kHpColor : kLpColor;
-        const CColor c (base.red, base.green, base.blue, (uint8_t)(70.0f + 185.0f * std::sqrt (std::clamp (fadeMul, 0.0f, 1.0f))));
         if (shownEnv > 0.01f)
         {
+            // the envelope lights a cinnabar halo round the handle (fainter as Vocal fades the filter)
             const double rr = kHandleRadius + 10.0 * shownEnv;
-            ctx->setFillColor (CColor (c.red, c.green, c.blue, (uint8_t)(40 + 80 * shownEnv)));
+            const float fade = std::sqrt (std::clamp (fadeMul, 0.0f, 1.0f));
+            ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, (uint8_t)((30 + 60 * shownEnv) * (0.3f + 0.7f * fade))));
             ctx->drawEllipse (CRect (h.x - rr, h.y - rr, h.x + rr, h.y + rr), kDrawFilled);
         }
-        const CRect hr (h.x - kHandleRadius, h.y - kHandleRadius, h.x + kHandleRadius, h.y + kHandleRadius);
-        ctx->setFillColor (c);
-        ctx->drawEllipse (hr, kDrawFilled);
-        ctx->setLineWidth (1.5);
-        ctx->setFrameColor (theme::kTextBright);
-        ctx->drawEllipse (hr, kDrawStroked);
+        // the handle (copper once Vocal has pushed it), its filter's name beside it
+        const bool held = drag == (k == 0 ? Drag::Hp : Drag::Lp);
+        pk::draw::handle (ctx, h, kHandleRadius, held, fadeMul >= 0.99f);
+        text (ctx, k == 0 ? "HP" : "LP", CRect (h.x - 20, h.y - kHandleRadius - 14, h.x + 20, h.y - kHandleRadius - 2), theme::kCopperPale, 9.0,
+              kCenterText, true);
     }
 
     // labels, the tracked note and the envelope meter
     char buf[112];
     std::snprintf (buf, sizeof (buf), "HP %s   LP %s   Split %s", host->valueText (kHpFreq).c_str (),
                    host->valueText (kLpFreq).c_str (), host->valueText (kSplit).c_str ());
-    text (ctx, buf, CRect (all.left + 36, all.top + 4, all.right - 90, all.top + 18), theme::kTextBright, 10.5, kLeftText, true);
+    text (ctx, buf, CRect (all.left + 36, all.top + 4, all.right - 90, all.top + 18), theme::kText, 10.5, kLeftText, true);
     std::snprintf (buf, sizeof (buf), "now HP %.0f Hz / LP %.0f Hz", hp, lp);
     text (ctx, buf, CRect (all.left + 36, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
     const CRect envBar (all.right - 84, all.top + 7, all.right - 8, all.top + 15);
     text (ctx, "ENV", CRect (envBar.left - 28, all.top + 4, envBar.left - 4, all.top + 18), theme::kTextDim, 9.0, kRightText);
-    ctx->setFillColor (theme::kControlBg);
+    ctx->setFillColor (theme::kLineDim);
     ctx->drawRect (envBar, kDrawFilled);
     if (shownEnv > 0.001f)
     {
-        ctx->setFillColor (theme::kAccent);
+        ctx->setFillColor (theme::kEnergyLive);
         ctx->drawRect (CRect (envBar.left, envBar.top, envBar.left + envBar.getWidth () * shownEnv, envBar.bottom), kDrawFilled);
     }
     if (!haveSpectrum)

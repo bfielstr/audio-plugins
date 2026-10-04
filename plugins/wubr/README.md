@@ -3,7 +3,7 @@
 Two bands whose gain and centre move with shapes you draw: wubs, pumps and sweeps, tempo-synced or free,
 or run once as envelopes. Then Smacheratr at the end of the chain.
 
-- **Bands**: two bell bands (1 green, 2 blue), each with Frequency, Width (octaves), Gain, and a Target:
+- **Bands**: two bell bands (numbered 1 and 2 at their handles in the display), each with Frequency, Width (octaves), Gain, and a Target:
   - **Gain**: the band's level is Gain + Depth x the shape (dB): +Depth at the top, -Depth at the bottom.
   - **Frequency**: the band sits at Gain and its centre moves Sweep octaves (half up at the top, half down).
   - **Both**: both at once.

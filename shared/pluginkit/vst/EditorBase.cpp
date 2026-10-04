@@ -139,7 +139,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     tailBandButtons.clear ();
     static const char* const bandNames[4] = {"1", "2", "S", "H"};
     static const char* const bandTips[4] = {
-        "Show Gently's first band (green in the display).", "Show Gently's second band (blue in the display).",
+        "Show Gently's first band (Gently in the display).", "Show Gently's second band (Gently 2 in the display).",
         "Show Gently's Sub band: from the bottom of the spectrum, it starts to taper at its Freq.",
         "Show Gently's High band: from its Freq, where it starts to taper, to the top of the spectrum."};
     for (int k = 0; k < 4; ++k)

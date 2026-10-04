@@ -23,7 +23,7 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kSpectrum =
-    "Grey: input spectrum. Orange: output. Bottom strip: gain applied per band (blue = cut, orange = boost). Drag the "
+    "Faint copper: input spectrum. Bright line: output. Bottom strip: gain applied per band (down = cut, up = boost). Drag the "
     "range edges to set Low/High, drag inside the range sideways to move it or up/down to set Contrast, "
     "double-click inside to reset Contrast. Shift: fine.";
 

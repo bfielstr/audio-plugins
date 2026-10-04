@@ -1,6 +1,6 @@
 // The bands in use (Bands: 1 .. 4) on a frequency display, in the style of a multiband's: each band a
-// coloured column between its crossovers, filled from 0 dB to its level, its drive (when on) as a tag
-// at the foot; the whole response in white (the bands' filters added up as the engine adds them, so
+// column between its crossovers (numbered at the top), filled from 0 dB to its level, its drive (when on) as a tag
+// at the foot; the whole response as a text-coloured line (the bands' filters added up as the engine adds them, so
 // the steps between levels show as they sound); the output's spectrum behind. The last band in use
 // reaches to the top of the display; the crossovers past it aren't shown.
 //   a band, up / down             its Gain (Shift: fine)

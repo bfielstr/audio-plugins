@@ -26,20 +26,20 @@ inline const char* forParam (uint32_t id)
         case kOutput: return "Output level, before the Smacheratr at the end.";
         case kSubOn: return "Unused: the Sub band works while its Range is above 0 dB (it had a button of its own before).";
         case kSubFreq:
-            return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its amber handle "
+            return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its handle "
                    "sideways). Everything below it, to the very bottom, is compressed.";
         case kSubRange:
             return "The Sub band compresses the sub region, from the bottom of the spectrum, a shelf, up to where its cut "
-                   "starts to let go (Freq). Range: the most it turns that region down (drag its amber handle down). 3 dB for "
+                   "starts to let go (Freq). Range: the most it turns that region down (drag its handle down). 3 dB for "
                    "every 5 the band is over its threshold, up to this. At 0 dB (the default) the band does nothing.";
         case kHighOn: return "Unused: the High band works while its Range is above 0 dB (it had a button of its own before).";
         case kHighFreq:
-            return "The High band: where it starts to taper off going down, 2 to 16 kHz (7 kHz by default; drag its rose "
+            return "The High band: where it starts to taper off going down, 2 to 16 kHz (7 kHz by default; drag its "
                    "handle sideways). Everything above it, to the very top, is compressed; half as much around half the "
                    "frequency, nearly nothing an octave below that.";
         case kHighRange:
             return "The High band compresses the top of the spectrum (harshness, fizz, sibilance), a shelf from where its cut "
-                   "starts to let go (Freq) up to the very top. Range: the most it turns that down (drag its rose handle "
+                   "starts to let go (Freq) up to the very top. Range: the most it turns that down (drag its handle "
                    "down). 3 dB for every 5 the band is over its threshold, up to this. At 0 dB (the default) the band does "
                    "nothing.";
         case kHighThreshold:
@@ -75,8 +75,8 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kDisplay =
-    "Gently's bands (1 green, 2 blue, Sub amber, High rose): each band's region shaded, the most it can cut dashed, the cut it is "
-    "making now filled in, the whole response in white. Behind: the output's spectrum filled, the input's dotted "
+    "Gently's bands (each named in its readout at the top): each band's region shaded, the most it can cut dashed, the cut it is "
+    "making now lit (cinnabar), the whole response as the bright line. Behind: the output's spectrum filled, the input's dotted "
     "(tilted 4.5 dB/oct). Drag a handle sideways for the band's frequency, down for its Range; drag an edge, or "
     "Alt-drag the band, for its width (the Sub and High bands have none); the wheel on a handle (Shift) too. Double-click "
     "or right-click a handle resets the band. Click band 1's or band 2's readout at the top to switch it on or off. The Sub "
