@@ -104,14 +104,10 @@ jobs:
 
       - name: Test
         # (a hung test fails after 10 minutes with its output, instead of holding the job for hours)
-        # The core tests run side by side, one per core (some check a CPU budget, so no more of them than
-        # cores: std::clock is wall time on Windows); the host tests (each opens a real editor window and
-        # clicks in it) one at a time.
-        shell: bash
-        run: |
-          cores=${NUMBER_OF_PROCESSORS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
-          ctest --test-dir build -C Release --output-on-failure --timeout 600 -E hosttest --parallel "$cores"
-          ctest --test-dir build -C Release --output-on-failure --timeout 600 -R hosttest --no-tests=ignore
+        # One at a time: several core tests check a CPU budget, and run side by side they starve each
+        # other (four failed "too slow" on Linux's 4 shared vCPUs), and the host tests drive real editor
+        # windows.
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 600
 
       - name: Package
         shell: bash
