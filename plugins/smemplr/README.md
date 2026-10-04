@@ -37,6 +37,20 @@ and **Length**) and the playhead first finishes its pass of the loop as it was, 
 start of the loop where it is by then, through the loop's crossfade (a very short one with Fade off),
 so the change lands in time and without a click.
 
+**Playheads** (Classic, 1 by default) plays up to four parts of the sample at once for every note.
+The first playhead is the loop; each of the others has a region of its own, shown in the waveform as
+a numbered region with dashed edges and a dashed bar above the loop's. Drag the bar to move a region,
+or drag its edges to resize it, just like the loop (the **Grid** applies too). Each region starts at
+its own start and loops as the loop does (or plays to the end flag with Loop off). All the playheads go
+through the same envelopes, filter, LFOs and glide, and on into the effects rack. **Spread** (-100 % to
++100 %, 0 by default) places them in the stereo field: at 0 they are all in the centre; turned up they
+move apart, two of them to the left and the right, three or four spread evenly between the edges, and
+negative values swap the sides. The **St** / **L** / **R** row for each playhead (numbered as in the
+waveform) picks which channel of a stereo sample it reads: both, only the left or only the right (a mono
+sample ignores it). With Warp on, **Beats**, **Tones**, **Texture** and **Re-Pitch** play every playhead;
+**Complex** and **Complex Pro** play only the first. A new Playheads setting applies to the next notes.
+Each extra playhead adds CPU, a little less than another voice would.
+
 **One-Shot** mode: one voice, **Trigger** / **Gate**, **Fade In** / **Fade Out**, **Snap**.
 
 **Slicing** mode: **Slice By** **Transient** (with **Sens**, up to 64 slices), **Beat** (**Division**),
@@ -251,7 +265,8 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
   saved while the Sub and High bands had buttons load a band that was off at Range 0 dB; slots saved
   before glue load with nothing glued.
 - Projects from before the modulation LFOs load with no mappings and sound exactly as before.
-- Projects from before the Grid load with it off.
+- Projects from before the Grid and Playheads load with the Grid off and one playhead reading both
+  channels: they sound exactly as before.
 
 ## Credits
 

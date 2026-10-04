@@ -277,6 +277,20 @@ std::vector<ParamInfo> buildTable ()
     // the waveform's Grid (off: the loop's drags move freely, as before)
     add (toggle (kGridOn, "Grid", "Grid", false));
     add (choice (kGridSize, "Grid Size", "Grid", {"1/16", "1/8", "1/4", "1/2", "1 Bar"}, 2));
+    // more playheads (1: the sampler as it was); the extra ones' regions start spread over the sample
+    add (choice (kPlayheads, "Playheads", "Playheads", {"1", "2", "3", "4"}, 0));
+    add (fl (kHeadSpread, "Playhead Spread", "Spread", -1.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+    for (int h = 0; h < kMaxPlayheads; ++h)
+    {
+        const std::string n = "Playhead " + std::to_string (h + 1);
+        add (choice ((ParamId)headChannelParam (h), keep (n + " Channel"), "Channel", {"Stereo", "Left", "Right"}, kHeadStereo));
+    }
+    for (int h = 1; h < kMaxPlayheads; ++h)
+    {
+        const std::string n = "Playhead " + std::to_string (h + 1);
+        add (pct ((ParamId)headParam (h, kHeadStart), keep (n + " Start"), "Start", 0.25 * h));
+        add (pct ((ParamId)headParam (h, kHeadLength), keep (n + " Length"), "Length", 0.25));
+    }
     return t;
 }
 

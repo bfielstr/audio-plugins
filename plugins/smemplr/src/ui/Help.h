@@ -31,8 +31,27 @@ inline const char* forParam (uint32_t id)
                    "a beat grid, so the loop is always a whole number of grid steps long. The grid follows the sample's "
                    "tempo while Warp is on, the host's tempo otherwise (120 BPM without one). Automation is not snapped.";
         case kGridSize: return "The Grid's step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar.";
+        case kPlayheads:
+            return "Playheads (Classic): 1 to 4. Every note plays each playhead's region at once, all through the same "
+                   "envelopes, filter, LFO and effects. The first is the loop; the others have regions of their own "
+                   "(numbered dashed regions in the waveform: drag them like the loop). Warp: Beats, Tones and Texture "
+                   "play every playhead, Re-Pitch too; Complex and Complex Pro only the first. A change applies to the "
+                   "next notes.";
+        case kHeadSpread:
+            return "Spread: 0 keeps every playhead in the centre. Turned up, they move apart across the stereo field "
+                   "(two: the first left, the second right; three or four: spread evenly), all the way at 100 %. "
+                   "Negative values mirror it.";
         default: break;
     }
+    if (id >= kHeadChannelBase && id < kHeadChannelBase + kMaxPlayheads)
+        return "Which channels of a stereo sample this playhead reads: St (both), L (the left in both) or R (the "
+               "right in both). A mono sample ignores it.";
+    if (id >= kHeadRegionBase && id < kNumParams)
+        return (id - kHeadRegionBase) % kHeadFields == kHeadStart
+                   ? "Where this playhead's region starts, as a share of the region between the flags (drag its "
+                     "start in the waveform)."
+                   : "The length of this playhead's region (it loops as the main loop does), as a share of the "
+                     "region between the flags (drag its end in the waveform).";
     if (isModLfoParam (id))
         switch ((id - kModLfoBase) % kModLfoFields)
         {
@@ -190,6 +209,7 @@ constexpr const char* kScope = "The final output (after every effect): left brig
 constexpr const char* kWaveform =
     "Waveform. Drag the flags to set the sample region. Classic: drag the bright markers for Start / Length, "
     "click the loop bar (lit while looping) to switch looping on or off, drag it to move the loop, drag its edges to resize. "
+    "With more Playheads, drag a numbered dashed bar to move that playhead's region, its edges to resize it. "
     "Slicing: double-click to add or remove a slice, drag to move, Alt-click to toggle manual/auto. Click the "
     "waveform to audition. Scroll or drag the ruler to pan; Cmd + scroll or drag the ruler vertically to zoom; "
     "double-click the ruler (or click Zoom) to zoom to the loop and back. Alt + scroll makes the waveform taller. "

@@ -227,6 +227,37 @@ static void uiInteraction (Rig& rig)
         win.click (855, 46);
         CHECK (plain (smemplr::kGridOn) < 0.5 && plain (smemplr::kWarp) < 0.5, "the Grid and Warp off again");
     }
+    // --- a second playhead: its region (Start 50 %, Length 20 % of the flags: 0.45 .. 0.59) has a dashed
+    // bar of its own just above the loop's (y 265 .. 275); dragging the bar moves the region and keeps its
+    // length, dragging its end resizes it ---
+    {
+        auto setp = [&] (uint32_t id, double v) { rig.controller->setParamNormalized (id, smemplr::toNormalized (id, v)); };
+        setp (smemplr::kPlayheads, 1); // 2 playheads
+        setp (smemplr::headParam (1, smemplr::kHeadStart), 0.5);
+        setp (smemplr::headParam (1, smemplr::kHeadLength), 0.2);
+        const double hs = 0.1 + 0.5 * 0.7, he = hs + 0.2 * 0.7, hy = 270;
+        const double hx = wx ((hs + he) / 2), loopBefore = plain (smemplr::kStart);
+        win.mouseDown (hx, hy);
+        win.mouseDrag (hx + 30, hy);
+        win.mouseDrag (hx + 60, hy);
+        win.mouseUp (hx + 60, hy);
+        const double hs1 = 0.1 + plain (smemplr::headParam (1, smemplr::kHeadStart)) * 0.7;
+        CHECK (std::fabs (hs1 - (hs + 60.0 / 1094.0)) < 0.004 && std::fabs (plain (smemplr::headParam (1, smemplr::kHeadLength)) - 0.2) < 1e-6,
+               "playhead 2's bar dragged: start %f (want %f), length %f", hs1, hs + 60.0 / 1094.0,
+               plain (smemplr::headParam (1, smemplr::kHeadLength)));
+        CHECK (plain (smemplr::kStart) == loopBefore, "the loop stays where it was");
+        // its end, 40 px further
+        const double ex = wx (hs1 + 0.2 * 0.7);
+        win.mouseDown (ex, hy);
+        win.mouseDrag (ex + 20, hy);
+        win.mouseDrag (ex + 40, hy);
+        win.mouseUp (ex + 40, hy);
+        const double len2 = plain (smemplr::headParam (1, smemplr::kHeadLength)) * 0.7;
+        CHECK (std::fabs (len2 - (0.14 + 40.0 / 1094.0)) < 0.004 &&
+                   std::fabs (0.1 + plain (smemplr::headParam (1, smemplr::kHeadStart)) * 0.7 - hs1) < 1e-6,
+               "playhead 2's end dragged: length %f (want %f)", len2, 0.14 + 40.0 / 1094.0);
+        setp (smemplr::kPlayheads, 0);
+    }
 
     // --- envelope display: shift-drag bends a curve, double-click adds / removes breakpoints ---
     // amp envelope plot area in the editor: x 402..688, y 476..606

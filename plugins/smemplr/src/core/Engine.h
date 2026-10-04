@@ -45,6 +45,11 @@ void flagRegion (const SampleData& s, const ParamArray& p, double& fs, double& f
 double sampleBpmFor (const SampleData& s, const ParamArray& p);
 // Classic-mode playback region (Start/Length/Loop inside the flags).
 bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r);
+// An extra playhead's region (head 1 .. 3: the second to the fourth; its Start / Length as classicRegion
+// reads the main loop's, the same Loop).
+bool headRegion (const SampleData& s, const ParamArray& p, int head, PlayRegion& r);
+// How many playheads a note gets: Playheads in Classic mode, 1 otherwise.
+int playheadsFor (const ParamArray& p);
 SliceSettings sliceSettingsFor (const SampleData& s, const ParamArray& p);
 // Envelope settings (ADSR, curves, breakpoints) for env 0 amp, 1 filter, 2 pitch.
 EnvSettings envSettingsFor (const ParamArray& p, int env);
@@ -87,6 +92,10 @@ public:
         double lfoPhase = 0.0;
         uint32_t seed = 1;
         const std::vector<int>* beatBounds = nullptr;
+        // the playheads (Classic: Playheads; the warped sources Beats, Tones and Texture too, Complex and
+        // Complex Pro only ever the first) and the extra ones' regions
+        int heads = 1;
+        PlayRegion headRegions[kMaxPlayheads - 1];
     };
 
     void prepare (double sr);
@@ -95,7 +104,8 @@ public:
     void kill (); // fast fade, 15 ms, after the filter (voice stealing / retrigger)
     void hardStop () { active = false; }
     void glideTo (int newNote, double newPitchBase, double glideMs);
-    void updateLoop (const PlayRegion& r);
+    // the loop where the parameters have it now (and the extra playheads' regions, if there are any)
+    void updateLoop (const PlayRegion& r, const PlayRegion* extraRegions = nullptr);
 
     void render (float* outL, float* outR, int n, const BlockCtx& c);
 
@@ -106,6 +116,9 @@ public:
     int group () const { return st.group; }
     uint64_t age () const { return st.age; }
     double displayPos () const;
+    // where each playhead reads (source frames), the first the main one: how many
+    int displayPositions (double* out, int max) const;
+    int heads () const { return numHeads; }
     bool sustained = false;
 
 private:
@@ -160,6 +173,29 @@ private:
     BeatsWarp beats;
     GrainWarp grain;
     PvWarp pv;
+
+    // The extra playheads (2 .. 4): each its own region, read the way the main one is (classic, or the
+    // Beats / Tones / Texture engines), into hL / hR, then given its channel and its place in the stereo
+    // field and added to the main one's (mixHeads; with one playhead reading both channels none of this
+    // runs). Complex and Complex Pro have one playhead (a phase vocoder per playhead would be far too
+    // large for every voice).
+    struct ExtraHead
+    {
+        ClassicHead classic;
+        BeatsWarp beats;
+        GrainWarp grain;
+    };
+    std::array<ExtraHead, kMaxPlayheads - 1> extra;
+    int numHeads = 1;
+    // the sample is mono and so is what the voice plays (one playhead: more are spread in stereo)
+    bool monoOut = false;
+    std::array<float, kMaxPlayheads> headPan {}; // each playhead's place, -1 .. 1 (glides to Spread's)
+    bool headPanSet = false;
+    float hL[16] {}, hR[16] {};
+    bool headDone (int k) const;
+    double headRemaining (int k) const; // output samples until playhead k's region end (large if looping)
+    double mainRemaining () const;      // ... the main one's
+    void mixHeads (float* L, float* R, int n, const BlockCtx& c, double pitchRatio, double rem0);
 
     Envelope ampEnv, filtEnv, pitchEnv;
     Lfo lfo;

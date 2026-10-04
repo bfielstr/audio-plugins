@@ -154,6 +154,10 @@ private:
     VSTGUI::CViewContainer *beatsGroup = nullptr, *tonesGroup = nullptr, *textureGroup = nullptr, *cproGroup = nullptr;
     VSTGUI::CView *sensKnob = nullptr, *divisionChoice = nullptr, *regionsChoice = nullptr, *manualHint = nullptr;
     VSTGUI::CViewContainer* slicePolyGroup = nullptr;
+    // the playheads' Spread and each one's Channel (and number): dimmed beyond Playheads
+    ParamView* headSpreadKnob = nullptr;
+    std::array<ParamView*, kMaxPlayheads> headChannels {};
+    std::array<Label*, kMaxPlayheads> headLabels {};
     VSTGUI::CView *driveKnob = nullptr, *morphKnob = nullptr;
     VSTGUI::CView *lfoRateHz = nullptr, *lfoRateSync = nullptr;
     VSTGUI::CViewContainer* envTabs[3] {};
