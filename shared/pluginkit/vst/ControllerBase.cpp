@@ -302,6 +302,8 @@ void ControllerBase::applyValues (const SettingValues& values)
             n[id] = std::clamp (v, 0.0, 1.0);
     for (uint32_t id = 0; id < tableRef.size (); ++id)
     {
+        if (!isSetting (id)) // (smemplr's hidden MIDI parameters: performance, not settings)
+            continue;
         beginEdit (id);
         setParamNormalized (id, n[id]);
         performEdit (id, n[id]);
