@@ -6,12 +6,12 @@
 
 #include "pluginkit/vst/ControllerBase.h"
 
-namespace gently {
+namespace gentlr {
 
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Gently"); }
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Gentlr", "Gently"); /* renamed: its presets and settings come along */ }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;
@@ -25,4 +25,4 @@ private:
     SharedMeters* shared = nullptr;
 };
 
-} // namespace gently
+} // namespace gentlr

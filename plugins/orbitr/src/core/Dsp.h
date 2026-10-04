@@ -16,7 +16,7 @@ namespace orbitr::dsp {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// Flushes denormals to zero while alive (as Gently and Levlr do): the delay lines and the ramps
+// Flushes denormals to zero while alive (as Gentlr and Levlr do): the delay lines and the ramps
 // decay towards them after the audio stops, and they are slow on x86.
 class NoDenormals
 {

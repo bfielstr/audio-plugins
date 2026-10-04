@@ -1,4 +1,4 @@
-// Gently's (called Clarity before) band: the low mids it compresses. A 12 dB/oct high-pass below and
+// Gentlr's (called Clarity before) band: the low mids it compresses. A 12 dB/oct high-pass below and
 // a 6 dB/oct low-pass above, Width octaves apart around the centre frequency, scaled so the band
 // peaks at 0 dB. A band that reaches an end of the spectrum turns into a shelf there, rather than
 // dipping back up past the end: with its low edge at 20 Hz or below it is the 6 dB/oct low-pass alone
@@ -115,7 +115,7 @@ inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, d
     return b;
 }
 
-// Gently's Sub band: a shelf, flat from the very bottom of the spectrum up to `taperHz`, where its cut
+// Gentlr's Sub band: a shelf, flat from the very bottom of the spectrum up to `taperHz`, where its cut
 // starts to let go (within about 1 dB of the full cut there, half of it around twice as high, nearly
 // none an octave above that); taperHz is 20 - 100 Hz. It is the complement of a critically damped
 // 12 dB/oct high-pass, so the cut is exactly the Range where the shelf is flat.
@@ -131,7 +131,7 @@ inline ClarityBand subBand (double sr, double taperHz)
     return b;
 }
 
-// Gently's High band, the Sub band's mirror: a shelf, flat from `taperHz` up to the very top of the
+// Gentlr's High band, the Sub band's mirror: a shelf, flat from `taperHz` up to the very top of the
 // spectrum, its cut letting go below taperHz (within about 1 dB of the full cut there, half of it
 // around half as high, nearly none an octave below that); taperHz is 2 - 16 kHz. It is the complement
 // of a critically damped 12 dB/oct low-pass (which is 0 at Nyquist, so the shelf is the whole Range
@@ -167,7 +167,7 @@ inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
     return magnitudeDb (b.hp, hz, sr) + magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
 }
 
-// Gently's region drive: what driving the cut band region `x` (the bands after their cut) through the
+// Gentlr's region drive: what driving the cut band region `x` (the bands after their cut) through the
 // Analog curve adds to the signal, level-matched (the curve's output divided by the gain, so a quiet
 // region passes as it is and a loud one is squashed and gains harmonics, rather than getting louder).
 // The engine adds it to the signal going into the curve.

@@ -9,10 +9,10 @@
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <xmmintrin.h>
-#define GENTLY_SSE 1
+#define GENTLR_SSE 1
 #endif
 
-namespace gently {
+namespace gentlr {
 
 namespace {
 inline float dbToGain (double db) { return (float)std::pow (10.0, db / 20.0); }
@@ -25,7 +25,7 @@ class NoDenormals
 public:
     NoDenormals ()
     {
-#if defined(GENTLY_SSE)
+#if defined(GENTLR_SSE)
         old = _mm_getcsr ();
         _mm_setcsr ((unsigned int)(old | 0x8040)); // FTZ | DAZ
 #elif defined(__aarch64__) && !defined(_MSC_VER)
@@ -38,7 +38,7 @@ public:
     }
     ~NoDenormals ()
     {
-#if defined(GENTLY_SSE)
+#if defined(GENTLR_SSE)
         _mm_setcsr ((unsigned int)old);
 #elif defined(__aarch64__) && !defined(_MSC_VER)
         asm volatile ("msr fpcr, %0" : : "r"(old));
@@ -144,7 +144,7 @@ void Engine::setParam (uint32_t id, double plain)
 void Engine::retune (bool force, const bool* works)
 {
     // where the bands sit: as set, or with No Overlap the working ones kept apart
-    smacheratr::GentlyLayout layout;
+    smacheratr::GentlrLayout layout;
     for (int k = 0; k < kAllBands; ++k)
     {
         layout.on[k] = works[k];
@@ -232,7 +232,7 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         proc[1] = mode != kMidOnly;
     };
     modeFlags ();
-    // a new mode waits until Gently has faded out and the region Drive's oversamplers have emptied
+    // a new mode waits until Gentlr has faded out and the region Drive's oversamplers have emptied
     const int holdLen = 2 * chan[0].os.latency () + 8;
 
     for (int i = 0; i < n; ++i)
@@ -408,4 +408,4 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     }
 }
 
-} // namespace gently
+} // namespace gentlr

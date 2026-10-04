@@ -6,14 +6,14 @@
 
 #include <algorithm>
 
-namespace gently {
+namespace gentlr {
 
 using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x474E544C; // 'GNTL'
 constexpr int32 kVersion = 2;
-constexpr int32 kSubHighRange = 2; // 2: the Sub and High bands (Gently's and the end saturator's) work while their Range is above 0 dB
+constexpr int32 kSubHighRange = 2; // 2: the Sub and High bands (Gentlr's and the end saturator's) work while their Range is above 0 dB
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -65,4 +65,4 @@ bool readState (IBStream* stream, State& st)
     return true;
 }
 
-} // namespace gently
+} // namespace gentlr

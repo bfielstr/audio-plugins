@@ -1,28 +1,28 @@
-# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr, Orbitr
+# Audio plug-ins: Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**, built on the
 Steinberg VST3 SDK and VSTGUI. MIT licensed.
 
 | Plug-in | What it is | Modelled on |
 |---|---|---|
-| [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gently, smoothr, any order, any number) and an output scope | Ableton Live's Simpler |
+| [**Smemplr**](plugins/smemplr/README.md) | Sampler instrument: Classic / One-Shot / Slicing, tempo-synced warping, multi-circuit filter, breakpoint envelopes, LFO; an effects rack (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gentlr, smoothr, any order, any number) and an output scope | Ableton Live's Simpler |
 | [**Multidyn**](plugins/multidyn/README.md) | Multiband upward/downward compressor-expander with side-chain; an OTT style (a measured model of Xfer's OTT) and its own Character style | Ableton Live's Multiband Dynamics |
 | [**Locus**](plugins/locus/README.md) | Low-end contrast: brings the dominant bass events into focus or thickens the low end | iZotope Ozone's Low End Focus |
 | [**Stretchr**](plugins/stretchr/README.md) | Pitch/time-stretch clip editor: 7 algorithms, stretch markers, pitch envelope, formants; bounce in place or drag the render to a track | REAPER's stretch modes and stretch markers |
-| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, Gently (a band compressor against mud and harshness, with thresholds and a region drive in its Advanced mode), soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
+| [**Smacheratr**](plugins/smacheratr/README.md) | Saturator with the Analog curve, a pre-limiter before the drive (on by default), colour filters, Gentlr (a band compressor against mud and harshness, with thresholds and a region drive in its Advanced mode), soft/hard post clip, 4x oversampling | Ableton Live's Saturator |
 | [**Para**](plugins/para/README.md) | Parallel high-pass + low-pass with gains to -inf, a MIDI-triggered split envelope, and Vocal / Liquid movement | a morphing EQ, Live-styled |
 | [**Widr**](plugins/widr/README.md) | Trailer-style stereo width (Haas, decorrelation, micro pitch, early reflections, a side-only reverb) that keeps the mono fold; the Widrs of a session share the stereo field by role | cinematic trailer mixing |
 | [**Wubr**](plugins/wubr/README.md) | Two bell bands whose gain and/or centre you draw LFO shapes for (synced or free), or run as envelopes triggered by MIDI or transients with a hold point; Smacheratr at the end | LFO Tool / ShaperBox-style wubs |
 | [**Levlr**](plugins/levlr/README.md) | The spectrum in 1 to 4 touching bands with a level and a drive each (Analog, Tape, Tube, Hard Clip, Fold; 4x oversampled, constant latency): movable minimum-phase Linkwitz-Riley crossovers (12 to 96 dB/oct, their phase shift kept), mute/solo, a live analyser; Smacheratr at the end, to push the bands into | a multiband splitter / FabFilter Pro-MB-style band display |
 | [**Smoothr**](plugins/smoothr/README.md) | A limiter that puts a smooth low end before the last dB of loudness: slow gain on the lows and fast on the highs (a linear-phase split), a true-peak ceiling, a scrolling gain-reduction history; Smacheratr feeding it, and Character, a dip in the low mids that opens when they get loud | a mastering limiter with a FabFilter Pro-L-style history |
 | [**Deepr**](plugins/deepr/README.md) | Makes a bass or reese sound deeper by contrast: dips the low mids only while the sub plays, folds the sub to mono; no latency of its own; Smacheratr at the end | psychoacoustic bass contrast |
-| [**Gently**](plugins/gently/README.md) | Smacheratr's Gently on its own: a gentle dynamic de-muddier / de-harsher, two bands, a Sub band and a High band that turn their region down only while it is loud (No Overlap: the bands push each other instead of overlapping), with a live display of the cuts over the spectrum; Advanced: a Threshold per band on vertical sliders and a drive for the region it cuts; Smacheratr at the end | a dynamic EQ / multiband compressor display |
+| [**Gentlr**](plugins/gentlr/README.md) | Smacheratr's Gentlr on its own: a gentle dynamic de-muddier / de-harsher, two bands, a Sub band and a High band that turn their region down only while it is loud (No Overlap: the bands push each other instead of overlapping), with a live display of the cuts over the spectrum; Advanced: a Threshold per band on vertical sliders and a drive for the region it cuts; Smacheratr at the end | a dynamic EQ / multiband compressor display |
 | [**Dropr**](plugins/dropr/README.md) | A 6-band compressor feeding a saturator: +30 dB into a -72 dB threshold, ratios past 1 : inf into negative ones (louder in, quieter out, down to a floor), Adaptive Time, upward compression, Tilt, Stereo / Mid-Side with Channel Link; a display with draggable crossovers, band gains and thresholds and live gain reduction; Smacheratr on and driven at the end | Minimal Audio's Fuse Compressor (its negative-ratio snare trick) |
 | [**Orbitr**](plugins/orbitr/README.md) | A Doppler swarm: 1 to 16 virtual sources orbiting or swarming round you, each heard through its own delay line, so its pitch follows its speed towards or away from you (true Doppler), with a floor reflection and a view of the orbs from above; "Liquid Debris"-like by default (Detonatr's Motion stage on its own); Smacheratr at the end | Tonsturm SpinTracer (in its spirit, not affiliated) |
 
 ![Smemplr](docs/smemplr/ui_slicing.png)
 
-Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gently** (called Clarity before), Gently's **Sub** band (the sub region from 20 Hz up to a taper point of 20 to 100 Hz), its **High** band (the top, from a taper point of 2 to 16 kHz up; both always there, flat at Range 0 dB until you pull them down), **No Overlap** and Gently's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
+Every plug-in can end its chain with **Smacheratr** (off by default, Drive 0 dB), with all its controls: its **Gentlr** (called Clarity before), Gentlr's **Sub** band (the sub region from 20 Hz up to a taper point of 20 to 100 Hz), its **High** band (the top, from a taper point of 2 to 16 kHz up; both always there, flat at Range 0 dB until you pull them down), **No Overlap** and Gentlr's Advanced mode (a Threshold per band, a Drive for the region it cuts) included.
 
 **Copy / Paste Settings** (every plug-in's **Menu**, and **Copy** / **Paste** on each effect's page in
 Smemplr's rack) puts an effect's settings on the clipboard as text: paste them into the same plug-in
@@ -102,7 +102,7 @@ plugins/wubr    drawn band LFOs         same structure
 plugins/levlr   four-band levels        same structure
 plugins/smoothr low-end-first limiter   same structure
 plugins/deepr   bass depth by contrast  same structure
-plugins/gently  gentle de-mud / de-harsh same structure
+plugins/gentlr  gentle de-mud / de-harsh same structure
 plugins/dropr   multiband compressor    same structure
 plugins/orbitr  doppler swarm           same structure
 shared/pluginkit   code all plug-ins share: parameter tables, VST3 controller/editor bases,

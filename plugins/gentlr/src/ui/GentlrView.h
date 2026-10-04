@@ -1,5 +1,5 @@
-// Gently's two bands, its Sub band and its High band on a frequency display, the way a multiband compressor shows its
-// bands (and the way Smacheratr's colour display shows its Gently): each band's region shaded between
+// Gentlr's two bands, its Sub band and its High band on a frequency display, the way a multiband compressor shows its
+// bands (and the way Smacheratr's colour display shows its Gentlr): each band's region shaded between
 // its edges, the most it can cut outlined (dashed), the cut it is making right now lit (cinnabar) from the
 // 0 dB line and moving with the audio, a handle at its centre as deep as its Range (Sub's and High's at
 // their Freq, where they start to taper). The whole response in the text colour (every band at its cut now, with its phase:
@@ -30,9 +30,9 @@
 #include <functional>
 #include <vector>
 
-namespace gently {
+namespace gentlr {
 
-class GentlyView : public VSTGUI::CView
+class GentlrView : public VSTGUI::CView
 {
 public:
     static constexpr double kMinHz = 20.0, kMaxHz = 20000.0;
@@ -42,9 +42,9 @@ public:
     static constexpr double kPillW = 150.0, kPillH = 16.0, kPillTop = 4.0;
     using MeterSource = std::function<const Meters* ()>;
 
-    GentlyView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
-    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gently band colour (one for all bands)
-    static const smacheratr::GentlyBandParams& bandParams ();        // where Gently's bands are among its parameters (No Overlap)
+    GentlrView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
+    static VSTGUI::CColor bandColor (int band, uint8_t alpha = 255); // Smacheratr's Gentlr band colour (one for all bands)
+    static const smacheratr::GentlrBandParams& bandParams ();        // where Gentlr's bands are among its parameters (No Overlap)
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
@@ -71,7 +71,7 @@ private:
     int bandUnder (const VSTGUI::CPoint& p) const; // the working band whose region p is in (-1: none)
     bool works (int band) const;
     double sampleRate () const;
-    smacheratr::GentlyLayout layoutNow () const; // where the bands sit (with No Overlap: kept apart, as the engine has them)
+    smacheratr::GentlrLayout layoutNow () const; // where the bands sit (with No Overlap: kept apart, as the engine has them)
     smacheratr::ClarityBand bandNow (int band) const;
     bool live () const;
     void analyse (const std::vector<float>& in, std::vector<float>& spec);
@@ -94,4 +94,4 @@ private:
     bool haveSpectrum = false;
 };
 
-} // namespace gently
+} // namespace gentlr

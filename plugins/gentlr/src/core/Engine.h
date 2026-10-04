@@ -1,4 +1,4 @@
-// Gently: Smacheratr's Gently on its own, without the saturation curve around it. Up to two bands
+// Gentlr: Smacheratr's Gentlr on its own, without the saturation curve around it. Up to two bands
 // (smacheratr/src/core/ClarityBand.h: 12 dB/oct below, 6 dB/oct above, around each band's
 // frequency), the Sub band (a shelf from the very bottom up to where its cut starts to let go:
 // smacheratr::subBand) and the High band (its mirror, a shelf from where its cut starts to let go up
@@ -23,7 +23,7 @@
 // that one only.
 //
 // On its own (another plug-in hosting it, e.g. a rack): Engine (false) (no end saturator), prepare,
-// setParam (Gently's IDs below kTailBase, plain values), process; latency () is fixed per sample rate.
+// setParam (Gentlr's IDs below kTailBase, plain values), process; latency () is fixed per sample rate.
 #pragma once
 
 #include "Params.h"
@@ -38,7 +38,7 @@
 #include <atomic>
 #include <vector>
 
-namespace gently {
+namespace gentlr {
 
 using ParamArray = std::array<double, kNumParams>;
 ParamArray defaultParams ();
@@ -55,7 +55,7 @@ struct Meters
 class Engine
 {
 public:
-    // withTail: the end-of-chain Smacheratr (off where Gently is built into another plug-in, and in tests)
+    // withTail: the end-of-chain Smacheratr (off where Gentlr is built into another plug-in, and in tests)
     explicit Engine (bool withTail = true) : hasTail (withTail) {}
     void prepare (double sampleRate, int maxBlock);
     void reset ();
@@ -122,7 +122,7 @@ private:
     float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f, 1.0f};
     // a band runs while it works (on, Range above 0) and, after it stops, until its cut has let go
     bool running[kAllBands] = {false, false, false, false};
-    // how much of Gently is in (1 normally): faded out and back in around a change of stereo mode
+    // how much of Gentlr is in (1 normally): faded out and back in around a change of stereo mode
     float fx = 1.0f, fxStep = 0.0f;
     int hold = 0; // samples left, faded out, before the new mode starts
     // the region Drive: its gain and how much of it is in (both smoothed), the cut bands per channel
@@ -136,4 +136,4 @@ private:
     Meters* meters = nullptr;
 };
 
-} // namespace gently
+} // namespace gentlr

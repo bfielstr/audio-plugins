@@ -1,5 +1,5 @@
-// Gently parameters. IDs are persisted in projects: only ever append. The end saturator's first three
-// blocks came last; Gently's parameters added after them (the High band, No Overlap) sit right after
+// Gentlr parameters. IDs are persisted in projects: only ever append. The end saturator's first three
+// blocks came last; Gentlr's parameters added after them (the High band, No Overlap) sit right after
 // them, at fixed numbers, and the end saturator's fourth block after those, the very last. Every ID
 // below is pinned (static_asserts at the end of this file).
 #pragma once
@@ -11,9 +11,9 @@
 
 #include <cstdint>
 
-namespace gently {
+namespace gentlr {
 
-static_assert (pk::kTailFields == 6, "Gently's tail blocks follow its bands");
+static_assert (pk::kTailFields == 6, "Gentlr's tail blocks follow its bands");
 
 // Two bands, as in Smacheratr, then the Sub band and the High band (bands kSub and kHigh where all four
 // are counted: the engine, the display and the Threshold sliders work on kAllBands, in Smacheratr's
@@ -23,7 +23,7 @@ static_assert (kBands == smacheratr::kClarityBands, "one Threshold slider per ba
 constexpr int kSub = kBands;
 constexpr int kHigh = kBands + 1;
 constexpr int kAllBands = kBands + 2;
-static_assert (kSub == smacheratr::kSubBand && kHigh == smacheratr::kHighBand && kAllBands == smacheratr::kGentlyBands,
+static_assert (kSub == smacheratr::kSubBand && kHigh == smacheratr::kHighBand && kAllBands == smacheratr::kGentlrBands,
                "Smacheratr's bands, in its order");
 // a band (not Sub or High), that has a Width
 constexpr bool hasWidth (int k) { return k < kBands; }
@@ -51,7 +51,7 @@ enum StereoMode : int
 enum ParamId : uint32_t
 {
     kAdvanced = 0, // the bands' Thresholds and the region Drive work
-    kDrive,        // Advanced: saturate the band region Gently works on (Smacheratr's Analog curve, level-matched)
+    kDrive,        // Advanced: saturate the band region Gentlr works on (Smacheratr's Analog curve, level-matched)
     kDriveAmount,  // dB into the curve for that region (0 - 36)
     kAttack,       // ms, how fast the detector follows a band getting louder
     kRelease,      // ms, how fast it lets go
@@ -68,7 +68,7 @@ enum ParamId : uint32_t
     kSubThreshold,                            // dB, where it starts cutting (Advanced; without it -18 dB)
     kTailBase,                                         // the Smacheratr at the end of the chain: pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gently's Advanced mode and Sub band: pk::kTailExt2Fields entries
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields entries
     // --- after the end saturator's first three blocks ---
     // the High band, the Sub band's mirror: a shelf, everything from where its cut starts to let go up
     // to the very top (smacheratr::highBand), compressed like the bands; no Width and no button, as Sub
@@ -77,7 +77,7 @@ enum ParamId : uint32_t
     kHighRange,                                    // dB, the most it turns the top down (0 - 24; 0 by default)
     kHighThreshold,                                // dB, where it starts cutting (Advanced; without it -18 dB)
     kNoOverlap,    // the bands never cover the same frequencies (they push each other: smacheratr/src/core/NoOverlap.h)
-    kTailExt3Base, // the end Smacheratr's Gently High band and No Overlap: pk::kTailExt3Fields entries (the last block)
+    kTailExt3Base, // the end Smacheratr's Gentlr High band and No Overlap: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 
@@ -101,7 +101,7 @@ constexpr bool isSubParam (uint32_t id) { return id >= kSubOn && id < kTailBase;
 constexpr bool isHighParam (uint32_t id) { return id >= kHighOn && id <= kHighThreshold; }
 constexpr bool isBandParam (uint32_t id) { return (id >= kBandBase && id < kTailBase) || isHighParam (id); }
 constexpr bool isTailParam (uint32_t id) { return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kNumParams); }
-// its field in smacheratr::Tail (the first three blocks are consecutive, the fourth comes after Gently's own)
+// its field in smacheratr::Tail (the first three blocks are consecutive, the fourth comes after Gentlr's own)
 constexpr uint32_t tailField (uint32_t id)
 {
     return id >= kTailExt3Base ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base) : id - kTailBase;
@@ -117,12 +117,12 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // above 0 dB (`on` is ignored), as Smacheratr's.
 inline bool bandWorks (int k, double on, double rangeDb) { return (!hasOn (k) || on >= 0.5) && rangeDb > 0.0; }
 
-// Gently's Threshold sliders are Smacheratr's (smacheratr::ThresholdSlider, bound to Smacheratr's
-// Threshold IDs): the Gently parameter behind Smacheratr parameter `id`, or -1.
+// Gentlr's Threshold sliders are Smacheratr's (smacheratr::ThresholdSlider, bound to Smacheratr's
+// Threshold IDs): the Gentlr parameter behind Smacheratr parameter `id`, or -1.
 inline int64_t fromSmacheratr (uint32_t id)
 {
     for (int k = 0; k < kAllBands; ++k)
-        if (id == smacheratr::kGentlyThresholdIds[k])
+        if (id == smacheratr::kGentlrThresholdIds[k])
             return (int64_t)thresholdParam (k);
     if (id == smacheratr::kClarityAdvanced)
         return kAdvanced;
@@ -134,7 +134,7 @@ inline int64_t fromSmacheratr (uint32_t id)
 // The IDs are persisted: pinned.
 static_assert (kAdvanced == 0 && kDrive == 1 && kDriveAmount == 2 && kAttack == 3 && kRelease == 4 && kStereo == 5 && kMix == 6 &&
                    kOutput == 7,
-               "Gently's IDs are persisted");
+               "Gentlr's IDs are persisted");
 static_assert (kBandBase == 8 && kBandBlock == 5 && bandParam (1, kThreshold) == 17, "the bands: 8 - 17");
 static_assert (kSubOn == 18 && kSubFreq == 19 && kSubRange == 20 && kSubThreshold == 21, "the Sub band: 18 - 21");
 static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "the end saturator's blocks: 22, 28, 45");
@@ -142,4 +142,4 @@ static_assert (kHighOn == 54 && kHighFreq == 55 && kHighRange == 56 && kHighThre
                "the High band: 54 - 57, No Overlap 58");
 static_assert (kTailExt3Base == 59 && kNumParams == 64, "64 parameters (the end saturator's fourth block last)");
 
-} // namespace gently
+} // namespace gentlr

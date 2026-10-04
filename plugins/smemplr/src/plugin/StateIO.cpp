@@ -27,9 +27,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 // 9: no saturator after the rack (a new Smemplr has a Smacheratr slot instead; an old project's goes
 //    into the rack), and the M/S EQ's side high-pass has ten slopes (6 / 12 / 24 dB before)
 // 10: Levlr in the rack: the slot type's choice has one more entry
-// 11: Gently's (Clarity's) Advanced mode in the rack's Smacheratrs
-// 12: Gently's Sub band in the rack's Smacheratrs
-// 13: Gently and Smoothr in the rack: the slot type's choice has two more entries; Levlr's Bands and
+// 11: Gentlr's (Clarity's) Advanced mode in the rack's Smacheratrs
+// 12: Gentlr's Sub band in the rack's Smacheratrs
+// 13: Gentlr and Smoothr in the rack: the slot type's choice has two more entries; Levlr's Bands and
 //     band drives in its slots; Para's slopes (6 .. 96 dB, Brickwall) and a drive per filter in its slots;
 //     Multidyn's OTT gain staging, crossover slope, Soften Color and Sub band in its slots
 // 14: Multidyn's Style in its slots (OTT for new ones; older slots keep Character, their sound)
@@ -37,11 +37,11 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     (the high-pass's on unless its gain is above 0 dB, the low-pass's off) in its slots, and its Fade's
 //     range 1 .. 60 semitones (1 .. 36 before: a slot's Fade keeps its semitones)
 // 16: Multidyn's Sub Input in its slots (0 dB: older slots read 0 there, -24 dB)
-// 17: Gently's High band and No Overlap in the rack's Smacheratrs and Gentlys (off, their defaults: the
+// 17: Gentlr's High band and No Overlap in the rack's Smacheratrs and Gentlrs (off, their defaults: the
 //     places held nothing that was used)
 // 18: the modulation LFOs' mappings after the loop fade flag (Modulation.h: encodeModMap, behind its
 //     size in bytes); an older state has none
-// 19: no Sub and High buttons in the rack's Smacheratrs and Gentlys (a band works while its Range is above
+// 19: no Sub and High buttons in the rack's Smacheratrs and Gentlrs (a band works while its Range is above
 //     0 dB; one that was off gets Range 0)
 constexpr int32 kVersion = 19;
 constexpr int32 kModsSince = 18;
@@ -159,13 +159,13 @@ bool readState (IBStream* stream, PluginState& st)
             if (st.has[typeId])
                 st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeLevlr - 1)));
         }
-    // 10 .. 12 over the kinds before Gently and Smoothr
+    // 10 .. 12 over the kinds before Gentlr and Smoothr
     else if (version < 13)
         for (int slot = 0; slot < kRackSlots; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
             if (st.has[typeId])
-                st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeGently - 1)));
+                st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeGentlr - 1)));
         }
     // the M/S EQ's slope was stored over its three choices (6, 12, 24 dB): the same slope on the longer
     // list (before the old fixed M/S EQ moves into the rack, which converts its own)
@@ -261,9 +261,9 @@ bool readState (IBStream* stream, PluginState& st)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
-    // Gently's Advanced mode (11), Sub band (12), High band and No Overlap (17) in the rack's Smacheratrs, and the
-    // last two in its Gentlys: defaults (off: the same sound)
-    migrateGentlyInSlots (st.norm, st.has, version);
+    // Gentlr's Advanced mode (11), Sub band (12), High band and No Overlap (17) in the rack's Smacheratrs, and the
+    // last two in its Gentlrs: defaults (off: the same sound)
+    migrateGentlrInSlots (st.norm, st.has, version);
     // the Sub and High bands without buttons (19): one that was off gets Range 0 (after the defaults above)
     migrateSubHighInSlots (st.norm, st.has, version);
     // Levlr's Bands and drives (13)

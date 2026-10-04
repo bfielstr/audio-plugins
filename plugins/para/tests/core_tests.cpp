@@ -722,10 +722,10 @@ TEST (drive_params)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
     CHECK (kHpDriveOn == kTailExtBase + 17 && kTailExt2Base == kHpDriveOn + 3, "the drive's IDs follow the end saturator's block");
     CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kTailExt3Base == kLpGainLock + 1 && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
-               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" &&
-               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's), then the low-pass drive, then the low-pass slope and the locks");
+           "Gentlr's Advanced block (the end saturator's), then the low-pass drive, then the low-pass slope and the locks");
     CHECK (std::string (t.info (kHpDriveOn).name) == "High-Pass Drive On" && std::string (t.info (kHpDrive).name) == "High-Pass Drive" &&
                std::string (t.info (kLpDriveOn).name) == "Low-Pass Drive On" && std::string (t.info (kLpDrive).name) == "Low-Pass Drive",
            "one drive per filter");

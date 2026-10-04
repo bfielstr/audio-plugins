@@ -1,6 +1,6 @@
 #!/bin/sh
 # Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
-# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr, Orbitr)
+# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr)
 # for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
 # removed (only if they are ours).
@@ -118,8 +118,9 @@ version_of() {
 
 mkdir -p "$dest"
 # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
-# Removed only when this release no longer ships it under that name.
-for old in Simplr Lowfocus Smatcheratr Perrera Smempler; do
+# Removed only when this release no longer ships it under that name. Gently was renamed Gentlr with
+# the same class IDs, so a Gently.vst3 left next to Gentlr.vst3 would show up as a second copy.
+for old in Simplr Lowfocus Smatcheratr Perrera Smempler Gently; do
     if [ ! -d "$tmp/x/$old.vst3" ]; then
         for dir in "$dest" "$root"; do
             if [ -d "$dir/$old.vst3" ] && is_ours "$dir/$old.vst3"; then

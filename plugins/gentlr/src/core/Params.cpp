@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace gently {
+namespace gentlr {
 
 using namespace pk;
 using namespace pk::make;
@@ -14,7 +14,7 @@ namespace {
 
 std::vector<ParamInfo> buildTable ()
 {
-    // Smacheratr's Gently parameters, for the ranges the two share (the Threshold sliders are
+    // Smacheratr's Gentlr parameters, for the ranges the two share (the Threshold sliders are
     // Smacheratr's, working on normalized values, so the Thresholds must match exactly)
     const auto& sm = smacheratr::paramTable ();
     auto like = [&] (uint32_t id, uint32_t smId, const std::string& name, const char* shortName, double def) {
@@ -74,4 +74,4 @@ const ParamTable& paramTable ()
     return t;
 }
 
-} // namespace gently
+} // namespace gentlr

@@ -110,28 +110,28 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 3; ++i)
         colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
 
-    // Gently's Threshold sliders (Advanced), at the right edge of the colour display while Advanced is on
-    for (int k = 0; k < kGentlyBands; ++k)
+    // Gentlr's Threshold sliders (Advanced), at the right edge of the colour display while Advanced is on
+    for (int k = 0; k < kGentlrBands; ++k)
         thresholdSliders[k] = bind (root, new ThresholdSlider (CRect (0, 0, 1, 1), this, k, [c = ctl] () -> const Meters* {
                                         auto* s = c->getShared ();
                                         return s ? &s->meters : nullptr;
                                     }));
 
-    // bottom: Gently (one button), a band selector and the selected band's Frequency, Width and Range;
+    // bottom: Gentlr (one button), a band selector and the selected band's Frequency, Width and Range;
     // Advanced, and with it the region Drive; No Overlap
-    auto* cp = new pk::Panel (CRect (8, kGentlyTop, 752, kGentlyTop + 80), "GENTLY");
+    auto* cp = new pk::Panel (CRect (8, kGentlrTop, 752, kGentlrTop + 80), "GENTLR");
     root->addView (cp);
-    bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gently"));
+    bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gentlr"));
     clarityBandButtons.clear ();
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
-        static const char* const names[kGentlyBands] = {"Band 1", "Band 2", "Sub", "High"};
-        static const char* const tips[kGentlyBands] = {
-            "Show Gently's first band (Gently in the display).",
-            "Show Gently's second band (Gently 2 in the display; it works once its Range is above 0 dB).",
-            "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once its "
+        static const char* const names[kGentlrBands] = {"Band 1", "Band 2", "Sub", "High"};
+        static const char* const tips[kGentlrBands] = {
+            "Show Gentlr's first band (Gentlr in the display).",
+            "Show Gentlr's second band (Gentlr 2 in the display; it works once its Range is above 0 dB).",
+            "Show Gentlr's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; it works once its "
             "Range is above 0 dB).",
-            "Show Gently's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once "
+            "Show Gentlr's High band (from its Freq, where it starts to taper, to the top of the spectrum; it works once "
             "its Range is above 0 dB)."};
         auto* bt = new ActionButton (CRect (92 + k * 46, 30, 136 + k * 46, 50), names[k], [this, k] { showClarityBand (k); },
                                      [this, k] { return clarityBand == k; });
@@ -142,8 +142,8 @@ void Editor::buildUI (CFrame* f)
         {
             // the Sub and High bands: Freq and Range where the other bands have theirs (no width, no button: a
             // band works while its Range is above 0 dB)
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kGentlyFreqIds[k], "Freq")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kGentlyRangeIds[k], "Range")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kGentlrFreqIds[k], "Freq")));
+            clarityViews[k].push_back (bind (cp, new Knob (knobRect (400, 10), this, kGentlrRangeIds[k], "Range")));
             continue;
         }
         clarityViews[k].push_back (bind (cp, new Knob (knobRect (284, 10), this, kClarityFreqIds[k], "Freq")));
@@ -152,7 +152,7 @@ void Editor::buildUI (CFrame* f)
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     showClarityBand (clarityBand);
-    bind (cp, new Toggle (CRect (kGentlyAdvancedX - 8 - 42, 30, kGentlyAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
+    bind (cp, new Toggle (CRect (kGentlrAdvancedX - 8 - 42, 30, kGentlrAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
     advancedViews.push_back (bind (cp, new Toggle (CRect (556, 30, 606, 50), this, kClarityDrive, "Drive")));
     advancedViews.push_back (bind (cp, new Knob (knobRect (610, 10), this, kClarityDriveAmount, "Amount")));
     noOverlapView = bind (cp, new NoOverlapToggle (CRect (kNoOverlapX - 8 - 34, 30, kNoOverlapX - 8 + 34, 50), this, smacheratrBandParams ()));
@@ -165,8 +165,8 @@ void Editor::buildUI (CFrame* f)
 
 void Editor::showClarityBand (int band)
 {
-    clarityBand = band < 0 ? 0 : band >= kGentlyBands ? kGentlyBands - 1 : band;
-    for (int k = 0; k < kGentlyBands; ++k)
+    clarityBand = band < 0 ? 0 : band >= kGentlrBands ? kGentlrBands - 1 : band;
+    for (int k = 0; k < kGentlrBands; ++k)
         for (auto* v : clarityViews[k])
             v->setVisible (k == clarityBand);
     for (auto* b : clarityBandButtons)
@@ -189,20 +189,20 @@ void Editor::updateLooks ()
     const bool on = plainValue (kColorOn) >= 0.5;
     for (auto* v : colorViews)
         v->setEnabledLook (on);
-    const bool gently = plainValue (kClarity) >= 0.5;
-    for (int k = 0; k < kGentlyBands; ++k)
+    const bool gentlr = plainValue (kClarity) >= 0.5;
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         for (auto* v : clarityViews[k])
-            v->setEnabledLook (gently);
+            v->setEnabledLook (gentlr);
         if (thresholdSliders[k])
             thresholdSliders[k]->setEnabledLook (smacheratrBandParams ().works (this, k));
     }
     if (noOverlapView)
-        noOverlapView->setEnabledLook (gently);
+        noOverlapView->setEnabledLook (gentlr);
     for (auto* v : advancedViews)
-        v->setEnabledLook (gently);
+        v->setEnabledLook (gentlr);
     if (advancedViews.size () == 2)
-        advancedViews[1]->setEnabledLook (gently && plainValue (kClarityDrive) >= 0.5);
+        advancedViews[1]->setEnabledLook (gentlr && plainValue (kClarityDrive) >= 0.5);
 }
 
 void Editor::paramChanged (uint32_t id)

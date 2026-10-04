@@ -1,5 +1,5 @@
 // Smemplr's effects rack: kRackSlots slots after the sampler (Params.h), each Empty or one of the
-// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gently, smoothr), in any order; the same effect may sit
+// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gentlr, smoothr), in any order; the same effect may sit
 // in several slots. Every slot owns one engine of each kind, allocated up front, so loading or
 // moving an effect never allocates on the audio thread; only the slot's current kind runs.
 //
@@ -20,7 +20,7 @@
 #include "wubr/src/core/Engine.h"
 #include "levlr/src/core/Engine.h"
 #include "smoothr/src/core/Engine.h"
-#include "gently/src/core/Engine.h"
+#include "gentlr/src/core/Engine.h"
 
 #include "pluginkit/ParamTable.h"
 
@@ -42,6 +42,7 @@ double slopeFromThreeChoices (double oldNorm);
 } // namespace mseq
 
 const char* fxName (int type); // "para", ...; "" for Empty
+const char* fxFormerName (int type); // the name a renamed kind had ("gently" for gentlr), for pasting its old settings; "" for none
 // The table a kind reads its block through (an empty table for Empty).
 const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
 // A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
@@ -79,14 +80,14 @@ int slotAfterChain (const std::function<int (int)>& typeOf);
 // is used) the old saturator stays on and keeps running after the rack, as before.
 void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
-// States from before version 17 (before 12: the Sub band's too; before 11: Gently's Advanced mode too):
-// the places in a rack Smacheratr's block that Gently's later parameters take (Advanced .. Drive Amount,
+// States from before version 17 (before 12: the Sub band's too; before 11: Gentlr's Advanced mode too):
+// the places in a rack Smacheratr's block that Gentlr's later parameters take (Advanced .. Drive Amount,
 // the Sub band's, then the High band's and No Overlap) held nothing that was used; they get their
-// defaults (Advanced, Sub, High and No Overlap off: the same sound). A Gently slot's High band and No
+// defaults (Advanced, Sub, High and No Overlap off: the same sound). A Gentlr slot's High band and No
 // Overlap (17) get theirs the same way.
-void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+void migrateGentlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
-// States from before version 19: the Sub and High bands of the rack's Smacheratrs and Gentlys had a
+// States from before version 19: the Sub and High bands of the rack's Smacheratrs and Gentlrs had a
 // button each (off by default) and Ranges of 8 and 6 dB by default; now a band works while its Range is
 // above 0 dB. A band that was off gets Range 0, one that was on keeps its Range (or, not saved, the old
 // default): smacheratr::subHighStateToRange. Same sound.
@@ -117,7 +118,7 @@ struct RackMeters
     std::array<wubr::Meters, kRackSlots> wubr;
     std::array<levlr::Meters, kRackSlots> levlr;
     std::array<smoothr::Meters, kRackSlots> smoothr;
-    std::array<gently::Meters, kRackSlots> gently;
+    std::array<gentlr::Meters, kRackSlots> gentlr;
 };
 
 class Rack
@@ -157,7 +158,7 @@ private:
         wubr::Engine wubr {false};
         levlr::Engine levlr {false};
         smoothr::Engine smoothr;
-        gently::Engine gently {false};
+        gentlr::Engine gentlr {false};
     };
     void apply (Slot& s, uint32_t j);      // one value to the slot's current effect
     void applyAll (Slot& s);               // every value (a new kind), and a clean start

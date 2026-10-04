@@ -23,8 +23,8 @@ enum ParamId : uint32_t
     kOutput,    // dB
     kTailBase,  // the Smacheratr at the end of the chain: pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode and Sub band: pk::kTailExt2Fields
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 

@@ -63,11 +63,11 @@ std::string settingsEffect (const std::string& text)
     return "";
 }
 
-bool settingsFromText (const std::string& text, const std::string& effect, SettingValues& out)
+bool settingsFromText (const std::string& text, const std::string& effect, SettingValues& out, const std::string& formerEffect)
 {
     out.clear ();
-    const std::string e = settingsEffect (text);
-    if (e.empty () || lower (e) != lower (effect))
+    const std::string e = lower (settingsEffect (text));
+    if (e.empty () || (e != lower (effect) && (formerEffect.empty () || e != lower (formerEffect))))
         return false;
     std::istringstream in (text);
     std::string line;

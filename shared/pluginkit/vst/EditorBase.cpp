@@ -126,22 +126,22 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     tip (bind (p, new Toggle (row (392, 424, rowA), this, extBase + kTailExtDcFilter, "DC")), "Remove DC offset before the curve.");
     tip (bind (p, new Toggle (row (430, 480, rowA), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");
-    // Gently: one button, Advanced, a band selector and the selected band's controls (all bands' are
+    // Gentlr: one button, Advanced, a band selector and the selected band's controls (all bands' are
     // made; the other band's are hidden)
-    tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gently")),
-         "Gently: a compressor on up to four bands (the Sub band from the bottom, the High band to the top), so a hard-pushed drive does not go muddy or "
+    tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gentlr")),
+         "Gentlr: a compressor on up to four bands (the Sub band from the bottom, the High band to the top), so a hard-pushed drive does not go muddy or "
          "harsh (12 dB/oct below, 6 dB/oct above each band). A band works while its Range is above 0 dB.");
     tip (bind (p, new Toggle (row (64, 124, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
-         "Gently's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
-         "for the region it cuts. Off, Gently starts cutting at -18 dB, as it always did.");
+         "Gentlr's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
+         "for the region it cuts. Off, Gentlr starts cutting at -18 dB, as it always did.");
     for (auto& v : tailBandViews)
         v.clear ();
     tailBandButtons.clear ();
     static const char* const bandNames[4] = {"1", "2", "S", "H"};
     static const char* const bandTips[4] = {
-        "Show Gently's first band (Gently in the display).", "Show Gently's second band (Gently 2 in the display).",
-        "Show Gently's Sub band: from the bottom of the spectrum, it starts to taper at its Freq.",
-        "Show Gently's High band: from its Freq, where it starts to taper, to the top of the spectrum."};
+        "Show Gentlr's first band (Gentlr in the display).", "Show Gentlr's second band (Gentlr 2 in the display).",
+        "Show Gentlr's Sub band: from the bottom of the spectrum, it starts to taper at its Freq.",
+        "Show Gentlr's High band: from its Freq, where it starts to taper, to the top of the spectrum."};
     for (int k = 0; k < 4; ++k)
     {
         auto* bt = new ActionButton (row (128 + k * 14, 140 + k * 14, rowB), bandNames[k], [this, k] { showTailBand (k); },
@@ -158,9 +158,9 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
             views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, f)));
             views.push_back (bind (p, new NumberBox (row (232, 264, rowB), this, w)));
             views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, g)));
-            tip (views[0], "Gently: the centre of this band.");
-            tip (views[1], "Gently: this band's width in octaves (or Alt-drag the band in the display).");
-            tip (views[2], "Gently: the most this band is turned down; at 0 dB the band does nothing.");
+            tip (views[0], "Gentlr: the centre of this band.");
+            tip (views[1], "Gentlr: this band's width in octaves (or Alt-drag the band in the display).");
+            tip (views[2], "Gentlr: the most this band is turned down; at 0 dB the band does nothing.");
         }
         // the Sub and High bands: Frequency and Range where the other bands have theirs (no width, and no
         // button: a band works while its Range is above 0 dB)
@@ -168,15 +168,15 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
         {
             views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext2Base + kTailExt2SubFreq)));
             views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext2Base + kTailExt2SubRange)));
-            tip (views[0], "Gently's Sub band: where it starts to taper off.");
-            tip (views[1], "Gently's Sub band: the most it turns the sub region down; at 0 dB (the default) it does nothing.");
+            tip (views[0], "Gentlr's Sub band: where it starts to taper off.");
+            tip (views[1], "Gentlr's Sub band: the most it turns the sub region down; at 0 dB (the default) it does nothing.");
         }
         else
         {
             views.push_back (bind (p, new NumberBox (row (184, 228, rowB), this, ext3Base + kTailExt3HighFreq)));
             views.push_back (bind (p, new NumberBox (row (268, 306, rowB), this, ext3Base + kTailExt3HighRange)));
-            tip (views[0], "Gently's High band: where it starts to taper off, going down (2 to 16 kHz).");
-            tip (views[1], "Gently's High band: the most it turns the top of the spectrum down; at 0 dB (the default) it does nothing.");
+            tip (views[0], "Gentlr's High band: where it starts to taper off, going down (2 to 16 kHz).");
+            tip (views[1], "Gentlr's High band: the most it turns the top of the spectrum down; at 0 dB (the default) it does nothing.");
         }
     }
     showTailBand (tailBand);

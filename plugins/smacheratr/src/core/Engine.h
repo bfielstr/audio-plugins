@@ -9,7 +9,7 @@
 // look-ahead delay is always in the path and the dry signal is delayed to match, so the latency
 // reported to the host never changes while the plug-in is running.
 //
-// Gently (called Clarity before) works between the Drive and the curve: see process() and
+// Gentlr (called Clarity before) works between the Drive and the curve: see process() and
 // ClarityBand.h. Its Advanced mode gives each band a Threshold (clarityCutDb in Params.h) and can
 // drive the region it cuts: the cut bands are split out again (the same band filters) and put
 // through the Analog curve on their own, level-matched (clarityRegionDrive in ClarityBand.h),
@@ -38,9 +38,9 @@ struct Meters
 {
     std::atomic<float> inPeak {0.0f};
     std::atomic<float> outPeak {0.0f};
-    std::atomic<float> clarityDb {0.0f};  // Gently's cut before the curve (dB, 0 or less)
+    std::atomic<float> clarityDb {0.0f};  // Gentlr's cut before the curve (dB, 0 or less)
     std::atomic<float> clarity2Db {0.0f}; // its second band's
-    // Gently's bands' levels as it measures them (the band's peak level into the curve, dB; -120
+    // Gentlr's bands' levels as it measures them (the band's peak level into the curve, dB; -120
     // while the band is off), for the Threshold sliders
     std::atomic<float> clarityLevelDb {-120.0f};
     std::atomic<float> clarity2LevelDb {-120.0f};
@@ -50,7 +50,7 @@ struct Meters
     std::atomic<float> clarityHighLevelDb {-120.0f}; // and its level
 };
 
-// Band k's cut and level meters (Gently's order: the two bands, Sub, High).
+// Band k's cut and level meters (Gentlr's order: the two bands, Sub, High).
 inline const std::atomic<float>& clarityCutMeter (const Meters& m, int k)
 {
     return k == 0 ? m.clarityDb : k == 1 ? m.clarity2Db : k == 2 ? m.claritySubDb : m.clarityHighDb;
@@ -108,8 +108,8 @@ private:
     struct Channel
     {
         Biquad dc, preLo, preHi, postLo, postHi;
-        Biquad bandHp[kGentlyBands], bandLp[kGentlyBands], postHp[kGentlyBands], postLp[kGentlyBands]; // Clarity's bands, before and after the curve
-        Oversampler os, regionOs; // regionOs: Gently's driven region, oversampled beside the rest
+        Biquad bandHp[kGentlrBands], bandLp[kGentlrBands], postHp[kGentlrBands], postLp[kGentlrBands]; // Clarity's bands, before and after the curve
+        Oversampler os, regionOs; // regionOs: Gentlr's driven region, oversampled beside the rest
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
     };
@@ -124,14 +124,14 @@ private:
     bool inMs = false;
     // Clarity: the level of its band going into the curve (mean square, both channels), the cut it
     // asks for, the band in use and the (smoothed) gains of the band before and after the curve
-    double lmEnv[kGentlyBands] {}, lmAtk = 0.0, lmRel = 0.0;
-    float lmCutDb[kGentlyBands] {};
-    double bandFreq[kGentlyBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kGentlyBands] = {-1.0, -1.0, -1.0, -1.0};
-    float bandNorm[kGentlyBands] = {1.0f, 1.0f, 1.0f, 1.0f}, gBandPre[kGentlyBands] = {1.0f, 1.0f, 1.0f, 1.0f},
-          gBandPost[kGentlyBands] = {1.0f, 1.0f, 1.0f, 1.0f};
-    std::vector<float> gPost[kGentlyBands];
-    bool clarityWas[kGentlyBands] = {false, false, false, false};
-    // Gently's region drive: the cut bands per channel, oversampled, and the drive's (smoothed) gain
+    double lmEnv[kGentlrBands] {}, lmAtk = 0.0, lmRel = 0.0;
+    float lmCutDb[kGentlrBands] {};
+    double bandFreq[kGentlrBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kGentlrBands] = {-1.0, -1.0, -1.0, -1.0};
+    float bandNorm[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f}, gBandPre[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f},
+          gBandPost[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f};
+    std::vector<float> gPost[kGentlrBands];
+    bool clarityWas[kGentlrBands] = {false, false, false, false};
+    // Gentlr's region drive: the cut bands per channel, oversampled, and the drive's (smoothed) gain
     // and how much of it is in (faded in and out, so switching it clicks nowhere)
     std::vector<float> region[2], regionOsBuf, gRegion, gRegionMix;
     float regionGain = 1.0f, regionMix = 0.0f;

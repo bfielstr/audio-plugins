@@ -1,5 +1,5 @@
 // Character: a dip in the low mids (somewhere in 80 - 250 Hz) that only opens on loud low-mid content,
-// just before the limiter. It is Smacheratr's Clarity (Gently) at work on its own:
+// just before the limiter. It is Smacheratr's Clarity (Gentlr) at work on its own:
 //   - it listens through Clarity's band (ClarityBand.h: a 12 dB/oct high-pass under it, a 6 dB/oct
 //     low-pass over it, peak at 0 dB), here run twice in a row (24 dB/oct under, 12 over) so that
 //     only the low mids open it, not a loud bass or a loud upper mid;

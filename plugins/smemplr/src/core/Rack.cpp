@@ -41,7 +41,7 @@ static_assert (para::kLpDrive == kSlotBlock - 1 && para::kLpSlope == kSlotBlock 
                    para::kLpGainLock == kSlotBlock + 2 && para::kNumParams <= kSlotBlockAll,
                "Para's parameters must fit a slot's block and extension (block position = Para's ID)");
 // Wubr in a slot: its own IDs without its end saturator (5 .. 10, 85 .. 101 and its last block,
-// Gently's Advanced mode), in order, then the ones after the saturator's block (Link Rates)
+// Gentlr's Advanced mode), in order, then the ones after the saturator's block (Link Rates)
 constexpr uint32_t kWubrBands = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase); // positions before Link Rates
 constexpr uint32_t kWubrHosted = kWubrBands + (wubr::kTailExt2Base - wubr::kLinkRate);
 static_assert (wubr::kTailBase == 5 && kWubrHosted <= kSlotBlockAll, "Wubr's parameters must fit a slot's block and extension");
@@ -164,16 +164,16 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {smoothr::kTailExt3Base, smoothr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
     };
     static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
-    static const std::vector<RackHidden> gentlyHidden {
-        {gently::kSubOn, gently::kSubOn, "unused: the Sub band works while its Range is above 0"},
-        {gently::kTailBase, gently::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {gently::kHighOn, gently::kHighOn, "unused: the High band works while its Range is above 0"},
-        {gently::kTailExt3Base, gently::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+    static const std::vector<RackHidden> gentlrHidden {
+        {gentlr::kSubOn, gentlr::kSubOn, "unused: the Sub band works while its Range is above 0"},
+        {gentlr::kTailBase, gentlr::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gentlr::kHighOn, gentlr::kHighOn, "unused: the High band works while its Range is above 0"},
+        {gentlr::kTailExt3Base, gentlr::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
     // (its saturator's fourth block runs on into the slot's extension: not in the rack)
-    static_assert (gently::kTailExt3Base <= kSlotBlock && gently::kNumParams <= kSlotBlockAll, "Gently's parameters must fit a slot's block");
+    static_assert (gentlr::kTailExt3Base <= kSlotBlock && gentlr::kNumParams <= kSlotBlockAll, "Gentlr's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
-        {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gently button (a band works while its Range is above 0)"},
+        {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gentlr button (a band works while its Range is above 0)"},
         {smacheratr::kClaritySub, smacheratr::kClaritySub, "unused: the Sub band works while its Range is above 0"},
         {smacheratr::kClarityHigh, smacheratr::kClarityHigh, "unused: the High band works while its Range is above 0"},
     };
@@ -186,7 +186,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         case kFxWubr: return wubrHidden;
         case kFxLevlr: return levlrHidden;
         case kFxSmoothr: return smoothrHidden;
-        case kFxGently: return gentlyHidden;
+        case kFxGentlr: return gentlrHidden;
         default: return none;
     }
 }
@@ -246,11 +246,13 @@ const char* fxName (int type)
         case kFxWidr: return "widr";
         case kFxWubr: return "wubr";
         case kFxLevlr: return "levlr";
-        case kFxGently: return "gently";
+        case kFxGentlr: return "gentlr";
         case kFxSmoothr: return "smoothr";
         default: return "";
     }
 }
+
+const char* fxFormerName (int type) { return type == kFxGentlr ? "gently" : ""; }
 
 const pk::ParamTable& fxTable (int type)
 {
@@ -265,7 +267,7 @@ const pk::ParamTable& fxTable (int type)
         case kFxWubr: return wubr::paramTable ();
         case kFxLevlr: return levlr::paramTable ();
         case kFxSmoothr: return smoothr::paramTable ();
-        case kFxGently: return gently::paramTable ();
+        case kFxGentlr: return gentlr::paramTable ();
         default: return empty;
     }
 }
@@ -274,7 +276,7 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
 {
     // Smacheratr's block positions are its own IDs; each one is a field of the old saturator (its On is
     // the slot's). The values go through their plain values, so the two tables need not agree on ranges.
-    // The old saturator never had Gently's Advanced mode (the tail's third block): those get defaults.
+    // The old saturator never had Gentlr's Advanced mode (the tail's third block): those get defaults.
     const auto& st = smacheratr::paramTable ();
     static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's parameters sit in a slot's block");
     set (slotParam (slot, kSlotType), toNormalized (slotParam (slot, kSlotType), (double)kFxSmacheratr));
@@ -332,11 +334,11 @@ void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<
     norm[onId] = 0.0;
 }
 
-void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+void migrateGentlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
     if (version >= 17)
         return;
-    // Smacheratr's Gently parameters added since the state was saved: before 11 from Advanced on, before
+    // Smacheratr's Gentlr parameters added since the state was saved: before 11 from Advanced on, before
     // 12 from the Sub band on, before 17 the High band and No Overlap
     const uint32_t first = version < 11 ? smacheratr::kClarityAdvanced : version < 12 ? smacheratr::kClaritySub : smacheratr::kClarityHigh;
     for (int slot = 0; slot < kRackSlots; ++slot)
@@ -354,8 +356,8 @@ void migrateGentlyInSlots (std::array<double, kNumParams>& norm, std::array<bool
         };
         if (type == kFxSmacheratr)
             setDefaults (first, smacheratr::kNumParams, smacheratr::paramTable ());
-        else if (type == kFxGently && version >= 13) // (Gently came to the rack in 13)
-            setDefaults (gently::kHighOn, gently::kTailExt3Base, gently::paramTable ());
+        else if (type == kFxGentlr && version >= 13) // (Gentlr came to the rack in 13)
+            setDefaults (gentlr::kHighOn, gentlr::kTailExt3Base, gentlr::paramTable ());
     }
 }
 
@@ -375,10 +377,10 @@ void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<boo
             subOn = slotBlockParam (slot, smacheratr::kClaritySub), subRange = slotBlockParam (slot, smacheratr::kClaritySubRange);
             highOn = slotBlockParam (slot, smacheratr::kClarityHigh), highRange = slotBlockParam (slot, smacheratr::kClarityHighRange);
         }
-        else if (type == kFxGently)
+        else if (type == kFxGentlr)
         {
-            subOn = slotBlockParam (slot, gently::kSubOn), subRange = slotBlockParam (slot, gently::kSubRange);
-            highOn = slotBlockParam (slot, gently::kHighOn), highRange = slotBlockParam (slot, gently::kHighRange);
+            subOn = slotBlockParam (slot, gentlr::kSubOn), subRange = slotBlockParam (slot, gentlr::kSubRange);
+            highOn = slotBlockParam (slot, gentlr::kHighOn), highRange = slotBlockParam (slot, gentlr::kHighRange);
         }
         else
             continue; // (the other effects' own saturators are not used in the rack)
@@ -493,7 +495,7 @@ void Rack::prepare (double sampleRate, int maxBlockSize)
         s->wubr.prepare (sr, maxBlock);
         s->levlr.prepare (sr, maxBlock);
         s->smoothr.prepare (sr, maxBlock);
-        s->gently.prepare (sr, maxBlock);
+        s->gentlr.prepare (sr, maxBlock);
         applyAll (*s);
     }
 }
@@ -510,7 +512,7 @@ void Rack::reset ()
         s->wubr.reset ();
         s->levlr.reset ();
         s->smoothr.reset ();
-        s->gently.reset ();
+        s->gentlr.reset ();
     }
 }
 
@@ -526,7 +528,7 @@ void Rack::setMeters (RackMeters* m)
         s.wubr.setMeters (m ? &m->wubr[(size_t)i] : nullptr);
         s.levlr.setMeters (m ? &m->levlr[(size_t)i] : nullptr);
         s.smoothr.setMeters (m ? &m->smoothr[(size_t)i] : nullptr);
-        s.gently.setMeters (m ? &m->gently[(size_t)i] : nullptr);
+        s.gentlr.setMeters (m ? &m->gentlr[(size_t)i] : nullptr);
     }
 }
 
@@ -553,9 +555,9 @@ void Rack::apply (Slot& s, uint32_t block)
             // its own saturator stays off in the rack (a Smacheratr slot before it does that)
             s.smoothr.setParam (j, j == smoothr::kTailBase + pk::kTailOn ? 0.0 : v);
             break;
-        case kFxGently:
+        case kFxGentlr:
             // off: fully dry (its dry path is delayed to its latency)
-            s.gently.setParam (j, j == gently::kMix && !s.on ? 0.0 : v);
+            s.gentlr.setParam (j, j == gentlr::kMix && !s.on ? 0.0 : v);
             break;
         default: break; // the M/S EQ reads its values when it runs
     }
@@ -576,7 +578,7 @@ void Rack::applyAll (Slot& s)
         case kFxWubr: s.wubr.reset (); break;
         case kFxLevlr: s.levlr.reset (); break;
         case kFxSmoothr: s.smoothr.reset (); break;
-        case kFxGently: s.gently.reset (); break;
+        case kFxGentlr: s.gentlr.reset (); break;
         default: break;
     }
 }
@@ -603,8 +605,8 @@ void Rack::setParam (uint32_t id, double plain)
         s.multidyn.setBypass (!s.on);
         if (s.type == kFxSmacheratr)
             apply (s, smacheratr::kDryWet);
-        else if (s.type == kFxGently)
-            apply (s, gently::kMix);
+        else if (s.type == kFxGentlr)
+            apply (s, gentlr::kMix);
     }
     else
     {
@@ -626,8 +628,8 @@ int Rack::latency () const
             l += s->para.latency (); // its drive's oversampling, on or off
         else if (s->type == kFxLevlr)
             l += s->levlr.latency (); // its drives' oversampling, on or off
-        else if (s->type == kFxGently)
-            l += s->gently.latency (); // its region Drive's oversampler, always in the path
+        else if (s->type == kFxGentlr)
+            l += s->gentlr.latency (); // its region Drive's oversampler, always in the path
         else if (s->type == kFxSmoothr)
             l += s->smoothr.latency (); // the limiter's look-ahead (and its saturator's, off), on or off
     return l;
@@ -707,7 +709,7 @@ void Rack::process (float* L, float* R, int n)
                 else
                     s.levlr.processBypassed (L, R, n); // off: its latency's delay only
                 break;
-            case kFxGently: s.gently.process (L, R, L, R, n); break; // off: fully dry, same latency
+            case kFxGentlr: s.gentlr.process (L, R, L, R, n); break; // off: fully dry, same latency
             case kFxSmoothr:
                 if (s.on)
                     s.smoothr.process (L, R, L, R, n);

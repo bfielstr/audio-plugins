@@ -8,7 +8,7 @@
 #include <array>
 #include <atomic>
 
-namespace gently {
+namespace gentlr {
 
 class Processor : public Steinberg::Vst::AudioEffect
 {
@@ -38,4 +38,4 @@ private:
     std::atomic<bool> reloadParams {false};
 };
 
-} // namespace gently
+} // namespace gentlr

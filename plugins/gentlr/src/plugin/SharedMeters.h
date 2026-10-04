@@ -5,7 +5,7 @@
 
 #include <atomic>
 
-namespace gently {
+namespace gentlr {
 
 struct SharedMeters
 {
@@ -23,4 +23,4 @@ private:
     std::atomic<int> refs {1};
 };
 
-} // namespace gently
+} // namespace gentlr

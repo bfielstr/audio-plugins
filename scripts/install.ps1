@@ -1,5 +1,5 @@
 # Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
-# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr, Orbitr) on Windows,
+# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr) on Windows,
 # into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
 # left at the top of the VST3 folder by older installers are removed (only if they are ours).
 #
@@ -72,8 +72,9 @@ try {
     if (-not $plugins) { throw 'Unexpected archive layout (no .vst3 inside).' }
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     # Plug-ins that were renamed: an installed copy under the old name would load twice (same IDs).
-    # Removed only when this release no longer ships it under that name.
-    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr', 'Perrera', 'Smempler') {
+    # Removed only when this release no longer ships it under that name. Gently was renamed Gentlr with
+    # the same class IDs, so a Gently.vst3 left next to Gentlr.vst3 would show up as a second copy.
+    foreach ($old in 'Simplr', 'Lowfocus', 'Smatcheratr', 'Perrera', 'Smempler', 'Gently') {
         if (Test-Path (Join-Path $x "$old.vst3")) { continue }
         foreach ($dir in $dest, $root) {
             $oldBundle = Join-Path $dir "$old.vst3"

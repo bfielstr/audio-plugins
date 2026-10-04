@@ -27,8 +27,8 @@ enum ParamId : uint32_t
     kTrigger = kTailBase + pk::kTailFields, // On Play: the clip starts when the host starts; Timeline: where it is
     kStereo,           // Extreme and Alien: Wide (left and right apart) / Same (one channel, duplicated)
     kTailExtBase,      // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries (not render settings)
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (not render settings)
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries (not render settings)
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 

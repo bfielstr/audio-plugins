@@ -188,10 +188,10 @@ TEST (params)
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "size");
     CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
-               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" &&
-               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's) is the last");
+           "Gentlr's Advanced block (the end saturator's) is the last");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& info = t.info (id);
