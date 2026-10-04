@@ -1,6 +1,6 @@
 # Smoothr: a limiter that keeps the low end smooth (slow lows, fast highs), with Smacheratr before it
 # and Character, a dip in the low mids.
-project(Smoothr VERSION 0.10.0.0)
+project(Smoothr VERSION 0.11.0.0)
 
 add_library(smoothr_core STATIC
     src/core/Params.h
