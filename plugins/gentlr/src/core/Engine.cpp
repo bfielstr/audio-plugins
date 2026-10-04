@@ -1,6 +1,7 @@
 #include "Engine.h"
 
 #include "smacheratr/src/core/ClarityBand.h"
+#include "smacheratr/src/core/Glue.h"
 #include "smacheratr/src/core/NoOverlap.h"
 
 #include <algorithm>
@@ -145,7 +146,8 @@ void Engine::setParam (uint32_t id, double plain)
 
 void Engine::retune (bool force, const bool* works)
 {
-    // where the bands sit: as set, or with No Overlap the working ones kept apart
+    // where the bands sit: as set, glued borders held (smacheratr::applyGlue), and with No Overlap the
+    // working ones kept apart
     smacheratr::GentlrLayout layout;
     for (int k = 0; k < kAllBands; ++k)
     {
@@ -153,6 +155,10 @@ void Engine::retune (bool force, const bool* works)
         layout.freq[k] = p[freqParam (k)];
         layout.width[k] = hasWidth (k) ? p[bandParam (k, kWidth)] : 0.0; // (the Sub and High bands have no width)
     }
+    bool glued[smacheratr::kGluePairs];
+    for (int g = 0; g < smacheratr::kGluePairs; ++g)
+        glued[g] = p[kGlueIds[g]] >= 0.5;
+    smacheratr::applyGlue (layout, glued);
     if (p[kNoOverlap] >= 0.5)
         smacheratr::resolveOverlaps (layout);
     for (int k = 0; k < kAllBands; ++k)

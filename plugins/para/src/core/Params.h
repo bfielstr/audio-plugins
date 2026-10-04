@@ -55,13 +55,14 @@ enum ParamId : uint32_t
     kHpGainLock, // the high-pass gain never goes above 0 dB (on by default)
     kLpGainLock, // the low-pass gain never goes above 0 dB (off by default)
     // --- after the gain locks ---
-    kTailExt3Base, // Gentlr's High band and No Overlap in the end Smacheratr: pk::kTailExt3Fields entries (the last block)
-    kNumParams = kTailExt3Base + pk::kTailExt3Fields
+    kTailExt3Base, // Gentlr's High band, No Overlap and Slope in the end Smacheratr: pk::kTailExt3Fields entries
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
+    kNumParams = kTailExt4Base + pk::kTailExt4Fields
 };
 static_assert (pk::kTailExtFields <= kHpDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 static_assert (pk::kTailExt2Fields == kLpDriveOn - kTailExt2Base, "Gentlr's Advanced block must fill its room: IDs are persisted");
 static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 60 && kLpDrive == 61 &&
-                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kTailExt3Base == 65 && kNumParams == 71,
+                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kTailExt3Base == 65 && kTailExt4Base == 71 && kNumParams == 76,
                "Para's IDs are persisted in projects");
 
 // The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.

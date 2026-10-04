@@ -25,7 +25,8 @@ const ParamTable& paramTable ()
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
-        static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the tail's fourth block is the last");
+        smacheratr::addTailExt4Params (v, kTailExt4Base);
+        static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last");
         return v;
     }());
     return t;

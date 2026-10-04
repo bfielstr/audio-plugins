@@ -45,7 +45,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     0 dB; one that was off gets Range 0)
 // 20: Gentlr's band Slope in the rack's Smacheratrs and Gentlrs (Classic for states from before it, the
 //     shape there was; 12 / 12 for new slots)
-constexpr int32 kVersion = 20;
+// 21: Gentlr's glue switches in the rack's Smacheratrs and Gentlrs (off, their defaults: the places held
+//     nothing that was used)
+constexpr int32 kVersion = 21;
 constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -279,6 +281,8 @@ bool readState (IBStream* stream, PluginState& st)
     // Gentlr's band Slope (20) in the rack's Smacheratrs and Gentlrs: Classic (last: after the defaults
     // the migrations above give, and the old saturator moved into the rack)
     migrateSlopeInSlots (st.norm, st.has, version);
+    // Gentlr's glue (21): off
+    migrateGlueInSlots (st.norm, st.has, version);
     return true;
 }
 

@@ -6,9 +6,10 @@
 // threshold (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every
 // 5 over, at most by its Range (smacheratr::clarityCutDb). The bands work one after the other (band 1,
 // band 2, Sub, High, as in Smacheratr), each measuring its own band: x + (g - 1) * band, so with no cut
-// a band leaves the signal exactly as it was. With No Overlap on, the working bands are kept apart
-// before they are designed (smacheratr::resolveOverlaps: the editor pushes them apart as they are
-// dragged, so this only acts on automation, or a band switched on, that makes them overlap).
+// a band leaves the signal exactly as it was. Glued bands keep their shared border, and with No Overlap
+// on the working bands are kept apart, before they are designed (smacheratr::applyGlue and
+// resolveOverlaps: the editor writes both as the bands are dragged, so these only act on automation,
+// or a band switched on, that moves a glued border or makes bands overlap).
 //
 //   input -> [to mid / side] -> band 1 -> band 2 -> Sub -> High (each cut) -> [back to left / right] -> delay
 //                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added

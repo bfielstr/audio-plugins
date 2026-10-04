@@ -27,8 +27,9 @@ enum ParamId : uint32_t
 
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of the saturator: pk::kTailExtFields entries
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
-    kNumParams = kTailExt3Base + pk::kTailExt3Fields
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band, No Overlap and Slope in it: pk::kTailExt3Fields entries
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
+    kNumParams = kTailExt4Base + pk::kTailExt4Fields
 };
 
 enum Listen { kListenOff = 0, kListenSub, kListenCut };

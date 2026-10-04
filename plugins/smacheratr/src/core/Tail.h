@@ -10,8 +10,8 @@
 
 namespace smacheratr {
 
-// every field of the tail: the four blocks
-constexpr uint32_t kTailAllFields = kTailExt3First + pk::kTailExt3Fields;
+// every field of the tail: the five blocks
+constexpr uint32_t kTailAllFields = kTailExt4First + pk::kTailExt4Fields;
 
 class Tail
 {
@@ -34,7 +34,8 @@ public:
     void setMidSide (bool ms) { eng.setParam (kMidSide, ms ? 1.0 : 0.0); }
 
     // the plain value of one of the tail's fields (a pk::TailField, pk::kTailFields + a pk::TailExtField,
-    // kTailExt2First + a pk::TailExt2Field or kTailExt3First + a pk::TailExt3Field)
+    // kTailExt2First + a pk::TailExt2Field, kTailExt3First + a pk::TailExt3Field or kTailExt4First + a
+    // pk::TailExt4Field)
     void setParam (uint32_t field, double v)
     {
         if (field >= pk::kTailFields)
@@ -43,8 +44,10 @@ public:
                 eng.setParam (kTailExtIds[field - pk::kTailFields], v);
             else if (field < kTailExt3First)
                 eng.setParam (kTailExt2Ids[field - kTailExt2First], v);
-            else if (field < kTailAllFields)
+            else if (field < kTailExt4First)
                 eng.setParam (kTailExt3Ids[field - kTailExt3First], v);
+            else if (field < kTailAllFields)
+                eng.setParam (kTailExt4Ids[field - kTailExt4First], v);
             return;
         }
         switch (field)

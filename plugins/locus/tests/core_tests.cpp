@@ -129,11 +129,13 @@ TEST (params)
 {
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "size");
-    CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
+    CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kTailExt4Base + pk::kTailExt4Fields &&
+               std::string (t.info (kTailExt4Base + pk::kTailExt4Glue12).name) == "Saturator Gentlr Glue 1 / 2" &&
+               t.info (kTailExt4Base + pk::kTailExt4Glue2High).def == 0.0 &&
                std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gentlr's Advanced block (the end saturator's) is the last");
+           "Gentlr's Advanced block (the end saturator's), its High band block, then its glue block last (off)");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         double v;

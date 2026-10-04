@@ -51,8 +51,9 @@ enum ParamId : uint32_t
     kSubOutput,  // dB, its level after the compression
     kStyle,      // OTT (a model of Xfer's OTT, see Ott.h) / Character (Multidyn's own, see Engine.h)
     kSubInput,   // dB, the Sub band's level before its compression (as a band's Input)
-    kSatExt3Base, // Gentlr's High band and No Overlap in the built-in Smacheratr: pk::kTailExt3Fields entries
-    kNumParams = kSatExt3Base + pk::kTailExt3Fields
+    kSatExt3Base, // Gentlr's High band, No Overlap and Slope in the built-in Smacheratr: pk::kTailExt3Fields entries
+    kSatExt4Base = kSatExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries
+    kNumParams = kSatExt4Base + pk::kTailExt4Fields
 };
 
 // pinned: IDs are persisted (the Smacheratr blocks before them have a fixed size now)
@@ -61,7 +62,8 @@ static_assert (kSubOn == 92 && kSubFreq == 93 && kSubThresh == 94 && kSubRatio =
                    kSubOutput == 98,
                "the Sub band is 92 .. 98");
 static_assert (kStyle == 99 && kSubInput == 100, "Style is 99, Sub Input 100");
-static_assert (kSatExt3Base == 101 && kNumParams == 107, "the built-in Smacheratr's fourth block is 101 .. 106");
+static_assert (kSatExt3Base == 101 && kSatExt4Base == 107 && kNumParams == 112,
+               "the built-in Smacheratr's fourth block is 101 .. 106, its fifth 107 .. 111");
 
 enum Style { kStyleOtt = 0, kStyleCharacter };
 

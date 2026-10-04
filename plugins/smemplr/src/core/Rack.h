@@ -98,6 +98,10 @@ void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<boo
 // by the migrations before this one). Same sound; a new slot gets 12 / 12.
 void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 21: the rack's Smacheratrs and Gentlrs had no glue; their glue switches get
+// off, their default (the places held nothing that was used). Same sound.
+void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+
 // States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an
 // "OTT pushed further" then: multidyn::migrateOldBaked moves the difference into its controls) and its
 // later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).

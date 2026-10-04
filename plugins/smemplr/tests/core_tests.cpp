@@ -449,7 +449,7 @@ TEST (para_slots_separate_slopes_and_gain_locks)
 {
     // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
     // at block positions 62 .. 64 (Para's IDs), and map back
-    CHECK (para::kNumParams == 71 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
+    CHECK (para::kNumParams == 76 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
            (unsigned)para::kNumParams);
     for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
     {
@@ -814,6 +814,44 @@ TEST (slope_in_slots)
     endSaturatorToSlot (
         3, [&] (uint32_t id) { return norm[id]; }, [&] (uint32_t id, double v) { norm[id] = v; });
     CHECK (norm[slotBlockParam (3, smacheratr::kClaritySlope)] == smacheratr::classicSlopeNorm (), "the old saturator in a slot: Classic");
+}
+
+TEST (glue_in_slots)
+{
+    // states from before 21: a rack Smacheratr's and Gentlr's glue switches get off (whatever the place
+    // held); 21 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Para (left alone). The
+    // switches have places in the slots (Gentlr's in the extension) and show on the pages
+    for (int version : {19, 20, 21})
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
+        for (int slot = 0; slot < 3; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            norm[typeId] = toNormalized (typeId, types[slot]);
+            has[typeId] = true;
+            for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            {
+                norm[slotBlockParam (slot, j)] = 1.0;
+                has[slotBlockParam (slot, j)] = true;
+            }
+        }
+        migrateGlueInSlots (norm, has, version);
+        int off = 0;
+        for (int g = 0; g < smacheratr::kGluePairs; ++g)
+            off += (norm[slotBlockParam (0, smacheratr::kClarityGlueIds[g])] == 0.0) +
+                   (norm[slotBlockParam (1, (uint32_t)fxBlockOf (kFxGentlr, gentlr::kGlueIds[g]))] == 0.0);
+        CHECK (off == (version < 21 ? 2 * smacheratr::kGluePairs : 0), "version %d: %d switches off", version, off);
+        int touched = 0;
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            touched += norm[slotBlockParam (2, j)] != 1.0;
+        CHECK (touched == 0, "version %d: the Para left alone", version);
+    }
+    for (int g = 0; g < smacheratr::kGluePairs; ++g)
+        CHECK (fxBlockOf (kFxGentlr, gentlr::kGlueIds[g]) == (int64_t)gentlr::kGlueIds[g] && gentlr::kGlueIds[g] < kSlotBlockAll &&
+                   fxBlockOf (kFxSmacheratr, smacheratr::kClarityGlueIds[g]) == (int64_t)smacheratr::kClarityGlueIds[g],
+               "glue switch %d has a place in both slots", g);
 }
 
 TEST (sub_high_without_buttons_in_slots)
