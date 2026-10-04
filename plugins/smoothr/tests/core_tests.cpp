@@ -259,7 +259,6 @@ TEST (latency_constant_and_exact)
             en.setParam (kRelease, 5.0 + 150.0 * k);
             en.setParam (kAutoRelease, k % 3 == 0);
             en.setParam (kCharacter, 0.2 * k);
-            en.setParam (kTailExtBase + pk::kTailExtHiQuality, k % 2 == 0);
         });
         same &= e->latency () == lat;
         // and a change while running leaves it where it is
@@ -268,6 +267,12 @@ TEST (latency_constant_and_exact)
         same &= e->latency () == lat;
     }
     CHECK (same, "latency %d whatever the settings", lat);
+    // but the saturator's Oversampling: its oversampler's delay (none with Off, 4x by default)
+    int byOs[3];
+    for (int m = 0; m < 3; ++m)
+        byOs[m] = engine ([m] (Engine& en) { en.setParam (kTailExtBase + pk::kTailExtOversampling, m); })->latency ();
+    CHECK (byOs[2] == lat && byOs[0] < byOs[1] && byOs[1] < byOs[2], "latency by Oversampling: Off %d, 2x %d, 4x %d (default %d)",
+           byOs[0], byOs[1], byOs[2], lat);
     for (double sr : {44100.0, 96000.0})
     {
         auto e = engine ({}, sr, false);

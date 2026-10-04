@@ -53,4 +53,6 @@ from the current settings. The menu is described in the [top-level README](../..
 ## Latency
 
 About 87 ms (4096 samples at 48 kHz for the analysis, plus the saturator's 1.7 ms), reported to the
-host for automatic compensation.
+host for automatic compensation. The saturator's part depends on its **Oversampling**: 85 samples at
+48 kHz at 4x (the default), 80 at 2x and 48 with Off; changing it changes the latency, and the host is
+told.

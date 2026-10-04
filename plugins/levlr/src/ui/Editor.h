@@ -15,7 +15,7 @@ class Controller;
 class LevelView;
 
 // The band display on top, a row of controls (each band's level, mute, solo, drive and its type; the
-// crossovers, the slope, Bands and the output), then the end Smacheratr. The columns of the bands past
+// crossovers, the slope, Bands, the drives' Oversampling and the output), then the end Smacheratr. The columns of the bands past
 // Bands are hidden (as they are in the display).
 class Editor : public pk::EditorBase
 {
@@ -29,6 +29,8 @@ public:
     static constexpr double kDriveTop = kRowTop + 92.0; // each band's Drive knob and Type
     static constexpr double kBandsTop = kRowTop + 92.0;  // Bands (1 .. 4), right of the band columns
     static constexpr double kBandsLeft = kViewLeft + kBands * kColumnW + 46.0, kBandsRight = kBandsLeft + 152.0;
+    static constexpr double kOsTop = kBandsTop + 30.0; // the drives' Oversampling (Off, 2x, 4x), under Bands
+    static constexpr double kOsLeft = kBandsLeft + 44.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

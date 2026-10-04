@@ -14,11 +14,12 @@ namespace {
 constexpr int32 kMagic = 0x504F5244; // 'DROP'
 // 1: the drawn transient shape (never released); 2: the multiband compressor. A version 1 state loads
 // as the defaults (its parameters meant something else).
-constexpr int32 kVersion = 4;
+constexpr int32 kVersion = 5;
 // 3: the end saturator's Sub and High bands work while their Range is above 0 dB (no buttons)
 constexpr int32 kSubHighRange = 3;
 // 4: the end saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kClassicSlope = 4;
+constexpr int32 kOversamplingChoice = 5; // 5: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -66,6 +67,9 @@ bool readState (IBStream* stream, State& st)
     // instance gets 12 / 12)
     if (version >= 2 && version < kClassicSlope) // (a version 1 state loads as the defaults)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
+    // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version >= 2 && version < kOversamplingChoice)
+        smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
     return true;
 }
 

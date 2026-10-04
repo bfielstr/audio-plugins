@@ -12,9 +12,10 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x57554252; // 'WUBR'
-constexpr int32 kVersion = 3;
+constexpr int32 kVersion = 4;
 constexpr int32 kSubHighRange = 2; // 2: the end saturator's Sub and High bands work while their Range is above 0 dB
 constexpr int32 kClassicSlope = 3; // 3: the end saturator's Gentlr Slope (Classic for states from before it)
+constexpr int32 kOversamplingChoice = 4; // 4: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -62,6 +63,9 @@ bool readState (IBStream* stream, State& st)
     // instance gets 12 / 12)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
+    // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version < kOversamplingChoice)
+        smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
     return true;
 }
 

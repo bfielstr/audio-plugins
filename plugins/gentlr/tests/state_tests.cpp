@@ -162,10 +162,14 @@ int main ()
         s.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
         CHECK (readState (&s, back), "Gently's state read");
+        // (but the end saturator's Hi-Quality switch, now Oversampling: on the end the switch read it as)
+        const uint32_t os = kTailExtBase + pk::kTailExtOversampling;
         int wrong = 0;
         for (uint32_t id = 0; id < gentlyParams; ++id)
-            wrong += back.has[id] && back.norm[id] == std::fmod (0.071 * (id + 3), 1.0) ? 0 : 1;
+            if (id != os)
+                wrong += back.has[id] && back.norm[id] == std::fmod (0.071 * (id + 3), 1.0) ? 0 : 1;
         CHECK (wrong == 0, "every value Gently saved, as it was (%d not)", wrong);
+        CHECK (back.norm[os] == (std::fmod (0.071 * (os + 3), 1.0) >= 0.5 ? 1.0 : 0.0), "the end saturator's Hi-Quality as 4x or Off");
         // and its bands' Slope (and the end saturator's), which Gently did not have: Classic, the shape
         // its bands had, so the project sounds as it did
         CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == smacheratr::kSlopeClassic && back.has[kSlope] &&

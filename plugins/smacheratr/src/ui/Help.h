@@ -40,7 +40,9 @@ inline const char* forParam (uint32_t id)
         case kColorWidth: return "Width of the second colour filter (larger = wider).";
         case kOutput: return "Final output attenuation.";
         case kDryWet: return "Balance between the dry input and the saturated signal. Use 100 % on a return track.";
-        case kHiQuality: return "Runs the curve 4x oversampled to reduce aliasing (a little more CPU).";
+        case kOversampling:
+            return "Oversampling: runs the curve at 2x or 4x the sample rate to reduce aliasing (4x: the least, a little more CPU and "
+                   "latency). Off: no oversampling and no latency from it.";
         case kDcFilter: return "Removes DC offset from the input before the curve.";
         case kClarity:
             return "Gentlr: a compressor on a band (two if you like), so a hard-pushed drive does not go muddy or harsh: "

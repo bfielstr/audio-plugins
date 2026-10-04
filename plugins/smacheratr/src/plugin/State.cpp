@@ -12,11 +12,12 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 6; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 7; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
 constexpr int32 kSubHighRange = 5;     // 5: no Sub and High buttons (those bands work while their Range is above 0)
 constexpr int32 kClassicSlope = 6;     // 6: Gentlr's band Slope (Classic for states from before it)
+constexpr int32 kOversamplingChoice = 7; // 7: Oversampling Off / 2x / 4x (the Hi-Quality switch before: on 4x, off Off)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -86,6 +87,9 @@ bool readState (IBStream* stream, State& st)
         st.norm[kClaritySlope] = classicSlopeNorm ();
         st.has[kClaritySlope] = true;
     }
+    // Oversampling was the Hi-Quality switch: on is 4x, off is Off (oversamplingFromHiQuality)
+    if (version < kOversamplingChoice && st.has[kOversampling])
+        st.norm[kOversampling] = oversamplingFromHiQuality (st.norm[kOversampling]);
     return true;
 }
 

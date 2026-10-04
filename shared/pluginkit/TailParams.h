@@ -35,7 +35,7 @@ enum TailExtField : uint32_t
     kTailExtColorHi,
     kTailExtColorFreq,
     kTailExtColorWidth,
-    kTailExtHiQuality,
+    kTailExtOversampling, // Off, 2x, 4x (Hi-Quality, a switch for 4x, before: its normalized 0 / 1 mean the same)
     kTailExtDcFilter,
     kTailExtMidSide,
     kTailExtClarity,
@@ -87,7 +87,9 @@ enum TailExt3Field : uint32_t
 // addTailExt4Params). One switch per pair of bands that can be glued at a shared border (smacheratr's
 // GluePair order), all off by default: states from before it load them off and sound as they did. In
 // smacheratr::Tail::setParam field kTailFields + kTailExtFields + kTailExt2Fields + kTailExt3Fields + i
-// is this block's field i.
+// is this block's field i. Levlr has its drives' Oversampling right after it (closed in there: a new tail
+// field needs a sixth block). Oversampling (kTailExtOversampling) was the Hi-Quality switch and became a
+// choice in its place: its ID and the meaning of its two ends stayed, so no block grew.
 enum TailExt4Field : uint32_t
 {
     kTailExt4Glue12 = 0, // band 1 and band 2

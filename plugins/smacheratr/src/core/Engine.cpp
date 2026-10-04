@@ -42,7 +42,6 @@ void Engine::Channel::reset ()
     os.reset ();
     regionOs.reset ();
     dryDelay.reset ();
-    wetDelay.reset ();
     lookDelay.reset ();
 }
 
@@ -66,10 +65,12 @@ void Engine::prepare (double sampleRate, int mb)
         c.dc.c = highPass (sr, kDcHz, M_SQRT1_2);
         c.lookDelay.resize (look);
     }
+    // the dry delay holds the longest latency (4x's); its length follows the Oversampling in use
+    osFactor = oversamplingFactor (p[kOversampling]);
     for (auto& c : chan)
     {
-        c.dryDelay.resize (latency ());
-        c.wetDelay.resize (c.os.latency ()); // stands in for the oversampler when Hi-Quality is off
+        c.dryDelay.resize (latencyAt (4));
+        c.dryDelay.setLength (latencyAt (osFactor));
     }
     for (int c = 0; c < 2; ++c)
     {
@@ -98,11 +99,41 @@ void Engine::reset ()
     limGainDb = 0.0f;
     std::fill (lookPeaks.begin (), lookPeaks.end (), 0.0f);
     lookPos = 0;
+    // (a host activating the plug-in sets the parameters and resets: the Oversampling set then is the
+    // one it is told the latency of)
+    if (oversamplingFactor (p[kOversampling]) != osFactor)
+        applyOversampling ();
+    publishLatency ();
+}
+
+void Engine::applyOversampling ()
+{
+    // Off, 2x and 4x delay the wet path by different amounts: the dry delay takes the new length and
+    // everything that ran at the old rate starts again from silence (the colour filters are designed
+    // for the new rate on the next block: updateFilters)
+    osFactor = oversamplingFactor (p[kOversampling]);
+    for (auto& c : chan)
+    {
+        c.dryDelay.setLength (latencyAt (osFactor));
+        c.os.reset ();
+        c.regionOs.reset ();
+        c.preLo.reset ();
+        c.preHi.reset ();
+        c.postLo.reset ();
+        c.postHi.reset ();
+    }
+    publishLatency ();
+}
+
+void Engine::publishLatency ()
+{
+    if (meters)
+        meters->latency.store (latencyAt (osFactor), std::memory_order_relaxed);
 }
 
 void Engine::updateFilters (bool force)
 {
-    const double rate = p[kHiQuality] >= 0.5 ? 4.0 * sr : sr;
+    const double rate = osFactor * sr;
     const double lo = colorDb (p[kColorLo]), hi = colorDb (p[kColorHi]), freq = p[kColorFreq], width = p[kColorWidth];
     if (!force && lo == cLo && hi == cHi && freq == cFreq && width == cWidth && rate == cRate)
         return;
@@ -147,7 +178,7 @@ float Engine::shapeChain (Channel& c, float v, bool color, int post) const
 void Engine::clipCeiling (float* yl, float* yr, int n) const
 {
     // Soft and Hard Clip: nothing leaves above 0 dBFS. The clip after the curve (in the oversampled
-    // path) is the sound, soft or hard; what comes after it can rise above it again (Hi-Quality's downsampling filter
+    // path) is the sound, soft or hard; what comes after it can rise above it again (the oversampler's downsampling filter
     // overshooting the clipped edges, Gentlr's band filters, the dry part of a mix, Output, Mid/Side
     // back to left / right), so the very end is held to 0 dBFS too: only those overshoots are cut.
     if ((int)std::lround (p[kPostClip]) == kPostOff)
@@ -170,6 +201,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         return;
     }
+    if (oversamplingFactor (p[kOversampling]) != osFactor && !inMs)
+        applyOversampling ();
     const float mixT = (float)std::clamp (p[kDryWet], 0.0, 1.0);
     if (mixT <= 0.0f && mix < 1e-5f)
     {
@@ -237,7 +270,6 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             c.postHi.reset ();
             c.os.reset ();
             c.regionOs.reset ();
-            c.wetDelay.reset ();
             c.lookDelay.reset ();
         }
         regionMix = 0.0f;
@@ -245,7 +277,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         std::fill (lookPeaks.begin (), lookPeaks.end (), 0.0f);
     }
     updateFilters (false);
-    const bool hiq = p[kHiQuality] >= 0.5, color = p[kColorOn] >= 0.5, dc = p[kDcFilter] >= 0.5;
+    const bool color = p[kColorOn] >= 0.5, dc = p[kDcFilter] >= 0.5;
     const bool preLimit = p[kPreLimit] >= 0.5;
     const float threshold = dbToGain (p[kPreLimitThreshold]);
     const int post = std::clamp ((int)std::lround (p[kPostClip]), (int)kPostOff, (int)kPostHard);
@@ -433,30 +465,43 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     for (int c = 0; c < 2; ++c)
     {
         Channel& ch = chan[c];
-        if (hiq)
+        if (osFactor > 1)
         {
-            ch.os.up (pre[c].data (), osBuf.data (), n);
+            // 4x: both stages; 2x: the first alone (Oversampler.h)
+            const int f = osFactor, m = f * n;
+            const int shift = f == 4 ? 2 : 1;
+            if (f == 4)
+                ch.os.up (pre[c].data (), osBuf.data (), n);
+            else
+                ch.os.up2x (pre[c].data (), osBuf.data (), n);
             if (regionOn)
             {
                 // the region, driven at the oversampled rate and added to what goes into the curve
-                ch.regionOs.up (region[c].data (), regionOsBuf.data (), n);
-                for (int i = 0; i < 4 * n; ++i)
+                if (f == 4)
+                    ch.regionOs.up (region[c].data (), regionOsBuf.data (), n);
+                else
+                    ch.regionOs.up2x (region[c].data (), regionOsBuf.data (), n);
+                for (int i = 0; i < m; ++i)
                 {
-                    const size_t j = (size_t)(i / 4);
+                    const size_t j = (size_t)(i >> shift);
                     osBuf[(size_t)i] += (float)(gRegionMix[j] * clarityRegionDrive (regionOsBuf[(size_t)i], gRegion[j]));
                 }
             }
-            for (int i = 0; i < 4 * n; ++i)
+            for (int i = 0; i < m; ++i)
                 osBuf[(size_t)i] = shapeChain (ch, osBuf[(size_t)i], color, post);
-            ch.os.down (osBuf.data (), wet.data (), n);
+            if (f == 4)
+                ch.os.down (osBuf.data (), wet.data (), n);
+            else
+                ch.os.down2x (osBuf.data (), wet.data (), n);
         }
         else
         {
+            // Off: the curve at the plug-in's rate, no delay
             if (regionOn)
                 for (int i = 0; i < n; ++i)
                     pre[c][(size_t)i] += (float)(gRegionMix[(size_t)i] * clarityRegionDrive (region[c][(size_t)i], gRegion[(size_t)i]));
             for (int i = 0; i < n; ++i)
-                wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
+                wet[(size_t)i] = shapeChain (ch, pre[c][(size_t)i], color, post);
         }
         for (int k = 0; k < kGentlrBands; ++k)
             if (clarity[k])

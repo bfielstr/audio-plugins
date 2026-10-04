@@ -77,7 +77,37 @@ tresult PLUGIN_API ControllerBase::setParamNormalized (ParamID tag, ParamValue v
     if (tag < tableRef.size ())
         for (auto* e : editors)
             e->paramChanged (tag);
+    checkLatency ();
     return r;
+}
+
+void ControllerBase::watchLatency (const std::atomic<int>* source)
+{
+    if (!source || std::find (latencySources.begin (), latencySources.end (), source) != latencySources.end ())
+        return;
+    latencySources.push_back (source);
+    latencySeen.push_back (source->load (std::memory_order_relaxed));
+}
+
+void ControllerBase::unwatchLatency ()
+{
+    latencySources.clear ();
+    latencySeen.clear ();
+}
+
+void ControllerBase::checkLatency ()
+{
+    bool moved = false;
+    for (size_t i = 0; i < latencySources.size (); ++i)
+    {
+        const int now = latencySources[i]->load (std::memory_order_relaxed);
+        if (now == latencySeen[i] || now < 0)
+            continue;
+        moved |= latencySeen[i] >= 0; // (the first value known is the one the host read)
+        latencySeen[i] = now;
+    }
+    if (moved && componentHandler)
+        componentHandler->restartComponent (Steinberg::Vst::kLatencyChanged);
 }
 
 tresult PLUGIN_API ControllerBase::setState (IBStream* stream)

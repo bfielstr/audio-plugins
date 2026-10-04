@@ -15,8 +15,9 @@ constexpr int32 kMagic = 0x5442524F; // 'ORBT'
 // 1: the first (never released before its end saturator's Sub and High bands lost their buttons, so a
 // version 1 state already means "a band works while its Range is above 0 dB": nothing to convert)
 // 2: the end saturator's Gentlr Slope (Classic for states from before it: version 1 was released)
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
 constexpr int32 kClassicSlope = 2;
+constexpr int32 kOversamplingChoice = 3; // 3: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -60,6 +61,9 @@ bool readState (IBStream* stream, State& st)
     // instance gets 12 / 12)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
+    // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version < kOversamplingChoice)
+        smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
     return true;
 }
 

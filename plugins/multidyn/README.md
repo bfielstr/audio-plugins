@@ -162,7 +162,9 @@ README](../../README.md#presets).
 ## Latency
 
 Every band always runs through the 1 ms look-ahead, and the saturator's and Color's oversampling add
-their own, so the latency (218 samples at 48 kHz) never changes. It is reported to the host.
+their own, so the latency (218 samples at 48 kHz) does not change with the settings, except the
+saturator's **Oversampling**: 4x is the default, 2x takes 5 samples off at 48 kHz and Off 37; the host is
+told when it changes. It is reported to the host.
 
 ## Older projects
 

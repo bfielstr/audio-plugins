@@ -37,7 +37,7 @@ furthest the driven signal can go as dashed lines.
 **Post Clip** (**No Clip** / **Soft Clip** / **Hard Clip**) clips the output at 0 dB after the curve, so
 the output never goes over the **Output** level (-36 to 0 dB). With Soft Clip and Hard Clip nothing
 leaves above 0 dBFS at all (Soft clips more gently on the way there). Some stages after the curve can
-rise over it again (the Hi-Quality downsampling filter overshooting by up to 4 dB, gentlr's bands, the
+rise over it again (the oversampling's downsampling filter overshooting by up to 4 dB, gentlr's bands, the
 dry part of a mix, Mid/Side going back to left and right: up to 6 dB), so the very end, after Output, is
 held to 0 dBFS too; only those overshoots are cut. **Dry/Wet** blends in the dry signal; use 100 % on a
 return track.
@@ -116,13 +116,15 @@ dB over (2.5 : 1, hard knee), reaching the Range (Range / 0.6) dB over it.
 Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB): the bands gentlr works on are
 split out again, put through the Analog curve on their own and added back, level-matched, so the cut
 region gets density and harmonics while the rest of the sound stays clean. It runs oversampled with the
-rest when Hi-Quality is on, fades in and out when switched, and does not change the latency. With
+rest (as **Oversampling** says), fades in and out when switched, and does not change the latency. With
 Advanced off, every band starts cutting at -18 dB.
 
 ## Menu
 
-- **Hi-Quality (4x oversampling)** (on by default) runs the curve 4x oversampled (two linear-phase
-  half-band stages) to keep aliasing down.
+- **Oversampling Off** / **2x** / **4x** (4x by default) runs the curve at that multiple of the sample
+  rate to keep aliasing down: 4x through two linear-phase half-band stages, 2x through the first of them
+  alone (a little more aliasing from the highest harmonics), Off at the plain rate (the most aliasing,
+  no latency from it, the least CPU). The status line at the top shows the setting and the latency.
 - **Pre-DC Filter** removes DC offset before the curve.
 - **Mid/Side** saturates the mid and the side apart, so the side is driven by its own, lower level and
   a wide sound stays wide when you push the drive. (widr's end saturator always works this way.)
@@ -138,12 +140,15 @@ README](../../README.md#presets).
 
 ## Latency
 
-About 1.7 ms (83 samples at 48 kHz: the pre-limiter's 1 ms look-ahead plus the oversampling), the same
-whatever the settings, and reported to the host.
+The pre-limiter's 1 ms look-ahead (always in the path, on or off) plus the oversampling's: 85 samples at
+48 kHz at 4x (the default, about 1.8 ms), 80 at 2x and 48 with Oversampling off. The second half-band
+stage is short, so 2x saves only a few samples over 4x; Off saves them all. It is reported to the host,
+does not change while a setting is held, and the host is told when a new Oversampling changes it.
 
 ## Older projects
 
 gentlr was called Clarity. Projects saved before Slope existed load with **Classic** and sound exactly
 as they did. Projects saved while the Sub and High bands had switches sound the same: a band that was
 off loads at Range 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing
-glued.
+glued. Projects saved while Oversampling was the **Hi-Quality** switch load with 4x where it was on and
+Off where it was off: they sound as they did.

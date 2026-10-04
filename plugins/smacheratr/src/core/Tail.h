@@ -1,6 +1,8 @@
 // The optional Smacheratr at the end of a plug-in's chain (its parameters: pk::addTailParams). It
-// is always in the path, with its dry/wet at zero when off, so the latency it adds never changes;
-// while off it skips the curve and only delays the signal.
+// is always in the path, with its dry/wet at zero when off, so switching it on or off never changes
+// the latency it adds; while off it skips the curve and only delays the signal. Its Oversampling
+// (Off, 2x, 4x) sets that latency (Engine.h): a plug-in whose controller watches the tail's meters
+// (pk::ControllerBase::watchLatency) tells the host when it changes.
 #pragma once
 
 #include "Engine.h"
@@ -19,7 +21,7 @@ public:
     Tail ()
     {
         eng.setParam (kColorOn, 0.0);
-        eng.setParam (kHiQuality, 1.0);
+        eng.setParam (kOversampling, kOs4x);
         eng.setParam (kDcFilter, 0.0);
         eng.setParam (kOutput, 0.0);
         eng.setParam (kDrive, 0.0);

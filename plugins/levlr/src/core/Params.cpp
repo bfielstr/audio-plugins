@@ -47,7 +47,9 @@ std::vector<ParamInfo> buildTable ()
     }
     smacheratr::addTailExt3Params (v, kTailExt3Base);
     smacheratr::addTailExt4Params (v, kTailExt4Base);
-    static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the end saturator's fifth block is the last");
+    // (4x, what the drives always ran at before)
+    v.push_back (choice (kDriveOversampling, "Drive Oversampling", "Oversampling", {"Off", "2x", "4x"}, kDriveOs4x));
+    static_assert (kNumParams == kDriveOversampling + 1, "the drives' Oversampling is the last");
     return v;
 }
 
@@ -82,6 +84,9 @@ void migrateState (int version, double norm[kNumParams], const bool has[kNumPara
     // gets 12 / 12)
     if (version < 5)
         norm[kTailExt3Base + pk::kTailExt3Slope] = smacheratr::classicSlopeNorm ();
+    // before 6 the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version < kOversamplingChoiceVersion)
+        smacheratr::tailOversamplingFromHiQuality (norm, has, kTailExtBase);
 }
 
 } // namespace levlr

@@ -11,9 +11,10 @@ using namespace Steinberg;
 namespace {
 constexpr int32 kMagic = 0x4C45564C; // 'LEVL'
 // 2: Slope has eight choices (12 .. 96 dB/oct) instead of three; 3: Bands and the bands' drives; 4: the
-// end saturator's Sub and High bands without buttons; 5: the end saturator's Gentlr Slope
+// end saturator's Sub and High bands without buttons; 5: the end saturator's Gentlr Slope; 6: Oversampling
+// (the drives' and the end saturator's)
 constexpr int32 kVersion = kStateVersion;
-static_assert (kVersion == 5, "a new state version needs its migration (migrateState)");
+static_assert (kVersion == 6, "a new state version needs its migration (migrateState)");
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)

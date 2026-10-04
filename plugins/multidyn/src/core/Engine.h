@@ -117,7 +117,7 @@ public:
     double param (uint32_t id) const { return p[id]; }
     // withTail: the end-of-chain Smacheratr (off where Multidyn is built into another plug-in)
     explicit Engine (bool withTail = true);
-    int latency () const { return look + color.latency () + (hasTail ? sat.latency () : 0); } // constant for a sample rate
+    int latency () const { return look + color.latency () + (hasTail ? sat.latency () : 0); } // constant while the saturator's Oversampling is held
     int colorLatency () const { return color.latency (); } // Soften's Color's part of it
     // Bypassed, the dry signal passes with the same latency (for the built-in use in Smemplr).
     void setBypass (bool b) { bypass = b; }

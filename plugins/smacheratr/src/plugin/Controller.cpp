@@ -15,6 +15,7 @@ using namespace Steinberg::Vst;
 
 tresult PLUGIN_API Controller::terminate ()
 {
+    unwatchLatency ();
     if (shared)
     {
         shared->release ();
@@ -53,9 +54,11 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
             if (m != shared)
             {
                 m->retain ();
+                unwatchLatency ();
                 if (shared)
                     shared->release ();
                 shared = m;
+                watchLatency (&shared->meters.latency); // (it moves with Oversampling)
             }
         }
         return kResultOk;

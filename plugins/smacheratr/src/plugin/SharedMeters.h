@@ -9,8 +9,7 @@ namespace smacheratr {
 
 struct SharedMeters
 {
-    Meters meters;
-    std::atomic<int> latency {0};
+    Meters meters; // (its latency: the engine's, as it runs)
     std::atomic<double> sampleRate {48000.0};
     void retain () { refs.fetch_add (1); }
     void release ()

@@ -417,6 +417,32 @@ void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, 
     }
 }
 
+void migrateOversamplingInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 22)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId])
+            continue;
+        const int type = (int)std::lround (toPlain (typeId, norm[typeId]));
+        if (type == kFxSmacheratr)
+        {
+            const uint32_t id = slotBlockParam (slot, (uint32_t)fxBlockOf (type, smacheratr::kOversampling));
+            if (has[id])
+                norm[id] = smacheratr::oversamplingFromHiQuality (norm[id]);
+        }
+        else if (type == kFxLevlr)
+        {
+            const uint32_t id = slotBlockParam (slot, (uint32_t)fxBlockOf (type, levlr::kDriveOversampling));
+            norm[id] = levlr::defaultNormalized (levlr::kDriveOversampling);
+            has[id] = true;
+        }
+    }
+    smacheratr::tailOversamplingFromHiQuality (norm, has, kTailExtBase); // (the old saturator after the rack)
+}
+
 void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
     if (version >= 19)

@@ -1,5 +1,7 @@
 // 4x oversampling as two 2x stages, each a linear-phase Kaiser-windowed sinc half-band FIR used
-// for both the up- and the down-sampling. The delay is a whole number of input samples.
+// for both the up- and the down-sampling, or 2x with the first stage alone (the steep one: the second
+// only has to clear the band the first leaves above 20 kHz, so it is short, and 2x's delay is most of
+// 4x's). The delay is a whole number of input samples.
 #pragma once
 
 #include <vector>
@@ -40,6 +42,12 @@ public:
     int latency () const { return s1.latency () + s2.latency () / 2; } // input samples
     void up (const float* in, float* out, int n);   // out: 4n samples
     void down (const float* in, float* out, int n); // in: 4n samples
+    // 2x: the first stage alone (a reset () between switching from 4x to 2x and back)
+    int latency2x () const { return s1.latency (); }
+    void up2x (const float* in, float* out, int n) { s1.up (in, out, n); }     // out: 2n samples
+    void down2x (const float* in, float* out, int n) { s1.down (in, out, n); } // in: 2n samples
+    // by factor (1, 2 or 4; 1 is no oversampling: no delay)
+    int latency (int factor) const { return factor >= 4 ? latency () : factor == 2 ? latency2x () : 0; }
 
 private:
     Halfband2x s1, s2;

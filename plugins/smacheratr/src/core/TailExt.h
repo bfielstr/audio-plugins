@@ -21,7 +21,7 @@
 namespace smacheratr {
 
 inline constexpr uint32_t kTailExtIds[pk::kTailExtFields] = {kOutput,    kColorOn,   kColorLo, kColorHi,
-                                                            kColorFreq, kColorWidth, kHiQuality, kDcFilter,
+                                                            kColorFreq, kColorWidth, kOversampling, kDcFilter,
                                                             kMidSide,   kClarity,    kClarityFreq, kClarityWidth,
                                                             kClarityRange, kClarity2,  kClarity2Freq, kClarity2Width,
                                                             kClarity2Range};
@@ -172,6 +172,17 @@ inline void tailSlopeToClassic (Norm& norm, Has& has, uint32_t ext3Base)
 {
     norm[ext3Base + pk::kTailExt3Slope] = classicSlopeNorm ();
     has[ext3Base + pk::kTailExt3Slope] = true;
+}
+
+// The end saturator's Oversampling for a state saved while it was the Hi-Quality switch (its second block
+// at extBase): on -> 4x, off -> Off (oversamplingFromHiQuality). A state without it keeps the default (4x,
+// as Hi-Quality's was on).
+template <class Norm, class Has>
+inline void tailOversamplingFromHiQuality (Norm& norm, const Has& has, uint32_t extBase)
+{
+    const uint32_t id = extBase + pk::kTailExtOversampling;
+    if (has[id])
+        norm[id] = oversamplingFromHiQuality (norm[id]);
 }
 
 } // namespace smacheratr

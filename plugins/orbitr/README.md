@@ -64,8 +64,8 @@ README](../../README.md#presets).
 
 The delays are taken relative to the centre: a source at the centre is 10 ms late, so orbitr's own
 latency is a constant 10 ms (480 samples at 48 kHz) whatever the settings; the input in Mix and Dry/Wet
-is delayed as much. With the end saturator's (always in the path, so it never changes) it is reported to
-the host for automatic compensation.
+is delayed as much. With the end saturator's (always in the path, so switching it on or off never
+changes it) it is reported to the host for automatic compensation. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told.
 
 ## CPU
 

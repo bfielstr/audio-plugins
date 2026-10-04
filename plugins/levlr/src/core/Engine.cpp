@@ -120,8 +120,9 @@ void Engine::prepare (double sampleRate, int maxBlock)
     countStep = (float)(1.0 / (0.020 * sr));                         // 20 ms between two band counts
     for (auto& d : drive)
         d.prepare (sr, kChunk);
-    ring.assign ((size_t)std::max (1, driveLatency ()) * kRingStride, 0.0f);
-    bypassRing.assign ((size_t)std::max (1, driveLatency ()) * 2, 0.0f);
+    const int most = drive[0].latencyAt (4);
+    ring.assign ((size_t)std::max (1, most) * kRingStride, 0.0f);
+    bypassRing.assign ((size_t)std::max (1, most) * 2, 0.0f);
     if (meters)
         meters->sampleRate.store ((float)sr);
     reset ();
@@ -173,10 +174,26 @@ void Engine::reset ()
         drive[b].set (db > 0.0 && b < countNow, (int)std::lround (p[driveParam (b, kDriveType)]), db);
         drive[b].reset ();
     }
+    applyOversampling (); // (the drives' factor as set, the delays cleared)
+    tail.reset ();
+}
+
+void Engine::applyOversampling ()
+{
+    const int f = driveOversamplingFactor (p[kDriveOversampling]);
+    for (auto& d : drive)
+        d.setFactor (f);
+    ringLen = drive[0].latency ();
     std::fill (ring.begin (), ring.end (), 0.0f);
     std::fill (bypassRing.begin (), bypassRing.end (), 0.0f);
     ringPos = bypassPos = 0;
-    tail.reset ();
+    publishLatency ();
+}
+
+void Engine::publishLatency ()
+{
+    if (meters)
+        meters->driveLatency.store (drive[0].latency (), std::memory_order_relaxed);
 }
 
 void Engine::setParam (uint32_t id, double plain)
@@ -202,8 +219,10 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
 void Engine::processBypassed (float* l, float* r, int n)
 {
     // the same delay as when it runs, so switching it off doesn't move the rest of the rack in time
-    const int len = (int)(bypassRing.size () / 2);
-    if (driveLatency () <= 0 || len <= 0)
+    if (driveOversamplingFactor (p[kDriveOversampling]) != drive[0].oversampling ())
+        applyOversampling ();
+    const int len = ringLen;
+    if (len <= 0)
         return;
     for (int i = 0; i < n; ++i)
     {
@@ -233,6 +252,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
     const float outT = (float)dbToGain (p[kOutput]);
     const int slopeT = std::clamp ((int)std::lround (p[kSlope]), 0, kNumSlopes - 1);
     const float sg = (float)smoothGain;
+    if (driveOversamplingFactor (p[kDriveOversampling]) != drive[0].oversampling ())
+        applyOversampling ();
 
     // the drives: a band past the count has its drive off
     bool driving[kBands], anyDrive = false;
@@ -243,7 +264,15 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         driving[b] = !drive[b].idle ();
         anyDrive |= driving[b];
     }
-    const int len = (int)(ring.size () / kRingStride);
+    const int len = ringLen;
+    // a value into the delay and the one it gives back from len samples ago (len 0: no delay)
+    auto delayed = [len] (float& cell, float v) {
+        if (len <= 0)
+            return v;
+        const float o = cell;
+        cell = v;
+        return o;
+    };
 
     for (int i = 0; i < n; ++i)
     {
@@ -305,13 +334,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         float* slot = &ring[(size_t)ringPos * kRingStride];
         float gd[kBands];
         for (int b = 0; b < kBands; ++b)
-        {
-            gd[b] = slot[2 * kBands + b];
-            slot[2 * kBands + b] = gain[b];
-        }
-        const float ld = slot[3 * kBands];
-        slot[3 * kBands] = level;
-        levelD[i] = ld;
+            gd[b] = delayed (slot[2 * kBands + b], gain[b]);
+        levelD[i] = delayed (slot[3 * kBands], level);
 
         const float x[2] = {inL[i], inR[i]};
         float y[2];
@@ -345,17 +369,11 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
             }
             float td[kBands];
             for (int b = 0; b < kBands; ++b)
-            {
-                td[b] = slot[c * kBands + b];
-                slot[c * kBands + b] = tap[b];
-            }
+                td[b] = delayed (slot[c * kBands + b], tap[b]);
             // the clean output: the bands at their levels added up as Levlr always has (the same sum,
             // so the same numbers), then delayed; with every drive off it is the output
             y[c] = (gain[0] * tap[0] + gain[1] * tap[1] + gain[2] * tap[2] + gain[3] * tap[3]) * level;
-            float& yd = slot[3 * kBands + 1 + c];
-            const float yOut = yd;
-            yd = y[c];
-            y[c] = yOut;
+            y[c] = delayed (slot[3 * kBands + 1 + c], y[c]);
             if (anyDrive)
                 for (int b = 0; b < kBands; ++b)
                 {

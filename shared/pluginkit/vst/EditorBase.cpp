@@ -61,6 +61,7 @@ VSTGUI::CFrame* EditorBase::openDetached (double zoom, const RootWrapper& wrap)
     byParam.clear ();
     buildUI (frame);
     addInfoStrip ();
+    writeLayoutReport (); // (PK_LAYOUT_REPORT: the draw benchmark checks the layout on Linux this way)
     if (wrap && frame->getNbViews () > 0)
     {
         CView* root = frame->getView (0);
@@ -200,7 +201,10 @@ void EditorBase::HoverWatch::onMouseExited (CView* view, CFrame* f)
 CMessageResult EditorBase::notify (CBaseObject* sender, const char* message)
 {
     if (message == CVSTGUITimer::kMsgTimer && frame)
+    {
         idle ();
+        controller->checkLatency ();
+    }
     return VSTGUIEditor::notify (sender, message);
 }
 
@@ -241,8 +245,9 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
          "Clip the output at 0 dB after the curve (Soft: the Analog curve again, Hard: a digital clip).");
     tip (bind (p, new Toggle (row (296, 338, rowA), this, extBase + kTailExtMidSide, "M/S")),
          "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound stays wide.");
-    tip (bind (p, new Toggle (row (342, 388, rowA), this, extBase + kTailExtHiQuality, "Hi-Q")),
-         "Run the curve 4x oversampled to reduce aliasing (a little more CPU).");
+    tip (bind (p, new Choice (row (342, 388, rowA), this, extBase + kTailExtOversampling)),
+         "Oversampling: run the curve at 2x or 4x the sample rate to reduce aliasing (4x, the default: the least, a little more "
+         "CPU and latency). Off: no oversampling, no latency from it.");
     tip (bind (p, new Toggle (row (392, 424, rowA), this, extBase + kTailExtDcFilter, "DC")), "Remove DC offset before the curve.");
     tip (bind (p, new Toggle (row (430, 480, rowA), this, extBase + kTailExtColorOn, "Color")),
          "Colour filters: an EQ before the curve, undone after it, so the curve bites harder or softer on some frequencies.");

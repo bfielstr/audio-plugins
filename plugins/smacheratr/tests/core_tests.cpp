@@ -127,14 +127,17 @@ static double delayedError (const std::vector<float>& out, const std::vector<flo
     return err;
 }
 
-static std::unique_ptr<Engine> engine (bool hiQuality = true)
+// An engine at Oversampling `mode` (OversamplingMode).
+static std::unique_ptr<Engine> engineOs (int mode)
 {
     auto e = std::make_unique<Engine> ();
-    e->setParam (kHiQuality, hiQuality ? 1.0 : 0.0);
+    e->setParam (kOversampling, mode);
     e->setParam (kColorOn, 0.0); // the defaults have Color on; tests start neutral
     e->prepare (kSr, 512);
     return e;
 }
+// hiQuality: 4x (the default) or Off (what the old Hi-Quality switch's on and off were)
+static std::unique_ptr<Engine> engine (bool hiQuality = true) { return engineOs (hiQuality ? kOs4x : kOsOff); }
 
 // ---------------------------------------------------------------------------
 // The half-band stage as it was before it went polyphase (Oversampler.cpp): the plain FIR at the 2x
@@ -329,10 +332,40 @@ TEST (transparent_at_zero_drive)
         auto e = engine (hq);
         auto out = run (*e, in, 333);
         const int lat = e->latency ();
-        CHECK (lat > 48 && lat < 200, "latency %d (look-ahead + oversampling)", lat);
+        CHECK (lat >= 48 + (hq ? 1 : 0) && lat < 200, "latency %d (look-ahead, and oversampling with hq)", lat);
         const double err = delayedError (out.l, in.l, (size_t)lat, 4800);
         CHECK (err < (hq ? 2e-3 : 1e-6), "hq %d: reconstruction error %g (latency %d)", hq, err, lat);
-        CHECK (e->latency () == engine (!hq)->latency (), "latency is the same with Hi-Quality on and off");
+    }
+    // the latency is the look-ahead's and the oversampler's: none with Off, 2x the first half-band stage's
+    // alone (most of 4x's: the second stage is short), and the same while a setting is held
+    {
+        const int look = (int)std::lround (0.001 * kSr);
+        auto off = engineOs (kOsOff), x2 = engineOs (kOs2x), x4 = engineOs (kOs4x);
+        std::printf ("    latency at 48 kHz: Off %d, 2x %d, 4x %d samples\n", off->latency (), x2->latency (), x4->latency ());
+        CHECK (off->latency () == look, "Off: the look-ahead alone (%d)", off->latency ());
+        CHECK (x2->latency () > look && x2->latency () < x4->latency (), "2x between: %d (4x %d)", x2->latency (), x4->latency ());
+        CHECK (engine ()->latency () == x4->latency (), "the default is 4x");
+        // each one exact: a quiet signal comes out delayed by just that
+        for (int mode : {(int)kOsOff, (int)kOs2x, (int)kOs4x})
+        {
+            auto e = engineOs (mode);
+            const int lat = e->latency ();
+            auto out = run (*e, in, 333);
+            const double err = delayedError (out.l, in.l, (size_t)lat, 4800);
+            CHECK (err < (mode == kOsOff ? 1e-6 : 2e-3) && e->latency () == lat, "mode %d: error %g at latency %d", mode, err, lat);
+        }
+        // switched while running: the next block runs at the new latency (and the meters say so)
+        Meters m;
+        auto e = engineOs (kOs4x);
+        e->setMeters (&m);
+        CHECK (m.latency.load () == x4->latency (), "published at 4x: %d", m.latency.load ());
+        run (*e, in, 333);
+        e->setParam (kOversampling, kOs2x);
+        CHECK (e->latency () == x2->latency (), "reports 2x's once set");
+        run (*e, in, 333);
+        CHECK (m.latency.load () == x2->latency (), "runs at 2x's: %d", m.latency.load ());
+        auto out = run (*e, in, 333);
+        CHECK (delayedError (out.l, in.l, (size_t)x2->latency (), 4800) < 2e-3, "and is exact at it");
     }
     // the pre-limiter below its threshold changes nothing either, and keeps the latency
     auto e = engine (false);
@@ -375,7 +408,7 @@ TEST (drive_adds_harmonics_and_the_curve_holds_one)
     auto out = run (*e, in);
     CHECK (toneDb (out.l, 3000.0, a, b) > -30.0, "third harmonic %f dB", toneDb (out.l, 3000.0, a, b));
     CHECK (peakOf (out.l, a, b) <= 1.0 + 1e-6, "peak %f", peakOf (out.l, a, b));
-    // with Hi-Quality the downsampling filter rings a little past the curve
+    // with 4x oversampling the downsampling filter rings a little past the curve
     e = engine (true);
     e->setParam (kDrive, 18.0);
     out = run (*e, in);
@@ -388,7 +421,7 @@ TEST (drive_adds_harmonics_and_the_curve_holds_one)
 
 TEST (post_clip_never_leaves_above_0_dbfs)
 {
-    // driven into Soft or Hard Clip, nothing after the clip takes the output back over 0 dBFS: not Hi-Quality's
+    // driven into Soft or Hard Clip, nothing after the clip takes the output back over 0 dBFS: not the oversampler's
     // downsampling filter, Mid/Side back to left / right, Gentlr, the dry part of a mix or Output
     struct Case
     {
@@ -396,7 +429,7 @@ TEST (post_clip_never_leaves_above_0_dbfs)
         double mix, outDb;
         const char* name;
     };
-    const Case cases[] = {{true, false, false, 1.0, 0.0, "Hi-Quality"},  {false, true, false, 1.0, 0.0, "Mid/Side"},
+    const Case cases[] = {{true, false, false, 1.0, 0.0, "4x oversampling"},  {false, true, false, 1.0, 0.0, "Mid/Side"},
                           {true, true, false, 1.0, 0.0, "both"},         {false, false, true, 1.0, 0.0, "Gentlr"},
                           {true, false, false, 0.5, 0.0, "half dry"},    {true, false, false, 1.0, 6.0, "Output +6 dB"}};
     uint32_t seed = 3;
@@ -523,20 +556,37 @@ TEST (color_shapes_where_the_saturation_happens)
     CHECK (h3 (0.5) > h3 (0.0) + 0.5, "Amt Lo +50 %% saturates it more: %f vs %f", h3 (0.5), h3 (0.0));
 }
 
-TEST (hi_quality_reduces_aliasing)
+TEST (oversampling_reduces_aliasing)
 {
-    // a saturated 10 kHz tone: its 5th harmonic (50 kHz) aliases to 2 kHz at 48 kHz
+    // a saturated 10 kHz tone: its 5th harmonic (50 kHz) aliases to 2 kHz at 48 kHz (at 2x, where 96 kHz
+    // folds it to 46 kHz, the downsampler takes it out; the 7th, 70 kHz, folds to 26 kHz there and then
+    // to 22 kHz, and the 9th, 90 kHz, to 6 kHz: 2x leaves the high harmonics' aliases that 4x clears)
     auto in = tones ({{10000.0, -6.0}}, 1.0);
     const size_t a = 24000, b = 48000;
-    auto alias = [&] (bool hq) {
-        auto e = engine (hq);
-        e->setParam (kDrive, 12.0);
+    // the energy of everything that is not the tone or a harmonic below Nyquist (the aliases), relative
+    // to the tone, in dB
+    auto aliasDb = [&] (int mode) {
+        auto e = engineOs (mode);
+        e->setParam (kDrive, 18.0);
         auto out = run (*e, in);
-        return toneDb (out.l, 2000.0, a, b);
+        double rest = 0.0;
+        for (double f = 500.0; f < 23000.0; f += 500.0)
+            if (std::fmod (f, 10000.0) != 0.0)
+                rest += std::pow (10.0, toneDb (out.l, f, a, b) / 10.0);
+        return 10.0 * std::log10 (rest + 1e-30) - toneDb (out.l, 10000.0, a, b);
     };
-    const double off = alias (false), on = alias (true);
+    const double off = aliasDb (kOsOff), x2 = aliasDb (kOs2x), x4 = aliasDb (kOs4x);
+    std::printf ("    alias energy against the tone: Off %.1f, 2x %.1f, 4x %.1f dB\n", off, x2, x4);
     CHECK (off > -50.0, "aliasing without oversampling: %f dB", off);
-    CHECK (on < off - 20.0, "Hi-Quality suppresses it: %f vs %f dB", on, off);
+    CHECK (x2 < off - 10.0, "2x suppresses it: %f vs %f dB", x2, off);
+    CHECK (x4 < x2 - 6.0, "4x the most: %f vs %f dB", x4, x2);
+    // the 5th harmonic's alias alone, as before: 4x takes it at least 20 dB below no oversampling
+    auto alias2k = [&] (int mode) {
+        auto e = engineOs (mode);
+        e->setParam (kDrive, 12.0);
+        return toneDb (run (*e, in).l, 2000.0, a, b);
+    };
+    CHECK (alias2k (kOs4x) < alias2k (kOsOff) - 20.0, "4x suppresses the 2 kHz alias: %f vs %f dB", alias2k (kOs4x), alias2k (kOsOff));
 }
 
 TEST (dry_wet_and_dc_filter)
@@ -998,16 +1048,17 @@ TEST (gentlr_region_drive)
            db (on, 750.0), db (off, 750.0));
     CHECK (std::fabs (db (on, 5100.0) - db (off, 5100.0)) < 0.5, "the tone outside the band: %.2f vs %.2f dB", db (on, 5100.0),
            db (off, 5100.0));
-    // oversampled or not, the region lines up with the rest (the latency does not change): Hi-Quality
-    // on and off give nearly the same output
+    // oversampled or not, the region lines up with the rest: 4x and Off give nearly the same output, Off's
+    // earlier by the oversampler's latency
     const Sig onLow = render (true, false);
+    const size_t shift = (size_t)(engine (true)->latency () - engine (false)->latency ());
     double diff = 0.0, sum = 0.0;
     for (size_t i = 24000; i < on.l.size (); ++i)
     {
-        diff += (on.l[i] - onLow.l[i]) * (on.l[i] - onLow.l[i]);
+        diff += (on.l[i] - onLow.l[i - shift]) * (on.l[i] - onLow.l[i - shift]);
         sum += on.l[i] * on.l[i];
     }
-    CHECK (std::sqrt (diff / sum) < 0.05, "Hi-Quality on vs off with the region driven: %.3f", std::sqrt (diff / sum));
+    CHECK (std::sqrt (diff / sum) < 0.05, "4x vs Off with the region driven: %.3f", std::sqrt (diff / sum));
 }
 
 TEST (gentlr_region_drive_keeps_the_latency_and_does_not_click)
@@ -1130,7 +1181,7 @@ TEST (performance)
         run (*e, in);
         secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
     }
-    std::printf ("    CPU: %.2f%% of one core (stereo, Hi-Quality)\n", 100.0 * secs / 10.0);
+    std::printf ("    CPU: %.2f%% of one core (stereo, 4x oversampling)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
 }
 
@@ -1441,7 +1492,7 @@ TEST (gentlr_high_band)
     }
 
     // High at Range 0 is what Gentlr was before it: bit for bit, whatever its other controls say (with
-    // and without Hi-Quality, the other bands working)
+    // and without 4x oversampling, the other bands working)
     auto in2 = tones ({{80.0, -8.0}, {320.0, -12.0}, {3000.0, -10.0}, {9000.0, -12.0}}, 0.5);
     auto renderAll = [&] (bool hq, bool high, double taper, double range, double threshold) {
         auto e = engine (hq);

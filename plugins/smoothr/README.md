@@ -112,4 +112,6 @@ README](../../README.md#presets).
 ## Latency
 
 Constant, 1051 samples at 48 kHz (21.9 ms): the split 404, the lows' look-ahead 479, the highs' 71 and
-the interpolation 12, plus the saturator's 85. Reported to the host.
+the interpolation 12, plus the saturator's 85. Reported to the host. The saturator's part depends on its
+**Oversampling**: 85 at 4x (the default), 80 at 2x and 48 with Off; changing it changes the latency, and
+the host is told.
