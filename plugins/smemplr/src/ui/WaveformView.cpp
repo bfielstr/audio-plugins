@@ -140,6 +140,51 @@ void WaveformView::markerPositions (const SampleData& s, double& fs, double& fe,
     le = r.loopEnd; // Length: the loop's end (filled in with Loop off too)
 }
 
+void WaveformView::setZoomedToSelection (bool z)
+{
+    if (z == zoomedSel)
+        return;
+    zoomedSel = z;
+    if (onViewChanged)
+        onViewChanged ();
+}
+
+void WaveformView::toggleZoomToSelection ()
+{
+    auto s = sample ();
+    if (zoomedSel || !s || s->length <= 0)
+    {
+        resetZoom ();
+        return;
+    }
+    // the loop (Classic, Loop on), else the flagged region, with 4 % of it to spare each side
+    double fs, fe, rs, re, le;
+    markerPositions (*s, fs, fe, rs, re, le);
+    double a = fs, b = fe;
+    if ((int)std::lround (host->plainValue (kMode)) == kModeClassic && host->plainValue (kLoopOn) >= 0.5)
+    {
+        a = rs;
+        b = le;
+    }
+    const double len = s->length;
+    const double pad = 0.04 * (b - a);
+    viewLen = std::clamp ((b - a + 2.0 * pad) / len, std::max (1e-6, 32.0 / len), 1.0);
+    viewStart = std::clamp ((a - pad) / len, 0.0, 1.0 - viewLen);
+    setZoomedToSelection (viewLen < 1.0);
+    invalid ();
+}
+
+void WaveformView::setWaveHeight (double h)
+{
+    h = std::clamp (h, 1.0, kMaxHeight);
+    if (h == heightZoom)
+        return;
+    heightZoom = h;
+    invalid ();
+    if (onViewChanged)
+        onViewChanged ();
+}
+
 double WaveformView::gridFrames (const SampleData& s) const
 {
     if (host->plainValue (kGridOn) < 0.5)
@@ -197,7 +242,7 @@ void WaveformView::draw (CDrawContext* ctx)
     const SliceEditsPtr edits = bridge->editsNow ();
     pk::LayerKey key;
     key.params (host).add ((const void*)s.get (), s->length, (const void*)edits.get (), bridge->changeCounter.load ());
-    key.add (viewStart, viewLen, drag, dragSlice, dragSlicePos, moved, hoverSlice);
+    key.add (viewStart, viewLen, heightZoom, drag, dragSlice, dragSlicePos, moved, hoverSlice);
     key.add (bridge->hostBpm.load (std::memory_order_relaxed)); // (the Grid's lines with Warp off)
     layer.draw (ctx, getViewSize (), key.value (), [this] (CDrawContext* c) { paint (c, false); });
 
@@ -359,7 +404,7 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
     for (int c = 0; c < lanes; ++c)
     {
         const double mid = w.top + laneH * (c + 0.5);
-        const double scale = laneH * 0.46 / std::max (0.05f, std::min (1.0f, s->peakAbs));
+        const double scale = laneH * 0.46 / std::max (0.05f, std::min (1.0f, s->peakAbs)) * heightZoom;
         ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (w.left, mid), CPoint (w.right, mid));
         const float* d = s->data (c);
@@ -638,6 +683,14 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
     int si = -1;
     const Handle h = hitTest (p, si);
     const double len = s->length;
+    if (h == Handle::Ruler && e.clickCount == 2)
+    {
+        // zoom to the loop (or the flags), or back out
+        toggleZoomToSelection ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
 
     if (mode == kModeSlicing && h != Handle::Ruler)
     {
@@ -819,6 +872,8 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
             viewStart = anchor - frac * newLen;
             viewLen = newLen;
             viewStart = std::clamp (viewStart, 0.0, 1.0 - viewLen);
+            if (dx != 0.0 || dy != 0.0)
+                setZoomedToSelection (false); // (zoomed or scrolled by hand)
             break;
         }
         default: break;
@@ -873,7 +928,15 @@ void WaveformView::onMouseWheelEvent (MouseWheelEvent& e)
     if (!s)
         return;
     const double anchor = xToPos (e.mousePosition.x);
-    if (e.modifiers.has (ModifierKey::Control) || e.modifiers.has (ModifierKey::Alt))
+    if (e.modifiers.has (ModifierKey::Alt))
+    {
+        // Alt: the waveform's height (the drawing only)
+        setWaveHeight (heightZoom * std::exp (-e.deltaY * 0.08));
+        e.consumed = true;
+        return;
+    }
+    setZoomedToSelection (false); // (zoomed or scrolled by hand)
+    if (e.modifiers.has (ModifierKey::Control))
     {
         const double factor = std::exp (-e.deltaY * 0.08);
         const double newLen = std::clamp (viewLen * factor, std::max (1e-6, 32.0 / s->length), 1.0);
@@ -1019,6 +1082,76 @@ void WaveformView::idle ()
                 invalidRect (playheadStrip (before[i]));
                 invalidRect (playheadStrip (lastHeads[i]));
             }
+}
+
+//------------------------------------------------------------------------------
+void WaveHeightSlider::draw (CDrawContext* ctx)
+{
+    // a field like a value box: the share of the range filled in copper (log scale), the height as text
+    const CRect r = getViewSize ();
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (r, kDrawFilled);
+    const double h = wave ? wave->waveHeight () : 1.0;
+    const double x = std::log2 (h) / std::log2 (WaveformView::kMaxHeight);
+    CRect fill = r;
+    fill.inset (1, 1);
+    fill.right = fill.left + fill.getWidth () * x;
+    if (fill.right > fill.left)
+    {
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, 90));
+        ctx->drawRect (fill, kDrawFilled);
+    }
+    pk::draw::outline (ctx, r, theme::kCopper, 0);
+    char buf[32];
+    std::snprintf (buf, sizeof (buf), h < 9.95 ? "Height x%.1f" : "Height x%.0f", h);
+    drawText (ctx, buf, r, theme::kText, 10.0, kCenterText);
+}
+
+void WaveHeightSlider::onMouseDownEvent (MouseDownEvent& e)
+{
+    if (!wave)
+        return;
+    if (e.buttonState.isRight () || (e.buttonState.isLeft () && e.clickCount == 2))
+    {
+        wave->setWaveHeight (1.0); // back to x1
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
+    if (!e.buttonState.isLeft ())
+        return;
+    dragging = true;
+    startX = e.mousePosition.x;
+    startValue = std::log2 (wave->waveHeight ());
+    e.consumed = true;
+}
+
+void WaveHeightSlider::onMouseMoveEvent (MouseMoveEvent& e)
+{
+    if (!dragging || !wave)
+        return;
+    // the slider's width covers the range (Shift: a tenth of that)
+    const double per = std::log2 (WaveformView::kMaxHeight) / std::max (20.0, getViewSize ().getWidth ());
+    const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.1 : 1.0;
+    wave->setWaveHeight (std::exp2 (startValue + (e.mousePosition.x - startX) * per * fine));
+    invalid ();
+    e.consumed = true;
+}
+
+void WaveHeightSlider::onMouseUpEvent (MouseUpEvent& e)
+{
+    dragging = false;
+    e.consumed = true;
+}
+
+void WaveHeightSlider::onMouseWheelEvent (MouseWheelEvent& e)
+{
+    if (!wave || e.deltaY == 0.0)
+        return;
+    wave->setWaveHeight (wave->waveHeight () * std::exp (e.deltaY * 0.08));
+    invalid ();
+    e.consumed = true;
 }
 
 } // namespace smemplr

@@ -53,8 +53,12 @@ formant correction on top.
 
 **The waveform**: click to audition (in Slicing mode it plays the slice under the mouse). The loop bar
 can be clicked and dragged, and so can the shaded loop above the waveform (a click there still
-auditions). Zoom with Cmd/Alt + scroll or by dragging the ruler up and down; scroll, or drag the ruler
-sideways, to pan. Live playheads show what is playing.
+auditions). Zoom with Cmd + scroll or by dragging the ruler up and down; scroll, or drag the ruler
+sideways, to pan. **Zoom**, at the right end of the ruler, zooms to the loop (Classic with Loop on) or
+to the region between the flags; click it again to see the whole sample (double-clicking the ruler
+does the same). **Height** beside it makes the waveform taller, up to 16 times, to see quiet parts
+(drag it sideways, scroll on it, or Alt + scroll over the waveform; double-click to reset). It only
+changes the drawing. Live playheads show what is playing.
 
 **Grid**, at the right end of the ruler (off by default), makes the loop snap to a beat grid while you
 drag it: its start, its end, or the whole loop by its bar or its shaded region. The loop then always
