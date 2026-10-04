@@ -48,18 +48,19 @@ bool PLUGIN_API EditorBase::open (void* parent, const PlatformType& platformType
     frame->enableTooltips (controller->uiShowTips, 600);
     frame->open (parent, platformType);
     frame->setZoom (scale);
+    // a section built folded (setContentHeight while building) recorded a shorter content; the window
+    // the host opened is still the full height, so lay out at the full height first (laid out at the
+    // short one, the UI was centred in the window: everything sat lower than drawn, by half the folded
+    // section, and clicks missed), then ask the host for the shorter window
+    const double foldedHeight = contentHeight;
+    contentHeight = fullContentHeight;
+    baseHeight = contentHeight + kInfoHeight;
     // the host may have given the window another shape than the UI's (a size it kept, or one it chose)
     layoutFrame (rect.getWidth (), rect.getHeight ());
-    // a section built folded (setContentHeight while building): the window at the content's height, if
-    // the host lets it be resized (otherwise the content keeps its full height)
-    if (contentHeight != fullContentHeight)
-    {
-        const double h = contentHeight;
-        contentHeight = fullContentHeight;
-        baseHeight = contentHeight + kInfoHeight;
-        if (!setContentHeight (h))
-            placeInfoStrip (); // (the strip back at the full content's end)
-    }
+    // the window at the content's height, if the host lets it be resized (otherwise the content keeps
+    // its full height and the folded section's space stays empty)
+    if (foldedHeight != fullContentHeight && !setContentHeight (foldedHeight))
+        placeInfoStrip (); // (the strip back at the full content's end)
     return true;
 }
 
