@@ -113,6 +113,13 @@ public:
 
     double uiScale = 1.0;
     bool uiShowTips = true;
+    // The end saturator's sections (smacheratr::TailPanel): which are open (kTailOpenSaturator,
+    // kTailOpenGentlr; -1: not decided yet, so a new instance opens the saturator only when it is on), and
+    // which layer of its colour display is in front (Smacheratr's own editor and Smemplr's rack page use it
+    // too: 0 Color, 1 Gentlr). Editor state, saved with the controller's (not parameters).
+    static constexpr int kTailOpenSaturator = 1, kTailOpenGentlr = 2;
+    int uiTailOpen = -1;
+    int uiColorLayer = 0;
 
 protected:
     void refreshEditor ();

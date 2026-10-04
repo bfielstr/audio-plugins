@@ -95,7 +95,8 @@ band (outlined where it gives way to the group). On the right: a **Goniometer** 
 a vertical line) and a **CORRELATION** meter (+1 mono, 0 unrelated, below 0 it cancels in mono).
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). Here it
-saturates the mid and the side apart, so pushing it does not narrow the image.
+saturates the mid and the side apart, so pushing it does not narrow the image. While it is off it folds
+to its header strips; click a strip (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## Presets
 

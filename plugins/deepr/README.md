@@ -47,7 +47,9 @@ plays, the low mids of the rest are dipped; when it stops, they come back.
 With Depth at 0 the output is flat at every frequency: the split and the sum make an all-pass, and the
 dry signal goes through the same all-pass so any Mix lines up.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+it is off it folds to its header strips; click a strip (or switch it on) to open it. See
+[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## Why it sounds deeper
 

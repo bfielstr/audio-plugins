@@ -68,6 +68,8 @@ std::vector<TextSpot> spotsOf (CView* v)
         return x->textSpots ();
     if (auto* x = dynamic_cast<Segmented*> (v))
         return x->textSpots ();
+    if (auto* x = dynamic_cast<ViewSwitch*> (v))
+        return x->textSpots ();
     if (auto* x = dynamic_cast<Choice*> (v))
         return x->textSpots ();
     if (auto* x = dynamic_cast<ActionButton*> (v))

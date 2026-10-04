@@ -1,6 +1,6 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailDisplays.h"
+#include "smacheratr/src/ui/TailPanel.h"
 
 #include "../core/Params.h"
 
@@ -18,7 +18,8 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 900.0;
-    static constexpr double kHeight = 660.0;
+    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 408, 8 px clear under it
+    static constexpr double kHeight = 408.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
     // layout (also used by the host test)
     static constexpr double kViewLeft = 8.0, kViewTop = 40.0, kViewRight = 892.0, kViewBottom = 300.0;
     static constexpr double kRowTop = 308.0, kTailTop = 408.0;
@@ -33,7 +34,7 @@ private:
     void showMenu (VSTGUI::CPoint where);
 
     Controller* ctl;
-    std::unique_ptr<smacheratr::TailDisplays> tailDisplays;
+    std::unique_ptr<smacheratr::TailPanel> tail;
     HistoryView* history = nullptr;
 };
 

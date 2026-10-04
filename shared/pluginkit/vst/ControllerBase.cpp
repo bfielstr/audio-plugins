@@ -110,6 +110,12 @@ void ControllerBase::checkLatency ()
         componentHandler->restartComponent (Steinberg::Vst::kLatencyChanged);
 }
 
+namespace {
+// The view state's tag in the controller's state, then a count and that many values (uiTailOpen,
+// uiColorLayer): a reader takes the ones it knows.
+constexpr int32 kViewStateTag = 0x56575354; // 'VWST'
+} // namespace
+
 tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
 {
     if (!stream)
@@ -144,6 +150,22 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
             }
         }
     }
+    // the view state after it, tagged (states from before it end here: the defaults stay)
+    int32 tag = 0, count = 0;
+    if (s.readInt32 (tag) && tag == kViewStateTag && s.readInt32 (count) && count >= 0 && count < 64)
+    {
+        int32 values[2] = {-1, 0};
+        for (int32 i = 0; i < count; ++i)
+        {
+            int32 v = 0;
+            if (!s.readInt32 (v))
+                break;
+            if (i < 2)
+                values[i] = v;
+        }
+        uiTailOpen = values[0] < 0 ? -1 : values[0] & (kTailOpenSaturator | kTailOpenGentlr);
+        uiColorLayer = values[1] == 1 ? 1 : 0;
+    }
     refreshEditor ();
     return kResultOk;
 }
@@ -153,10 +175,12 @@ tresult PLUGIN_API ControllerBase::getState (IBStream* stream)
     if (!stream)
         return kInvalidArgument;
     IBStreamer s (stream, kLittleEndian);
-    // fields are only ever appended: an older version reads what it knows and ignores the rest
+    // fields are only ever appended: an older version reads what it knows and ignores the rest (the preset
+    // reference, then the view state behind its tag)
     const std::string ref = std::to_string ((int)currentKind) + ":" + currentPath;
     return s.writeDouble (uiScale) && s.writeBool (uiShowTips) && s.writeStr8 (presetTitle.c_str ()) &&
-                   s.writeStr8 (ref.c_str ())
+                   s.writeStr8 (ref.c_str ()) && s.writeInt32 (kViewStateTag) && s.writeInt32 (2) &&
+                   s.writeInt32 (uiTailOpen) && s.writeInt32 (uiColorLayer)
                ? kResultOk
                : kResultFalse;
 }

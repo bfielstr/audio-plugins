@@ -104,7 +104,7 @@ inline const char* forParam (uint32_t id)
             return "Gentlr (Advanced): the band's level where it starts cutting (-18 dB by default, where it starts without "
                    "Advanced). Over it, 3 dB of cut for every 5 dB, up to the band's Range. The bar beside it is the "
                    "band's level going into the curve, bright where it is over the threshold. Drag up/down, double-click "
-                   "to reset.";
+                   "to reset. Grabbing it selects its band (lit, with its controls shown); the selected band's slider is lit.";
         case kClarityDrive:
             return "Gentlr (Advanced): drive the region Gentlr works on. Its bands are split out again, put through the "
                    "Analog curve on their own and put back, so the cut region gets density and harmonics while the rest "
@@ -125,9 +125,12 @@ constexpr const char* kShaperDisplay =
     "Drag up/down to set Drive, double-click to reset it. Shift: fine.";
 
 constexpr const char* kColorDisplay =
-    "The colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
+    "Two layers, picked with the Color | Gentlr switch above it: the one in front has its handles to drag and its "
+    "controls under the display, the other is drawn faint behind. "
+    "Color: the colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
-    "With Gentlr on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
+    "Gentlr (once it is on): its bands; the band selected (its handle grabbed, its button, or its Threshold slider with Advanced) "
+    "has its handle and its slider lit. Drag a handle sideways for the frequency and down for the Range, an edge for the width, "
     "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub and High bands (named in their readouts) "
     "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. "
     "Drag a band's edge onto its neighbour's (it snaps) and they glue: a link icon sits on the border near the bottom, lit "

@@ -62,9 +62,12 @@ void ThresholdSlider::draw (CDrawContext* ctx)
     // a meter bed: a well in a thin outline (copper; cinnabar while dragged), the band's name on top
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
-    pk::draw::outline (ctx, r, dragging ? theme::kEnergyLive : (on ? theme::kCopper : theme::kLineDim), 0);
-    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15), on ? theme::kCopperPale : theme::kTextDim,
-          10.0, true);
+    pk::draw::outline (ctx, r, dragging ? theme::kEnergyLive : selected ? theme::kCopperPale : (on ? theme::kCopper : theme::kLineDim), 0);
+    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15),
+          selected ? theme::kText : on ? theme::kCopperPale : theme::kTextDim, 10.0, true);
+    // the band shown in the editor: a lamp under its name (lit while the band works, idle otherwise)
+    if (selected)
+        pk::draw::marker (ctx, CRect (r.left + 3, r.top, r.right - 3, r.top + 17), on ? theme::kEnergyLive : theme::kEnergyIdle);
 
     // the level as a meter: energy idle below the threshold, lit live above it (the part being cut)
     const double thr = host->plainValue (param);
@@ -113,6 +116,8 @@ void ThresholdSlider::onMouseDownEvent (MouseDownEvent& e)
         return;
     if (!e.buttonState.isLeft ())
         return;
+    if (onPicked)
+        onPicked (band);
     if (e.clickCount == 2)
     {
         host->setOnce (param, host->table ().defaultNormalized (param));

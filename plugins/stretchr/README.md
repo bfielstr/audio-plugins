@@ -113,8 +113,10 @@ envelope and stretch markers for changes over time.
 
 ## smacheratr
 
-The bottom panel is the saturator every plug-in here can end with (off, Drive 0 dB). It adds 1.7 ms
-of latency, reported to the host, which keeps the clip aligned.
+The bottom panel is the saturator every plug-in here can end with (off, Drive 0 dB). While it is off it
+folds to its header strips; click a strip (or switch it on) to open it (see [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins)). It adds 1.7 ms
+of latency at its default 4x Oversampling (1 ms with Oversampling off), reported to the host, which keeps
+the clip aligned.
 
 ## Presets
 

@@ -146,7 +146,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tailDisplays.reset ();
+    tail.reset ();
     clipView = nullptr;
     status = summary[0] = summary[1] = nullptr;
     modeButtons[0] = modeButtons[1] = nullptr;
@@ -283,12 +283,10 @@ void Editor::buildUI (CFrame* f)
 
     // OUTPUT
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 600, 972, 678 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                               [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
-                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 954, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
+                                                    [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
+    tail->add (root, CRect (8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight));
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
     // the Gain knob, then Trigger and Outside Clip under it, each label over its selector (the knob
@@ -349,8 +347,8 @@ void Editor::updateAlgorithmControls ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (id == kAlgorithm || id == kFollowTempo)
         updateAlgorithmControls ();
     if (clipView && (id == kSpeed || id == kFollowTempo || id == kSourceBpm))
@@ -359,8 +357,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     Session* s = ctl->getSession ();
     if (!s)
         return;

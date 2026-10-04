@@ -12,11 +12,13 @@
 // meters lit. It prints times, it does not judge them: it fails only if the editor cannot be built or
 // the two renderings differ.
 // Linux only (the cairo backend draws offscreen without a display). Built with -DPK_DRAW_BENCH=ON:
-//   <plugin>_drawbench [ticks] [--all] [--quiet-rects] [--dump <dir>] [--compare <dir>]
+//   <plugin>_drawbench [ticks] [--all] [--quiet-rects] [--dump <dir>] [--compare <dir>] [--set <id>=<normalized>]...
 // ticks: draws timed per figure (the median is shown). --all times every view, not only the large
 // displays; --quiet-rects lists the rectangles still repainted once the audio has stopped. --dump
 // writes the renderings (PNG to look at, .rgba to compare); --compare reports how far this build's
-// renderings at rest are from ones dumped by another build (before / after a change to a view).
+// renderings at rest are from ones dumped by another build (before / after a change to a view). --set
+// gives a parameter a value (normalized, in the controller) before the editor is built (to look at a
+// state: an end saturator switched on, its section open).
 #include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/LayoutCheck.h"
 #include "pluginkit/vst/EditorBase.h"
@@ -331,8 +333,17 @@ int main (int argc, char** argv)
     int ticks = 30;
     std::string dumpDir, compareDir;
     bool allViews = false, listQuiet = false;
+    std::vector<std::pair<uint32, double>> sets;
     for (int i = 1; i < argc; ++i)
     {
+        unsigned id = 0;
+        double v = 0.0;
+        if (!std::strcmp (argv[i], "--set") && i + 1 < argc && std::sscanf (argv[i + 1], "%u=%lf", &id, &v) == 2)
+        {
+            sets.emplace_back ((uint32)id, v);
+            ++i;
+            continue;
+        }
         if (!std::strcmp (argv[i], "--dump") && i + 1 < argc)
             dumpDir = argv[++i];
         else if (!std::strcmp (argv[i], "--compare") && i + 1 < argc)
@@ -379,6 +390,8 @@ int main (int argc, char** argv)
             return 1;
         }
         std::printf ("draw benchmark: %s, median of %d draws per figure, ms per draw\n", pluginName.c_str (), ticks);
+        for (const auto& [id, v] : sets)
+            audio.controller->setParamNormalized (id, v);
 
         for (double zoom : {1.0, 1.5, 2.0})
         {

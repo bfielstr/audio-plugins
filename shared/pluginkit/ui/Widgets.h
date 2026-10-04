@@ -123,6 +123,32 @@ private:
     Map idOf;
 };
 
+// A ParamHost in front of another one that passes everything through and tells `began` of each gesture
+// that starts (its ID, in this host's IDs): an editor follows what is grabbed on a page this way (the
+// band whose control was grabbed is selected).
+class WatchedParamHost : public ParamHost
+{
+public:
+    WatchedParamHost (ParamHost* host, std::function<void (uint32_t)> began) : in (host), onBegin (std::move (began)) {}
+    const ParamTable& table () override { return in->table (); }
+    double norm (uint32_t id) override { return in->norm (id); }
+    double plainValue (uint32_t id) override { return in->plainValue (id); }
+    void beginEdit (uint32_t id) override
+    {
+        in->beginEdit (id);
+        if (onBegin)
+            onBegin (id);
+    }
+    void setNorm (uint32_t id, double v) override { in->setNorm (id, v); }
+    void endEdit (uint32_t id) override { in->endEdit (id); }
+    std::string valueText (uint32_t id) override { return in->valueText (id); }
+    int64_t sourceParam (uint32_t id) override { return in->sourceParam (id); }
+
+private:
+    ParamHost* in;
+    std::function<void (uint32_t)> onBegin;
+};
+
 // The mouse wheel on a filter handle changes the filter's intensity (resonance, Q or slope) in every
 // display of the suite: while the handle is held, or with Shift over it. The change of the
 // parameter's normalized value for one wheel event: one step for a stepped parameter, 2 % per
@@ -152,6 +178,7 @@ public:
     // The parameter's full name (the info box's title for this control).
     std::string paramName () const { return host->table ().info (param).name; }
     int64_t sourceParamId () const { return host->sourceParam (param); } // (ParamHost::sourceParam)
+    ParamHost* paramHost () const { return host; }
     void setEnabledLook (bool e)
     {
         if (e != enabledLook)
@@ -224,10 +251,20 @@ public:
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
     void onMouseCancelEvent (VSTGUI::MouseCancelEvent& e) override;
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
+    // drawn selected (an outline in pale copper): the control of the thing selected elsewhere (a band's
+    // Threshold, while the band is selected)
+    void setSelected (bool s)
+    {
+        if (s != selected)
+        {
+            selected = s;
+            invalid ();
+        }
+    }
 
 private:
     VSTGUI::CColor color;
-    bool dragging = false;
+    bool dragging = false, selected = false;
     double startY = 0, dragValue = 0;
 };
 
@@ -242,6 +279,22 @@ public:
 
 private:
     std::string label;
+};
+
+// A segmented switch for view state, not a parameter (which layer of a display is in front): drawn as
+// Segmented; `get` gives the segment lit, a click calls `set` with the one clicked.
+class ViewSwitch : public VSTGUI::CView
+{
+public:
+    ViewSwitch (const VSTGUI::CRect& r, std::vector<std::string> labels, std::function<int ()> get, std::function<void (int)> set);
+    void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
+    void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
+
+private:
+    std::vector<std::string> labels;
+    std::function<int ()> get;
+    std::function<void (int)> set;
 };
 
 // Segmented selector for a choice parameter; `labels` may shorten the choice names.

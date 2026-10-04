@@ -52,6 +52,8 @@ void Editor::onClose ()
     status = nullptr;
     thresholdView = nullptr;
     colorViews.clear ();
+    colorKnobs.clear ();
+    layerSwitch = nullptr;
     for (auto& v : clarityViews)
         v.clear ();
     clarityBandButtons.clear ();
@@ -89,7 +91,6 @@ void Editor::buildUI (CFrame* f)
     root->addView (shaper);
     bind (root, new Choice (CRect (8, 266, 112, 288), this, kPostClip));
     bind (root, new Toggle (CRect (120, 266, 176, 288), this, kColorOn, "Color"));
-    colorViews.push_back (bind (root, new Knob (knobRect (184, 262), this, kColorLo)));
     bind (root, new Knob (knobRect (24, 346, 68, 78), this, kDrive, nullptr, true));
     bind (root, new Knob (knobRect (128, 346, 68, 78), this, kOutput));
     bind (root, new Knob (knobRect (232, 346, 68, 78), this, kDryWet));
@@ -107,19 +108,38 @@ void Editor::buildUI (CFrame* f)
         });
     pk::setHelp (color, "Colour EQ", help::kColorDisplay);
     root->addView (color);
-    const uint32_t colorIds[3] = {kColorHi, kColorFreq, kColorWidth};
-    for (int i = 0; i < 3; ++i)
-        colorViews.push_back (bind (root, new Knob (knobRect (kColorLeft + 60 + i * 130, 346), this, colorIds[i])));
+    // which layer of it is in front, above its right end
+    layerSwitch = new pk::ViewSwitch (CRect (kLayerLeft, kLayerTop, kLayerLeft + kLayerW, kLayerTop + 18), {"Color", "Gentlr"},
+                                      [this] { return layer (); }, [this] (int i) { setLayer (i); });
+    layerSwitch->setTooltipText ("Which layer of the colour display is in front: the colour filters (their points, and Amt Lo, Amt "
+                                 "Hi, Freq and Width under the display) or Gentlr (its band handles, and the selected band's Freq, "
+                                 "Width and Range under the display). The other layer is drawn faint behind.");
+    root->addView (layerSwitch);
+    // with Color in front: its four amounts under the display
+    const uint32_t colorIds[4] = {kColorLo, kColorHi, kColorFreq, kColorWidth};
+    for (int i = 0; i < 4; ++i)
+    {
+        colorKnobs.push_back (bind (root, new Knob (knobRect (kLayerKnobsLeft + i * kLayerKnobStep, kLayerKnobsTop), this, colorIds[i])));
+        colorViews.push_back (colorKnobs.back ());
+    }
 
     // Gentlr's Threshold sliders (Advanced), at the right edge of the colour display while Advanced is on
     for (int k = 0; k < kGentlrBands; ++k)
+    {
         thresholdSliders[k] = bind (root, new ThresholdSlider (CRect (0, 0, 1, 1), this, k, [c = ctl] () -> const Meters* {
                                         auto* s = c->getShared ();
                                         return s ? &s->meters : nullptr;
                                     }));
+        // grabbing a band's Threshold selects the band (Gentlr's layer in front, its knobs under the display)
+        thresholdSliders[k]->onPicked = [this] (int b) {
+            setLayer (1);
+            showClarityBand (b);
+        };
+    }
 
-    // bottom: Gentlr (one button), a band selector and the selected band's Frequency, Width and Range;
-    // the bands' Slope under the selector; Advanced, and with it the region Drive; No Overlap
+    // bottom: Gentlr (one button), a band selector (the selected band's Frequency, Width and Range are under
+    // the colour display, with Gentlr in front); the bands' Slope under the selector; Advanced, and with it
+    // the region Drive; No Overlap
     auto* cp = new pk::Panel (CRect (8, kGentlrTop, 752, kGentlrTop + 80), "GENTLR");
     root->addView (cp);
     bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gentlr"));
@@ -136,25 +156,34 @@ void Editor::buildUI (CFrame* f)
             "its Range is above 0 dB)."};
         // (Band 1 and Band 2 wider than Sub and High, for their longer names)
         static const double left[kGentlrBands] = {92, 145, 198, 241}, right[kGentlrBands] = {142, 195, 238, 281};
-        auto* bt = new ActionButton (CRect (left[k], 30, right[k], 50), names[k], [this, k] { showClarityBand (k); },
+        auto* bt = new ActionButton (CRect (left[k], 30, right[k], 50), names[k],
+                                     [this, k] {
+                                         setLayer (1); // (its knobs are Gentlr's layer's)
+                                         showClarityBand (k);
+                                     },
                                      [this, k] { return clarityBand == k; });
         bt->setTooltipText (tips[k]);
         cp->addView (bt);
         clarityBandButtons.push_back (bt);
+        // its knobs under the colour display, where the colour amounts are with Color in front
+        auto knobAt = [&] (int i, uint32_t id, const char* name) {
+            clarityViews[k].push_back (
+                bind (root, new Knob (knobRect (kLayerKnobsLeft + i * kLayerKnobStep, kLayerKnobsTop), this, id, name)));
+        };
         if (!hasWidth (k))
         {
             // the Sub and High bands: Freq and Range where the other bands have theirs (no width, no button: a
             // band works while its Range is above 0 dB)
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (292, 10), this, kGentlrFreqIds[k], "Freq")));
-            clarityViews[k].push_back (bind (cp, new Knob (knobRect (412, 10), this, kGentlrRangeIds[k], "Range")));
+            knobAt (0, kGentlrFreqIds[k], "Freq");
+            knobAt (2, kGentlrRangeIds[k], "Range");
             continue;
         }
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (292, 10), this, kClarityFreqIds[k], "Freq")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (352, 10), this, kClarityWidthIds[k], "Width")));
-        clarityViews[k].push_back (bind (cp, new Knob (knobRect (412, 10), this, kClarityRangeIds[k], "Range")));
+        knobAt (0, kClarityFreqIds[k], "Freq");
+        knobAt (1, kClarityWidthIds[k], "Width");
+        knobAt (2, kClarityRangeIds[k], "Range");
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
-    showClarityBand (clarityBand);
+    setLayer (layer ());
     cp->addView (new Label (CRect (92, 54, 132, 74), "Slope", 10.5));
     slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 50, 54, kSlopeX - 8 + 50, 74), this, kClaritySlope));
     // how the bands sit together: Advanced, No Overlap under it (both columns 82 wide)
@@ -174,11 +203,32 @@ void Editor::buildUI (CFrame* f)
 void Editor::showClarityBand (int band)
 {
     clarityBand = band < 0 ? 0 : band >= kGentlrBands ? kGentlrBands - 1 : band;
+    const bool gentlrFront = layer () == 1;
     for (int k = 0; k < kGentlrBands; ++k)
+    {
         for (auto* v : clarityViews[k])
-            v->setVisible (k == clarityBand);
+            v->setVisible (gentlrFront && k == clarityBand);
+        if (thresholdSliders[k])
+            thresholdSliders[k]->setSelected (k == clarityBand);
+    }
+    for (auto* v : colorKnobs)
+        v->setVisible (!gentlrFront);
+    if (color)
+        color->setSelectedBand (clarityBand);
     for (auto* b : clarityBandButtons)
         b->invalid ();
+}
+
+int Editor::layer () const { return controller->uiColorLayer == 1 ? 1 : 0; }
+
+void Editor::setLayer (int l)
+{
+    controller->uiColorLayer = l == 1 ? 1 : 0;
+    if (color)
+        color->setLayer (l == 1 ? ColorView::Layer::Gentlr : ColorView::Layer::Color);
+    if (layerSwitch)
+        layerSwitch->invalid ();
+    showClarityBand (clarityBand); // (the knobs under the display: the layer's)
 }
 
 void Editor::layoutAdvanced ()

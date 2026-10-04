@@ -61,6 +61,9 @@ public:
     void onMouseExitEvent (VSTGUI::MouseExitEvent& e) override;
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle ();
+    // the band selected in the editor (its handle lit, its region a little brighter; -1: none)
+    void setSelectedBand (int band);
+    int selectedBand () const { return selected; }
 
     // layout (also used by the host test)
     double xOfHz (double hz) const;
@@ -92,7 +95,7 @@ private:
     pk::ParamHost* host;
     MeterSource meters;
     Drag drag = Drag::None;
-    int dragBand = 0, hoverBand = -1;
+    int dragBand = 0, hoverBand = -1, selected = -1;
     VSTGUI::CPoint down;
     double startFreq = 0.0, startRange = 0.0, startWidth = 0.0;
     smacheratr::BandPush push; // No Overlap and glue: the neighbours a drag pushes or drags along, the edge it snaps

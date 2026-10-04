@@ -18,7 +18,7 @@ if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
 
-# Smacheratr's displays, also for the saturator at the end of the other plug-ins' chains
+# Smacheratr's displays, and the saturator section at the end of the other plug-ins' chains (TailPanel)
 add_library(smacheratr_ui STATIC
     src/ui/ShaperView.h
     src/ui/ShaperView.cpp
@@ -26,8 +26,8 @@ add_library(smacheratr_ui STATIC
     src/ui/ColorView.cpp
     src/ui/ThresholdSlider.h
     src/ui/ThresholdSlider.cpp
-    src/ui/TailDisplays.h
-    src/ui/TailDisplays.cpp
+    src/ui/TailPanel.h
+    src/ui/TailPanel.cpp
     src/ui/BandPush.h
     src/ui/BandPush.cpp
 )

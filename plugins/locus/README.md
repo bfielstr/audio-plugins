@@ -41,7 +41,9 @@ The display shows the input spectrum (a faint copper body), the output (a bright
 applied per band. Drag the range edges to move them, drag inside the range sideways to move it or up and
 down to set Contrast, and double-click to reset Contrast.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+it is off it folds to its header strips; click a strip (or switch it on) to open it. See
+[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## Presets
 

@@ -76,6 +76,16 @@ public:
     // The window size including the info strip, at 100 %.
     double fullWidth () const { return baseWidth; }
     double fullHeight () const { return baseHeight; }
+    // A section of the content folded or opened (the end saturator's, smacheratr::TailPanel): the content
+    // is now `height` tall (at most the height the editor was made with). The window asks the host for
+    // the new size at the zoom it has (so nothing changes size), the info strip moves up or down with the
+    // content's end. False when the host keeps the window as it is: the content then keeps its full
+    // height (the space under a folded section stays empty). While building (before the window opens) it
+    // only records the height; open () asks the host for it.
+    bool setContentHeight (double height);
+    double contentHeightNow () const { return contentHeight; }
+    double contentHeightMade () const { return fullContentHeight; } // every section open
+    ControllerBase* controllerBase () const { return controller; }
     InfoBox* infoBox () const { return info; }
     // For measuring (the draw benchmark, shared/pluginkit/testing/DrawBench.cpp): builds the UI into a
     // frame of its own that is not put in a window, zoomed by `zoom`, for drawing into an offscreen
@@ -103,36 +113,24 @@ protected:
             byParam[view->paramId ()].push_back (view);
         return view;
     }
-    // The panel of the optional Smacheratr at the end of the chain (pk::addTailParams at `base`, the
-    // extended fields at `extBase`, Gentlr's Advanced block at `ext2Base`, its High band and No
-    // Overlap at `ext3Base`): every Smacheratr control, in two rows and three knobs. Gentlr (called
-    // Clarity before) has one button, Advanced and a band selector; the selected band's Frequency,
-    // Width and Range are shown (its Threshold sliders and region Drive are in
-    // smacheratr::TailDisplays, at the right of the colour display, and so are No Overlap and the bands'
-    // Slope, at the right of the panel's title). Needs about 680 x 78.
-    Panel* addTailPanel (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r, uint32_t base, uint32_t extBase, uint32_t ext2Base,
-                         uint32_t ext3Base, const char* title = "smacheratr  (end of the chain)");
-public:
-    // Shows Gentlr band `band`'s controls in the tail panel (the display calls it when a band is picked).
-    void showTailBand (int band);
-
-protected:
     // Sets tooltips on every bound parameter view from a help lookup.
     void applyParamTooltips (const char* (*helpFor) (uint32_t));
     // Called before the frame is released.
     virtual void onClose () {}
 
     ControllerBase* controller;
-    const double contentHeight;        // the plug-in's own height (where the info strip starts)
-    const double baseWidth, baseHeight; // the whole window at 100 %, the info strip included
+    const double fullContentHeight;    // the plug-in's own height as made, every section open
+    double contentHeight;              // its height now (where the info strip starts; less while a section is folded)
+    const double baseWidth;            // the whole window at 100 %, the info strip included
+    double baseHeight;
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
-    int tailBand = 0;                                              // Gentlr band shown in the tail panel
-    std::vector<VSTGUI::CView*> tailBandViews[4], tailBandButtons; // its controls, per band (1, 2, Sub, High); the selector
 
 private:
     // Lays the open frame out in a window of w x h px: zoomed by zoomFor and centred.
     void layoutFrame (double w, double h);
+    // The root view and the info strip at the content height now.
+    void placeInfoStrip ();
     // Adds the info strip under the content built by buildUI (the root view grows to hold it).
     void addInfoStrip ();
     // Appends the layout check's findings to $PK_LAYOUT_REPORT, when it is set (pk::layoutReport).

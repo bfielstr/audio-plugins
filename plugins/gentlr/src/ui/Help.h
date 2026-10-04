@@ -91,18 +91,19 @@ constexpr const char* kDisplay =
     "and High bands have no switch: they sit flat at 0 dB until you pull their handle down. With No Overlap on, a band "
     "pushes its neighbours along. Drag a band's edge (or the Sub or High handle) onto its neighbour's edge (it snaps) and "
     "the two glue: a link icon sits on the border at the bottom, lit while glued; click it to detach them, or to glue two "
-    "bands that touch.";
+    "bands that touch. Grabbing any of a band's controls selects it: its handle lights, and so do its header and its "
+    "Threshold slider (Advanced).";
 
 constexpr const char* kSubThresholdSlider =
     "Advanced: the Sub band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "
-    "the threshold and being cut. Double-click or right-click: -18 dB.";
+    "the threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the band (its handle and header lit).";
 
 constexpr const char* kHighThresholdSlider =
     "Advanced: the High band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over "
-    "the threshold and being cut. Double-click or right-click: -18 dB.";
+    "the threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the band (its handle and header lit).";
 
 constexpr const char* kThresholdSlider =
     "Advanced: the band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over the "
-    "threshold and being cut. Double-click or right-click: -18 dB.";
+    "threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the band (its handle and header lit).";
 
 } // namespace gentlr::help

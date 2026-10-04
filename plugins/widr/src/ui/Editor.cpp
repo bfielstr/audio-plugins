@@ -47,7 +47,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tailDisplays.reset ();
+    tail.reset ();
     stage = nullptr;
     gonio = nullptr;
     statusLabel = nullptr;
@@ -111,12 +111,10 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 604, 752, 682 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                               [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
-                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 734, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail->add (root, CRect (8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -125,16 +123,16 @@ void Editor::buildUI (CFrame* f)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (stage)
         stage->invalid ();
 }
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (stage)
         stage->idle ();
     if (gonio)

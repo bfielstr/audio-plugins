@@ -67,7 +67,9 @@ slope: first order at 6 dB, Linkwitz-Riley at 12, 24 and 36 to 96 dB, a quadratu
   small amount on or off, Pre or Post (37 samples at 48 kHz), so the latency never changes; moving them
   between Pre and Post fades the sound out and back in for about 10 ms. Both drives on, stereo, take
   about 1.5 % of a core.
-- **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+- **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+  it is off it folds to its header strips; click a strip (or switch it on) to open it. See
+  [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ![The Vocal movement](../../docs/para/ui_para_vocal.png)
 

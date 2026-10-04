@@ -45,7 +45,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tailDisplays.reset ();
+    tail.reset ();
     history = nullptr;
 }
 
@@ -87,9 +87,7 @@ void Editor::buildUI (CFrame* f)
     chr->addView (new Label (CRect (80, 46, 316, 62), "only when they get loud", 10.0));
 
     // the saturator before the limiter, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight),
-                                    kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, "smacheratr  (before the limiter)");
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (
+    tail = std::make_unique<smacheratr::TailPanel> (
         this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
         [c = ctl] {
             auto* s = c->getShared ();
@@ -98,9 +96,8 @@ void Editor::buildUI (CFrame* f)
         [c = ctl] () -> const smacheratr::Meters* {
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;
-        });
-    tailDisplays->add (tailPanel, CRect (10, 24, 874, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+        }, "smacheratr  (before the limiter)");
+    tail->add (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -109,16 +106,16 @@ void Editor::buildUI (CFrame* f)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (id == kCeiling && history)
         history->invalid ();
 }
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (history)
         history->idle ();
 }
