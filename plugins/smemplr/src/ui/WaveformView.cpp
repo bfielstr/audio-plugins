@@ -408,7 +408,7 @@ void WaveformView::draw (CDrawContext* ctx)
             // being dragged cinnabar
             const bool held = drag == Handle::Slice && i == dragSlice;
             if (!sl.manual[i] && !held)
-                ctx->setLineStyle (theme::kDashed);
+                ctx->setLineStyle (theme::dashed ());
             vline (x, held ? theme::kEnergyLive : (sl.manual[i] ? theme::kSliceManual : theme::kCopperPale), held ? 1.5 : 1.0);
             ctx->setLineStyle (kLineSolid);
             if (x >= w.left - 2 && x <= w.right)

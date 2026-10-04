@@ -312,7 +312,7 @@ void BandView::draw (CDrawContext* ctx)
     const bool downHot = drag.what == Target::DownThreshold || hover.what == Target::DownThreshold;
     const bool upHot = drag.what == Target::UpThreshold || hover.what == Target::UpThreshold;
     // held or hovered, a threshold lights cinnabar; the upward one is dashed (dim line while it is off)
-    ctx->setLineStyle (theme::kDashed);
+    ctx->setLineStyle (theme::dashed ());
     hline (upT, upHot ? theme::kEnergyLive : (upOn ? kUp : theme::kLineDim), 1.0, false);
     ctx->setLineStyle (kLineSolid);
     hline (downT, downHot ? theme::kEnergyLive : kDown, downHot ? 1.5 : 1.0, false);

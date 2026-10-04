@@ -177,7 +177,7 @@ void DeeprView::draw (CDrawContext* ctx)
         if (auto full = dipPath (-depth, false))
         {
             ctx->setFrameColor (theme::kCopper);
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
             ctx->drawGraphicsPath (full, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }

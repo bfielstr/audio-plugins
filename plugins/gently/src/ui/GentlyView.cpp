@@ -430,7 +430,7 @@ void GentlyView::draw (CDrawContext* ctx)
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (bandColor (k, 120));
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
             ctx->drawGraphicsPath (rp, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }

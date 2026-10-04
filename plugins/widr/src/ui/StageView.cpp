@@ -134,7 +134,7 @@ void StageView::draw (CDrawContext* ctx)
         ctx->setLineWidth (lineWidth);
         ctx->setFrameColor (col);
         if (dashed)
-            ctx->setLineStyle (theme::kDashed);
+            ctx->setLineStyle (theme::dashed ());
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
         ctx->setLineStyle (kLineSolid);
         const double t = a * kDeg;

@@ -40,8 +40,14 @@ inline constexpr CColor kGridMajor = kLineDim;
 inline constexpr CColor kGridZero = withAlpha (kCopper, 120);
 
 // The dashed line style of the suite: the second line of a pair that the old palette told apart by
-// hue (a limit, a range, the other band, the other channel).
-inline const VSTGUI::CLineStyle kDashed (VSTGUI::CLineStyle::kLineCapButt, VSTGUI::CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0});
+// hue (a limit, a range, the other band, the other channel). A function, not a global: a global would
+// be built when any file including this header starts, and the host tests include it without linking
+// VSTGUI's drawing code.
+inline const VSTGUI::CLineStyle& dashed ()
+{
+    static const VSTGUI::CLineStyle s (VSTGUI::CLineStyle::kLineCapButt, VSTGUI::CLineStyle::kLineJoinMiter, 0.0, {3.0, 3.0});
+    return s;
+}
 
 // --- the names the code used before the theme, mapped as docs/THEME.md's "Values for code" suggests
 inline constexpr CColor kBackground = kGround;

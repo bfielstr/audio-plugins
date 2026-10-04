@@ -224,7 +224,7 @@ void HistoryView::drawHistory (CDrawContext* ctx)
                 ctx->setFrameColor (*line);
                 ctx->setLineWidth (1.0);
                 if (dashed)
-                    ctx->setLineStyle (theme::kDashed);
+                    ctx->setLineStyle (theme::dashed ());
                 ctx->drawGraphicsPath (edge, CDrawContext::kPathStroked);
                 ctx->setLineStyle (kLineSolid);
             }
