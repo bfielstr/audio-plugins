@@ -167,7 +167,8 @@ void Motion::retarget ()
                     double d = ref, dist = dSm;
                     for (int it = 0; it < 3; ++it)
                     {
-                        const Vec q = position (k, d);
+                        // (the first step starts from ref for every tap: where the orb is now)
+                        const Vec q = it == 0 ? now : position (k, d);
                         const double dz = img == 0 ? q.z : -2.0 * kEarHeight - q.z;
                         dist = std::sqrt ((q.x - ex) * (q.x - ex) + q.y * q.y + dz * dz);
                         d = dist / c;
@@ -219,9 +220,10 @@ void Motion::process (float* l, float* r, int n)
                 if (tap.gain == 0.0f && tap.gainStep == 0.0f)
                     continue;
                 const float pos = (float)writePos - tap.delay;
-                const float fl = std::floor (pos);
-                const int i0 = (int)fl;
-                const float fr = pos - fl;
+                int i0 = (int)pos; // floor (without the library call)
+                if ((float)i0 > pos)
+                    --i0;
+                const float fr = pos - (float)i0;
                 const float y = dsp::hermite (b[(i0 - 1) & mask], b[i0 & mask], b[(i0 + 1) & mask], b[(i0 + 2) & mask], fr) * tap.gain;
                 if (j & 1)
                     wr += y;

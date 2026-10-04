@@ -473,7 +473,7 @@ TEST (finite_and_cpu)
             finite = finite && std::isfinite (l[i]) && std::isfinite (r[i]) && std::fabs (l[i]) < 8.0f;
         CHECK (finite, "finite and bounded");
         std::printf ("    CPU: %.2f%% of one core (%s, saturator on)\n", 100.0 * secs / 10.0, most ? "16 orbs at 80 m/s" : "the defaults");
-        CHECK (secs / 10.0 < (most ? 0.3 : 0.12), "too slow");
+        CHECK (secs / 10.0 < (most ? 0.18 : 0.09), "too slow"); // (about 7 % and 4 % here)
     }
 }
 
