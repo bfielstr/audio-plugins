@@ -48,6 +48,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kClarityHighRange, "Gentlr High Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClarityHighThreshold, "Gentlr High Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityNoOverlap, "Gentlr No Overlap", "No Overlap", false));
+        v.push_back (choice (kClaritySlope, "Gentlr Slope", "Slope", {"12 / 12", "Signature", "Classic"}, kSlope12));
         return v;
     }());
     return t;

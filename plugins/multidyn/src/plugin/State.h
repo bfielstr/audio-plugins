@@ -16,8 +16,8 @@ struct State
 };
 
 // Version 4: the OTT gain staging (3 and older are migrated with migrateOldBaked, Params.h); 6: no Sub
-// and High buttons in the saturator (State.cpp).
-constexpr Steinberg::int32 kStateVersion = 6;
+// and High buttons in the saturator; 7: the saturator's Gentlr Slope (State.cpp).
+constexpr Steinberg::int32 kStateVersion = 7;
 // version: what the stream says it is (the tests write an older one)
 bool writeState (Steinberg::IBStream* stream, const State& s, Steinberg::int32 version = kStateVersion);
 bool readState (Steinberg::IBStream* stream, State& s);

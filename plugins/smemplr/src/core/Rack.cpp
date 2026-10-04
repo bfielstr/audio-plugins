@@ -168,9 +168,10 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {gentlr::kSubOn, gentlr::kSubOn, "unused: the Sub band works while its Range is above 0"},
         {gentlr::kTailBase, gentlr::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {gentlr::kHighOn, gentlr::kHighOn, "unused: the High band works while its Range is above 0"},
-        {gentlr::kTailExt3Base, gentlr::kNumParams - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gentlr::kTailExt3Base, gentlr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
-    // (its saturator's fourth block runs on into the slot's extension: not in the rack)
+    // (its saturator's fourth block runs on into the slot's extension: not in the rack; its Slope after
+    // it is, in the extension too)
     static_assert (gentlr::kTailExt3Base <= kSlotBlock && gentlr::kNumParams <= kSlotBlockAll, "Gentlr's parameters must fit a slot's block");
     static const std::vector<RackHidden> smacheratrHidden {
         {smacheratr::kClarity2, smacheratr::kClarity2, "unused: one Gentlr button (a band works while its Range is above 0)"},
@@ -276,7 +277,8 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
 {
     // Smacheratr's block positions are its own IDs; each one is a field of the old saturator (its On is
     // the slot's). The values go through their plain values, so the two tables need not agree on ranges.
-    // The old saturator never had Gentlr's Advanced mode (the tail's third block): those get defaults.
+    // The old saturator never had Gentlr's Advanced mode (the tail's third block): those get defaults,
+    // but the band Slope gets Classic, the shape the old saturator's bands had (and still have).
     const auto& st = smacheratr::paramTable ();
     static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's parameters sit in a slot's block");
     set (slotParam (slot, kSlotType), toNormalized (slotParam (slot, kSlotType), (double)kFxSmacheratr));
@@ -291,6 +293,8 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
                 f = -1;
             const uint32_t id = f < 0 ? 0 : (f < (int)pk::kTailFields ? kTailBase + (uint32_t)f : kTailExtBase + (uint32_t)(f - pk::kTailFields));
             v = f < 0 ? st.defaultNormalized (j) : st.toNormalized (j, toPlain (id, norm (id)));
+            if (j == smacheratr::kClaritySlope)
+                v = smacheratr::classicSlopeNorm ();
         }
         set (slotBlockParam (slot, j), v);
     }
@@ -358,6 +362,29 @@ void migrateGentlrInSlots (std::array<double, kNumParams>& norm, std::array<bool
             setDefaults (first, smacheratr::kNumParams, smacheratr::paramTable ());
         else if (type == kFxGentlr && version >= 13) // (Gentlr came to the rack in 13)
             setDefaults (gentlr::kHighOn, gentlr::kTailExt3Base, gentlr::paramTable ());
+    }
+}
+
+void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 20)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId])
+            continue;
+        const int type = (int)std::lround (toPlain (typeId, norm[typeId]));
+        int64_t j = -1;
+        if (type == kFxSmacheratr)
+            j = fxBlockOf (type, smacheratr::kClaritySlope);
+        else if (type == kFxGentlr)
+            j = fxBlockOf (type, gentlr::kSlope);
+        if (j < 0)
+            continue; // (the other effects' own saturators are not used in the rack)
+        const uint32_t id = slotBlockParam (slot, (uint32_t)j);
+        norm[id] = smacheratr::classicSlopeNorm (); // (the same normalized value in Gentlr's table: Smacheratr's choice)
+        has[id] = true;
     }
 }
 

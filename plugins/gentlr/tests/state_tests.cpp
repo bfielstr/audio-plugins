@@ -147,7 +147,7 @@ int main ()
     // at version 2), written by hand as Gently wrote it: every value it saved loads into Gentlr
     {
         MemoryStream s;
-        const uint32_t gentlyParams = kTailExt3Base + pk::kTailExt3Fields; // every ID Gently had
+        const uint32_t gentlyParams = 64; // every ID Gently had (0.11: the end saturator's fourth block last, 59 - 63)
         {
             IBStreamer w (&s, kLittleEndian);
             w.writeInt32 (0x474E544C); // GNTL
@@ -166,6 +166,31 @@ int main ()
         for (uint32_t id = 0; id < gentlyParams; ++id)
             wrong += back.has[id] && back.norm[id] == std::fmod (0.071 * (id + 3), 1.0) ? 0 : 1;
         CHECK (wrong == 0, "every value Gently saved, as it was (%d not)", wrong);
+        // and its bands' Slope (and the end saturator's), which Gently did not have: Classic, the shape
+        // its bands had, so the project sounds as it did
+        CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == smacheratr::kSlopeClassic && back.has[kSlope] &&
+                   std::lround (toPlain (kTailExt3Base + pk::kTailExt3Slope, back.norm[kTailExt3Base + pk::kTailExt3Slope])) ==
+                       smacheratr::kSlopeClassic,
+               "Gently's bands: Classic (Gentlr's and the end saturator's)");
+    }
+    // the Slope from version 3 on: as saved; not saved (and in a new instance), 12 / 12
+    {
+        MemoryStream s;
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x474E544C);
+            w.writeInt32 (3);
+            w.writeInt32 (1);
+            w.writeInt32u (kSlope);
+            w.writeDouble (toNormalized (kSlope, (double)smacheratr::kSlopeSignature));
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "read");
+        CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == smacheratr::kSlopeSignature &&
+                   std::lround (toPlain (kTailExt3Base + pk::kTailExt3Slope, back.norm[kTailExt3Base + pk::kTailExt3Slope])) == smacheratr::kSlope12,
+               "version 3: Signature as saved, the end saturator's (not saved) 12 / 12");
+        CHECK (defaultNormalized (kSlope) == 0.0 && defaultNormalized (kTailExt3Base + pk::kTailExt3Slope) == 0.0, "a new instance: 12 / 12");
     }
     // a state from a newer Gentlr: the IDs this one does not know are skipped, the rest read
     {

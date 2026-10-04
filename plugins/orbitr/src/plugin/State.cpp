@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,7 +14,9 @@ namespace {
 constexpr int32 kMagic = 0x5442524F; // 'ORBT'
 // 1: the first (never released before its end saturator's Sub and High bands lost their buttons, so a
 // version 1 state already means "a band works while its Range is above 0 dB": nothing to convert)
-constexpr int32 kVersion = 1;
+// 2: the end saturator's Gentlr Slope (Classic for states from before it: version 1 was released)
+constexpr int32 kVersion = 2;
+constexpr int32 kClassicSlope = 2;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -52,6 +56,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
+    // instance gets 12 / 12)
+    if (version < kClassicSlope)
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     return true;
 }
 

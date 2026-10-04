@@ -114,6 +114,22 @@ int main ()
         CHECK (readOld (5, {{kClaritySub, 0.0}, {kClaritySubRange, toNormalized (kClaritySubRange, 12.0)}}, back), "read");
         CHECK (std::fabs (plain (back, kClaritySubRange) - 12.0) < 1e-9, "a new state's Range as saved");
     }
+    // the band Slope: a state from before it (version 5) loads Classic, the shape its bands had; a state of
+    // version 6 loads it as saved, and one without it (or a new instance) has 12 / 12
+    {
+        State back;
+        CHECK (readOld (5, {{kClarity, 1.0}, {kClarityRange, toNormalized (kClarityRange, 8.0)}}, back), "read");
+        CHECK (std::lround (plain (back, kClaritySlope)) == kSlopeClassic && back.has[kClaritySlope], "version 5: Classic");
+        State v4;
+        CHECK (readOld (4, {{kClarity, 1.0}}, v4) && std::lround (plain (v4, kClaritySlope)) == kSlopeClassic, "version 4: Classic too");
+        State now;
+        CHECK (readOld (6, {{kClaritySlope, toNormalized (kClaritySlope, kSlopeSignature)}}, now) &&
+                   std::lround (plain (now, kClaritySlope)) == kSlopeSignature,
+               "version 6: as saved");
+        State none;
+        CHECK (readOld (6, {{kClarity, 1.0}}, none) && std::lround (plain (none, kClaritySlope)) == kSlope12, "version 6, not saved: 12 / 12");
+        CHECK (defaultNormalized (kClaritySlope) == 0.0, "a new instance: 12 / 12");
+    }
     std::printf ("smacheratr state: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }

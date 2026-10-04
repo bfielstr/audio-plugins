@@ -4,7 +4,7 @@
 // block, its High band and No Overlap) through a mapping, and read the tail's levels and the sample
 // rate through functions. While Gentlr's Advanced is on, a strip at the right of the colour display
 // holds the region Drive (on / amount) and the bands' Threshold sliders. Gentlr's No Overlap button
-// goes above the colour display's right end (in the tail panel's title row).
+// goes above the colour display's right end (in the tail panel's title row), its bands' Slope left of it.
 #pragma once
 
 #include "ColorView.h"
@@ -50,6 +50,7 @@ private:
     VSTGUI::CRect colorArea;
     ThresholdSlider* sliders[kGentlrBands] = {nullptr, nullptr, nullptr, nullptr};
     pk::ParamView* noOverlap = nullptr;
+    pk::ParamView* slope = nullptr;
     pk::ParamView* driveOn = nullptr;
     pk::ParamView* driveAmount = nullptr;
 };

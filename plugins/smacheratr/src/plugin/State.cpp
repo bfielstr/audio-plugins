@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -10,10 +12,11 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 5; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 6; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
 constexpr int32 kSubHighRange = 5;     // 5: no Sub and High buttons (those bands work while their Range is above 0)
+constexpr int32 kClassicSlope = 6;     // 6: Gentlr's band Slope (Classic for states from before it)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -77,6 +80,12 @@ bool readState (IBStream* stream, State& st)
         for (uint32_t id : {kClarityFreq})
             if (st.has[id])
                 st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
+    // Gentlr's bands had one shape before their Slope: Classic, the same sound (a new instance gets 12 / 12)
+    if (version < kClassicSlope)
+    {
+        st.norm[kClaritySlope] = classicSlopeNorm ();
+        st.has[kClaritySlope] = true;
+    }
     return true;
 }
 

@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 using namespace Steinberg;
 using namespace dropr;
@@ -110,6 +111,36 @@ int main ()
         CHECK (std::fabs (toPlain (subRange, back.norm[subRange]) - 5.0) < 1e-9 && toPlain (highRange, back.norm[highRange]) == 0.0,
                "Sub (on): 5 dB, High (off): 0 (%.2f / %.2f)", toPlain (subRange, back.norm[subRange]), toPlain (highRange, back.norm[highRange]));
         CHECK (defaultNormalized (subRange) == 0.0 && defaultNormalized (highRange) == 0.0, "new: both at Range 0");
+    }
+    // the end saturator's Gentlr Slope: a state from before it (version 3, and 2) loads Classic, the
+    // shape its bands had; version 4 as saved; a new instance 12 / 12
+    {
+        const uint32_t slope = kTailExt3Base + pk::kTailExt3Slope;
+        auto read = [&] (int32 version, bool withSlope, State& back) {
+            MemoryStream s;
+            {
+                IBStreamer w (&s, kLittleEndian);
+                w.writeInt32 (0x504F5244);
+                w.writeInt32 (version);
+                w.writeInt32 (withSlope ? 2 : 1);
+                w.writeInt32u (kDownThreshold);
+                w.writeDouble (0.25);
+                if (withSlope)
+                {
+                    w.writeInt32u (slope);
+                    w.writeDouble (toNormalized (slope, 1.0)); // Signature
+                }
+            }
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            return readState (&s, back);
+        };
+        auto slopeOf = [&] (const State& st) { return std::lround (toPlain (slope, st.norm[slope])); };
+        State v3, v2, v4, v4none;
+        CHECK (read (3, false, v3) && read (2, false, v2) && read (4, true, v4) && read (4, false, v4none), "read");
+        CHECK (slopeOf (v3) == 2 && slopeOf (v2) == 2 && v3.has[slope], "versions 2 and 3: Classic (%ld / %ld)", slopeOf (v3), slopeOf (v2));
+        CHECK (slopeOf (v4) == 1 && slopeOf (v4none) == 0, "version 4: as saved, or 12 / 12 (%ld / %ld)", slopeOf (v4), slopeOf (v4none));
+        CHECK (v3.norm[kDownThreshold] == 0.25, "the rest as saved");
+        CHECK (defaultNormalized (slope) == 0.0 && std::string (paramTable ().info (slope).name) == "Saturator Gentlr Slope", "a new instance: 12 / 12");
     }
     // not Dropr's
     {

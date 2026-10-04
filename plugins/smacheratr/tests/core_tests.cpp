@@ -1657,6 +1657,192 @@ TEST (gentlr_no_overlap_in_the_engine)
     CHECK (finite, "No Overlap switched as it plays: finite");
 }
 
+// ---------------------------------------------------------------------------
+// Gentlr's band Slope: 12 / 12 (the default), Signature (24 / 12) and Classic (12 / 6, as before)
+
+TEST (gentlr_slopes_shape_the_bands)
+{
+    const int slopes[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
+    const char* names[3] = {"12 / 12", "Signature", "Classic"};
+    const double below[3] = {12.0, 24.0, 12.0}, above[3] = {12.0, 12.0, 6.0};
+    for (int i = 0; i < 3; ++i)
+    {
+        const ClarityBand b = clarityBand (kSr, 400.0, 2.0, slopes[i]); // (200 - 800 Hz: away from Nyquist's warping)
+        auto db = [&] (double hz) { return clarityBandDb (b, hz, kSr); };
+        double peak = -100.0;
+        for (double hz = 40.0; hz < 4000.0; hz *= 1.01)
+            peak = std::max (peak, db (hz));
+        CHECK (std::fabs (peak) < 0.1, "%s: peaks at 0 dB (%.2f)", names[i], peak);
+        CHECK (b.hp2On == (slopes[i] == kSlopeSignature) && !b.lowShelf && !b.highShelf, "%s: its sections", names[i]);
+        // an octave and two octaves past each edge, and the slope between them (the other side's filter
+        // still a little in it, two octaves away)
+        const double lo1 = db (b.lowHz / 2), lo2 = db (b.lowHz / 4), hi1 = db (b.highHz * 2), hi2 = db (b.highHz * 4);
+        std::printf ("    %-9s an octave / two below: %.1f / %.1f dB, above: %.1f / %.1f dB\n", names[i], lo1, lo2, hi1, hi2);
+        CHECK (std::fabs ((lo1 - lo2) - below[i]) < 1.0, "%s: %.0f dB/oct below (%.1f)", names[i], below[i], lo1 - lo2);
+        CHECK (std::fabs ((hi1 - hi2) - above[i]) < 1.0, "%s: %.0f dB/oct above (%.1f)", names[i], above[i], hi1 - hi2);
+        CHECK (lo1 < -below[i] + 2.0 && lo1 > -below[i] - 4.0 && hi1 < -above[i] + 2.0 && hi1 > -above[i] - 4.0,
+               "%s: an octave past each edge about one slope down (%.1f / %.1f dB)", names[i], lo1, hi1);
+        // the cut at the band's centre: 12 / 12 is symmetric, its phases cancel there and the cut is the whole
+        // Range; the others' deepest cut comes within 1.5 dB of it
+        double deepest = 0.0;
+        for (double hz = 40.0; hz < 4000.0; hz *= 1.01)
+            deepest = std::min (deepest, clarityCutAtDb (b, hz, kSr, -12.0));
+        if (slopes[i] == kSlope12)
+            CHECK (std::fabs (clarityCutAtDb (b, 400.0, kSr, -12.0) + 12.0) < 0.05, "12 / 12: the whole cut at the centre (%.2f dB)",
+                   clarityCutAtDb (b, 400.0, kSr, -12.0));
+        CHECK (deepest < -10.5 && deepest > -12.05, "%s: the deepest cut %.2f dB of 12", names[i], deepest);
+    }
+    // Classic is the shape before the Slope, coefficient for coefficient (and clarityBand's default, for
+    // Smoothr's character filters)
+    {
+        const ClarityBand c = clarityBand (kSr, 300.0, 1.5, kSlopeClassic), d = clarityBand (kSr, 300.0, 1.5);
+        const BiquadCoeffs hp = highPass (kSr, c.lowHz, M_SQRT1_2), lp = lowPass1 (kSr, c.highHz);
+        auto same = [] (const BiquadCoeffs& x, const BiquadCoeffs& y) {
+            return x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.a1 == y.a1 && x.a2 == y.a2;
+        };
+        CHECK (same (c.hp, hp) && same (c.lp, lp) && !c.hp2On && same (d.hp, hp) && same (d.lp, lp) && d.norm == c.norm,
+               "Classic: a 12 dB/oct Butterworth high-pass and a first-order low-pass, as before");
+        const ClarityBand at = clarityBandAt (kSr, 500.0, 1.5, c.norm, kSlopeClassic);
+        CHECK (same (at.lp, lowPass1 (kSr, at.highHz)) && !at.hp2On, "and retuned the same way");
+        const ClarityBand sig = clarityBandAt (kSr, 500.0, 1.5, 1.0, kSlopeSignature);
+        CHECK (sig.hp2On && same (sig.hp2, sig.hp), "Signature retuned: its second section too");
+    }
+}
+
+TEST (gentlr_slopes_at_the_ends_are_shelves)
+{
+    // at an end of the spectrum each slope's band is a shelf: flat to the end, the cut exactly the Range
+    // there, the side it keeps at that side's slope (12 / 12: 12 and 12; Signature: 24 below, 12 above;
+    // Classic: 6 and 6, as before), at the band's level at its edge (-3 dB, Signature's 24 dB side -6 dB)
+    const int slopes[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
+    const char* names[3] = {"12 / 12", "Signature", "Classic"};
+    const double below[3] = {12.0, 24.0, 6.0}, above[3] = {12.0, 12.0, 6.0};
+    for (int i = 0; i < 3; ++i)
+    {
+        const ClarityBand low = clarityBand (kSr, 40.0, 2.0, slopes[i]), high = clarityBand (kSr, 10000.0, 4.0, slopes[i]); // (edges 80 Hz, 2.5 kHz)
+        auto db = [] (const ClarityBand& b, double hz) { return clarityBandDb (b, hz, kSr); };
+        CHECK (low.lowShelf && !low.highShelf && high.highShelf && !high.lowShelf, "%s: shelves", names[i]);
+        CHECK (std::fabs (db (low, 5.0)) < 0.5 && std::fabs (db (low, 20.0)) < 1.0, "%s: the low shelf flat to the bottom (%.2f dB at 5 Hz)",
+               names[i], db (low, 5.0));
+        CHECK (std::fabs (db (high, 20000.0)) < 1.0 && std::fabs (db (high, 23000.0)) < 0.5, "%s: the high shelf flat to the top (%.2f dB at 20 kHz)",
+               names[i], db (high, 20000.0));
+        // exact where flat: the whole cut at the very end
+        CHECK (std::fabs (clarityCutAtDb (low, 1.0, kSr, -12.0) + 12.0) < 0.05 && std::fabs (clarityCutAtDb (high, 23990.0, kSr, -12.0) + 12.0) < 0.05,
+               "%s: the cut exactly the Range at the ends (%.3f / %.3f dB)", names[i], clarityCutAtDb (low, 1.0, kSr, -12.0),
+               clarityCutAtDb (high, 23990.0, kSr, -12.0));
+        // (three to four octaves out: a critically damped section's knee is long)
+        const double lowSlope = db (low, low.highHz * 8) - db (low, low.highHz * 16), highSlope = db (high, high.lowHz / 8) - db (high, high.lowHz / 16);
+        CHECK (std::fabs (lowSlope - above[i]) < 1.0 && std::fabs (highSlope - below[i]) < 1.0,
+               "%s: the low shelf %.0f dB/oct above its edge (%.1f), the high shelf %.0f below (%.1f)", names[i], above[i], lowSlope, below[i],
+               highSlope);
+        if (slopes[i] != kSlopeClassic)
+        {
+            const double edgeLo = db (low, low.highHz), edgeHi = db (high, high.lowHz);
+            const double wantHi = slopes[i] == kSlopeSignature ? -6.0 : -3.0;
+            CHECK (std::fabs (edgeLo + 3.0) < 0.3 && std::fabs (edgeHi - wantHi) < 0.3, "%s: at its edge -3 / %.0f dB (%.2f / %.2f)", names[i],
+                   wantHi, edgeLo, edgeHi);
+            // turned down by the full 24 dB, what comes up past the edge stays small (critically damped)
+            double lift = 0.0;
+            for (double hz = 20.0; hz < 2000.0; hz *= 1.02)
+                lift = std::max (lift, clarityCutAtDb (low, hz, kSr, -24.0));
+            for (double hz = 100.0; hz < 23000.0; hz *= 1.02)
+                lift = std::max (lift, clarityCutAtDb (high, hz, kSr, -24.0));
+            CHECK (lift < (slopes[i] == kSlopeSignature ? 2.8 : 1.4), "%s: at most %.2f dB up past a shelf's edge", names[i], lift);
+        }
+    }
+    // the Sub and High bands keep their shape whatever the Slope (they take none)
+}
+
+TEST (gentlr_slope_parameter)
+{
+    const auto& t = paramTable ();
+    CHECK (t.info (kClaritySlope).def == kSlope12 && t.toText (kClaritySlope, kSlope12) == "12 / 12" &&
+               t.toText (kClaritySlope, kSlopeSignature) == "Signature" && t.toText (kClaritySlope, kSlopeClassic) == "Classic" &&
+               std::string (t.info (kClaritySlope).name) == "Gentlr Slope",
+           "the Slope: 12 / 12 by default, then Signature and Classic (%s)", t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
+    CHECK (kClaritySlope == kClarityNoOverlap + 1 && kNumParams == kClaritySlope + 1, "appended: ID %u", (unsigned)kClaritySlope);
+    CHECK (defaultParams ()[kClaritySlope] == kSlope12, "a new engine: 12 / 12");
+    // the end saturators: the last field of the tail's fourth block
+    CHECK (tailFieldOf (kClaritySlope) == (int)(kTailExt3First + pk::kTailExt3Slope) && pk::kTailExt3Slope == pk::kTailExt3Fields - 1,
+           "the Slope's tail field");
+    std::vector<pk::ParamInfo> v3;
+    addTailExt3Params (v3, 300);
+    CHECK (std::string (v3[pk::kTailExt3Slope].name) == "Saturator Gentlr Slope" && v3[pk::kTailExt3Slope].def == kSlope12,
+           "the tail's Slope: 12 / 12 by default");
+    CHECK (classicSlopeNorm () == 1.0, "Classic: the last choice");
+}
+
+// The engine's output with every Gentlr band at work (both bands, Sub, High, Advanced and the region
+// Drive, a band moved halfway), hashed (FNV-1a over the output's bits)
+static uint64_t gentlrRenderHash (int slope)
+{
+    const size_t n = 48000;
+    std::vector<float> l (n), r (n), ol (n), orr (n);
+    uint32_t seed = 12345;
+    for (size_t i = 0; i < n; ++i)
+    {
+        seed = seed * 1664525u + 1013904223u;
+        const double noise = ((seed >> 8) / 16777216.0 - 0.5) * 0.2;
+        const double t = (double)i / 48000.0;
+        l[i] = (float)(0.4 * std::sin (2.0 * M_PI * 80.0 * t) + 0.3 * std::sin (2.0 * M_PI * 320.0 * t) + 0.2 * std::sin (2.0 * M_PI * 3100.0 * t) + noise);
+        r[i] = (float)(0.35 * std::sin (2.0 * M_PI * 110.0 * t) + 0.25 * std::sin (2.0 * M_PI * 9000.0 * t) + noise);
+    }
+    Engine e;
+    e.setParam (kDrive, 12.0);
+    e.setParam (kClarity, 1.0);
+    e.setParam (kClarityFreq, 300.0);
+    e.setParam (kClarityWidth, 1.5);
+    e.setParam (kClarityRange, 12.0);
+    e.setParam (kClarity2Freq, 3000.0);
+    e.setParam (kClarity2Width, 2.5);
+    e.setParam (kClarity2Range, 9.0);
+    e.setParam (kClaritySubRange, 6.0);
+    e.setParam (kClarityHighRange, 6.0);
+    e.setParam (kClarityAdvanced, 1.0);
+    e.setParam (kClarityThreshold, -30.0);
+    e.setParam (kClarity2Threshold, -30.0);
+    e.setParam (kClarityDrive, 1.0);
+    e.setParam (kClaritySlope, slope);
+    e.prepare (48000.0, 512);
+    for (size_t p = 0; p < n; p += 512)
+    {
+        const int m = (int)std::min<size_t> (512, n - p);
+        e.process (l.data () + p, r.data () + p, ol.data () + p, orr.data () + p, m);
+        if (p == 24064)
+            e.setParam (kClarityFreq, 150.0); // (the retune path)
+    }
+    uint64_t h = 1469598103934665603ull;
+    for (const auto* v : {&ol, &orr})
+        for (float f : *v)
+        {
+            uint32_t b;
+            std::memcpy (&b, &f, 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                h ^= (b >> (8 * i)) & 0xff;
+                h *= 1099511628211ull;
+            }
+        }
+    return h;
+}
+
+TEST (gentlr_classic_slope_is_the_engine_before)
+{
+    // Classic renders bit for bit what the engine rendered before the Slope. The hash was taken from the
+    // engine before the Slope (0.11), built the same way; the bits depend on the compiler and its maths
+    // library, so it is pinned only for the Linux x86-64 GCC build (the CI's and the usual one), and
+    // elsewhere printed
+    const uint64_t classic = gentlrRenderHash (kSlopeClassic), twelve = gentlrRenderHash (kSlope12),
+                   signature = gentlrRenderHash (kSlopeSignature);
+    std::printf ("    Classic %016llx, 12 / 12 %016llx, Signature %016llx\n", (unsigned long long)classic, (unsigned long long)twelve,
+                 (unsigned long long)signature);
+    CHECK (classic != twelve && classic != signature && twelve != signature, "each slope sounds its own");
+    CHECK (gentlrRenderHash (kSlopeClassic) == classic, "the same every time");
+#if defined(__linux__) && defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
+    CHECK (classic == 0xb72650abb487a4f5ull, "Classic: the engine before the Slope, bit for bit (%016llx)", (unsigned long long)classic);
+#endif
+}
+
 int main (int argc, char** argv)
 {
     const char* filter = argc > 1 ? argv[1] : nullptr;

@@ -59,6 +59,7 @@ void Editor::onClose ()
         t = nullptr;
     advancedViews.clear ();
     noOverlapView = nullptr;
+    slopeView = nullptr;
 }
 
 void Editor::buildUI (CFrame* f)
@@ -118,7 +119,7 @@ void Editor::buildUI (CFrame* f)
                                     }));
 
     // bottom: Gentlr (one button), a band selector and the selected band's Frequency, Width and Range;
-    // Advanced, and with it the region Drive; No Overlap
+    // the bands' Slope under the selector; Advanced, and with it the region Drive; No Overlap
     auto* cp = new pk::Panel (CRect (8, kGentlrTop, 752, kGentlrTop + 80), "GENTLR");
     root->addView (cp);
     bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gentlr"));
@@ -152,6 +153,8 @@ void Editor::buildUI (CFrame* f)
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     showClarityBand (clarityBand);
+    cp->addView (new Label (CRect (92, 54, 132, 74), "Slope", 10.5));
+    slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 46, 54, kSlopeX - 8 + 46, 74), this, kClaritySlope));
     bind (cp, new Toggle (CRect (kGentlrAdvancedX - 8 - 42, 30, kGentlrAdvancedX - 8 + 42, 50), this, kClarityAdvanced, "Advanced"));
     advancedViews.push_back (bind (cp, new Toggle (CRect (556, 30, 606, 50), this, kClarityDrive, "Drive")));
     advancedViews.push_back (bind (cp, new Knob (knobRect (610, 10), this, kClarityDriveAmount, "Amount")));
@@ -199,6 +202,8 @@ void Editor::updateLooks ()
     }
     if (noOverlapView)
         noOverlapView->setEnabledLook (gentlr);
+    if (slopeView)
+        slopeView->setEnabledLook (gentlr);
     for (auto* v : advancedViews)
         v->setEnabledLook (gentlr);
     if (advancedViews.size () == 2)

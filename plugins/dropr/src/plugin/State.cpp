@@ -14,9 +14,11 @@ namespace {
 constexpr int32 kMagic = 0x504F5244; // 'DROP'
 // 1: the drawn transient shape (never released); 2: the multiband compressor. A version 1 state loads
 // as the defaults (its parameters meant something else).
-constexpr int32 kVersion = 3;
+constexpr int32 kVersion = 4;
 // 3: the end saturator's Sub and High bands work while their Range is above 0 dB (no buttons)
 constexpr int32 kSubHighRange = 3;
+// 4: the end saturator's Gentlr Slope (Classic for states from before it)
+constexpr int32 kClassicSlope = 4;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -60,6 +62,10 @@ bool readState (IBStream* stream, State& st)
     // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
+    // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
+    // instance gets 12 / 12)
+    if (version >= 2 && version < kClassicSlope) // (a version 1 state loads as the defaults)
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     return true;
 }
 

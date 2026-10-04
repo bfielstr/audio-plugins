@@ -58,9 +58,25 @@ enum ParamId : uint32_t
     // neighbours along when it is dragged or widened; the engine keeps them apart when automation (or
     // a band switched on) makes them overlap (resolveOverlaps, NoOverlap.h).
     kClarityNoOverlap,
+    // Slope: the shape of Gentlr's two bands (not the Sub and High bands, shelves of their own), both at
+    // once (ClaritySlope, ClarityBand.h). 12 / 12 for a new instance; states from before it load Classic,
+    // the shape there was then.
+    kClaritySlope,
 
     kNumParams
 };
+
+// Gentlr's band slopes (kClaritySlope's choices, in this order: persisted), below / above the band:
+// 12 / 12 dB per octave (the default), Signature 24 / 12 and Classic 12 / 6 (the only shape before).
+enum ClaritySlope : int
+{
+    kSlope12 = 0,
+    kSlopeSignature,
+    kSlopeClassic,
+    kNumSlopes
+};
+// the Slope a plain value picks
+inline int claritySlopeOf (double plain) { return std::clamp ((int)std::lround (plain), 0, kNumSlopes - 1); }
 
 enum PostClipMode { kPostOff = 0, kPostSoft, kPostHard };
 

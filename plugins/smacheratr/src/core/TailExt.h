@@ -29,8 +29,8 @@ inline constexpr uint32_t kTailExt2Ids[pk::kTailExt2Fields] = {kClarityAdvanced,
                                                               kClaritySub, kClaritySubFreq, kClaritySubRange, kClaritySubThreshold};
 static_assert (pk::kTailExt2Fields == 9, "one Smacheratr parameter per field of the tail's third block");
 inline constexpr uint32_t kTailExt3Ids[pk::kTailExt3Fields] = {kClarityHigh, kClarityHighFreq, kClarityHighRange, kClarityHighThreshold,
-                                                              kClarityNoOverlap};
-static_assert (pk::kTailExt3Fields == 5, "one Smacheratr parameter per field of the tail's fourth block");
+                                                              kClarityNoOverlap, kClaritySlope};
+static_assert (pk::kTailExt3Fields == 6, "one Smacheratr parameter per field of the tail's fourth block");
 
 inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool midSide = false)
 {
@@ -136,6 +136,17 @@ inline void tailSubHighToRange (Norm& norm, Has& has, uint32_t ext2Base, uint32_
     const uint32_t subRange = ext2Base + pk::kTailExt2SubRange, highRange = ext3Base + pk::kTailExt3HighRange;
     subHighStateToRange (norm, has, ext2Base + pk::kTailExt2Sub, subRange, ext3Base + pk::kTailExt3High, highRange);
     has[subRange] = has[highRange] = true;
+}
+
+// Gentlr's band Slope for a state saved before it: Classic (12 dB/oct below, 6 above), the only shape
+// there was, so the state sounds as it did (a new instance gets 12 / 12), normalized.
+inline double classicSlopeNorm () { return toNormalized (kClaritySlope, kSlopeClassic); }
+// The same for a plug-in's end saturator (its fourth block at ext3Base), marked as present.
+template <class Norm, class Has>
+inline void tailSlopeToClassic (Norm& norm, Has& has, uint32_t ext3Base)
+{
+    norm[ext3Base + pk::kTailExt3Slope] = classicSlopeNorm ();
+    has[ext3Base + pk::kTailExt3Slope] = true;
 }
 
 } // namespace smacheratr

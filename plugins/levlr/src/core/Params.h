@@ -61,8 +61,8 @@ enum ParamId : uint32_t
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 static_assert (kTailExt2Base + pk::kTailExt2Fields == kBandCount, "the end saturator's blocks end where the band count starts");
-static_assert (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 63,
-               "saved IDs: Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 62");
+static_assert (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 64,
+               "saved IDs: Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63");
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 constexpr uint32_t xoverParam (int k) { return kXover + (uint32_t)k; }
@@ -93,11 +93,13 @@ inline double toNormalized (uint32_t id, double p) { return paramTable ().toNorm
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 
 // The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives; 4: the
-// end saturator's Sub and High bands have no buttons (they work while their Range is above 0 dB).
-constexpr int kStateVersion = 4;
+// end saturator's Sub and High bands have no buttons (they work while their Range is above 0 dB); 5: the
+// end saturator's Gentlr Slope.
+constexpr int kStateVersion = 5;
 // Brings the normalized values of a state saved by `version` to this one: version 1's three slopes
 // among the eight; before 3, four bands and every drive off (the sound it was saved with); before 4,
-// the end saturator's Sub and High bands that were off get Range 0 (smacheratr::subHighStateToRange).
+// the end saturator's Sub and High bands that were off get Range 0 (smacheratr::subHighStateToRange);
+// before 5, the end saturator's Gentlr Slope is Classic (the shape there was).
 // `has`: the IDs the state had (the rest hold their defaults).
 void migrateState (int version, double norm[kNumParams], const bool has[kNumParams]);
 // The parameters added after 0.6.0 (Bands and the drives). A host that stored Levlr's parameters

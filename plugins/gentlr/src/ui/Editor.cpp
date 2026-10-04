@@ -125,6 +125,10 @@ void Editor::buildUI (CFrame* f)
     helpBtn->setTooltipText ("Show or hide these help tooltips.");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (1072, 6, 1152, 28), "Menu", [this] { showMenu (CPoint (1072, 28)); }));
+    // the bands' Slope (bands 1 and 2, both at once), in the header, left of the presets (over the
+    // detector's column)
+    root->addView (new Label (CRect (kSlopeLeft - 72, 6, kSlopeLeft - 6, 28), "Band Slope", 10.5));
+    bind (root, new Choice (CRect (kSlopeLeft, 7, kSlopeLeft + 108, 27), this, kSlope));
 
     auto metersOf = [c = ctl] () -> const Meters* {
         auto* s = c->getShared ();

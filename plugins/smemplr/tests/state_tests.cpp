@@ -1,10 +1,11 @@
 // Headless tests for Smemplr's saved state (StateIO.cpp): the modulation's mappings from version 18 on,
-// and older states, which have none; the rack's Sub and High bands without buttons from 19. Run:
+// and older states, which have none; the rack's Sub and High bands without buttons from 19, its Gentlr Slope from 20. Run:
 // ./smemplr_state_tests
 #include "Modulation.h"
 #include "Params.h"
 #include "Rack.h"
 #include "plugin/StateIO.h"
+#include "smacheratr/src/core/TailExt.h"
 
 #include "public.sdk/source/common/memorystream.h"
 
@@ -120,6 +121,29 @@ int main ()
                "version %d: the Gentlr's Sub (on) kept, High (off) %s", version, old ? "at 0" : "kept");
         CHECK (back.norm[kFilterFreq] == 0.4, "version %d: the rest", version);
     }
+    // a version 19 state (before Gentlr's band Slope): its Smacheratr (slot 0) and Gentlr (slot 1) get
+    // Classic, the shape their bands had; a Para (slot 2) keeps what its own place holds. A version 20
+    // state keeps them as saved, and a new slot has 12 / 12
+    for (int32 version : {19, 20})
+    {
+        PluginState st = someState (), back;
+        st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
+        st.norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxGentlr);
+        st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxPara);
+        const uint32_t smSlope = slotBlockParam (0, smacheratr::kClaritySlope), gtSlope = slotBlockParam (1, gentlr::kSlope);
+        const uint32_t paraSame = slotBlockParam (2, smacheratr::kClaritySlope);
+        st.norm[smSlope] = st.norm[gtSlope] = 0.5; // Signature
+        st.norm[paraSame] = 0.3;
+        CHECK (roundTrip (st, back, version), "read version %d", version);
+        const bool old = version < 20;
+        const double want = old ? smacheratr::classicSlopeNorm () : 0.5;
+        CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.has[smSlope] && back.has[gtSlope],
+               "version %d: the Smacheratr's and the Gentlr's Slope %s", version, old ? "Classic" : "as saved");
+        CHECK (back.norm[paraSame] == 0.3, "version %d: the Para's own place as saved", version);
+    }
+    CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == 0.0 &&
+               fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == 0.0,
+           "a new slot: 12 / 12");
     // cut short in the mappings: the rest of the state still loads, without them
     {
         PluginState st = someState (), back;
