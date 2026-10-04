@@ -90,7 +90,7 @@ void Editor::buildUI (CFrame* f)
     auto* tailPanel = addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight),
                                     kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, "smacheratr  (before the limiter)");
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (
-        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base},
+        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
         [c = ctl] {
             auto* s = c->getShared ();
             return s ? s->sampleRate.load () : 48000.0;

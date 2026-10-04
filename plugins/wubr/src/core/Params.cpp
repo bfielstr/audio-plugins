@@ -58,10 +58,11 @@ std::vector<ParamInfo> buildTable ()
     smacheratr::addTailExtParams (v, kTailExtBase);
     static_assert (kLinkRate == kTailExtBase + pk::kTailExtFields, "the link comes right after the end saturator's block");
     v.push_back (toggle (kLinkRate, "Link Rates", "Link", true));
-    static_assert (kTailExt2Base == kLinkRate + 1 && kNumParams == kTailExt3Base + pk::kTailExt3Fields,
+    static_assert (kTailExt2Base == kLinkRate + 1 && kNumParams == kTailExt4Base + pk::kTailExt4Fields,
                    "Gentlr's Advanced block comes after the link, and the High band's block is the last");
     smacheratr::addTailExt2Params (v, kTailExt2Base);
     smacheratr::addTailExt3Params (v, kTailExt3Base);
+    smacheratr::addTailExt4Params (v, kTailExt4Base);
     return v;
 }
 

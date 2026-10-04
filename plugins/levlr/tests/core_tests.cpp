@@ -150,8 +150,9 @@ TEST (parameters_and_defaults)
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
            "the end Smacheratr: off, Pre-Limit on");
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
-    CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 64,
-           "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63");
+    CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kNumParams == 69,
+           "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63, its fifth at 64 .. 68");
+    CHECK (std::string (t.info (kTailExt4Base + pk::kTailExt4GlueSub1).name) == "Saturator Gentlr Glue Sub / 1", "the fifth block");
     CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the fourth block");
     CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
     for (int b = 0; b < kBands; ++b)

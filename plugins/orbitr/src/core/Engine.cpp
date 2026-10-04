@@ -27,7 +27,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
     tail.prepare (sr, maxBlock);
     for (uint32_t f = 0; f < smacheratr::kTailAllFields; ++f)
     {
-        const uint32_t id = smacheratr::tailParamOf (f, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base});
+        const uint32_t id = smacheratr::tailParamOf (f, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base});
         tail.setParam (f, p[id]);
     }
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -65,7 +65,9 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kTailExt3Base)
+    if (id >= kTailExt4Base)
+        tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
+    else if (id >= kTailExt3Base)
         tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
     else if (id >= kTailExt2Base)
         tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);

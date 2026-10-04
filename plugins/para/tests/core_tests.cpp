@@ -721,7 +721,9 @@ TEST (drive_params)
     for (uint32_t id = 0; id < kNumParams; ++id)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
     CHECK (kHpDriveOn == kTailExtBase + 17 && kTailExt2Base == kHpDriveOn + 3, "the drive's IDs follow the end saturator's block");
-    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kTailExt3Base == kLpGainLock + 1 && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
+    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kTailExt3Base == kLpGainLock + 1 && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kTailExt4Base + pk::kTailExt4Fields &&
+               std::string (t.info (kTailExt4Base + pk::kTailExt4Glue12).name) == "Saturator Gentlr Glue 1 / 2" &&
+               t.info (kTailExt4Base + pk::kTailExt4Glue2High).def == 0.0 &&
                std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,

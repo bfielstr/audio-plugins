@@ -2,6 +2,7 @@
 #include "Color.h"
 #include "ClarityBand.h"
 #include "Engine.h"
+#include "Glue.h"
 #include "NoOverlap.h"
 #include "Tail.h"
 #include "Params.h"
@@ -1658,6 +1659,272 @@ TEST (gentlr_no_overlap_in_the_engine)
 }
 
 // ---------------------------------------------------------------------------
+// Glue: two neighbouring bands held at a shared border (Glue.h)
+
+static bool near (double a, double b, double tol = 1e-6) { return std::fabs (a - b) <= tol * std::max (1.0, std::fabs (b)); }
+
+TEST (gentlr_glue_pairs_and_parameters)
+{
+    // every pair that can meet has a switch, each switch names its two bands; Sub and High never meet
+    for (int g = 0; g < kGluePairs; ++g)
+        CHECK (glue::pairOf (glue::firstOf (g), glue::secondOf (g)) == g && glue::pairOf (glue::secondOf (g), glue::firstOf (g)) == g,
+               "switch %d: its bands", g);
+    CHECK (glue::pairOf (kSubBand, kHighBand) == -1 && glue::pairOf (0, 0) == -1, "Sub and High cannot glue");
+    CHECK (kSubMaxHz < kHighMinHz, "(they never touch: the Sub band ends below where the High band starts)");
+    const auto& t = paramTable ();
+    const char* names[kGluePairs] = {"Gentlr Glue 1 / 2", "Gentlr Glue Sub / 1", "Gentlr Glue Sub / 2", "Gentlr Glue 1 / High", "Gentlr Glue 2 / High"};
+    for (int g = 0; g < kGluePairs; ++g)
+        CHECK (kClarityGlueIds[g] == kClarityGlue12 + (uint32_t)g && t.info (kClarityGlueIds[g]).def == 0.0 &&
+                   std::string (t.info (kClarityGlueIds[g]).name) == names[g] && defaultParams ()[kClarityGlueIds[g]] == 0.0 &&
+                   tailFieldOf (kClarityGlueIds[g]) == (int)(kTailExt4First + (uint32_t)g),
+               "%s: off by default, the tail's fifth block", names[g]);
+    std::vector<pk::ParamInfo> v4;
+    addTailExt4Params (v4, 200);
+    CHECK (v4.size () == pk::kTailExt4Fields && v4[0].id == 200 && std::string (v4[pk::kTailExt4Glue2High].name) == "Saturator Gentlr Glue 2 / High",
+           "the tail's fifth block");
+    const TailBases bases {10, 20, 50, 70, 200};
+    CHECK (tailParamOf (kTailExt4First + pk::kTailExt4GlueSub2, bases) == 200 + pk::kTailExt4GlueSub2 &&
+               tailFieldIn (200 + pk::kTailExt4Glue1High, bases) == (int)(kTailExt4First + pk::kTailExt4Glue1High) &&
+               tailFieldIn (200 + pk::kTailExt4Fields, bases) == -1,
+           "the fifth block's IDs and fields");
+    CHECK (kTailAllFields == kTailExt4First + pk::kTailExt4Fields, "the tail takes all five blocks");
+}
+
+TEST (gentlr_glue_holds_the_border)
+{
+    bool none[kGluePairs] {}, all[kGluePairs];
+    for (bool& b : all)
+        b = true;
+    // nothing glued, or glued and already touching: left exactly as it is
+    {
+        GentlrLayout l = layoutOf (250.0, 2.0, 1500.0, 2.0, 40.0, 9000.0), was = l;
+        applyGlue (l, none);
+        CHECK (std::memcmp (&l, &was, sizeof l) == 0, "nothing glued: untouched, to the bit");
+        GentlrLayout t = layoutOf (250.0, 2.0, 1000.0, 2.0);
+        t.freq[1] = hiEdge (t, 0) * 2.0; // touching
+        const GentlrLayout tw = t;
+        applyGlue (t, all);
+        CHECK (std::memcmp (&t, &tw, sizeof t) == 0, "glued and touching: untouched, to the bit");
+    }
+    // band 1's high edge leads: band 2's low edge follows, its high edge stays (it gets wider)
+    {
+        bool g[kGluePairs] {};
+        g[kGlue12] = true;
+        GentlrLayout l = layoutOf (250.0, 2.0, 2000.0, 1.0); // 125 - 500 Hz, 1414 - 2828 Hz
+        const double hi2 = hiEdge (l, 1);
+        applyGlue (l, g);
+        CHECK (near (loEdge (l, 1), 500.0) && near (hiEdge (l, 1), hi2) && near (hiEdge (l, 0), 500.0), "band 2 from %.1f Hz (500), to %.1f (%.1f)",
+               loEdge (l, 1), hiEdge (l, 1), hi2);
+        CHECK (near (l.freq[0], 250.0) && near (l.width[0], 2.0), "the leader stays");
+        // automation moving band 1: band 2's low edge goes with it
+        GentlrLayout m = l;
+        m.freq[0] = 300.0;
+        applyGlue (m, g);
+        CHECK (near (loEdge (m, 1), hiEdge (m, 0)) && near (hiEdge (m, 1), hi2), "band 1 moved: the border follows (%.1f / %.1f Hz)",
+               hiEdge (m, 0), loEdge (m, 1));
+        // the follower at 4 octaves keeps that width and moves along
+        GentlrLayout w = layoutOf (60.0, 0.5, 4000.0, 1.0);
+        applyGlue (w, g);
+        CHECK (near (loEdge (w, 1), hiEdge (w, 0)) && near (w.width[1], kMaxWidthOct), "pulled down past 4 octaves: it moves (%.2f oct)",
+               w.width[1]);
+    }
+    // the band order is the centres': band 2 under band 1 leads band 1's low edge
+    {
+        bool g[kGluePairs] {};
+        g[kGlue12] = true;
+        GentlrLayout l = layoutOf (3000.0, 1.0, 400.0, 1.0);
+        applyGlue (l, g);
+        CHECK (near (loEdge (l, 0), hiEdge (l, 1)) && near (l.freq[1], 400.0), "band 2 below: band 1 follows it");
+    }
+    // the shelves lead: the Sub band's Freq is band 1's low edge, the High band's Freq band 2's high edge
+    {
+        bool g[kGluePairs] {};
+        g[kGlueSub1] = g[kGlue2High] = true;
+        GentlrLayout l = layoutOf (250.0, 2.0, 2500.0, 1.0, 60.0, 8000.0);
+        const double hi1 = hiEdge (l, 0), lo2 = loEdge (l, 1);
+        applyGlue (l, g);
+        CHECK (near (loEdge (l, 0), 60.0) && near (hiEdge (l, 0), hi1) && near (l.freq[kSubBand], 60.0), "band 1 from the Sub band's 60 Hz");
+        CHECK (near (hiEdge (l, 1), 8000.0) && near (loEdge (l, 1), lo2) && near (l.freq[kHighBand], 8000.0), "band 2 up to the High band's 8 kHz");
+    }
+    // a glue waits while its bands are not neighbours (or one does not work)
+    {
+        bool g[kGluePairs] {};
+        g[kGlueSub2] = true;
+        GentlrLayout l = layoutOf (250.0, 1.0, 2000.0, 1.0, 40.0), was = l; // band 1 between Sub and band 2
+        applyGlue (l, g);
+        CHECK (std::memcmp (&l, &was, sizeof l) == 0, "band 1 between them: nothing");
+        GentlrLayout o = layoutOf (250.0, 1.0, 0.0, 0.0, 40.0), ow = o;
+        g[kGlueSub2] = false;
+        g[kGlue12] = true;
+        applyGlue (o, g);
+        CHECK (std::memcmp (&o, &ow, sizeof o) == 0, "band 2 does not work: nothing");
+    }
+    // at random, everything glued: every glued border equal (where the widths allow), widths in range
+    uint32_t seed = 777;
+    auto rnd = [&] { return (seed = seed * 1664525u + 1013904223u) / 4294967296.0; };
+    int bad = 0;
+    for (int i = 0; i < 2000; ++i)
+    {
+        GentlrLayout l = layoutOf (20.0 * std::pow (1000.0, rnd ()), kMinWidthOct + rnd () * 3.5, 20.0 * std::pow (1000.0, rnd ()),
+                                   kMinWidthOct + rnd () * 3.5, rnd () < 0.7 ? 20.0 * std::pow (5.0, rnd ()) : 0.0,
+                                   rnd () < 0.7 ? 2000.0 * std::pow (8.0, rnd ()) : 0.0);
+        bool g[kGluePairs];
+        for (bool& b : g)
+            b = rnd () < 0.5;
+        int top = -1; // the band under the High band (by the centres before)
+        for (int k = 0; k < kClarityBands; ++k)
+            if (l.on[k] && (top < 0 || l.freq[k] > l.freq[top]))
+                top = k;
+        applyGlue (l, g);
+        bool ok = true;
+        for (int k = 0; k < kClarityBands; ++k)
+            ok = ok && l.width[k] >= kMinWidthOct - 1e-9 && l.width[k] <= kMaxWidthOct + 1e-9 && std::isfinite (l.freq[k]);
+        // the High band's border holds (it leads the band under it, whatever happened below)
+        if (l.on[kHighBand])
+        {
+            if (top >= 0 && g[glue::pairOf (top, kHighBand)] && hiEdge (l, top) < l.freq[kHighBand] * 4.0)
+                ok = ok && (near (hiEdge (l, top), l.freq[kHighBand], 1e-6) || l.width[top] <= kMinWidthOct + 1e-9 ||
+                            l.width[top] >= kMaxWidthOct - 1e-9);
+        }
+        bad += ok ? 0 : 1;
+    }
+    CHECK (bad == 0, "%d random glued layouts went out of range or let the High band's border go", bad);
+}
+
+TEST (gentlr_glue_follows_drags)
+{
+    bool g[kGluePairs] {};
+    g[kGlue12] = true;
+    // band 1 and band 2 touching at 500 Hz
+    GentlrLayout start = layoutOf (250.0, 2.0, 1000.0, 2.0);
+    // dragging the shared border (band 1's high edge, its low edge kept) up to 700 Hz: band 2 narrows
+    {
+        GentlrLayout l = start;
+        l.freq[0] = std::sqrt (125.0 * 700.0);
+        l.width[0] = std::log2 (700.0 / 125.0);
+        followGlue (l, 0, start, g);
+        CHECK (near (loEdge (l, 1), 700.0) && near (hiEdge (l, 1), 2000.0), "band 2 from %.1f Hz (700) to %.1f (2000)", loEdge (l, 1), hiEdge (l, 1));
+    }
+    // moving band 1 down an octave: band 2 widens down to it
+    {
+        GentlrLayout l = start;
+        l.freq[0] = 125.0;
+        followGlue (l, 0, start, g);
+        CHECK (near (loEdge (l, 1), 250.0) && near (hiEdge (l, 1), 2000.0) && near (l.width[1], 3.0), "band 2 widened to 3 octaves (%.2f)", l.width[1]);
+    }
+    // moving band 1 up into band 2: band 2 narrows to half an octave, then moves along
+    {
+        GentlrLayout l = start;
+        l.freq[0] = 1000.0; // high edge 2 kHz
+        followGlue (l, 0, start, g);
+        CHECK (near (loEdge (l, 1), 2000.0) && near (l.width[1], kMinWidthOct), "band 2 at 2 kHz, half an octave wide (%.2f)", l.width[1]);
+    }
+    // detached (switch off): band 2 stays where it is
+    {
+        bool off[kGluePairs] {};
+        GentlrLayout l = start;
+        l.freq[0] = 125.0;
+        followGlue (l, 0, start, off);
+        CHECK (near (l.freq[1], 1000.0) && near (l.width[1], 2.0), "detached: band 2 keeps its place");
+    }
+    // a chain: Sub glued to band 1, band 1 to band 2; dragging the Sub band's Freq moves band 1's low edge only
+    {
+        bool c[kGluePairs] {};
+        c[kGlueSub1] = c[kGlue12] = true;
+        GentlrLayout s = layoutOf (250.0, 2.0, 1000.0, 2.0, 62.5); // Sub up to 62.5 Hz, band 1 from 125 Hz: not touching
+        s.freq[kSubBand] = 62.5;
+        s.freq[0] = std::sqrt (62.5 * 500.0);
+        s.width[0] = 3.0; // band 1 from 62.5 to 500 Hz
+        GentlrLayout l = s;
+        l.freq[kSubBand] = 80.0;
+        followGlue (l, kSubBand, s, c);
+        CHECK (near (loEdge (l, 0), 80.0) && near (hiEdge (l, 0), 500.0) && near (loEdge (l, 1), 500.0), "band 1 from 80 Hz, still glued to band 2 at 500");
+        // band 1 moved down: held by the Sub band at 20 Hz (its low edge cannot go lower)
+        GentlrLayout m = s;
+        m.freq[0] = s.freq[0] / 8.0;
+        followGlue (m, 0, s, c);
+        CHECK (near (loEdge (m, 0), kSubMinHz) && near (m.freq[kSubBand], kSubMinHz) && near (m.width[0], 3.0), "held at %.2f Hz", loEdge (m, 0));
+        CHECK (near (loEdge (m, 1), hiEdge (m, 0)), "band 2 still glued to it");
+    }
+    // the High band: band 2's high edge follows its Freq; band 2 dragged up stops at 16 kHz
+    {
+        bool c[kGluePairs] {};
+        c[kGlue2High] = true;
+        GentlrLayout s = layoutOf (250.0, 2.0, 0.0, 2.0, 0.0, 6000.0);
+        s.on[1] = true;
+        s.freq[1] = 3000.0;
+        s.width[1] = 2.0 * std::log2 (6000.0 / 3000.0); // 1.5 - 6 kHz
+        GentlrLayout l = s;
+        l.freq[kHighBand] = 8000.0;
+        followGlue (l, kHighBand, s, c);
+        CHECK (near (hiEdge (l, 1), 8000.0) && near (loEdge (l, 1), 1500.0), "band 2 up to the High band's 8 kHz");
+        GentlrLayout m = s;
+        m.freq[1] = 12000.0;
+        followGlue (m, 1, s, c);
+        CHECK (near (hiEdge (m, 1), kHighMaxHz) && near (m.freq[kHighBand], kHighMaxHz) && near (m.width[1], 2.0), "held at 16 kHz (%.0f Hz)",
+               hiEdge (m, 1));
+    }
+}
+
+TEST (gentlr_glue_snaps_and_draws_its_borders)
+{
+    bool none[kGluePairs] {};
+    GentlrLayout l = layoutOf (250.0, 2.0, 1000.0, 2.0, 40.0, 7000.0); // band 1 125 - 500, band 2 500 - 2000: touching
+    // band 1's high edge near band 2's low edge snaps onto it; too far, nothing
+    double target = 0.0;
+    CHECK (snapTarget (l, 0, true, std::log2 (510.0), 0.05, none, &target) == 1 && near (target, std::log2 (500.0)), "snaps to band 2");
+    CHECK (snapTarget (l, 0, true, std::log2 (600.0), 0.05, none, &target) == -1, "too far: nothing");
+    CHECK (snapTarget (l, 0, false, std::log2 (41.0), 0.05, none, &target) == kSubBand && near (target, std::log2 (40.0)), "its low edge to the Sub band");
+    CHECK (snapTarget (l, 1, true, std::log2 (7100.0), 0.05, none, &target) == kHighBand, "band 2's high edge to the High band");
+    CHECK (snapTarget (l, kSubBand, true, std::log2 (126.0), 0.05, none, &target) == 0, "the Sub band's Freq to band 1");
+    bool g[kGluePairs] {};
+    g[kGlue12] = true;
+    CHECK (snapTarget (l, 0, true, std::log2 (500.0), 0.05, g, &target) == -1, "already glued: no snap");
+    // the borders: touching band 1 and band 2 (a dim link), the rest apart; glued ones lit
+    GlueBorder b[kGentlrBands];
+    int n = glueBorders (l, none, b);
+    CHECK (n == 1 && b[0].pair == kGlue12 && !b[0].glued && near (b[0].at, std::log2 (500.0)), "one border, unglued (%d)", n);
+    n = glueBorders (l, g, b);
+    CHECK (n == 1 && b[0].glued, "glued: lit");
+    // with No Overlap on, a glued pair keeps its border where No Overlap leaves bands touching
+    bool sg[kGluePairs] {};
+    sg[kGlueSub1] = true;
+    GentlrLayout o = layoutOf (250.0, 2.0, 400.0, 2.0, 60.0); // band 2 overlapping band 1; band 1 apart from Sub
+    applyGlue (o, sg);
+    resolveOverlaps (o);
+    CHECK (!bandsOverlap (o) && near (loEdge (o, 0), 60.0), "glue and No Overlap together: apart, band 1 glued to Sub (%.2f Hz)", loEdge (o, 0));
+}
+
+TEST (gentlr_glue_in_the_engine)
+{
+    auto in = tones ({{150.0, -8.0}, {400.0, -10.0}, {3000.0, -10.0}, {9000.0, -12.0}}, 0.5);
+    auto render = [&] (const bool* g, double f1, double w1, double f2, double w2) {
+        auto e = engine ();
+        e->setParam (kDrive, 14.0);
+        e->setParam (kClarity, 1.0);
+        e->setParam (kClarityFreq, f1);
+        e->setParam (kClarityWidth, w1);
+        e->setParam (kClarity2Freq, f2);
+        e->setParam (kClarity2Width, w2);
+        e->setParam (kClarity2Range, 6.0);
+        for (int k = 0; k < kGluePairs; ++k)
+            e->setParam (kClarityGlueIds[k], g[k] ? 1.0 : 0.0);
+        return run (*e, in, 333).l;
+    };
+    bool none[kGluePairs] {}, g[kGluePairs] {};
+    g[kGlue12] = true;
+    // touching (as the editors leave glued bands): glue changes nothing, to the bit
+    const double f2 = 500.0 * 2.0;
+    CHECK (render (g, 250.0, 2.0, f2, 2.0) == render (none, 250.0, 2.0, f2, 2.0), "glued and touching: the same sound");
+    // apart (automation moved band 1): band 2's low edge follows, as applyGlue says
+    const auto glued = render (g, 250.0, 2.0, 2000.0, 1.0);
+    GentlrLayout l = layoutOf (250.0, 2.0, 2000.0, 1.0);
+    applyGlue (l, g);
+    CHECK (glued != render (none, 250.0, 2.0, 2000.0, 1.0) && glued == render (none, l.freq[0], l.width[0], l.freq[1], l.width[1]),
+           "apart: as if band 2 had been set to the border");
+}
+
+// ---------------------------------------------------------------------------
 // Gentlr's band Slope: 12 / 12 (the default), Signature (24 / 12) and Classic (12 / 6, as before)
 
 TEST (gentlr_slopes_shape_the_bands)
@@ -1760,7 +2027,7 @@ TEST (gentlr_slope_parameter)
                t.toText (kClaritySlope, kSlopeSignature) == "Signature" && t.toText (kClaritySlope, kSlopeClassic) == "Classic" &&
                std::string (t.info (kClaritySlope).name) == "Gentlr Slope",
            "the Slope: 12 / 12 by default, then Signature and Classic (%s)", t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
-    CHECK (kClaritySlope == kClarityNoOverlap + 1 && kNumParams == kClaritySlope + 1, "appended: ID %u", (unsigned)kClaritySlope);
+    CHECK (kClaritySlope == kClarityNoOverlap + 1 && kClarityGlue12 == kClaritySlope + 1, "appended: ID %u", (unsigned)kClaritySlope);
     CHECK (defaultParams ()[kClaritySlope] == kSlope12, "a new engine: 12 / 12");
     // the end saturators: the last field of the tail's fourth block
     CHECK (tailFieldOf (kClaritySlope) == (int)(kTailExt3First + pk::kTailExt3Slope) && pk::kTailExt3Slope == pk::kTailExt3Fields - 1,

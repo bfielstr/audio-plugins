@@ -2,6 +2,7 @@
 
 #include "ClarityBand.h"
 #include "Color.h"
+#include "Glue.h"
 #include "NoOverlap.h"
 
 #include <algorithm>
@@ -274,7 +275,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     double levelDb[kGentlrBands] = {-120.0, -120.0, -120.0, -120.0};
     for (int k = 0; k < kGentlrBands; ++k)
         clarity[k] = clarityBandOn (p[kClarity], p[kGentlrRangeIds[k]]); // (Sub and High too: no button of their own)
-    // where the bands sit: as set, or with No Overlap kept apart (what the editors push is left as it is)
+    // where the bands sit: as set, glued borders held (Glue.h), and with No Overlap kept apart (what the
+    // editors write already holds both, and is left as it is)
     GentlrLayout layout;
     for (int k = 0; k < kGentlrBands; ++k)
     {
@@ -282,6 +284,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         layout.freq[k] = p[kGentlrFreqIds[k]];
         layout.width[k] = hasWidth (k) ? p[kClarityWidthIds[k]] : 0.0; // (the Sub and High bands have none)
     }
+    bool glued[kGluePairs];
+    for (int g = 0; g < kGluePairs; ++g)
+        glued[g] = p[kClarityGlueIds[g]] >= 0.5;
+    applyGlue (layout, glued);
     if (p[kClarityNoOverlap] >= 0.5)
         resolveOverlaps (layout);
     for (int k = 0; k < kGentlrBands; ++k)

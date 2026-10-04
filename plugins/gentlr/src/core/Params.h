@@ -2,7 +2,8 @@
 // blocks came last; Gentlr's parameters added after them (the High band, No Overlap) sit right after
 // them, at fixed numbers, and the end saturator's fourth block after those. That block grew by one
 // field (its Gentlr's Slope) while it was still the last; Gentlr's own Slope came after it, so it is
-// closed in now. Every ID below is pinned (static_asserts at the end of this file).
+// closed in now. Gentlr's glue switches came next, its own and then the end saturator's (a fifth
+// block, at the very end). Every ID below is pinned (static_asserts at the end of this file).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -83,8 +84,18 @@ enum ParamId : uint32_t
     // Slope: the shape of bands 1 and 2 (smacheratr::ClaritySlope: 12 / 12 for a new instance; State.cpp
     // gives states from before it Classic, the shape there was then). The Sub and High bands keep theirs.
     kSlope = kTailExt3Base + pk::kTailExt3Fields,
-    kNumParams
+    // Glue: two neighbouring bands held at a shared border (smacheratr/src/core/Glue.h), one switch per
+    // pair that can meet, in smacheratr::GluePair's order; all off by default (and in states from before)
+    kGlue12,    // band 1 and band 2
+    kGlueSub1,  // the Sub band and band 1
+    kGlueSub2,  // the Sub band and band 2
+    kGlue1High, // band 1 and the High band
+    kGlue2High, // band 2 and the High band
+    kTailExt4Base, // the end Smacheratr's Gentlr glue: pk::kTailExt4Fields entries (the last block)
+    kNumParams = kTailExt4Base + pk::kTailExt4Fields
 };
+// Gentlr's glue switches (smacheratr::GluePair's order)
+inline constexpr uint32_t kGlueIds[smacheratr::kGluePairs] = {kGlue12, kGlueSub1, kGlueSub2, kGlue1High, kGlue2High};
 
 // the detector's default times: Smacheratr's (15 ms attack, 150 ms release)
 constexpr double kDefaultAttackMs = 15.0, kDefaultReleaseMs = 150.0;
@@ -105,11 +116,17 @@ constexpr uint32_t thresholdParam (int k)
 constexpr bool isSubParam (uint32_t id) { return id >= kSubOn && id < kTailBase; }
 constexpr bool isHighParam (uint32_t id) { return id >= kHighOn && id <= kHighThreshold; }
 constexpr bool isBandParam (uint32_t id) { return (id >= kBandBase && id < kTailBase) || isHighParam (id); }
-constexpr bool isTailParam (uint32_t id) { return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope); }
-// its field in smacheratr::Tail (the first three blocks are consecutive, the fourth comes after Gentlr's own)
+constexpr bool isTailParam (uint32_t id)
+{
+    return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope) || (id >= kTailExt4Base && id < kNumParams);
+}
+// its field in smacheratr::Tail (the first three blocks are consecutive, the fourth and fifth come after
+// Gentlr's own)
 constexpr uint32_t tailField (uint32_t id)
 {
-    return id >= kTailExt3Base ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base) : id - kTailBase;
+    return id >= kTailExt4Base   ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + pk::kTailExt3Fields + (id - kTailExt4Base)
+           : id >= kTailExt3Base ? pk::kTailFields + pk::kTailExtFields + pk::kTailExt2Fields + (id - kTailExt3Base)
+                                 : id - kTailBase;
 }
 
 const pk::ParamTable& paramTable ();
@@ -135,6 +152,9 @@ inline int64_t fromSmacheratr (uint32_t id)
         return kNoOverlap;
     if (id == smacheratr::kClaritySlope)
         return kSlope;
+    for (int g = 0; g < smacheratr::kGluePairs; ++g)
+        if (id == smacheratr::kClarityGlueIds[g])
+            return kGlueIds[g];
     return -1;
 }
 
@@ -147,6 +167,8 @@ static_assert (kSubOn == 18 && kSubFreq == 19 && kSubRange == 20 && kSubThreshol
 static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "the end saturator's blocks: 22, 28, 45");
 static_assert (kHighOn == 54 && kHighFreq == 55 && kHighRange == 56 && kHighThreshold == 57 && kNoOverlap == 58,
                "the High band: 54 - 57, No Overlap 58");
-static_assert (kTailExt3Base == 59 && kSlope == 65 && kNumParams == 66, "the end saturator's fourth block 59 - 64, Slope 65: 66 parameters");
+static_assert (kTailExt3Base == 59 && kSlope == 65, "the end saturator's fourth block 59 - 64, Slope 65");
+static_assert (kGlue12 == 66 && kGlue2High == 70 && kTailExt4Base == 71 && kNumParams == 76,
+               "the glue switches 66 - 70, the end saturator's fifth block 71 - 75: 76 parameters");
 
 } // namespace gentlr

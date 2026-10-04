@@ -171,7 +171,7 @@ void Editor::buildUI (CFrame* f)
     auto* tailPanel =
         addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base);
     tailDisplays = std::make_unique<smacheratr::TailDisplays> (
-        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base}, rateOf,
+        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
         [c = ctl] () -> const smacheratr::Meters* {
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;

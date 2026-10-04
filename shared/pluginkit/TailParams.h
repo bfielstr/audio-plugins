@@ -82,4 +82,20 @@ enum TailExt3Field : uint32_t
     kTailExt3Fields
 };
 
+// Gentlr's glue, a fifth block each plug-in appends at the very end of its IDs (the fourth is closed in:
+// Gentlr has its own Slope right after it; the parameters: smacheratr/src/core/TailExt.h,
+// addTailExt4Params). One switch per pair of bands that can be glued at a shared border (smacheratr's
+// GluePair order), all off by default: states from before it load them off and sound as they did. In
+// smacheratr::Tail::setParam field kTailFields + kTailExtFields + kTailExt2Fields + kTailExt3Fields + i
+// is this block's field i.
+enum TailExt4Field : uint32_t
+{
+    kTailExt4Glue12 = 0, // band 1 and band 2
+    kTailExt4GlueSub1,   // the Sub band and band 1
+    kTailExt4GlueSub2,   // the Sub band and band 2
+    kTailExt4Glue1High,  // band 1 and the High band
+    kTailExt4Glue2High,  // band 2 and the High band
+    kTailExt4Fields
+};
+
 } // namespace pk

@@ -62,9 +62,21 @@ enum ParamId : uint32_t
     // once (ClaritySlope, ClarityBand.h). 12 / 12 for a new instance; states from before it load Classic,
     // the shape there was then.
     kClaritySlope,
+    // Glue: two neighbouring bands held at a shared border (Glue.h), one switch per pair that can meet:
+    // band 1 and band 2, the Sub band and either band, either band and the High band. (The Sub and High
+    // bands never meet: the Sub band ends by 100 Hz, the High band starts at 2 kHz.) Off by default and
+    // in states from before glue, so those sound as they did.
+    kClarityGlue12,    // band 1 and band 2, at whichever's high edge meets the other's low edge
+    kClarityGlueSub1,  // the Sub band's Freq and band 1's low edge
+    kClarityGlueSub2,  // the Sub band's Freq and band 2's low edge
+    kClarityGlue1High, // band 1's high edge and the High band's Freq
+    kClarityGlue2High, // band 2's high edge and the High band's Freq
 
     kNumParams
 };
+
+static_assert (kClaritySlope == 36 && kClarityGlue12 == 37 && kClarityGlue2High == 41 && kNumParams == 42,
+               "the IDs are persisted: the glue switches were appended after the Slope");
 
 // Gentlr's band slopes (kClaritySlope's choices, in this order: persisted), below / above the band:
 // 12 / 12 dB per octave (the default), Signature 24 / 12 and Classic 12 / 6 (the only shape before).
@@ -98,6 +110,10 @@ inline constexpr uint32_t kGentlrFreqIds[kGentlrBands] = {kClarityFreq, kClarity
 inline constexpr uint32_t kGentlrRangeIds[kGentlrBands] = {kClarityRange, kClarity2Range, kClaritySubRange, kClarityHighRange};
 inline constexpr uint32_t kGentlrThresholdIds[kGentlrBands] = {kClarityThreshold, kClarity2Threshold, kClaritySubThreshold,
                                                                kClarityHighThreshold};
+// Gentlr's glue switches (GluePair's order, Glue.h)
+constexpr int kGluePairs = 5;
+inline constexpr uint32_t kClarityGlueIds[kGluePairs] = {kClarityGlue12, kClarityGlueSub1, kClarityGlueSub2, kClarityGlue1High,
+                                                         kClarityGlue2High};
 // a band (not Sub or High), that has a Width
 constexpr bool hasWidth (int band) { return band < kClarityBands; }
 constexpr double kSubMinHz = 20.0, kSubMaxHz = 100.0, kSubDefaultHz = 40.0;

@@ -63,7 +63,14 @@ std::vector<ParamInfo> buildTable ()
     v.push_back (like (kNoOverlap, smacheratr::kClarityNoOverlap, "No Overlap", "No Overlap", 0.0));
     smacheratr::addTailExt3Params (v, kTailExt3Base);
     v.push_back (like (kSlope, smacheratr::kClaritySlope, "Slope", "Slope", smacheratr::kSlope12));
-    static_assert (kNumParams == kSlope + 1, "the Slope is the last");
+    // the glue switches: Smacheratr's (off), without its "Gentlr " in front
+    for (int g = 0; g < smacheratr::kGluePairs; ++g)
+    {
+        const ParamInfo& pi = sm.info (smacheratr::kClarityGlueIds[g]);
+        v.push_back (like (kGlueIds[g], smacheratr::kClarityGlueIds[g], std::string (pi.name).substr (7), pi.shortName, 0.0));
+    }
+    smacheratr::addTailExt4Params (v, kTailExt4Base);
+    static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the end saturator's fifth block is the last");
     return v;
 }
 

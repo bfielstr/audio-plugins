@@ -46,7 +46,8 @@ std::vector<ParamInfo> buildTable ()
                              kDriveAnalog));
     }
     smacheratr::addTailExt3Params (v, kTailExt3Base);
-    static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the end saturator's fourth block is the last");
+    smacheratr::addTailExt4Params (v, kTailExt4Base);
+    static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the end saturator's fifth block is the last");
     return v;
 }
 

@@ -121,6 +121,8 @@ public:
             tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
         else if (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields)
             tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
+        else if (id >= kTailExt4Base && id < kTailExt4Base + pk::kTailExt4Fields)
+            tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
     }
     double param (uint32_t id) const { return p[id]; }
     // Depends on the sample rate only: the drives' delay, whether they are on and wherever they are,

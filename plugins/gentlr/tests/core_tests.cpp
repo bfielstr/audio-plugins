@@ -3,6 +3,7 @@
 #include "Params.h"
 
 #include "smacheratr/src/core/ClarityBand.h"
+#include "smacheratr/src/core/Glue.h"
 #include "smacheratr/src/core/NoOverlap.h"
 
 #include <algorithm>
@@ -155,14 +156,16 @@ TEST (parameters_and_defaults)
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
     CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
-               kHighOn == kTailExt2Base + pk::kTailExt2Fields && kSlope == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kSlope + 1,
-           "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block, then the Slope");
+               kHighOn == kTailExt2Base + pk::kTailExt2Fields && kSlope == kTailExt3Base + pk::kTailExt3Fields && kGlue12 == kSlope + 1 &&
+               kTailExt4Base == kGlue2High + 1 && kNumParams == kTailExt4Base + pk::kTailExt4Fields,
+           "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block, then the "
+           "Slope, the glue switches and the end saturator's fifth block");
     CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced", "the third block");
     CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the last block");
     // every end saturator parameter reaches the tail's field it stands for, and only those are tail parameters
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
-        const int f = smacheratr::tailFieldIn (id, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base});
+        const int f = smacheratr::tailFieldIn (id, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base});
         CHECK (isTailParam (id) == (f >= 0) && (f < 0 || tailField (id) == (uint32_t)f), "ID %u: tail field %d", id, f);
     }
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end Smacheratr off");
@@ -209,10 +212,11 @@ TEST (parameters_and_defaults)
         {28, "Saturator Output"}, {45, "Saturator Gentlr Advanced"}, {53, "Saturator Gentlr Sub Threshold"},
         {54, "High (unused)"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
         {58, "No Overlap"},       {59, "Saturator Gentlr High (unused)"}, {63, "Saturator Gentlr No Overlap"},
-        {64, "Saturator Gentlr Slope"}, {65, "Slope"}};
+        {64, "Saturator Gentlr Slope"}, {65, "Slope"}, {66, "Glue 1 / 2"}, {67, "Glue Sub / 1"}, {68, "Glue Sub / 2"},
+        {69, "Glue 1 / High"}, {70, "Glue 2 / High"}, {71, "Saturator Gentlr Glue 1 / 2"}, {75, "Saturator Gentlr Glue 2 / High"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
-    CHECK (kNumParams == 66, "66 parameters: %u", (unsigned)kNumParams);
+    CHECK (kNumParams == 76, "76 parameters: %u", (unsigned)kNumParams);
     std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gentlr block at %u)\n", (unsigned)kNumParams,
                  (unsigned)kBandBase, (unsigned)kSubOn, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
 }
@@ -583,6 +587,38 @@ TEST (no_overlap)
         });
     };
     CHECK (withHigh (true) != withHigh (false), "High over band 2: kept apart");
+}
+
+TEST (glue)
+{
+    // band 1 (125 - 500 Hz) glued to band 2 (1414 - 2828 Hz, apart): the engine holds band 2's low edge on
+    // band 1's high edge (smacheratr::applyGlue); off, or touching, it changes nothing
+    auto set = [] (bool glued, double f1, double w1, double f2, double w2) {
+        return [=] (Engine& en) {
+            en.setParam (bandParam (0, kFreq), f1);
+            en.setParam (bandParam (0, kWidth), w1);
+            en.setParam (bandParam (1, kFreq), f2);
+            en.setParam (bandParam (1, kWidth), w2);
+            en.setParam (kGlue12, glued ? 1.0 : 0.0);
+        };
+    };
+    const Sig in = tones ({{150.0, -6.0}, {320.0, -6.0}, {700.0, -6.0}, {3000.0, -6.0}}, 0.8);
+    auto render = [&] (const std::function<void (Engine&)>& s) {
+        auto e = engine (s);
+        return run (*e, in).l;
+    };
+    CHECK (render (set (true, 250.0, 2.0, 1000.0, 2.0)) == render (set (false, 250.0, 2.0, 1000.0, 2.0)), "touching: the same sound");
+    const auto held = render (set (true, 250.0, 2.0, 2000.0, 1.0));
+    smacheratr::GentlrLayout l;
+    l.on[0] = l.on[1] = true;
+    l.freq[0] = 250.0, l.width[0] = 2.0, l.freq[1] = 2000.0, l.width[1] = 1.0;
+    l.freq[kSub] = smacheratr::kSubDefaultHz, l.freq[kHigh] = smacheratr::kHighDefaultHz;
+    bool g[smacheratr::kGluePairs] {};
+    g[smacheratr::kGlue12] = true;
+    smacheratr::applyGlue (l, g);
+    CHECK (held != render (set (false, 250.0, 2.0, 2000.0, 1.0)) && held == render (set (false, l.freq[0], l.width[0], l.freq[1], l.width[1])),
+           "apart: as if band 2 had been set to the border");
+    CHECK (fromSmacheratr (smacheratr::kClarityGlueSub2) == kGlueSub2 && kGlueIds[smacheratr::kGlue2High] == kGlue2High, "Smacheratr's glue IDs");
 }
 
 TEST (advanced_thresholds)

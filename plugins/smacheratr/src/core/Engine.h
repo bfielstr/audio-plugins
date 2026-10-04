@@ -14,8 +14,9 @@
 // drive the region it cuts: the cut bands are split out again (the same band filters) and put
 // through the Analog curve on their own, level-matched (clarityRegionDrive in ClarityBand.h),
 // oversampled with the rest when Hi-Quality is on, so the region gets denser without the latency
-// changing. With Advanced off none of that runs and the output is what it was before it. With No
-// Overlap on, the working bands are kept apart (resolveOverlaps, NoOverlap.h) before they are designed.
+// changing. With Advanced off none of that runs and the output is what it was before it. Glued bands
+// keep their shared border (applyGlue, Glue.h), and with No Overlap on the working bands are kept apart
+// (resolveOverlaps, NoOverlap.h), before they are designed.
 #pragma once
 
 #include "Biquad.h"
