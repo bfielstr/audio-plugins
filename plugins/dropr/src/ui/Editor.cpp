@@ -57,13 +57,13 @@ void Editor::buildUI (CFrame* f)
     root->addView (latencyLabel);
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
     display = new BandView (CRect (kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom), this,
                             [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; });
-    display->setTooltipText (help::kDisplay);
+    pk::setHelp (display, "Bands", help::kDisplay);
     root->addView (display);
 
     // the right column: how many bands, stereo or mid-side, how far the channels are linked
@@ -88,7 +88,8 @@ void Editor::buildUI (CFrame* f)
     knobAt (3, kDownThreshold);
     ratioKnob = knobAt (4, kDownRatio);
     negRatioKnob = knobAt (4, kNegRatio);
-    bind (dyn, new pk::Toggle (CRect (col (4), kNegToggleTop, col (4) + 56, kNegToggleTop + 16), this, kNegative, "Negative"));
+    // (3 px wider than the knob on each side: "Negative" in bold fits; the column keeps 4 px to the next)
+    bind (dyn, new pk::Toggle (CRect (col (4) - 3, kNegToggleTop, col (4) + 59, kNegToggleTop + 16), this, kNegative, "Negative"));
     rangeKnob = knobAt (5, kRange);
     knobAt (6, kUpThreshold);
     knobAt (7, kUpRatio);

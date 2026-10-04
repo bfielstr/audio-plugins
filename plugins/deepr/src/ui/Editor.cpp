@@ -57,14 +57,14 @@ void Editor::buildUI (CFrame* f)
     root->addView (latencyLabel);
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
     display = new DeeprView (CRect (8, 40, 752, 290), this,
                              [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
                              [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; });
-    display->setTooltipText (help::kDisplay);
+    pk::setHelp (display, "Display", help::kDisplay);
     root->addView (display);
 
     // the dip: how deep, where, and what opens it

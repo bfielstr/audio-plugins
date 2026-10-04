@@ -26,8 +26,14 @@ namespace draw {
 void outline (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const VSTGUI::CColor& c, double radius = 2.0);
 // Corner brackets: an L of `len` px at each corner of `r`.
 void brackets (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, double len, const VSTGUI::CColor& c);
-// A horizontal hairline from x0 to x1 with 3 px ticks every `step` px (a section divider).
-void tickRule (VSTGUI::CDrawContext* ctx, double x0, double x1, double y, const VSTGUI::CColor& c, double step = 8.0);
+// A plain horizontal hairline from x0 to x1 on the pixel row `y` (a section divider, a header's edge).
+void rule (VSTGUI::CDrawContext* ctx, double x0, double x1, double y, const VSTGUI::CColor& c);
+// The old "ticked" rule. The ticks were decoration and are gone (they made the panels look busy): it
+// draws the plain rule now and only stays so callers not yet moved over keep building. Use rule().
+inline void tickRule (VSTGUI::CDrawContext* ctx, double x0, double x1, double y, const VSTGUI::CColor& c, double /*step*/ = 8.0)
+{
+    rule (ctx, x0, x1, y, c);
+}
 // A button's lamp: a short 2 px bar above the bottom edge of `r`.
 void marker (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const VSTGUI::CColor& c);
 struct ButtonState
@@ -42,8 +48,8 @@ void button (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const std::strin
 // A drag handle in a display: a well-filled ring of radius `r`, pale copper; held or selected
 // (`active`) it lights cinnabar with a centre dot. Its element off (`enabled` false): plain copper.
 void handle (VSTGUI::CDrawContext* ctx, const VSTGUI::CPoint& c, double r, bool active, bool enabled = true);
-// The editor window's background: ground, a well header band of `headerHeight` over a ticked divider,
-// and a thin copper frame with corner brackets.
+// The editor window's background: ground, a well header band of `headerHeight` over a plain dim
+// hairline, and a thin copper frame with corner brackets.
 void window (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, double headerHeight = 34.0);
 } // namespace draw
 
@@ -118,12 +124,28 @@ private:
 // notch otherwise; 0 when the event has no vertical movement.
 double wheelStep (const VSTGUI::MouseWheelEvent& e, const ParamTable& table, uint32_t id);
 
+// A piece of text a widget draws, for the layout check (pk::layoutReport): the area it is drawn in,
+// the text, its font, how it is aligned (0 left, 1 centre, 2 right) and the room the widget keeps
+// clear inside the area (its outline and padding, both sides together). A widget whose text changes
+// gives one spot per sample text (a value at the ends of its range, its default, now).
+struct TextSpot
+{
+    VSTGUI::CRect area;
+    std::string text;
+    double size = 10.0;
+    bool bold = false;
+    int align = 1;
+    double pad = 0.0;
+};
+
 // A view bound to one parameter.
 class ParamView : public VSTGUI::CView
 {
 public:
     ParamView (const VSTGUI::CRect& r, ParamHost* h, uint32_t id) : CView (r), host (h), param (id) {}
     uint32_t paramId () const { return param; }
+    // The parameter's full name (the info box's title for this control).
+    std::string paramName () const { return host->table ().info (param).name; }
     int64_t sourceParamId () const { return host->sourceParam (param); } // (ParamHost::sourceParam)
     void setEnabledLook (bool e)
     {
@@ -138,6 +160,8 @@ protected:
     // A right click resets the parameter to its default (its neutral value) in every control of the
     // suite. Call first in onMouseDownEvent; true when it handled the event.
     bool resetOnRightClick (VSTGUI::MouseDownEvent& e);
+    // The value's text at the ends of the range, at the default and now (the layout check's samples).
+    std::vector<std::string> sampleTexts () const;
 
     ParamHost* host;
     uint32_t param;
@@ -149,6 +173,9 @@ class Knob : public ParamView
 public:
     Knob (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label = nullptr, bool bipolar = false);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
+    // The square the dial (track, arc and body) is drawn in: under the label, above the value.
+    VSTGUI::CRect dialRect () const;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
@@ -168,6 +195,7 @@ class HSlider : public ParamView
 public:
     HSlider (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
@@ -185,6 +213,7 @@ class NumberBox : public ParamView
 public:
     NumberBox (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, VSTGUI::CColor color = theme::kText);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
@@ -203,6 +232,7 @@ class Toggle : public ParamView
 public:
     Toggle (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
 
 private:
@@ -215,6 +245,7 @@ class Segmented : public ParamView
 public:
     Segmented (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, std::vector<std::string> labels);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
 
 private:
@@ -227,6 +258,7 @@ class Choice : public ParamView
 public:
     Choice (const VSTGUI::CRect& r, ParamHost* h, uint32_t id, const char* label = nullptr);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
 
 private:
@@ -240,6 +272,7 @@ public:
     ActionButton (const VSTGUI::CRect& r, std::string text, std::function<void ()> onClick,
                   std::function<bool ()> active = {});
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
     void setText (const std::string& t)
@@ -247,6 +280,7 @@ public:
         text = t;
         invalid ();
     }
+    const std::string& label () const { return text; }
 
 private:
     std::string text;
@@ -268,12 +302,14 @@ public:
             invalid ();
         }
     }
+    const std::string& getText () const { return text; }
     void setDim (bool d)
     {
         dim = d;
         invalid ();
     }
     void draw (VSTGUI::CDrawContext* ctx) override;
+    std::vector<TextSpot> textSpots () const; // (the layout check)
 
 private:
     std::string text;
@@ -288,6 +324,7 @@ class Panel : public VSTGUI::CViewContainer
 public:
     Panel (const VSTGUI::CRect& r, std::string title = {});
     void drawBackgroundRect (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& update) override;
+    const std::string& titleText () const { return title; }
 
 private:
     std::string title;

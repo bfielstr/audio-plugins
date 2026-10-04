@@ -8,6 +8,11 @@ if(WIN32)
 endif()
 pk_dsp_settings(pluginkit_core)
 
+# The pure helpers' tests (help text wrapping, the info box's titles, the layout overlap check).
+add_executable(pluginkit_tests tests/pluginkit_tests.cpp)
+target_link_libraries(pluginkit_tests PRIVATE pluginkit_core)
+add_test(NAME pluginkit_core COMMAND pluginkit_tests)
+
 if(PK_BUILD_PLUGINS)
     # VST3 controller/editor bases and VSTGUI widgets.
     add_library(pluginkit_vst STATIC
@@ -26,6 +31,11 @@ if(PK_BUILD_PLUGINS)
         pluginkit/ui/Theme.h
         pluginkit/ui/Widgets.h
         pluginkit/ui/Widgets.cpp
+        pluginkit/ui/HelpText.h
+        pluginkit/ui/InfoBox.h
+        pluginkit/ui/InfoBox.cpp
+        pluginkit/ui/LayoutCheck.h
+        pluginkit/ui/LayoutCheck.cpp
         pluginkit/ui/ScopeView.h
         pluginkit/ui/DropFiles.h
         pluginkit/ui/ScopeView.cpp

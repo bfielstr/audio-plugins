@@ -307,6 +307,11 @@ void Editor::buildUI (CFrame* f)
         v->setTooltipText (t);
         return v;
     };
+    // (with a title for the info box, for views with no parameter name to show)
+    auto titled = [] (CView* v, const char* title, const char* t) {
+        pk::setHelp (v, title, t);
+        return v;
+    };
     root->addView (tip (new ActionButton (CRect (8, 6, 60, 28), "Load", [this] { browseForSample (); }), help::kLoad));
     root->addView (tip (new ActionButton (CRect (64, 6, 86, 28), "<", [this] { stepSample (-1); }), help::kPrevNext));
     root->addView (tip (new ActionButton (CRect (88, 6, 110, 28), ">", [this] { stepSample (1); }), help::kPrevNext));
@@ -331,7 +336,7 @@ void Editor::buildUI (CFrame* f)
     waveform = new WaveformView (CRect (8, 38, 1102, 300), ctl, this);
     waveform->onContextMenu = [this] (CPoint p) { showMenu (p); };
     waveform->onFileDropped = [this] (const std::string& p) { loadFile (p); };
-    waveform->setTooltipText (help::kWaveform);
+    pk::setHelp (waveform, "Waveform", help::kWaveform);
     root->addView (waveform);
 
     // ---- sample row -------------------------------------------------------------
@@ -438,7 +443,7 @@ void Editor::buildUI (CFrame* f)
     bind (fp, new Choice (CRect (110, 24, 190, 42), this, kFilterCircuit));
     bind (fp, new Segmented (CRect (196, 24, 266, 42), this, kFilterSlope, {"12", "24"}));
     filterDisplay = new FilterDisplay (CRect (8, 48, 364, 204), this);
-    filterDisplay->setTooltipText (help::kFilterDisplay);
+    pk::setHelp (filterDisplay, "Filter Response", help::kFilterDisplay);
     fp->addView (filterDisplay);
     bind (fp, new Knob (knobRect (8, 214), this, kFilterFreq));
     bind (fp, new Knob (knobRect (66, 214), this, kFilterRes));
@@ -461,7 +466,7 @@ void Editor::buildUI (CFrame* f)
         tabButtons.push_back (b);
     }
     envDisplay = new EnvelopeDisplay (CRect (8, 48, 310, 204), this, 0);
-    envDisplay->setTooltipText (help::kEnvelope);
+    pk::setHelp (envDisplay, "Envelope", help::kEnvelope);
     ep->addView (envDisplay);
     for (int t = 0; t < 3; ++t)
     {
@@ -488,8 +493,8 @@ void Editor::buildUI (CFrame* f)
     auto* lp = new Panel (CRect (710, 410, 918, 716), "LFO");
     root->addView (lp);
     bind (lp, new Toggle (CRect (40, 3, 80, 17), this, kLfoOn, "On"));
-    bind (lp, new Choice (CRect (8, 24, 110, 42), this, kLfoWave));
-    bind (lp, new Segmented (CRect (116, 24, 176, 42), this, kLfoSync, {"Hz", "Sync"}));
+    bind (lp, new Choice (CRect (8, 24, 104, 42), this, kLfoWave));
+    bind (lp, new Segmented (CRect (108, 24, 176, 42), this, kLfoSync, {"Hz", "Sync"})); // (34 px a segment: "Sync" in bold)
     bind (lp, new Toggle (CRect (180, 24, 200, 42), this, kLfoRetrig, "R"));
     lfoRateHz = bind (lp, new Knob (knobRect (8, 50), this, kLfoRate));
     lfoRateSync = bind (lp, new Knob (knobRect (8, 50), this, kLfoSyncRate));
@@ -546,7 +551,7 @@ void Editor::buildUI (CFrame* f)
             return b ? b->sampleRate.load () : 48000.0;
         },
         Bridge::kScopeSize);
-    scope->setTooltipText (help::kScope);
+    pk::setHelp (scope, "Output Scope", help::kScope);
     root->addView (scope);
 
     // ---- the modulation (the column at the right): four LFOs, each with a handle to drag onto a control,
@@ -563,19 +568,19 @@ void Editor::buildUI (CFrame* f)
             line->setBackgroundColor (theme::kLineDim);
             mp->addView (line);
         }
-        modLive.push_back (tip (new LfoHandle (CRect (8, y, 66, y + 40), l, this), help::kLfoHandle));
+        modLive.push_back (titled (new LfoHandle (CRect (8, y, 66, y + 40), l, this), "LFO", help::kLfoHandle));
         mp->addView (modLive.back ());
         bind (mp, new Choice (CRect (72, y, 204, y + 18), this, modLfoParam (l, kModShape)));
         bind (mp, new Choice (CRect (72, y + 22, 140, y + 40), this, modLfoParam (l, kModSync)));
         bind (mp, new Toggle (CRect (144, y + 22, 204, y + 40), this, modLfoParam (l, kModRetrig), "Retrig"));
         modRateKnobs[(size_t)l] = bind (mp, new Knob (knobRect (8, y + 46), this, modLfoParam (l, kModRate)));
         bind (mp, new Knob (knobRect (66, y + 46), this, modLfoParam (l, kModPhase)));
-        modLive.push_back (tip (new LfoScope (CRect (126, y + 50, 204, y + 104), l, this), help::kLfoScope));
+        modLive.push_back (titled (new LfoScope (CRect (126, y + 50, 204, y + 104), l, this), "LFO Shape", help::kLfoScope));
         mp->addView (modLive.back ());
     }
     mp->addView (new Label (CRect (8, 506, 204, 520), "MAPPINGS", 10.0, true));
     modList = new ModList (CRect (8, 524, 204, 524 + kMaxModMappings * ModList::kRow), this);
-    modList->setTooltipText (help::kModList);
+    pk::setHelp (modList, "Mappings", help::kModList);
     mp->addView (modList);
     modListShown = ~0ull;
 
@@ -1346,10 +1351,13 @@ void Editor::buildBody ()
             g->addView (sp);
             for (int x = 0; x < 3; ++x)
                 add (new NumberBox (CRect (608 + x * 74, 94, 676 + x * 74, 112), h, (uint32_t)(kXover1 + x)), tip ((uint32_t)(kXover1 + x)));
-            add (new Knob (knobRect (608, 114), h, kAmount), tip (kAmount));
-            add (new Knob (knobRect (664, 114), h, kTime), tip (kTime));
-            add (new Knob (knobRect (720, 114), h, kOutput, nullptr, true), tip (kOutput));
-            mdCharViews.push_back (static_cast<ParamView*> (add (new Knob (knobRect (776, 114), h, kSoften), tip (kSoften))));
+            // four knobs in 56 px slots: each 52 px wide, so neighbours keep 4 px apart (the same dial;
+            // its size is set by the height)
+            auto slot = [] (double x) { return CRect (x + 2, 114, x + 54, 114 + kKnobH); };
+            add (new Knob (slot (608), h, kAmount), tip (kAmount));
+            add (new Knob (slot (664), h, kTime), tip (kTime));
+            add (new Knob (slot (720), h, kOutput, nullptr, true), tip (kOutput));
+            mdCharViews.push_back (static_cast<ParamView*> (add (new Knob (slot (776), h, kSoften), tip (kSoften))));
             // the crossovers' slope; Soften's Color; the RMS window; the Sub band (on, where it tapers)
             add (new Choice (CRect (608, 182, 690, 200), h, kXoverSlope), tip (kXoverSlope));
             add (new Toggle (CRect (694, 182, 754, 200), h, kSoftenColor, "Color"), tip (kSoftenColor));
@@ -1508,9 +1516,14 @@ void Editor::buildBody ()
                 add (new Knob (knobRect (196 + i * 62, 100), h, row2[i]), tip (row2[i]));
             add (new pk::HSlider (CRect (196, 172, 506, 192), h, kDryLevel, "Dry"), tip (kDryLevel));
             add (new pk::HSlider (CRect (196, 198, 506, 218), h, kWetLevel, "Wet"), tip (kWetLevel));
-            auto* n = new Label (CRect (520, 172, 834, 218), "here Widr works alone (the group awareness needs its own plug-in)", 9.5);
-            n->setDim (true);
-            g->addView (n);
+            // (a Label is one line: the note in two, so it stays in its column)
+            for (int line = 0; line < 2; ++line)
+            {
+                auto* n = new Label (CRect (520, 174 + line * 14, 834, 188 + line * 14),
+                                     line == 0 ? "here Widr works alone (the group" : "awareness needs its own plug-in)", 9.5);
+                n->setDim (true);
+                g->addView (n);
+            }
             break;
         }
         case kFxLevlr:
@@ -1613,9 +1626,14 @@ void Editor::buildBody ()
             auto* cl = new Label (CRect (598, 96, 834, 110), "character", 10.0, true, 0);
             g->addView (cl);
             add (new Knob (knobRect (598, 112), h, smoothr::kCharacter), tip (smoothr::kCharacter));
-            auto* n = new Label (CRect (528, 196, 834, 222), "its saturator before the limiter: a smacheratr slot before this one", 9.5);
-            n->setDim (true);
-            g->addView (n);
+            // (a Label is one line: the note in two, so it stays in its column)
+            for (int line = 0; line < 2; ++line)
+            {
+                auto* n = new Label (CRect (528, 194 + line * 14, 834, 208 + line * 14),
+                                     line == 0 ? "its saturator before the limiter:" : "a smacheratr slot before this one", 9.5);
+                n->setDim (true);
+                g->addView (n);
+            }
             break;
         }
         case kFxWubr:
@@ -1640,12 +1658,13 @@ void Editor::buildBody ()
                 g->addView (bt);
                 wubrBandButtons.push_back (bt);
             }
-            add (new Segmented (CRect (360, 8, 474, 26), h, wubr::kMode, {"LFO", "Envelope"}), tip (wubr::kMode));
-            auto* trig = new Segmented (CRect (480, 8, 588, 26), h, wubr::kTrigger, {"MIDI", "Transient"});
+            // (segments of 60 px and more: room for "Frequency", "Envelope" and "Transient" in bold)
+            add (new Segmented (CRect (370, 8, 490, 26), h, wubr::kMode, {"LFO", "Envelope"}), tip (wubr::kMode));
+            auto* trig = new Segmented (CRect (496, 8, 616, 26), h, wubr::kTrigger, {"MIDI", "Transient"});
             add (trig, tip (wubr::kTrigger));
             wubrEnvViews.push_back (trig);
-            g->addView (new Label (CRect (592, 10, 622, 24), "Sens", 10.5, false, 2));
-            wubrSensView = new NumberBox (CRect (626, 8, 676, 26), h, wubr::kSensitivity);
+            g->addView (new Label (CRect (620, 10, 648, 24), "Sens", 10.5, false, 2));
+            wubrSensView = new NumberBox (CRect (652, 8, 702, 26), h, wubr::kSensitivity);
             add (wubrSensView, tip (wubr::kSensitivity));
             // per band (both are made; the selected one's controls are shown): its row controls, shape
             // (both shapes always shown, band 1 above band 2) and knobs
@@ -1658,12 +1677,12 @@ void Editor::buildBody ()
                     return v;
                 };
                 band (new Toggle (CRect (130, 8, 172, 26), h, wubr::bandParam (b, wubr::kBandOn), "On"), wubr::bandParam (b, wubr::kBandOn));
-                band (new Segmented (CRect (178, 8, 346, 26), h, wubr::bandParam (b, wubr::kTarget), {"Gain", "Frequency", "Both"}),
+                band (new Segmented (CRect (178, 8, 364, 26), h, wubr::bandParam (b, wubr::kTarget), {"Gain", "Frequency", "Both"}),
                       wubr::bandParam (b, wubr::kTarget));
-                auto* holdLabel = new Label (CRect (684, 10, 714, 24), "Hold", 10.5, false, 2);
+                auto* holdLabel = new Label (CRect (710, 10, 740, 24), "Hold", 10.5, false, 2);
                 g->addView (holdLabel);
                 views.push_back (holdLabel);
-                auto* hold = new NumberBox (CRect (718, 8, 768, 26), h, wubr::bandParam (b, wubr::kHold));
+                auto* hold = new NumberBox (CRect (744, 8, 794, 26), h, wubr::bandParam (b, wubr::kHold));
                 band (hold, wubr::bandParam (b, wubr::kHold));
                 wubrEnvViews.push_back (hold);
                 wubrShapes[b] = new wubr::ShapeView (CRect (306, 32 + b * 99, 520, 127 + b * 99), h, b, metersOf);

@@ -64,18 +64,18 @@ void Editor::buildUI (CFrame* f)
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
     stage = new StageView (CRect (kStageLeft, kStageTop, kStageRight, kStageBottom), this, ctl);
-    stage->setTooltipText (help::kStage);
+    pk::setHelp (stage, "Stage", help::kStage);
     root->addView (stage);
     gonio = new GonioView (CRect (568, 40, 752, 300), [c = ctl] () -> Meters* {
         auto* s = c->getShared ();
         return s ? &s->meters : nullptr;
     });
-    gonio->setTooltipText (help::kGonio);
+    pk::setHelp (gonio, "Goniometer", help::kGonio);
     root->addView (gonio);
 
     auto* wp = new Panel (CRect (8, 308, 752, 432), "WIDTH");

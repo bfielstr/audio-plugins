@@ -30,6 +30,8 @@ on another track, or between a plug-in and the same effect in Smemplr's rack, bo
 
 In every plug-in (and in the effects inside Smemplr) a **right click** on a control or a display handle resets it to its default, neutral value (a double-click does too), and the **mouse wheel** on a filter handle, while you hold it or with Shift over it, sets its resonance.
 
+Every plug-in has an **info box** along the bottom of its window: point at a control or a display and it shows its name and what it does (the help that the floating tooltips show too; the **?** in the header switches the tooltips on and off, the info box is always there). The window **resizes** to any shape: the interface keeps its own proportions, zoomed to fit and centred, never stretched (Menu > Interface Size sets the usual sizes).
+
 The plug-ins were called Simplr and Lowfocus until 0.5.0; projects keep loading (the plug-in IDs are unchanged).
 
 ## Install

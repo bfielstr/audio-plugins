@@ -18,7 +18,7 @@ sag under load and re-strike. It should feel foreign, precise and a little menac
 | Panel | `#0d0a08` | Slightly lifted surfaces. |
 | Well | `#040302` | Recessed areas: meter beds, display wells, input fields. |
 | Dim line | `#33291f` | Secondary structure, grids, inactive tracks, hatching. |
-| Copper | `#9c6a4c` | Primary linework: outlines, rules, tick scales, knob bodies. Lines and large shapes only. |
+| Copper | `#9c6a4c` | Primary linework: outlines, rules, knob bodies. Lines and large shapes only. |
 | Pale copper | `#c79a7c` | Small labels and microtype that must stay readable on the ground. |
 | Text | `#d4cdbf` | Body text, values, headings. Warm off-white. |
 | Text dim | `#8f897c` | Secondary text, units, hints. |
@@ -41,8 +41,10 @@ Rules:
 
 - Lines are thin (1 px, 0.5 px on high-density displays) and numerous. Complexity comes from the amount of
   fine detail, not from line weight or filled shapes.
-- Drafting language: tick scales, nested corner brackets, callout leaders ending in small terminals,
-  dimension marks, fine hatching, concentric and offset contours. Think engineering callouts on a blueprint.
+- Drafting language: nested corner brackets, callout leaders ending in small terminals, dimension marks,
+  fine hatching, concentric and offset contours. Think engineering callouts on a blueprint. Tick scales
+  only where they carry a value (a display's frequency or dB grid, a time ruler): purely decorative
+  ticks on knobs and rules made the panels look busy and are gone.
 - Avoid filled plates, thick borders, drop shadows, gradients used as decoration, rounded "app" cards.
   Corner radii are small (2-3 px) or zero.
 - Dense overlapping contour lines forming folded wireframe surfaces are welcome for hero elements.
@@ -82,10 +84,11 @@ Safety limits (photosensitivity):
 
 ## Translating to plugin UIs
 
-- **Window:** ground background; a thin copper frame with corner brackets; section dividers as dim hairlines
-  with tick marks rather than boxes.
-- **Knobs and faders:** drawn as thin copper outlines with a fine tick scale; the value arc or position
-  marker is cinnabar live on a dim-line track. No filled caps, no skeuomorphic shading.
+- **Window:** ground background; a thin copper frame with corner brackets; the header band over one plain
+  dim hairline; panel titles in small uppercase pale copper on plain space (no rule after them).
+- **Knobs and faders:** drawn as thin copper outlines (a body circle and a pointer, no tick scale); the
+  value arc or position marker is cinnabar live on a dim-line track. No filled caps, no skeuomorphic
+  shading.
 - **Meters:** well background; segments idle in energy idle, lit in energy live, peak / clip segment in
   energy peak with a short hold. Thin segments, many of them.
 - **Value readouts:** mono type in text colour inside a thin copper bracket; units in text dim.
@@ -96,6 +99,37 @@ Safety limits (photosensitivity):
 - **Selection and focus:** cinnabar outline, 1-2 px, with a clear offset. Must be visible for keyboard use.
 - **Errors and clipping:** peak colour briefly, then live cinnabar; pair with text so colour is not the only cue.
 - **Bypassed / disabled:** everything drops to dim line and energy idle; text to text dim.
+
+### Info box
+
+Every editor has an info box along its bottom, in the manner of Live's Info View: a well in a dim
+hairline that shows the name of whatever the mouse is over (in the text colour, at the left) and its
+help (in text dim, wrapped to the box, four lines at most). A control bound to a parameter shows the
+parameter's name; a display or button shows the title its editor gives it (`pk::setHelp`), or the short
+lead-in of its help ("Presets: ..."). The texts are the same as the floating tooltips', so each help
+text is written once (the plug-ins' `Help.h`). The info box is always there; the **?** in each header
+switches only the floating tooltips, which are wrapped to about 50 characters a line.
+`shared/pluginkit/ui/InfoBox.h` has it; `pk::EditorBase` adds it under every editor's content (the
+window is `EditorBase::kInfoHeight` taller than the content, nothing above it moves) and feeds it the
+view under the mouse.
+
+### Layout
+
+Controls, labels and value boxes must not overlap or touch, and a value must fit its box: outlines and
+texts that run into each other are the clutter this theme avoids. `pk::layoutReport`
+(`shared/pluginkit/ui/LayoutCheck.h`) lists every visible pair that overlaps or touches, where they draw
+(a label's text, a knob's dial and texts, other controls' rectangles grown to any text that reaches out
+of them), and every text wider than its box (measured in the theme's font at the ends of the value's
+range, its default and now). A control placed wholly on a display (a readout, a switch in its corner)
+is by design and not listed. Set `PK_LAYOUT_REPORT` to a file and every editor opened appends its list
+there; the macOS host tests print it.
+
+### Resizing
+
+The window resizes to any shape (and Menu > Interface Size sets the proportional sizes, 75 % to 200 %).
+The UI is never stretched: it is zoomed as large as fits both ways, between 50 % and 200 %, and centred,
+with the ground in the margins. The zoom is what is remembered, so a window opens again in the UI's own
+shape at that zoom.
 
 ## Values for code
 
@@ -108,7 +142,7 @@ ground        #070504   (7, 5, 4)          kBackground
 panel         #0d0a08   (13, 10, 8)        kPanel, kControlBg
 well          #040302   (4, 3, 2)          kHeader, kWaveBg
 line-dim      #33291f   (51, 41, 31)       kPanelEdge, kKnobTrack, kGrid, kWaveOutside
-copper        #9c6a4c   (156, 106, 76)     outlines, tick scales, kWave (trace)
+copper        #9c6a4c   (156, 106, 76)     outlines, rules, kWave (trace)
 copper-pale   #c79a7c   (199, 154, 124)    small labels
 text          #d4cdbf   (212, 205, 191)    kText, kTextBright, kSliceManual
 text-dim      #8f897c   (143, 137, 124)    kTextDim
@@ -139,11 +173,12 @@ All the plugins now follow this theme (October 2026):
   `kCopper`, `kCopperPale`, `kText`, `kTextDim`, `kEnergyIdle`, `kEnergyLive`, `kEnergyPeak`), three grid
   weights (`kGridMinor`, `kGridMajor`, `kGridZero`), the suite's dashed line style (`kDashed`) and
   `withAlpha`. The old names are kept as aliases, mapped as in the table above.
-- The shared controls are linework: knobs are a copper tick scale and body circle with a cinnabar value
-  arc on a dim track; toggles, buttons and tabs are copper outlines with a lamp (energy idle off,
-  energy live on); value boxes sit in a copper bracket with their units dim; panels are hairline frames
-  with copper corner brackets and a ticked title rule; the editor window has a copper frame with nested
-  corner brackets over a ticked header divider. Display handles are rings that light cinnabar while held.
+- The shared controls are linework: knobs are a copper body circle and pointer with a cinnabar value
+  arc on a dim track (no tick scale); toggles, buttons and tabs are copper outlines with a lamp (energy
+  idle off, energy live on); value boxes sit in a copper bracket with their units dim; panels are
+  hairline frames with copper corner brackets and their title on plain space; the editor window has a
+  copper frame with nested corner brackets and a plain dim hairline under the header. Display handles
+  are rings that light cinnabar while held.
 - In the displays, distinctions that used hue are carried by line style (solid / dashed, and for
   Smemplr's four LFOs solid / dashed / dotted / dash-dot), brightness (copper / pale copper / text,
   idle / live / peak), position and labels. Cuts and gain reduction being made, meters, the loop

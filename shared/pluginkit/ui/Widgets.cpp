@@ -124,16 +124,11 @@ void brackets (CDrawContext* ctx, const CRect& r, double len, const CColor& c)
                c);
 }
 
-void tickRule (CDrawContext* ctx, double x0, double x1, double y, const CColor& c, double step)
+void rule (CDrawContext* ctx, double x0, double x1, double y, const CColor& c)
 {
-    // a horizontal hairline with short ticks hanging from it every `step` px and at its right end: the
-    // suite's section divider (a drafting rule instead of a box edge)
+    // one hairline, nothing hanging from it: the suite's divider is as quiet as a line can be
     y = std::floor (y) + 0.5;
-    std::vector<std::pair<CPoint, CPoint>> segs {{CPoint (x0, y), CPoint (x1, y)}};
-    for (double x = x0; x <= x1 - 2.0; x += step)
-        segs.push_back ({CPoint (std::floor (x) + 0.5, y), CPoint (std::floor (x) + 0.5, y + 3)});
-    segs.push_back ({CPoint (std::floor (x1) - 0.5, y), CPoint (std::floor (x1) - 0.5, y + 3)});
-    hairlines (ctx, segs, c);
+    hairlines (ctx, {{CPoint (x0, y), CPoint (x1, y)}}, c);
 }
 
 void marker (CDrawContext* ctx, const CRect& r, const CColor& c)
@@ -183,13 +178,13 @@ void handle (CDrawContext* ctx, const CPoint& c, double r, bool active, bool ena
 
 void window (CDrawContext* ctx, const CRect& r, double headerHeight)
 {
-    // The window: the ground, the header band as a well over a ticked dim divider, and a thin copper
+    // The window: the ground, the header band as a well over a plain dim hairline, and a thin copper
     // frame with nested corner brackets (the outer at the edge, a shorter one inset by 3 px).
     fill (ctx, r, theme::kGround);
     if (headerHeight > 0)
     {
         fill (ctx, CRect (r.left, r.top, r.right, r.top + headerHeight), theme::kWell);
-        tickRule (ctx, r.left + 6, r.right - 6, r.top + headerHeight - 1, theme::kLineDim, 24);
+        rule (ctx, r.left + 6, r.right - 6, r.top + headerHeight - 1, theme::kLineDim);
     }
     outline (ctx, r, theme::withAlpha (theme::kCopper, 110), 0);
     brackets (ctx, r, 14, theme::kCopper);
@@ -206,6 +201,16 @@ Knob::Knob (const CRect& r, ParamHost* h, uint32_t id, const char* l, bool bi)
 {
 }
 
+CRect Knob::dialRect () const
+{
+    // as large as fits between the label (13 px, and 2 px clear) and the value strip, and 7 px in
+    // from each side
+    const CRect r = getViewSize ();
+    const double size = std::min (r.getWidth () - 14.0, r.getHeight () - 30.0);
+    const double cx = r.getCenter ().x, cy = r.top + 15 + size / 2;
+    return CRect (cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2);
+}
+
 void Knob::draw (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
@@ -213,19 +218,19 @@ void Knob::draw (CDrawContext* ctx)
     // the label in pale copper (small text: plain copper is too dark for it), text dim when disabled
     text (ctx, label, CRect (r.left, r.top, r.right, r.top + 13), enabledLook ? theme::kCopperPale : theme::kTextDim, 10.5);
 
-    const double size = std::min (r.getWidth () - 14.0, r.getHeight () - 30.0);
-    const CPoint c (r.getCenter ().x, r.top + 15 + size / 2);
-    const CRect kr (c.x - size / 2, c.y - size / 2, c.x + size / 2, c.y + size / 2);
-    const double rad = size / 2;
+    const CRect kr = dialRect ();
+    const CPoint c = kr.getCenter ();
+    const double rad = kr.getWidth () / 2;
     auto at = [&] (double deg, double radius) {
         const double a = deg * M_PI / 180.0;
         return CPoint (c.x + std::cos (a) * radius, c.y + std::sin (a) * radius);
     };
 
     // Drawn as linework (docs/THEME.md, "Knobs and faders"): a dim-line track on the outer radius with
-    // the value arc lit in cinnabar on it, a fine copper tick scale just inside (11 ticks, the ends and
-    // the centre a little longer), a thin copper body circle and a text-coloured pointer up to it. No
-    // fills. Disabled, the copper drops to dim line and the arc to energy idle.
+    // the value arc lit in cinnabar on it, a thin copper body circle inside it and a text-coloured
+    // pointer up to the body. No fills, and no tick scale (it was decoration: the arc already shows
+    // where the value sits, and the ticks made rows of knobs look busy). Disabled, the copper drops to
+    // dim line and the arc to energy idle.
     const float start = 135.0f, sweep = 270.0f;
     const CColor copper = enabledLook ? theme::kCopper : theme::kLineDim;
     ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt));
@@ -240,14 +245,9 @@ void Knob::draw (CDrawContext* ctx)
         ctx->drawArc (kr, std::min (a0, a1), std::max (a0, a1), kDrawStroked);
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (copper);
-    const double tickOut = rad - 3.0, tickLen = std::max (2.0, rad * 0.14);
-    for (int i = 0; i <= 10; ++i)
-    {
-        const double deg = start + sweep * i / 10.0;
-        const double len = (i == 0 || i == 5 || i == 10) ? tickLen * 1.6 : tickLen;
-        ctx->drawLine (at (deg, tickOut - len), at (deg, tickOut));
-    }
-    const double body = std::max (3.0, tickOut - tickLen * 1.6 - 2.0);
+    // the body: a clear gap inside the arc (about a fifth of the radius, at least 4 px) so the two
+    // circles read as track and knob, not as a double line
+    const double body = std::max (3.0, rad - std::max (4.0, rad * 0.22));
     ctx->drawEllipse (CRect (c.x - body, c.y - body, c.x + body, c.y + body), kDrawStroked);
     // pointer: from near the centre to the body circle, 1.5 px
     const double ang = start + sweep * v;
@@ -705,7 +705,8 @@ void Panel::drawBackgroundRect (CDrawContext* ctx, const CRect&)
     CRect r (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ());
     // A section as a drafting frame, not a card: the panel surface (barely lifted from the ground) inside
     // a square dim hairline, copper corner brackets over its corners, and the title in small uppercase
-    // pale copper followed by a ticked dim rule to the right edge.
+    // pale copper on plain space (no rule after it: the ticked rule it had was decoration, and with
+    // controls in the title strip it only added clutter).
     fill (ctx, r, theme::kPanel);
     draw::outline (ctx, r, theme::kLineDim, 0);
     draw::brackets (ctx, r, 6, theme::kCopper);
@@ -714,20 +715,7 @@ void Panel::drawBackgroundRect (CDrawContext* ctx, const CRect&)
         std::string t = title;
         for (auto& ch : t)
             ch = (char)std::toupper ((unsigned char)ch);
-        const CRect tr (8, 3, r.right - 8, 18);
-        text (ctx, t, tr, theme::kCopperPale, 9.5, true, kLeftText);
-        ctx->setFont (theme::font (9.5, true));
-        const double x0 = tr.left + ctx->getStringWidth (t.c_str ()) + 6;
-        // the rule stops short of any control sitting in the title strip (outlined controls have no
-        // fill to hide it)
-        double x1 = tr.right;
-        forEachChild ([&] (CView* v) {
-            const CRect vr = v->getViewSize ();
-            if (v->isVisible () && vr.top < tr.bottom && vr.bottom > tr.top && vr.right > x0)
-                x1 = std::min (x1, vr.left - 6);
-        });
-        if (x0 + 12 < x1)
-            draw::tickRule (ctx, x0, x1, tr.getCenter ().y, theme::kLineDim, 8);
+        text (ctx, t, CRect (8, 3, r.right - 8, 18), theme::kCopperPale, 9.5, true, kLeftText);
     }
 }
 
@@ -735,5 +723,87 @@ Group::Group (const CRect& r) : CViewContainer (r)
 {
     setBackgroundColor (kTransparentCColor);
 }
+
+} // namespace pk
+
+//==============================================================================
+// The texts each widget draws, for the layout check (pk::layoutReport): the same areas, fonts and
+// alignments as their draw() above.
+namespace pk {
+
+std::vector<std::string> ParamView::sampleTexts () const
+{
+    const ParamTable& t = host->table ();
+    std::vector<std::string> out;
+    for (double n : {0.0, 1.0, t.defaultNormalized (param), host->norm (param)})
+        out.push_back (t.toText (param, t.toPlain (param, n)));
+    return out;
+}
+
+std::vector<TextSpot> Knob::textSpots () const
+{
+    const CRect r = getViewSize ();
+    std::vector<TextSpot> out {{CRect (r.left, r.top, r.right, r.top + 13), label, 10.5, false, 1, 0}};
+    for (const auto& s : sampleTexts ())
+        out.push_back ({CRect (r.left - 4, r.bottom - 13, r.right + 4, r.bottom), s, 10.0, false, 1, 0});
+    return out;
+}
+
+std::vector<TextSpot> HSlider::textSpots () const
+{
+    const CRect r = getViewSize ();
+    std::vector<TextSpot> out {{CRect (r.left, r.top, r.left + 44, r.bottom), label, 10.5, false, 0, 0}};
+    for (const auto& s : sampleTexts ())
+        out.push_back ({CRect (r.left + 46, r.top + 2, r.right, r.bottom - 2), s, 10.0, false, 1, 4});
+    return out;
+}
+
+std::vector<TextSpot> NumberBox::textSpots () const
+{
+    std::vector<TextSpot> out;
+    for (const auto& s : sampleTexts ())
+        out.push_back ({getViewSize (), s, 10.0, false, 1, 4});
+    return out;
+}
+
+std::vector<TextSpot> Toggle::textSpots () const
+{
+    // (lit, the label is bold: the wider of the two)
+    return {{getViewSize (), label, 10.5, true, 1, 6}};
+}
+
+std::vector<TextSpot> ActionButton::textSpots () const { return {{getViewSize (), text, 10.5, (bool)active, 1, 6}}; }
+
+std::vector<TextSpot> Segmented::textSpots () const
+{
+    const CRect r = getViewSize ();
+    const double w = r.getWidth () / std::max<size_t> (1, labels.size ());
+    std::vector<TextSpot> out;
+    for (size_t i = 0; i < labels.size (); ++i)
+        out.push_back ({CRect (r.left + (double)i * w, r.top, r.left + (double)(i + 1) * w, r.bottom), labels[i], 10.5, true, 1, 4});
+    return out;
+}
+
+std::vector<TextSpot> Choice::textSpots () const
+{
+    CRect r = getViewSize ();
+    std::vector<TextSpot> out;
+    if (!label.empty ())
+    {
+        out.push_back ({CRect (r.left, r.top, r.right, r.top + 13), label, 10.5, false, 1, 0});
+        r.top += 15;
+    }
+    CRect t = r;
+    t.inset (6, 0);
+    t.right -= 10;
+    for (const char* c : host->table ().info (param).choices)
+        out.push_back ({t, c, 10.5, false, 0, 0});
+    if (host->table ().info (param).choices.empty ())
+        for (const auto& s : sampleTexts ())
+            out.push_back ({t, s, 10.5, false, 0, 0});
+    return out;
+}
+
+std::vector<TextSpot> Label::textSpots () const { return {{getViewSize (), text, size, bold, align, 0}}; }
 
 } // namespace pk

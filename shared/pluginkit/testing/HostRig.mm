@@ -7,6 +7,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -174,8 +177,31 @@ EditorWindow::EditorWindow (IEditController* controller)
                                                     defer:NO];
     win.releasedWhenClosed = NO;
     window = (__bridge_retained void*)win;
+    // the layout check (pk::layoutReport): the editor appends what overlaps, touches or spills to the
+    // file in PK_LAYOUT_REPORT when it opens; printed here the first time an editor opens in this test
+    // (a note for whoever reads the log, not a failure: some layouts wait for their rework)
+    static bool reported = false;
+    const std::string report = std::string ([NSTemporaryDirectory () UTF8String]) + "pk_layout_report.txt";
+    if (!reported)
+    {
+        std::remove (report.c_str ());
+        setenv ("PK_LAYOUT_REPORT", report.c_str (), 1);
+    }
     attached = plugView->isPlatformTypeSupported (kPlatformTypeNSView) == kResultTrue &&
                plugView->attached ((__bridge void*)[win contentView], kPlatformTypeNSView) == kResultOk;
+    if (!reported)
+    {
+        reported = true;
+        unsetenv ("PK_LAYOUT_REPORT");
+        if (FILE* f = std::fopen (report.c_str (), "r"))
+        {
+            char line[1024];
+            while (std::fgets (line, sizeof (line), f))
+                std::printf ("  layout %s", line);
+            std::fclose (f);
+        }
+        std::remove (report.c_str ());
+    }
     pump (0.25);
 }
 

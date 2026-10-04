@@ -1,12 +1,16 @@
-// VSTGUI editor base: fixed-aspect zoomable frame, host-driven resizing, parameter binding for
-// pluginkit widgets, a periodic idle() and switchable hover tooltips.
+// VSTGUI editor base: a freely resizable window that shows the UI uniformly zoomed and centred (the
+// margins in the ground colour), parameter binding for pluginkit widgets, a periodic idle(), the info
+// box under every editor's content and switchable, wrapped hover tooltips.
 #pragma once
 
+#include "pluginkit/ui/InfoBox.h"
 #include "pluginkit/ui/Widgets.h"
 #include "pluginkit/vst/ControllerBase.h"
 
 #include "public.sdk/source/vst/vstguieditor.h"
+#include "vstgui/lib/cframe.h"
 
+#include <algorithm>
 #include <map>
 #include <type_traits>
 #include <vector>
@@ -16,6 +20,13 @@ namespace pk {
 class EditorBase : public Steinberg::Vst::VSTGUIEditor, public ParamHost
 {
 public:
+    // The strip under every editor's content that holds the info box: the window is this much taller
+    // than the `height` a plug-in gives (its content keeps its coordinates; the strip is added below).
+    static constexpr double kInfoHeight = InfoBox::kStripHeight;
+    // The zoom range (Menu > Interface Size and the host's resizing).
+    static constexpr double kMinZoom = 0.5, kMaxZoom = 2.0;
+
+    // width x height: the plug-in's content at 100 % (the window adds kInfoHeight below it).
     EditorBase (ControllerBase* c, double width, double height);
 
     bool PLUGIN_API open (void* parent, const VSTGUI::PlatformType& platformType) override;
@@ -47,10 +58,24 @@ public:
     // when it was one of the two.
     bool settingsMenuPicked (int index, int first);
 
+    // The floating tooltips ("?" in each header); the info box shows the same help either way.
     void setTooltipsEnabled (bool on);
     bool tooltipsEnabled () const { return controller->uiShowTips; }
+    // Asks the host for the window at `scale` times the base size (Menu > Interface Size).
     void resizeTo (double scale);
     double currentScale () const { return scale; }
+    // The zoom a window of w x h shows the UI at: as large as fits both ways (never stretched), within
+    // kMinZoom .. kMaxZoom.
+    static double zoomFor (double w, double h, double baseW, double baseH)
+    {
+        if (baseW <= 0 || baseH <= 0)
+            return 1.0;
+        return std::clamp (std::min (w / baseW, h / baseH), kMinZoom, kMaxZoom);
+    }
+    // The window size including the info strip, at 100 %.
+    double fullWidth () const { return baseWidth; }
+    double fullHeight () const { return baseHeight; }
+    InfoBox* infoBox () const { return info; }
 
     // ParamHost
     const ParamTable& table () override { return controller->table (); }
@@ -91,11 +116,33 @@ protected:
     virtual void onClose () {}
 
     ControllerBase* controller;
-    const double baseWidth, baseHeight;
+    const double contentHeight;        // the plug-in's own height (where the info strip starts)
+    const double baseWidth, baseHeight; // the whole window at 100 %, the info strip included
     double scale = 1.0;
     std::map<uint32_t, std::vector<VSTGUI::CView*>> byParam;
     int tailBand = 0;                                              // Gentlr band shown in the tail panel
     std::vector<VSTGUI::CView*> tailBandViews[4], tailBandButtons; // its controls, per band (1, 2, Sub, High); the selector
+
+private:
+    // Lays the open frame out in a window of w x h px: zoomed by zoomFor and centred.
+    void layoutFrame (double w, double h);
+    // Adds the info strip under the content built by buildUI (the root view grows to hold it).
+    void addInfoStrip ();
+    // Appends the layout check's findings to $PK_LAYOUT_REPORT, when it is set (pk::layoutReport).
+    void writeLayoutReport ();
+
+    // Follows the view under the mouse (the frame tells it each view entered and left) and shows its
+    // help in the info box.
+    struct HoverWatch : VSTGUI::IMouseObserver
+    {
+        EditorBase* editor = nullptr;
+        VSTGUI::SharedPointer<VSTGUI::CView> hovered; // the innermost view under the mouse
+        void onMouseEntered (VSTGUI::CView* view, VSTGUI::CFrame* frame) override;
+        void onMouseExited (VSTGUI::CView* view, VSTGUI::CFrame* frame) override;
+        void onMouseEvent (VSTGUI::MouseEvent&, VSTGUI::CFrame*) override {}
+    };
+    HoverWatch hoverWatch;
+    InfoBox* info = nullptr; // owned by the frame
 };
 
 } // namespace pk

@@ -3,6 +3,7 @@
 #include "Help.h"
 
 #include "../core/TailExt.h"
+#include "pluginkit/ui/InfoBox.h"
 
 #include "vstgui/lib/cviewcontainer.h"
 
@@ -23,11 +24,11 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
 {
     const double w = std::min (230.0, area.getWidth () * 0.34);
     shaper = new ShaperView (CRect (area.left, area.top, area.left + w, area.bottom), host.get (), meters);
-    shaper->setTooltipText (help::kShaperDisplay);
+    pk::setHelp (shaper, "Analog Curve", help::kShaperDisplay);
     parent->addView (shaper);
     colorArea = CRect (area.left + w + 8, area.top, area.right, area.bottom);
     color = new ColorView (colorArea, host.get (), rate, meters);
-    color->setTooltipText (help::kColorDisplay);
+    pk::setHelp (color, "Colour EQ", help::kColorDisplay);
     color->onBandPicked = [this] (int k) {
         if (bandPicked)
             bandPicked (k);

@@ -111,7 +111,7 @@ int main (int argc, char** argv)
             CHECK (win.ok (), "editor");
             ViewRect r;
             CHECK (win.view () && win.view ()->getSize (&r) == kResultOk && r.getWidth () == (int32)Editor::kWidth &&
-                       r.getHeight () == (int32)Editor::kHeight,
+                       r.getHeight () == (int32)(Editor::kHeight + pk::EditorBase::kInfoHeight),
                    "editor size %d x %d", r.getWidth (), r.getHeight ());
             pump (0.1);
             const double py = Editor::kMotionTop + Editor::kPatternTop + Editor::kPatternH / 2;

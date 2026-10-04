@@ -165,7 +165,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (status);
     auto* helpBtn = new ActionButton (CRect (848, 6, 870, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (876, 6, 972, 28), "Menu", [this] { showMenu (CPoint (876, 28)); }));
 
@@ -225,11 +225,11 @@ void Editor::buildUI (CFrame* f)
     exportBtn->setTooltipText (help::kExport);
     root->addView (exportBtn);
     auto* dragOut = new DragOutButton (CRect (872, 40, 972, 64), this);
-    dragOut->setTooltipText (help::kDragOut);
+    pk::setHelp (dragOut, "Drag Out", help::kDragOut);
     root->addView (dragOut);
 
     clipView = new ClipView (CRect (8, 70, 972, 380), ctl);
-    clipView->setTooltipText (help::kClipView);
+    pk::setHelp (clipView, "Clip", help::kClipView);
     clipView->onFileDropped = [this] (const std::string& p) { loadFile (p); };
     clipView->onContextMenu = [this] (CPoint p) { showClipMenu (p); };
     root->addView (clipView);
@@ -291,11 +291,13 @@ void Editor::buildUI (CFrame* f)
     tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
-    bind (out, new Knob (CRect (24, 28, 104, 128), this, kGain, nullptr, true));
-    out->addView (new Label (CRect (8, 134, 120, 148), "Outside Clip", 10.5, false, 1));
-    bind (out, new Segmented (CRect (12, 150, 116, 172), this, kOutside, {"Thru", "Mute"}));
-    out->addView (new Label (CRect (8, 100, 120, 114), "Trigger", 10.5, false, 1));
-    bind (out, new Segmented (CRect (12, 114, 116, 132), this, kTrigger, {"Play", "Timeline"}));
+    // the Gain knob, then Trigger and Outside Clip under it, each label over its selector (the knob
+    // is a little smaller than the other panels' main knobs, so its value clears Trigger's label)
+    bind (out, new Knob (CRect (28, 22, 100, 92), this, kGain, nullptr, true));
+    out->addView (new Label (CRect (8, 98, 120, 112), "Trigger", 10.5, false, 1));
+    bind (out, new Segmented (CRect (8, 112, 120, 130), this, kTrigger, {"Play", "Timeline"}));
+    out->addView (new Label (CRect (8, 138, 120, 152), "Outside Clip", 10.5, false, 1));
+    bind (out, new Segmented (CRect (8, 152, 120, 172), this, kOutside, {"Thru", "Mute"}));
 
     applyParamTooltips (&help::forParam);
     if (s)

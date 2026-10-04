@@ -194,7 +194,7 @@ constexpr const char* kEnvelope =
 constexpr const char* kFilterDisplay =
     "Filter response. Drag left/right for cutoff and up/down for resonance (Shift for fine); the mouse wheel while "
     "dragging (or with Shift) also sets the resonance. Env shows the filter envelope.";
-constexpr const char* kHelpButton = "Show or hide these help tooltips.";
+constexpr const char* kHelpButton = "Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).";
 constexpr const char* kLoad = "Load a sample (WAV, AIFF, FLAC or MP3). You can also drop a file on the waveform.";
 constexpr const char* kPrevNext = "Load the previous / next audio file in the same folder.";
 constexpr const char* kMenu = "Sample menu: normalize, reverse, crop, loop fade type, show the file, interface size.";
