@@ -52,16 +52,24 @@ void OrbView::idle ()
     invalid ();
 }
 
-void OrbView::draw (CDrawContext* ctx)
+double OrbView::centreX () const { return (getViewSize ().left + getViewSize ().right) / 2; }
+double OrbView::listenerY () const { return getViewSize ().bottom - 26; }
+
+double OrbView::scale () const
+{
+    const CRect all = getViewSize ();
+    const double span = std::max (1.0, (double)distance + (double)radius * 1.15);
+    return std::min ((listenerY () - all.top - 26) / span, (all.getWidth () / 2 - 12) / std::max (1.0, (double)radius * 1.15));
+}
+
+void OrbView::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
-    // metres to pixels: the listener near the bottom, the swarm's ball and a margin in view
-    const double cx = (all.left + all.right) / 2, ly = all.bottom - 26;
+    const double cx = centreX (), ly = listenerY ();
     const double span = std::max (1.0, (double)distance + (double)radius * 1.15);
-    const double scale = std::min ((ly - all.top - 26) / span, (all.getWidth () / 2 - 12) / std::max (1.0, (double)radius * 1.15));
+    const double scale = this->scale ();
     auto px = [&] (double mx) { return cx + mx * scale; };
     auto py = [&] (double my) { return ly - my * scale; };
     // metre rings round the listener
@@ -82,6 +90,19 @@ void OrbView::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (cx - 9, ly - 2), CPoint (cx - 9, ly + 2));
     ctx->drawLine (CPoint (cx + 9, ly - 2), CPoint (cx + 9, ly + 2));
     ctx->drawLine (CPoint (cx, ly - 6), CPoint (cx, ly - 11));
+}
+
+void OrbView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    baseLayer.draw (ctx, all, pk::LayerKey ().add (distance, radius), [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setClipRect (all);
+    const double cx = centreX (), ly = listenerY ();
+    const double scale = this->scale ();
+    auto px = [&] (double mx) { return cx + mx * scale; };
+    auto py = [&] (double my) { return ly - my * scale; };
+    ctx->setLineWidth (1.0);
+    ctx->setLineStyle (kLineSolid); // (as the ball's dashes left it)
     for (int k = 0; k < orbs; ++k)
     {
         // the trail, fading

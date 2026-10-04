@@ -8,6 +8,7 @@
 
 #include "Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -49,6 +50,11 @@ private:
     bool movedH = false, movedV = false;
     std::vector<float> shownIn, shownOut, shownGain;
     float binHz = 0.0f;
+    // The well, the grid with its scale and the focus range, under the spectra: a cached layer
+    // (pk::CachedLayer), rebuilt when the range, Contrast or a drag changes it.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    uint64_t shownKey = 0; // the settings the last repaint showed (idle repaints when they or the spectra move)
 };
 
 } // namespace locus

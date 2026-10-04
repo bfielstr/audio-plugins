@@ -700,17 +700,25 @@ Panel::Panel (const CRect& r, std::string t) : CViewContainer (r), title (std::m
     setBackgroundColor (kTransparentCColor);
 }
 
-void Panel::drawBackgroundRect (CDrawContext* ctx, const CRect&)
+void Panel::drawBackgroundRect (CDrawContext* ctx, const CRect& update)
 {
     CRect r (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ());
     // A section as a drafting frame, not a card: the panel surface (barely lifted from the ground) inside
     // a square dim hairline, copper corner brackets over its corners, and the title in small uppercase
     // pale copper on plain space (no rule after it: the ticked rule it had was decoration, and with
     // controls in the title strip it only added clutter).
+    // A display or a meter inside repaints only its own rectangle (`update`, in the panel's
+    // coordinates; the drawing is clipped to it): the frame and the title are drawn only when that
+    // rectangle reaches them, which keeps a meter tick from laying the title's text out again.
     fill (ctx, r, theme::kPanel);
-    draw::outline (ctx, r, theme::kLineDim, 0);
-    draw::brackets (ctx, r, 6, theme::kCopper);
-    if (!title.empty ())
+    CRect inner = r;
+    inner.inset (8, 8); // (the outline and the brackets lie in the outer 7 px)
+    if (!inner.rectInside (update))
+    {
+        draw::outline (ctx, r, theme::kLineDim, 0);
+        draw::brackets (ctx, r, 6, theme::kCopper);
+    }
+    if (!title.empty () && update.rectOverlap (CRect (4, 0, r.right - 4, 22)))
     {
         std::string t = title;
         for (auto& ch : t)

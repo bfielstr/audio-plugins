@@ -4,6 +4,8 @@
 
 #include "Clip.h"
 
+#include "pluginkit/ui/CachedLayer.h"
+
 #include "vstgui/lib/cview.h"
 #include "vstgui/lib/dragging.h"
 
@@ -68,6 +70,13 @@ private:
     double lastPlayX = -1.0;
     uint64_t lastVersion = 0;
     double lastOutLen = 1.0; // output length of the last drawn clip (for x <-> time)
+    // Everything up to the pitch envelope (ruler, tints, waveform, markers, speeds, envelope): a cached
+    // layer (pk::CachedLayer), rebuilt when the clip, the view's range, the mode or a hover or drag
+    // changes it. The playhead, the render progress and the capture state are drawn over it, and a
+    // moving playhead repaints only the strips it left and entered.
+    pk::CachedLayer baseLayer;
+    void paintClip (VSTGUI::CDrawContext* ctx, const Clip& c);
+    VSTGUI::CRect playheadStrip (double x) const;
 };
 
 } // namespace stretchr

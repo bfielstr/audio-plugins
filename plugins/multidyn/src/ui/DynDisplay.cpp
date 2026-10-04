@@ -99,7 +99,22 @@ double DynDisplay::xOf (double db) const
     return left + (std::clamp (db, kMinDb, kMaxDb) - kMinDb) / (kMaxDb - kMinDb) * width;
 }
 
-void DynDisplay::draw (CDrawContext* ctx)
+void DynDisplay::meterRows (const CRect& g, double& my, double& mh)
+{
+    const double top = g.top + 6, bottom = g.bottom - 16;
+    mh = std::max (4.0, (bottom - top) * 0.5);
+    my = (top + bottom) / 2 - mh / 2 + 2;
+}
+
+bool DynDisplay::textsClear (const CRect& g)
+{
+    // the gain texts sit in the graph's bottom 14 px (glyphs a pixel round them)
+    double my, mh;
+    meterRows (g, my, mh);
+    return my + mh <= g.bottom - 16.0;
+}
+
+void DynDisplay::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kPanel);
@@ -115,16 +130,14 @@ void DynDisplay::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
 
     const int n = bands ();
-    const bool ottStyle = std::lround (host->plainValue (kStyle)) == kStyleOtt; // the bands (not the Sub band) run OTT's law
     for (int k = 0; k < lanes (); ++k) // the bands, then the Sub band
     {
         const int b = k < n ? k : kSubBand;
         const LaneIds ids = laneIds (b);
-        const CRect lane = laneRect (b), g = graphRect (b);
+        const CRect g = graphRect (b);
         ctx->setFillColor (theme::kWell);
         ctx->drawRect (g, kDrawFilled);
-        const bool active = host->plainValue (ids.active) >= 0.5;
-        const bool dim = !active;
+        const bool dim = host->plainValue (ids.active) < 0.5;
         const double tb = ids.sub ? kMinDb : host->plainValue (ids.belowT);
         const double ta = host->plainValue (ids.aboveT);
         const double rb = ids.sub ? 1.0 : host->plainValue (ids.belowR);
@@ -149,46 +162,8 @@ void DynDisplay::draw (CDrawContext* ctx)
             ctx->drawLine (CPoint (xb, g.top), CPoint (xb, g.bottom));
         ctx->drawLine (CPoint (xa, g.top), CPoint (xa, g.bottom));
         ctx->setLineWidth (1.0);
-
-        // meters: thick = output, thin = input
-        {
-            const double top = g.top + 6, bottom = g.bottom - 16;
-            const double mh = std::max (4.0, (bottom - top) * 0.5);
-            const double my = (top + bottom) / 2 - mh / 2 + 2;
-            // the output lit (energy live; energy idle when bypassed), the input a thin text-coloured bar
-            ctx->setFillColor (dim ? theme::kEnergyIdle : theme::kEnergyLive);
-            ctx->drawRect (CRect (g.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
-            ctx->setFillColor (theme::withAlpha (theme::kText, dim ? 90 : 210));
-            ctx->drawRect (CRect (g.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
-        }
-
-        // the gain each block applies at its extreme (silence / 0 dB), and the current gain change
-        const CColor tc = dim ? theme::kTextDim : theme::kText;
-        const bool knee = host->plainValue (kSoftKnee) >= 0.5;
-        const double amount = host->plainValue (kAmount);
-        double belowMax = ids.sub ? 0.0 : std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
-        double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
-        if (ottStyle && !ids.sub)
-        {
-            // OTT style (Ott.h, as Engine.cpp sets it up): the gain over OTT's makeup at silence / 0 dB
-            // of the band's mean square, the makeup (like the baked output gains) not counted
-            const auto& t = paramTable ();
-            auto strength = [] (double r, double r0) { return (1.0 - 1.0 / std::max (1e-3, r)) / (1.0 - 1.0 / r0); };
-            const int kind = ott::bandKind (b, n);
-            const double up = strength (rb, t.info (ids.belowR).def), down = strength (ra, t.info (ids.aboveR).def);
-            const double upShift = tb - t.info (ids.belowT).def, downShift = ta - t.info (ids.aboveT).def;
-            const double makeup = ott::makeupShape (kind, amount) * ott::kMakeup[kind];
-            belowMax = std::max (0.0, ott::gainDb (kind, -120.0, amount, up, down, upShift, downShift) - makeup);
-            aboveMax = std::min (0.0, ott::gainDb (kind, 0.0, amount, up, down, upShift, downShift) - makeup);
-        }
-        if (std::fabs (belowMax) >= 0.05 && xb - g.left > 50)
-            text (ctx, gainText (belowMax), CRect (g.left + 4, g.bottom - 14, g.left + 60, g.bottom - 1), tc, 9.5, kLeftText, true);
-        if (std::fabs (aboveMax) >= 0.05 && g.right - xa > 50)
-            text (ctx, gainText (aboveMax), CRect (g.right - 60, g.bottom - 14, g.right - 4, g.bottom - 1), tc, 9.5, kRightText, true);
-        std::string tag = !active ? "bypassed" : (std::fabs (shownGain[b]) > 0.05f ? gainText (shownGain[b]) + " dB" : "");
-        if (!tag.empty ())
-            text (ctx, tag, CRect (g.left + 4, g.top + 1, g.left + 120, g.top + 13), tc, 9.0, kLeftText);
-        (void)lane;
+        if (textsClear (g))
+            paintGainTexts (ctx, b);
     }
 
     // dB scale
@@ -199,6 +174,79 @@ void DynDisplay::draw (CDrawContext* ctx)
         std::snprintf (buf, sizeof (buf), "%.0f", std::fabs (db)); // Live labels the scale 80 ... 0
         const double cx = std::clamp (xOf (db), gl + 12.0, gr - 12.0);
         text (ctx, buf, CRect (cx - 20, sy + 1, cx + 20, all.bottom), theme::kTextDim, 9.5);
+    }
+}
+
+void DynDisplay::paintGainTexts (CDrawContext* ctx, int b)
+{
+    // the gain each block applies at its extreme (silence / 0 dB)
+    const LaneIds ids = laneIds (b);
+    const CRect g = graphRect (b);
+    const int n = bands ();
+    const bool ottStyle = std::lround (host->plainValue (kStyle)) == kStyleOtt; // the bands (not the Sub band) run OTT's law
+    const bool dim = host->plainValue (ids.active) < 0.5;
+    const double tb = ids.sub ? kMinDb : host->plainValue (ids.belowT);
+    const double ta = host->plainValue (ids.aboveT);
+    const double rb = ids.sub ? 1.0 : host->plainValue (ids.belowR);
+    const double ra = host->plainValue (ids.aboveR);
+    const double xb = xOf (tb), xa = xOf (ta);
+    const CColor tc = dim ? theme::kTextDim : theme::kText;
+    const bool knee = host->plainValue (kSoftKnee) >= 0.5;
+    const double amount = host->plainValue (kAmount);
+    double belowMax = ids.sub ? 0.0 : std::min (36.0, belowGainDb (-120.0, tb, rb, knee) * amount);
+    double aboveMax = std::max (-80.0, aboveGainDb (0.0, ta, ra, knee) * amount);
+    if (ottStyle && !ids.sub)
+    {
+        // OTT style (Ott.h, as Engine.cpp sets it up): the gain over OTT's makeup at silence / 0 dB
+        // of the band's mean square, the makeup (like the baked output gains) not counted
+        const auto& t = paramTable ();
+        auto strength = [] (double r, double r0) { return (1.0 - 1.0 / std::max (1e-3, r)) / (1.0 - 1.0 / r0); };
+        const int kind = ott::bandKind (b, n);
+        const double up = strength (rb, t.info (ids.belowR).def), down = strength (ra, t.info (ids.aboveR).def);
+        const double upShift = tb - t.info (ids.belowT).def, downShift = ta - t.info (ids.aboveT).def;
+        const double makeup = ott::makeupShape (kind, amount) * ott::kMakeup[kind];
+        belowMax = std::max (0.0, ott::gainDb (kind, -120.0, amount, up, down, upShift, downShift) - makeup);
+        aboveMax = std::min (0.0, ott::gainDb (kind, 0.0, amount, up, down, upShift, downShift) - makeup);
+    }
+    if (std::fabs (belowMax) >= 0.05 && xb - g.left > 50)
+        text (ctx, gainText (belowMax), CRect (g.left + 4, g.bottom - 14, g.left + 60, g.bottom - 1), tc, 9.5, kLeftText, true);
+    if (std::fabs (aboveMax) >= 0.05 && g.right - xa > 50)
+        text (ctx, gainText (aboveMax), CRect (g.right - 60, g.bottom - 14, g.right - 4, g.bottom - 1), tc, 9.5, kRightText, true);
+}
+
+void DynDisplay::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    baseLayer.draw (ctx, all, pk::LayerKey ().params (host), [this] (CDrawContext* c) { paintBase (c); });
+
+    const int n = bands ();
+    for (int k = 0; k < lanes (); ++k) // the bands, then the Sub band
+    {
+        const int b = k < n ? k : kSubBand;
+        const LaneIds ids = laneIds (b);
+        const CRect g = graphRect (b);
+        const bool active = host->plainValue (ids.active) >= 0.5;
+        const bool dim = !active;
+
+        // meters: thick = output, thin = input
+        {
+            double my, mh;
+            meterRows (g, my, mh);
+            // the output lit (energy live; energy idle when bypassed), the input a thin text-coloured bar
+            ctx->setFillColor (dim ? theme::kEnergyIdle : theme::kEnergyLive);
+            ctx->drawRect (CRect (g.left, my, xOf (shownOut[b]), my + mh), kDrawFilled);
+            ctx->setFillColor (theme::withAlpha (theme::kText, dim ? 90 : 210));
+            ctx->drawRect (CRect (g.left, my - 4, xOf (shownIn[b]), my - 1.5), kDrawFilled);
+        }
+
+        // the gain each block applies at its extreme (in the layer unless the meters reach them), and
+        // the current gain change
+        if (!textsClear (g))
+            paintGainTexts (ctx, b);
+        const CColor tc = dim ? theme::kTextDim : theme::kText;
+        std::string tag = !active ? "bypassed" : (std::fabs (shownGain[b]) > 0.05f ? gainText (shownGain[b]) + " dB" : "");
+        if (!tag.empty ())
+            text (ctx, tag, CRect (g.left + 4, g.top + 1, g.left + 120, g.top + 13), tc, 9.0, kLeftText);
     }
 }
 
@@ -349,15 +397,17 @@ void DynDisplay::idle ()
         const float in = m ? m->inputDb[(size_t)b].load (std::memory_order_relaxed) : -100.0f;
         const float out = m ? m->outputDb[(size_t)b].load (std::memory_order_relaxed) : -100.0f;
         const float g = m ? m->gainDb[(size_t)b].load (std::memory_order_relaxed) : 0.0f;
-        auto ease = [&] (float& shown, float target) {
+        // (floor: the levels are drawn no lower than the scale's bottom, so one falling further, as it
+        // does for long after the audio stops, changes nothing on the screen and repaints nothing)
+        auto ease = [&] (float& shown, float target, float floor) {
             const float next = target > shown ? target : shown + (target - shown) * 0.25f;
-            if (std::fabs (next - shown) > 0.05f)
+            if (std::fabs (std::max (next, floor) - std::max (shown, floor)) > 0.05f)
                 changed = true;
             shown = next;
         };
-        ease (shownIn[b], in);
-        ease (shownOut[b], out);
-        ease (shownGain[b], g);
+        ease (shownIn[b], in, (float)kMinDb);
+        ease (shownOut[b], out, (float)kMinDb);
+        ease (shownGain[b], g, -1e9f);
     }
     if (changed)
         invalid ();

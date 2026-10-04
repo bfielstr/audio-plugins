@@ -113,7 +113,32 @@ void HistoryView::idle ()
         changed = true;
     }
     if (changed)
-        invalid ();
+    {
+        const uint64_t key = shownState ();
+        if (key != shownKey)
+        {
+            shownKey = key;
+            invalid ();
+        }
+    }
+}
+
+uint64_t HistoryView::shownState () const
+{
+    // every value as it is drawn: the levels and the reductions clamped to the scale (the levels'
+    // silence is -120 dB, far under it), the holds as their readouts round them
+    auto clampDb = [] (double db) { return std::clamp (db, -kRangeDb, 0.0); };
+    pk::LayerKey key;
+    key.params (host).add (have);
+    for (int i = 0; i < have && i < (int)inPk.size (); ++i)
+        key.add (clampDb (toDb (inPk[(size_t)i])), clampDb (toDb (outPk[(size_t)i])), clampDb (-grLow[(size_t)i]), clampDb (-grHigh[(size_t)i]));
+    const double lo = have > 0 ? grLow[(size_t)have - 1] : 0.0, hi = have > 0 ? grHigh[(size_t)have - 1] : 0.0;
+    key.add (dbText (-lo), dbText (-hi));
+    for (int c = 0; c < 2; ++c)
+        key.add (clampDb (barIn[c]), clampDb (barOut[c]));
+    key.add (clampDb (-barLow), clampDb (-barHigh));
+    key.add (dbText (holdIn), dbText (holdOut), holdGr > 0.05 ? dbText (-holdGr) : std::string ("0.0"), holdIn > host->plainValue (kCeiling));
+    return key.value ();
 }
 
 void HistoryView::onMouseDownEvent (MouseDownEvent& e)
@@ -129,24 +154,29 @@ void HistoryView::onMouseDownEvent (MouseDownEvent& e)
     }
 }
 
-void HistoryView::draw (CDrawContext* ctx)
+void HistoryView::meterLayout (double& top, double& bottom, double& w, double& gap, double x[3]) const
+{
+    const CRect m = metersRect ();
+    top = m.top + 16.0;
+    bottom = m.bottom - 16.0;
+    w = 12.0;
+    gap = 2.0;
+    x[0] = m.left;
+    x[1] = x[0] + 2 * w + gap + 8.0;
+    x[2] = x[1] + 2 * w + gap + 8.0;
+}
+
+void HistoryView::paintBase (CDrawContext* ctx)
 {
     const CRect r = getViewSize ();
+    const CRect p = plotRect ();
     // a display well in a dim hairline with copper corner brackets
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (r, kDrawFilled);
     pk::draw::outline (ctx, r, theme::kLineDim, 0);
     pk::draw::brackets (ctx, r, 6, theme::kCopper);
-    drawHistory (ctx);
-    drawMeters (ctx);
-}
 
-void HistoryView::drawHistory (CDrawContext* ctx)
-{
-    const CRect r = getViewSize ();
-    const CRect p = plotRect ();
-
-    // the header: what is what, and the reduction now
+    // the header: what is what (the reduction now is drawn over the layer, at the right)
     {
         double x = r.left + 10.0;
         // each key a sample of how its trace is drawn: a swatch, or a short (dashed) line
@@ -173,11 +203,6 @@ void HistoryView::drawHistory (CDrawContext* ctx)
         key (kOutFill, "output", 60.0);
         key (lowColor (), "reduction on the lows", 138.0, 1);
         key (highColor (), "on the highs", 90.0, 2);
-        const double lo = have > 0 ? grLow[(size_t)have - 1] : 0.0, hi = have > 0 ? grHigh[(size_t)have - 1] : 0.0;
-        text (ctx, "lows " + dbText (-lo) + " dB", CRect (p.right - 190.0, r.top + 2.0, p.right - 96.0, r.top + 20.0), lowColor (), 10.5,
-              kRightText, true);
-        text (ctx, "highs " + dbText (-hi) + " dB", CRect (p.right - 96.0, r.top + 2.0, p.right - 2.0, r.top + 20.0), highColor (), 10.5,
-              kRightText, true);
     }
 
     // the grid, every 6 dB
@@ -191,6 +216,41 @@ void HistoryView::drawHistory (CDrawContext* ctx)
             text (ctx, dbText (db), CRect (p.right - 30.0, y + 1.0, p.right - 3.0, y + 13.0), theme::kTextDim, 9.0, kRightText);
     }
 
+    // the meters' beds (thin bars on a dim track) and their names below them
+    double top, bottom, w, gap, x[3];
+    meterLayout (top, bottom, w, gap, x);
+    ctx->setFillColor (theme::kLineDim);
+    for (int k = 0; k < 3; ++k)
+        for (int c = 0; c < 2; ++c)
+            ctx->drawRect (CRect (x[k] + c * (w + gap), top, x[k] + c * (w + gap) + w, bottom), kDrawFilled);
+    const char* names[3] = {"IN", "OUT", "GR"};
+    for (int k = 0; k < 3; ++k)
+        text (ctx, names[k], CRect (x[k] - 6.0, bottom + 2.0, x[k] + 2 * w + gap + 6.0, bottom + 15.0), theme::kTextDim, 9.0);
+}
+
+void HistoryView::draw (CDrawContext* ctx)
+{
+    baseLayer.draw (ctx, getViewSize (), 0, [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setLineStyle (kLineSolid); // (as the header's keys left it)
+    drawHistory (ctx);
+    drawMeters (ctx);
+}
+
+void HistoryView::drawHistory (CDrawContext* ctx)
+{
+    const CRect r = getViewSize ();
+    const CRect p = plotRect ();
+
+    // the reduction now, at the right of the header
+    {
+        const double lo = have > 0 ? grLow[(size_t)have - 1] : 0.0, hi = have > 0 ? grHigh[(size_t)have - 1] : 0.0;
+        text (ctx, "lows " + dbText (-lo) + " dB", CRect (p.right - 190.0, r.top + 2.0, p.right - 96.0, r.top + 20.0), lowColor (), 10.5,
+              kRightText, true);
+        text (ctx, "highs " + dbText (-hi) + " dB", CRect (p.right - 96.0, r.top + 2.0, p.right - 2.0, r.top + 20.0), highColor (), 10.5,
+              kRightText, true);
+    }
+
+    ctx->setLineWidth (1.0);
     const int n = have;
     if (n > 1)
     {
@@ -256,12 +316,11 @@ void HistoryView::drawHistory (CDrawContext* ctx)
 void HistoryView::drawMeters (CDrawContext* ctx)
 {
     const CRect m = metersRect ();
-    const double top = m.top + 16.0, bottom = m.bottom - 16.0;
+    double top, bottom, w, gap, xs[3];
+    meterLayout (top, bottom, w, gap, xs);
     auto yOf = [&] (double db) { return top + std::clamp (-db / kRangeDb, 0.0, 1.0) * (bottom - top); };
-    const double w = 12.0, gap = 2.0;
     auto bar = [&] (double x, double db, bool fromTop, const CColor& c) {
-        ctx->setFillColor (theme::kLineDim); // the meter bed (thin bars on a dim track)
-        ctx->drawRect (CRect (x, top, x + w, bottom), kDrawFilled);
+        // (on its bed, in the cached layer)
         const double y = yOf (fromTop ? -db : db);
         ctx->setFillColor (c);
         if (fromTop)
@@ -271,7 +330,7 @@ void HistoryView::drawMeters (CDrawContext* ctx)
     };
     // over the ceiling: the input bars turn peak colour above it (the part the limiter takes off)
     const double ceilDb = host->plainValue (kCeiling);
-    const double x0 = m.left, x1 = x0 + 2 * w + gap + 8.0, x2 = x1 + 2 * w + gap + 8.0;
+    const double x0 = xs[0], x1 = xs[1], x2 = xs[2];
     for (int c = 0; c < 2; ++c)
     {
         const double x = x0 + c * (w + gap);
@@ -291,18 +350,13 @@ void HistoryView::drawMeters (CDrawContext* ctx)
     const double yc = std::floor (yOf (ceilDb)) + 0.5;
     ctx->drawLine (CPoint (x0 - 2.0, yc), CPoint (x1 + 2 * w + gap + 2.0, yc));
 
-    // the holds above, the names below
-    auto label = [&] (double x, const std::string& s, const CColor& c, bool below) {
-        const CRect rr = below ? CRect (x - 6.0, bottom + 2.0, x + 2 * w + gap + 6.0, bottom + 15.0)
-                               : CRect (x - 6.0, m.top, x + 2 * w + gap + 6.0, top - 2.0);
-        text (ctx, s, rr, c, 9.0);
+    // the holds above (the names below are in the cached layer)
+    auto label = [&] (double x, const std::string& s, const CColor& c) {
+        text (ctx, s, CRect (x - 6.0, m.top, x + 2 * w + gap + 6.0, top - 2.0), c, 9.0);
     };
-    label (x0, dbText (holdIn), holdIn > ceilDb ? theme::kEnergyPeak : theme::kText, false);
-    label (x1, dbText (holdOut), theme::kText, false);
-    label (x2, holdGr > 0.05 ? dbText (-holdGr) : "0.0", theme::kText, false);
-    label (x0, "IN", theme::kTextDim, true);
-    label (x1, "OUT", theme::kTextDim, true);
-    label (x2, "GR", theme::kTextDim, true);
+    label (x0, dbText (holdIn), holdIn > ceilDb ? theme::kEnergyPeak : theme::kText);
+    label (x1, dbText (holdOut), theme::kText);
+    label (x2, holdGr > 0.05 ? dbText (-holdGr) : "0.0", theme::kText);
 }
 
 } // namespace smoothr

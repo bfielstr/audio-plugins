@@ -9,6 +9,7 @@
 #include "../core/Engine.h"
 #include "../core/Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -41,6 +42,13 @@ private:
     VSTGUI::CPoint down;
     double startDriveN = 0.0;
     float shownIn = 0.0f, shownOut = 0.0f, shownClarity = 0.0f, shownClarity2 = 0.0f;
+    // The well, the grid and the pre-limiter's ceiling, under the signal's reach: a cached layer
+    // (pk::CachedLayer). The rest is drawn over it on every repaint (the reach shades the curve and
+    // the labels, so they stay on top of it).
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx, bool limiting, double ceil);
+    void curve (VSTGUI::CDrawContext* ctx, double from, double to, const VSTGUI::CColor& c, double width);
+    uint64_t shownKey = 0; // what the last repaint asked for showed (idle repaints only when it changes)
 };
 
 } // namespace smacheratr

@@ -31,6 +31,7 @@
 #include "../core/Params.h"
 #include "BandPush.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -90,6 +91,12 @@ private:
     BandPush push; // No Overlap and glue: the neighbours a band drag pushes or drags along, the edge it snaps
     int hoverLink = -1; // the link icon under the mouse (its border's index), lit brighter
     float shownCut[kGentlrBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
+    // The well, the grid and its scale, Gentlr's band regions and the colour response: everything drawn
+    // before Gentlr's live cuts, kept in a cached layer (pk::CachedLayer) until a setting or a drag
+    // changes it. The cuts, the handles and the labels are drawn over it on every repaint.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx, const bool clarity[], const ClarityBand bands[]);
+    void paintLabels (VSTGUI::CDrawContext* ctx); // the title and the settings, top left
 };
 
 } // namespace smacheratr

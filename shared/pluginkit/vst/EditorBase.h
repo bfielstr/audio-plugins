@@ -11,6 +11,7 @@
 #include "vstgui/lib/cframe.h"
 
 #include <algorithm>
+#include <functional>
 #include <map>
 #include <type_traits>
 #include <vector>
@@ -76,6 +77,12 @@ public:
     double fullWidth () const { return baseWidth; }
     double fullHeight () const { return baseHeight; }
     InfoBox* infoBox () const { return info; }
+    // For measuring (the draw benchmark, shared/pluginkit/testing/DrawBench.cpp): builds the UI into a
+    // frame of its own that is not put in a window, zoomed by `zoom`, for drawing into an offscreen
+    // context. `wrap` may supply a container of the given size to hold the content between it and the
+    // frame (one that records what the views invalidate). close () releases it.
+    using RootWrapper = std::function<VSTGUI::CViewContainer* (const VSTGUI::CRect&)>;
+    VSTGUI::CFrame* openDetached (double zoom, const RootWrapper& wrap = {});
 
     // ParamHost
     const ParamTable& table () override { return controller->table (); }

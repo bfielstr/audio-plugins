@@ -226,6 +226,7 @@ void ClipView::draw (CDrawContext* ctx)
     const CRect p = plotArea ();
 
     Session* s = session ();
+    const uint64_t version = s ? s->clipVersion () : 0;
     const Clip c = s ? s->clip () : Clip {};
     const int cap = s ? s->captureState () : 0;
 
@@ -251,6 +252,66 @@ void ClipView::draw (CDrawContext* ctx)
     const TimeMap map = timeMap (c);
     const double outLen = map.outLength ();
     lastOutLen = outLen;
+    double vs, vl;
+    viewRange (outLen, vs, vl);
+    // (the version read before the clip: an edit in between is drawn now and repainted with its
+    // version on the next tick, never kept under a newer one)
+    const uint64_t key = pk::LayerKey ().add (version, (const void*)c.audio.get (), outLen, vs, vl, editMode, drag, dragIndex, hoverIndex);
+    baseLayer.draw (ctx, r, key, [&] (CDrawContext* cc) { paintClip (cc, c); });
+
+    // playhead
+    if (s && s->playing.load ())
+    {
+        const double off = s->playOffset.load ();
+        const double t = off >= 0.0 ? off : s->transport.load () - c.start;
+        const double x = timeToX (t);
+        if (t >= 0.0 && t <= outLen && x >= p.left && x <= p.right)
+        {
+            ctx->setFrameColor (theme::kPlayhead);
+            ctx->setLineWidth (1.5);
+            ctx->drawLine (CPoint (x, r.top), CPoint (x, p.bottom));
+        }
+    }
+
+    // render progress / capture
+    if (s && s->rendering.load ())
+    {
+        ctx->setFillColor (theme::kEnergyLive);
+        ctx->drawRect (CRect (r.left, r.bottom - kProgress, r.left + r.getWidth () * s->progress.load (), r.bottom),
+                       kDrawFilled);
+    }
+    if (cap == Session::kArmed || cap == Session::kRecording)
+    {
+        char buf[64];
+        if (cap == Session::kArmed)
+            std::snprintf (buf, sizeof (buf), "Armed: start playback to capture (replaces this clip)");
+        else
+            std::snprintf (buf, sizeof (buf), "Recording  %s", formatTime (s->capturedSeconds (), 0.1).c_str ());
+        drawText (ctx, buf, CRect (p.left, p.bottom - 22, p.right - 8, p.bottom - 4), kRec, 11.0, kRightText, true);
+    }
+    ctx->setFrameColor (cap ? kRec : theme::kLineDim);
+    ctx->setLineWidth (1.0);
+    ctx->drawRect (r, kDrawStroked);
+}
+
+CRect ClipView::playheadStrip (double x) const
+{
+    // the playhead's line (1.5 px, antialiased) with a pixel to spare each side
+    const CRect r = getViewSize ();
+    return CRect (std::floor (x) - 2.0, r.top, std::ceil (x) + 2.0, plotArea ().bottom + 1.0);
+}
+
+void ClipView::paintClip (CDrawContext* ctx, const Clip& c)
+{
+    const CRect r = getViewSize ();
+    const CRect p = plotArea ();
+    ctx->setDrawMode (kAntiAliasing | kNonIntegralMode);
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (r, kDrawFilled);
+    ctx->setFillColor (theme::kWell);
+    ctx->drawRect (CRect (r.left, r.top, r.right, r.top + kRuler), kDrawFilled);
+    const TimeMap map = timeMap (c);
+    const double outLen = map.outLength ();
     double vs, vl;
     viewRange (outLen, vs, vl);
 
@@ -432,39 +493,6 @@ void ClipView::draw (CDrawContext* ctx)
             }
     }
 
-    // playhead
-    if (s && s->playing.load ())
-    {
-        const double off = s->playOffset.load ();
-        const double t = off >= 0.0 ? off : s->transport.load () - c.start;
-        const double x = timeToX (t);
-        if (t >= 0.0 && t <= outLen && x >= p.left && x <= p.right)
-        {
-            ctx->setFrameColor (theme::kPlayhead);
-            ctx->setLineWidth (1.5);
-            ctx->drawLine (CPoint (x, r.top), CPoint (x, p.bottom));
-        }
-    }
-
-    // render progress / capture
-    if (s && s->rendering.load ())
-    {
-        ctx->setFillColor (theme::kEnergyLive);
-        ctx->drawRect (CRect (r.left, r.bottom - kProgress, r.left + r.getWidth () * s->progress.load (), r.bottom),
-                       kDrawFilled);
-    }
-    if (cap == Session::kArmed || cap == Session::kRecording)
-    {
-        char buf[64];
-        if (cap == Session::kArmed)
-            std::snprintf (buf, sizeof (buf), "Armed: start playback to capture (replaces this clip)");
-        else
-            std::snprintf (buf, sizeof (buf), "Recording  %s", formatTime (s->capturedSeconds (), 0.1).c_str ());
-        drawText (ctx, buf, CRect (p.left, p.bottom - 22, p.right - 8, p.bottom - 4), kRec, 11.0, kRightText, true);
-    }
-    ctx->setFrameColor (cap ? kRec : theme::kLineDim);
-    ctx->setLineWidth (1.0);
-    ctx->drawRect (r, kDrawStroked);
 }
 
 //==============================================================================
@@ -737,12 +765,17 @@ void ClipView::idle ()
         dirty = true;
     }
     const bool playing = s->playing.load ();
+    bool moved = false;
+    double movedFrom = lastPlayX;
     if (playing || playing != wasPlaying)
     {
         const double off = s->playOffset.load ();
         const double x = timeToX (off >= 0.0 ? off : s->transport.load () - s->clipStart ());
-        if (std::fabs (x - lastPlayX) >= 1.0 || playing != wasPlaying)
+        if (playing != wasPlaying)
             dirty = true;
+        else if (std::fabs (x - lastPlayX) >= 1.0)
+            moved = true;
+        movedFrom = lastPlayX;
         lastPlayX = x;
     }
     wasPlaying = playing;
@@ -756,6 +789,12 @@ void ClipView::idle ()
     lastCapture = cap;
     if (dirty)
         invalid ();
+    else if (moved)
+    {
+        // only the playhead moved: the strips it left and entered (the rest is unchanged)
+        invalidRect (playheadStrip (movedFrom));
+        invalidRect (playheadStrip (lastPlayX));
+    }
 }
 
 } // namespace stretchr

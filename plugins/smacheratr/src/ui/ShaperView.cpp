@@ -49,12 +49,31 @@ double ShaperView::yOf (double out) const
     return r.bottom - (std::clamp (out, -kRange, kRange) + kRange) / (2.0 * kRange) * r.getHeight ();
 }
 
-void ShaperView::draw (CDrawContext* ctx)
+void ShaperView::curve (CDrawContext* ctx, double from, double to, const CColor& c, double width)
+{
+    const int steps = 240;
+    auto path = owned (ctx->createGraphicsPath ());
+    if (!path)
+        return;
+    for (int i = 0; i <= steps; ++i)
+    {
+        const double x = from + (to - from) * i / steps;
+        const CPoint pt (xOf (x), yOf (analogClip (x)));
+        if (i == 0)
+            path->beginSubpath (pt);
+        else
+            path->addLine (pt);
+    }
+    ctx->setLineWidth (width);
+    ctx->setFrameColor (c);
+    ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+}
+
+void ShaperView::paintBase (CDrawContext* ctx, bool limiting, double ceil)
 {
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
 
     // grid: zero and the clipping points
     ctx->setLineWidth (1.0);
@@ -68,25 +87,29 @@ void ShaperView::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (xOf (-kRange), yOf (-kRange)), CPoint (xOf (kRange), yOf (kRange)));
 
     // the pre-limiter's ceiling as the drive sees it: nothing reaches past these lines
-    const bool limiting = host->plainValue (kPreLimit) >= 0.5;
-    if (limiting)
+    if (limiting && ceil < kRange)
     {
-        const double ceil = std::pow (10.0, (host->plainValue (kPreLimitThreshold) + host->plainValue (kDrive)) / 20.0);
-        if (ceil < kRange)
-        {
-            // the region past the ceiling faintly shaded copper, the ceiling itself dashed pale copper
-            ctx->setFillColor (theme::withAlpha (theme::kCopper, 18));
-            ctx->drawRect (CRect (all.left, all.top, xOf (-ceil), all.bottom), kDrawFilled);
-            ctx->drawRect (CRect (xOf (ceil), all.top, all.right, all.bottom), kDrawFilled);
-            ctx->setFrameColor (theme::kCopperPale);
-            ctx->setLineStyle (theme::dashed ());
-            ctx->drawLine (CPoint (xOf (-ceil), all.top), CPoint (xOf (-ceil), all.bottom));
-            ctx->drawLine (CPoint (xOf (ceil), all.top), CPoint (xOf (ceil), all.bottom));
-            ctx->setLineStyle (kLineSolid);
-            text (ctx, "limit", CRect (xOf (ceil) + 3, all.bottom - 30, xOf (ceil) + 60, all.bottom - 18), theme::kCopperPale, 9.0,
-                  kLeftText);
-        }
+        // the region past the ceiling faintly shaded copper, the ceiling itself dashed pale copper
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, 18));
+        ctx->drawRect (CRect (all.left, all.top, xOf (-ceil), all.bottom), kDrawFilled);
+        ctx->drawRect (CRect (xOf (ceil), all.top, all.right, all.bottom), kDrawFilled);
+        ctx->setFrameColor (theme::kCopperPale);
+        ctx->setLineStyle (theme::dashed ());
+        ctx->drawLine (CPoint (xOf (-ceil), all.top), CPoint (xOf (-ceil), all.bottom));
+        ctx->drawLine (CPoint (xOf (ceil), all.top), CPoint (xOf (ceil), all.bottom));
+        ctx->setLineStyle (kLineSolid);
+        text (ctx, "limit", CRect (xOf (ceil) + 3, all.bottom - 30, xOf (ceil) + 60, all.bottom - 18), theme::kCopperPale, 9.0, kLeftText);
     }
+}
+
+void ShaperView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const bool limiting = host->plainValue (kPreLimit) >= 0.5;
+    const double ceil = limiting ? std::pow (10.0, (host->plainValue (kPreLimitThreshold) + host->plainValue (kDrive)) / 20.0) : kRange;
+    baseLayer.draw (ctx, all, pk::LayerKey ().add (limiting, ceil), [&] (CDrawContext* c) { paintBase (c, limiting, ceil); });
+    ctx->setClipRect (all);
+    ctx->setLineStyle (kLineSolid); // (as the ceiling's dashes left it)
 
     // where the driven signal sits
     const double reach = std::min ((double)shownIn, kRange);
@@ -96,29 +119,10 @@ void ShaperView::draw (CDrawContext* ctx)
         ctx->drawRect (CRect (xOf (-reach), all.top, xOf (reach), all.bottom), kDrawFilled);
     }
 
-    // the curve, with the reached part highlighted
-    const int steps = 240;
-    auto curve = [&] (double from, double to, const CColor& c, double width) {
-        auto path = owned (ctx->createGraphicsPath ());
-        if (!path)
-            return;
-        for (int i = 0; i <= steps; ++i)
-        {
-            const double x = from + (to - from) * i / steps;
-            const CPoint pt (xOf (x), yOf (analogClip (x)));
-            if (i == 0)
-                path->beginSubpath (pt);
-            else
-                path->addLine (pt);
-        }
-        ctx->setLineWidth (width);
-        ctx->setFrameColor (c);
-        ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
-    };
     // the curve a thin copper line; the part the signal reaches lit in cinnabar
-    curve (-kRange, kRange, theme::kCopper, 1.0);
+    curve (ctx, -kRange, kRange, theme::kCopper, 1.0);
     if (reach > 0.005)
-        curve (-reach, reach, theme::kEnergyLive, 2.0);
+        curve (ctx, -reach, reach, theme::kEnergyLive, 2.0);
 
     // labels
     text (ctx, "Analog", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18), theme::kText, 10.5, kLeftText, true);
@@ -220,7 +224,22 @@ void ShaperView::idle ()
     ease (shownClarity2, m->clarity2Db.load (std::memory_order_relaxed), 0.3f, 0.3f);
     if (shownIn < 1e-4f)
         shownIn = 0.0f;
-    invalid ();
+    // the rest settle too once they no longer show (the output reads -inf below 1e-4, a cut under
+    // 1e-4 dB is no bar at all), so a quiet display stops repainting
+    if (shownOut < 1e-4f)
+        shownOut = 0.0f;
+    if (std::fabs (shownClarity) < 1e-4f)
+        shownClarity = 0.0f;
+    if (std::fabs (shownClarity2) < 1e-4f)
+        shownClarity2 = 0.0f;
+    // repainted when the levels move or a setting changes (it used to repaint on every tick, also with
+    // nothing playing)
+    const uint64_t key = pk::LayerKey ().params (host).add (shownIn, shownOut, shownClarity, shownClarity2);
+    if (key != shownKey)
+    {
+        shownKey = key;
+        invalid ();
+    }
 }
 
 } // namespace smacheratr

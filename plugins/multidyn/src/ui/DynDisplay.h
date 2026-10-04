@@ -15,6 +15,7 @@
 #include "../core/Params.h"
 #include "../plugin/Meters.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -58,6 +59,15 @@ private:
         double start;
     };
     std::vector<uint32_t> targetsFor (Hit hit, int band, const VSTGUI::Modifiers& mods) const;
+    // Everything but the meters and the gain readouts, drawn from the settings: a cached layer
+    // (pk::CachedLayer) the meters are drawn over on every tick.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    void paintGainTexts (VSTGUI::CDrawContext* ctx, int band);
+    // the meters' bars in a lane's graph (thick: output, thin: input above it); the blocks' gain texts
+    // go into the layer when the bars stay clear of them
+    static void meterRows (const VSTGUI::CRect& g, double& my, double& mh);
+    static bool textsClear (const VSTGUI::CRect& g);
 
     pk::ParamHost* host;
     MeterSource meters;

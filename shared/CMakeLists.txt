@@ -39,6 +39,8 @@ if(PK_BUILD_PLUGINS)
         pluginkit/ui/ScopeView.h
         pluginkit/ui/DropFiles.h
         pluginkit/ui/ScopeView.cpp
+        pluginkit/ui/CachedLayer.h
+        pluginkit/ui/CachedLayer.cpp
     )
     target_include_directories(pluginkit_vst PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(pluginkit_vst PUBLIC pluginkit_core sdk vstgui_support)

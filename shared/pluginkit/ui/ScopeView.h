@@ -3,6 +3,8 @@
 // 50 ms trigger on a rising zero crossing so periodic waves stand still.
 #pragma once
 
+#include "pluginkit/ui/CachedLayer.h"
+
 #include "vstgui/lib/cview.h"
 
 #include <functional>
@@ -23,7 +25,8 @@ public:
                std::string title = "OUTPUT");
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
-    void idle () { invalid (); }
+    // repaints when the samples in its span changed (with the output silent, or stopped, it stays still)
+    void idle ();
     int span () const { return spanIndex; }
 
 private:
@@ -33,6 +36,14 @@ private:
     std::string title;
     int spanIndex = 1;
     std::vector<float> l, r, hi, lo;
+    // the well, the grid, the title and the span (they change with the span only); the traces and
+    // the peak are drawn over them on every tick
+    void paintStatic (VSTGUI::CDrawContext* ctx);
+    CachedLayer layer;
+    // how many samples the span shows, and how many are read for it (twice as many for the trigger)
+    void span (int& want, int& need, bool& trigger) const;
+    uint64_t shownKey = 0;
+    std::vector<float> peekL, peekR;
 };
 
 } // namespace pk

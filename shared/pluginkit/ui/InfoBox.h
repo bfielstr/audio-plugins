@@ -4,6 +4,8 @@
 // EditorBase adds the strip and feeds it the view under the mouse; plug-ins only set help texts.
 #pragma once
 
+#include "pluginkit/ui/CachedLayer.h"
+
 #include "vstgui/lib/cview.h"
 
 #include <string>
@@ -49,7 +51,9 @@ public:
     void draw (VSTGUI::CDrawContext* ctx) override;
 
 private:
+    void paint (VSTGUI::CDrawContext* ctx); // the box and its text
     HelpInfo info;
+    CachedLayer layer; // what paint drew (it changes only with the help shown)
 };
 
 } // namespace pk

@@ -339,7 +339,21 @@ void StageView::idle ()
     std::sort (shown.begin (), shown.end (), [] (const Member& a, const Member& b) { return a.id < b.id; });
     for (size_t i = 0; i < shown.size (); ++i)
         shown[i].number = (int)i + 1;
-    invalid ();
+    // repainted when what it shows changed: the group, the bands' meters, a setting (it used to repaint
+    // on every tick, also with nothing moving)
+    pk::LayerKey key;
+    key.params (host).add (drag);
+    for (const auto& m : shown)
+        key.add (m.id, m.self, m.role, m.width, m.space, m.number);
+    // (the bands' bars to a thousandth of their height, a small fraction of a pixel: the meters' noise
+    // floor jitters below that with the audio stopped)
+    for (int k = 0; k < kBands; ++k)
+        key.add (std::lround (1000.0f * std::clamp (gains[(size_t)k], 0.0f, 1.0f)), std::lround (1000.0f * std::clamp (yields[(size_t)k], 0.0f, 1.0f)));
+    if (key.value () != shownKey)
+    {
+        shownKey = key.value ();
+        invalid ();
+    }
 }
 
 } // namespace widr

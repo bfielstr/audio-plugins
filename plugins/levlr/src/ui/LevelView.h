@@ -13,6 +13,7 @@
 #include "../core/Engine.h"
 #include "../core/Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -62,7 +63,7 @@ private:
     bool hitChip (const VSTGUI::CPoint& p, int& band, bool& solo) const;
     double sampleRate () const;
     bool live () const;
-    void analyse ();
+    bool analyse (); // true: the spectrum moved where it is drawn (above kSpecFloorDb)
     double specAt (double f0, double f1) const;
     void setHover (int edge, int band);
 
@@ -81,6 +82,13 @@ private:
     uint32_t lastWritten = 0, lastBlocks = 0;
     int idleSinceBlock = 1 << 20;
     bool haveSpectrum = false;
+    // The well, the bands' columns and the grid with its scale, under the spectrum: a cached layer
+    // (pk::CachedLayer), rebuilt when a setting or the hover changes it. The response's points are kept
+    // too (summing every band's filters at each point is the costly part), until a setting changes.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    std::vector<VSTGUI::CPoint> responsePoints;
+    uint64_t responseKey = 0;
 };
 
 } // namespace levlr

@@ -51,6 +51,29 @@ bool PLUGIN_API EditorBase::open (void* parent, const PlatformType& platformType
     return true;
 }
 
+VSTGUI::CFrame* EditorBase::openDetached (double zoom, const RootWrapper& wrap)
+{
+    if (frame)
+        return nullptr;
+    // as open () builds it, without the window, the tooltips and the hover help
+    frame = new CFrame (CRect (0, 0, baseWidth, baseHeight), this);
+    frame->setBackgroundColor (theme::kGround);
+    byParam.clear ();
+    buildUI (frame);
+    addInfoStrip ();
+    if (wrap && frame->getNbViews () > 0)
+    {
+        CView* root = frame->getView (0);
+        frame->removeView (root, false); // (the reference the frame adopted goes over to the holder)
+        CViewContainer* holder = wrap (frame->getViewSize ());
+        holder->addView (root);
+        frame->addView (holder);
+    }
+    frame->setZoom (std::clamp (zoom, kMinZoom, kMaxZoom));
+    frame->attached (frame); // (the views find their frame and parents, as in a window)
+    return frame;
+}
+
 void PLUGIN_API EditorBase::close ()
 {
     onClose ();

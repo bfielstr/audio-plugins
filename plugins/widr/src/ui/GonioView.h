@@ -6,6 +6,8 @@
 
 #include "../core/Engine.h"
 
+#include "pluginkit/ui/CachedLayer.h"
+
 #include "vstgui/lib/cview.h"
 
 #include <functional>
@@ -29,6 +31,12 @@ private:
     std::vector<float> l, r;
     int count = 0;
     float correlation = 1.0f, level = 0.1f;
+    // The well, the axes and their names, the correlation meter's bed and scale: a cached layer
+    // (pk::CachedLayer) the dots, the readout and the needle are drawn over.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    double dotScale () const;
+    uint64_t shownKey = 0; // the dots and the correlation the last repaint showed (idle repaints when they move)
 };
 
 } // namespace widr

@@ -149,6 +149,9 @@ ctest --test-dir build -C Release           # DSP tests (+ plug-in host tests on
   libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev libfontconfig1-dev libcairo2-dev
   libfreetype6-dev libpango1.0-dev libgtkmm-3.0-dev` (Debian/Ubuntu names; gtkmm is only for the SDK's test hosts).
 - **Windows**: Visual Studio 2022 with the C++ workload; use `cmake -B build -A x64`.
+- **Draw benchmark** (Linux): `-DPK_DRAW_BENCH=ON` adds `<plug-in>_drawbench` (also run by ctest): it plays
+  a test signal through each plug-in and times its editor's repaints with and without the cached display
+  layers, checks both give the same pixels, and counts the repaints still asked for once the audio stops.
 
 Every push is built and tested on all three platforms by GitHub Actions; pushing a `v*` tag
 publishes a release and then runs the installers against it. The screenshots in `docs/<plug-in>/`

@@ -89,6 +89,33 @@ function(pk_add_plugin target)
             COMMAND codesign --force --sign - --timestamp=none "$<TARGET_BUNDLE_DIR:${target}>"
             COMMENT "Ad-hoc signing ${target}.vst3")
     endif()
+    if(PK_DRAW_BENCH)
+        pk_add_draw_bench(${target})
+    endif()
+endfunction()
+
+# pk_add_draw_bench(<target>)
+# With -DPK_DRAW_BENCH=ON (Linux): <target>_drawbench, the plug-in's sources built into an executable
+# that hosts it, plays a test signal through it and draws its editor offscreen, printing how long the
+# window and each display take with and without the cached layers (shared/pluginkit/testing/
+# DrawBench.cpp). Registered as a test that prints and only fails if the editor cannot be drawn or the
+# cached drawing differs from the direct one. The plug-in's include directories and libraries are taken
+# from its target when the build is generated.
+option(PK_DRAW_BENCH "Build the editors' draw benchmarks (Linux)" OFF)
+function(pk_add_draw_bench target)
+    if(APPLE OR WIN32)
+        return()
+    endif()
+    get_target_property(srcs ${target} SOURCES)
+    set(bench ${target}_drawbench)
+    string(TOLOWER ${bench} bench)
+    add_executable(${bench} ${srcs} ${CMAKE_SOURCE_DIR}/shared/pluginkit/testing/DrawBench.cpp
+        ${vst3sdk_SOURCE_DIR}/public.sdk/source/vst/hosting/plugprovider.cpp)
+    target_include_directories(${bench} PRIVATE $<TARGET_PROPERTY:${target},INCLUDE_DIRECTORIES>)
+    target_compile_definitions(${bench} PRIVATE $<TARGET_PROPERTY:${target},COMPILE_DEFINITIONS>)
+    target_link_libraries(${bench} PRIVATE $<TARGET_PROPERTY:${target},LINK_LIBRARIES> sdk_hosting ${CMAKE_DL_LIBS})
+    set_target_properties(${bench} PROPERTIES ENABLE_EXPORTS ON) # (dlopen (nullptr) finds the module's symbols)
+    add_test(NAME ${bench} COMMAND ${bench} 10)
 endfunction()
 
 # pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...> INCLUDES <dirs...>)

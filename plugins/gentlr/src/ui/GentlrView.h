@@ -29,6 +29,7 @@
 #include "smacheratr/src/core/ClarityBand.h"
 #include "smacheratr/src/ui/BandPush.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -84,7 +85,7 @@ private:
     smacheratr::GentlrLayout layoutNow () const; // where the bands sit (with No Overlap: kept apart, as the engine has them)
     smacheratr::ClarityBand bandNow (int band) const;
     bool live () const;
-    void analyse (const std::vector<float>& in, std::vector<float>& spec);
+    bool analyse (const std::vector<float>& in, std::vector<float>& spec); // true: it moved where it is drawn (above kSpecFloorDb)
     double specAt (const std::vector<float>& spec, double f0, double f1) const;
     void setHover (int band);
 
@@ -97,6 +98,14 @@ private:
     smacheratr::BandPush push; // No Overlap and glue: the neighbours a drag pushes or drags along, the edge it snaps
     int hoverLink = -1;        // the link icon under the mouse, lit brighter
     float shownCut[kAllBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the bands' cuts (dB, 0 or less), eased
+    // The well, the bands' regions and the grid with its scale, under the spectra: a cached layer
+    // (pk::CachedLayer), rebuilt when a setting, the hover or a drag changes it. Each band's most cut
+    // (its dashed curve) is kept as points until a setting, the rate or the size changes: working the
+    // band's response out at every point is the costly part.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx, const bool on[], const smacheratr::ClarityBand bands[]);
+    std::vector<VSTGUI::CPoint> rangePoints[kAllBands];
+    uint64_t rangeKey = 0;
 
     // the analyser: input and output
     std::vector<float> window, bufIn, bufOut, specIn, specOut;

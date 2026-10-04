@@ -35,14 +35,19 @@ ScopeView::ScopeView (const CRect& rect, Reader rd, std::function<double ()> sr,
     setTooltipText ("The final output: left bright, right dim, 0 dBFS in cinnabar. Click to change the time span.");
 }
 
-void ScopeView::draw (CDrawContext* ctx)
+namespace {
+// the plot inside the view, and a level's height in it
+CRect plotOf (const CRect& all) { return CRect (all.left + 4, all.top + 20, all.right - 4, all.bottom - 4); }
+double yIn (const CRect& plot, double v) { return plot.getCenter ().y - std::clamp (v, -kRange, kRange) / kRange * plot.getHeight () * 0.5; }
+} // namespace
+
+void ScopeView::paintStatic (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
-    const CRect plot (all.left + 4, all.top + 20, all.right - 4, all.bottom - 4);
-    auto yOf = [&] (double v) { return plot.getCenter ().y - std::clamp (v, -kRange, kRange) / kRange * plot.getHeight () * 0.5; };
+    const CRect plot = plotOf (all);
+    auto yOf = [&] (double v) { return yIn (plot, v); };
 
     // grid: the centre, half scale and the 0 dBFS lines
     ctx->setLineWidth (1.0);
@@ -55,11 +60,26 @@ void ScopeView::draw (CDrawContext* ctx)
     for (double v : {-1.0, 1.0})
         ctx->drawLine (CPoint (plot.left, yOf (v)), CPoint (plot.right, yOf (v)));
 
+    // labels: the title and the span, in the strip above the plot (the traces never reach it)
+    char buf[48];
+    text (ctx, title, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kText, 10.0, kLeftText, true);
+    const double ms = kSpanMs[spanIndex];
+    std::snprintf (buf, sizeof (buf), ms >= 1000.0 ? "%.0f s" : "%.0f ms", ms >= 1000.0 ? ms / 1000.0 : ms);
+    text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kTextDim, 9.5, kRightText);
+}
+
+void ScopeView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    layer.draw (ctx, all, LayerKey ().add (title, spanIndex), [this] (CDrawContext* c) { paintStatic (c); });
+    ctx->setClipRect (all);
+    const CRect plot = plotOf (all);
+    auto yOf = [&] (double v) { return yIn (plot, v); };
+
     // the samples of the span (twice as many for the trigger search on short spans)
-    const double sr = rate ? std::max (1000.0, rate ()) : 48000.0;
-    const int want = std::clamp ((int)(kSpanMs[spanIndex] * 0.001 * sr), 16, capacity / 2);
-    const bool trigger = kSpanMs[spanIndex] <= 50.0;
-    const int need = trigger ? 2 * want : want;
+    int want, need;
+    bool trigger;
+    span (want, need, trigger);
     l.assign ((size_t)need, 0.0f);
     r.assign ((size_t)need, 0.0f);
     const int got = reader ? reader (l.data (), r.data (), need) : 0;
@@ -117,12 +137,8 @@ void ScopeView::draw (CDrawContext* ctx)
     else
         text (ctx, "no output yet", plot, theme::kTextDim, 10.0, kCenterText);
 
-    // labels
+    // the peak, between the title and the span
     char buf[48];
-    text (ctx, title, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kText, 10.0, kLeftText, true);
-    const double ms = kSpanMs[spanIndex];
-    std::snprintf (buf, sizeof (buf), ms >= 1000.0 ? "%.0f s" : "%.0f ms", ms >= 1000.0 ? ms / 1000.0 : ms);
-    text (ctx, buf, CRect (all.left + 6, all.top + 3, all.right - 6, all.top + 17), theme::kTextDim, 9.5, kRightText);
     if (got > 0)
     {
         if (peak < 1e-5f)
@@ -133,6 +149,34 @@ void ScopeView::draw (CDrawContext* ctx)
               9.5, kCenterText);
     }
     ctx->resetClipRect ();
+}
+
+void ScopeView::span (int& want, int& need, bool& trigger) const
+{
+    const double sr = rate ? std::max (1000.0, rate ()) : 48000.0;
+    want = std::clamp ((int)(kSpanMs[spanIndex] * 0.001 * sr), 16, capacity / 2);
+    trigger = kSpanMs[spanIndex] <= 50.0;
+    need = trigger ? 2 * want : want;
+}
+
+void ScopeView::idle ()
+{
+    // the same samples draw () reads: repainted only when they (or the span) changed
+    int want, need;
+    bool trigger;
+    span (want, need, trigger);
+    peekL.assign ((size_t)need, 0.0f);
+    peekR.assign ((size_t)need, 0.0f);
+    const int got = reader ? reader (peekL.data (), peekR.data (), need) : 0;
+    LayerKey key;
+    key.add (spanIndex, need, got);
+    for (int i = 0; i < need; ++i)
+        key.add (peekL[(size_t)i], peekR[(size_t)i]);
+    if (key.value () != shownKey)
+    {
+        shownKey = key.value ();
+        invalid ();
+    }
 }
 
 void ScopeView::onMouseDownEvent (MouseDownEvent& e)

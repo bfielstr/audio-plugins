@@ -12,6 +12,7 @@
 #include "Mix.h"
 #include "Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -80,6 +81,7 @@ private:
     double startWidth = 0.0, startSpaceN = 0.0, widthAtDown = 0.0;
     std::vector<Member> shown;
     std::array<float, kBands> gains {}, yields {};
+    uint64_t shownKey = 0; // what the last repaint showed (idle repaints when it changes)
     // editor-side liveness of the registry slots (heartbeat changes, in idle calls)
     std::array<uint32_t, Registry::kSlots> beats {};
     std::array<int, Registry::kSlots> still {};
