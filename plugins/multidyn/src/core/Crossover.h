@@ -22,6 +22,8 @@
 // The 24 dB/oct split is the Lr4Split below (the one Multidyn always had), section for section.
 #pragma once
 
+#include "pluginkit/Simd.h"
+
 #include <cmath>
 #include <complex>
 
@@ -294,6 +296,197 @@ struct XoverAllpass
         {
             s[i].tick (x, c, l, b, h);
             x = x - 2.0f * s[i].k * b;
+        }
+        return x;
+    }
+};
+
+// ---- four signals at once ------------------------------------------------------------------------------
+// The same split and all-pass for four signals through filters of the same tuning (Multidyn's left and
+// right, and the side-chain's), in one SIMD register (pk::F4): every lane goes through exactly the
+// operations the scalar versions above do, so each lane's output is theirs, to the bit.
+constexpr int kLanes = 4;
+using pk::F4;
+
+struct Svf4
+{
+    alignas (16) float ic1[kLanes] {};
+    alignas (16) float ic2[kLanes] {};
+    alignas (16) float K[kLanes] {}, A1[kLanes] {}, A2[kLanes] {}, A3[kLanes] {}, K2[kLanes] {}; // K2: 2 k
+    float k = 1.41421356f;
+
+    void tune (float g, float kk)
+    {
+        Svf2 s;
+        tuneSvf (s, g, kk);
+        k = s.k;
+        for (int j = 0; j < kLanes; ++j)
+        {
+            K[j] = s.k;
+            A1[j] = s.a1;
+            A2[j] = s.a2;
+            A3[j] = s.a3;
+            K2[j] = 2.0f * s.k;
+        }
+    }
+    void reset ()
+    {
+        for (int j = 0; j < kLanes; ++j)
+            ic1[j] = ic2[j] = 0.0f;
+    }
+    // Svf2::tick for each lane: the low- and band-pass (the high-pass from hp ())
+    inline void tick (F4 v0, F4& lp, F4& bp)
+    {
+        const F4 i1 = F4::load (ic1), i2 = F4::load (ic2);
+        const F4 a2 = F4::load (A2);
+        const F4 v3 = v0 - i2;
+        const F4 v1 = F4::load (A1) * i1 + a2 * v3;
+        const F4 v2 = i2 + a2 * i1 + F4::load (A3) * v3;
+        const F4 two = F4::set1 (2.0f);
+        (two * v1 - i1).store (ic1);
+        (two * v2 - i2).store (ic2);
+        lp = v2;
+        bp = v1;
+    }
+    // the high-pass of the tick that gave v1 (band-pass) and v2 (low-pass) from v0
+    inline F4 hp (F4 v0, F4 v1, F4 v2) const { return v0 - F4::load (K) * v1 - v2; }
+    // the all-pass step x - 2 k b
+    inline F4 ap (F4 x, F4 b) const { return x - F4::load (K2) * b; }
+    // keeps lanes from..to-1 of another set of states (to leave some lanes as they were)
+    void copyLanes (const Svf4& o, int from, int to)
+    {
+        for (int j = from; j < to; ++j)
+        {
+            ic1[j] = o.ic1[j];
+            ic2[j] = o.ic2[j];
+        }
+    }
+};
+
+struct XoverSplit4
+{
+    Svf4 first, lo[kXoverMaxSections - 1], hi[kXoverMaxSections - 1];
+    alignas (16) float G1[kLanes] {}; // 6 dB: the one-pole's g / (1 + g)
+    alignas (16) float z1[kLanes] {}; // and its state
+    int slope = kXover24;
+    const XoverDef* def = &xoverDef (kXover24);
+
+    void setup (float g, int sl)
+    {
+        slope = sl;
+        def = &xoverDef (sl);
+        const XoverDef& d = *def;
+        for (float& x : G1)
+            x = g / (1.0f + g);
+        if (d.firstOrder)
+            return;
+        if (!d.onePoleFirst)
+            first.tune (g, d.k[0]);
+        for (int i = 1; i < d.sections; ++i)
+        {
+            lo[i - 1].tune (g, d.k[i]);
+            hi[i - 1].tune (g, d.k[i]);
+        }
+    }
+    void reset ()
+    {
+        first.reset ();
+        for (int i = 0; i < kXoverMaxSections - 1; ++i)
+        {
+            lo[i].reset ();
+            hi[i].reset ();
+        }
+        for (float& z : z1)
+            z = 0.0f;
+    }
+    void copyLanes (const XoverSplit4& o, int from, int to)
+    {
+        first.copyLanes (o.first, from, to);
+        for (int i = 0; i < kXoverMaxSections - 1; ++i)
+        {
+            lo[i].copyLanes (o.lo[i], from, to);
+            hi[i].copyLanes (o.hi[i], from, to);
+        }
+        for (int j = from; j < to; ++j)
+            z1[j] = o.z1[j];
+    }
+    // XoverSplit::tick for each lane
+    inline void tick (F4 x, F4& low, F4& high)
+    {
+        const XoverDef& d = *def;
+        F4 l, b, h;
+        if (d.firstOrder || d.onePoleFirst)
+        {
+            // trapezoidal one-pole: the low-pass, and the rest of the input as the high side
+            const F4 z = F4::load (z1);
+            const F4 v = (x - z) * F4::load (G1);
+            l = v + z;
+            (l + v).store (z1);
+            h = x - l;
+            if (d.firstOrder)
+            {
+                low = l;
+                high = h;
+                return;
+            }
+        }
+        else
+        {
+            first.tick (x, l, b);
+            h = first.hp (x, b, l);
+        }
+        for (int i = 1; i < d.sections; ++i)
+        {
+            F4 l2, b2, lh, bh;
+            lo[i - 1].tick (l, l2, b2);
+            hi[i - 1].tick (h, lh, bh);
+            h = hi[i - 1].hp (h, bh, lh);
+            l = l2;
+        }
+        low = l;
+        high = d.hiSign < 0.0f ? F4::set1 (d.hiSign) * h : h;
+    }
+};
+
+struct XoverAllpass4
+{
+    Svf4 s[kXoverMaxSections / 2];
+    int slope = kXover24;
+    const XoverDef* def = &xoverDef (kXover24);
+
+    void setup (float g, int sl)
+    {
+        slope = sl;
+        def = &xoverDef (sl);
+        for (int i = 0; i < def->apSections; ++i)
+            s[i].tune (g, def->apK[i]);
+    }
+    void reset ()
+    {
+        for (auto& x : s)
+            x.reset ();
+    }
+    void copyLanes (const XoverAllpass4& o, int from, int to)
+    {
+        for (int i = 0; i < kXoverMaxSections / 2; ++i)
+            s[i].copyLanes (o.s[i], from, to);
+    }
+    // XoverAllpass::tick for each lane
+    inline F4 tick (F4 x)
+    {
+        const XoverDef& d = *def;
+        F4 l, b;
+        int i = 0;
+        if (d.firstOrderAp)
+        {
+            s[0].tick (x, l, b);
+            x = l - s[0].hp (x, b, l);
+            i = 1;
+        }
+        for (; i < d.apSections; ++i)
+        {
+            s[i].tick (x, l, b);
+            x = s[i].ap (x, b);
         }
         return x;
     }

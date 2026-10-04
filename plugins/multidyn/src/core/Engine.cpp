@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "pluginkit/NoDenormals.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -137,31 +139,18 @@ void Engine::processColor (float* L, float* R, int n)
 void Engine::Bank::tune (int j, float g)
 {
     split[j].setup (g, slope);
-    scSplit[j].setup (g, slope);
     for (int b = 0; b < kMaxBands - 1; ++b)
-    {
         ap[b][j].setup (g, slope);
-        scAp[b][j].setup (g, slope);
-    }
     subAp[j].setup (g, slope);
-    scSubAp[j].setup (g, slope);
 }
 
-void Engine::Bank::tuneSub (float g)
-{
-    sub.setup (g, slope);
-    scSub.setup (g, slope);
-}
+void Engine::Bank::tuneSub (float g) { sub.setup (g, slope); }
 
 void Engine::Bank::resetSub ()
 {
     sub.reset ();
-    scSub.reset ();
     for (int j = 0; j < kMaxBands - 1; ++j)
-    {
         subAp[j].reset ();
-        scSubAp[j].reset ();
-    }
 }
 
 void Engine::Bank::reset ()
@@ -169,14 +158,22 @@ void Engine::Bank::reset ()
     for (int j = 0; j < kMaxBands - 1; ++j)
     {
         split[j].reset ();
-        scSplit[j].reset ();
         for (int b = 0; b < kMaxBands - 1; ++b)
-        {
             ap[b][j].reset ();
-            scAp[b][j].reset ();
-        }
     }
     resetSub ();
+}
+
+void Engine::Bank::copyLanes (const Bank& o, int from, int to)
+{
+    for (int j = 0; j < kMaxBands - 1; ++j)
+    {
+        split[j].copyLanes (o.split[j], from, to);
+        for (int b = 0; b < kMaxBands - 1; ++b)
+            ap[b][j].copyLanes (o.ap[b][j], from, to);
+        subAp[j].copyLanes (o.subAp[j], from, to);
+    }
+    sub.copyLanes (o.sub, from, to);
 }
 
 void Engine::prepare (double sampleRate, int)
@@ -310,41 +307,46 @@ void Engine::startSub ()
     subMix = 0.0f;
 }
 
-void Engine::splitWithSub (float x, int c, int n, bool sc, Bank& bk, float mix, float* out)
+void Engine::splitWithSub (const float* x, int n, Bank& bk, float mix, float (*out)[kLanes])
 {
-    float lo, hi;
-    (sc ? bk.scSub : bk.sub).tick (x, c, lo, hi);
+    const F4 in = F4::load (x);
+    F4 lo, hi;
+    bk.sub.tick (in, lo, hi);
     // the bands' input: the input as it is, going over to the part above the corner
-    const float rest = mix >= 1.0f ? hi : x + (hi - x) * mix;
-    if (sc)
-        splitBands (rest, c, n, bk.scSplit, bk.scAp, out);
+    alignas (16) float rest[kLanes];
+    if (mix >= 1.0f)
+        hi.store (rest);
     else
-        splitBands (rest, c, n, bk.split, bk.ap, out);
-    XoverAllpass* aps = sc ? bk.scSubAp : bk.subAp;
+        (in + (hi - in) * F4::set1 (mix)).store (rest);
+    splitBands (rest, n, bk, out);
     for (int j = 0; j < n - 1; ++j)
-        lo = aps[j].tick (lo, c);
-    out[kSubBand] = lo;
+        lo = bk.subAp[j].tick (lo);
+    lo.store (out[kSubBand]);
 }
 
-void Engine::splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out)
+void Engine::splitBands (const float* x, int n, Bank& bk, float (*out)[kLanes])
 {
-    float rest = x;
+    F4 rest = F4::load (x);
     for (int j = 0; j < n - 1; ++j)
     {
-        float lo, hi;
-        sp[j].tick (rest, c, lo, hi);
-        out[j] = lo;
-        rest = hi;
+        F4 lo;
+        bk.split[j].tick (rest, lo, rest);
+        lo.store (out[j]);
     }
-    out[n - 1] = rest;
+    rest.store (out[n - 1]);
     for (int b = 0; b + 2 < n; ++b)
+    {
+        F4 y = F4::load (out[b]);
         for (int j = b + 1; j < n - 1; ++j)
-            out[b] = aps[b][j].tick (out[b], c);
+            y = bk.ap[b][j].tick (y);
+        y.store (out[b]);
+    }
 }
 
 void Engine::process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL,
                       float* outR, int n)
 {
+    const pk::NoDenormals noDenormals; // the crossovers' states decay into them in silence
     if (bypass)
     {
         const int len = (int)bypassDelay[0].size ();
@@ -468,6 +470,19 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const float liftBlend = (float)soften, liftKeep = (float)(1.0 - 0.5 * soften);
     const float liftA = (float)(1.0 - std::exp (-2.0 * M_PI * std::min (8000.0 * std::pow (3500.0 / 8000.0, soften), 0.4 * sr) / sr));
 
+    // without the side-chain its lanes must not move: keep their states for the end of the block
+    scKept[0] = scKept[1] = false;
+    if (!scActive)
+    {
+        scKeep[cur] = banks[cur];
+        scKept[cur] = true;
+        if (fadePos >= 0)
+        {
+            scKeep[cur ^ 1] = banks[cur ^ 1];
+            scKept[cur ^ 1] = true;
+        }
+    }
+
     for (int i = 0; i < n; ++i)
     {
         outGain += (outTarget - outGain) * smooth;
@@ -481,6 +496,11 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
                 fresh.tune (j, xg[j]);
             fresh.tuneSub (subG);
             fresh.reset ();
+            if (!scActive)
+            {
+                scKeep[cur ^ 1].reset (); // (its side-chain lanes start from silence too)
+                scKept[cur ^ 1] = true;
+            }
             fadePos = 0;
         }
         const bool fading = fadePos >= 0;
@@ -489,7 +509,12 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         Bank& nb = banks[cur ^ 1];
         // the Sub band: starting, settling, fading in or out (off, nothing of it runs)
         if (subState == SubState::Off && wantSub)
+        {
             startSub ();
+            for (int k = 0; k < 2; ++k)
+                if (scKept[k])
+                    scKeep[k].resetSub ();
+        }
         if (subState == SubState::Warming)
         {
             if (!wantSub)
@@ -505,47 +530,34 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         }
         const bool subRun = subState != SubState::Off;
         used[kSubBand] = subRun;
-        float xs[2] = {inL[i], inR[i]};
+        // the four lanes: the input and the side-chain (silence without it: those lanes are put back)
+        alignas (16) const float xs[kLanes] = {inL[i], inR[i], scActive ? scL[i] * scGain : 0.0f, scActive ? scR[i] * scGain : 0.0f};
         float band[kAll][2] {};
         float scBand[kAll][2] {};
         const int nOut = subRun ? kAll : nBands;
-        for (int c = 0; c < 2; ++c)
         {
-            float tmp[kAll] {}, tmp2[kAll] {};
+            alignas (16) float tmp[kAll][kLanes] {}, tmp2[kAll][kLanes] {};
             if (subRun)
-                splitWithSub (xs[c], c, nBands, false, bk, subMix, tmp);
+                splitWithSub (xs, nBands, bk, subMix, tmp);
             else
-                splitBands (xs[c], c, nBands, bk.split, bk.ap, tmp);
+                splitBands (xs, nBands, bk, tmp);
             if (fading)
             {
                 if (subRun)
-                    splitWithSub (xs[c], c, nBands, false, nb, subMix, tmp2);
+                    splitWithSub (xs, nBands, nb, subMix, tmp2);
                 else
-                    splitBands (xs[c], c, nBands, nb.split, nb.ap, tmp2);
+                    splitBands (xs, nBands, nb, tmp2);
                 for (int bb = 0; bb < nOut; ++bb)
-                    tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
+                    for (int c = 0; c < kLanes; ++c)
+                        tmp[bb][c] += (tmp2[bb][c] - tmp[bb][c]) * w;
             }
             for (int bb = 0; bb < nOut; ++bb)
-                band[bb][c] = tmp[bb];
-            if (scActive)
-            {
-                const float sx = (c == 0 ? scL[i] : scR[i]) * scGain;
-                if (subRun)
-                    splitWithSub (sx, c, nBands, true, bk, subMix, tmp);
-                else
-                    splitBands (sx, c, nBands, bk.scSplit, bk.scAp, tmp);
-                if (fading)
+                for (int c = 0; c < 2; ++c)
                 {
-                    if (subRun)
-                        splitWithSub (sx, c, nBands, true, nb, subMix, tmp2);
-                    else
-                        splitBands (sx, c, nBands, nb.scSplit, nb.scAp, tmp2);
-                    for (int bb = 0; bb < nOut; ++bb)
-                        tmp[bb] += (tmp2[bb] - tmp[bb]) * w;
+                    band[bb][c] = tmp[bb][c];
+                    if (scActive)
+                        scBand[bb][c] = tmp[bb][2 + c];
                 }
-                for (int bb = 0; bb < nOut; ++bb)
-                    scBand[bb][c] = tmp[bb];
-            }
         }
         if (fading && ++fadePos > fadeWarm + fadeLen)
         {
@@ -741,6 +753,10 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
             outR[i] = sumR * outGain;
         }
     }
+
+    for (int k = 0; k < 2; ++k)
+        if (scKept[k])
+            banks[k].copyLanes (scKeep[k], 2, kLanes);
 
     // Soften's Color after the Output gain, then the built-in saturator (neither on the side-chain
     // listen signal)

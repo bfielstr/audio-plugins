@@ -163,28 +163,36 @@ private:
     // Crossover tree: split[j] separates band j from everything above it. Lower bands are
     // passed through allpasses at every higher crossover so the bands sum to an allpass. Two banks
     // of them: the one in use (cur) and, while the Slope changes, the new one fading in.
+    // Each filter runs four signals at once (Crossover.h, XoverSplit4): the left and right channels
+    // (lanes 0 and 1) and the side-chain's (lanes 2 and 3).
     struct Bank
     {
-        XoverSplit split[kMaxBands - 1], scSplit[kMaxBands - 1];
-        XoverAllpass ap[kMaxBands - 1][kMaxBands - 1], scAp[kMaxBands - 1][kMaxBands - 1];
+        XoverSplit4 split[kMaxBands - 1];
+        XoverAllpass4 ap[kMaxBands - 1][kMaxBands - 1];
         // the Sub band: its split, and the all-passes of the tree's crossovers it goes through
-        XoverSplit sub, scSub;
-        XoverAllpass subAp[kMaxBands - 1], scSubAp[kMaxBands - 1];
+        XoverSplit4 sub;
+        XoverAllpass4 subAp[kMaxBands - 1];
         int slope = kXover24;
         void tune (int j, float g); // crossover j's corner
         void tuneSub (float g);     // the Sub band's corner
         void reset ();
         void resetSub ();
+        void copyLanes (const Bank& o, int from, int to); // the filters' states of those lanes
     };
     Bank banks[2];
+    // Without the side-chain its lanes run along but must come out of the block as they went in (its
+    // filters only run while it is on): their states are kept here meanwhile.
+    Bank scKeep[2];
+    bool scKept[2] {};
     int cur = 0;
     int fadePos = -1;              // samples since the new bank started (-1: no change running)
     int fadeWarm = 0, fadeLen = 1; // it settles this long, then the bands crossfade this long
     float xf[kMaxBands - 1] {}, xg[kMaxBands - 1] {}; // the crossovers in use and their prewarped corners
-    void splitBands (float x, int c, int n, XoverSplit* sp, XoverAllpass (*aps)[kMaxBands - 1], float* out);
-    // one bank's split with the Sub band: the bands (out[0 .. n-1]) and the Sub band (out[kSubBand]);
-    // subMix: how far the bands' input has gone over to the part above the Sub band's corner
-    void splitWithSub (float x, int c, int n, bool sc, Bank& bk, float subMix, float* out);
+    // one bank's split of the four lanes x into n bands (out[0 .. n-1])
+    static void splitBands (const float* x, int n, Bank& bk, float (*out)[kLanes]);
+    // with the Sub band: the bands (out[0 .. n-1]) and the Sub band (out[kSubBand]); subMix: how far the
+    // bands' input has gone over to the part above the Sub band's corner
+    static void splitWithSub (const float* x, int n, Bank& bk, float subMix, float (*out)[kLanes]);
     BandState bands[kNumBands + 1]; // and the Sub band's (kSubBand)
     BandMeter meters[kNumBands + 1];
     enum class SubState { Off, Warming, In }; // In: fading in, on, or fading out
