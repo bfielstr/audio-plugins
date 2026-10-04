@@ -14,6 +14,10 @@ on:
         description: "Commit the macOS host tests' editor screenshots to docs/<plug-in>/ on this branch"
         type: boolean
         default: false
+      installers:
+        description: "Build the double-click installers (.pkg, Setup.exe), test them and keep them as workflow artifacts"
+        type: boolean
+        default: false
 
 # A newer push to a pull request stops the run for the older one. Runs on main and on tags always finish
 # (a release must never be cancelled half-way).
@@ -34,13 +38,24 @@ jobs:
           - name: macOS
             os: macos-latest
             asset: Plugins-macOS.zip
+            installer: Plugins-macOS.pkg
           - name: Linux x86_64
             os: ubuntu-22.04 # oldest supported glibc for wider compatibility
             asset: Plugins-Linux-x86_64.zip
+            installer: "" # Linux keeps the one-line script
           - name: Windows x64
             os: windows-latest
             asset: Plugins-Windows-x64.zip
+            installer: Plugins-Windows-x64-Setup.exe
     runs-on: ${{ matrix.os }}
+    env:
+      # The double-click installers (installer/) are built and tested for releases, and on a manual run
+      # with "installers" ticked (to try them before tagging).
+      BUILD_INSTALLERS: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.installers) }}
+      # Signing switches on by itself once these secrets exist (see "Sign the plug-ins" below); until
+      # then everything is published unsigned (the Mac bundles keep their ad-hoc signature).
+      HAVE_APPLE_SIGNING: ${{ secrets.APPLE_DEVELOPER_ID_P12 != '' }}
+      HAVE_WINDOWS_SIGNING: ${{ secrets.WINDOWS_CERT_PFX != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -135,6 +150,53 @@ jobs:
           git commit -m "Docs: editor screenshots from the macOS host tests (run ${{ github.run_id }})"
           git push origin "HEAD:${GITHUB_REF#refs/heads/}"
 
+      # Release signing, skipped while the secrets are not set. Secrets this expects:
+      #   macOS: APPLE_DEVELOPER_ID_P12 (base64 .p12 holding the "Developer ID Application" and
+      #   "Developer ID Installer" certificates), APPLE_DEVELOPER_ID_P12_PASSWORD, APPLE_DEVELOPER_ID
+      #   ("Developer ID Application: Name (TEAMID)"), APPLE_INSTALLER_IDENTITY ("Developer ID Installer:
+      #   Name (TEAMID)") and, for notarisation, APPLE_NOTARY_APPLE_ID, APPLE_NOTARY_TEAM_ID,
+      #   APPLE_NOTARY_PASSWORD (an app-specific password).
+      #   Windows: WINDOWS_CERT_PFX (base64 .pfx code-signing certificate), WINDOWS_CERT_PASSWORD.
+      - name: Sign the plug-ins (macOS, when a Developer ID is set)
+        if: runner.os == 'macOS' && env.HAVE_APPLE_SIGNING == 'true' && env.BUILD_INSTALLERS == 'true'
+        shell: bash
+        env:
+          P12: ${{ secrets.APPLE_DEVELOPER_ID_P12 }}
+          P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+        run: |
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kcpw="$(uuidgen)"
+          security create-keychain -p "$kcpw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpw" "$kc"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/id.p12"
+          security import "$RUNNER_TEMP/id.p12" -k "$kc" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/productsign
+          rm -f "$RUNNER_TEMP/id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$kcpw" "$kc" >/dev/null
+          # shellcheck disable=SC2046
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          for p in build/VST3/Release/*.vst3; do
+            codesign --force --timestamp --options runtime --sign "$APPLE_DEVELOPER_ID" "$p"
+            codesign -v --strict "$p"
+          done
+
+      - name: Sign the plug-ins (Windows, when a certificate is set)
+        if: runner.os == 'Windows' && env.HAVE_WINDOWS_SIGNING == 'true' && env.BUILD_INSTALLERS == 'true'
+        shell: pwsh
+        env:
+          PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          PFX_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'cert.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PFX))
+          "WINDOWS_CERT_FILE=$pfx" >> $env:GITHUB_ENV  # the installer build signs with it too
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe' | Sort-Object FullName | Select-Object -Last 1
+          Get-ChildItem build\VST3\Release\*.vst3\Contents\x86_64-win\*.vst3 | ForEach-Object {
+            & $signtool.FullName sign /f $pfx /p $env:PFX_PASSWORD /fd sha256 /tr http://timestamp.digicert.com /td sha256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signing $($_.Name) failed" }
+          }
+
       - name: Package
         shell: bash
         run: |
@@ -162,6 +224,44 @@ jobs:
           path: dist/${{ matrix.asset }}
           if-no-files-found: error
 
+      # The double-click installer: a .pkg on macOS (installer/macos/build-pkg.sh), an Inno Setup .exe on
+      # Windows (installer/windows/build-setup.sh). Both take every bundle in build/VST3/Release.
+      - name: Build the installer
+        if: matrix.installer != '' && env.BUILD_INSTALLERS == 'true'
+        shell: bash
+        env:
+          APPLE_INSTALLER_IDENTITY: ${{ env.HAVE_APPLE_SIGNING == 'true' && secrets.APPLE_INSTALLER_IDENTITY || '' }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            installer/macos/build-pkg.sh build/VST3/Release "dist/${{ matrix.installer }}"
+          else
+            if ! command -v iscc >/dev/null && [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
+              choco install innosetup -y --no-progress
+            fi
+            installer/windows/build-setup.sh build/VST3/Release dist
+          fi
+
+      - name: Test the installer (macOS)
+        if: runner.os == 'macOS' && matrix.installer != '' && env.BUILD_INSTALLERS == 'true'
+        run: installer/macos/smoke-test.sh "dist/${{ matrix.installer }}"
+
+      - name: Test the installer (Windows)
+        if: runner.os == 'Windows' && matrix.installer != '' && env.BUILD_INSTALLERS == 'true'
+        shell: pwsh
+        run: ./installer/windows/smoke-test.ps1 "dist/${{ matrix.installer }}"
+
+      - name: Upload the installer
+        if: matrix.installer != '' && env.BUILD_INSTALLERS == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.installer }}
+          path: dist/${{ matrix.installer }}
+          if-no-files-found: error
+
       - name: Upload UI screenshots
         if: runner.os == 'macOS' && always()
         uses: actions/upload-artifact@v4
@@ -182,14 +282,23 @@ jobs:
           pattern: Plugins-*
           merge-multiple: true
       - name: Checksums
-        run: cd dist && sha256sum Plugins-*.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: |
+          cd dist
+          # every release carries both double-click installers next to the zips
+          test -f Plugins-macOS.pkg && test -f Plugins-Windows-x64-Setup.exe
+          sha256sum Plugins-*.zip Plugins-*.pkg Plugins-*.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" --title "Plug-ins $GITHUB_REF_NAME (Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr)" \
-            --notes "Install with one command:
+            --notes "**Easiest:** download the installer for your system below and double-click it.
+
+          - macOS: \`Plugins-macOS.pkg\`. It is not signed by Apple yet: if macOS will not open it, right-click it and choose Open, or go to System Settings > Privacy & Security and click Open Anyway.
+          - Windows: \`Plugins-Windows-x64-Setup.exe\`. It is not signed yet: if Windows shows \"Windows protected your PC\", click More info, then Run anyway.
+
+          Or install with one command:
 
           **macOS / Linux**
           \`\`\`
@@ -207,3 +316,4 @@ jobs:
     uses: ./.github/workflows/installers.yml
     with:
       version: ${{ github.ref_name }}
+      require-installers: true

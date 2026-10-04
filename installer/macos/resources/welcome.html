@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: -apple-system, "Helvetica Neue", sans-serif; font-size: 13px; line-height: 1.45; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  h2 { font-size: 13px; margin: 14px 0 4px; }
+  p, ol, ul { margin: 0 0 8px; }
+  code { font-family: Menlo, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Audio plug-ins @VERSION@</h1>
+<p>This installs the bfielstr VST3 plug-ins for every user on this Mac. They work in REAPER, Ableton
+Live and any other host that loads VST3 plug-ins (Logic Pro does not load VST3). They run natively on
+Apple Silicon and Intel.</p>
+
+<h2>What happens</h2>
+<ul>
+  <li>On the next screens you can untick any plug-ins you do not want. All of them are ticked to start with.</li>
+  <li>They go into <code>/Library/Audio/Plug-Ins/VST3/bfielstr</code>.</li>
+  <li>Older versions are replaced. Copies under old names (for example <code>Gently.vst3</code>, now
+  <code>Gentlr.vst3</code>) are removed, so nothing shows up twice. So are copies that the one-line
+  install script put in your own Library folder. Other makers' plug-ins are never touched.</li>
+  <li>Your presets and projects are kept.</li>
+</ul>
+
+<h2>After installing</h2>
+<p>Open your host and scan for new plug-ins. In REAPER: Options, Preferences, Plug-ins, VST, Re-scan.
+In Live: Settings, Plug-ins, Rescan, with "Use VST3 Plug-in System Folders" turned on.</p>
+
+<h2>If your Mac would not open this installer</h2>
+<p>This installer is not signed by Apple yet, so macOS may say it "cannot be opened" or "cannot verify
+the developer". To open it anyway:</p>
+<ol>
+  <li>In Finder, right-click (or Control-click) the installer and choose Open. Then click Open again.</li>
+  <li>If that does not work: open System Settings, go to Privacy &amp; Security, scroll down and click
+  Open Anyway next to the message about this installer. Then enter your password.</li>
+</ol>
+</body>
+</html>

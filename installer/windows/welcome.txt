@@ -1,0 +1,19 @@
+Audio plug-ins (bfielstr)
+
+This installs the bfielstr VST3 plug-ins for every user on this PC. They work in REAPER, Ableton Live and any other host that loads VST3 plug-ins.
+
+What happens
+
+- On the next screen you can untick any plug-ins you do not want. All of them are ticked to start with.
+- They go into C:\Program Files\Common Files\VST3\bfielstr. Every VST3 host looks there.
+- Older versions are replaced. Copies under old names (for example Gently.vst3, now Gentlr.vst3) are removed, so nothing shows up twice. So are copies that the one-line install script put in your own user folder. Other makers' plug-ins are never touched.
+- Your presets and projects are kept.
+- To remove the plug-ins later, go to Settings > Apps > Installed apps, find "Audio plug-ins (bfielstr)" and choose Uninstall.
+
+After installing
+
+Open your host and scan for new plug-ins. In REAPER: Options > Preferences > Plug-ins > VST > Re-scan. In Live: Settings > Plug-ins > Rescan, with "Use VST3 Plug-in System Folders" turned on.
+
+About the blue "Windows protected your PC" message
+
+This installer is not signed yet, so Windows SmartScreen may warn about it before it starts. To run it anyway, click "More info", then "Run anyway".

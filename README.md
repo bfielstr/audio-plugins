@@ -59,6 +59,35 @@ unchanged.
 
 ## Install
 
+### Download the installer for your system
+
+- **macOS** (Apple Silicon and Intel, macOS 11 or newer):
+  [Plugins-macOS.pkg](https://github.com/bfielstr/audio-plugins/releases/latest/download/Plugins-macOS.pkg)
+- **Windows** (64-bit, Windows 10 or newer):
+  [Plugins-Windows-x64-Setup.exe](https://github.com/bfielstr/audio-plugins/releases/latest/download/Plugins-Windows-x64-Setup.exe)
+
+Double-click the file and follow the steps. You can untick any plug-ins you do not want. They are
+installed for every user on the computer, into `/Library/Audio/Plug-Ins/VST3/bfielstr` on macOS and
+`C:\Program Files\Common Files\VST3\bfielstr` on Windows. Running a newer installer replaces the
+older versions. Copies under the older names above (such as `Gently.vst3`) are removed, and so are
+copies the one-line scripts put in your own user folder, so nothing shows up twice. On Windows,
+uninstall from *Settings → Apps → Installed apps → Audio plug-ins (bfielstr)*.
+
+### If your computer will not open the installer
+
+The installers are not signed yet, so your computer may warn you the first time you open one. These
+steps tell it that you trust the file you downloaded from this page.
+
+- **macOS** says the installer "cannot be opened" or "cannot verify the developer": in Finder,
+  right-click (or Control-click) the file and choose *Open*, then click *Open* again. If there is no
+  *Open* button, go to *System Settings → Privacy & Security*, scroll down and click *Open Anyway*
+  next to the message about the installer. Then enter your password.
+- **Windows** shows a blue "Windows protected your PC" box: click *More info*, then *Run anyway*.
+
+### One-line install scripts
+
+If you prefer the command line, these do the same for your user only and also work on Linux.
+
 **macOS** (universal: Apple Silicon + Intel) **and Linux** (x86_64):
 
 ```sh
@@ -72,16 +101,26 @@ curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts
 irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.ps1 | iex
 ```
 
-The installers download the latest [release](https://github.com/bfielstr/audio-plugins/releases), check
+The scripts download the latest [release](https://github.com/bfielstr/audio-plugins/releases), check
 its SHA-256 checksum and install the `.vst3` bundles into a **`bfielstr`** folder inside the standard
-VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running an installer again replaces the
+VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running a script again replaces the
 installed versions. Copies that older installers put directly in the VST3 folder, and bundles under the
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
 `SIMPLR_VERSION=v0.12.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
-Then in REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*. In Live: *Settings → Plug-ins →
+### Install by hand
+
+Download the zip for your system from the
+[latest release](https://github.com/bfielstr/audio-plugins/releases/latest), unzip it and copy the
+`.vst3` bundles you want into a `bfielstr` folder inside your VST3 folder: `/Library/Audio/Plug-Ins/VST3`
+or `~/Library/Audio/Plug-Ins/VST3` on macOS, `C:\Program Files\Common Files\VST3` on Windows,
+`~/.vst3` on Linux.
+
+### After installing
+
+In REAPER: *Options → Preferences → Plug-ins → VST → Re-scan*. In Live: *Settings → Plug-ins →
 Rescan* (with *Use VST3 Plug-in System Folders* on).
 
 ## Presets
@@ -136,6 +175,7 @@ shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/e
                     VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
 scripts             build.sh, install.sh, install.ps1
+installer           the double-click installers: macos (.pkg), windows (Inno Setup), their CI tests
 ```
 
 Each plug-in keeps its DSP free of any framework so it is tested headlessly (`*_tests`); the
