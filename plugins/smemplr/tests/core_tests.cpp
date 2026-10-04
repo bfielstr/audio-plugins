@@ -243,6 +243,208 @@ TEST (fft_roundtrip)
     }
 }
 
+// The FFT Smemplr used before the split-array one (Fft.h): a plain radix-2 transform on std::complex,
+// every stage reading the one twiddle table with a stride. Kept as the reference the new one must match.
+class RefFft
+{
+public:
+    using cf = std::complex<float>;
+    explicit RefFft (int size)
+    {
+        n = size;
+        m = n / 2;
+        int bits = 0;
+        while ((1 << bits) < m)
+            ++bits;
+        rev.resize ((size_t)m);
+        for (int i = 0; i < m; ++i)
+        {
+            int r = 0;
+            for (int b = 0; b < bits; ++b)
+                if (i & (1 << b))
+                    r |= 1 << (bits - 1 - b);
+            rev[(size_t)i] = r;
+        }
+        tw.resize ((size_t)m / 2 + 1);
+        for (int i = 0; i <= m / 2; ++i)
+        {
+            double a = -2.0 * M_PI * i / m;
+            tw[(size_t)i] = cf ((float)std::cos (a), (float)std::sin (a));
+        }
+        split.resize ((size_t)m + 1);
+        for (int k = 0; k <= m; ++k)
+        {
+            double a = -2.0 * M_PI * k / n;
+            split[(size_t)k] = cf ((float)std::cos (a), (float)std::sin (a));
+        }
+        z.resize ((size_t)m);
+    }
+    void forward (const float* in, cf* out)
+    {
+        for (int i = 0; i < m; ++i)
+            z[(size_t)rev[(size_t)i]] = cf (in[2 * i], in[2 * i + 1]);
+        transform (false);
+        const cf z0 = z[0];
+        out[0] = cf (z0.real () + z0.imag (), 0.0f);
+        out[m] = cf (z0.real () - z0.imag (), 0.0f);
+        for (int k = 1; k < m; ++k)
+        {
+            const cf a = z[(size_t)k];
+            const cf b = std::conj (z[(size_t)(m - k)]);
+            const cf e = (a + b) * 0.5f;
+            const cf o = (a - b) * cf (0.0f, -0.5f);
+            out[k] = e + split[(size_t)k] * o;
+        }
+    }
+    void inverse (const cf* in, float* out)
+    {
+        for (int k = 0; k < m; ++k)
+        {
+            const cf a = in[k];
+            const cf b = std::conj (in[m - k]);
+            const cf e = (a + b) * 0.5f;
+            const cf o = (a - b) * 0.5f * std::conj (split[(size_t)k]);
+            z[(size_t)rev[(size_t)k]] = e + cf (0.0f, 1.0f) * o;
+        }
+        transform (true);
+        const float s = 1.0f / (float)m;
+        for (int i = 0; i < m; ++i)
+        {
+            out[2 * i] = z[(size_t)i].real () * s;
+            out[2 * i + 1] = z[(size_t)i].imag () * s;
+        }
+    }
+
+private:
+    void transform (bool inverseDir)
+    {
+        for (int len = 2; len <= m; len <<= 1)
+        {
+            const int half = len >> 1;
+            const int step = m / len;
+            for (int i = 0; i < m; i += len)
+                for (int j = 0; j < half; ++j)
+                {
+                    cf w = tw[(size_t)(j * step)];
+                    if (inverseDir)
+                        w = std::conj (w);
+                    const cf u = z[(size_t)(i + j)];
+                    const cf v = z[(size_t)(i + j + half)] * w;
+                    z[(size_t)(i + j)] = u + v;
+                    z[(size_t)(i + j + half)] = u - v;
+                }
+        }
+    }
+    int n = 0, m = 0;
+    std::vector<int> rev;
+    std::vector<cf> tw, split, z;
+};
+
+TEST (fft_matches_reference)
+{
+    // the split-array FFT computes the plain radix-2 one's transform (on x86 to the bit; a compiler that
+    // fuses multiply-adds may round a little differently), forward and inverse, at every size used
+    double worstF = 0.0, worstI = 0.0;
+    for (int n : {16, 256, 512, 1024, 2048, 4096})
+    {
+        Fft f (n);
+        RefFft r (n);
+        std::vector<float> x ((size_t)n), y1 ((size_t)n), y2 ((size_t)n);
+        std::vector<Fft::cf> s1 ((size_t)f.bins ()), s2 ((size_t)f.bins ());
+        uint32_t seed = 11;
+        for (int round = 0; round < 4; ++round)
+        {
+            for (auto& v : x)
+                v = randomBipolar (seed) * (round == 3 ? 1e-3f : 1.0f);
+            f.forward (x.data (), s1.data ());
+            r.forward (x.data (), s2.data ());
+            double peakS = 0.0, dS = 0.0;
+            for (int k = 0; k < f.bins (); ++k)
+            {
+                peakS = std::max (peakS, (double)std::abs (s2[(size_t)k]));
+                dS = std::max (dS, (double)std::abs (s1[(size_t)k] - s2[(size_t)k]));
+            }
+            // the same spectrum back (the reference's, so only the inverse differs)
+            f.inverse (s2.data (), y1.data ());
+            r.inverse (s2.data (), y2.data ());
+            double peakY = 0.0, dY = 0.0;
+            for (int i = 0; i < n; ++i)
+            {
+                peakY = std::max (peakY, (double)std::fabs (y2[(size_t)i]));
+                dY = std::max (dY, (double)std::fabs (y1[(size_t)i] - y2[(size_t)i]));
+            }
+            worstF = std::max (worstF, dS / peakS);
+            worstI = std::max (worstI, dY / peakY);
+        }
+    }
+    std::printf ("    largest difference: forward %.3g, inverse %.3g (of the peak)\n", worstF, worstI);
+    CHECK (worstF < 1e-6 && worstI < 1e-6, "forward %g, inverse %g", worstF, worstI);
+}
+
+// readSinc / readSincRing as they were before the kernel's range check went (the table now goes on
+// with zeros) and the taps' weights were worked out ahead of the sums
+static void refReadSinc (const float* a, const float* b, int len, double pos, float cutoff, float& outA, float& outB)
+{
+    const auto& t = SincTable::get ();
+    cutoff = std::clamp (cutoff, SincTable::kMinCutoff, 1.0f);
+    const int base = (int)std::floor (pos);
+    const float frac = (float)(pos - base);
+    const int half = (int)std::ceil (SincTable::kHalf / cutoff);
+    float sa = 0.0f, sb = 0.0f, wsum = 0.0f;
+    for (int i = base - half + 1; i <= base + half; ++i)
+    {
+        const float w = t.at (std::fabs ((float)(i - base) - frac) * cutoff);
+        wsum += w;
+        if (i < 0 || i >= len)
+            continue;
+        sa += w * a[i];
+        if (b)
+            sb += w * b[i];
+    }
+    const float g = wsum > 1e-6f ? 1.0f / wsum : 0.0f;
+    outA = sa * g;
+    outB = b ? sb * g : outA;
+}
+
+TEST (sinc_reads_match_reference)
+{
+    std::vector<float> a (4096), b (4096);
+    uint32_t seed = 3;
+    for (size_t i = 0; i < a.size (); ++i)
+    {
+        a[i] = randomBipolar (seed);
+        b[i] = randomBipolar (seed);
+    }
+    double worst = 0.0;
+    int n = 0;
+    for (float cutoff : {1.0f, 0.97f, 0.7f, 0.5f, 0.31f, 0.25f, 0.1f})
+        for (int k = 0; k < 2000; ++k)
+        {
+            const double pos = -40.0 + 4176.0 * (0.5 + 0.5 * randomBipolar (seed)); // past both ends too
+            float l1, r1, l2, r2, m1, m1r, m2, m2r;
+            readSinc (a.data (), b.data (), (int)a.size (), pos, cutoff, l1, r1);
+            refReadSinc (a.data (), b.data (), (int)a.size (), pos, cutoff, l2, r2);
+            readSinc (a.data (), nullptr, (int)a.size (), pos, cutoff, m1, m1r);
+            refReadSinc (a.data (), nullptr, (int)a.size (), pos, cutoff, m2, m2r);
+            worst = std::max ({worst, (double)std::fabs (l1 - l2), (double)std::fabs (r1 - r2), (double)std::fabs (m1 - m2)});
+            // the ring read: the same kernel round an absolute position of a power-of-two buffer
+            const double rp = 9000.0 + 3000.0 * (0.5 + 0.5 * randomBipolar (seed));
+            readSincRing (a.data (), b.data (), 4095, rp, cutoff, l1, r1);
+            const long long base = (long long)std::floor (rp);
+            std::vector<float> wa (128), wb (128);
+            for (int j = 0; j < 128; ++j)
+            {
+                wa[(size_t)j] = a[(size_t)((base - 64 + j) & 4095)];
+                wb[(size_t)j] = b[(size_t)((base - 64 + j) & 4095)];
+            }
+            refReadSinc (wa.data (), wb.data (), 128, rp - (double)(base - 64), cutoff, l2, r2);
+            worst = std::max ({worst, (double)std::fabs (l1 - l2), (double)std::fabs (r1 - r2)});
+            ++n;
+        }
+    std::printf ("    %d reads, largest difference %.3g\n", n, worst);
+    CHECK (worst < 1e-6, "%g", worst);
+}
+
 static double toneAmp (const std::vector<float>& x, double f, size_t a, size_t b);
 
 // Loads an effect into a rack slot with its own defaults, on; sets one of its values (plain).
@@ -3221,8 +3423,9 @@ TEST (far_transpose_cpu_and_memory)
     std::printf ("    CPU, 8 complex voices: %.1f%% at 0 st, %.1f%% at +48; 8 complex pro voices: %.1f%% at 0 st, %.1f%% at +48\n",
                  pv0, pv48, pro0, pro48);
     CHECK (at48 < 25.0 && hp48 < 30.0, "too slow: %.1f%% / %.1f%%", at48, hp48);
-    // (read the old way, at the sample's rate, 8 complex voices at +48 took about 290%, complex pro 360%)
-    CHECK (pv48 < 110.0 && pro48 < 130.0, "the vocoder too slow at +48: %.1f%% / %.1f%%", pv48, pro48);
+    // (read the old way, at the sample's rate, 8 complex voices at +48 took about 290%, complex pro 360%;
+    // read from the levels with the old FFT about 70 % and 85 %; now about 25 % and 28 % here)
+    CHECK (pv48 < 50.0 && pro48 < 55.0, "the vocoder too slow at +48: %.1f%% / %.1f%%", pv48, pro48);
 }
 
 // --- the modulation LFOs (Modulation.h) -------------------------------------------------------------
@@ -3585,7 +3788,7 @@ TEST (performance)
     std::printf ("    CPU: 32 classic voices %.1f%%, 8 complex voices %.1f%%, 16 beats voices %.1f%%\n", classic,
                  complex8, beats16);
     CHECK (classic < 25.0, "classic too slow %f%%", classic);
-    CHECK (complex8 < 40.0, "complex too slow %f%%", complex8);
+    CHECK (complex8 < 25.0, "complex too slow %f%%", complex8); // (about 9 % here)
 }
 
 int main (int argc, char** argv)

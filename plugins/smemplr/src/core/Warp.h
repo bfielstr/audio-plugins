@@ -156,7 +156,7 @@ private:
     std::vector<float> winBase, envBase;
     double envAt = 0.0; // the analysis position envBase was taken at
     bool envValid = false;
-    std::vector<float> window, fa, fb, fl, fr, olaL, olaR, olaW, fifoL, fifoR, synthPhase, corr, cep, logEnv;
+    std::vector<float> window, fa, fb, fl, fr, olaL, olaR, olaW, fifoL, fifoR, synthPhase, corr, cep, logEnv, phaseB;
     std::vector<Fft::cf> sa, sb, sl, sr, stmp;
     std::vector<int> peakOf;
     double hostSr = 44100.0;

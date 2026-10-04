@@ -31,6 +31,16 @@ public:
         const float fr = f - (float)i;
         return table[i] + fr * (table[i + 1] - table[i]);
     }
+    // The same for 0 <= x < kHalf + 1, without the range check: the table goes on with zeros up to there
+    // (the kernel is 0 from kHalf on, so this reads exactly what at() returns). The reads' kernels
+    // reach at most kHalf + cutoff.
+    float atNear (float x) const
+    {
+        const float f = x * kRes;
+        const int i = (int)f;
+        const float fr = f - (float)i;
+        return table[i] + fr * (table[i + 1] - table[i]);
+    }
 
 private:
     SincTable ()
@@ -46,6 +56,8 @@ private:
             return sum;
         };
         const double norm = bessel0 (beta);
+        for (int i = 0; i < kSize; ++i)
+            table[i] = 0.0f;
         for (int i = 0; i <= kHalf * kRes + 1; ++i)
         {
             const double x = (double)i / kRes;
@@ -55,7 +67,8 @@ private:
             table[i] = (float)(sinc * w);
         }
     }
-    float table[kHalf * kRes + 2];
+    static constexpr int kSize = (kHalf + 1) * kRes + 2;
+    float table[kSize];
 };
 
 // Reads one or two channels at a fractional position. Positions outside [0, len) read as 0.
@@ -71,20 +84,34 @@ inline void readSinc (const float* a, const float* b, int len, double pos, float
     const int lo = base - half + 1, hi = base + half;
     if (lo >= 0 && hi < len)
     {
-        for (int i = lo; i <= hi; ++i)
+        // the kernel first (independent taps), then the sums in the same order as ever
+        float w[2 * SincTable::kHalf * 4];
+        const int cnt = hi - lo + 1;
+        for (int j = 0; j < cnt; ++j)
+            w[j] = t.atNear (std::fabs ((float)(j + 1 - half) - frac) * cutoff);
+        const float* pa = a + lo;
+        if (b)
         {
-            const float w = t.at (std::fabs ((float)(i - base) - frac) * cutoff);
-            wsum += w;
-            sa += w * a[i];
-            if (b)
-                sb += w * b[i];
+            const float* pb = b + lo;
+            for (int j = 0; j < cnt; ++j)
+            {
+                wsum += w[j];
+                sa += w[j] * pa[j];
+                sb += w[j] * pb[j];
+            }
         }
+        else
+            for (int j = 0; j < cnt; ++j)
+            {
+                wsum += w[j];
+                sa += w[j] * pa[j];
+            }
     }
     else
     {
         for (int i = lo; i <= hi; ++i)
         {
-            const float w = t.at (std::fabs ((float)(i - base) - frac) * cutoff);
+            const float w = t.atNear (std::fabs ((float)(i - base) - frac) * cutoff);
             wsum += w;
             if (i < 0 || i >= len)
                 continue;
@@ -110,7 +137,7 @@ inline void readSincRing (const float* a, const float* b, int mask, double pos, 
     float sa = 0.0f, sb = 0.0f, wsum = 0.0f;
     for (int k = -half + 1; k <= half; ++k)
     {
-        const float w = t.at (std::fabs ((float)k - frac) * cutoff);
+        const float w = t.atNear (std::fabs ((float)k - frac) * cutoff);
         const int idx = (int)((base + k) & mask);
         wsum += w;
         sa += w * a[idx];
