@@ -175,10 +175,18 @@ enum ParamId : uint32_t
     kFiltLoopLock = kModLfoEnd, // 998
     kPitchLoopLock,             // 999
 
-    // The next free ID would be 1000, but that is where the hidden MIDI parameters (1000 .. 1002) are:
-    // the table has every ID from 0 up, so a new parameter goes after them (from 1003), which kNumParams,
-    // the table and every loop over the parameters then learn. New parameters are appended, never in a
-    // block above: every ID is stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
+    // --- the hidden MIDI parameters (1000 .. 1002: MidiParamId below, which they keep): in the table so it
+    // has every ID from 0 up, but not saved, not in presets or settings, not modulated and not given to
+    // the engine (isMidiParam; isValidParam is false for them) ---
+    kMidiParamsAt, // 1000
+    // --- added in 0.11 (after the MIDI parameters; a state without them reads their defaults, which
+    // change nothing): the waveform's Grid, which the loop's drags snap to (WaveformView.cpp; the
+    // engine does not read it) ---
+    kGridOn = kMidiParamsAt + 3, // 1003
+    kGridSize,                   // 1004, 1/16 .. 1 Bar (gridBeats)
+
+    // The next free ID is 1005. New parameters are appended, never in a block above: every ID is
+    // stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
     // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
     // second extension block from here (kRackSlots times the new count, slot by slot), which
     // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
@@ -189,7 +197,9 @@ static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is follo
 static_assert (kRackExtEnd == 975 && kTransHpOn == 975 && kTransHpFreq == 976 && kTransHpSlope == 977,
                "stored IDs moved: append, never insert");
 static_assert (kModLfoBase == 978, "stored IDs moved: append, never insert");
-static_assert (kFiltLoopLock == 998 && kPitchLoopLock == 999 && kNumParams == 1000,
+static_assert (kFiltLoopLock == 998 && kPitchLoopLock == 999 && kMidiParamsAt == 1000,
+               "stored IDs moved: append, never insert");
+static_assert (kGridOn == 1003 && kGridSize == 1004 && kNumParams == 1005,
                "a new parameter: update the next free ID in the comment above (and this)");
 
 // The modulation LFOs' parameters: kModLfos LFOs, each a block of kModLfoFields (a new field goes in a
@@ -250,14 +260,20 @@ constexpr uint32_t envPointParam (int env, int point, int field)
 // First ADSR parameter (attack) of each envelope; D, S, R follow.
 constexpr uint32_t envAdsrBase (int env) { return env == 0 ? kAmpA : (env == 1 ? kFiltA : kPitchA); }
 
-// Hidden parameters that receive MIDI controllers through IMidiMapping.
+// Hidden parameters that receive MIDI controllers through IMidiMapping. They sit in the table (it has
+// every ID up to kNumParams) as placeholders: the controller registers them hidden (Controller.cpp), the
+// processor turns them into events, and they are neither saved nor handed to the engine.
 enum MidiParamId : uint32_t
 {
     kMidiPitchBend = 1000,
     kMidiSustain = 1001,
     kMidiModWheel = 1002,
 };
-static_assert (kNumParams <= kMidiPitchBend, "the parameters run into the hidden MIDI ones");
+static_assert (kMidiParamsAt == kMidiPitchBend, "the MIDI parameters' place in the table");
+constexpr bool isMidiParam (uint32_t id) { return id >= kMidiPitchBend && id <= kMidiModWheel; }
+
+// The Grid's step in quarter-note beats (kGridSize: 1/16, 1/8, 1/4, 1/2, 1 Bar).
+double gridBeats (int index);
 
 using pk::Curve;
 using pk::Disp;
@@ -266,7 +282,8 @@ using pk::PType;
 
 const pk::ParamTable& paramTable ();
 inline const ParamInfo& paramInfo (uint32_t id) { return paramTable ().info (id); }
-inline bool isValidParam (uint32_t id) { return id < kNumParams; }
+// a parameter of the instrument (not a hidden MIDI one): saved, given to the engine, may be modulated
+inline bool isValidParam (uint32_t id) { return id < kNumParams && !isMidiParam (id); }
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double plain) { return paramTable ().toNormalized (id, plain); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }

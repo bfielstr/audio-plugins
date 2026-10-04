@@ -195,6 +195,38 @@ static void uiInteraction (Rig& rig)
         CHECK (std::fabs (plain (smemplr::kLength) - lengthBefore) < 0.004 && plain (smemplr::kLoopOn) >= 0.5,
                "the region drag keeps the length and the loop on");
     }
+    // --- the Grid (over the ruler's right end: Grid at 836..874 x 39..53): with Warp on (8 beats over the
+    // flags 0.1 .. 0.8) a 1/4 step is an eighth of the flagged region; a drag of the loop puts its start
+    // on a step and makes it whole steps long, and a drag of its end keeps the start ---
+    {
+        win.click (855, 46);
+        CHECK (plain (smemplr::kGridOn) >= 0.5, "clicking Grid should switch it on");
+        win.click (780, 17); // Warp on
+        CHECK (plain (smemplr::kWarp) >= 0.5, "warp on for the grid");
+        const double step = 0.7 / 8.0;
+        auto onGrid = [] (double x) { return std::fabs (x - std::round (x)) < 1e-6; };
+        const double rs0 = 0.1 + plain (smemplr::kStart) * 0.7, le0 = rs0 + plain (smemplr::kLength) * 0.7;
+        const double gx = wx ((rs0 + le0) / 2);
+        win.mouseDown (gx, barY);
+        win.mouseDrag (gx + 30, barY);
+        win.mouseDrag (gx + 61, barY);
+        win.mouseUp (gx + 61, barY);
+        const double rs1 = 0.1 + plain (smemplr::kStart) * 0.7, len1 = plain (smemplr::kLength) * 0.7;
+        CHECK (onGrid ((rs1 - 0.1) / step) && onGrid (len1 / step) && len1 > step * 0.999,
+               "a loop dragged on the grid: start %f, length %f (steps of %f)", rs1, len1, step);
+        // its end dragged half a step further: a whole number of steps, the start where it was
+        const double ex = wx (rs1 + len1);
+        win.mouseDown (ex, barY);
+        win.mouseDrag (ex + 20, barY);
+        win.mouseDrag (ex + step * 1094.0 * 1.4, barY);
+        win.mouseUp (ex + step * 1094.0 * 1.4, barY);
+        const double rs2 = 0.1 + plain (smemplr::kStart) * 0.7, len2 = plain (smemplr::kLength) * 0.7;
+        CHECK (std::fabs (rs2 - rs1) < 1e-9 && onGrid (len2 / step) && std::fabs (len2 - len1 - step) < 1e-6,
+               "the loop's end dragged on the grid: start %f -> %f, length %f -> %f", rs1, rs2, len1, len2);
+        win.click (780, 17);
+        win.click (855, 46);
+        CHECK (plain (smemplr::kGridOn) < 0.5 && plain (smemplr::kWarp) < 0.5, "the Grid and Warp off again");
+    }
 
     // --- envelope display: shift-drag bends a curve, double-click adds / removes breakpoints ---
     // amp envelope plot area in the editor: x 402..688, y 476..606
@@ -300,7 +332,8 @@ int main (int argc, char** argv)
 
         // --- controller surface ---------------------------------------------------
         const int32 count = rig.controller->getParameterCount ();
-        CHECK (count == (int32)smemplr::kNumParams + 3, "param count %d", count);
+        // (the hidden MIDI parameters are in the table's range, 1000 .. 1002: no more than its size)
+        CHECK (count == (int32)smemplr::kNumParams, "param count %d", count);
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         String128 str;
         rig.controller->getParamStringByValue (smemplr::kFilterFreq, 1.0, str);

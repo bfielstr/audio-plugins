@@ -35,6 +35,12 @@ public:
 
     // Called from the editor's idle timer; repaints if playheads moved.
     void idle ();
+    // The ruler's right end, this wide, is the editor's (its Grid controls sit over it): the ruler's
+    // marks and the sample's name stay left of it.
+    static constexpr double kToolsWidth = 270.0;
+    // The Grid's step in the sample's frames (0: Grid off): its note length (Grid Size) at the sample's
+    // tempo while Warp is on, at the host's otherwise (120 BPM without one), counted from the start flag.
+    double gridFrames (const SampleData& s) const;
     void resetZoom ()
     {
         viewStart = 0.0;
@@ -61,6 +67,10 @@ private:
     void removeSlice (int index);
     void toggleSliceKind (int index);
     void stopPreview ();
+    // The loop's drags with the Grid on (step: gridFrames, > 0): the loop starts on a grid line and is a
+    // whole number of steps long (at least one; held inside the flags fs .. fe). keepStart: only the
+    // length snaps (the loop's end dragged), the start stays where it is
+    void setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart = false);
 
     Controller* controller;
     ParamHost* host;

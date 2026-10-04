@@ -78,6 +78,17 @@ private:
 
 Parameter* Controller::makeParameter (uint32_t id)
 {
+    // the hidden MIDI parameters (their places in the table: Params.h), as they always were: hidden,
+    // automatable (for the hosts that send the controllers that way), never shown
+    if (isMidiParam (id))
+    {
+        const int32 hidden = ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;
+        if (id == kMidiPitchBend)
+            return new Parameter (STR16 ("Pitch Bend"), id, nullptr, 0.5, 0, hidden);
+        if (id == kMidiSustain)
+            return new Parameter (STR16 ("Sustain Pedal"), id, nullptr, 0.0, 1, hidden);
+        return new Parameter (STR16 ("Mod Wheel"), id, nullptr, 0.0, 0, hidden);
+    }
     if (isRackParam (id))
     {
         const RackField rf = rackField (id);
@@ -138,10 +149,7 @@ tresult PLUGIN_API Controller::initialize (FUnknown* context)
     const tresult r = pk::ControllerBase::initialize (context);
     if (r != kResultOk)
         return r;
-    const int32 hidden = ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden;
-    parameters.addParameter (STR16 ("Pitch Bend"), nullptr, 0, 0.5, hidden, kMidiPitchBend);
-    parameters.addParameter (STR16 ("Sustain Pedal"), nullptr, 1, 0.0, hidden, kMidiSustain);
-    parameters.addParameter (STR16 ("Mod Wheel"), nullptr, 0, 0.0, hidden, kMidiModWheel);
+    // (the hidden MIDI parameters are in the table's range: makeParameter registered them)
     // a new Smemplr's first slot has an effect: its parameters take its names from the start
     for (int s = 0; s < kRackSlots; ++s)
         retitleSlot (s);
@@ -166,7 +174,8 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
     if (!readState (stream, st))
         return kResultFalse;
     for (uint32_t id = 0; id < kNumParams; ++id)
-        setParamNormalized (id, st.has[id] ? st.norm[id] : defaultNormalized (id));
+        if (isValidParam (id)) // (the MIDI ones are not in a state)
+            setParamNormalized (id, st.has[id] ? st.norm[id] : defaultNormalized (id));
     pendingPath = st.samplePath;
     return kResultOk;
 }

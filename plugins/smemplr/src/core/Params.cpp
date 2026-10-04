@@ -269,6 +269,14 @@ std::vector<ParamInfo> buildTable ()
     // the filter and pitch envelopes locked to the loop (Engine.cpp: Voice::render)
     add (choice (kFiltLoopLock, "Filter Env Loop Lock", "Lock", {"Off", "Restart", "Fit"}, kLoopLockOff));
     add (choice (kPitchLoopLock, "Pitch Env Loop Lock", "Lock", {"Off", "Restart", "Fit"}, kLoopLockOff));
+    // the hidden MIDI parameters' places (Params.h: MidiParamId): what the controller registers there is
+    // its own (Controller::makeParameter), these give their ranges and defaults (the bend centred)
+    add (pct ((ParamId)kMidiPitchBend, "Pitch Bend", "Bend", 0.5));
+    add (toggle ((ParamId)kMidiSustain, "Sustain Pedal", "Sustain", false));
+    add (pct ((ParamId)kMidiModWheel, "Mod Wheel", "Mod", 0.0));
+    // the waveform's Grid (off: the loop's drags move freely, as before)
+    add (toggle (kGridOn, "Grid", "Grid", false));
+    add (choice (kGridSize, "Grid Size", "Grid", {"1/16", "1/8", "1/4", "1/2", "1 Bar"}, 2));
     return t;
 }
 
@@ -285,6 +293,11 @@ double syncDivisionBeats (int i) { return kSyncDivisionBeats[std::clamp (i, 0, 2
 int regionsFromIndex (int i) { return kRegionCounts[std::clamp (i, 0, 5)]; }
 double divisionBeats (int i) { return kDivisionBeats[std::clamp (i, 0, 6)]; }
 double preserveBeats (int i) { return kPreserveBeats[std::clamp (i, 0, 6)]; }
+double gridBeats (int i)
+{
+    static const double beats[] = {0.25, 0.5, 1.0, 2.0, 4.0};
+    return beats[std::clamp (i, 0, 4)];
+}
 
 bool circuitSupported (int type, int circuit)
 {

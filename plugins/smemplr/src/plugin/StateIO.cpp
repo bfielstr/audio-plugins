@@ -77,11 +77,13 @@ bool writeState (IBStream* stream, const PluginState& st)
 {
     IBStreamer s (stream, kLittleEndian);
     int32 present = 0;
+    // (never the hidden MIDI parameters: they are not settings)
+    auto saved = [&] (uint32 id) { return st.has[id] && !isMidiParam (id); };
     for (uint32 id = 0; id < kNumParams; ++id)
-        present += st.has[id] ? 1 : 0;
+        present += saved (id) ? 1 : 0;
     bool ok = s.writeInt32 (kMagic) && s.writeInt32 (kVersion) && s.writeInt32 (present);
     for (uint32 id = 0; ok && id < kNumParams; ++id)
-        if (st.has[id])
+        if (saved (id))
             ok = s.writeInt32u (id) && s.writeDouble (st.norm[id]);
     ok = ok && s.writeInt32 ((int32)st.samplePath.size ());
     ok = ok && (st.samplePath.empty () || s.writeRaw (st.samplePath.data (), (int32)st.samplePath.size ()) ==
@@ -110,7 +112,7 @@ bool readState (IBStream* stream, PluginState& st)
         double v = 0.0;
         if (!s.readInt32u (id) || !s.readDouble (v))
             return false;
-        if (id < kNumParams) // unknown IDs from newer versions are skipped
+        if (id < kNumParams && !isMidiParam (id)) // unknown IDs from newer versions are skipped
         {
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;

@@ -144,6 +144,25 @@ int main ()
     CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == 0.0 &&
                fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == 0.0,
            "a new slot: 12 / 12");
+    // the hidden MIDI parameters are never saved (whatever the state holds for them), and a state from
+    // before the parameters after them (the Grid) reads without them: their defaults
+    {
+        PluginState st = someState (), back;
+        st.norm[kMidiSustain] = 1.0;
+        st.norm[kMidiPitchBend] = 0.9;
+        for (uint32_t id = kGridOn; id < kNumParams; ++id)
+            st.has[id] = false;
+        CHECK (roundTrip (st, back), "read");
+        CHECK (!back.has[kMidiSustain] && !back.has[kMidiPitchBend] && !back.has[kMidiModWheel], "MIDI parameters saved");
+        for (uint32_t id = kGridOn; id < kNumParams; ++id)
+            CHECK (!back.has[id], "parameter %u read from a state without it", id);
+        PluginState st2 = someState (), back2;
+        st2.norm[kGridOn] = 1.0;
+        st2.norm[kGridSize] = toNormalized (kGridSize, 4);
+        CHECK (roundTrip (st2, back2) && back2.has[kGridOn] && back2.norm[kGridOn] == 1.0 &&
+                   back2.norm[kGridSize] == toNormalized (kGridSize, 4),
+               "the Grid saved");
+    }
     // cut short in the mappings: the rest of the state still loads, without them
     {
         PluginState st = someState (), back;

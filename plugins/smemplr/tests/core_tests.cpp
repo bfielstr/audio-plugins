@@ -1253,13 +1253,18 @@ TEST (rack_wubr_mapping)
         CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
     // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
     // high-pass, the modulation LFOs, the envelopes' Loop Locks), not the rack's, and the IDs run on to
-    // kNumParams with no gap, up to the hidden MIDI parameters
+    // kNumParams with no gap, through the hidden MIDI parameters (1000 .. 1002: in the table, but not the
+    // instrument's) to the ones after them
     CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kModLfoBase == kTransHpSlope + 1 &&
-               kFiltLoopLock == kModLfoEnd && kPitchLoopLock == kFiltLoopLock + 1 && kNumParams == kPitchLoopLock + 1 &&
-               kNumParams <= kMidiPitchBend,
+               kFiltLoopLock == kModLfoEnd && kPitchLoopLock == kFiltLoopLock + 1 && kMidiPitchBend == kPitchLoopLock + 1 &&
+               kMidiModWheel + 1 == kGridOn && paramTable ().size () == kNumParams,
            "kNumParams %u", (unsigned)kNumParams);
     for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
-        CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id), "%u is the sampler's", id);
+        CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id) == !isMidiParam (id), "%u is the sampler's", id);
+    CHECK (!isValidParam (kMidiPitchBend) && !isValidParam (kMidiSustain) && !isValidParam (kMidiModWheel) &&
+               isMidiParam (kMidiSustain) && !isMidiParam (kPitchLoopLock) && !isMidiParam (kGridOn) &&
+               !canModulate (kMidiModWheel, kFxEmpty) && !canModulate (kMidiPitchBend, kFxEmpty),
+           "the MIDI parameters are not the instrument's");
     CHECK (isRackParam (kRackExtEnd - 1) && rackField (kRackExtEnd - 1).slot == kRackSlots - 1 &&
                rackField (kRackExtEnd - 1).field == kSlotParams + kSlotBlockAll - 1,
            "the last extension ID is the last slot's last position");

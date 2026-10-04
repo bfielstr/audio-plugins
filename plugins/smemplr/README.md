@@ -56,6 +56,13 @@ can be clicked and dragged, and so can the shaded loop above the waveform (a cli
 auditions). Zoom with Cmd/Alt + scroll or by dragging the ruler up and down; scroll, or drag the ruler
 sideways, to pan. Live playheads show what is playing.
 
+**Grid**, at the right end of the ruler (off by default), makes the loop snap to a beat grid while you
+drag it: its start, its end, or the whole loop by its bar or its shaded region. The loop then always
+starts on a grid line (counted from the start flag) and is a whole number of grid steps long. The menu
+beside it sets the step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar. The tempo is the sample's own
+while Warp is on (from **Warp as**) and the host's otherwise (120 BPM without one). Only drags snap,
+not automation. The grid lines are drawn while it is on, and it is saved with the project.
+
 **The right-click menu**: **Normalize Volume**, **Reverse**, **Crop to Sample Start/End** (and **Undo
 Crop**), **Use Constant Power Fade for Loops**, **Reset Slice Edits**, **Show in Finder** (Explorer, File
 Manager), **Load Sample...**, **Clear Sample**. None of it changes the file on disk.
@@ -235,6 +242,7 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
   saved while the Sub and High bands had buttons load a band that was off at Range 0 dB; slots saved
   before glue load with nothing glued.
 - Projects from before the modulation LFOs load with no mappings and sound exactly as before.
+- Projects from before the Grid load with it off.
 
 ## Credits
 

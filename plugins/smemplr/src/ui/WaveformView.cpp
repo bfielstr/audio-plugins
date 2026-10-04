@@ -140,6 +140,43 @@ void WaveformView::markerPositions (const SampleData& s, double& fs, double& fe,
     le = r.loopEnd; // Length: the loop's end (filled in with Loop off too)
 }
 
+double WaveformView::gridFrames (const SampleData& s) const
+{
+    if (host->plainValue (kGridOn) < 0.5)
+        return 0.0;
+    double bpm = 120.0;
+    if (host->plainValue (kWarp) >= 0.5)
+        bpm = sampleBpmFor (s, paramsFrom (host));
+    else if (auto* b = controller->getBridge (); b && b->hostBpm.load (std::memory_order_relaxed) > 0.0)
+        bpm = b->hostBpm.load (std::memory_order_relaxed);
+    return gridBeats ((int)std::lround (host->plainValue (kGridSize))) * 60.0 / std::max (1.0, bpm) * s.sampleRate;
+}
+
+void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart)
+{
+    const double span = std::max (1.0, fe - fs);
+    if (keepStart)
+    {
+        // whole steps from where the loop starts, at least one, as many as fit before the end flag
+        const double fit = std::floor ((fe - rs) / step + 1e-9);
+        const double l = fit >= 1.0 ? std::clamp (std::round (len / step), 1.0, fit) * step : fe - rs;
+        host->setNorm (kLength, std::clamp (l / span, 0.0, 1.0));
+        return;
+    }
+    // whole steps, at least one, and no more than fit between the start flag and the end flag
+    const double maxSteps = std::floor (span / step + 1e-9);
+    double steps = std::max (1.0, std::round (len / step));
+    if (maxSteps >= 1.0)
+        steps = std::min (steps, maxSteps);
+    const double l = maxSteps >= 1.0 ? steps * step : span;
+    // on a grid line counted from the start flag, the loop's end no later than the end flag
+    double k = std::round ((rs - fs) / step);
+    k = std::clamp (k, 0.0, std::max (0.0, std::floor ((fe - l - fs) / step + 1e-9)));
+    const double start = fs + k * step;
+    host->setNorm (kStart, std::clamp ((start - fs) / span, 0.0, 1.0));
+    host->setNorm (kLength, std::clamp (l / span, 0.0, 1.0));
+}
+
 void WaveformView::computeSlicesForDisplay (SliceList& out, const SampleData& s) const
 {
     auto* b = controller->getBridge ();
@@ -161,6 +198,7 @@ void WaveformView::draw (CDrawContext* ctx)
     pk::LayerKey key;
     key.params (host).add ((const void*)s.get (), s->length, (const void*)edits.get (), bridge->changeCounter.load ());
     key.add (viewStart, viewLen, drag, dragSlice, dragSlicePos, moved, hoverSlice);
+    key.add (bridge->hostBpm.load (std::memory_order_relaxed)); // (the Grid's lines with Warp off)
     layer.draw (ctx, getViewSize (), key.value (), [this] (CDrawContext* c) { paint (c, false); });
 
     // --- playheads (in the wave area: clear of the ruler's name and the overview strip)
@@ -280,8 +318,26 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
         }
     }
 
-    // --- beat grid ---------------------------------------------------------------
-    if (warp)
+    // --- beat grid: the Grid's steps while it is on (a bar's lines brighter), else Warp's beats ----
+    if (const double step = mode == kModeClassic ? gridFrames (*s) : 0.0; step > 0.0)
+    {
+        const double stepN = step / len; // normalized
+        const double perBar = 4.0 / gridBeats ((int)std::lround (host->plainValue (kGridSize)));
+        if (stepN / viewLen * w.getWidth () > 4)
+        {
+            const long long k0 = (long long)std::max (0.0, std::floor ((viewStart - nfs) / stepN));
+            for (long long k = k0; nfs + k * stepN <= std::min (nfe, viewStart + viewLen) + 1e-12; ++k)
+            {
+                const double x = posToX (nfs + k * stepN);
+                if (x < w.left || x > w.right)
+                    continue;
+                const bool bar = std::fmod ((double)k, perBar) < 0.5;
+                ctx->setFrameColor (bar ? theme::kGridMajor : theme::kGridMinor);
+                ctx->drawLine (CPoint (x, w.top), CPoint (x, w.bottom));
+            }
+        }
+    }
+    else if (warp)
     {
         const double beats = std::max (1.0, host->plainValue (kWarpBeats));
         const double beatLen = (fe - fs) / beats / len;
@@ -499,11 +555,12 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
     char info[160];
     std::snprintf (info, sizeof (info), "%s   %.3f s   %d Hz   %s", s->name.c_str (), s->seconds (),
                    (int)s->sampleRate, s->numChannels > 1 ? "Stereo" : "Mono");
+    // (left of the editor's tools over the ruler's right end)
     const CRect rr = rulerArea ();
+    const double tools = rr.right - kToolsWidth;
     ctx->setFillColor (theme::kWell);
-    ctx->drawRect (CRect (rr.right - 330, rr.top, rr.right, rr.bottom - 1), kDrawFilled);
-    drawText (ctx, info, CRect (rr.right - 326, rr.top, rr.right - 6, rr.bottom - 1), theme::kTextDim, 9.5,
-              kRightText);
+    ctx->drawRect (CRect (tools - 330, rr.top, rr.right, rr.bottom - 1), kDrawFilled);
+    drawText (ctx, info, CRect (tools - 326, rr.top, tools - 6, rr.bottom - 1), theme::kTextDim, 9.5, kRightText);
     ctx->resetClipRect ();
 }
 
@@ -712,12 +769,24 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
     double fs, fe, rs, re, le;
     markerPositions (*s, fs, fe, rs, re, le);
     const double minGap = 64.0 / len;
+    // the Grid (Classic: the loop's drags snap to it; automation does not)
+    const double step = (int)std::lround (host->plainValue (kMode)) == kModeClassic ? gridFrames (*s) : 0.0;
     switch (drag)
     {
         case Handle::FlagStart: host->setNorm (kSampleStart, std::min (pos, fe / len - minGap)); break;
         case Handle::FlagEnd: host->setNorm (kSampleEnd, std::max (pos, fs / len + minGap)); break;
-        case Handle::Start: host->setNorm (kStart, std::clamp ((pos * len - fs) / (fe - fs), 0.0, 1.0)); break;
-        case Handle::LoopEnd: host->setNorm (kLength, std::clamp ((pos * len - rs) / std::max (1.0, fe - fs), 0.0, 1.0)); break;
+        case Handle::Start:
+            if (step > 0.0) // the loop's start on the grid, its length whole steps
+                setLoopOnGrid (pos * len, le - rs, fs, fe, step);
+            else
+                host->setNorm (kStart, std::clamp ((pos * len - fs) / (fe - fs), 0.0, 1.0));
+            break;
+        case Handle::LoopEnd:
+            if (step > 0.0) // the end a whole number of steps after the start
+                setLoopOnGrid (rs, pos * len - rs, fs, fe, step, true);
+            else
+                host->setNorm (kLength, std::clamp ((pos * len - rs) / std::max (1.0, fe - fs), 0.0, 1.0));
+            break;
         case Handle::LoopRegion:
             if (!moved)
                 break;
@@ -727,6 +796,11 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
         {
             // move the whole loop: it begins at Start, so Start moves with it and Length stays
             const double span = std::max (1.0, fe - fs);
+            if (step > 0.0) // (on the grid: from grid line to grid line, whole steps long)
+            {
+                setLoopOnGrid (loopDragRs + (pos * len - loopDragDownPos), loopDragLen, fs, fe, step);
+                break;
+            }
             const double newRs = std::clamp (loopDragRs + (pos * len - loopDragDownPos), fs, fe - loopDragLen);
             host->setNorm (kStart, std::clamp ((newRs - fs) / span, 0.0, 1.0));
             host->setNorm (kLength, std::clamp (loopDragLen / span, 0.0, 1.0));

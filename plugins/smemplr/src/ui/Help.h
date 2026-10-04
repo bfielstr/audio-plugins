@@ -26,6 +26,11 @@ inline const char* forParam (uint32_t id)
         case kMsSideGain: return "Level of the side signal (the stereo width).";
         case kMsMidGain: return "Level of the mid signal.";
         case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default).";
+        case kGridOn:
+            return "Grid (off by default): dragging the loop's start, its end or the whole loop in the waveform snaps to "
+                   "a beat grid, so the loop is always a whole number of grid steps long. The grid follows the sample's "
+                   "tempo while Warp is on, the host's tempo otherwise (120 BPM without one). Automation is not snapped.";
+        case kGridSize: return "The Grid's step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar.";
         default: break;
     }
     if (isModLfoParam (id))
