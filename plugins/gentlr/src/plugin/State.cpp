@@ -12,8 +12,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x474E544C; // 'GNTL'
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
 constexpr int32 kSubHighRange = 2; // 2: the Sub and High bands (Gentlr's and the end saturator's) work while their Range is above 0 dB
+constexpr int32 kClassicSlope = 3; // 3: the bands' Slope, Gentlr's and the end saturator's (Classic for states from before it)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -61,6 +62,14 @@ bool readState (IBStream* stream, State& st)
         smacheratr::subHighStateToRange (st.norm, st.has, kSubOn, kSubRange, kHighOn, kHighRange);
         st.has[kSubRange] = st.has[kHighRange] = true;
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
+    }
+    // bands 1 and 2 had one shape before their Slope (Gently, as Gentlr was called then, included):
+    // Classic, the same sound (a new instance gets 12 / 12); the end saturator's Gentlr too
+    if (version < kClassicSlope)
+    {
+        st.norm[kSlope] = smacheratr::classicSlopeNorm ();
+        st.has[kSlope] = true;
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     }
     return true;
 }

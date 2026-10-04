@@ -1,7 +1,8 @@
 // Gentlr parameters. IDs are persisted in projects: only ever append. The end saturator's first three
 // blocks came last; Gentlr's parameters added after them (the High band, No Overlap) sit right after
-// them, at fixed numbers, and the end saturator's fourth block after those, the very last. Every ID
-// below is pinned (static_asserts at the end of this file).
+// them, at fixed numbers, and the end saturator's fourth block after those. That block grew by one
+// field (its Gentlr's Slope) while it was still the last; Gentlr's own Slope came after it, so it is
+// closed in now. Every ID below is pinned (static_asserts at the end of this file).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -77,8 +78,12 @@ enum ParamId : uint32_t
     kHighRange,                                    // dB, the most it turns the top down (0 - 24; 0 by default)
     kHighThreshold,                                // dB, where it starts cutting (Advanced; without it -18 dB)
     kNoOverlap,    // the bands never cover the same frequencies (they push each other: smacheratr/src/core/NoOverlap.h)
-    kTailExt3Base, // the end Smacheratr's Gentlr High band and No Overlap: pk::kTailExt3Fields entries (the last block)
-    kNumParams = kTailExt3Base + pk::kTailExt3Fields
+    kTailExt3Base, // the end Smacheratr's Gentlr High band, No Overlap and Slope: pk::kTailExt3Fields entries
+    // --- after the end saturator's fourth block ---
+    // Slope: the shape of bands 1 and 2 (smacheratr::ClaritySlope: 12 / 12 for a new instance; State.cpp
+    // gives states from before it Classic, the shape there was then). The Sub and High bands keep theirs.
+    kSlope = kTailExt3Base + pk::kTailExt3Fields,
+    kNumParams
 };
 
 // the detector's default times: Smacheratr's (15 ms attack, 150 ms release)
@@ -100,7 +105,7 @@ constexpr uint32_t thresholdParam (int k)
 constexpr bool isSubParam (uint32_t id) { return id >= kSubOn && id < kTailBase; }
 constexpr bool isHighParam (uint32_t id) { return id >= kHighOn && id <= kHighThreshold; }
 constexpr bool isBandParam (uint32_t id) { return (id >= kBandBase && id < kTailBase) || isHighParam (id); }
-constexpr bool isTailParam (uint32_t id) { return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kNumParams); }
+constexpr bool isTailParam (uint32_t id) { return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope); }
 // its field in smacheratr::Tail (the first three blocks are consecutive, the fourth comes after Gentlr's own)
 constexpr uint32_t tailField (uint32_t id)
 {
@@ -128,6 +133,8 @@ inline int64_t fromSmacheratr (uint32_t id)
         return kAdvanced;
     if (id == smacheratr::kClarityNoOverlap)
         return kNoOverlap;
+    if (id == smacheratr::kClaritySlope)
+        return kSlope;
     return -1;
 }
 
@@ -140,6 +147,6 @@ static_assert (kSubOn == 18 && kSubFreq == 19 && kSubRange == 20 && kSubThreshol
 static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "the end saturator's blocks: 22, 28, 45");
 static_assert (kHighOn == 54 && kHighFreq == 55 && kHighRange == 56 && kHighThreshold == 57 && kNoOverlap == 58,
                "the High band: 54 - 57, No Overlap 58");
-static_assert (kTailExt3Base == 59 && kNumParams == 64, "64 parameters (the end saturator's fourth block last)");
+static_assert (kTailExt3Base == 59 && kSlope == 65 && kNumParams == 66, "the end saturator's fourth block 59 - 64, Slope 65: 66 parameters");
 
 } // namespace gentlr

@@ -1417,6 +1417,9 @@ void Editor::buildBody ()
             fxColorView->onBandPicked = [this] (int k) { showClarityBand (k); };
             // No Overlap, under the colour display (switched on, it splits what overlaps)
             add (new NoOverlapToggle (CRect (446, 208, 526, 226), h, smacheratrBandParams ()), tip (kClarityNoOverlap));
+            // the bands' Slope, left of it
+            g->addView (new Label (CRect (236, 210, 272, 224), "Slope", 10.0, false, 0));
+            add (new Choice (CRect (276, 208, 376, 226), h, kClaritySlope), tip (kClaritySlope));
             add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
             add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
             add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gentlr"), tip (kClarity));
@@ -1555,6 +1558,9 @@ void Editor::buildBody ()
             add (gentlrView, gentlr::help::kDisplay);
             // No Overlap, under the display (switched on, it splits what overlaps)
             add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gentlr::GentlrView::bandParams ()), tip (gentlr::kNoOverlap));
+            // the bands' Slope (bands 1 and 2), beside it
+            g->addView (new Label (CRect (104, 210, 168, 224), "Band Slope", 10.0, false, 0));
+            add (new Choice (CRect (172, 208, 272, 226), h, gentlr::kSlope), tip (gentlr::kSlope));
             // the bands: a row each (band 1, band 2, Sub, High), On and its values (Sub and High: their name, no
             // On, they work while their Range is above 0 dB)
             const char* heads[5] = {"", "Freq", "Width", "Range", "Thresh"};

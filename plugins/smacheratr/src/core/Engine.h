@@ -109,6 +109,7 @@ private:
     {
         Biquad dc, preLo, preHi, postLo, postHi;
         Biquad bandHp[kGentlrBands], bandLp[kGentlrBands], postHp[kGentlrBands], postLp[kGentlrBands]; // Clarity's bands, before and after the curve
+        Biquad bandHp2[kGentlrBands], postHp2[kGentlrBands]; // their second section below (Signature's 24 dB/oct; bandHp2On)
         Oversampler os, regionOs; // regionOs: Gentlr's driven region, oversampled beside the rest
         Delay dryDelay, wetDelay, lookDelay;
         void reset ();
@@ -127,6 +128,8 @@ private:
     double lmEnv[kGentlrBands] {}, lmAtk = 0.0, lmRel = 0.0;
     float lmCutDb[kGentlrBands] {};
     double bandFreq[kGentlrBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kGentlrBands] = {-1.0, -1.0, -1.0, -1.0};
+    int bandSlope[kGentlrBands] = {-1, -1, -1, -1};              // the Slope each band was designed with
+    bool bandHp2On[kGentlrBands] = {false, false, false, false}; // runs its second section below
     float bandNorm[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f}, gBandPre[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f},
           gBandPost[kGentlrBands] = {1.0f, 1.0f, 1.0f, 1.0f};
     std::vector<float> gPost[kGentlrBands];

@@ -10,6 +10,7 @@
 #include <cmath>
 #include <complex>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <string>
@@ -154,8 +155,8 @@ TEST (parameters_and_defaults)
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
     CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
-               kHighOn == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields,
-           "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block last");
+               kHighOn == kTailExt2Base + pk::kTailExt2Fields && kSlope == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kSlope + 1,
+           "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block, then the Slope");
     CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced", "the third block");
     CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the last block");
     // every end saturator parameter reaches the tail's field it stands for, and only those are tail parameters
@@ -207,10 +208,11 @@ TEST (parameters_and_defaults)
         {19, "Sub Frequency"},    {20, "Sub Range"},      {21, "Sub Threshold"},        {22, "Saturator"},
         {28, "Saturator Output"}, {45, "Saturator Gentlr Advanced"}, {53, "Saturator Gentlr Sub Threshold"},
         {54, "High (unused)"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
-        {58, "No Overlap"},       {59, "Saturator Gentlr High (unused)"}, {63, "Saturator Gentlr No Overlap"}};
+        {58, "No Overlap"},       {59, "Saturator Gentlr High (unused)"}, {63, "Saturator Gentlr No Overlap"},
+        {64, "Saturator Gentlr Slope"}, {65, "Slope"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
-    CHECK (kNumParams == 64, "64 parameters: %u", (unsigned)kNumParams);
+    CHECK (kNumParams == 66, "66 parameters: %u", (unsigned)kNumParams);
     std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gentlr block at %u)\n", (unsigned)kNumParams,
                  (unsigned)kBandBase, (unsigned)kSubOn, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
 }
@@ -283,14 +285,15 @@ TEST (a_loud_band_is_cut_by_its_range)
     };
     double meter = 0.0;
     const double cut = measure (250.0, -1.0, 8.0, &meter);
-    // the band's cut is 8 dB at its peak; the band's phase there makes the tone's drop a little less
-    const smacheratr::ClarityBand b = smacheratr::clarityBand (kSr, 250.0, 2.0);
+    // the band's cut is 8 dB at its peak; the band's phase there decides the tone's drop (the default
+    // Slope, 12 / 12, is symmetric: its phases cancel at the centre and the drop is the whole 8 dB)
+    const smacheratr::ClarityBand b = smacheratr::clarityBand (kSr, 250.0, 2.0, smacheratr::kSlope12);
     const double g = std::pow (10.0, -8.0 / 20.0);
     std::complex<double> h (1.0, 0.0);
     {
         const std::complex<double> z1 = std::polar (1.0, -2.0 * M_PI * 250.0 / kSr), z2 = z1 * z1;
         auto H = [&] (const smacheratr::BiquadCoeffs& c) { return (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2); };
-        h = H (b.hp) * H (b.lp) * b.norm;
+        h = H (b.hp) * (b.hp2On ? H (b.hp2) : 1.0) * H (b.lp) * b.norm;
     }
     const double expect = 20.0 * std::log10 (std::abs (1.0 - (1.0 - g) * h));
     std::printf ("    250 Hz at -1 dB: %.2f dB (the band's maths: %.2f dB), meter %.2f dB\n", cut, expect, meter);
@@ -320,7 +323,7 @@ TEST (a_loud_band_is_cut_by_its_range)
 TEST (band_two_and_width)
 {
     // band 2 at 3 kHz (default), a loud tone there is cut; band 1 (250 Hz) stays out of it (it hears
-    // the 3 kHz tone through its 6 dB/oct top, about 16 dB down: under its threshold)
+    // the 3 kHz tone through its top, 12 dB/oct with the default Slope: under its threshold)
     Meters m;
     auto e = engine ({}, kSr, &m);
     const Sig in = tones ({{3000.0, -8.0}, {250.0, -30.0}}, 1.0);
@@ -920,6 +923,101 @@ TEST (fuzz_and_cpu)
         const double secs = std::chrono::duration<double> (std::chrono::steady_clock::now () - t0).count ();
         std::printf ("    %s: %.2f%% of real time (stereo, 48 kHz)\n", cs.name, 100.0 * secs / 10.0);
     }
+}
+
+// ---------------------------------------------------------------------------
+// the band Slope (smacheratr::ClaritySlope): bands 1 and 2 only
+
+// Gentlr's output with every band at work (Advanced, Thresholds, the region Drive), hashed (FNV-1a
+// over the output's bits)
+static uint64_t slopeRenderHash (int slope)
+{
+    const size_t n = 48000;
+    std::vector<float> l (n), r (n), ol (n), orr (n);
+    uint32_t seed = 12345;
+    for (size_t i = 0; i < n; ++i)
+    {
+        seed = seed * 1664525u + 1013904223u;
+        const double noise = ((seed >> 8) / 16777216.0 - 0.5) * 0.2;
+        const double t = (double)i / 48000.0;
+        l[i] = (float)(0.4 * std::sin (2.0 * M_PI * 80.0 * t) + 0.3 * std::sin (2.0 * M_PI * 320.0 * t) + 0.2 * std::sin (2.0 * M_PI * 3100.0 * t) + noise);
+        r[i] = (float)(0.35 * std::sin (2.0 * M_PI * 110.0 * t) + 0.25 * std::sin (2.0 * M_PI * 9000.0 * t) + noise);
+    }
+    Engine e (false);
+    e.setParam (bandParam (0, kRange), 12.0);
+    e.setParam (bandParam (0, kFreq), 300.0);
+    e.setParam (bandParam (1, kRange), 9.0);
+    e.setParam (bandParam (1, kWidth), 3.0);
+    e.setParam (kSubRange, 6.0);
+    e.setParam (kHighRange, 6.0);
+    e.setParam (bandParam (0, kThreshold), -30.0);
+    e.setParam (bandParam (1, kThreshold), -30.0);
+    e.setParam (kDrive, 1.0);
+    e.setParam (kSlope, slope);
+    e.prepare (48000.0, 512);
+    for (size_t p = 0; p < n; p += 512)
+    {
+        const int m = (int)std::min<size_t> (512, n - p);
+        e.process (l.data () + p, r.data () + p, ol.data () + p, orr.data () + p, m);
+    }
+    uint64_t h = 1469598103934665603ull;
+    for (const auto* v : {&ol, &orr})
+        for (float f : *v)
+        {
+            uint32_t b;
+            std::memcpy (&b, &f, 4);
+            for (int i = 0; i < 4; ++i)
+            {
+                h ^= (b >> (8 * i)) & 0xff;
+                h *= 1099511628211ull;
+            }
+        }
+    return h;
+}
+
+TEST (slope)
+{
+    const auto& t = paramTable ();
+    CHECK (std::lround (t.info (kSlope).def) == smacheratr::kSlope12 && std::string (t.info (kSlope).name) == "Slope" &&
+               t.toText (kSlope, smacheratr::kSlopeSignature) == "Signature",
+           "Slope: 12 / 12 for a new instance");
+    CHECK (fromSmacheratr (smacheratr::kClaritySlope) == (int64_t)kSlope, "Smacheratr's Slope is Gentlr's (the shared displays)");
+    CHECK (!isTailParam (kSlope) && isTailParam (kTailExt3Base + pk::kTailExt3Slope), "Gentlr's own, and the end saturator's");
+
+    // a tone two octaves under band 1's low edge, the band cutting all it can: 12 / 12 (12 dB/oct there)
+    // moves it a little (the band's phase lifts it), Signature (24 dB/oct) leaves it alone; an octave
+    // over its high edge, Classic's 6 dB/oct reaches it, the others' 12 much less
+    auto drop = [] (int slope, double hz) {
+        auto e = engine ([slope] (Engine& en) {
+            en.setParam (kSlope, slope);
+            en.setParam (bandParam (0, kFreq), 400.0);
+            en.setParam (bandParam (0, kRange), 24.0);
+            en.setParam (bandParam (0, kThreshold), -60.0);
+            en.setParam (bandParam (1, kOn), 0.0);
+            en.setParam (kAdvanced, 1.0);
+        });
+        // the band itself loud (so it is cut to its Range), the probe quieter beside it
+        const Sig in = tones ({{400.0, -6.0}, {hz, -30.0}}, 1.0);
+        const Sig out = run (*e, in);
+        return toneDb (out.l, hz, 24000) - toneDb (in.l, hz, 24000);
+    };
+    const double above12 = drop (smacheratr::kSlope12, 1600.0), aboveSig = drop (smacheratr::kSlopeSignature, 1600.0),
+                 aboveClassic = drop (smacheratr::kSlopeClassic, 1600.0);
+    const double below12 = drop (smacheratr::kSlope12, 50.0), belowSig = drop (smacheratr::kSlopeSignature, 50.0);
+    std::printf ("    an octave over the band: 12 / 12 %.2f, Signature %.2f, Classic %.2f dB; two octaves under: 12 / 12 %.2f, Signature %.2f dB\n",
+                 above12, aboveSig, aboveClassic, below12, belowSig);
+    CHECK (aboveClassic < above12 - 1.0 && std::fabs (above12 - aboveSig) < 1.0, "above the band: Classic cuts more there, the other two alike");
+    CHECK (std::fabs (belowSig) < std::fabs (below12) && std::fabs (belowSig) < 0.3, "below the band: Signature leaves it more alone (%.2f / %.2f)",
+           belowSig, below12);
+
+    // Classic renders bit for bit what Gentlr rendered before the Slope (the hash taken from the engine
+    // before it, 0.11; pinned for the Linux x86-64 GCC build, see smacheratr's test of the same)
+    const uint64_t classic = slopeRenderHash (smacheratr::kSlopeClassic), twelve = slopeRenderHash (smacheratr::kSlope12);
+    std::printf ("    Classic %016llx, 12 / 12 %016llx\n", (unsigned long long)classic, (unsigned long long)twelve);
+    CHECK (classic != twelve, "each slope sounds its own");
+#if defined(__linux__) && defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
+    CHECK (classic == 0x9737d2db291ffcddull, "Classic: Gentlr before the Slope, bit for bit (%016llx)", (unsigned long long)classic);
+#endif
 }
 
 int main (int argc, char** argv)

@@ -69,7 +69,8 @@ enum TailExt2Field : uint32_t
 // Gentlr's High band and No Overlap, a fourth block each plug-in appends at the very end of its IDs
 // (the third is closed in: some plug-ins have parameters right after it; the parameters:
 // smacheratr/src/core/TailExt.h, addTailExt3Params). In smacheratr::Tail::setParam field
-// kTailFields + kTailExtFields + kTailExt2Fields + i is this block's field i.
+// kTailFields + kTailExtFields + kTailExt2Fields + i is this block's field i. It grew by the Slope while
+// it was the last block everywhere; Gentlr's own Slope now comes after it, so it is closed in too.
 enum TailExt3Field : uint32_t
 {
     kTailExt3High = 0,      // unused: Gentlr's High band works while its Range is above 0 dB
@@ -77,6 +78,7 @@ enum TailExt3Field : uint32_t
     kTailExt3HighRange,     // dB (0 by default: the band does nothing)
     kTailExt3HighThreshold, // dB
     kTailExt3NoOverlap,     // Gentlr's bands never cover the same frequencies
+    kTailExt3Slope,         // the shape of Gentlr's two bands (smacheratr::ClaritySlope; Classic in states from before it)
     kTailExt3Fields
 };
 

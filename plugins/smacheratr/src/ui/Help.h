@@ -4,6 +4,13 @@
 
 namespace smacheratr::help {
 
+// Gentlr's band Slope (Smacheratr's, Gentlr's own, the end saturators' and the rack's)
+inline constexpr const char* kSlope =
+    "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12 (the "
+    "default): 12 dB/oct on both sides, the cut exactly the Range at the band's centre. Signature: 24 dB/oct below and "
+    "12 above, a steeper floor under the band. Classic: 12 below and 6 above, the shape before the Slope (older "
+    "projects load with it, so they sound as they did).";
+
 inline const char* forParam (uint32_t id)
 {
     switch (id)
@@ -32,12 +39,13 @@ inline const char* forParam (uint32_t id)
         case kClarity:
             return "Gentlr: a compressor on a band (two if you like), so a hard-pushed drive does not go muddy or harsh: "
                    "when the band hits the curve hard it is turned down before it (up to Range, 8 dB by default, only "
-                   "when pushed) and after it by half as much. The band slopes 12 dB/oct below and 6 dB/oct above; set "
-                   "it with Freq and Width, or drag its handle in the frequency display (edges or Alt-drag: width; "
+                   "when pushed) and after it by half as much. Its Slope sets the band's shape (12 dB/oct on both sides by "
+                   "default); set it with Freq and Width, or drag its handle in the frequency display (edges or Alt-drag: width; "
                    "wheel: width). A band works while its Range is above 0 dB. Advanced gives each band a Threshold "
                    "and can drive the region it cuts.";
         case kClarityFreq: return "Gentlr: the centre of the band it compresses (20 Hz to 20 kHz).";
-        case kClarityWidth: return "Gentlr: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
+        case kClarityWidth: return "Gentlr: the band's width in octaves, between its low and high edges (their slopes: Slope).";
+        case kClaritySlope: return kSlope;
         case kClarity2Freq: return "Gentlr band 2: the centre of its band.";
         case kClarity2Width: return "Gentlr band 2: the band's width in octaves.";
         case kClarity2Range:

@@ -12,8 +12,9 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5448; // 'SMTH'
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
 constexpr int32 kSubHighRange = 2; // 2: the saturator's Sub and High bands work while their Range is above 0 dB
+constexpr int32 kClassicSlope = 3; // 3: the saturator's Gentlr Slope (Classic for states from before it)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -58,6 +59,10 @@ bool readState (IBStream* stream, State& st)
     // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
+    // the saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
+    // instance gets 12 / 12)
+    if (version < kClassicSlope)
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     return true;
 }
 

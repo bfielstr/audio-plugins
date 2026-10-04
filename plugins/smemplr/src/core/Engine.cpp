@@ -670,6 +670,9 @@ void Engine::prepare (double sampleRate, int)
         v.prepare (sr);
     rack.prepare (sr, 512);
     tail.prepare (sr, 512);
+    // the saturator after the rack (before 0.9) has no parameters for Gentlr's band Slope: Classic, the
+    // shape its bands had (an old project's sound)
+    tail.setParam (smacheratr::kTailExt3First + pk::kTailExt3Slope, smacheratr::kSlopeClassic);
     // the effects as the parameters have them (a new Smemplr: Smacheratr in the first slot)
     for (uint32_t id = 0; id < kNumParams; ++id)
         if (isRackParam (id))

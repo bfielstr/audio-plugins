@@ -17,11 +17,13 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 5; // 2: the Algorithm choice has 8 entries (Alien)
+constexpr int32 kVersion = 6; // 2: the Algorithm choice has 8 entries (Alien)
                                // 3: the end saturator's Clarity Frequency 20 Hz - 20 kHz
                                // 4: one Clarity button in the end saturator
                                // 5: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
+                               // 6: the end saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kSubHighRange = 5;
+constexpr int32 kClassicSlope = 6;
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -104,6 +106,10 @@ bool readState (IBStream* stream, State& st, bool withClip)
     // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
+    // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
+    // instance gets 12 / 12)
+    if (version < kClassicSlope)
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     st.hasClip = false;
     st.clip = {};
     if (!withClip)

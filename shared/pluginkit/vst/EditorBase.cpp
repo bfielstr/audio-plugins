@@ -130,7 +130,7 @@ Panel* EditorBase::addTailPanel (CViewContainer* parent, const CRect& r, uint32_
     // made; the other band's are hidden)
     tip (bind (p, new Toggle (row (10, 60, rowB), this, extBase + kTailExtClarity, "Gentlr")),
          "Gentlr: a compressor on up to four bands (the Sub band from the bottom, the High band to the top), so a hard-pushed drive does not go muddy or "
-         "harsh (12 dB/oct below, 6 dB/oct above each band). A band works while its Range is above 0 dB.");
+         "harsh (each band's shape: the Slope, at the right of the title). A band works while its Range is above 0 dB.");
     tip (bind (p, new Toggle (row (64, 124, rowB), this, ext2Base + kTailExt2Advanced, "Advanced")),
          "Gentlr's Advanced mode: a Threshold per band (the sliders at the right of the frequency display) and a Drive "
          "for the region it cuts. Off, Gentlr starts cutting at -18 dB, as it always did.");

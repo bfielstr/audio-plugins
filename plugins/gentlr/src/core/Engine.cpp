@@ -66,6 +66,7 @@ void Engine::Channel::reset ()
     {
         hp[k].reset ();
         lp[k].reset ();
+        hp2[k].reset ();
     }
     os.reset ();
     dryDelay.reset ();
@@ -106,6 +107,7 @@ void Engine::resetBand (int k)
     {
         chan[c].hp[k].reset ();
         chan[c].lp[k].reset ();
+        chan[c].hp2[k].reset ();
         env[c][k] = 0.0;
         cutDb[c][k] = 0.0f;
         gBand[c][k] = gTarget[c][k] = 1.0f;
@@ -156,18 +158,26 @@ void Engine::retune (bool force, const bool* works)
     for (int k = 0; k < kAllBands; ++k)
     {
         const double f = layout.freq[k], w = layout.width[k];
-        if (!force && f == bandFreq[k] && w == bandWidth[k])
+        // (the Slope shapes bands 1 and 2, not the Sub and High shelves)
+        const int slope = hasWidth (k) ? smacheratr::claritySlopeOf (p[kSlope]) : smacheratr::kSlopeClassic;
+        if (!force && f == bandFreq[k] && w == bandWidth[k] && slope == bandSlope[k])
             continue;
         const smacheratr::ClarityBand b = k == kSub    ? smacheratr::subBand (sr, f)
                                           : k == kHigh ? smacheratr::highBand (sr, f)
-                                                       : smacheratr::clarityBand (sr, f, w);
+                                                       : smacheratr::clarityBand (sr, f, w, slope);
         bandFreq[k] = f;
         bandWidth[k] = w;
+        bandSlope[k] = slope;
         bandNorm[k] = (float)b.norm;
+        if (b.hp2On && !hp2On[k])
+            for (auto& c : chan)
+                c.hp2[k].reset (); // the second section comes in from rest (it held whatever it had when last used)
+        hp2On[k] = b.hp2On;
         for (auto& c : chan)
         {
             c.hp[k].c = b.hp;
             c.lp[k].c = b.lp;
+            c.hp2[k].c = b.hp2;
         }
     }
 }
@@ -307,7 +317,8 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
             for (int k = 0; k < kAllBands; ++k)
                 if (running[k])
                 {
-                    const double band = chan[c].lp[k].process (chan[c].hp[k].process (d)) * bandNorm[k];
+                    const double h = chan[c].hp[k].process (d);
+                    const double band = chan[c].lp[k].process (hp2On[k] ? chan[c].hp2[k].process (h) : h) * bandNorm[k];
                     power[e][k] = std::max (power[e][k], 2.0 * band * band); // a sine's peak level
                     const double g = 1.0 + (gBand[e][k] - 1.0) * fx;
                     d += (g - 1.0) * band;

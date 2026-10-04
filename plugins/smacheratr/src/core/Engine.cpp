@@ -30,6 +30,8 @@ void Engine::Channel::reset ()
         bandLp[k].reset ();
         postHp[k].reset ();
         postLp[k].reset ();
+        bandHp2[k].reset ();
+        postHp2[k].reset ();
     }
     dc.reset ();
     preLo.reset ();
@@ -261,8 +263,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
     // Gentlr (called Clarity before), a compressor on up to four bands (one button; a band works while
     // its Range is above 0; the third and fourth are the Sub and High bands, shelves at the ends of the
-    // spectrum, which also need their own buttons) (ClarityBand.h: 12 dB/oct below, 6 dB/oct above,
-    // around each band's frequency): when the drive pushes a band past its threshold into the curve (-18 dBFS, or the
+    // spectrum, which also need their own buttons) (ClarityBand.h: the two bands' shape is the Slope,
+    // 12 / 12 dB/oct, Signature 24 / 12 or Classic 12 / 6, around each band's frequency): when the drive pushes a band past its threshold into the curve (-18 dBFS, or the
     // band's Threshold with Advanced on), it is turned down before the curve (3 dB for every 5 over, at
     // most the band's Range: clarityCutDb), so it does not pile up into mud and intermodulate, and
     // after it by half as much (the curve squashes the cut before it back up). The bands work one
@@ -296,6 +298,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 c.bandLp[k].reset ();
                 c.postHp[k].reset ();
                 c.postLp[k].reset ();
+                c.bandHp2[k].reset ();
+                c.postHp2[k].reset ();
             }
         }
         if (!clarity[k])
@@ -303,17 +307,29 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         levelDb[k] = 10.0 * std::log10 (std::max (1e-12, lmEnv[k]));
         const double thresholdDb = advanced ? p[kGentlrThresholdIds[k]] : kClarityThresholdDb;
         lmCutDb[k] = (float)clarityCutDb (levelDb[k], thresholdDb, p[kGentlrRangeIds[k]]);
-        if (layout.freq[k] != bandFreq[k] || layout.width[k] != bandWidth[k])
+        // (the Slope shapes the two bands, not the Sub and High shelves)
+        const int slope = hasWidth (k) ? claritySlopeOf (p[kClaritySlope]) : kSlopeClassic;
+        if (layout.freq[k] != bandFreq[k] || layout.width[k] != bandWidth[k] || slope != bandSlope[k])
         {
             bandFreq[k] = layout.freq[k];
             bandWidth[k] = layout.width[k];
+            bandSlope[k] = slope;
             const ClarityBand b = k == kSubBand    ? subBand (sr, bandFreq[k])
                                   : k == kHighBand ? highBand (sr, bandFreq[k])
-                                                   : clarityBand (sr, bandFreq[k], bandWidth[k]);
+                                                   : clarityBand (sr, bandFreq[k], bandWidth[k], slope);
+            if (b.hp2On && !bandHp2On[k])
+                for (auto& c : chan)
+                {
+                    // the second section comes in from rest (it held whatever it had when last used)
+                    c.bandHp2[k].reset ();
+                    c.postHp2[k].reset ();
+                }
+            bandHp2On[k] = b.hp2On;
             for (auto& c : chan)
             {
                 c.bandHp[k].c = c.postHp[k].c = b.hp;
                 c.bandLp[k].c = c.postLp[k].c = b.lp;
+                c.bandHp2[k].c = c.postHp2[k].c = b.hp2;
             }
             bandNorm[k] = (float)b.norm;
         }
@@ -391,7 +407,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             for (int k = 0; k < kGentlrBands; ++k)
                 if (clarity[k])
                 {
-                    const double band = chan[c].bandLp[k].process (chan[c].bandHp[k].process (d)) * bandNorm[k];
+                    const double h = chan[c].bandHp[k].process (d);
+                    const double band = chan[c].bandLp[k].process (bandHp2On[k] ? chan[c].bandHp2[k].process (h) : h) * bandNorm[k];
                     lmPower[k] = std::max (lmPower[k], 2.0 * band * band); // a sine's peak level
                     d = (float)(d + (gBandPre[k] - 1.0f) * band);
                     cutBands += gBandPre[k] * band;
@@ -440,7 +457,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 for (int i = 0; i < n; ++i)
                 {
                     const float w = wet[(size_t)i];
-                    const double band = ch.postLp[k].process (ch.postHp[k].process (w)) * bandNorm[k];
+                    const double h = ch.postHp[k].process (w);
+                    const double band = ch.postLp[k].process (bandHp2On[k] ? ch.postHp2[k].process (h) : h) * bandNorm[k];
                     wet[(size_t)i] = (float)(w + (gPost[k][(size_t)i] - 1.0f) * band);
                 }
         for (int i = 0; i < n; ++i)

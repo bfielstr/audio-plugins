@@ -488,6 +488,10 @@ int main (int argc, char** argv)
             for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 CHECK (b8.norm[smemplr::slotBlockParam (2, id)] == smacheratr::defaultNormalized (id), "version 8: %s at its default",
                        smacheratr::paramTable ().info (id).name);
+            // and its bands' Slope is Classic, the shape they had (a new slot: 12 / 12)
+            CHECK (std::lround (smacheratr::toPlain (smacheratr::kClaritySlope, b8.norm[smemplr::slotBlockParam (2, smacheratr::kClaritySlope)])) ==
+                       smacheratr::kSlopeClassic,
+                   "version 8: the old saturator's bands Classic");
         }
 
         // States from before version 11: Gentlr's Advanced places in a Smacheratr slot held nothing that

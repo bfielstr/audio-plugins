@@ -19,7 +19,8 @@ constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end satur
 constexpr int32 kOttDefaults = 4;      // 4: Live's OTT preset's gain staging baked in (Params.h)
 constexpr int32 kStyleAdded = 5;       // 5: Style (OTT for new instances; older states keep Character)
 constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the saturator (a band works while its Range is above 0)
-static_assert (kStateVersion == kSubHighRange);
+constexpr int32 kClassicSlope = 7;     // 7: the saturator's Gentlr Slope (Classic for states from before it)
+static_assert (kStateVersion == kClassicSlope);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -96,6 +97,10 @@ bool readState (IBStream* stream, State& st)
     // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kSatExt2Base, kSatExt3Base);
+    // the saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
+    // instance gets 12 / 12)
+    if (version < kClassicSlope)
+        smacheratr::tailSlopeToClassic (st.norm, st.has, kSatExt3Base);
     return true;
 }
 

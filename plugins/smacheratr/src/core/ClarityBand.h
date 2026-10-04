@@ -1,18 +1,37 @@
-// Gentlr's (called Clarity before) band: the low mids it compresses. A 12 dB/oct high-pass below and
-// a 6 dB/oct low-pass above, Width octaves apart around the centre frequency, scaled so the band
-// peaks at 0 dB. A band that reaches an end of the spectrum turns into a shelf there, rather than
-// dipping back up past the end: with its low edge at 20 Hz or below it is the 6 dB/oct low-pass alone
-// (flat to the bottom), with its high edge at 20 kHz or above a 6 dB/oct high-pass at its low edge
-// (flat to the top). A shelf is 1 exactly where it is flat and the complement of a filter that adds up
-// with it to the input (lowPass1 / highPass1), so turning it down (x + (g - 1) band) is a shelving
-// cut of exactly g there (a band alone gets its cut from the two filters' phases cancelling at its
-// centre; a single low- or high-pass does not, so a shelf has to be one of such a pair). The Sub and
-// High bands are shelves of their own (subBand, highBand). The engine turns the band down
-// (x + (g - 1) * band) and the colour display draws it.
-// The law that sets the cut is clarityCutDb (Params.h).
+// Gentlr's (called Clarity before) band: the region it compresses, a high-pass below and a low-pass
+// above, Width octaves apart around the centre frequency, scaled so the band peaks at 0 dB. The Slope
+// (ClaritySlope, kClaritySlope) picks the two filters:
+//   12 / 12    a 12 dB/oct Butterworth high-pass and a 12 dB/oct Butterworth low-pass (both -3 dB at
+//              their edge). The band is symmetric on a log axis, so the two filters' phases cancel at
+//              its centre and a cut there is exactly what the law asks for. The default.
+//   Signature  24 dB/oct below (a Linkwitz-Riley high-pass: two of the Butterworth sections, -6 dB at
+//              the edge) and the same 12 dB/oct low-pass above: a steeper floor under the band.
+//   Classic    a 12 dB/oct Butterworth high-pass and a 6 dB/oct first-order low-pass, the only shape
+//              before the Slope (states from then load it), bit for bit as it was.
+// A band that reaches an end of the spectrum turns into a shelf there, rather than dipping back up
+// past the end: with its low edge at 20 Hz or below it is its upper filter alone (flat to the bottom),
+// with its high edge at 20 kHz or above its lower filter alone (flat to the top). The engine turns
+// the band down as x + (g - 1) band, so a shelf has to be exactly 1 (no phase) where it is flat for
+// the cut to be exactly g there: a band alone gets its cut from its two filters' phases cancelling at
+// its centre, a single low- or high-pass does not, so a shelf is one of a complementary pair, a filter
+// whose other half takes the rest of the input without lifting it. Classic's shelves are the
+// first-order pair (lowPass1 / highPass1, which add up to the input exactly; Classic's high shelf is
+// a 6 dB/oct high-pass at its low edge, not the band's 12 dB one). The steeper shelves are Linkwitz-
+// Riley halves at the same order as the side they replace: an LR2 (critically damped 12 dB/oct)
+// section for a 12 dB side, two of them (LR2 squared) for Signature's 24 dB side. A critically damped
+// section is exactly 1 at its end of the spectrum (the bilinear transform puts DC and Nyquist there)
+// and the least resonant: turned down by the full 24 dB, the region just past the edge comes up by
+// about 1.2 dB with one section and 2.6 dB with two (a Butterworth or LR4 shelf: 1.9 and 4 dB; any
+// minimum-phase shelf steeper than 6 dB/oct lifts a little there). Their corners are moved so the
+// shelf is at the band's level at its edge (-3 dB for a 12 dB side, -6 dB for Signature's 24 dB):
+// both are where one critically damped section is at -3 dB (kCritEdge). The Sub and High bands are
+// shelves of their own (subBand, highBand) and keep their shape whatever the Slope.
+// The engine turns the band down (x + (g - 1) * band) and the colour display draws it
+// (clarityCutAtDb). The law that sets the cut is clarityCutDb (Params.h).
 #pragma once
 
 #include "Biquad.h"
+#include "Params.h"
 #include "Shaper.h"
 
 #include <algorithm>
@@ -61,6 +80,8 @@ inline BiquadCoeffs complementOf (const BiquadCoeffs& h)
 struct ClarityBand
 {
     BiquadCoeffs hp, lp;
+    BiquadCoeffs hp2; // a second section below (Signature's 24 dB/oct); the identity otherwise
+    bool hp2On = false;
     double norm = 1.0; // scales the band's peak to 0 dB
     double lowHz = 0.0, highHz = 0.0;
     bool lowShelf = false, highShelf = false; // runs flat past its low / high edge (no filter there)
@@ -69,7 +90,23 @@ struct ClarityBand
 // where a band's edge makes it a shelf (the ends of the audible spectrum)
 constexpr double kShelfLowHz = 20.0, kShelfHighHz = 20000.0;
 
-inline ClarityBand clarityBand (double sr, double centerHz, double widthOct)
+// Where a critically damped (Q 0.5) section is at -3 dB, over its corner: sqrt (sqrt 2 - 1). A
+// low-pass shelf's corner is its edge / kCritEdge, a high-pass shelf's its edge * kCritEdge; two
+// sections there are at -6 dB.
+inline const double kCritEdge = std::sqrt (M_SQRT2 - 1.0);
+
+// The band's two (Signature: three) filters at its edges, as the Slope makes them (not a shelf)
+inline void clarityBandFilters (ClarityBand& b, double sr, int slope)
+{
+    b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
+    b.hp2 = BiquadCoeffs {};
+    b.hp2On = slope == kSlopeSignature;
+    if (b.hp2On)
+        b.hp2 = b.hp; // Linkwitz-Riley: two Butterworth sections
+    b.lp = slope == kSlopeClassic ? lowPass1 (sr, b.highHz) : lowPass (sr, b.highHz, M_SQRT1_2);
+}
+
+inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int slope = kSlopeClassic)
 {
     ClarityBand b;
     const double half = std::pow (2.0, 0.5 * std::clamp (widthOct, 0.1, 8.0));
@@ -81,19 +118,28 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct)
     {
         // a shelf (both: the whole spectrum): 1 where it is flat, no scaling
         if (b.highShelf && !b.lowShelf)
-            b.hp = highPass1 (sr, b.lowHz);
+        {
+            if (slope == kSlopeClassic)
+                b.hp = highPass1 (sr, b.lowHz);
+            else
+            {
+                b.hp = highPass (sr, b.lowHz * kCritEdge, 0.5);
+                b.hp2On = slope == kSlopeSignature;
+                if (b.hp2On)
+                    b.hp2 = b.hp;
+            }
+        }
         if (b.lowShelf && !b.highShelf)
-            b.lp = lowPass1 (sr, b.highHz);
+            b.lp = slope == kSlopeClassic ? lowPass1 (sr, b.highHz) : lowPass (sr, std::min (b.highHz / kCritEdge, 0.45 * sr), 0.5);
         b.norm = 1.0;
         return b;
     }
-    b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
-    b.lp = lowPass1 (sr, b.highHz);
+    clarityBandFilters (b, sr, slope);
     double peakDb = -200.0;
     for (int i = 0; i <= 64; ++i)
     {
         const double hz = b.lowHz * 0.5 * std::pow (b.highHz * 2.0 / (b.lowHz * 0.5), i / 64.0);
-        peakDb = std::max (peakDb, magnitudeDb (b.hp, hz, sr) + magnitudeDb (b.lp, hz, sr));
+        peakDb = std::max (peakDb, magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) + magnitudeDb (b.lp, hz, sr));
     }
     b.norm = std::pow (10.0, -peakDb / 20.0);
     return b;
@@ -101,16 +147,15 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct)
 
 // The band at another centre, keeping a peak scaling worked out before (the shape of the band on a
 // log axis does not change with its centre, away from Nyquist): cheap enough to retune often.
-inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, double norm)
+inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, double norm, int slope = kSlopeClassic)
 {
     ClarityBand b;
     const double half = std::pow (2.0, 0.5 * std::clamp (widthOct, 0.1, 8.0));
     if (centerHz / half <= kShelfLowHz || centerHz * half >= std::min (kShelfHighHz, 0.45 * sr))
-        return clarityBand (sr, centerHz, widthOct); // a shelf: its own peak scaling
+        return clarityBand (sr, centerHz, widthOct, slope); // a shelf: its own peak scaling
     b.lowHz = std::clamp (centerHz / half, 5.0, 0.3 * sr);
     b.highHz = std::clamp (centerHz * half, b.lowHz * 1.01, 0.45 * sr);
-    b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
-    b.lp = lowPass1 (sr, b.highHz);
+    clarityBandFilters (b, sr, slope);
     b.norm = norm;
     return b;
 }
@@ -156,7 +201,7 @@ inline double clarityCutAtDb (const ClarityBand& b, double hz, double sr, double
         const std::complex<double> z1 = std::polar (1.0, -2.0 * M_PI * hz / sr), z2 = z1 * z1;
         return (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
     };
-    const std::complex<double> h = resp (b.hp) * resp (b.lp) * b.norm;
+    const std::complex<double> h = resp (b.hp) * (b.hp2On ? resp (b.hp2) : 1.0) * resp (b.lp) * b.norm;
     const double g = std::pow (10.0, cutDb / 20.0);
     return 20.0 * std::log10 (std::max (1e-9, std::abs (1.0 + (g - 1.0) * h)));
 }
@@ -164,7 +209,7 @@ inline double clarityCutAtDb (const ClarityBand& b, double hz, double sr, double
 // the band's level at hz, dB (0 at its peak)
 inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
 {
-    return magnitudeDb (b.hp, hz, sr) + magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
+    return magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) + magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
 }
 
 // Gentlr's region drive: what driving the cut band region `x` (the bands after their cut) through the

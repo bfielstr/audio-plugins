@@ -31,6 +31,7 @@ public:
     static constexpr double kSubLeft = kViewLeft + kBands * kBandW, kSubW = 156.0; // the Sub band's
     static constexpr double kHighLeft = kSubLeft + kSubW;                           // the High band's (as wide)
     static constexpr double kNoOverlapLeft = kViewRight - 2 * 56.0 - 12.0;          // No Overlap, above Mix and Output
+    static constexpr double kSlopeLeft = 724.0;                                     // the bands' Slope, in the header
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

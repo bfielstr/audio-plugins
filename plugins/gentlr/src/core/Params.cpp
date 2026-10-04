@@ -62,7 +62,8 @@ std::vector<ParamInfo> buildTable ()
     v.push_back (like (kHighThreshold, smacheratr::kClarityHighThreshold, "High Threshold", "Thresh", smacheratr::kClarityThresholdDb));
     v.push_back (like (kNoOverlap, smacheratr::kClarityNoOverlap, "No Overlap", "No Overlap", 0.0));
     smacheratr::addTailExt3Params (v, kTailExt3Base);
-    static_assert (kNumParams == kTailExt3Base + pk::kTailExt3Fields, "the end saturator's fourth block is the last");
+    v.push_back (like (kSlope, smacheratr::kClaritySlope, "Slope", "Slope", smacheratr::kSlope12));
+    static_assert (kNumParams == kSlope + 1, "the Slope is the last");
     return v;
 }
 

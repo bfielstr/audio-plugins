@@ -77,6 +77,10 @@ void migrateState (int version, double norm[kNumParams], const bool has[kNumPara
     if (version < 4)
         smacheratr::subHighStateToRange (norm, has, kTailExt2Base + pk::kTailExt2Sub, kTailExt2Base + pk::kTailExt2SubRange,
                                          kTailExt3Base + pk::kTailExt3High, kTailExt3Base + pk::kTailExt3HighRange);
+    // before 5 the end saturator's Gentlr bands had one shape: Classic, the same sound (a new instance
+    // gets 12 / 12)
+    if (version < 5)
+        norm[kTailExt3Base + pk::kTailExt3Slope] = smacheratr::classicSlopeNorm ();
 }
 
 } // namespace levlr

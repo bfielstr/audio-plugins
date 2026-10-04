@@ -47,7 +47,8 @@ std::complex<double> response (const smacheratr::BiquadCoeffs& c, double hz, dou
 std::complex<double> bandGain (const ClarityBand& b, double hz, double sr, double cutDb)
 {
     const double g = std::pow (10.0, cutDb / 20.0);
-    return 1.0 - (1.0 - g) * response (b.hp, hz, sr) * response (b.lp, hz, sr) * b.norm;
+    const std::complex<double> hp2 = b.hp2On ? response (b.hp2, hz, sr) : 1.0;
+    return 1.0 - (1.0 - g) * response (b.hp, hz, sr) * hp2 * response (b.lp, hz, sr) * b.norm;
 }
 
 double toDb (std::complex<double> c) { return 20.0 * std::log10 (std::abs (c) + 1e-9); }
@@ -133,7 +134,7 @@ ClarityBand GentlrView::bandNow (int band) const
         return smacheratr::subBand (sampleRate (), l.freq[band]);
     if (band == kHigh)
         return smacheratr::highBand (sampleRate (), l.freq[band]);
-    return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band]);
+    return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band], smacheratr::claritySlopeOf (host->plainValue (kSlope)));
 }
 
 double GentlrView::xOfHz (double hz) const

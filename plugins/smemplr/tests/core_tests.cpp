@@ -449,7 +449,7 @@ TEST (para_slots_separate_slopes_and_gain_locks)
 {
     // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
     // at block positions 62 .. 64 (Para's IDs), and map back
-    CHECK (para::kNumParams == 70 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
+    CHECK (para::kNumParams == 71 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
            (unsigned)para::kNumParams);
     for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
     {
@@ -764,6 +764,56 @@ TEST (gentlr_sub_band_in_slots)
                        gentlr::toPlain (gentlr::kHighOn, norm[slotBlockParam (1, gentlr::kHighOn)]) == 0.0,
                    "version %d: High off", version);
     }
+}
+
+TEST (slope_in_slots)
+{
+    // states from before 20: a rack Smacheratr's and Gentlr's band Slope gets Classic, the shape their bands
+    // had (whatever the place held); 20 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Para
+    // (left alone)
+    for (int version : {16, 19, 20})
+    {
+        std::array<double, kNumParams> norm {};
+        std::array<bool, kNumParams> has {};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
+        for (int slot = 0; slot < 3; ++slot)
+        {
+            const uint32_t typeId = slotParam (slot, kSlotType);
+            norm[typeId] = toNormalized (typeId, types[slot]);
+            has[typeId] = true;
+            for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            {
+                norm[slotBlockParam (slot, j)] = 0.0;
+                has[slotBlockParam (slot, j)] = true;
+            }
+        }
+        migrateSlopeInSlots (norm, has, version);
+        const double classic = smacheratr::classicSlopeNorm (), want = version < 20 ? classic : 0.0;
+        CHECK (norm[slotBlockParam (0, smacheratr::kClaritySlope)] == want && norm[slotBlockParam (1, (uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope))] == want,
+               "version %d: the Smacheratr's and the Gentlr's Slope %s", version, version < 20 ? "Classic" : "as saved");
+        int touched = 0;
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            touched += norm[slotBlockParam (2, j)] != 0.0;
+        CHECK (touched == 0, "version %d: the Para left alone", version);
+    }
+    // Gentlr's Slope sits in the slot's extension (its ID 65, after its end saturator's blocks), shown in the rack
+    auto rackHides = [] (int type, uint32_t id) {
+        for (const RackHidden& r : rackHiddenParams (type))
+            if (id >= r.first && id <= r.last)
+                return true;
+        return false;
+    };
+    CHECK (fxBlockOf (kFxGentlr, gentlr::kSlope) == (int64_t)gentlr::kSlope && gentlr::kSlope >= kSlotBlock && gentlr::kSlope < kSlotBlockAll &&
+               !rackHides (kFxGentlr, gentlr::kSlope) && rackHides (kFxGentlr, gentlr::kTailExt3Base + pk::kTailExt3Slope),
+           "Gentlr's Slope in the rack, its end saturator's not");
+    CHECK (!rackHides (kFxSmacheratr, smacheratr::kClaritySlope), "Smacheratr's Slope in the rack");
+    // the saturator after the rack (before 0.9) moved into a slot: Classic, the shape its bands had
+    std::array<double, kNumParams> norm {};
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        norm[id] = defaultNormalized (id);
+    endSaturatorToSlot (
+        3, [&] (uint32_t id) { return norm[id]; }, [&] (uint32_t id, double v) { norm[id] = v; });
+    CHECK (norm[slotBlockParam (3, smacheratr::kClaritySlope)] == smacheratr::classicSlopeNorm (), "the old saturator in a slot: Classic");
 }
 
 TEST (sub_high_without_buttons_in_slots)

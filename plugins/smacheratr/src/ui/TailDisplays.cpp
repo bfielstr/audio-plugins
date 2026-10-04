@@ -37,6 +37,11 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
     noOverlap = new NoOverlapToggle (CRect (area.right - 90, area.top - 22, area.right, area.top - 4), host.get (), smacheratrBandParams ());
     noOverlap->setTooltipText (help::forParam (kClarityNoOverlap));
     parent->addView (noOverlap);
+    // the bands' Slope, left of it
+    parent->addView (new pk::Label (CRect (area.right - 244, area.top - 22, area.right - 206, area.top - 4), "Slope", 10.5));
+    slope = new pk::Choice (CRect (area.right - 202, area.top - 22, area.right - 98, area.top - 4), host.get (), kClaritySlope);
+    slope->setTooltipText (help::kSlope);
+    parent->addView (slope);
     // Gentlr's Advanced mode: the region Drive and the Threshold sliders, in a strip at the right of
     // the colour display (hidden while Advanced is off)
     driveOn = new pk::Toggle (CRect (0, 0, 1, 1), host.get (), kClarityDrive, "Drive");
@@ -70,6 +75,8 @@ void TailDisplays::updateLooks ()
             sliders[k]->setEnabledLook (smacheratrBandParams ().works (host.get (), k));
     if (noOverlap)
         noOverlap->setEnabledLook (on >= 0.5);
+    if (slope)
+        slope->setEnabledLook (on >= 0.5);
     if (driveOn)
         driveOn->setEnabledLook (on >= 0.5);
     if (driveAmount)
@@ -97,7 +104,7 @@ void TailDisplays::paramChanged (uint32_t id)
         layoutAdvanced ();
     updateLooks ();
     for (CView* v : {(CView*)shaper, (CView*)color, (CView*)sliders[0], (CView*)sliders[1], (CView*)sliders[2], (CView*)sliders[3],
-                     (CView*)driveOn, (CView*)driveAmount, (CView*)noOverlap})
+                     (CView*)driveOn, (CView*)driveAmount, (CView*)noOverlap, (CView*)slope})
         if (v)
             v->invalid ();
 }
@@ -110,7 +117,7 @@ void TailDisplays::closed ()
     color = nullptr;
     for (auto& s : sliders)
         s = nullptr;
-    driveOn = driveAmount = noOverlap = nullptr;
+    driveOn = driveAmount = noOverlap = slope = nullptr;
 }
 
 } // namespace smacheratr

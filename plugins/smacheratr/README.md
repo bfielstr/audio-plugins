@@ -69,6 +69,16 @@ has no width. At Range 0 Gentlr is exactly what it was, bit for bit. Projects sa
 the Sub and High bands had buttons sound the same: a band that was off loads at Range 0, one that was
 on keeps its Range.
 
+**Slope** (in the Gentlr panel, under the band buttons; one for both bands, the Sub and High bands keep
+their own shape) sets the shape of Gentlr's two bands: **12 / 12** (the default: 12 dB/oct below the
+band and 12 dB/oct above it; the band is symmetric, so at its centre the cut is exactly the Range),
+**Signature** (24 dB/oct below, 12 dB/oct above: a steeper floor under the band, so a band on the low
+mids leaves the bass under it alone) or **Classic** (12 dB/oct below, 6 dB/oct above: the only shape
+before the Slope). Every band is scaled to peak at 0 dB, and a band that reaches an end of the spectrum
+is still a shelf there, keeping the slope of its other side; the colour display draws the shape
+selected. Projects saved before the Slope load with Classic and sound exactly as they did; the end
+saturator in the other plug-ins has the same Slope (beside No Overlap, above its colour display).
+
 **No Overlap** (in the Gentlr panel, off by default): Gentlr's working bands never cover the same
 frequencies. Dragging or widening a band in the colour display pushes its neighbours' edges along (a
 neighbour narrows, and once it is 0.5 octaves wide moves as a whole); where a neighbour cannot move

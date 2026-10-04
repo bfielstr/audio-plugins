@@ -2,6 +2,8 @@
 
 #include "../core/Params.h"
 
+#include "smacheratr/src/ui/Help.h"
+
 namespace gentlr::help {
 
 inline const char* forParam (uint32_t id)
@@ -50,6 +52,7 @@ inline const char* forParam (uint32_t id)
                    "pushes its neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot "
                    "move further). Switched on, bands that overlap are split at the middle of the overlap; automation that "
                    "makes them overlap is kept apart the same way.";
+        case kSlope: return smacheratr::help::kSlope;
         case kSubThreshold:
             return "Advanced: where the Sub band starts cutting (its peak level, dB). The slider shows the band's level: "
                    "brighter above the threshold, where it is being cut.";
@@ -62,7 +65,7 @@ inline const char* forParam (uint32_t id)
             case kFreq: return "The band's centre (drag its handle in the display sideways).";
             case kWidth:
                 return "How wide the band is, in octaves between its edges (drag an edge in the display, or Alt-drag the "
-                       "band). 12 dB/oct below it, 6 dB/oct above.";
+                       "band). Its slopes below and above are the Band Slope (12 dB/oct on both sides by default).";
             case kRange:
                 return "The most the band is turned down (drag its handle down). It cuts 3 dB for every 5 the band is over "
                        "its threshold, up to this. 0 dB: the band does nothing.";

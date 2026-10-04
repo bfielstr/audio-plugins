@@ -61,7 +61,7 @@ static_assert (kSubOn == 92 && kSubFreq == 93 && kSubThresh == 94 && kSubRatio =
                    kSubOutput == 98,
                "the Sub band is 92 .. 98");
 static_assert (kStyle == 99 && kSubInput == 100, "Style is 99, Sub Input 100");
-static_assert (kSatExt3Base == 101 && kNumParams == 106, "the built-in Smacheratr's fourth block is 101 .. 105");
+static_assert (kSatExt3Base == 101 && kNumParams == 107, "the built-in Smacheratr's fourth block is 101 .. 106");
 
 enum Style { kStyleOtt = 0, kStyleCharacter };
 

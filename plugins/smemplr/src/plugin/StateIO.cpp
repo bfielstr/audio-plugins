@@ -43,7 +43,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     size in bytes); an older state has none
 // 19: no Sub and High buttons in the rack's Smacheratrs and Gentlrs (a band works while its Range is above
 //     0 dB; one that was off gets Range 0)
-constexpr int32 kVersion = 19;
+// 20: Gentlr's band Slope in the rack's Smacheratrs and Gentlrs (Classic for states from before it, the
+//     shape there was; 12 / 12 for new slots)
+constexpr int32 kVersion = 20;
 constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -274,6 +276,9 @@ bool readState (IBStream* stream, PluginState& st)
     migrateMultidynInSlots (st.norm, st.has, version);
     if (version < 9)
         moveEndSaturatorIntoRack (st.norm, st.has); // (the rack is what the state has; its saturator after it, into it)
+    // Gentlr's band Slope (20) in the rack's Smacheratrs and Gentlrs: Classic (last: after the defaults
+    // the migrations above give, and the old saturator moved into the rack)
+    migrateSlopeInSlots (st.norm, st.has, version);
     return true;
 }
 

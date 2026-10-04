@@ -70,7 +70,7 @@ ClarityBand ColorView::bandOf (int band) const
         return subBand (sampleRate (), l.freq[band]);
     if (band == kHighBand)
         return highBand (sampleRate (), l.freq[band]);
-    return clarityBand (sampleRate (), l.freq[band], l.width[band]);
+    return clarityBand (sampleRate (), l.freq[band], l.width[band], claritySlopeOf (host->plainValue (kClaritySlope)));
 }
 
 bool ColorView::clarityOn (int band) const { return smacheratrBandParams ().works (host, band); }

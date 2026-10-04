@@ -11,8 +11,8 @@ loud; with Advanced, the region they cut can be driven) -> **Mix** -> **Output**
 
 ## The bands
 
-Each band is a region of the spectrum (a 12 dB/oct high-pass below it, a 6 dB/oct low-pass above it,
-around its frequency, scaled so it peaks at 0 dB: Smacheratr's band) with a compressor on it. When the
+Each band is a region of the spectrum (a high-pass below it and a low-pass above it, their slopes set
+by **Slope**, around its frequency, scaled so it peaks at 0 dB: Smacheratr's band) with a compressor on it. When the
 band's level (its peak level, as a sine's peak) goes over -18 dBFS, the band is turned down by 3 dB for
 every 5 dB over (2.5 : 1, hard knee), at most by its **Range**, which it reaches (Range / 0.6) dB over
 the threshold. The band is taken out of the signal and put back turned down (x + (g - 1) * band), so a
@@ -25,6 +25,14 @@ band that is not cutting leaves the signal exactly as it was, bit for bit.
   its region now. A band whose edge reaches an end of the spectrum (its low edge at 20 Hz or below, or
   its high edge at 20 kHz or above) turns into a shelf there: it runs flat past that end instead of
   dipping back up.
+- **Band Slope** (at the top, left of the presets; one for both bands, the Sub and High bands keep their
+  own shape): **12 / 12** (the default: 12 dB/oct below the band and 12 dB/oct above it; the band is
+  symmetric, so at its centre the cut is exactly what the law asks for), **Signature** (24 dB/oct below,
+  12 dB/oct above: a steeper floor under the band, so a band on the low mids leaves the bass under it
+  alone) or **Classic** (12 dB/oct below, 6 dB/oct above: the only shape before the Slope). A band at an
+  end of the spectrum is still a shelf there, keeping the slope of its other side, and the display draws
+  the shape selected. Projects saved before the Slope (Gently's included) load with Classic and sound
+  exactly as they did.
 - **Sub**: a shelf for the sub region, flat from the very bottom of the spectrum up to its
   **Freq** (20 to 100 Hz, 40 Hz by default), where its cut starts to let go (within about 1 dB of the
   full cut there, about half of it at twice that, nearly none two octaves up). It has a **Range** and the
