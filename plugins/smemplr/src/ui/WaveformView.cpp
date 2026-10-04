@@ -397,14 +397,21 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
             }
     }
 
-    // --- waveform ----------------------------------------------------------------
+    // --- waveform: drawn at the level Gain gives it (full scale, 0 dBFS, fills most of its lane; Height
+    // zooms it further), held to its lane; what Gain would push past full scale is drawn in the peak
+    // colour where it plays ----------------------------------------------------------
     const int lanes = s->numChannels;
     const double laneH = w.getHeight () / lanes;
     const double framesPerPx = viewLen * len / w.getWidth ();
+    const double gain = std::pow (10.0, host->plainValue (kGain) / 20.0);
     for (int c = 0; c < lanes; ++c)
     {
         const double mid = w.top + laneH * (c + 0.5);
-        const double scale = laneH * 0.46 / std::max (0.05f, std::min (1.0f, s->peakAbs)) * heightZoom;
+        const double scale = laneH * 0.46 * heightZoom * gain;
+        // a level (before Gain) as a height in the lane, held inside it
+        const double room = std::max (1.0, laneH * 0.5 - 1.0);
+        auto yOf = [&] (double v) { return mid - std::clamp (v * scale, -room, room); };
+        const double clipAt = 1.0 / gain; // the level Gain takes to full scale
         ctx->setFrameColor (theme::kGridMinor);
         ctx->drawLine (CPoint (w.left, mid), CPoint (w.right, mid));
         const float* d = s->data (c);
@@ -417,9 +424,10 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
             CPoint prev;
             for (int i = a; i <= b; ++i)
             {
-                const CPoint pt (posToX (i / len), mid - d[i] * scale);
+                const CPoint pt (posToX (i / len), yOf (d[i]));
                 const bool inside = i >= fs && i <= fe;
-                ctx->setFrameColor (inside ? theme::kCopper : theme::kLineDim);
+                const bool clips = std::fabs (d[i]) > clipAt || (i > a && std::fabs (d[i - 1]) > clipAt);
+                ctx->setFrameColor (inside ? (clips ? theme::kEnergyPeak : theme::kCopper) : theme::kLineDim);
                 if (i > a)
                     ctx->drawLine (prev, pt);
                 prev = pt;
@@ -457,8 +465,23 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
                 }
             }
             const double midPos = (a + b) * 0.5;
-            ctx->setFrameColor (midPos >= fs && midPos <= fe ? theme::kCopper : theme::kLineDim);
-            ctx->drawLine (CPoint (x + 0.5, mid - hi * scale - 0.5), CPoint (x + 0.5, mid - lo * scale + 0.5));
+            const bool inside = midPos >= fs && midPos <= fe;
+            // the part inside full scale, then (where it plays) what goes past it, in the peak colour
+            const double h = std::min ((double)hi, clipAt), l = std::max ((double)lo, -clipAt);
+            ctx->setFrameColor (inside ? theme::kCopper : theme::kLineDim);
+            if (h >= l)
+                ctx->drawLine (CPoint (x + 0.5, yOf (h) - 0.5), CPoint (x + 0.5, yOf (l) + 0.5));
+            if (!inside && (hi > clipAt || lo < -clipAt))
+                ctx->drawLine (CPoint (x + 0.5, yOf (hi) - 0.5), CPoint (x + 0.5, yOf (lo) + 0.5));
+            else
+            {
+                // (at least 2 px of it, also where the lane's edge holds it)
+                ctx->setFrameColor (theme::kEnergyPeak);
+                if (hi > clipAt)
+                    ctx->drawLine (CPoint (x + 0.5, yOf (hi) - 0.5), CPoint (x + 0.5, std::max (yOf (clipAt), yOf (hi) + 2.0)));
+                if (lo < -clipAt)
+                    ctx->drawLine (CPoint (x + 0.5, std::min (yOf (-clipAt), yOf (lo) - 2.0)), CPoint (x + 0.5, yOf (lo) + 0.5));
+            }
         }
     }
 
