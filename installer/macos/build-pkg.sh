@@ -127,8 +127,11 @@ for p in "${plugins[@]}"; do
     pkgbuild --analyze --root "$work/roots/$p" "$plist" >/dev/null
     i=0
     while /usr/libexec/PlistBuddy -c "Print :$i" "$plist" >/dev/null 2>&1; do
-        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$plist"
-        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsVersionChecked false" "$plist" 2>/dev/null || true
+        # (Set when pkgbuild wrote the key, Add when it did not: newer pkgbuilds leave some keys out)
+        for key in BundleIsRelocatable BundleIsVersionChecked; do
+            /usr/libexec/PlistBuddy -c "Set :$i:$key false" "$plist" 2>/dev/null ||
+                /usr/libexec/PlistBuddy -c "Add :$i:$key bool false" "$plist"
+        done
         i=$((i + 1))
     done
     pkgbuild --root "$work/roots/$p" --component-plist "$plist" \
