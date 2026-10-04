@@ -1,0 +1,6 @@
+# smemplr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: slices, beats
+comment: Slices the sample at its transients, one note per slice.
+Playback Mode = Slicing
+Slice By = Transient
+Loop On = Off

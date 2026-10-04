@@ -191,6 +191,19 @@ loaded there). The latency of the rack is reported to the host, which is told wh
 switched-off effect keeps its latency. The **Output Scope** on the right shows the final output (click
 it to change the time span).
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Playback*: One-Shot Drum, Pad, Slicer. Save your own with **Save As...** (a
+category and tags are optional), filter the menu by tag, and use **Save as Default** to make every
+new smemplr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
+A smemplr preset holds the settings, the LFO mappings and the path of the loaded sample, as before:
+loading one loads its sample, and so does a saved default (a new smemplr then starts with that
+sample, if the file is still there). **Init** and the factory presets set the controls only and
+clear the LFO mappings; the loaded sample stays.
+
 ## Notes and limits
 
 - The warp algorithms are smemplr's own. They are tempo-accurate and tested. Manual warp markers are

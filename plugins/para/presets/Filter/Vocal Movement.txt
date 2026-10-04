@@ -1,0 +1,4 @@
+# para factory preset (format: shared/pluginkit/PresetStore.h)
+tags: vocal, talking, bass
+comment: The Vocal movement, for talking bass sweeps.
+Movement = Vocal

@@ -1,0 +1,4 @@
+# stretchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: time, slow
+comment: Half speed, pitch unchanged.
+Speed = 50 %

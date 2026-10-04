@@ -1,0 +1,15 @@
+# multidyn factory preset (format: shared/pluginkit/PresetStore.h)
+tags: gentle, glue, downward
+comment: Downward compression only, 2:1 per band, no upward lift.
+Band 1 Above Threshold = -24 dB
+Band 1 Above Ratio = 1 : 2
+Band 1 Below Ratio = 1 : 1
+Band 2 Above Threshold = -24 dB
+Band 2 Above Ratio = 1 : 2
+Band 2 Below Ratio = 1 : 1
+Band 3 Above Threshold = -24 dB
+Band 3 Above Ratio = 1 : 2
+Band 3 Below Ratio = 1 : 1
+Band 4 Above Threshold = -24 dB
+Band 4 Above Ratio = 1 : 2
+Band 4 Below Ratio = 1 : 1

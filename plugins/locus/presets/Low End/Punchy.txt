@@ -1,0 +1,4 @@
+# locus factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, kick, punch
+comment: Bass notes and kick hits forward, the mud between them down.
+Contrast = 50 %

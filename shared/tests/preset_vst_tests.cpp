@@ -1,0 +1,449 @@
+// The preset system with the SDK, on a small processor / controller pair connected the way a host
+// connects them (in a temporary preset folder, $PK_PRESETS_DIR): .vstpreset round trips with tags,
+// files without metadata (saved before 0.13), Init, factory presets, the tag filter, Save as Default
+// (a new instance starts from it, a project's state still wins), Reset Default, rename / delete and
+// the menu message the macOS host tests use. Run: ./pluginkit_preset_tests
+#include "pluginkit/vst/ControllerBase.h"
+#include "pluginkit/vst/Presets.h"
+
+#include "base/source/fstreamer.h"
+#include "public.sdk/source/common/memorystream.h"
+#include "public.sdk/source/vst/hosting/hostclasses.h"
+#include "public.sdk/source/vst/vstaudioeffect.h"
+
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+using namespace Steinberg;
+using namespace Steinberg::Vst;
+namespace fs = std::filesystem;
+
+static int gFailures = 0, gChecks = 0;
+#define CHECK(cond, ...)                                                   \
+    do                                                                     \
+    {                                                                      \
+        ++gChecks;                                                         \
+        if (!(cond))                                                       \
+        {                                                                  \
+            ++gFailures;                                                   \
+            std::printf ("    FAIL %s:%d: %s  ", __FILE__, __LINE__, #cond); \
+            std::printf (__VA_ARGS__);                                     \
+            std::printf ("\n");                                            \
+        }                                                                  \
+    } while (0)
+
+// what the editor support code expects from a plug-in module (a test is not one)
+void* moduleHandle = nullptr;
+extern "C" SMTG_EXPORT_SYMBOL IPluginFactory* PLUGIN_API GetPluginFactory () { return nullptr; }
+
+namespace {
+
+const FUID kProcId (0x11111111, 0x22222222, 0x33333333, 0x44444444);
+const FUID kOtherId (0x55555555, 0x22222222, 0x33333333, 0x44444444);
+constexpr const char* kName = "PresetTestPlug";
+constexpr uint32_t kN = 4;
+
+const pk::ParamTable& testTable ()
+{
+    static const pk::ParamTable t ({
+        pk::make::real (0, "Frequency", "Freq", 20.0, 20000.0, 250.0, pk::Curve::Log, pk::Disp::Hz),
+        pk::make::real (1, "Range", "Range", 0.0, 24.0, 8.0, pk::Curve::Linear, pk::Disp::Db),
+        pk::make::choice (2, "Mode", "Mode", {"Soft", "Hard"}, 0),
+        pk::make::percent (3, "Mix", "Mix", 1.0),
+    });
+    return t;
+}
+
+// the state: a magic number, then every value
+bool writeValues (IBStream* s, const std::array<double, kN>& v)
+{
+    IBStreamer st (s, kLittleEndian);
+    bool ok = st.writeInt32 (0x50525354);
+    for (double x : v)
+        ok = ok && st.writeDouble (x);
+    return ok;
+}
+bool readValues (IBStream* s, std::array<double, kN>& v)
+{
+    IBStreamer st (s, kLittleEndian);
+    int32 magic = 0;
+    if (!st.readInt32 (magic) || magic != 0x50525354)
+        return false;
+    for (auto& x : v)
+        if (!st.readDouble (x))
+            return false;
+    return true;
+}
+std::array<double, kN> defaults ()
+{
+    std::array<double, kN> d;
+    for (uint32_t i = 0; i < kN; ++i)
+        d[i] = testTable ().defaultNormalized (i);
+    return d;
+}
+
+class Proc : public AudioEffect
+{
+public:
+    std::array<double, kN> v = defaults ();
+    tresult PLUGIN_API initialize (FUnknown* context) override
+    {
+        const tresult r = AudioEffect::initialize (context);
+        if (r == kResultOk)
+            pk::presets::applyDefault (*this, kProcId, kName);
+        return r;
+    }
+    tresult PLUGIN_API setState (IBStream* s) override { return readValues (s, v) ? kResultOk : kResultFalse; }
+    tresult PLUGIN_API getState (IBStream* s) override { return writeValues (s, v) ? kResultOk : kResultFalse; }
+    tresult PLUGIN_API notify (IMessage* m) override
+    {
+        return pk::presets::handleProcessorMessage (*this, m) ? kResultOk : AudioEffect::notify (m);
+    }
+};
+
+class Ctrl : public pk::ControllerBase
+{
+public:
+    Ctrl () : pk::ControllerBase (testTable ()) { setPresetInfo (kProcId, kName); }
+    int extraResets = 0;
+    tresult PLUGIN_API setComponentState (IBStream* s) override
+    {
+        std::array<double, kN> v;
+        if (!readValues (s, v))
+            return kResultFalse;
+        for (uint32_t i = 0; i < kN; ++i)
+            setParamNormalized (i, v[i]);
+        return kResultOk;
+    }
+
+protected:
+    void resetExtraState () override { ++extraResets; }
+};
+
+// a processor and a controller, initialized and connected as a host does
+struct Instance
+{
+    IPtr<Proc> proc;
+    IPtr<Ctrl> ctrl;
+    explicit Instance (FUnknown* host)
+    {
+        proc = owned (new Proc ());
+        ctrl = owned (new Ctrl ());
+        proc->initialize (host);
+        ctrl->initialize (host);
+        proc->connect (ctrl);
+        ctrl->connect (proc);
+    }
+    ~Instance ()
+    {
+        proc->disconnect (ctrl);
+        ctrl->disconnect (proc);
+        ctrl->terminate ();
+        proc->terminate ();
+    }
+    // a host edit: both halves
+    void set (uint32_t id, double n)
+    {
+        ctrl->setParamNormalized (id, n);
+        proc->v[id] = n;
+    }
+    double ctl (uint32_t id) { return ctrl->getParamNormalized (id); }
+};
+
+bool near (double a, double b) { return std::fabs (a - b) < 1e-9; }
+
+std::vector<char> stateOf (const std::array<double, kN>& v)
+{
+    MemoryStream ms;
+    writeValues (&ms, v);
+    return std::vector<char> (ms.getData (), ms.getData () + ms.getSize ());
+}
+
+const pk::presets::Item* findItem (const std::vector<pk::presets::Item>& items, const std::string& name)
+{
+    for (const auto& i : items)
+        if (i.name == name)
+            return &i;
+    return nullptr;
+}
+
+std::vector<std::string> menuViaMessage (Ctrl* c)
+{
+    auto msg = owned (new HostMessage ());
+    msg->setMessageID (pk::presets::kMsgMenu);
+    c->notify (msg);
+    const void* data = nullptr;
+    uint32 size = 0;
+    std::vector<std::string> out;
+    if (msg->getAttributes ()->getBinary (pk::presets::kAttrItems, data, size) != kResultOk || !data)
+        return out;
+    std::string s ((const char*)data, size), cur;
+    for (char ch : s)
+        if (ch == '\n')
+        {
+            out.push_back (cur);
+            cur.clear ();
+        }
+        else
+            cur += ch;
+    return out;
+}
+
+bool contains (const std::vector<std::string>& v, const std::string& s)
+{
+    for (const auto& x : v)
+        if (x == s)
+            return true;
+    return false;
+}
+
+} // namespace
+
+int main ()
+{
+    const fs::path root = fs::temp_directory_path () / ("pk_preset_tests_" + std::to_string ((long long)std::rand ()) + "_" +
+                                                         std::to_string ((long long)fs::file_time_type::clock::now ().time_since_epoch ().count ()));
+    fs::create_directories (root);
+#if defined(_WIN32)
+    _putenv_s ("PK_PRESETS_DIR", root.string ().c_str ());
+#else
+    setenv ("PK_PRESETS_DIR", root.string ().c_str (), 1);
+#endif
+    auto* hostApp = new HostApplication ();
+    FUnknown* host = hostApp;
+    const fs::path folder = root / kName;
+
+    std::printf ("fileRoundTripWithTags\n");
+    {
+        fs::create_directories (folder / "Drums");
+        const auto comp = stateOf ({0.1, 0.2, 1.0, 0.4});
+        pk::presets::Meta m;
+        m.name = "Kick";
+        m.plugin = kName;
+        m.category = "Drums";
+        m.tags = {"punchy", "low end"};
+        const std::string path = (folder / "Drums" / "Kick.vstpreset").string ();
+        CHECK (pk::presets::write (path, kProcId, comp, {}, &m), "write");
+        std::vector<char> c2, k2;
+        CHECK (pk::presets::read (path, kProcId, c2, k2) && c2 == comp, "states back");
+        CHECK (!pk::presets::read (path, kOtherId, c2, k2), "another plug-in's class refuses it");
+        const auto back = pk::presets::readMeta (path);
+        CHECK (back.tags == m.tags && back.category == "Drums" && back.name == "Kick" && back.plugin == kName, "%s",
+               pk::presets::joinTags (back.tags).c_str ());
+        // edit the tags later: the states stay
+        pk::presets::Meta m2 = back;
+        m2.tags = {"808"};
+        CHECK (pk::presets::rewriteMeta (path, kProcId, m2), "rewrite");
+        CHECK (pk::presets::readMeta (path).tags == std::vector<std::string> {"808"}, "new tags");
+        CHECK (pk::presets::read (path, kProcId, c2, k2) && c2 == comp, "states unchanged");
+        fs::remove (path);
+    }
+
+    std::printf ("oldFilesWithoutMetadata\n");
+    {
+        fs::create_directories (folder);
+        const auto comp = stateOf ({0.3, 0.3, 0.0, 0.3});
+        const std::string path = (folder / "Old.vstpreset").string ();
+        CHECK (pk::presets::write (path, kProcId, comp, {}, nullptr), "write as 0.12 did");
+        std::string xml;
+        CHECK (!pk::presets::readMetaXml (path, xml), "no Info chunk");
+        const auto m = pk::presets::readMeta (path);
+        CHECK (m.tags.empty () && m.category.empty (), "empty metadata");
+        const auto items = pk::presets::listUser (folder.string ());
+        const auto* it = findItem (items, "Old");
+        CHECK (it && it->tags.empty () && it->category.empty (), "listed");
+        Instance a (host);
+        CHECK (a.ctrl->loadPreset (path), "loads");
+        CHECK (near (a.ctl (0), 0.3) && near (a.proc->v[3], 0.3), "values from it (controller %g, processor %g)", a.ctl (0), a.proc->v[3]);
+        CHECK (a.ctrl->presetName () == "Old" && a.ctrl->presetKind () == pk::presets::Kind::User, "a user preset");
+        // tags can be added to it
+        CHECK (a.ctrl->setPresetTags (path, {"vintage"}), "tag it");
+        CHECK (pk::presets::readMeta (path).tags == std::vector<std::string> {"vintage"}, "tagged");
+        fs::remove (path);
+    }
+
+    std::printf ("saveUserPresetsAndFilterByTag\n");
+    {
+        Instance a (host);
+        a.set (0, 0.7);
+        a.set (1, 0.25);
+        CHECK (a.ctrl->saveUserPreset ("Bright", "Vocals", {"vocal", "bright"}), "save");
+        CHECK (fs::exists (folder / "Vocals" / "Bright.vstpreset"), "in its category's folder");
+        CHECK (a.ctrl->presetName () == "Bright" && a.ctrl->presetKind () == pk::presets::Kind::User, "current");
+        a.set (0, 0.2);
+        CHECK (a.ctrl->saveUserPreset ("Dark", "", {"vocal"}), "save 2");
+        CHECK (!a.ctrl->saveUserPreset ("Init", "", {}), "Init cannot be a user preset");
+        CHECK (!a.ctrl->saveUserPreset ("a/b", "", {}), "bad name");
+        const auto items = a.ctrl->userItems ();
+        CHECK (items.size () == 2, "%zu user presets", items.size ());
+        const auto* b = findItem (items, "Bright");
+        CHECK (b && b->category == "Vocals" && pk::presets::hasTag (b->tags, "bright"), "tags listed");
+        a.ctrl->tagFilter = "bright";
+        auto titles = pk::presets::menuTitles (a.ctrl->presetMenu ());
+        CHECK (contains (titles, "Vocals/Bright") && !contains (titles, "Dark"), "filtered");
+        a.ctrl->tagFilter.clear ();
+        titles = pk::presets::menuTitles (a.ctrl->presetMenu ());
+        CHECK (contains (titles, "Vocals/Bright") && contains (titles, "Dark"), "all");
+        // load it back in a new instance
+        Instance c (host);
+        CHECK (c.ctrl->loadPreset ((folder / "Vocals" / "Bright.vstpreset").string ()), "load");
+        CHECK (near (c.ctl (0), 0.7) && near (c.ctl (1), 0.25) && near (c.proc->v[0], 0.7), "values");
+        // Save keeps tags and category
+        c.set (2, 1.0);
+        CHECK (c.ctrl->savePreset (c.ctrl->presetPath ()), "save over");
+        const auto m = pk::presets::readMeta ((folder / "Vocals" / "Bright.vstpreset").string ());
+        CHECK (m.category == "Vocals" && m.tags.size () == 2, "kept its metadata");
+        // rename and delete
+        CHECK (c.ctrl->renamePreset (c.ctrl->presetPath (), "Shiny"), "rename");
+        CHECK (fs::exists (folder / "Vocals" / "Shiny.vstpreset") && !fs::exists (folder / "Vocals" / "Bright.vstpreset"), "renamed");
+        CHECK (c.ctrl->presetName () == "Shiny", "%s", c.ctrl->presetName ().c_str ());
+        {
+            Instance o (host);
+            CHECK (o.ctrl->saveUserPreset ("Other", "Vocals", {}), "another in the category");
+        }
+        CHECK (!c.ctrl->renamePreset (c.ctrl->presetPath (), "Other"), "a rename never replaces another preset");
+        CHECK (fs::exists (folder / "Vocals" / "Shiny.vstpreset") && fs::exists (folder / "Vocals" / "Other.vstpreset"), "both still there");
+        fs::remove (folder / "Vocals" / "Other.vstpreset");
+        CHECK (c.ctrl->deletePreset (c.ctrl->presetPath ()), "delete");
+        CHECK (!fs::exists (folder / "Vocals" / "Shiny.vstpreset") && c.ctrl->presetKind () == pk::presets::Kind::None, "gone");
+        fs::remove (folder / "Dark.vstpreset");
+    }
+
+    std::printf ("initIsTheDefaults\n");
+    {
+        Instance a (host);
+        for (uint32_t i = 0; i < kN; ++i)
+            a.set (i, 0.9);
+        CHECK (a.ctrl->loadInit (), "Init");
+        for (uint32_t i = 0; i < kN; ++i)
+            CHECK (near (a.ctl (i), testTable ().defaultNormalized (i)), "param %u at its default (%g)", i, a.ctl (i));
+        CHECK (a.ctrl->presetName () == "Init" && a.ctrl->presetKind () == pk::presets::Kind::Init, "named Init");
+        CHECK (a.ctrl->extraResets == 1, "extra state reset");
+        const auto menu = a.ctrl->presetMenu ();
+        CHECK (!menu.empty () && menu[0].title == "Init" && menu[0].checked, "Init first and checked");
+    }
+
+    std::printf ("factoryPresets\n");
+    {
+        static const pk::presets::FactoryFile files[] = {
+            {"Mixing/Tame.txt", "tags: mix, harsh\nFrequency = 3 kHz\nRange = 4 dB\n"},
+            {"Broken.txt", "Nope = 1\n"}, // skipped: does not parse
+        };
+        pk::presets::registerFactory (files, 2);
+        Instance a (host);
+        const auto& f = a.ctrl->factoryPresets ();
+        CHECK (f.size () == 1 && f[0].name == "Tame" && f[0].category == "Mixing", "%zu factory presets", f.size ());
+        a.set (3, 0.1);
+        CHECK (a.ctrl->loadFactory (0), "load");
+        CHECK (std::fabs (testTable ().toPlain (0, a.ctl (0)) - 3000.0) < 0.5 && near (testTable ().toPlain (1, a.ctl (1)), 4.0), "its values");
+        CHECK (near (a.ctl (3), testTable ().defaultNormalized (3)), "the rest at defaults");
+        CHECK (a.ctrl->presetName () == "Tame" && a.ctrl->presetKind () == pk::presets::Kind::Factory, "current");
+        a.ctrl->tagFilter = "harsh";
+        const auto titles = pk::presets::menuTitles (a.ctrl->presetMenu ());
+        CHECK (contains (titles, "Mixing/Tame") && contains (titles, "Tags: harsh/harsh"), "filtered by a factory tag");
+        a.ctrl->tagFilter.clear ();
+    }
+
+    std::printf ("saveAsDefaultStartsNewInstances\n");
+    {
+        {
+            Instance a (host);
+            CHECK (!a.ctrl->hasDefault (), "none yet");
+            a.set (0, 0.61);
+            a.set (2, 1.0);
+            a.ctrl->uiScale = 1.5;
+            const std::string before = a.ctrl->presetName ();
+            CHECK (a.ctrl->saveAsDefault (), "save as default");
+            CHECK (a.ctrl->hasDefault () && fs::exists (folder / pk::presets::kDefaultFile), "the file");
+            CHECK (a.ctrl->presetName () == before, "the current preset stays");
+            CHECK (pk::presets::listUser (folder.string ()).empty (), "the default is not in the list");
+        }
+        {
+            Instance b (host); // a new instance, no project
+            CHECK (near (b.proc->v[0], 0.61) && near (b.proc->v[2], 1.0), "processor starts from it (%g)", b.proc->v[0]);
+            CHECK (near (b.ctl (0), 0.61) && near (b.ctl (2), 1.0), "controller starts from it (%g)", b.ctl (0));
+            CHECK (b.ctrl->presetName () == "Default" && b.ctrl->presetKind () == pk::presets::Kind::Default, "%s", b.ctrl->presetName ().c_str ());
+            CHECK (near (b.ctrl->uiScale, 1.5), "its interface size");
+            // Load Default after changes
+            b.set (0, 0.1);
+            CHECK (b.ctrl->loadDefault () && near (b.ctl (0), 0.61) && near (b.proc->v[0], 0.61), "Load Default");
+            // Init is still the factory defaults
+            CHECK (b.ctrl->loadInit () && near (b.ctl (0), testTable ().defaultNormalized (0)), "Init is not the saved default");
+        }
+        {
+            // a project: the host restores its state after creating the instance, which wins
+            Instance p (host);
+            const auto project = stateOf ({0.05, 0.15, 0.0, 0.25});
+            MemoryStream ps (const_cast<char*> (project.data ()), (TSize)project.size ());
+            CHECK (p.proc->setState (&ps) == kResultOk, "processor project state");
+            ps.seek (0, IBStream::kIBSeekSet, nullptr);
+            CHECK (p.ctrl->setComponentState (&ps) == kResultOk, "controller project state");
+            MemoryStream cs;
+            {
+                IBStreamer s (&cs, kLittleEndian);
+                s.writeDouble (1.0);
+                s.writeBool (true);
+                s.writeStr8 ("From The Project"); // a controller state as 0.12 wrote it
+            }
+            cs.seek (0, IBStream::kIBSeekSet, nullptr);
+            CHECK (p.ctrl->setState (&cs) == kResultOk, "controller state");
+            CHECK (near (p.proc->v[0], 0.05) && near (p.ctl (0), 0.05) && near (p.ctl (3), 0.25), "the project's values, not the default's");
+            CHECK (p.ctrl->presetName () == "From The Project" && near (p.ctrl->uiScale, 1.0), "%s", p.ctrl->presetName ().c_str ());
+        }
+        {
+            // the host syncs a new instance's controller from the processor (getState -> setComponentState)
+            Instance s (host);
+            MemoryStream st;
+            s.proc->getState (&st);
+            st.seek (0, IBStream::kIBSeekSet, nullptr);
+            s.ctrl->setComponentState (&st);
+            CHECK (near (s.ctl (0), 0.61), "the same default either way");
+        }
+        {
+            Instance r (host);
+            CHECK (r.ctrl->resetDefault () && !r.ctrl->hasDefault (), "Reset Default");
+            CHECK (r.ctrl->loadDefault () && r.ctrl->presetKind () == pk::presets::Kind::Init, "Load Default without one: Init");
+        }
+        {
+            Instance n (host);
+            for (uint32_t i = 0; i < kN; ++i)
+                CHECK (near (n.proc->v[i], testTable ().defaultNormalized (i)) && near (n.ctl (i), testTable ().defaultNormalized (i)),
+                       "factory defaults again (param %u)", i);
+            CHECK (n.ctrl->presetName ().empty (), "no preset name");
+        }
+    }
+
+    std::printf ("controllerStateKeepsTheCurrentPreset\n");
+    {
+        Instance a (host);
+        a.ctrl->loadFactory (0);
+        MemoryStream st;
+        CHECK (a.ctrl->getState (&st) == kResultOk, "get");
+        st.seek (0, IBStream::kIBSeekSet, nullptr);
+        Instance b (host);
+        CHECK (b.ctrl->setState (&st) == kResultOk, "set");
+        CHECK (b.ctrl->presetName () == "Tame" && b.ctrl->presetKind () == pk::presets::Kind::Factory &&
+                   b.ctrl->presetPath () == "Mixing/Tame.txt",
+               "%s", b.ctrl->presetPath ().c_str ());
+    }
+
+    std::printf ("menuMessage\n");
+    {
+        Instance a (host);
+        const auto items = menuViaMessage (a.ctrl);
+        CHECK (!items.empty () && items[0] == "Init", "Init first (%zu items)", items.size ());
+        for (const char* t : {"Save as Default", "Load Default", "Reset Default", "Save As...", "Edit Tags...", "Tags/All", "Mixing/Tame"})
+            CHECK (contains (items, t), "has %s", t);
+    }
+
+    hostApp->release ();
+    std::error_code ec;
+    fs::remove_all (root, ec);
+    std::printf ("\n%d checks, %d failures\n", gChecks, gFailures);
+    return gFailures == 0 ? 0 : 1;
+}

@@ -53,3 +53,11 @@ add_subdirectory(plugins/dropr)
 add_subdirectory(plugins/gentlr)
 add_subdirectory(plugins/smoothr)
 add_subdirectory(plugins/orbitr)
+
+# Every plug-in's factory presets (plugins/<plugin>/presets) parse against its parameters.
+add_executable(factory_presets_tests shared/tests/factory_presets_tests.cpp)
+target_compile_definitions(factory_presets_tests PRIVATE PK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(factory_presets_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugins)
+target_link_libraries(factory_presets_tests PRIVATE pluginkit_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
+    orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
+add_test(NAME factory_presets COMMAND factory_presets_tests)

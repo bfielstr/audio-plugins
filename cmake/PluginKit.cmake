@@ -62,6 +62,18 @@ function(pk_add_plugin target)
     target_link_libraries(${target} PRIVATE pluginkit_vst sdk vstgui_support)
     smtg_target_configure_version_file(${target})
 
+    # factory presets: <plugin>/presets/**/*.txt compiled in (cmake/EmbedPresets.cmake)
+    set(_pk_presets "${CMAKE_CURRENT_SOURCE_DIR}/presets")
+    if(EXISTS "${_pk_presets}")
+        file(GLOB_RECURSE _pk_preset_files CONFIGURE_DEPENDS "${_pk_presets}/*.txt")
+        set(_pk_presets_cpp "${CMAKE_CURRENT_BINARY_DIR}/${target}_factory_presets.cpp")
+        add_custom_command(OUTPUT "${_pk_presets_cpp}"
+            COMMAND ${CMAKE_COMMAND} -DPRESET_DIR=${_pk_presets} -DOUT=${_pk_presets_cpp} -P ${CMAKE_SOURCE_DIR}/cmake/EmbedPresets.cmake
+            DEPENDS ${_pk_preset_files} ${CMAKE_SOURCE_DIR}/cmake/EmbedPresets.cmake
+            COMMENT "Embedding the factory presets of ${target}")
+        target_sources(${target} PRIVATE "${_pk_presets_cpp}")
+    endif()
+
     set(lic "${CMAKE_BINARY_DIR}/licenses")
     configure_file(${vst3sdk_SOURCE_DIR}/LICENSE.txt ${lic}/VST3_SDK_LICENSE.txt COPYONLY)
     configure_file(${vst3sdk_SOURCE_DIR}/vstgui4/LICENSE ${lic}/VSTGUI_LICENSE.txt COPYONLY)

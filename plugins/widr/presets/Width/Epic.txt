@@ -1,0 +1,5 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: epic, wide, trailer
+comment: The Epic character, very wide.
+Character = Epic
+Width = 170 %

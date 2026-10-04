@@ -1,0 +1,6 @@
+# orbitr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: subtle, shimmer
+comment: A few orbs, mostly the dry sound.
+Orbs = 3
+Speed = 8
+Mix = 25 %

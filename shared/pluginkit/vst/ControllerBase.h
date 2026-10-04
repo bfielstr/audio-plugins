@@ -4,6 +4,8 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/PresetStore.h"
+#include "pluginkit/SettingsText.h"
 
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "public.sdk/source/vst/vstparameters.h"
@@ -56,12 +58,40 @@ public:
 
     // Presets. The processor's state travels in messages, so saving and loading work from the
     // editor without any help from the host. Subclasses call setPresetInfo() in their constructor.
+    // See PresetStore.h for the kinds of preset (Init, factory, user, the saved default).
     void setPresetInfo (const Steinberg::FUID& processorClassId, const char* pluginName, const char* formerName = nullptr);
+    const std::string& pluginName () const { return presetPlugin; }
     std::string presetFolder () const;
     const std::string& presetName () const { return presetTitle; }
-    bool savePreset (const std::string& path); // the processor answers synchronously in-process
+    presets::Kind presetKind () const { return currentKind; }
+    const std::string& presetPath () const { return currentPath; } // user file, or factory source path
+    // meta: written into the file (nullptr: the current preset's tags and category are kept when
+    // `path` is the current user preset, else none)
+    bool savePreset (const std::string& path, const presets::Meta* meta = nullptr); // the processor answers synchronously in-process
     bool loadPreset (const std::string& path);
     void resetToDefaults (); // every parameter back to its default, as complete gestures
+    bool loadInit ();        // Init: resetToDefaults (and resetExtraState), shown as "Init"
+    // Factory presets: the files registered by the build (Presets.h), parsed against this table.
+    const std::vector<presets::FactoryPreset>& factoryPresets ();
+    bool loadFactory (int index);
+    std::vector<presets::Item> factoryItems ();
+    std::vector<presets::Item> userItems () const;
+    // User presets: <folder>/[category/]name.vstpreset
+    std::string userPresetPath (const std::string& name, const std::string& category = {}) const;
+    bool saveUserPreset (const std::string& name, const std::string& category, const std::vector<std::string>& tags);
+    bool setPresetTags (const std::string& path, const std::vector<std::string>& tags);
+    bool renamePreset (const std::string& path, const std::string& newName);
+    bool deletePreset (const std::string& path);
+    // The saved default: a new instance starts from it (see applyStartupDefault).
+    std::string defaultPath () const;
+    bool hasDefault () const;
+    bool saveAsDefault ();
+    bool loadDefault (); // Init when there is none
+    bool resetDefault ();
+    // The Presets menu (PresetBar) and its tag filter (for this editor session).
+    std::vector<presets::MenuEntry> presetMenu (std::vector<presets::Item>* factoryOut = nullptr,
+                                                std::vector<presets::Item>* userOut = nullptr);
+    std::string tagFilter;
 
     // Copy / Paste Settings (SettingsText.h, under the plug-in's name from setPresetInfo; a paste also
     // takes texts under its former name): every parameter; a paste sets the ones in the text as complete gestures and returns false (changing
@@ -76,6 +106,12 @@ protected:
     void refreshEditor ();
     // The VST3 parameter registered for a table entry (a TableParameter unless overridden).
     virtual Steinberg::Vst::Parameter* makeParameter (uint32_t id);
+    // Init and factory presets set every parameter; a plug-in with state beyond its parameters that a
+    // fresh instance does not have (smemplr's LFO mappings) clears it here.
+    virtual void resetExtraState () {}
+    // Called at the end of initialize(): the saved default, if there is one, as a new instance's
+    // settings. A host loading a project then calls setComponentState / setState, which win.
+    void applyStartupDefault ();
 
     // every open editor (a host may show more than one view of a plug-in, or open the next before it
     // closes the last): each one follows the parameters
@@ -83,8 +119,17 @@ protected:
     const ParamTable& tableRef;
     Steinberg::FUID presetClassId;
     std::string presetPlugin, presetTitle, presetFormer; // presetFormer: the name its presets were saved under before a rename
+    presets::Kind currentKind = presets::Kind::None;
+    std::string currentPath;
     std::string pendingSavePath;
+    presets::Meta pendingMeta;
+    bool pendingHasMeta = false, pendingIsDefault = false;
     bool lastSaveOk = false;
+    std::vector<presets::FactoryPreset> factory;
+    bool factoryParsed = false;
+
+private:
+    void applyValues (const SettingValues& values); // every parameter: the default unless in `values`
 };
 
 } // namespace pk

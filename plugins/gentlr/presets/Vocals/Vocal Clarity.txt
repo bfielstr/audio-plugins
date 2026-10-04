@@ -1,0 +1,7 @@
+# gentlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: vocal, gentle
+comment: A little less boom and a little less sibilance on a voice.
+Band 1 Frequency = 250 Hz
+Band 1 Range = 4 dB
+Band 2 Frequency = 6 kHz
+Band 2 Range = 4 dB

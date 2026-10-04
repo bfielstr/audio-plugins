@@ -1,0 +1,6 @@
+# levlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: grit, highs, saturation
+comment: Clipped drive on the top band only.
+Band 4 Drive = 9 dB
+Band 4 Drive Type = Hard Clip
+Band 4 Gain = -2 dB

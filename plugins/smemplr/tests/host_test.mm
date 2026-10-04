@@ -301,6 +301,7 @@ int main (int argc, char** argv)
         // --- controller surface ---------------------------------------------------
         const int32 count = rig.controller->getParameterCount ();
         CHECK (count == (int32)smemplr::kNumParams + 3, "param count %d", count);
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         String128 str;
         rig.controller->getParamStringByValue (smemplr::kFilterFreq, 1.0, str);
         const std::string freqText = StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (str)));

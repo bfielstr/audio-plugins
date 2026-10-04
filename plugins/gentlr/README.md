@@ -160,6 +160,14 @@ its controls, its own gentlr included.
 
 gentlr is also in smemplr's effects rack.
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Mixing*: De-mud, Tame Harshness; *Vocals*: Vocal Clarity. Save your own with
+**Save As...** (a category and tags are optional), filter the menu by tag, and use **Save as
+Default** to make every new gentlr start from the current settings. The menu is described in the
+[top-level README](../../README.md#presets).
+
 ## Latency
 
 The region Drive's 4x oversampler delays the signal a little (37 samples at 48 kHz). Its delay is always

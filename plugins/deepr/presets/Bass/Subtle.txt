@@ -1,0 +1,4 @@
+# deepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, subtle
+comment: A light dip above the sub.
+Depth = 3 dB

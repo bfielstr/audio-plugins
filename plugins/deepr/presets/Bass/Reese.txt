@@ -1,0 +1,6 @@
+# deepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, reese
+comment: A wider dip a little higher, for detuned reese basses.
+Depth = 8 dB
+Dip Frequency = 300 Hz
+Dip Width = 2.0

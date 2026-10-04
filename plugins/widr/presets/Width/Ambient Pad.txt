@@ -1,0 +1,5 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pad, ambient, space
+comment: A pad pushed to the sides and back.
+Role = Ambient
+Space = 40 %

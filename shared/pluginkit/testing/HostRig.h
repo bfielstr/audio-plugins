@@ -103,6 +103,11 @@ bool allFinite (const std::vector<float>& x);
 size_t soundEnd (const std::vector<float>& x, float threshold);
 // Every parameter reported by the controller is automatable.
 int countNonAutomatable (Steinberg::Vst::IEditController* controller);
+// The Presets menu's entries as the controller reports them (pk::presets::kMsgMenu; sub-menu entries
+// as "Parent/Child"), and checks that it starts with Init and has Save as Default and the other
+// commands and at least one factory preset (a fresh preset folder assumed: no tag filter).
+std::vector<std::string> presetMenu (Steinberg::Vst::IEditController* controller);
+void checkPresetMenu (Steinberg::Vst::IEditController* controller);
 
 // Modifier flag values (NSEventModifierFlag*), usable without Cocoa headers.
 constexpr unsigned long kShift = 1ul << 17;

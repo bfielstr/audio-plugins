@@ -1,0 +1,6 @@
+# smacheratr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: crunch, aggressive, drums
+comment: Hard drive, hard clip, the output down.
+Drive = 18 dB
+Post Clip Mode = Hard Clip
+Output = -6 dB

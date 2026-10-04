@@ -1,0 +1,5 @@
+# smacheratr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: clip, peaks
+comment: Catches peaks with a soft clip.
+Drive = 3 dB
+Post Clip Mode = Soft Clip

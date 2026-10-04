@@ -52,6 +52,14 @@ ahead at the Distance, rings every metre (every 5 m when far).
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
 
+## Presets
+
+The **Presets** menu in the header starts with **Init** (every control at its default) and has these
+factory presets: *Motion*: Dense Swarm, Slow Orbit, Subtle Shimmer. Save your own with **Save
+As...** (a category and tags are optional), filter the menu by tag, and use **Save as Default** to
+make every new orbitr start from the current settings. The menu is described in the [top-level
+README](../../README.md#presets).
+
 ## Latency
 
 The delays are taken relative to the centre: a source at the centre is 10 ms late, so orbitr's own

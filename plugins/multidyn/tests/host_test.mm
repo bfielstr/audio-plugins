@@ -94,6 +94,7 @@ int main (int argc, char** argv)
 
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count %d", rig.controller->getParameterCount ());
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
+        checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         CHECK (rig.component->getBusCount (kAudio, kInput) == 2, "main + side-chain inputs");
         // a fresh instance is the four-band upward-compression preset
         CHECK (std::lround (plainOf (rig, kBands)) == 2 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&

@@ -51,7 +51,10 @@ licensed. The current version is **0.12.0**.
 - **Copy Settings / Paste Settings** in every plug-in's **Menu** (and **Copy** / **Paste** on each
   effect's page in smemplr's rack) put the settings on the clipboard as text. Paste them into the same
   plug-in on another track, or between a plug-in and the same effect in smemplr's rack, both ways.
-- **Presets** (see below), and the copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
+- **Presets** in the header of every plug-in: **Init** (every control at its default) always at the
+  top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
+  as Default** so a new instance starts the way you like it (see below).
+- The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr and locus was called lowfocus until 0.5.0. gentlr was called
 gently before 0.12. smacheratr's gentlr was called Clarity. Projects keep loading: the plug-in IDs are
@@ -125,15 +128,39 @@ Rescan* (with *Use VST3 Plug-in System Folders* on).
 
 ## Presets
 
-Every plug-in has a **Presets** menu in its header: the presets in your preset folder, *Save
-Preset...*, *Load Preset File...* and *Reset to Defaults*. Presets are standard `.vstpreset` files,
-so hosts can load them as well. They live in
+Every plug-in has a **Presets** menu in its header. From the top:
+
+- **Init**: every control back to its default, as a new instance with no saved default. It is always
+  there and cannot be overwritten or deleted.
+- **Factory** presets that come with the plug-in, in sub-menus by category. They cannot be changed
+  either: save a copy under your own name instead.
+- **User**: your presets. A preset saved with a category goes into a sub-menu of that name.
+- **Tags**: pick a tag to see only the presets that carry it (factory ones included); **All** shows
+  everything again.
+- **Save** (over the current preset, if it is one of yours), **Save As...** (a name, an optional
+  category and tags, separated by commas), **Rename...**, **Edit Tags...** and **Delete...**.
+- **Save as Default** stores the current settings as the plug-in's default: every new instance starts
+  from them, and **Load Default** brings them back. **Reset Default** goes back to the factory
+  defaults. A project you open still loads exactly as it was saved.
+- **Save Preset File...** and **Load Preset File...** save or open a `.vstpreset` file anywhere.
+
+Presets are standard `.vstpreset` files, so hosts can load them as well. Tags and the category are
+stored in the file's metadata, and files from older versions load as before (they just have no tags).
+They live in
 
 | | |
 |---|---|
 | Windows | `Documents\VST3 Presets\bfielstr\<plug-in>` |
 | macOS | `~/Library/Audio/Presets/bfielstr/<plug-in>` |
 | Linux | `~/.vst3/presets/bfielstr/<plug-in>` |
+
+with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
+same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
+
+The factory presets are text files in `plugins/<plug-in>/presets/<category>/` in the source, built
+into the plug-in. Each line sets one control by its name, as the plug-in shows its value (for example
+`Band 1 Range = 6 dB`); controls a file does not name stay at their defaults. The format is described
+in [shared/pluginkit/PresetStore.h](shared/pluginkit/PresetStore.h).
 
 ## Build from source
 
@@ -160,7 +187,7 @@ come from the macOS host tests.
 ## Layout
 
 ```
-plugins/smemplr     sampler                  src/core (DSP) · src/plugin (VST3) · src/ui · tests
+plugins/smemplr     sampler                  src/core (DSP) · src/plugin (VST3) · src/ui · tests · presets
 plugins/multidyn    multiband dynamics       same structure
 plugins/locus       low-end contrast         same structure
 plugins/stretchr    pitch/time editor        same structure (reuses Smemplr's warp engines)
@@ -175,8 +202,9 @@ plugins/gentlr      gentle de-mud / de-harsh same structure
 plugins/dropr       multiband compressor     same structure
 plugins/orbitr      doppler swarm            same structure
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
-                    VSTGUI widgets, the instance registry, the macOS host-test harness
+                    the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
+cmake/EmbedPresets.cmake  builds a plug-in's presets/*.txt into it (its factory presets)
 scripts             build.sh, install.sh, install.ps1
 installer           the double-click installers: macos (.pkg), windows (Inno Setup), their CI tests
 ```

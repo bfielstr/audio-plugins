@@ -1,0 +1,7 @@
+# gentlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: mix, mud, low mids
+comment: Only the low-mid band: turns 300 Hz down when it builds up.
+Band 1 Frequency = 300 Hz
+Band 1 Width = 1.5
+Band 1 Range = 6 dB
+Band 2 Range = 0 dB

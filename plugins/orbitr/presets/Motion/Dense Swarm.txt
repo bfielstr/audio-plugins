@@ -1,0 +1,5 @@
+# orbitr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: swarm, dense, fx
+comment: Twelve orbs, more random.
+Orbs = 12
+Randomness = 80 %

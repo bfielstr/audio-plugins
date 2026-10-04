@@ -1,0 +1,6 @@
+# levlr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: tone, broad
+comment: Lows and highs up a little, low mids down a little.
+Band 1 Gain = 3 dB
+Band 2 Gain = -1.5 dB
+Band 4 Gain = 3 dB

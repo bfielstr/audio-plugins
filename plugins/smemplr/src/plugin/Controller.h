@@ -60,6 +60,12 @@ public:
 
 protected:
     Steinberg::Vst::Parameter* makeParameter (uint32_t id) override;
+    // Init and factory presets: no LFO mappings, as in a new smemplr (the loaded sample stays)
+    void resetExtraState () override
+    {
+        if (bridge)
+            bridge->setMods ({});
+    }
 
 private:
     void retitleSlot (int slot);
