@@ -17,6 +17,13 @@ inline float wrapPi (float x)
         x += 2.0f * (float)M_PI;
     return x - (float)M_PI;
 }
+
+// |z|, worked out in double (as glibc's hypotf does it, without the call)
+inline float magnitude (Fft::cf z)
+{
+    const double re = z.real (), im = z.imag ();
+    return (float)std::sqrt (re * re + im * im);
+}
 } // namespace
 
 //==============================================================================
@@ -350,7 +357,7 @@ void PvWarp::prepare (double sampleRate)
     const size_t n = kMaxN, b = kMaxN / 2 + 1;
     for (auto* vec : {&window, &winBase, &fa, &fb, &fl, &fr, &olaL, &olaR, &olaW, &cep})
         vec->assign (n, 0.0f);
-    for (auto* vec : {&synthPhase, &corr, &logEnv, &envBase})
+    for (auto* vec : {&synthPhase, &corr, &logEnv, &envBase, &phaseB})
         vec->assign (b, 0.0f);
     for (auto* vec : {&sa, &sb, &sl, &sr, &stmp})
         vec->assign (b, Fft::cf ());
@@ -419,10 +426,10 @@ void PvWarp::readFrame (const SampleData& s, double centre, float* mid, float* l
     const float* d0 = s.levelData (lv, 0);
     const float* d1 = stereo ? s.levelData (lv, 1) : nullptr;
     const long long len = s.levelLength (lv);
-    for (int i = 0; i < N; ++i)
-    {
-        const double vp = (double)(c - N / 2 + i) * scale;
-        float a = 0.0f, b = 0.0f;
+    const long long base = c - N / 2;
+    auto general = [&] (int i, float& a, float& b) {
+        const double vp = (double)(base + i) * scale;
+        a = b = 0.0f;
         if (vp >= region.start && !region.pastEnd (vp))
         {
             const long long idx = lv == 0 ? (long long)region.map (vp) : (long long)std::floor (region.map (vp) / scale + 0.5);
@@ -432,6 +439,31 @@ void PvWarp::readFrame (const SampleData& s, double centre, float* mid, float* l
                 b = d1 ? d1[idx] : a;
             }
         }
+    };
+    // Where the frame lies inside the region, before the loop's end, and inside the level, the region
+    // maps a position to itself: frame sample i is level frame base + i (the general reading gives
+    // exactly that there; the positions are whole level frames).
+    const double limit = region.loop ? region.loopEnd : region.end;
+    auto direct = [&] (long long i) {
+        const double vp = (double)(base + i) * scale;
+        return vp >= region.start && vp < limit && base + i >= 0 && base + i < len;
+    };
+    long long i0 = std::clamp ((long long)std::ceil (region.start / scale) - base, 0LL, (long long)N);
+    while (i0 > 0 && direct (i0 - 1))
+        --i0;
+    while (i0 < N && !direct (i0))
+        ++i0;
+    long long i1 = i0;
+    if (i0 < N)
+    {
+        i1 = std::clamp ((long long)std::ceil (limit / scale) - base, i0 + 1, (long long)N);
+        i1 = std::min (i1, std::max (i0 + 1, len - base));
+        while (i1 > i0 + 1 && !direct (i1 - 1))
+            --i1;
+        while (i1 < N && direct (i1))
+            ++i1;
+    }
+    auto put = [&] (int i, float a, float b) {
         const float wv = window[(size_t)i];
         if (mid)
             mid[i] = 0.5f * (a + b) * wv;
@@ -439,6 +471,33 @@ void PvWarp::readFrame (const SampleData& s, double centre, float* mid, float* l
             l[i] = a * wv;
         if (r)
             r[i] = b * wv;
+    };
+    for (int i = 0; i < (int)i0; ++i)
+    {
+        float a, b;
+        general (i, a, b);
+        put (i, a, b);
+    }
+    {
+        const int from = (int)i0, cnt = (int)(i1 - i0);
+        const float* a0 = d0 + (base + i0);
+        const float* b0 = (d1 ? d1 : d0) + (base + i0);
+        const float* w = window.data () + from;
+        if (mid)
+            for (int j = 0; j < cnt; ++j)
+                mid[from + j] = 0.5f * (a0[j] + b0[j]) * w[j];
+        if (l)
+            for (int j = 0; j < cnt; ++j)
+                l[from + j] = a0[j] * w[j];
+        if (r)
+            for (int j = 0; j < cnt; ++j)
+                r[from + j] = b0[j] * w[j];
+    }
+    for (int i = (int)i1; i < N; ++i)
+    {
+        float a, b;
+        general (i, a, b);
+        put (i, a, b);
     }
 }
 
@@ -469,7 +528,7 @@ void PvWarp::sampleEnvelope (const SampleData& s)
     std::vector<Fft::cf>& tmp = sa;
     efft->forward (x, tmp.data ());
     for (int k = 0; k < eBins; ++k)
-        tmp[(size_t)k] = Fft::cf (std::log (std::abs (tmp[(size_t)k]) + 1e-7f), 0.0f);
+        tmp[(size_t)k] = Fft::cf (std::log (magnitude (tmp[(size_t)k]) + 1e-7f), 0.0f);
     efft->inverse (tmp.data (), cep.data ());
     const int q = std::clamp (envOrder * eN / 8192, 4, eN / 2 - 1);
     for (int i = q; i <= eN - q; ++i)
@@ -528,11 +587,11 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     if (stereo)
         fft->forward (fr.data (), sr.data ());
 
-    // magnitudes of the mid frame (stored in corr temporarily)
+    // magnitudes of the mid frame (stored in logEnv for now)
     float eA = 0.0f, eB = 0.0f;
     for (int k = 0; k < bins; ++k)
     {
-        const float ma = std::abs (sa[(size_t)k]), mb = std::abs (sb[(size_t)k]);
+        const float ma = magnitude (sa[(size_t)k]), mb = magnitude (sb[(size_t)k]);
         eA += ma * ma;
         eB += mb * mb;
         logEnv[(size_t)k] = mb;
@@ -569,12 +628,17 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
         for (int j = prevPeak; j < bins; ++j)
             peakOf[(size_t)j] = lastPeak;
 
+    // the mid frame's phases (each bin's once: the locking below reads its peak's too)
+    float* phB = phaseB.data ();
+    for (int k = 0; k < bins; ++k)
+        phB[k] = std::arg (sb[(size_t)k]);
+
     // phase propagation at peaks
     for (int k = 0; k < bins; ++k)
     {
         if (peakOf[(size_t)k] != k)
             continue;
-        const float phiB = std::arg (sb[(size_t)k]);
+        const float phiB = phB[k];
         if (reset)
             synthPhase[(size_t)k] = phiB;
         else
@@ -590,9 +654,9 @@ void PvWarp::synthesiseFrame (const SampleData& s, const WarpRates& w)
     for (int k = 0; k < bins; ++k)
     {
         const int p = peakOf[(size_t)k];
-        const float phiK = std::arg (sb[(size_t)k]);
+        const float phiK = phB[k];
         if (p != k)
-            synthPhase[(size_t)k] = synthPhase[(size_t)p] + phiK - std::arg (sb[(size_t)p]);
+            synthPhase[(size_t)k] = synthPhase[(size_t)p] + phiK - phB[p];
         const float d = synthPhase[(size_t)k] - phiK;
         stmp[(size_t)k] = Fft::cf (std::cos (d), std::sin (d));
     }
