@@ -208,9 +208,13 @@ void MsView::idle ()
     float m = 0.0f, s = 0.0f;
     levels (m, s);
     auto ease = [] (float& v, float t) { v += (t - v) * (t > v ? 0.7f : 0.15f); };
+    const float mid0 = shownMid, side0 = shownSide;
     ease (shownMid, m);
     ease (shownSide, s);
-    invalid ();
+    // repainted while the levels move (it used to repaint on every tick; once they have sunk under a
+    // millionth, about -120 dB, nothing on the screen moves)
+    if (std::fabs (shownMid - mid0) > 1e-6f || std::fabs (shownSide - side0) > 1e-6f)
+        invalid ();
 }
 
 } // namespace smemplr

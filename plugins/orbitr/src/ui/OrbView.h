@@ -6,6 +6,7 @@
 #include "Engine.h"
 #include "Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -33,6 +34,14 @@ private:
     float tx[Motion::kMaxOrbs][kTrail] {}, ty[Motion::kMaxOrbs][kTrail] {};
     int trailPos = 0;
     uint32_t seen = 0;
+    // The well, the metre rings, the ball and the listener (they move only with the Distance and the
+    // radius): a cached layer (pk::CachedLayer) the orbs and their trails are drawn over.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    // metres to pixels: the listener near the bottom, the swarm's ball and a margin in view
+    double centreX () const;
+    double listenerY () const;
+    double scale () const;
 };
 
 } // namespace orbitr

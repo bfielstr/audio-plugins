@@ -183,6 +183,13 @@ void InfoBox::showFor (CView* v)
 
 void InfoBox::draw (CDrawContext* ctx)
 {
+    // repainted when a neighbour's meter or a hover changes it: the text is fitted word by word, so it
+    // is kept in a bitmap until the help shown changes
+    layer.draw (ctx, getViewSize (), LayerKey ().add (info.title, info.text), [this] (CDrawContext* c) { paint (c); });
+}
+
+void InfoBox::paint (CDrawContext* ctx)
+{
     const CRect r = getViewSize ();
     // a recessed field like the displays (a well in a dim hairline): the title in the text colour at
     // the left, the help in text dim to the right of it, wrapped to the box (docs/THEME.md, "Info box")

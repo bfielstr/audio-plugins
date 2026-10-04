@@ -14,6 +14,7 @@
 #include "Engine.h"
 #include "Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -66,6 +67,10 @@ private:
     MeterSource meters;
     Hit drag, hover;
     float shownLevel[kMaxBands], shownGain[kMaxBands], shownOut[kMaxBands];
+    // The well, the bands' columns and the grid with its scale, under the meters: a cached layer
+    // (pk::CachedLayer), rebuilt when a setting changes it.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
 };
 
 } // namespace dropr

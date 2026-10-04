@@ -49,16 +49,14 @@ double SpectrumView::hzOfX (double x) const
     return kMinHz * std::pow (kMaxHz / kMinHz, std::clamp ((x - r.left) / r.getWidth (), 0.0, 1.0));
 }
 
-void SpectrumView::draw (CDrawContext* ctx)
+void SpectrumView::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect pr = plot ();
     const CRect strip (all.left, pr.bottom + 14, all.right, all.bottom);
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
     auto yOf = [&] (double db) { return pr.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * pr.getHeight (); };
-    auto yGain = [&] (double db) { return strip.getCenter ().y - std::clamp (db, -24.0, 24.0) / 24.0 * strip.getHeight () * 0.5; };
 
     // grid
     ctx->setLineWidth (1.0);
@@ -93,6 +91,21 @@ void SpectrumView::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (xl, all.top), CPoint (xl, all.bottom));
     ctx->setFrameColor (drag == Drag::High || drag == Drag::Range ? theme::kEnergyLive : theme::kCopperPale);
     ctx->drawLine (CPoint (xh, all.top), CPoint (xh, all.bottom));
+}
+
+void SpectrumView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const CRect pr = plot ();
+    const CRect strip (all.left, pr.bottom + 14, all.right, all.bottom);
+    baseLayer.draw (ctx, all, pk::LayerKey ().add (host->plainValue (kLowFreq), host->plainValue (kHighFreq), host->plainValue (kContrast), drag),
+                    [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setClipRect (all);
+    ctx->setLineWidth (1.0);
+    auto yOf = [&] (double db) { return pr.top + (kMaxDb - std::clamp (db, kMinDb, kMaxDb)) / (kMaxDb - kMinDb) * pr.getHeight (); };
+    auto yGain = [&] (double db) { return strip.getCenter ().y - std::clamp (db, -24.0, 24.0) / 24.0 * strip.getHeight () * 0.5; };
+    const double lo = host->plainValue (kLowFreq), hi = std::max (host->plainValue (kHighFreq), lo * 1.05);
+    const double xl = xOfHz (lo), xh = xOfHz (hi);
 
     // spectra
     const int n = (int)shownIn.size ();
@@ -299,7 +312,17 @@ void SpectrumView::idle ()
         ease (shownOut[(size_t)k], s->spectrum.outputDb[(size_t)k].load (std::memory_order_relaxed), 0.6f, 0.15f);
         ease (shownGain[(size_t)k], s->spectrum.gainDb[(size_t)k].load (std::memory_order_relaxed), 0.4f, 0.4f);
     }
-    invalid ();
+    // repainted when the spectra or a setting moved (it used to repaint on every tick, also once the
+    // audio had stopped and the spectra stood still)
+    pk::LayerKey key;
+    key.params (host).add (binHz);
+    for (int k = 0; k < n; ++k)
+        key.add (shownIn[(size_t)k], shownOut[(size_t)k], shownGain[(size_t)k]);
+    if (key.value () != shownKey)
+    {
+        shownKey = key.value ();
+        invalid ();
+    }
 }
 
 } // namespace locus

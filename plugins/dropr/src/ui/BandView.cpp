@@ -219,13 +219,12 @@ void BandView::idle ()
         invalid ();
 }
 
-void BandView::draw (CDrawContext* ctx)
+void BandView::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect pr = plot ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
     char buf[96];
 
@@ -261,6 +260,20 @@ void BandView::draw (CDrawContext* ctx)
         std::snprintf (buf, sizeof (buf), "%+.0f", db);
         text (ctx, std::fabs (db) < 0.1 ? "0" : buf, CRect (all.left + 1, y - 7, pr.left - 4, y + 7), theme::kTextDim, 9.0, kRightText);
     }
+}
+
+void BandView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const CRect pr = plot ();
+    baseLayer.draw (ctx, all, pk::LayerKey ().params (host), [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setClipRect (all);
+    ctx->setLineWidth (1.0);
+    char buf[96];
+
+    const int n = bands ();
+    double f[kNumXovers];
+    xovers (f);
 
     // the meters: level (after the Input gain), level after the gain, gain reduction from 0 dB
     for (int k = 0; k < n; ++k)

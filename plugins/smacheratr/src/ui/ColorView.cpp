@@ -144,13 +144,12 @@ double ColorView::clarityEdgeX (int band, bool high) const
     return xOfHz (high ? b.highHz : b.lowHz);
 }
 
-void ColorView::draw (CDrawContext* ctx)
+void ColorView::paintBase (CDrawContext* ctx, const bool clarity[], const ClarityBand bands[])
 {
     const CRect all = getViewSize ();
     const bool on = host->plainValue (kColorOn) >= 0.5;
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
 
     // grid
     ctx->setLineWidth (1.0);
@@ -173,12 +172,8 @@ void ColorView::draw (CDrawContext* ctx)
     }
 
     // Gentlr's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
-    bool clarity[kGentlrBands];
-    ClarityBand bands[kGentlrBands];
     for (int k = 0; k < kGentlrBands; ++k)
     {
-        clarity[k] = clarityOn (k);
-        bands[k] = bandOf (k);
         if (!clarity[k])
             continue;
         const double x0 = xOfHz (bands[k].lowHz), x1 = xOfHz (bands[k].highHz);
@@ -214,6 +209,36 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->setFrameColor (on ? theme::kText : theme::kTextDim);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
+}
+
+void ColorView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const bool on = host->plainValue (kColorOn) >= 0.5;
+    bool clarity[kGentlrBands];
+    ClarityBand bands[kGentlrBands];
+    for (int k = 0; k < kGentlrBands; ++k)
+    {
+        clarity[k] = clarityOn (k);
+        bands[k] = bandOf (k);
+    }
+    // drawn from the settings, the sample rate and which band edge is held
+    const bool edgeHeld = drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth;
+    // The labels at the top are drawn last (over the handles); nothing else drawn after the layer comes
+    // up there (Gentlr's cuts and ranges lie below 0 dB, its readouts start under the labels), so while
+    // the colour handles stay clear of them they go into the layer too, the same as drawn last.
+    const bool labelsUnder = std::min (loHandle ().y, hiHandle ().y) - kHandleRadius - 2.0 >= all.top + 34.0;
+    const uint64_t key = pk::LayerKey ().params (host).add (sampleRate (), edgeHeld ? dragBand : -1, labelsUnder);
+    baseLayer.draw (ctx, all, key, [&] (CDrawContext* c) {
+        paintBase (c, clarity, bands);
+        if (labelsUnder)
+            paintLabels (c);
+    });
+    ctx->setClipRect (all);
+    const double sr = sampleRate ();
+    const int steps = 160;
+    ctx->setLineWidth (1.0);
+    ctx->setLineStyle (kLineSolid);
 
     // Gentlr at work, as a multiband compressor shows its bands: the most each can cut outlined, the
     // cut it is making right now filled in from the 0 dB line, a handle at its centre and its readout
@@ -303,15 +328,23 @@ void ColorView::draw (CDrawContext* ctx)
     for (const CPoint& h : {loHandle (), hiHandle ()})
         pk::draw::handle (ctx, h, kHandleRadius, false, on);
 
-    // labels
+    // labels (in the cached layer while no handle comes up to them)
+    if (!labelsUnder)
+        paintLabels (ctx);
+    ctx->setLineWidth (1.0);
+    ctx->resetClipRect ();
+}
+
+void ColorView::paintLabels (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const bool on = host->plainValue (kColorOn) >= 0.5;
     text (ctx, on ? "COLOR" : "COLOR  (off)", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18),
           on ? theme::kCopperPale : theme::kTextDim, 10.5, kLeftText, true);
     char buf[96];
     std::snprintf (buf, sizeof (buf), "Lo %s   Hi %s @ %s", host->valueText (kColorLo).c_str (),
                    host->valueText (kColorHi).c_str (), host->valueText (kColorFreq).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
-    ctx->setLineWidth (1.0);
-    ctx->resetClipRect ();
 }
 
 int ColorView::bandUnder (const CPoint& p) const

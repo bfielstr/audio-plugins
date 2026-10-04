@@ -219,7 +219,7 @@ double GentlrView::pillsBottom () const
 
 bool GentlrView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
 
-void GentlrView::analyse (const std::vector<float>& in, std::vector<float>& spec)
+bool GentlrView::analyse (const std::vector<float>& in, std::vector<float>& spec)
 {
     std::vector<std::complex<float>> a ((size_t)kFftSize);
     float wsum = 0.0f;
@@ -230,12 +230,16 @@ void GentlrView::analyse (const std::vector<float>& in, std::vector<float>& spec
     }
     fft (a);
     const float scale = 2.0f / wsum; // a sine of amplitude A reads A
+    bool moved = false;
     for (size_t k = 1; k < spec.size (); ++k)
     {
         const float db = 20.0f * std::log10 (std::max (1e-7f, std::abs (a[k]) * scale));
         float& s = spec[k];
+        const float before = std::max (s, (float)kSpecFloorDb);
         s += (db - s) * (db > s ? 0.6f : 0.25f); // quick to rise, slower to fall
+        moved |= std::fabs (std::max (s, (float)kSpecFloorDb) - before) > 1e-3f;
     }
+    return moved;
 }
 
 double GentlrView::specAt (const std::vector<float>& spec, double f0, double f1) const
@@ -291,10 +295,12 @@ void GentlrView::idle ()
         lastWritten = w;
         if (m->scope.read (bufIn.data (), bufOut.data (), kFftSize) >= kFftSize / 4)
         {
-            analyse (bufIn, specIn);
-            analyse (bufOut, specOut);
+            // (repainted when the spectra move on the screen: with the input quiet they sink below the
+            // floor they are drawn at and stay there)
+            const bool movedIn = analyse (bufIn, specIn), movedOut = analyse (bufOut, specOut);
+            if (movedIn || movedOut || !haveSpectrum)
+                changed = true;
             haveSpectrum = true;
-            changed = true;
         }
     }
     else if (haveSpectrum && !live ())
@@ -314,22 +320,12 @@ void GentlrView::idle ()
         invalid ();
 }
 
-void GentlrView::draw (CDrawContext* ctx)
+void GentlrView::paintBase (CDrawContext* ctx, const bool on[], const ClarityBand bands[])
 {
     const CRect all = getViewSize ();
     const double top = plotTop (), bot = plotBottom ();
-    const double sr = sampleRate ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
-
-    bool on[kAllBands];
-    ClarityBand bands[kAllBands];
-    for (int k = 0; k < kAllBands; ++k)
-    {
-        on[k] = works (k);
-        bands[k] = bandNow (k);
-    }
 
     // the bands' regions, behind everything
     for (int k = 0; k < kAllBands; ++k)
@@ -360,6 +356,26 @@ void GentlrView::draw (CDrawContext* ctx)
         std::snprintf (b, sizeof (b), "%.0f", db);
         text (ctx, b, CRect (all.right - 30, yOfDb (db) - 12, all.right - 3, yOfDb (db)), theme::kTextDim, 9.0, kRightText);
     }
+}
+
+void GentlrView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const double top = plotTop (), bot = plotBottom ();
+    const double sr = sampleRate ();
+
+    bool on[kAllBands];
+    ClarityBand bands[kAllBands];
+    for (int k = 0; k < kAllBands; ++k)
+    {
+        on[k] = works (k);
+        bands[k] = bandNow (k);
+    }
+    const int hotBand = hoverBand >= 0 ? hoverBand : (drag != Drag::None ? dragBand : -1);
+    const uint64_t key = pk::LayerKey ().params (host).add (sr, hoverBand, drag != Drag::None ? dragBand : -1, hotBand);
+    baseLayer.draw (ctx, all, key, [&] (CDrawContext* c) { paintBase (c, on, bands); });
+    ctx->setClipRect (all);
+    ctx->setLineWidth (1.0);
 
     // the spectra on their own scale (0 dBFS at the top), tilted so a mix reads level: the output
     // filled, the input as a line (where it stands above the output, Gentlr is cutting)
@@ -445,8 +461,32 @@ void GentlrView::draw (CDrawContext* ctx)
             continue;
         const ClarityBand& b = bands[k];
         const double range = host->plainValue (rangeParam (k));
-        if (auto rp = gainPath ([&] (double hz) { return toDb (bandGain (b, hz, sr, -range)); }, false))
+        // (the points worked out again only when a setting, the rate or the size changed)
+        const uint64_t rk = pk::LayerKey ().params (host).add (sr, all);
+        if (rk != rangeKey)
         {
+            rangeKey = rk;
+            for (int j = 0; j < kAllBands; ++j)
+                rangePoints[j].clear ();
+        }
+        if (rangePoints[k].empty ())
+            for (int i = 0; i <= steps; ++i)
+            {
+                const double hz = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / steps);
+                if (hz >= 0.4999 * sr)
+                    break;
+                rangePoints[k].push_back (CPoint (xOfHz (hz), yOfDb (toDb (bandGain (b, hz, sr, -range)))));
+            }
+        auto rp = owned (ctx->createGraphicsPath ());
+        if (rp && !rangePoints[k].empty ())
+        {
+            for (size_t i = 0; i < rangePoints[k].size (); ++i)
+            {
+                if (i == 0)
+                    rp->beginSubpath (rangePoints[k][i]);
+                else
+                    rp->addLine (rangePoints[k][i]);
+            }
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (bandColor (k, 120));
             ctx->setLineStyle (theme::dashed ());

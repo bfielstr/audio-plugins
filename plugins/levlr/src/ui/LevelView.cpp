@@ -145,7 +145,7 @@ CRect LevelView::chip (int b, bool solo) const
 
 bool LevelView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
 
-void LevelView::analyse ()
+bool LevelView::analyse ()
 {
     std::vector<std::complex<float>> a ((size_t)kFftSize);
     float wsum = 0.0f;
@@ -156,12 +156,16 @@ void LevelView::analyse ()
     }
     fft (a);
     const float scale = 2.0f / wsum; // a sine of amplitude A reads A
+    bool moved = false;
     for (size_t k = 1; k < spec.size (); ++k)
     {
         const float db = 20.0f * std::log10 (std::max (1e-7f, std::abs (a[k]) * scale));
         float& s = spec[k];
+        const float before = std::max (s, (float)kSpecFloorDb);
         s += (db - s) * (db > s ? 0.6f : 0.25f); // quick to rise, slower to fall
+        moved |= std::fabs (std::max (s, (float)kSpecFloorDb) - before) > 1e-3f;
     }
+    return moved;
 }
 
 double LevelView::specAt (double f0, double f1) const
@@ -202,9 +206,11 @@ void LevelView::idle ()
         lastWritten = w;
         if (m->scope.read (nullptr, buf.data (), kFftSize) >= kFftSize / 4)
         {
-            analyse ();
+            // (repainted when the spectrum moves on the screen: with the input quiet it sinks below
+            // the floor it is drawn at and stays there)
+            if (analyse () || !haveSpectrum)
+                changed = true;
             haveSpectrum = true;
-            changed = true;
         }
     }
     else if (haveSpectrum && !live ())
@@ -223,21 +229,13 @@ void LevelView::idle ()
         invalid ();
 }
 
-void LevelView::draw (CDrawContext* ctx)
+void LevelView::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const double top = plotTop (), bot = plotBottom ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
-
-    double xo[kCrossovers], gains[kBands];
-    crossovers (xo);
-    auto plain = [this] (uint32_t id) { return host->plainValue (id); };
     const int bands = count ();
-    bandGains (plain, gains, bands);
-    const int slope = std::clamp ((int)std::lround (plain (kSlope)), 0, kNumSlopes - 1);
-    const double sr = sampleRate ();
 
     // the bands' columns (the bands in use)
     for (int b = 0; b < bands; ++b)
@@ -266,6 +264,25 @@ void LevelView::draw (CDrawContext* ctx)
         std::snprintf (b, sizeof (b), db > 0 ? "+%.0f" : "%.0f", db);
         text (ctx, b, CRect (all.right - 30, yOfDb (db) - 12, all.right - 3, yOfDb (db)), theme::kTextDim, 9.0, kRightText);
     }
+}
+
+void LevelView::draw (CDrawContext* ctx)
+{
+    const CRect all = getViewSize ();
+    const double top = plotTop (), bot = plotBottom ();
+    // drawn from the settings (the bands and their crossovers) and which band is hovered or held
+    const int heldBand = drag == Drag::Band ? dragIndex : -1;
+    baseLayer.draw (ctx, all, pk::LayerKey ().params (host).add (hoverBand, heldBand), [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setClipRect (all);
+    ctx->setLineWidth (1.0);
+
+    double xo[kCrossovers], gains[kBands];
+    crossovers (xo);
+    auto plain = [this] (uint32_t id) { return host->plainValue (id); };
+    const int bands = count ();
+    bandGains (plain, gains, bands);
+    const int slope = std::clamp ((int)std::lround (plain (kSlope)), 0, kNumSlopes - 1);
+    const double sr = sampleRate ();
 
     // the output's spectrum, on its own scale (0 dBFS at the top), tilted so a mix reads level
     if (haveSpectrum)
@@ -347,23 +364,31 @@ void LevelView::draw (CDrawContext* ctx)
         }
     }
 
-    // the whole response: the bands' filters added up at their levels, as the engine adds them
-    if (auto path = owned (ctx->createGraphicsPath ()))
+    // the whole response: the bands' filters added up at their levels, as the engine adds them (the
+    // points worked out again only when a setting, the rate or the size changed)
+    const uint64_t rk = pk::LayerKey ().params (host).add (sr, all);
+    if (rk != responseKey)
     {
+        responseKey = rk;
+        responsePoints.clear ();
         const int steps = std::max (64, (int)(all.getWidth () / 2.0));
-        bool started = false;
         for (int i = 0; i <= steps; ++i)
         {
             const double f = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / steps);
             if (f >= 0.4999 * sr)
                 break;
             const double db = 20.0 * std::log10 (std::abs (totalResponse (xo, slope, gains, f, sr, bands)) + 1e-9);
-            const CPoint pt (xOfHz (f), yOfDb (std::clamp (db, -kRangeDb - 3.0, kRangeDb + 3.0)));
-            if (!started)
-                path->beginSubpath (pt);
+            responsePoints.push_back (CPoint (xOfHz (f), yOfDb (std::clamp (db, -kRangeDb - 3.0, kRangeDb + 3.0))));
+        }
+    }
+    if (auto path = owned (ctx->createGraphicsPath ()))
+    {
+        for (size_t i = 0; i < responsePoints.size (); ++i)
+        {
+            if (i == 0)
+                path->beginSubpath (responsePoints[i]);
             else
-                path->addLine (pt);
-            started = true;
+                path->addLine (responsePoints[i]);
         }
         ctx->setLineWidth (1.0);
         ctx->setFrameColor (kCurve);

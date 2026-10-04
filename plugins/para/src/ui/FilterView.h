@@ -20,6 +20,7 @@
 #include "../core/Engine.h"
 #include "../core/Params.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -67,7 +68,9 @@ private:
     {
         return lockedGainDb (host->plainValue (hp ? kHpGain : kLpGain), host->plainValue (hp ? kHpGainLock : kLpGainLock) >= 0.5);
     }
-    void analyse (const std::vector<float>& x, std::vector<float>& spec);
+    // true: the spectrum moved on the screen (it is drawn no lower than kSpecFloorDb, so one falling
+    // further, as it does for long after the audio stops, repaints nothing)
+    bool analyse (const std::vector<float>& x, std::vector<float>& spec);
     double specAt (const std::vector<float>& spec, double f0, double f1) const;
 
     pk::ParamHost* host;
@@ -90,6 +93,11 @@ private:
     bool haveSpectrum = false;
     double rate = 48000.0;
     std::vector<float> bufIn, bufOut, specIn, specOut, window;
+    // Cached layers (pk::CachedLayer): the well and the grid with its scale under the spectra; the
+    // filters' curves over them (rebuilt when a cutoff, slope, resonance or gain moves). The spectra,
+    // the handles and the labels over them are drawn on every repaint.
+    pk::CachedLayer gridLayer, curveLayer;
+    void paintGrid (VSTGUI::CDrawContext* ctx);
 };
 
 } // namespace para

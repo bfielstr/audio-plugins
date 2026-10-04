@@ -98,7 +98,41 @@ CPoint DeeprView::handle () const
     return CPoint (xOfHz (host->plainValue (kDipFreq)), yOfDb (-host->plainValue (kDepth)));
 }
 
-void DeeprView::draw (CDrawContext* ctx)
+SharedPointer<CGraphicsPath> DeeprView::dipPath (CDrawContext* ctx, double gainDb, bool closed) const
+{
+    const CRect pr = plot ();
+    const double sr = sampleRate ();
+    const double dipHz = host->plainValue (kDipFreq);
+    const smacheratr::BiquadCoeffs bp = smacheratr::bandPass (sr, std::min (dipHz, 0.4 * sr), dipQ (host->plainValue (kDipWidth)));
+    auto path = owned (ctx->createGraphicsPath ());
+    if (!path)
+        return path;
+    const double g = std::pow (10.0, gainDb / 20.0);
+    const int n = std::max (2, (int)pr.getWidth () / 2);
+    for (int i = 0; i <= n; ++i)
+    {
+        const double x = pr.left + pr.getWidth () * i / n;
+        const double hz = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / n);
+        const double mag = std::abs (1.0 - (1.0 - g) * response (bp, sr, hz));
+        const CPoint pt (x, yOfDb (20.0 * std::log10 (std::max (1e-9, mag))));
+        if (i == 0)
+        {
+            path->beginSubpath (closed ? CPoint (x, yOfDb (0.0)) : pt);
+            if (closed)
+                path->addLine (pt);
+        }
+        else
+            path->addLine (pt);
+    }
+    if (closed)
+    {
+        path->addLine (CPoint (pr.right, yOfDb (0.0)));
+        path->closeSubpath ();
+    }
+    return path;
+}
+
+void DeeprView::paintBase (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect pr = plot ();
@@ -108,9 +142,7 @@ void DeeprView::draw (CDrawContext* ctx)
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (CRect (pr.left, pr.top, pr.right, pr.bottom), kDrawFilled);
     ctx->drawRect (mr, kDrawFilled);
-    ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
-
     // grid
     for (double f : {30.0, 40.0, 50.0, 60.0, 80.0, 100.0, 200.0, 300.0, 400.0, 500.0, 800.0, 1000.0})
     {
@@ -141,49 +173,38 @@ void DeeprView::draw (CDrawContext* ctx)
     ctx->drawLine (CPoint (xs, pr.top), CPoint (xs, pr.bottom));
     text (ctx, "SUB", CRect (pr.left, pr.bottom - 18, xs, pr.bottom - 4), theme::kCopperPale, 9.5);
 
-    // the dip: dashed at full Depth, filled with the dip it is making now
-    const double sr = sampleRate ();
-    const double dipHz = host->plainValue (kDipFreq), depth = host->plainValue (kDepth);
-    const smacheratr::BiquadCoeffs bp = smacheratr::bandPass (sr, std::min (dipHz, 0.4 * sr), dipQ (host->plainValue (kDipWidth)));
-    auto dipPath = [&] (double gainDb, bool closed) -> SharedPointer<CGraphicsPath> {
-        auto path = owned (ctx->createGraphicsPath ());
-        if (!path)
-            return path;
-        const double g = std::pow (10.0, gainDb / 20.0);
-        const int n = std::max (2, (int)pr.getWidth () / 2);
-        for (int i = 0; i <= n; ++i)
-        {
-            const double x = pr.left + pr.getWidth () * i / n;
-            const double hz = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / n);
-            const double mag = std::abs (1.0 - (1.0 - g) * response (bp, sr, hz));
-            const CPoint pt (x, yOfDb (20.0 * std::log10 (std::max (1e-9, mag))));
-            if (i == 0)
-            {
-                path->beginSubpath (closed ? CPoint (x, yOfDb (0.0)) : pt);
-                if (closed)
-                    path->addLine (pt);
-            }
-            else
-                path->addLine (pt);
-        }
-        if (closed)
-        {
-            path->addLine (CPoint (pr.right, yOfDb (0.0)));
-            path->closeSubpath ();
-        }
-        return path;
-    };
+    // the dip at full Depth, dashed (the dip it is making now is filled over the layer)
+    const double depth = host->plainValue (kDepth);
     if (depth > 0.01)
-        if (auto full = dipPath (-depth, false))
+        if (auto full = dipPath (ctx, -depth, false))
         {
             ctx->setFrameColor (theme::kCopper);
             ctx->setLineStyle (theme::dashed ());
             ctx->drawGraphicsPath (full, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
         }
+
+    // the meter's grid, and its name under it
+    for (double db = -48.0; db <= -12.0; db += 12.0)
+    {
+        ctx->setFrameColor (theme::kGridMinor);
+        ctx->drawLine (CPoint (mr.left + 2, yOfLevel (db)), CPoint (mr.right - 2, yOfLevel (db)));
+    }
+    text (ctx, "sub dB", CRect (mr.left - 6, mr.bottom, mr.right, mr.bottom + kAxisHeight), theme::kTextDim, 9.0);
+}
+
+void DeeprView::draw (CDrawContext* ctx)
+{
+    const CRect pr = plot ();
+    const CRect mr = meter ();
+    baseLayer.draw (ctx, getViewSize (), pk::LayerKey ().params (host).add (sampleRate (), drag), [this] (CDrawContext* c) { paintBase (c); });
+    ctx->setClipRect (getViewSize ());
+    ctx->setLineWidth (1.0);
+    ctx->setLineStyle (kLineSolid); // (as the full dip's dashes left it)
+    const double dipHz = host->plainValue (kDipFreq), depth = host->plainValue (kDepth);
     const bool working = shownCut < -0.05f;
     if (working)
-        if (auto live = dipPath (shownCut, true))
+        if (auto live = dipPath (ctx, shownCut, true))
         {
             ctx->setFillColor (withAlpha (kDip, 70));
             ctx->drawGraphicsPath (live, CDrawContext::kPathFilled);
@@ -206,14 +227,10 @@ void DeeprView::draw (CDrawContext* ctx)
     std::snprintf (buf, sizeof (buf), "Depth %.1f dB   Width %.1f oct", depth, host->plainValue (kDipWidth));
     text (ctx, buf, CRect (pr.left + 44, pr.top + 20, pr.left + 300, pr.top + 34), theme::kTextDim, 9.5, kLeftText);
 
-    // the sub's level: the key region (threshold .. +12 dB), the level, the threshold
+    // the sub's level: the key region (threshold .. +12 dB), the level, the threshold (the meter's grid
+    // is in the layer)
     const double th = host->plainValue (kThreshold);
     const double bar = mr.left + 10, barR = mr.right - 10;
-    for (double db = -48.0; db <= -12.0; db += 12.0)
-    {
-        ctx->setFrameColor (theme::kGridMinor);
-        ctx->drawLine (CPoint (mr.left + 2, yOfLevel (db)), CPoint (mr.right - 2, yOfLevel (db)));
-    }
     // the key region a faint copper band (brighter while the dip works); the sub's level a meter bar,
     // energy idle at rest and live while it pushes the dip
     ctx->setFillColor (withAlpha (theme::kCopper, working ? 70 : 30));
@@ -232,7 +249,6 @@ void DeeprView::draw (CDrawContext* ctx)
     const bool labelBelow = yt - 14 < mr.top;
     text (ctx, buf, labelBelow ? CRect (mr.left, yt + 2, mr.right, yt + 14) : CRect (mr.left, yt - 14, mr.right, yt - 2),
           theme::kText, 9.5);
-    text (ctx, "sub dB", CRect (mr.left - 6, mr.bottom, mr.right, mr.bottom + kAxisHeight), theme::kTextDim, 9.0);
     ctx->resetClipRect ();
 }
 

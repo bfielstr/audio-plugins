@@ -10,6 +10,7 @@
 
 #include "../core/Engine.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
@@ -53,6 +54,16 @@ private:
     // the bars (dB, falling back 24 dB a second) and their holds
     double barIn[2] = {-120.0, -120.0}, barOut[2] = {-120.0, -120.0}, holdIn = -120.0, holdOut = -120.0;
     double barLow = 0.0, barHigh = 0.0, holdGr = 0.0;
+    // The well and its frame, the header's keys, the grid with its scale, the meters' beds and names:
+    // a cached layer (pk::CachedLayer) the history, the ceiling and the meters are drawn over.
+    pk::CachedLayer baseLayer;
+    void paintBase (VSTGUI::CDrawContext* ctx);
+    // the meters' geometry: the bars' top and bottom, their width and gap, and where each pair starts
+    void meterLayout (double& top, double& bottom, double& w, double& gap, double x[3]) const;
+    // what a repaint shows, as a key: idle repaints only when it changes (the history goes on scrolling
+    // with the audio stopped, but once it is all quiet, and the bars have fallen, nothing moves)
+    uint64_t shownState () const;
+    uint64_t shownKey = 0;
 };
 
 } // namespace smoothr

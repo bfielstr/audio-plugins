@@ -193,13 +193,11 @@ double FilterView::specAt (const std::vector<float>& spec, double f0, double f1)
     return mx;
 }
 
-void FilterView::draw (CDrawContext* ctx)
+void FilterView::paintGrid (CDrawContext* ctx)
 {
-    trackLeader ();
     const CRect all = getViewSize ();
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
-    ctx->setClipRect (all);
     const double plotBottom = all.bottom - 16.0;
 
     // grid
@@ -221,6 +219,17 @@ void FilterView::draw (CDrawContext* ctx)
         std::snprintf (buf, sizeof (buf), "%.0f", db);
         text (ctx, buf, CRect (all.left + 2, yOfDb (db) - 12, all.left + 30, yOfDb (db)), theme::kTextDim, 9.0, kLeftText);
     }
+}
+
+void FilterView::draw (CDrawContext* ctx)
+{
+    trackLeader ();
+    const CRect all = getViewSize ();
+    // the grid depends on the view's size only (the layer keys the size and the zoom itself)
+    gridLayer.draw (ctx, all, 0, [this] (CDrawContext* c) { paintGrid (c); });
+    ctx->setClipRect (all);
+    const double plotBottom = all.bottom - 16.0;
+    ctx->setLineWidth (1.0);
 
     // live spectra: input (a dim body) and output (copper), on their own scale (0 dBFS at the top)
     if (haveSpectrum)
@@ -269,7 +278,7 @@ void FilterView::draw (CDrawContext* ctx)
     const double hc = std::clamp (hp, 5.0, 0.49 * rate), lc = std::clamp (lp, 5.0, 0.49 * rate);
     auto warped = [&] (double f, double fc) { return fc * std::tan (M_PI * f / rate) / std::tan (M_PI * fc / rate); };
     const double hpGain = filterGain (gainDbOf (true)) * hpMul, lpGain = filterGain (gainDbOf (false)) * lpMul;
-    auto curve = [&] (int which, const CColor& stroke, const CColor* fill, double width, bool dashed = false) {
+    auto curve = [&] (CDrawContext* ctx, int which, const CColor& stroke, const CColor* fill, double width, bool dashed = false) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
             return;
@@ -311,9 +320,14 @@ void FilterView::draw (CDrawContext* ctx)
         ctx->setLineStyle (kLineSolid);
     };
     const CColor hpFill = theme::withAlpha (theme::kCopper, 22), lpFill = theme::withAlpha (theme::kCopper, 22);
-    curve (0, kHpColor, &hpFill, 1.0);
-    curve (1, kLpColor, &lpFill, 1.0, true);
-    curve (2, theme::kText, nullptr, 1.5);
+    // kept while nothing they are drawn from moves (with tracking or the envelope at work they are
+    // painted directly, as the cutoffs change on every tick)
+    const uint64_t curveKey = pk::LayerKey ().add (hc, lc, hpGain, lpGain, hpSlope, lpSlope, resHp, resLp, rate);
+    curveLayer.draw (ctx, all, curveKey, [&] (CDrawContext* c) {
+        curve (c, 0, kHpColor, &hpFill, 1.0);
+        curve (c, 1, kLpColor, &lpFill, 1.0, true);
+        curve (c, 2, theme::kText, nullptr, 1.5);
+    });
 
     // handles, with a halo that grows with the envelope
     for (int k = 0; k < 2; ++k)
@@ -497,7 +511,7 @@ void FilterView::onMouseExitEvent (MouseExitEvent& e)
     e.consumed = true;
 }
 
-void FilterView::analyse (const std::vector<float>& x, std::vector<float>& spec)
+bool FilterView::analyse (const std::vector<float>& x, std::vector<float>& spec)
 {
     std::vector<std::complex<float>> a ((size_t)kFftSize);
     float wsum = 0.0f;
@@ -508,12 +522,16 @@ void FilterView::analyse (const std::vector<float>& x, std::vector<float>& spec)
     }
     fft (a);
     const float scale = 2.0f / wsum; // a sine of amplitude A reads A
+    bool moved = false;
     for (size_t k = 1; k < spec.size (); ++k)
     {
         const float db = 20.0f * std::log10 (std::max (1e-7f, std::abs (a[k]) * scale));
         float& s = spec[k];
+        const float before = std::max (s, (float)kSpecFloorDb);
         s += (db - s) * (db > s ? 0.6f : 0.25f); // quick to rise, slower to fall
+        moved |= std::fabs (std::max (s, (float)kSpecFloorDb) - before) > 1e-3f;
     }
+    return moved;
 }
 
 void FilterView::idle ()
@@ -568,10 +586,10 @@ void FilterView::idle ()
     if (w != lastWritten && m->scope.read (bufIn.data (), bufOut.data (), kFftSize) >= kFftSize / 4)
     {
         lastWritten = w;
-        analyse (bufIn, specIn);
-        analyse (bufOut, specOut);
+        const bool movedIn = analyse (bufIn, specIn), movedOut = analyse (bufOut, specOut);
+        if (movedIn || movedOut || !haveSpectrum)
+            changed = true;
         haveSpectrum = true;
-        changed = true;
     }
     if (changed)
         invalid ();

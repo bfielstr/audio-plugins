@@ -149,6 +149,48 @@ void WaveformView::computeSlicesForDisplay (SliceList& out, const SampleData& s)
 
 void WaveformView::draw (CDrawContext* ctx)
 {
+    auto s = sample ();
+    auto* bridge = controller->getBridge ();
+    if (!s || s->length <= 0 || !bridge)
+    {
+        paint (ctx, true); // (a message: nothing to keep)
+        return;
+    }
+    // drawn from the sample, every setting, the slice edits, the zoom and what is held or hovered
+    const SliceEditsPtr edits = bridge->editsNow ();
+    pk::LayerKey key;
+    key.params (host).add ((const void*)s.get (), s->length, (const void*)edits.get (), bridge->changeCounter.load ());
+    key.add (viewStart, viewLen, drag, dragSlice, dragSlicePos, moved, hoverSlice);
+    layer.draw (ctx, getViewSize (), key.value (), [this] (CDrawContext* c) { paint (c, false); });
+
+    // --- playheads (in the wave area: clear of the ruler's name and the overview strip)
+    const CRect w = waveArea ();
+    ctx->setClipRect (getViewSize ());
+    ctx->setLineStyle (kLineSolid);
+    const int n = std::min (bridge->numPlayheads.load (std::memory_order_acquire), Bridge::kMaxPlayheads);
+    for (int i = 0; i < n; ++i)
+    {
+        const double x = posToX (bridge->playheads[(size_t)i].load (std::memory_order_relaxed));
+        if (x < w.left - 2 || x > w.right + 2)
+            continue;
+        ctx->setLineWidth (1.0);
+        ctx->setFrameColor (theme::kPlayhead);
+        ctx->drawLine (CPoint (x, w.top), CPoint (x, w.bottom));
+    }
+    ctx->setLineWidth (1.0);
+    ctx->resetClipRect ();
+}
+
+CRect WaveformView::playheadStrip (float pos) const
+{
+    // a playhead's 1 px line with a pixel to spare each side
+    const CRect w = waveArea ();
+    const double x = posToX (pos);
+    return CRect (std::floor (x) - 2.0, w.top, std::ceil (x) + 2.0, w.bottom);
+}
+
+void WaveformView::paint (CDrawContext* ctx, bool playheads)
+{
     const CRect all = getViewSize ();
     const CRect w = waveArea ();
     ctx->setFillColor (theme::kWell);
@@ -436,8 +478,8 @@ void WaveformView::draw (CDrawContext* ctx)
         }
     }
 
-    // --- playheads ---------------------------------------------------------------
-    if (bridge)
+    // --- playheads (drawn over the cached layer by draw ()) ---------------------
+    if (bridge && playheads)
     {
         const int n = std::min (bridge->numPlayheads.load (std::memory_order_acquire), Bridge::kMaxPlayheads);
         for (int i = 0; i < n; ++i)
@@ -882,16 +924,27 @@ void WaveformView::idle ()
     const int n = std::min (b->numPlayheads.load (std::memory_order_acquire), Bridge::kMaxPlayheads);
     if (n != lastHeadCount)
         changed = true;
+    // only the playheads moved: the strips each left and entered are repainted, not the whole view
+    float before[Bridge::kMaxPlayheads];
+    bool headsMoved = false;
     for (int i = 0; i < n; ++i)
     {
         const float v = b->playheads[(size_t)i].load (std::memory_order_relaxed);
+        before[i] = lastHeads[i];
         if (std::fabs (v - lastHeads[i]) > 1e-6f)
-            changed = true;
+            headsMoved = true;
         lastHeads[i] = v;
     }
     lastHeadCount = n;
     if (changed)
         invalid ();
+    else if (headsMoved)
+        for (int i = 0; i < n; ++i)
+            if (before[i] != lastHeads[i])
+            {
+                invalidRect (playheadStrip (before[i]));
+                invalidRect (playheadStrip (lastHeads[i]));
+            }
 }
 
 } // namespace smemplr

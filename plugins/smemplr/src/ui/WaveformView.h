@@ -5,6 +5,8 @@
 #include "SampleData.h"
 #include "Slices.h"
 
+#include "pluginkit/ui/CachedLayer.h"
+
 #include "vstgui/lib/dragging.h"
 
 #include <functional>
@@ -76,6 +78,13 @@ private:
     int lastHeadCount = 0;
     uint32_t lastChange = 0;
     VSTGUI::SharedPointer<VSTGUI::IDropTarget> dropTarget;
+    // Everything but the playheads (ruler, waveform, markers, loop, slices, overview, name): a cached
+    // layer (pk::CachedLayer) rebuilt when the sample, a setting, the zoom or a drag changes it. The
+    // playheads are drawn over it, and while only they move, only the strips they left and entered
+    // are repainted.
+    pk::CachedLayer layer;
+    void paint (VSTGUI::CDrawContext* ctx, bool playheads);
+    VSTGUI::CRect playheadStrip (float pos) const;
 };
 
 } // namespace smemplr
