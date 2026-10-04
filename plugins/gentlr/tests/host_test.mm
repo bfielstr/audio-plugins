@@ -8,8 +8,11 @@
 
 #include "public.sdk/source/common/memorystream.h"
 
+#import <Foundation/Foundation.h>
+
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -61,6 +64,17 @@ static InputFn harshMix ()
 static double plainOf (Rig& rig, uint32_t id) { return toPlain (id, rig.controller->getParamNormalized (id)); }
 
 // where the display puts things (GentlrView's layout, the display at its full width: Advanced off)
+// What the layout check (pk::layoutReport, written when the first editor opened: HostRig) found: its
+// lines other than the editor's heading
+static int layoutFindings ()
+{
+    std::ifstream f (std::string ([NSTemporaryDirectory () UTF8String]) + "pk_layout_report.txt");
+    int n = 0;
+    for (std::string line; std::getline (f, line);)
+        n += !line.empty () && line.rfind ("==", 0) != 0;
+    return n;
+}
+
 static double xOfHz (double hz)
 {
     const double l = Editor::kViewLeft, r = Editor::kViewRight;
@@ -163,6 +177,7 @@ int main (int argc, char** argv)
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");
+            CHECK (layoutFindings () == 0, "the layout check finds nothing overlapping, touching or spilling (printed above)");
             // every band cutting a mix with too much 45 Hz, 220 Hz and 3.2 kHz
             for (int i = 0; i < 24; ++i)
             {
@@ -231,6 +246,44 @@ int main (int argc, char** argv)
             for (uint32_t id : {(uint32_t)kNoOverlap, (uint32_t)kHighFreq, (uint32_t)kHighRange, bandParam (1, kFreq),
                                 bandParam (1, kWidth)})
                 rig.param (id, defaultNormalized (id));
+
+            // glue on touch: band 1 (250 Hz, 2 octaves: 125 - 500 Hz) and band 2 at 1 kHz, an octave wide
+            // (707 - 1414 Hz). Band 1's high edge dragged to 3 px short of band 2's low edge snaps onto it, and
+            // when the drag ends the two are glued (the link icon on the border, the switch on)
+            {
+                rig.param (bandParam (1, kFreq), toNormalized (bandParam (1, kFreq), 1000.0));
+                rig.param (bandParam (1, kWidth), toNormalized (bandParam (1, kWidth), 1.0));
+                pump (0.05);
+                auto edge1 = [&] { return plainOf (rig, bandParam (0, kFreq)) * std::exp2 (0.5 * plainOf (rig, bandParam (0, kWidth))); };
+                auto edge2 = [&] { return plainOf (rig, bandParam (1, kFreq)) / std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth))); };
+                const double ey = yOfDb (-20.0); // (under the readouts, away from the handles)
+                CHECK (plainOf (rig, kGlue12) < 0.5, "nothing glued by default");
+                win.drag (xOfHz (edge1 ()), ey, xOfHz (edge2 ()) - 3.0, ey);
+                pump (0.05);
+                CHECK (plainOf (rig, kGlue12) >= 0.5, "band 1's edge dragged onto band 2's: glued");
+                CHECK (std::fabs (std::log2 (edge1 () / edge2 ())) < 1e-3, "and touching: %.1f / %.1f Hz", edge1 (), edge2 ());
+                CHECK (win.savePng (outDir + "/ui_gentlr_glue.png"), "screenshot, glued");
+                // band 1's handle moved left 40 px: band 2's low edge follows it (band 2 widens), band 2's top stays
+                const double top2 = plainOf (rig, bandParam (1, kFreq)) * std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth)));
+                const double hx = xOfHz (plainOf (rig, bandParam (0, kFreq))), hy = yOfDb (-plainOf (rig, bandParam (0, kRange)));
+                win.drag (hx, hy, hx - 40.0, hy);
+                pump (0.05);
+                const double top2b = plainOf (rig, bandParam (1, kFreq)) * std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth)));
+                CHECK (std::fabs (std::log2 (edge1 () / edge2 ())) < 1e-3 && edge2 () < 650.0 && std::fabs (top2b / top2 - 1.0) < 1e-3,
+                       "band 1 moved: band 2's low edge with it (%.1f / %.1f Hz), its top stays (%.0f Hz)", edge1 (), edge2 (), top2b);
+                // a click on the link icon (on the border, at the bottom of the display) detaches them; they stay put
+                const double f1 = plainOf (rig, bandParam (0, kFreq)), f2 = plainOf (rig, bandParam (1, kFreq));
+                win.click (xOfHz (edge1 ()), Editor::kViewBottom - 16.0 - 10.0);
+                pump (0.05);
+                CHECK (plainOf (rig, kGlue12) < 0.5, "the link icon clicked: detached");
+                CHECK (plainOf (rig, bandParam (0, kFreq)) == f1 && plainOf (rig, bandParam (1, kFreq)) == f2, "and the bands stay where they were");
+                // clicked again (they still touch): glued again
+                win.click (xOfHz (edge1 ()), Editor::kViewBottom - 16.0 - 10.0);
+                pump (0.05);
+                CHECK (plainOf (rig, kGlue12) >= 0.5, "clicked again: glued");
+                for (uint32_t id : {(uint32_t)kGlue12, bandParam (0, kFreq), bandParam (0, kWidth), bandParam (1, kFreq), bandParam (1, kWidth)})
+                    rig.param (id, defaultNormalized (id));
+            }
 
             // Advanced: a Threshold per band on the sliders at the right of the display, the region Drive
             rig.param (gentlr::kAdvanced, 1.0);

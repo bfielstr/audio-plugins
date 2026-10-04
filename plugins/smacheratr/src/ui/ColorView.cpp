@@ -55,12 +55,31 @@ double ColorView::sampleRate () const
 
 bool ColorView::clarityShown (int) const { return host->plainValue (kClarity) >= 0.5; } // (every band, Sub and High too)
 
-GentlrLayout ColorView::layoutNow () const
+GentlrLayout ColorView::layoutNow () const { return shownLayout (host, smacheratrBandParams ()); }
+
+int ColorView::links (GlueBorder out[kGentlrBands], CPoint at[kGentlrBands]) const
 {
-    GentlrLayout l = readLayout (host, smacheratrBandParams ());
-    if (host->plainValue (kClarityNoOverlap) >= 0.5)
-        resolveOverlaps (l);
-    return l;
+    if (host->plainValue (kClarity) < 0.5)
+        return 0;
+    const int n = linkBorders (host, smacheratrBandParams (), out);
+    for (int i = 0; i < n; ++i)
+        at[i] = CPoint (xOfHz (std::exp2 (out[i].at)), getViewSize ().bottom - 26.0); // (above the frequency labels)
+    return n;
+}
+
+int ColorView::linkAt (const CPoint& p, GlueBorder* b) const
+{
+    GlueBorder borders[kGentlrBands];
+    CPoint at[kGentlrBands];
+    const int n = links (borders, at);
+    for (int i = 0; i < n; ++i)
+        if (std::hypot (p.x - at[i].x, p.y - at[i].y) <= kLinkRadius + 1.0)
+        {
+            if (b)
+                *b = borders[i];
+            return i;
+        }
+    return -1;
 }
 
 ClarityBand ColorView::bandOf (int band) const
@@ -92,6 +111,8 @@ void ColorView::idle ()
     if (changed)
         invalid ();
 }
+
+double ColorView::snapOctaves () const { return 6.0 * std::log2 (kMaxHz / kMinHz) / std::max (1.0, getViewSize ().getWidth ()); }
 
 double ColorView::xOfHz (double hz) const
 {
@@ -266,6 +287,18 @@ void ColorView::draw (CDrawContext* ctx)
         pk::draw::handle (ctx, h, kHandleRadius + 1, drag != Drag::None && dragBand == k);
     }
 
+    // the glue links on the borders where two bands touch (lit while glued), and where a dragged edge
+    // sits snapped (it glues there when the drag ends)
+    {
+        GlueBorder borders[kGentlrBands];
+        CPoint at[kGentlrBands];
+        const int n = links (borders, at);
+        for (int i = 0; i < n; ++i)
+            drawLink (ctx, at[i], borders[i].glued, hoverLink == i);
+        if (push.active () && push.snapped () >= 0)
+            drawLink (ctx, CPoint (xOfHz (std::exp2 (push.snappedAt ())), all.bottom - 26.0), true, true);
+    }
+
     // handles
     for (const CPoint& h : {loHandle (), hiHandle ()})
         pk::draw::handle (ctx, h, kHandleRadius, false, on);
@@ -326,6 +359,16 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
     if (!e.buttonState.isLeft () && !right)
         return;
+    // a link icon: glues or detaches the two bands at its border
+    GlueBorder link {};
+    if (!right && linkAt (e.mousePosition, &link) >= 0)
+    {
+        toggleGlue (host, smacheratrBandParams (), link);
+        invalid ();
+        e.consumed = true;
+        e.ignoreFollowUpMoveAndUpEvents (true);
+        return;
+    }
     drag = hit (e.mousePosition, &dragBand);
     // Alt (Option) held on a band, its handle or anywhere in its region: a sideways drag sets its width
     if (!right && e.clickCount < 2 && e.modifiers.has (ModifierKey::Alt) && drag != Drag::Lo && drag != Drag::Hi)
@@ -376,12 +419,17 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     {
         host->beginEdit (cFreq);
         host->beginEdit (cRange);
-        push.begin (host, smacheratrBandParams (), dragBand, {cFreq, cRange}); // (No Overlap: first splits what overlaps)
+        // (No Overlap: first splits what overlaps; an edge within 6 px of a neighbour's snaps onto it)
+        push.begin (host, smacheratrBandParams (), dragBand, {cFreq, cRange}, BandPush::Grab::Body, snapOctaves ());
     }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth)
     {
         host->beginEdit (cWidth);
-        push.begin (host, smacheratrBandParams (), dragBand, {cWidth});
+        push.begin (host, smacheratrBandParams (), dragBand, {cWidth},
+                    drag == Drag::ClarityLow    ? BandPush::Grab::LowEdge
+                    : drag == Drag::ClarityHigh ? BandPush::Grab::HighEdge
+                                                : BandPush::Grab::Width,
+                    snapOctaves ());
     }
     startLo = host->plainValue (kColorLo);
     startHi = host->plainValue (kColorHi);
@@ -403,6 +451,18 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
 {
     if (drag == Drag::None)
     {
+        const int link = linkAt (e.mousePosition);
+        if (link != hoverLink)
+        {
+            hoverLink = link;
+            invalid ();
+        }
+        if (link >= 0)
+        {
+            if (auto* f = getFrame ())
+                f->setCursor (kCursorHand);
+            return;
+        }
         int hb = 0;
         Drag h = hit (e.mousePosition, &hb);
         if (e.modifiers.has (ModifierKey::Alt) && h != Drag::Lo && h != Drag::Hi &&
@@ -471,7 +531,7 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag == Drag::None)
         return;
-    push.end (host);
+    push.end (host, smacheratrBandParams ()); // (an edge left snapped on a neighbour's: glued)
     if (drag == Drag::Clarity)
     {
         host->endEdit (kGentlrFreqIds[dragBand]);
@@ -523,6 +583,11 @@ void ColorView::onMouseExitEvent (MouseExitEvent& e)
 {
     if (auto* f = getFrame ())
         f->setCursor (kCursorDefault);
+    if (hoverLink >= 0)
+    {
+        hoverLink = -1;
+        invalid ();
+    }
     e.consumed = true;
 }
 

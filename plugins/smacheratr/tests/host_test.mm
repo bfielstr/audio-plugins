@@ -7,7 +7,10 @@
 
 #include "public.sdk/source/common/memorystream.h"
 
+#import <Foundation/Foundation.h>
+
 #include <cmath>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -16,6 +19,17 @@ using namespace Steinberg::Vst;
 using namespace pk::testing;
 using namespace smacheratr;
 #define CHECK PK_CHECK
+
+// What the layout check (pk::layoutReport, written when the first editor opened: HostRig) found: its
+// lines other than the editor's heading
+static int layoutFindings ()
+{
+    std::ifstream f (std::string ([NSTemporaryDirectory () UTF8String]) + "pk_layout_report.txt");
+    int n = 0;
+    for (std::string line; std::getline (f, line);)
+        n += !line.empty () && line.rfind ("==", 0) != 0;
+    return n;
+}
 
 static State baseState ()
 {
@@ -112,6 +126,7 @@ int main (int argc, char** argv)
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");
+            CHECK (layoutFindings () == 0, "the layout check finds nothing overlapping, touching or spilling (printed above)");
             for (int i = 0; i < 20; ++i)
             {
                 out.clear ();
@@ -192,7 +207,7 @@ int main (int argc, char** argv)
             pump (0.05);
             CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr_high.png"), "gentlr high band screenshot");
             auto band2Top = [&] { return plainOf (rig, kClarity2Freq) * std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
-            win.click (Editor::kNoOverlapX, gentlrY);
+            win.click (Editor::kNoOverlapX, Editor::kNoOverlapY);
             pump (0.05);
             CHECK (plainOf (rig, kClarityNoOverlap) >= 0.5, "No Overlap switched on from the editor");
             CHECK (band2Top () <= plainOf (rig, kClarityHighFreq) * 1.001 && plainOf (rig, kClarityHighFreq) > 7000.0,
@@ -200,6 +215,34 @@ int main (int argc, char** argv)
             for (uint32_t id : {(uint32_t)kClarityNoOverlap, (uint32_t)kClarityHighRange, (uint32_t)kClarityHighFreq, (uint32_t)kClarity2Freq,
                                 (uint32_t)kClarity2Width, (uint32_t)kClarity2Range})
                 rig.param (id, defaultNormalized (id));
+
+            // glue on touch in the colour display: band 1 (250 Hz, 2 octaves: 125 - 500 Hz) and band 2 at 1 kHz,
+            // an octave wide (707 - 1414 Hz). Band 1's high edge dragged to 3 px short of band 2's low edge
+            // snaps onto it and glues them when the drag ends; the link icon on the border detaches them
+            {
+                auto gx = [] (double hz) { return Editor::kColorLeft + std::log (hz / 20.0) / std::log (1000.0) * Editor::kColorViewWidth; };
+                const double gy = Editor::kColorTop + Editor::kColorViewHeight / 2 + 0.75 * (Editor::kColorViewHeight / 2 - 12.0); // (-18 dB)
+                const double linkY = Editor::kColorTop + Editor::kColorViewHeight - 26.0;
+                rig.param (kClarity2Range, toNormalized (kClarity2Range, 6.0));
+                rig.param (kClarity2Freq, toNormalized (kClarity2Freq, 1000.0));
+                rig.param (kClarity2Width, toNormalized (kClarity2Width, 1.0));
+                pump (0.05);
+                auto edge1 = [&] { return plainOf (rig, kClarityFreq) * std::exp2 (0.5 * plainOf (rig, kClarityWidth)); };
+                auto edge2 = [&] { return plainOf (rig, kClarity2Freq) / std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
+                CHECK (plainOf (rig, kClarityGlue12) < 0.5, "nothing glued by default");
+                win.drag (gx (edge1 ()), gy, gx (edge2 ()) - 3.0, gy);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityGlue12) >= 0.5, "band 1's edge dragged onto band 2's: glued");
+                CHECK (std::fabs (std::log2 (edge1 () / edge2 ())) < 1e-3, "and touching: %.1f / %.1f Hz", edge1 (), edge2 ());
+                CHECK (win.savePng (outDir + "/ui_smacheratr_glue.png"), "glue screenshot");
+                const double f1 = plainOf (rig, kClarityFreq), f2 = plainOf (rig, kClarity2Freq);
+                win.click (gx (edge1 ()), linkY);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityGlue12) < 0.5 && plainOf (rig, kClarityFreq) == f1 && plainOf (rig, kClarity2Freq) == f2,
+                       "the link icon clicked: detached, the bands where they were");
+                for (uint32_t id : {(uint32_t)kClarityFreq, (uint32_t)kClarityWidth, (uint32_t)kClarity2Freq, (uint32_t)kClarity2Width})
+                    rig.param (id, defaultNormalized (id));
+            }
             rig.param (kClarity, 0.0);
             rig.param (kClarity2Range, 0.0);
 

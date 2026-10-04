@@ -1,7 +1,7 @@
 // Smacheratr's two displays (the Analog curve, and the colour curve with Gentlr's bands) for the
 // saturator at the end of another plug-in's chain: the displays work on the plug-in's tail
-// parameters (its four blocks, TailBases: pk::addTailParams, the extended block, Gentlr's Advanced
-// block, its High band and No Overlap) through a mapping, and read the tail's levels and the sample
+// parameters (its five blocks, TailBases: pk::addTailParams, the extended block, Gentlr's Advanced
+// block, its High band and No Overlap, its glue) through a mapping, and read the tail's levels and the sample
 // rate through functions. While Gentlr's Advanced is on, a strip at the right of the colour display
 // holds the region Drive (on / amount) and the bands' Threshold sliders. Gentlr's No Overlap button
 // goes above the colour display's right end (in the tail panel's title row), its bands' Slope left of it.

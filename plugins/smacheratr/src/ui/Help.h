@@ -5,6 +5,12 @@
 namespace smacheratr::help {
 
 // Gentlr's band Slope (Smacheratr's, Gentlr's own, the end saturators' and the rack's)
+inline constexpr const char* kGlue =
+    "Glue: two of Gentlr's bands held at a shared border. Drag a band's edge onto its neighbour's in the display (it "
+    "snaps within a few pixels) and the two glue: the border then moves as one (one band widens as the other narrows; "
+    "for the Sub and High bands their Freq is the border) and a band moved drags its neighbour's edge along. The link "
+    "icon on the border (lit cinnabar while glued) detaches them, or glues two bands that touch. Automation holds a "
+    "glued border too. Off by default.";
 inline constexpr const char* kSlope =
     "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12 (the "
     "default): 12 dB/oct on both sides, the cut exactly the Range at the band's centre. Signature: 24 dB/oct below and "
@@ -84,6 +90,11 @@ inline const char* forParam (uint32_t id)
                    "neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot move further). "
                    "Switched on, bands that overlap are split at the middle of the overlap; automation that makes them "
                    "overlap is kept apart the same way.";
+        case kClarityGlue12:
+        case kClarityGlueSub1:
+        case kClarityGlueSub2:
+        case kClarityGlue1High:
+        case kClarityGlue2High: return kGlue;
         case kClarityHighThreshold:
         case kClaritySubThreshold:
         case kClarityThreshold:
@@ -116,6 +127,8 @@ constexpr const char* kColorDisplay =
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "With Gentlr on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
     "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub and High bands (named in their readouts) "
-    "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
+    "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. "
+    "Drag a band's edge onto its neighbour's (it snaps) and they glue: a link icon sits on the border near the bottom, lit "
+    "while glued; click it to detach them, or to glue two bands that touch. Shift: fine.";
 
 } // namespace smacheratr::help

@@ -13,8 +13,15 @@
 //   Alt (Option) + drag on a Gentlr band, sideways   its width, the band staying centred (right: wider)
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Gentlr's width
 //   double-click or right-click a handle      reset its parameters
+//   a band edge dragged onto a neighbour's (within a few pixels it snaps)   the two are glued at that
+//                                 border when the drag ends: a link icon sits on it, near the bottom
+//   link icon, click              detaches the two (lit cinnabar: glued), or glues two that touch (copper)
+//   a glued border dragged        both edges move: one band widens as the other narrows (for the Sub and
+//                                 High bands their Freq is the border); a glued band moved drags its
+//                                 neighbour's edge along
 // With No Overlap on, a band dragged or widened pushes its neighbours' edges along (BandPush), and the
-// bands are drawn where the engine has them (overlaps from automation split, as resolveOverlaps does).
+// bands are drawn where the engine has them (glued borders held, overlaps from automation split, as
+// applyGlue and resolveOverlaps do).
 // Used by Smacheratr and, through a pk::MappedParamHost, by the Smacheratr in Smemplr's rack; the
 // sample rate and the levels come from functions so it does not depend on a controller.
 #pragma once
@@ -57,12 +64,16 @@ public:
     VSTGUI::CPoint hiHandle () const;
     VSTGUI::CPoint clarityHandle (int band) const; // at a Clarity band's centre, as deep as its Range
     double clarityEdgeX (int band, bool high) const; // its edges
+    // the link icons (Glue.h): where each sits (its border, near the bottom), and the one at p (-1: none)
+    int links (GlueBorder out[kGentlrBands], VSTGUI::CPoint at[kGentlrBands]) const;
+    int linkAt (const VSTGUI::CPoint& p, GlueBorder* b = nullptr) const;
 
 private:
     enum class Drag { None, Lo, Hi, Clarity, ClarityLow, ClarityHigh, ClarityWidth };
     Drag hit (const VSTGUI::CPoint& p, int* band = nullptr) const; // band: which Clarity band was hit
     int bandUnder (const VSTGUI::CPoint& p) const;                 // the working band whose region p is in (-1: none)
     double sampleRate () const;
+    double snapOctaves () const;        // how near (6 px, in octaves) a dragged edge snaps onto a neighbour's
     bool clarityOn (int band) const;    // the band works (Clarity on, Range above 0; Sub and High the same)
     bool clarityShown (int band) const; // its handle is there to grab (Clarity on: every band, at 0 dB while its Range is 0)
     GentlrLayout layoutNow () const;     // where the bands sit (with No Overlap: kept apart, as the engine has them)
@@ -76,7 +87,8 @@ private:
     int dragBand = 0; // the Clarity band being dragged
     double startLo = 0.0, startHi = 0.0, startFreq = 0.0, startClarity = 0.0, startRange = 0.0, startWidth = 0.0;
     bool movedH = false, movedV = false;
-    BandPush push; // No Overlap: the neighbours a band drag pushes
+    BandPush push; // No Overlap and glue: the neighbours a band drag pushes or drags along, the edge it snaps
+    int hoverLink = -1; // the link icon under the mouse (its border's index), lit brighter
     float shownCut[kGentlrBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
 };
 
