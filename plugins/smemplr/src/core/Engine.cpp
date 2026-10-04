@@ -51,14 +51,16 @@ double sampleBpmFor (const SampleData& s, const ParamArray& p)
     return std::max (1.0, p[kWarpBeats]) * 60.0 / secs;
 }
 
-bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r)
+namespace {
+// a loop from Start (a share of the flagged region) Length long (a share of it too), to the end flag
+bool loopRegion (const SampleData& s, const ParamArray& p, double start, double length, PlayRegion& r)
 {
     double fs, fe;
     flagRegion (s, p, fs, fe);
     const bool snap = on (p[kSnap]);
     r = PlayRegion {};
     const double span = fe - fs;
-    double rs = fs + std::clamp (p[kStart], 0.0, 1.0) * span;
+    double rs = fs + std::clamp (start, 0.0, 1.0) * span;
     rs = std::min (rs, fe - 16.0);
     if (snap)
         rs = std::min ((double)s.snapToZero ((int)rs), fe - 16.0);
@@ -70,7 +72,7 @@ bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r)
     r.end = re;
     r.loop = on (p[kLoopOn]);
     const double ls = rs;
-    double le = std::min (re, rs + std::max (16.0, p[kLength] * span));
+    double le = std::min (re, rs + std::max (16.0, length * span));
     if (snap)
         le = std::min (re, (double)s.snapToZero ((int)le));
     if (le - ls < 16.0)
@@ -78,6 +80,19 @@ bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r)
     r.loopStart = ls;
     r.loopEnd = le;
     return r.end > r.start;
+}
+} // namespace
+
+bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r) { return loopRegion (s, p, p[kStart], p[kLength], r); }
+
+bool headRegion (const SampleData& s, const ParamArray& p, int head, PlayRegion& r)
+{
+    return loopRegion (s, p, p[headParam (head, kHeadStart)], p[headParam (head, kHeadLength)], r);
+}
+
+int playheadsFor (const ParamArray& p)
+{
+    return idx (p[kMode]) == kModeClassic ? std::clamp (idx (p[kPlayheads]) + 1, 1, kMaxPlayheads) : 1;
 }
 
 EnvSettings envSettingsFor (const ParamArray& p, int env)
@@ -125,6 +140,11 @@ void Voice::prepare (double sampleRate)
     beats.prepare (sr);
     grain.prepare (sr);
     pv.prepare (sr);
+    for (auto& x : extra)
+    {
+        x.beats.prepare (sr);
+        x.grain.prepare (sr);
+    }
 }
 
 void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p)
@@ -166,6 +186,28 @@ void Voice::start (const Start& s, const SampleData& sample, const ParamArray& p
         source = Source::Pv;
         pv.start (sample, s.region, s.warpMode == kWarpComplexPro, (float)(p[kFormants] / 100.0),
                   idx (p[kCproEnvelope]));
+    }
+    // the extra playheads, read the way the main one is (the Complex modes have none)
+    numHeads = source == Source::Pv ? 1 : std::clamp (s.heads, 1, kMaxPlayheads);
+    monoOut = sample.numChannels < 2 && numHeads == 1;
+    headPanSet = false;
+    for (int k = 0; k + 1 < numHeads; ++k)
+    {
+        ExtraHead& x = extra[(size_t)k];
+        const PlayRegion& r = s.headRegions[k];
+        x.classic.start (r);
+        if (source == Source::Beats)
+        {
+            static const std::vector<int> none;
+            x.beats.start (sample, r, s.beatBounds ? *s.beatBounds : none, idx (p[kBeatsLoop]), (float)(p[kBeatsEnvelope] / 100.0));
+        }
+        else if (source == Source::Grain)
+        {
+            const bool tones = s.warpMode == kWarpTones;
+            const float ms = tones ? (float)(4.0 + p[kTonesGrain] * 1.2) : (float)(10.0 + p[kTextureGrain] * 4.0);
+            // (a seed of its own: Texture's scatter differs from the main playhead's)
+            x.grain.start (r, tones, ms, tones ? 0.0f : (float)(p[kTextureFlux] / 100.0), s.seed ^ (0x9E3779B9u * (uint32_t)(k + 1)));
+        }
     }
 
     ampEnv.reset ();
@@ -244,11 +286,52 @@ void Voice::ClassicHead::follow (const PlayRegion& r)
     }
 }
 
-void Voice::updateLoop (const PlayRegion& r)
+void Voice::updateLoop (const PlayRegion& r, const PlayRegion* extraRegions)
 {
     if (source != Source::Classic || st.mode != kModeClassic)
         return;
     head.follow (r);
+    if (extraRegions)
+        for (int k = 0; k + 1 < numHeads; ++k)
+            extra[(size_t)k].classic.follow (extraRegions[k]);
+}
+
+int Voice::displayPositions (double* out, int max) const
+{
+    int n = 0;
+    if (n < max)
+        out[n++] = displayPos ();
+    for (int k = 0; k + 1 < numHeads && n < max; ++k)
+    {
+        const ExtraHead& x = extra[(size_t)k];
+        out[n++] = source == Source::Beats ? x.beats.displayPos () : source == Source::Grain ? x.grain.displayPos () : x.classic.pos;
+    }
+    return n;
+}
+
+bool Voice::headDone (int k) const
+{
+    if (k == 0)
+        return source == Source::Classic ? head.done : source == Source::Beats ? beats.finished : source == Source::Grain ? grain.finished : pv.finished;
+    const ExtraHead& x = extra[(size_t)k - 1];
+    return source == Source::Classic ? x.classic.done : source == Source::Beats ? x.beats.finished : x.grain.finished;
+}
+
+double Voice::headRemaining (int k) const
+{
+    if (k == 0)
+        return mainRemaining ();
+    const ExtraHead& x = extra[(size_t)k - 1];
+    const auto& r = x.classic.region;
+    if (r.loop)
+        return 1e12;
+    switch (source)
+    {
+        case Source::Classic: return (r.end - x.classic.pos) / std::max (1e-9, lastRate);
+        case Source::Beats: return (r.end - x.beats.virtualPos ()) / std::max (1e-9, lastSrcPerOut);
+        case Source::Grain: return (r.end - x.grain.virtualPos ()) / std::max (1e-9, lastSrcPerOut);
+        default: return 1e12;
+    }
 }
 
 double Voice::displayPos () const
@@ -263,6 +346,22 @@ double Voice::displayPos () const
 }
 
 double Voice::remainingOut () const
+{
+    const auto& r = head.region;
+    if (r.loop)
+        return 1e12;
+    if (numHeads > 1)
+    {
+        // (the voice ends with its last playhead: each fades out on its own, mixHeads)
+        double most = 0.0;
+        for (int k = 1; k < numHeads; ++k)
+            most = std::max (most, headRemaining (k));
+        return std::max (most, mainRemaining ());
+    }
+    return mainRemaining ();
+}
+
+double Voice::mainRemaining () const
 {
     const auto& r = head.region;
     if (r.loop)
@@ -290,6 +389,10 @@ double Voice::loopPassLen (const ParamArray& p) const
 float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double pitchRatio)
 {
     const SampleData& s = *c.sample;
+    // more playheads, or the main one reading one channel: mixHeads after the main one is read (with
+    // one playhead reading both channels none of it runs: the voice plays as it always has)
+    const bool heads = numHeads > 1 || idx ((*c.p)[headChannelParam (0)]) != kHeadStereo;
+    const double rem0 = heads && numHeads > 1 ? headRemaining (0) : 1e12; // (before this block moves it)
     lastSrcPerOut = c.srcPerOut;
     if (source != Source::Classic)
     {
@@ -309,6 +412,8 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
                 srcDone = pv.finished;
                 break;
         }
+        if (heads)
+            mixHeads (L, R, n, c, pitchRatio, rem0);
         return 1.0f;
     }
 
@@ -316,7 +421,84 @@ float Voice::sourceRender (float* L, float* R, int n, const BlockCtx& c, double 
     lastRate = rate;
     renderClassic (head, L, R, n, c, rate);
     srcDone = head.done;
+    if (heads)
+        mixHeads (L, R, n, c, pitchRatio, rem0);
     return 1.0f;
+}
+
+void Voice::mixHeads (float* L, float* R, int n, const BlockCtx& c, double pitchRatio, double rem0)
+{
+    const ParamArray& p = *c.p;
+    const bool stereoSrc = c.sample->numChannels > 1;
+    // Spread: 0, every playhead in the centre; turned up, they move apart across the stereo field,
+    // evenly from the left (the main playhead) to the right (the last), all the way at 100 %; turned
+    // down, the other way round
+    const double spread = std::clamp (p[kHeadSpread], -1.0, 1.0);
+    std::array<float, kMaxPlayheads> target {};
+    for (int k = 0; k < numHeads; ++k)
+        target[(size_t)k] = numHeads > 1 ? (float)(spread * (-1.0 + 2.0 * k / (numHeads - 1))) : 0.0f;
+    if (!headPanSet)
+    {
+        headPan = target;
+        headPanSet = true;
+    }
+    const double declick = 0.0015 * sr;
+    // a playhead: its channel (a stereo sample's left or right in both), its end (with more playheads
+    // each fades out on its own as it reaches the end flag), its place (gliding over the block to where
+    // Spread puts it now). The place: the two channels drawn together as the playhead moves out (all the
+    // way at the edge) and panned at constant power, unchanged in the centre.
+    auto shape = [&] (int k, float* a, float* b, double rem) {
+        const int ch = idx (p[headChannelParam (k)]);
+        if (stereoSrc && ch == kHeadLeft)
+            std::copy (a, a + n, b);
+        else if (stereoSrc && ch == kHeadRight)
+            std::copy (b, b + n, a);
+        if (numHeads > 1 && rem < 1e11)
+            for (int i = 0; i < n; ++i)
+            {
+                const float g = (float)std::clamp ((rem - i) / declick, 0.0, 1.0);
+                a[i] *= g;
+                b[i] *= g;
+            }
+        const float from = headPan[(size_t)k], to = target[(size_t)k];
+        headPan[(size_t)k] = to;
+        if (from == 0.0f && to == 0.0f)
+            return;
+        for (int i = 0; i < n; ++i)
+        {
+            const float pan = from + (to - from) * (float)(i + 1) / (float)n;
+            const float w = std::fabs (pan);
+            const float mid = 0.5f * (a[i] + b[i]);
+            const float l = a[i] + (mid - a[i]) * w, r = b[i] + (mid - b[i]) * w;
+            const float angle = (pan + 1.0f) * (float)(M_PI * 0.25);
+            const float gl = pan >= 1.0f ? 0.0f : std::cos (angle) * (float)M_SQRT2; // (exactly 0 at the edge)
+            const float gr = pan <= -1.0f ? 0.0f : std::sin (angle) * (float)M_SQRT2;
+            a[i] = l * gl;
+            b[i] = r * gr;
+        }
+    };
+    shape (0, L, R, rem0);
+    bool done = headDone (0);
+    const WarpRates w {c.srcPerOut, pitchRatio, c.srcRate};
+    for (int k = 1; k < numHeads; ++k)
+    {
+        ExtraHead& x = extra[(size_t)k - 1];
+        const double rem = headRemaining (k);
+        switch (source)
+        {
+            case Source::Beats: x.beats.render (*c.sample, hL, hR, n, w); break;
+            case Source::Grain: x.grain.render (*c.sample, hL, hR, n, w); break;
+            default: renderClassic (x.classic, hL, hR, n, c, lastRate); break;
+        }
+        shape (k, hL, hR, rem);
+        for (int i = 0; i < n; ++i)
+        {
+            L[i] += hL[i];
+            R[i] += hR[i];
+        }
+        done = done && headDone (k);
+    }
+    srcDone = done;
 }
 
 void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const BlockCtx& c, double rate) const
@@ -464,7 +646,7 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
 {
     const ParamArray& p = *c.p;
     const bool classic = st.mode == kModeClassic;
-    const bool mono = c.sample->numChannels < 2;
+    const bool mono = monoOut; // (a mono sample with more playheads is played in stereo: they spread)
     const bool filterOn = on (p[kFilterOn]);
     const EnvSettings ampS = envSettingsFor (p, 0);
     EnvSettings filtS = envSettingsFor (p, 1);
@@ -998,8 +1180,17 @@ void Engine::startNote (int note, float velocity, bool)
 
     const bool warp = on (p[kWarp]);
     const int warpMode = idx (p[kWarpMode]);
+    // the extra playheads' regions (Classic); Beats cuts the sample from the earliest of them on
+    const int heads = playheadsFor (p);
+    PlayRegion headRegions[kMaxPlayheads - 1];
+    PlayRegion cut = r;
+    for (int k = 1; k < heads; ++k)
+    {
+        headRegion (*smp, p, k, headRegions[k - 1]);
+        cut.start = std::min (cut.start, headRegions[k - 1].start);
+    }
     if (warp && warpMode == kWarpBeatsMode)
-        computeBeatBounds (r);
+        computeBeatBounds (cut);
 
     const double base = mode == kModeSlicing ? 0.0 : (double)(note - rootOf (p));
     double glideFrom = 0.0;
@@ -1048,6 +1239,9 @@ void Engine::startNote (int note, float velocity, bool)
         s.lfoPhase = lfoPhase;
         s.seed = seed = seed * 1664525u + 1013904223u;
         s.beatBounds = &beatBounds;
+        s.heads = heads;
+        for (int h = 0; h + 1 < heads; ++h)
+            s.headRegions[h] = headRegions[h];
         slot->start (s, *smp, p);
     }
 }
@@ -1238,12 +1432,24 @@ void Engine::renderStep (float* L, float* R, int n, const HostInfo& host)
 
     PlayRegion loopRegion;
     const bool liveLoop = idx (p[kMode]) == kModeClassic && regionFor (rootOf (p), loopRegion);
+    // the extra playheads' regions follow their parameters as the main loop follows Start / Length
+    PlayRegion headRegions[kMaxPlayheads - 1];
+    bool liveHeads = false;
+    if (liveLoop)
+        for (const auto& v : voices)
+            if (v.isActive () && v.heads () > 1)
+            {
+                for (int k = 1; k < kMaxPlayheads; ++k)
+                    headRegion (*smp, p, k, headRegions[k - 1]);
+                liveHeads = true;
+                break;
+            }
     for (auto& v : voices)
     {
         if (!v.isActive ())
             continue;
         if (liveLoop)
-            v.updateLoop (loopRegion);
+            v.updateLoop (loopRegion, liveHeads ? headRegions : nullptr);
         v.render (L, R, n, c);
     }
 
@@ -1279,9 +1485,15 @@ int Engine::playPositions (float* out, int max) const
     if (!smp || smp->length <= 0)
         return 0;
     int k = 0;
+    double heads[kMaxPlayheads];
     for (auto& v : voices)
         if (v.isActive () && !v.isKilling () && k < max)
-            out[k++] = (float)(v.displayPos () / smp->length);
+        {
+            // (every playhead of the voice)
+            const int nh = v.displayPositions (heads, kMaxPlayheads);
+            for (int h = 0; h < nh && k < max; ++h)
+                out[k++] = (float)(heads[h] / smp->length);
+        }
     return k;
 }
 

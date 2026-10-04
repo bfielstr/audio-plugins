@@ -197,7 +197,8 @@ double WaveformView::gridFrames (const SampleData& s) const
     return gridBeats ((int)std::lround (host->plainValue (kGridSize))) * 60.0 / std::max (1.0, bpm) * s.sampleRate;
 }
 
-void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart)
+void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart, uint32_t startId,
+                                  uint32_t lengthId)
 {
     const double span = std::max (1.0, fe - fs);
     if (keepStart)
@@ -205,7 +206,7 @@ void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, d
         // whole steps from where the loop starts, at least one, as many as fit before the end flag
         const double fit = std::floor ((fe - rs) / step + 1e-9);
         const double l = fit >= 1.0 ? std::clamp (std::round (len / step), 1.0, fit) * step : fe - rs;
-        host->setNorm (kLength, std::clamp (l / span, 0.0, 1.0));
+        host->setNorm (lengthId, std::clamp (l / span, 0.0, 1.0));
         return;
     }
     // whole steps, at least one, and no more than fit between the start flag and the end flag
@@ -218,8 +219,33 @@ void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, d
     double k = std::round ((rs - fs) / step);
     k = std::clamp (k, 0.0, std::max (0.0, std::floor ((fe - l - fs) / step + 1e-9)));
     const double start = fs + k * step;
-    host->setNorm (kStart, std::clamp ((start - fs) / span, 0.0, 1.0));
-    host->setNorm (kLength, std::clamp (l / span, 0.0, 1.0));
+    host->setNorm (startId, std::clamp ((start - fs) / span, 0.0, 1.0));
+    host->setNorm (lengthId, std::clamp (l / span, 0.0, 1.0));
+}
+
+int WaveformView::extraHeads () const
+{
+    if ((int)std::lround (host->plainValue (kMode)) != kModeClassic)
+        return 1;
+    return std::clamp ((int)std::lround (host->plainValue (kPlayheads)) + 1, 1, kMaxPlayheads);
+}
+
+void WaveformView::headPositions (const SampleData& s, int k, double& hs, double& he) const
+{
+    PlayRegion r;
+    headRegion (s, paramsFrom (host), k, r);
+    hs = r.loopStart;
+    he = r.loopEnd;
+}
+
+CRect WaveformView::headBar (const SampleData& s, int k) const
+{
+    // 10 px high, one above the other over the loop's bar (playhead 2 the lowest)
+    double hs, he;
+    headPositions (s, k, hs, he);
+    const CRect w = waveArea ();
+    const double bottom = w.bottom - 16.0 - 12.0 * (k - 1);
+    return CRect (posToX (hs / s.length), bottom - 10.0, posToX (he / s.length), bottom);
 }
 
 void WaveformView::computeSlicesForDisplay (SliceList& out, const SampleData& s) const
@@ -242,7 +268,7 @@ void WaveformView::draw (CDrawContext* ctx)
     const SliceEditsPtr edits = bridge->editsNow ();
     pk::LayerKey key;
     key.params (host).add ((const void*)s.get (), s->length, (const void*)edits.get (), bridge->changeCounter.load ());
-    key.add (viewStart, viewLen, heightZoom, drag, dragSlice, dragSlicePos, moved, hoverSlice);
+    key.add (viewStart, viewLen, heightZoom, drag, dragSlice, dragSlicePos, moved, hoverSlice, dragHead);
     key.add (bridge->hostBpm.load (std::memory_order_relaxed)); // (the Grid's lines with Warp off)
     layer.draw (ctx, getViewSize (), key.value (), [this] (CDrawContext* c) { paint (c, false); });
 
@@ -499,7 +525,7 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
     };
     dim (w.left, xfs, 150);
     dim (xfe, w.right, 150);
-    if (mode == kModeClassic)
+    if (mode == kModeClassic && extraHeads () == 1) // (with more playheads their regions play too)
     {
         const bool looping = host->plainValue (kLoopOn) >= 0.5;
         dim (xfs, posToX (rs / len), 120);
@@ -553,6 +579,43 @@ void WaveformView::paint (CDrawContext* ctx, bool playheads)
         ctx->setFillColor (theme::withAlpha (theme::kText, 190));
         ctx->drawPolygon ({CPoint (xs, w.bottom - 10), CPoint (xs + 7, w.bottom - 5), CPoint (xs, w.bottom)}, kDrawFilled);
         ctx->drawPolygon ({CPoint (xl, w.bottom - 10), CPoint (xl - 7, w.bottom - 5), CPoint (xl, w.bottom)}, kDrawFilled);
+
+        // the extra playheads' regions (Playheads 2 .. 4): told apart from the loop by line style and
+        // number (docs/THEME.md): a fainter shade, dashed cinnabar edges, and a dashed bar of their own
+        // above the loop's with the playhead's number (lit while it is dragged)
+        for (int k = 1; k < extraHeads (); ++k)
+        {
+            double hs, he;
+            headPositions (*s, k, hs, he);
+            const double x0 = posToX (hs / len), x1 = posToX (he / len);
+            const bool held = dragHead == k && (drag == Handle::HeadStart || drag == Handle::HeadEnd || drag == Handle::HeadBody);
+            const CRect area (std::max (w.left, x0), w.top, std::min (w.right, x1), w.bottom);
+            if (area.right > area.left)
+            {
+                ctx->setFillColor (theme::withAlpha (loopOn ? theme::kLoop : theme::kCopper, held ? 30 : (loopOn ? 12 : 8)));
+                ctx->drawRect (area, kDrawFilled);
+            }
+            ctx->setLineStyle (theme::dashed ());
+            vline (x0, theme::withAlpha (theme::kLoop, held ? 230 : 150), 1.0);
+            vline (x1, theme::withAlpha (theme::kLoop, held ? 230 : 150), 1.0);
+            const CRect hb = headBar (*s, k);
+            const CRect hbClip (std::max (w.left, hb.left), hb.top, std::min (w.right, hb.right), hb.bottom);
+            if (hbClip.right > hbClip.left)
+            {
+                ctx->setFillColor (theme::withAlpha (theme::kLoop, held ? 70 : 34));
+                ctx->drawRect (hbClip, kDrawFilled);
+                ctx->setFrameColor (theme::withAlpha (theme::kLoop, held ? 255 : 190));
+                ctx->setLineWidth (1.0);
+                ctx->drawRect (CRect (hbClip.left + 0.5, hbClip.top + 0.5, hbClip.right - 0.5, hbClip.bottom - 0.5), kDrawStroked);
+            }
+            ctx->setLineStyle (kLineSolid);
+            if (hbClip.getWidth () > 10)
+            {
+                char num[4];
+                std::snprintf (num, sizeof (num), "%d", k + 1);
+                drawText (ctx, num, CRect (hbClip.left + 3, hbClip.top - 1, hbClip.left + 14, hbClip.bottom), theme::kText, 8.5, kLeftText, true);
+            }
+        }
     }
     else if (mode == kModeSlicing)
     {
@@ -663,6 +726,20 @@ WaveformView::Handle WaveformView::hitTest (const CPoint& p, int& sliceIndex) co
     if (mode == kModeClassic)
     {
         const CRect w = waveArea ();
+        // an extra playhead's bar: its ends or the whole region
+        for (int k = 1; k < extraHeads (); ++k)
+        {
+            const CRect hb = headBar (*s, k);
+            if (p.y < hb.top - 1 || p.y > hb.bottom + 1)
+                continue;
+            double hs, he;
+            headPositions (*s, k, hs, he);
+            if (near (he) || near (hs) || (p.x > hb.left && p.x < hb.right))
+            {
+                sliceIndex = k; // (which playhead)
+                return near (he) ? Handle::HeadEnd : near (hs) ? Handle::HeadStart : Handle::HeadBody;
+            }
+        }
         const bool lower = p.y > w.getCenter ().y;
         const CRect bar = loopBar (*s);
         const bool inBarRow = p.y >= bar.top - 2 && p.y <= w.bottom;
@@ -676,6 +753,17 @@ WaveformView::Handle WaveformView::hitTest (const CPoint& p, int& sliceIndex) co
             return Handle::LoopEnd;
         if (near (rs) && (lower || !near (fs)))
             return Handle::Start;
+        // an extra playhead's edges, anywhere along them (the loop's own come first)
+        for (int k = 1; k < extraHeads (); ++k)
+        {
+            double hs, he;
+            headPositions (*s, k, hs, he);
+            if (near (he) || near (hs))
+            {
+                sliceIndex = k;
+                return near (he) ? Handle::HeadEnd : Handle::HeadStart;
+            }
+        }
         if (host->plainValue (kLoopOn) >= 0.5 && w.pointInside (p) && p.x > posToX (rs / s->length) && p.x < posToX (le / s->length))
             return Handle::LoopRegion;
     }
@@ -753,6 +841,21 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
     drag = h;
     switch (h)
     {
+        case Handle::HeadStart:
+        case Handle::HeadEnd:
+        case Handle::HeadBody:
+        {
+            // an extra playhead's region: dragged like the loop (its start, its end, or all of it)
+            dragHead = si;
+            double hs, he;
+            headPositions (*s, dragHead, hs, he);
+            loopDragDownPos = xToPos (p.x) * len;
+            loopDragRs = hs;
+            loopDragLen = he - hs;
+            host->beginEdit (headParam (dragHead, kHeadStart));
+            host->beginEdit (headParam (dragHead, kHeadLength));
+            break;
+        }
         case Handle::FlagStart: host->beginEdit (kSampleStart); break;
         case Handle::FlagEnd: host->beginEdit (kSampleEnd); break;
         case Handle::Start: host->beginEdit (kStart); break;
@@ -882,6 +985,40 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
             host->setNorm (kLength, std::clamp (loopDragLen / span, 0.0, 1.0));
             break;
         }
+        case Handle::HeadStart:
+        case Handle::HeadEnd:
+        case Handle::HeadBody:
+        {
+            // as the loop's: the start moves the region (its length stays), the end sets its length, the
+            // bar moves it all; on the Grid, to grid lines and whole steps
+            const uint32_t sId = headParam (dragHead, kHeadStart), lId = headParam (dragHead, kHeadLength);
+            const double span = std::max (1.0, fe - fs);
+            double hs, he;
+            headPositions (*s, dragHead, hs, he);
+            if (drag == Handle::HeadStart)
+            {
+                if (step > 0.0)
+                    setLoopOnGrid (pos * len, he - hs, fs, fe, step, false, sId, lId);
+                else
+                    host->setNorm (sId, std::clamp ((pos * len - fs) / span, 0.0, 1.0));
+            }
+            else if (drag == Handle::HeadEnd)
+            {
+                if (step > 0.0)
+                    setLoopOnGrid (hs, pos * len - hs, fs, fe, step, true, sId, lId);
+                else
+                    host->setNorm (lId, std::clamp ((pos * len - hs) / span, 0.0, 1.0));
+            }
+            else if (step > 0.0)
+                setLoopOnGrid (loopDragRs + (pos * len - loopDragDownPos), loopDragLen, fs, fe, step, false, sId, lId);
+            else
+            {
+                const double newHs = std::clamp (loopDragRs + (pos * len - loopDragDownPos), fs, fe - loopDragLen);
+                host->setNorm (sId, std::clamp ((newHs - fs) / span, 0.0, 1.0));
+                host->setNorm (lId, std::clamp (loopDragLen / span, 0.0, 1.0));
+            }
+            break;
+        }
         case Handle::Slice: dragSlicePos = std::clamp (pos, fs / len, fe / len); break;
         case Handle::Ruler:
         {
@@ -910,6 +1047,12 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
 {
     switch (drag)
     {
+        case Handle::HeadStart:
+        case Handle::HeadEnd:
+        case Handle::HeadBody:
+            host->endEdit (headParam (dragHead, kHeadStart));
+            host->endEdit (headParam (dragHead, kHeadLength));
+            break;
         case Handle::FlagStart: host->endEdit (kSampleStart); break;
         case Handle::FlagEnd: host->endEdit (kSampleEnd); break;
         case Handle::Start: host->endEdit (kStart); break;
@@ -934,6 +1077,7 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
     }
     drag = Handle::None;
     dragSlice = -1;
+    dragHead = 0;
     invalid ();
     e.consumed = true;
 }

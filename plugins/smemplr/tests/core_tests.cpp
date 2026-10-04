@@ -2155,6 +2155,222 @@ TEST (moved_loop_hands_over_after_its_pass)
     }
 }
 
+// 2 s: a 300 Hz sine, then (from 1 s) a 1200 Hz one; stereo: 300 Hz on the left, 1200 Hz on the right
+static std::shared_ptr<SampleData> twoTones (bool stereo)
+{
+    const double sr = 44100.0;
+    std::vector<float> l ((size_t)(2.0 * sr)), r;
+    for (size_t i = 0; i < l.size (); ++i)
+    {
+        const double t = i / sr;
+        l[i] = 0.4f * (float)std::sin (2.0 * M_PI * (stereo || t < 1.0 ? 300.0 : 1200.0) * t);
+    }
+    if (stereo)
+    {
+        r.resize (l.size ());
+        for (size_t i = 0; i < r.size (); ++i)
+            r[i] = 0.4f * (float)std::sin (2.0 * M_PI * 1200.0 * i / sr);
+    }
+    return SampleData::fromBuffers (l, r, sr, "two tones");
+}
+
+TEST (playheads_one_is_the_sampler_as_before)
+{
+    // Playheads 1: the other playheads' settings (Spread, their regions and channels) change nothing,
+    // bit for bit (the sound of every older project). (The output was also compared with the build
+    // before the playheads over classic, every warp mode, one-shot and slicing scenarios.)
+    for (bool warp : {false, true})
+    {
+        auto render = [&] (bool touch) {
+            std::unique_ptr<Engine> e (makeEngine (sine (220.0, 1.0, 44100.0, true)));
+            e->setParam (kLoopOn, 1);
+            e->setParam (kLength, 0.4);
+            e->setParam (kLoopFade, 0.2);
+            e->setParam (kWarp, warp ? 1 : 0);
+            e->setParam (kWarpMode, kWarpTexture);
+            if (touch)
+            {
+                e->setParam (kHeadSpread, 1.0);
+                for (int h = 1; h < kMaxPlayheads; ++h)
+                {
+                    e->setParam (headParam (h, kHeadStart), 0.1 * h);
+                    e->setParam (headParam (h, kHeadLength), 0.3);
+                    e->setParam (headChannelParam (h), kHeadRight);
+                }
+            }
+            e->noteOn (60, 1.0f);
+            e->noteOn (64, 0.7f);
+            Out o = run (*e, 24000, {}, 333);
+            o.l.insert (o.l.end (), o.r.begin (), o.r.end ());
+            return o.l;
+        };
+        CHECK (render (false) == render (true), "warp %d: the other playheads' settings change the sound", (int)warp);
+    }
+    CHECK (paramTable ().info (kPlayheads).def == 0.0 && paramTable ().info (kHeadSpread).def == 0.0 &&
+               paramTable ().info (headChannelParam (0)).def == kHeadStereo,
+           "1 playhead, centred, stereo by default");
+}
+
+TEST (playheads_spread_and_channels)
+{
+    // the main loop over the 300 Hz half, playhead 2's region the 1200 Hz half (a mono sample: more
+    // playheads play it in stereo)
+    auto s = twoTones (false);
+    auto play = [&] (int heads, double spread, int mode, bool filter, int frames = 24000) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, filter ? 1 : 0);
+        e->setParam (kFilterFreq, 200.0);
+        e->setParam (kFilterSlope, 1);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kStart, 0.0);
+        e->setParam (kLength, 0.5);
+        e->setParam (kPlayheads, heads - 1);
+        e->setParam (kHeadSpread, spread);
+        e->setParam (headParam (1, kHeadStart), 0.5);
+        e->setParam (headParam (1, kHeadLength), 0.5);
+        if (mode >= 0)
+        {
+            e->setParam (kWarp, 1);
+            e->setParam (kWarpMode, mode);
+            e->setParam (kWarpBeats, 4); // 2 s at 120 BPM: the sample's own speed
+        }
+        e->noteOn (60, 1.0f);
+        Out o = run (*e, frames);
+        float pos[8];
+        const int n = e->playPositions (pos, 8);
+        CHECK (n == heads, "%d playheads shown (want %d)", n, heads);
+        if (heads == 2 && n == 2)
+            CHECK (pos[0] <= 0.501f && pos[1] >= 0.499f, "the playheads in their regions: %f, %f", pos[0], pos[1]);
+        return o;
+    };
+    // Spread +100 %: the main playhead hard left, the second hard right; -100 %: the other way round
+    for (double spread : {1.0, -1.0})
+    {
+        Out o = play (2, spread, -1, false);
+        const double fl = freqOf (o.l, 4800, 24000), fr = freqOf (o.r, 4800, 24000);
+        const double wantL = spread > 0 ? 300.0 : 1200.0, wantR = spread > 0 ? 1200.0 : 300.0;
+        std::printf ("    Spread %+.0f %%: left %.0f Hz, right %.0f Hz\n", spread * 100.0, fl, fr);
+        CHECK (std::fabs (fl - wantL) < wantL * 0.02 && std::fabs (fr - wantR) < wantR * 0.02,
+               "Spread %+.0f %%: left %.0f Hz (want %.0f), right %.0f Hz (want %.0f)", spread * 100.0, fl, wantL, fr, wantR);
+        CHECK (rms (o.l, 4800) > 0.2 && rms (o.r, 4800) > 0.2, "both sides play: %f, %f", rms (o.l, 4800), rms (o.r, 4800));
+    }
+    // Spread 0: both playheads in the centre, the same in both channels (both regions together)
+    {
+        Out o = play (2, 0.0, -1, false);
+        CHECK (o.l == o.r && rms (o.l, 4800) > 0.2, "centred: the same both sides (%f)", rms (o.l, 4800));
+    }
+    // the filter and the envelope are the voice's: a low-pass at 200 Hz takes the 1200 Hz playhead (right)
+    // down far more than the 300 Hz one, and both end with the note's release
+    {
+        Out dry = play (2, 1.0, -1, false), wet = play (2, 1.0, -1, true);
+        const double r1200 = rms (wet.r, 4800) / rms (dry.r, 4800), r300 = rms (wet.l, 4800) / rms (dry.l, 4800);
+        std::printf ("    low-pass at 200 Hz: the 300 Hz playhead x%.3f, the 1200 Hz one x%.4f\n", r300, r1200);
+        CHECK (r1200 < 0.02 && r300 > r1200 * 10.0, "the filter on every playhead: %f, %f", r300, r1200);
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kLength, 0.5);
+        e->setParam (kPlayheads, 1);
+        e->setParam (kHeadSpread, 1.0);
+        e->setParam (headParam (1, kHeadStart), 0.5);
+        e->setParam (kAmpA, 300.0);
+        e->setParam (kAmpR, 50.0);
+        e->noteOn (60, 1.0f);
+        Out a = run (*e, 24000);
+        CHECK (rms (a.l, 0, 960) < rms (a.l, 19200) * 0.1 && rms (a.r, 0, 960) < rms (a.r, 19200) * 0.1,
+               "the attack on both playheads: %f / %f, %f / %f", rms (a.l, 0, 960), rms (a.l, 19200), rms (a.r, 0, 960), rms (a.r, 19200));
+        e->noteOff (60);
+        Out b = run (*e, 24000);
+        CHECK (rms (b.l, 12000) < 1e-4 && rms (b.r, 12000) < 1e-4 && e->activeVoices () == 0, "the release ends both: %f, %f",
+               rms (b.l, 12000), rms (b.r, 12000));
+    }
+    // the granular warp modes (and Beats) render both regions, one each side
+    for (int mode : {kWarpTexture, kWarpTones, kWarpBeatsMode})
+    {
+        Out o = play (2, 1.0, mode, false, 48000);
+        const double fl = freqOf (o.l, 9600, 48000), fr = freqOf (o.r, 9600, 48000);
+        std::printf ("    warp mode %d: left %.0f Hz, right %.0f Hz\n", mode, fl, fr);
+        CHECK (std::fabs (fl - 300.0) < 30.0 && std::fabs (fr - 1200.0) < 120.0 && rms (o.l, 9600) > 0.1 && rms (o.r, 9600) > 0.1,
+               "warp mode %d with 2 playheads: left %.0f Hz (%f), right %.0f Hz (%f)", mode, fl, rms (o.l, 9600), fr, rms (o.r, 9600));
+    }
+    // three and four playheads spread evenly: at 100 % the outer ones at the edges (3: one in the centre)
+    {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kLength, 0.5);
+        e->setParam (kPlayheads, 2); // 3
+        e->setParam (kHeadSpread, 1.0);
+        for (int h = 1; h < 3; ++h) // both extra ones over the 1200 Hz half
+        {
+            e->setParam (headParam (h, kHeadStart), 0.5);
+            e->setParam (headParam (h, kHeadLength), 0.5);
+        }
+        e->noteOn (60, 1.0f);
+        Out o = run (*e, 24000);
+        // left: the main playhead (300 Hz) and half the centre one; right: the last one and half the centre
+        CHECK (rms (o.l, 4800) > 0.2 && rms (o.r, 4800) > 0.2 && std::fabs (freqOf (o.r, 4800, 24000) - 1200.0) < 24.0,
+               "three playheads: %f, %f, right %.0f Hz", rms (o.l, 4800), rms (o.r, 4800), freqOf (o.r, 4800, 24000));
+    }
+    // Channel: a stereo sample's left (300 Hz) or right (1200 Hz) in both outputs; a mono sample ignores it
+    auto st = twoTones (true);
+    for (int ch : {kHeadLeft, kHeadRight})
+    {
+        std::unique_ptr<Engine> e (makeEngine (st));
+        e->setParam (kFilterOn, 0);
+        e->setParam (kLoopOn, 1);
+        e->setParam (headChannelParam (0), ch);
+        e->noteOn (60, 1.0f);
+        Out o = run (*e, 24000);
+        const double want = ch == kHeadLeft ? 300.0 : 1200.0;
+        CHECK (o.l == o.r && std::fabs (freqOf (o.l, 4800, 24000) - want) < want * 0.02,
+               "Channel %s: %.0f Hz in both", ch == kHeadLeft ? "Left" : "Right", freqOf (o.l, 4800, 24000));
+    }
+    {
+        auto render = [&] (int ch) {
+            std::unique_ptr<Engine> e (makeEngine (s));
+            e->setParam (kLoopOn, 1);
+            e->setParam (headChannelParam (0), ch);
+            e->noteOn (60, 1.0f);
+            return run (*e, 4800).l;
+        };
+        CHECK (render (kHeadLeft) == render (kHeadStereo) && render (kHeadRight) == render (kHeadStereo), "a mono sample ignores Channel");
+    }
+}
+
+TEST (playheads_cpu)
+{
+    // CPU scales with the playheads: four of them in every voice stay real-time (best of three)
+    auto s = sine (220.0, 4.0, 44100.0, true);
+    auto timeOnce = [&] (int voices, int heads, bool warp) {
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (kVoices, 14); // 32
+        e->setParam (kFilterFreq, 3000.0);
+        e->setParam (kFilterSlope, 1);
+        e->setParam (kLoopOn, 1);
+        e->setParam (kWarp, warp ? 1 : 0);
+        e->setParam (kWarpMode, kWarpTexture);
+        e->setParam (kPlayheads, heads - 1);
+        e->setParam (kHeadSpread, 0.7);
+        for (int i = 0; i < voices; ++i)
+            e->noteOn (40 + i, 0.8f);
+        const std::clock_t t0 = std::clock ();
+        run (*e, (int)kHostSr * 4);
+        return 100.0 * (double)(std::clock () - t0) / CLOCKS_PER_SEC / 4.0;
+    };
+    auto timeIt = [&] (int voices, int heads, bool warp) {
+        double best = 1e9;
+        for (int i = 0; i < 3; ++i)
+            best = std::min (best, timeOnce (voices, heads, warp));
+        return best;
+    };
+    const double one = timeIt (8, 1, false), four = timeIt (8, 4, false), tex1 = timeIt (4, 1, true), tex4 = timeIt (4, 4, true);
+    std::printf ("    CPU, 8 classic voices: %.1f%% with 1 playhead, %.1f%% with 4; 4 texture voices: %.1f%%, %.1f%%\n", one, four,
+                 tex1, tex4);
+    CHECK (four < 25.0, "8 classic voices with 4 playheads too slow: %.1f%%", four); // (about 13 % here)
+    CHECK (tex4 < 25.0, "4 texture voices with 4 playheads too slow: %.1f%%", tex4); // (about 12 % here)
+}
+
 TEST (low_pass_does_not_click_when_a_deep_note_stops)
 {
     // a deep note through the low-pass at a low cutoff: a new note taking over (one voice) and the

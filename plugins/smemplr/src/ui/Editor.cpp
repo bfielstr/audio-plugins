@@ -293,6 +293,9 @@ void Editor::onClose ()
     waveform = nullptr;
     filterDisplay = nullptr;
     envDisplay = nullptr;
+    headSpreadKnob = nullptr;
+    headChannels.fill (nullptr);
+    headLabels.fill (nullptr);
 }
 
 // --- building ---------------------------------------------------------------------
@@ -370,6 +373,17 @@ void Editor::buildUI (CFrame* f)
     bind (classicGroup, new Toggle (CRect (256, 58, 310, 76), this, kSnap, "Snap"));
     bind (classicGroup, new Choice (CRect (384, 24, 454, 58), this, kVoices, "Voices"));
     bind (classicGroup, new Toggle (CRect (384, 64, 454, 82), this, kRetrig, "Retrig"));
+    // more playheads (Engine.cpp: Voice::mixHeads): how many, how far apart in the stereo field, and the
+    // channel each one reads, by number (the waveform numbers their regions the same way)
+    bind (classicGroup, new Choice (CRect (462, 24, 520, 58), this, kPlayheads, "Playheads"));
+    headSpreadKnob = bind (classicGroup, new Knob (knobRect (524, 24), this, kHeadSpread, "Spread", true));
+    for (int h = 0; h < kMaxPlayheads; ++h)
+    {
+        const double y = 26 + h * 18;
+        headLabels[(size_t)h] = new Label (CRect (586, y, 596, y + 14), std::to_string (h + 1), 10.0, true, 1);
+        classicGroup->addView (headLabels[(size_t)h]);
+        headChannels[(size_t)h] = bind (classicGroup, new Segmented (CRect (598, y, 694, y + 14), this, headChannelParam (h), {"St", "L", "R"}));
+    }
 
     oneShotGroup = new Group (CRect (0, 0, 700, 98));
     sp->addView (oneShotGroup);
@@ -760,6 +774,7 @@ void Editor::paramChanged (uint32_t id)
         case kLfoSync:
         case kLfoOn:
         case kAmpLoopMode:
+        case kPlayheads:
         case kWarpBeats: updateVisibility (); break;
         default: break;
     }
@@ -1804,6 +1819,18 @@ void Editor::updateVisibility ()
     const bool sync = std::lround (plainValue (kLfoSync)) == 1;
     lfoRateHz->setVisible (!sync);
     lfoRateSync->setVisible (sync);
+
+    // the playheads: Spread and the channels of the ones not playing look disabled
+    const int heads = (int)std::lround (plainValue (kPlayheads)) + 1;
+    if (headSpreadKnob)
+        headSpreadKnob->setEnabledLook (heads > 1);
+    for (int h = 0; h < kMaxPlayheads; ++h)
+    {
+        if (headChannels[(size_t)h])
+            headChannels[(size_t)h]->setEnabledLook (h < heads);
+        if (headLabels[(size_t)h])
+            headLabels[(size_t)h]->setDim (h >= heads);
+    }
 
     for (int t = 0; t < 3; ++t)
         envTabs[t]->setVisible (t == envTab);

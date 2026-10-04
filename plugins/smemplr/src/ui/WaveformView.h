@@ -2,6 +2,7 @@
 
 #include "UiKit.h"
 
+#include "Params.h"
 #include "SampleData.h"
 #include "Slices.h"
 
@@ -63,12 +64,18 @@ public:
 
 private:
     // LoopRegion: inside the shaded loop (Loop on), above its bar: a drag moves the loop like the bar, a click
-    // auditions as anywhere else in the waveform
-    enum class Handle { None, FlagStart, FlagEnd, Start, LoopEnd, LoopBody, Slice, Ruler, Preview, LoopRegion };
+    // auditions as anywhere else in the waveform. HeadStart / HeadEnd / HeadBody: an extra playhead's
+    // region (dragHead: which), its start, its end, or the whole region by its bar
+    enum class Handle { None, FlagStart, FlagEnd, Start, LoopEnd, LoopBody, Slice, Ruler, Preview, LoopRegion, HeadStart, HeadEnd, HeadBody };
 
     SamplePtr sample () const;
     VSTGUI::CRect waveArea () const;
     VSTGUI::CRect loopBar (const SampleData& s) const; // the loop brace at the bottom (Classic mode)
+    // The extra playheads (Classic, Playheads 2 .. 4): how many there are (1: none shown), playhead k's
+    // (1 .. 3) region (start, loop end in frames) and its bar, stacked above the loop's
+    int extraHeads () const;
+    void headPositions (const SampleData& s, int k, double& hs, double& he) const;
+    VSTGUI::CRect headBar (const SampleData& s, int k) const;
     VSTGUI::CRect rulerArea () const;
     double xToPos (double x) const; // -> normalized sample position
     double posToX (double pos) const;
@@ -83,7 +90,8 @@ private:
     // The loop's drags with the Grid on (step: gridFrames, > 0): the loop starts on a grid line and is a
     // whole number of steps long (at least one; held inside the flags fs .. fe). keepStart: only the
     // length snaps (the loop's end dragged), the start stays where it is
-    void setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart = false);
+    void setLoopOnGrid (double rs, double len, double fs, double fe, double step, bool keepStart = false,
+                        uint32_t startId = kStart, uint32_t lengthId = kLength);
 
     void setZoomedToSelection (bool z);
 
@@ -94,6 +102,7 @@ private:
     double heightZoom = 1.0;
     Handle drag = Handle::None;
     int dragSlice = -1;
+    int dragHead = 0; // the extra playhead dragged (1 .. 3)
     bool dragSliceManual = false;
     double dragSliceOrigPos = 0.0, dragSlicePos = 0.0;
     VSTGUI::CPoint dragStartPoint, lastPoint;
