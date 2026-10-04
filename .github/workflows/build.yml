@@ -46,6 +46,16 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
             cmake -B build -A x64
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            # Ninja keeps every core busy (Makefiles left the Mac build at about 27 minutes). Release tags
+            # build universal binaries (arm64 and x86_64, CMakeLists.txt); everything else builds only
+            # the runner's own architecture, half the compiling, which is what the tests run on anyway.
+            command -v ninja >/dev/null || brew install ninja
+            ARCH_ARGS=()
+            if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+              ARCH_ARGS=(-DCMAKE_OSX_ARCHITECTURES="$(uname -m)")
+            fi
+            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${ARCH_ARGS[@]}"
           else
             cmake -B build -DCMAKE_BUILD_TYPE=Release
           fi
@@ -65,6 +75,14 @@ jobs:
           cd build/VST3/Release
           ls -d *.vst3
           test -d Smemplr.vst3 && test -d Multidyn.vst3 && test -d Locus.vst3 && test -d Stretchr.vst3 && test -d Smacheratr.vst3 && test -d Para.vst3 && test -d Widr.vst3 && test -d Wubr.vst3 && test -d Levlr.vst3 && test -d Deepr.vst3 && test -d Smoothr.vst3 && test -d Gently.vst3 && test -d Dropr.vst3 && test -d Orbitr.vst3
+          # a release's Mac plug-ins must run on Apple Silicon and Intel (pull requests build one architecture)
+          if [ "$RUNNER_OS" = "macOS" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            for p in *.vst3; do
+              archs=$(lipo -archs "$p/Contents/MacOS/${p%.vst3}")
+              echo "$p: $archs"
+              [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || { echo "$p is not universal"; exit 1; }
+            done
+          fi
           case "$RUNNER_OS" in
             macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gently.vst3 Dropr.vst3 Orbitr.vst3 ;;
             Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gently.vst3 Dropr.vst3 Orbitr.vst3 ;;
