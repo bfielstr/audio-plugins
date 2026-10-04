@@ -4,8 +4,17 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # (a change that only touches documentation builds nothing; tags always build, whatever they change)
+    paths-ignore: ["**.md", "docs/**"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
+
+# A newer push to a pull request stops the run for the older one. Runs on main and on tags always finish
+# (a release must never be cancelled half-way).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: write # needed to publish releases on tags
@@ -39,11 +48,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libx11-dev libx11-xcb-dev libxcb-util-dev libxcb-cursor-dev \
             libxcb-keysyms1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libfontconfig1-dev libcairo2-dev libfreetype6-dev libpango1.0-dev libgtkmm-3.0-dev zip
+            libfontconfig1-dev libcairo2-dev libfreetype6-dev libpango1.0-dev libgtkmm-3.0-dev zip ccache
+
+      # The VST3 SDK, cloned and patched once (cmake/PluginKit.cmake, cmake/PatchVstgui.cmake) and kept
+      # until either file changes (the tag it clones is in PluginKit.cmake)
+      - name: Cache the VST3 SDK
+        uses: actions/cache@v4
+        with:
+          path: external/vst3sdk
+          key: vst3sdk-${{ runner.os }}-${{ hashFiles('cmake/PluginKit.cmake', 'cmake/PatchVstgui.cmake') }}
+
+      # The compiler cache (macOS and Linux): a push that changes a few files recompiles only those.
+      # Releases (universal on macOS) and everything else (one architecture) keep separate caches.
+      - name: Cache compiled objects
+        if: runner.os != 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ runner.os }}-${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'dev' }}-${{ github.sha }}
+          restore-keys: ccache-${{ runner.os }}-${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'dev' }}-
 
       - name: Configure
         shell: bash
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
         run: |
+          # every compiler goes through ccache on macOS and Linux (C, C++ and the Objective-C++ files)
+          CCACHE_ARGS=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
           if [ "$RUNNER_OS" = "Windows" ]; then
             cmake -B build -A x64
           elif [ "$RUNNER_OS" = "macOS" ]; then
@@ -51,22 +82,36 @@ jobs:
             # build universal binaries (arm64 and x86_64, CMakeLists.txt); everything else builds only
             # the runner's own architecture, half the compiling, which is what the tests run on anyway.
             command -v ninja >/dev/null || brew install ninja
+            command -v ccache >/dev/null || brew install ccache
             ARCH_ARGS=()
             if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
               ARCH_ARGS=(-DCMAKE_OSX_ARCHITECTURES="$(uname -m)")
             fi
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${ARCH_ARGS[@]}"
+            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${ARCH_ARGS[@]}" "${CCACHE_ARGS[@]}"
           else
-            cmake -B build -DCMAKE_BUILD_TYPE=Release
+            cmake -B build -DCMAKE_BUILD_TYPE=Release "${CCACHE_ARGS[@]}"
           fi
 
       # Building also runs Steinberg's VST3 validator against the plug-in.
       - name: Build
-        run: cmake --build build --config Release --parallel
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_MAXSIZE: 1G
+        shell: bash
+        run: |
+          cmake --build build --config Release --parallel
+          if [ "$RUNNER_OS" != "Windows" ]; then ccache --show-stats; fi
 
       - name: Test
         # (a hung test fails after 10 minutes with its output, instead of holding the job for hours)
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 600
+        # The core tests run side by side, one per core (some check a CPU budget, so no more of them than
+        # cores: std::clock is wall time on Windows); the host tests (each opens a real editor window and
+        # clicks in it) one at a time.
+        shell: bash
+        run: |
+          cores=${NUMBER_OF_PROCESSORS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}
+          ctest --test-dir build -C Release --output-on-failure --timeout 600 -E hosttest --parallel "$cores"
+          ctest --test-dir build -C Release --output-on-failure --timeout 600 -R hosttest --no-tests=ignore
 
       - name: Package
         shell: bash
