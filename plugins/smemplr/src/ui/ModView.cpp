@@ -285,13 +285,13 @@ void ModOverlay::draw (CDrawContext* ctx)
                 // parameter, energy idle otherwise
                 ctx->setLineWidth (1.0);
                 ctx->setFrameColor (theme::kLineDim);
-                ctx->drawArc (rr, 135.0f, 405.0f, kDrawStroked);
+                pk::draw::arc (ctx, rr, 135.0, 405.0);
                 const double a0 = knobAngle (base), a1 = knobAngle (base + m.depth);
                 ctx->setLineWidth (2.0);
                 ctx->setFrameColor (working ? modColor (m.lfo) : theme::kEnergyIdle);
                 ctx->setLineStyle (modLineStyle (m.lfo));
                 if (std::fabs (a1 - a0) > 0.5)
-                    ctx->drawArc (rr, (float)std::min (a0, a1), (float)std::max (a0, a1), kDrawStroked);
+                    pk::draw::arc (ctx, rr, std::min (a0, a1), std::max (a0, a1));
                 ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapRound));
             }
             if (any)
