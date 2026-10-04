@@ -66,7 +66,9 @@ inline const char* forParam (uint32_t id)
         case kMode:
             return "Playback mode. Classic: pitched instrument with ADSR and looping. One-Shot: plays the whole region "
                    "once, monophonic (drums, phrases). Slicing: cuts the sample into slices played from C1 upwards.";
-        case kGain: return "Level of the sample before the filter (separate from the output Volume).";
+        case kGain:
+            return "Level of the sample before the filter (separate from the output Volume). The waveform is drawn at this "
+                   "level: what it would push past full scale (0 dBFS) shows in the peak colour.";
         case kStart: return "Where playback starts, as a percentage of the region between the flags.";
         case kLength:
             return "The loop's length, from Start (a share of the region between the flags). The sample itself "

@@ -58,7 +58,9 @@ sideways, to pan. **Zoom**, at the right end of the ruler, zooms to the loop (Cl
 to the region between the flags; click it again to see the whole sample (double-clicking the ruler
 does the same). **Height** beside it makes the waveform taller, up to 16 times, to see quiet parts
 (drag it sideways, scroll on it, or Alt + scroll over the waveform; double-click to reset). It only
-changes the drawing. Live playheads show what is playing.
+changes the drawing. The waveform is drawn at the level **Gain** gives it: turn Gain up and it grows,
+and what would go past full scale (0 dBFS) is drawn in the bright peak colour. Live playheads show what
+is playing.
 
 **Grid**, at the right end of the ruler (off by default), makes the loop snap to a beat grid while you
 drag it: its start, its end, or the whole loop by its bar or its shaded region. The loop then always
