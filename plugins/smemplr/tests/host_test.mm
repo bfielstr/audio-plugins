@@ -855,15 +855,23 @@ int main (int argc, char** argv)
             rig.stop ();
         }
 
-        // editor resize constraint keeps the aspect ratio
+        // the window resizes freely: any shape within the zoom range is allowed (the UI keeps its own
+        // shape inside it, zoomed to fit and centred), only sizes past the smallest and largest zoom
+        // are clamped
         if (IPlugView* v = rig.controller->createView (ViewType::kEditor))
         {
+            const double w = smemplr::Editor::kWidth, h = smemplr::Editor::kHeight + pk::EditorBase::kInfoHeight;
             ViewRect r (0, 0, 1665, 900);
             CHECK (v->canResize () == kResultTrue, "resizable");
             v->checkSizeConstraint (&r);
-            // the editor keeps its aspect ratio (1328 x 1012 with the effects rack and the modulation)
-            const double w = smemplr::Editor::kWidth, h = smemplr::Editor::kHeight;
-            CHECK (std::abs (r.getWidth () * h - r.getHeight () * w) < w, "aspect %dx%d", r.getWidth (), r.getHeight ());
+            CHECK (r.getWidth () == 1665 && r.getHeight () == 900, "a free shape is kept: %dx%d", r.getWidth (), r.getHeight ());
+            ViewRect tiny (0, 0, 100, 5000);
+            v->checkSizeConstraint (&tiny);
+            CHECK (tiny.getWidth () == (int32)std::lround (w * pk::EditorBase::kMinZoom) &&
+                       tiny.getHeight () == (int32)std::lround (h * pk::EditorBase::kMaxZoom),
+                   "clamped to the zoom range: %dx%d", tiny.getWidth (), tiny.getHeight ());
+            // the zoom such a window shows the UI at: the smaller of the two ratios
+            CHECK (std::abs (pk::EditorBase::zoomFor (1665, 900, w, h) - 900.0 / h) < 1e-9, "zoom fits the height");
             v->release ();
         }
 

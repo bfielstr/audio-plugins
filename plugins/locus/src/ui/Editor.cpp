@@ -57,12 +57,12 @@ void Editor::buildUI (CFrame* f)
     root->addView (latencyLabel);
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
     spectrum = new SpectrumView (CRect (8, 40, 752, 300), this, ctl);
-    spectrum->setTooltipText (help::kSpectrum);
+    pk::setHelp (spectrum, "Spectrum", help::kSpectrum);
     root->addView (spectrum);
 
     auto* p = new Panel (CRect (8, 308, 752, 432), "FOCUS");

@@ -139,11 +139,11 @@ Live, or a file from Finder / Explorer). A DAW's drag carries the clip's name as
 file; the file is what gets loaded. A temporary file (a render the DAW deletes later) is copied to
 Documents/bfielstr/Samples first.
 
-Extras: hover tooltips for every control (**?** toggles them), a clickable/draggable loop bar in
+Extras: help for every control in the info box at the bottom and in hover tooltips (**?** toggles the tooltips), a clickable/draggable loop bar in
 the waveform (the shaded loop above it drags too; a click there still auditions), audition by clicking the waveform (plays the slice under the mouse in Slicing mode),
 ◀ ▶ step through the samples in the current folder, zoom (Cmd/Alt + scroll, or drag the ruler
 vertically) and pan (scroll, or drag the ruler horizontally), live playheads, resizable UI (drag
-the window corner, or Menu → Interface Size).
+the window corner to any shape: the interface keeps its proportions, centred; or Menu → Interface Size).
 
 ## Differences from Live's Simpler
 

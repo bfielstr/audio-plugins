@@ -112,7 +112,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (scStatus);
     root->addView (tip (new ActionButton (CRect (786, 6, 808, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                           [this] { return tooltipsEnabled (); }),
-                        "Show or hide these help tooltips."));
+                        "Show or hide the floating help tooltips (the info box at the bottom shows the same help either way)."));
     root->addView (new ActionButton (CRect (814, 6, 912, 28), "Menu", [this] { showMenu (CPoint (814, 28)); }));
 
     // column headers outside the display
@@ -127,7 +127,7 @@ void Editor::buildUI (CFrame* f)
 
     display = new DynDisplay (CRect (kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom), this,
                               [c = ctl] { return c->getMeters (); });
-    display->setTooltipText (help::kDisplay);
+    pk::setHelp (display, "Bands", help::kDisplay);
     root->addView (display);
 
     // per band: the positions are set in updateLayout()

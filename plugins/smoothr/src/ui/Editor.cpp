@@ -57,7 +57,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (new pk::PresetBar (CRect (580, 6, 776, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (784, 6, 806, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (CPoint (812, 28)); }));
 
@@ -65,7 +65,7 @@ void Editor::buildUI (CFrame* f)
         auto* s = c->getShared ();
         return s ? &s->meters : nullptr;
     });
-    history->setTooltipText (help::kDisplay);
+    pk::setHelp (history, "History", help::kDisplay);
     root->addView (history);
 
     // the limiter: Input, Ceiling, Release (and Auto), Smooth

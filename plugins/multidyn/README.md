@@ -153,4 +153,4 @@ controls on the right.
 - **Side-chain**: route another track into inputs 3/4 in REAPER; On, Gain, Dry/Wet (detector blend)
   and Listen; the status line under the Slope row says whether a signal is routed.
 
-Every control is an automatable parameter; hover any control for help (**?** toggles tooltips).
+Every control is an automatable parameter; point at any control for help in the info box at the bottom (and in a tooltip: **?** toggles the tooltips).

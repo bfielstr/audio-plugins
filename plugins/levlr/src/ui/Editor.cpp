@@ -65,8 +65,8 @@ public:
     void draw (CDrawContext* ctx) override
     {
         const CRect r = getViewSize ();
-        // a header as linework: a ticked dim rule under it and a short copper tick at the left (no plate)
-        pk::draw::tickRule (ctx, r.left, r.right, r.bottom - 1, pk::theme::kLineDim, 8);
+        // a header as linework: a plain dim rule under it and a short copper bar at the left (no plate)
+        pk::draw::rule (ctx, r.left, r.right, r.bottom - 1, pk::theme::kLineDim);
         ctx->setFillColor (pk::theme::kCopper);
         ctx->drawRect (CRect (r.left, r.top + 4, r.left + 2, r.bottom - 5), kDrawFilled);
         double set[kCrossovers], xo[kCrossovers];
@@ -113,7 +113,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (new pk::PresetBar (CRect (580, 6, 776, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (784, 6, 806, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (CPoint (812, 28)); }));
 
@@ -126,7 +126,7 @@ void Editor::buildUI (CFrame* f)
         return s ? s->sampleRate.load () : 48000.0;
     };
     levels = new LevelView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), this, metersOf);
-    levels->setTooltipText (help::kDisplay);
+    pk::setHelp (levels, "Levels", help::kDisplay);
     root->addView (levels);
 
     // each band: its name and range, level, mute and solo; under them its drive and the drive's type

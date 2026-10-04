@@ -82,7 +82,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
@@ -92,7 +92,7 @@ void Editor::buildUI (CFrame* f)
         auto* s = c->getShared ();
         return s ? &s->meters : nullptr;
     });
-    view->setTooltipText (help::kDisplay);
+    pk::setHelp (view, "Filter Response", help::kDisplay);
     root->addView (view);
     // on the display, under the envelope meter: what dragging a handle up or down moves
     bind (root, new Toggle (CRect (kViewRight - 90, kViewTop + 22, kViewRight - 8, kViewTop + 40), this, kDragGain, "Drag Gain"));

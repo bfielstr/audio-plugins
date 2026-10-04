@@ -138,7 +138,7 @@ int main (int argc, char** argv)
             CHECK (win.ok (), "editor");
             ViewRect r;
             CHECK (win.view () && win.view ()->getSize (&r) == kResultOk && r.getWidth () == (int32)Editor::kWidth &&
-                       r.getHeight () == (int32)Editor::kHeight,
+                       r.getHeight () == (int32)(Editor::kHeight + pk::EditorBase::kInfoHeight),
                    "editor size %d x %d", r.getWidth (), r.getHeight ());
             for (int i = 0; i < 20; ++i)
             {

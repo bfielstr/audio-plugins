@@ -73,7 +73,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (status);
     auto* helpBtn = new ActionButton (CRect (644, 6, 666, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
-    helpBtn->setTooltipText ("Show or hide these help tooltips.");
+    helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
     root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
 
@@ -85,7 +85,7 @@ void Editor::buildUI (CFrame* f)
                                  auto* s = c->getShared ();
                                  return s ? &s->meters : nullptr;
                              });
-    shaper->setTooltipText (help::kShaperDisplay);
+    pk::setHelp (shaper, "Analog Curve", help::kShaperDisplay);
     root->addView (shaper);
     bind (root, new Choice (CRect (8, 266, 112, 288), this, kPostClip));
     bind (root, new Toggle (CRect (120, 266, 176, 288), this, kColorOn, "Color"));
@@ -105,7 +105,7 @@ void Editor::buildUI (CFrame* f)
             auto* s = c->getShared ();
             return s ? &s->meters : nullptr;
         });
-    color->setTooltipText (help::kColorDisplay);
+    pk::setHelp (color, "Colour EQ", help::kColorDisplay);
     root->addView (color);
     const uint32_t colorIds[3] = {kColorHi, kColorFreq, kColorWidth};
     for (int i = 0; i < 3; ++i)
