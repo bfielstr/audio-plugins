@@ -712,7 +712,7 @@ void Engine::setSliceEdits (SliceEditsPtr e)
 
 void Engine::setParam (uint32_t id, double plain)
 {
-    if (id >= kNumParams)
+    if (!isValidParam (id)) // (the hidden MIDI parameters are events: Processor.cpp)
         return;
     base[id] = plain;
     applyParam (id, plain);

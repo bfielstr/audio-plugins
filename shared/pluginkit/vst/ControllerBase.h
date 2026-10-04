@@ -112,6 +112,9 @@ protected:
     // Called at the end of initialize(): the saved default, if there is one, as a new instance's
     // settings. A host loading a project then calls setComponentState / setState, which win.
     void applyStartupDefault ();
+    // A table entry that is a setting (reset to its default, copied and pasted as settings): all of them
+    // unless overridden (Smemplr's hidden MIDI parameters are not).
+    virtual bool isSetting (uint32_t) const { return true; }
 
     // every open editor (a host may show more than one view of a plug-in, or open the next before it
     // closes the last): each one follows the parameters

@@ -120,7 +120,7 @@ void Processor::handleParamChanges (IParameterChanges* changes, int numSamples)
         const int32 points = q->getPointCount ();
         if (points <= 0)
             continue;
-        if (id < kNumParams)
+        if (id < kNumParams && !isMidiParam (id))
         {
             int32 offset;
             ParamValue v;
@@ -316,7 +316,7 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         st.norm[id] = normMirror[id].load ();
-        st.has[id] = true;
+        st.has[id] = isValidParam (id); // (not the hidden MIDI parameters)
     }
     st.samplePath = bridge->samplePath ();
     st.ops = bridge->sampleOps ();

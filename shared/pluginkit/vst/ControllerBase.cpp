@@ -277,6 +277,8 @@ void ControllerBase::resetToDefaults ()
 {
     for (uint32_t id = 0; id < tableRef.size (); ++id)
     {
+        if (!isSetting (id))
+            continue;
         const double def = tableRef.defaultNormalized (id);
         beginEdit (id);
         setParamNormalized (id, def);
@@ -527,7 +529,8 @@ std::string ControllerBase::settingsText ()
 {
     SettingValues v;
     for (uint32_t id = 0; id < tableRef.size (); ++id)
-        v.emplace_back (id, getParamNormalized (id));
+        if (isSetting (id))
+            v.emplace_back (id, getParamNormalized (id));
     return settingsToText (presetPlugin, v, &tableRef);
 }
 
@@ -538,7 +541,7 @@ bool ControllerBase::applySettingsText (const std::string& text)
         return false;
     for (const auto& [id, n] : v)
     {
-        if (id >= tableRef.size ())
+        if (id >= tableRef.size () || !isSetting (id))
             continue;
         beginEdit (id);
         setParamNormalized (id, n);

@@ -66,6 +66,7 @@ protected:
         if (bridge)
             bridge->setMods ({});
     }
+    bool isSetting (uint32_t id) const override { return !isMidiParam (id); } // (not reset, copied or pasted)
 
 private:
     void retitleSlot (int slot);

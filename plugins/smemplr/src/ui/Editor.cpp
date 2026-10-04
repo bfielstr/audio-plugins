@@ -338,6 +338,10 @@ void Editor::buildUI (CFrame* f)
     waveform->onFileDropped = [this] (const std::string& p) { loadFile (p); };
     pk::setHelp (waveform, "Waveform", help::kWaveform);
     root->addView (waveform);
+    // over the ruler's right end (WaveformView::kToolsWidth, which the ruler leaves to them): the Grid the
+    // loop's drags snap to and its step
+    bind (root, new Toggle (CRect (836, 39, 874, 53), this, kGridOn, "Grid"));
+    bind (root, new Choice (CRect (878, 39, 936, 53), this, kGridSize));
 
     // ---- sample row -------------------------------------------------------------
     auto* sp = new Panel (CRect (8, 306, 1102, 404), "SAMPLE");
