@@ -1625,8 +1625,7 @@ TEST (crossover_lanes_match_scalar)
         }
     std::printf ("    largest difference %.3g\n", worst);
     // (0 with GCC/Clang on x86; arm64 and MSVC round some steps their own way: 1.6e-5 / 1.7e-5 on signals of
-    // about 1 there, where a
-    // wrong lane would differ by tenths)
+    // about 1 there, where a wrong lane would differ by tenths)
     CHECK (worst < 1e-4, "%g", worst);
 }
 
