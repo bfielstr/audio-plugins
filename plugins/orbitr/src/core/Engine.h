@@ -1,7 +1,8 @@
 // Orbitr: Detonatr's Motion stage on its own, a Doppler swarm in the spirit of Tonsturm's
 // SpinTracer (not affiliated), with its "Liquid Debris"-like setting as the defaults.
 //
-//   input -> Motion (the orbs moving round the listener, each heard through its own delay line; Mix
+//   input -> Motion (the orbs moving round the listener, each heard through its own delay line, playing
+//   the input or, with Grains, their grains of it; Mix
 //   against the input, delayed as much) -> Dry/Wet with the input (delayed as much) -> Output ->
 //   Smacheratr (the optional saturator at the end of every plug-in)
 //
@@ -30,6 +31,9 @@ struct Meters
     std::atomic<int> orbs {0};
     std::array<std::atomic<float>, Motion::kMaxOrbs> orbX {}, orbY {};
     std::atomic<float> distance {3.0f}, radius {2.0f};
+    // Grains: whether the orbs play grains, and each orb's newest grain's window now (0 .. 1)
+    std::atomic<bool> grains {false};
+    std::array<std::atomic<float>, Motion::kMaxOrbs> orbGrain {};
 };
 
 class Engine

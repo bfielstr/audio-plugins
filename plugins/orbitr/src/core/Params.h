@@ -25,14 +25,23 @@ enum ParamId : uint32_t
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields
     kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band, No Overlap and Slope in it: pk::kTailExt3Fields entries
-    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries
+    // Grains (after the end saturator's blocks: the IDs before them are in saved projects)
+    kGrains = kTailExt4Base + pk::kTailExt4Fields, // Off / On: each orb plays grains of the recent input instead of the input
+    kGrainSize,    // ms: each grain's length
+    kGrainDensity, // x: how many grains of an orb overlap (its grains per second x the grain's length)
+    kGrainScatter, // 0 .. 1: how far each grain's slice of the input jumps about (and its start in time)
+    kGrainPitch,   // semitones: the grains' own transposition (before the orb's Doppler)
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
 static_assert (kPattern == 1 && kSpeed == 2 && kDistance == 3 && kRadius == 4 && kSpread == 5 && kRandom == 6 && kFloor == 7 &&
                    kMix == 8 && kDryWet == 9 && kOutput == 10 && kTailBase == 11,
                "Orbitr's parameter IDs are fixed");
+static_assert (kTailExt4Base == 49 && kGrains == 54 && kGrainSize == 55 && kGrainDensity == 56 && kGrainScatter == 57 &&
+                   kGrainPitch == 58 && kNumParams == 59,
+               "saved IDs: the end saturator's fifth block at 49 .. 53, Grains at 54 .. 58");
 
 enum Pattern { kPatternOrbit = 0, kPatternSwarm };
 

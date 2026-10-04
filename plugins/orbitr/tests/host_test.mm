@@ -122,6 +122,15 @@ int main (int argc, char** argv)
             win.click (Editor::kMotionLeft + Editor::kPatternLeft + Editor::kPatternW * 3 / 4, py);
             pump (0.05);
             CHECK (std::lround (plainOf (rig, kPattern)) == kPatternSwarm, "Swarm clicked: %.0f", plainOf (rig, kPattern));
+            // the Grains switch in the GRAINS panel: on, then off again (the screenshot without it)
+            const double gx = Editor::kGrainsLeft + Editor::kPatternLeft + Editor::kPatternW / 2;
+            const double gy = Editor::kGrainsTop + Editor::kPatternTop + Editor::kPatternH / 2;
+            win.click (gx, gy);
+            pump (0.05);
+            CHECK (plainOf (rig, kGrains) >= 0.5, "Grains clicked on: %.0f", plainOf (rig, kGrains));
+            win.click (gx, gy);
+            pump (0.05);
+            CHECK (plainOf (rig, kGrains) < 0.5, "Grains clicked off: %.0f", plainOf (rig, kGrains));
             rig.param (kPattern, toNormalized (kPattern, kPatternSwarm));
             for (int i = 0; i < 20; ++i)
             {

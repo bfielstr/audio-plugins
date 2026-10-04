@@ -1,6 +1,7 @@
 // Orbitr's display (Detonatr's Motion page): the orbs seen from above, round the listener at the
 // bottom, facing up, with their trails, the ball (Swarm) or the circles' reach (Orbit) round the
-// centre at the Distance, and rings every metre (every 5 m when far).
+// centre at the Distance, and rings every metre (every 5 m when far). With Grains, each orb swells
+// with its newest grain and wears a ring.
 #pragma once
 
 #include "Engine.h"
@@ -29,6 +30,8 @@ private:
     int orbs = 0;
     float x[Motion::kMaxOrbs] {}, y[Motion::kMaxOrbs] {};
     float distance = 3.0f, radius = 2.0f;
+    bool grains = false;
+    float grain[Motion::kMaxOrbs] {}; // each orb's newest grain's window (Grains)
     // each orb's trail (the last positions)
     static constexpr int kTrail = 12;
     float tx[Motion::kMaxOrbs][kTrail] {}, ty[Motion::kMaxOrbs][kTrail] {};

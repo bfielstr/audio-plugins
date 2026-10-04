@@ -1,0 +1,12 @@
+# orbitr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: grains, shimmer, pitch, fx
+comment: Sparse short grains an octave up, flung round a fast orbit.
+Pattern = Orbit
+Orbs = 8
+Speed = 30
+Grains = On
+Grain Size = 40 ms
+Grain Density = 0.8
+Grain Scatter = 40 %
+Grain Pitch = 12 st
+Mix = 40 %

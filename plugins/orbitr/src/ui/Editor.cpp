@@ -76,16 +76,26 @@ void Editor::buildUI (CFrame* f)
     for (int i = 0; i < 7; ++i)
         bind (motion, new Knob (CRect (140 + 64 * i, 28, 196 + 64 * i, 92), this, knobs[i]));
 
-    auto* out = new Panel (CRect (608, 298, 752, 414), "OUTPUT");
+    // the grains: each orb plays grains of the recent input instead of the input (the knobs under
+    // MOTION's first four)
+    auto* grains = new Panel (CRect (kGrainsLeft, kGrainsTop, 600, kGrainsTop + 116), "GRAINS");
+    root->addView (grains);
+    bind (grains, new Toggle (CRect (kPatternLeft, kPatternTop, kPatternLeft + kPatternW, kPatternTop + kPatternH), this, kGrains, "Grains"));
+    const uint32_t grainKnobs[] = {kGrainSize, kGrainDensity, kGrainScatter, kGrainPitch};
+    for (int i = 0; i < 4; ++i)
+        bind (grains, new Knob (CRect (140 + 64 * i, 28, 196 + 64 * i, 92), this, grainKnobs[i], nullptr, i == 3));
+
+    // the output, beside both (its knobs on their rows)
+    auto* out = new Panel (CRect (608, 298, 752, kGrainsTop + 116), "OUTPUT");
     root->addView (out);
-    bind (out, new Knob (CRect (16, 28, 72, 92), this, kDryWet));
-    bind (out, new Knob (CRect (80, 28, 136, 92), this, kOutput, nullptr, true));
+    bind (out, new Knob (CRect (44, 28, 100, 92), this, kDryWet));
+    bind (out, new Knob (CRect (44, 152, 100, 216), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
                                                     [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-    tail->add (root, CRect (8, 422, 752, 422 + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, CRect (8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -96,7 +106,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (display && id < kTailBase)
+    if (display && (id < kTailBase || id >= kGrains))
         display->invalid ();
 }
 

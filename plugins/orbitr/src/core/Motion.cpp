@@ -20,6 +20,26 @@ struct Lcg
         return (double)(s >> 8) / (double)(1u << 23) - 1.0;
     }
 };
+
+// the grains' Hann window, kWindow + 1 points (the last for the interpolation's neighbour)
+constexpr int kWindow = 1024;
+struct HannTable
+{
+    float w[kWindow + 2];
+    HannTable ()
+    {
+        for (int i = 0; i <= kWindow + 1; ++i)
+            w[i] = (float)(0.5 - 0.5 * std::cos (kTwoPi * std::min (i, kWindow) / kWindow));
+    }
+};
+const HannTable kHann;
+inline float hann (double phase) // phase 0 .. 1
+{
+    const double x = phase * kWindow;
+    const int i = std::clamp ((int)x, 0, kWindow);
+    const float f = (float)(x - i);
+    return kHann.w[i] + (kHann.w[i + 1] - kHann.w[i]) * f;
+}
 } // namespace
 
 void Motion::prepare (double sampleRate, int maxBlock)
@@ -34,6 +54,16 @@ void Motion::prepare (double sampleRate, int maxBlock)
         size <<= 1;
     buf.assign ((size_t)size, 0.0f);
     mask = size - 1;
+    orbBuf.assign ((size_t)size * kMaxOrbs, 0.0f);
+    // the grains read the input from a longer line: a slice and Scatter (1 s), and a grain at half
+    // speed falling behind by half its length (0.25 s)
+    histMax = (kSliceSpan + kScatterSpan + 0.5 * kMaxGrainMs * 0.001) * sr + 8.0;
+    int hsize = 1;
+    while (hsize < (int)histMax + 16)
+        hsize <<= 1;
+    hist.assign ((size_t)hsize, 0.0f);
+    histMask = hsize - 1;
+    gMixStep = (float)(1.0 / (0.03 * sr));
     dry.prepare (baseDelay);
     smooth = 1.0 - std::exp (-(double)kStep / (0.05 * sr));
     Lcg rng {0x2545F491u};
@@ -55,7 +85,9 @@ void Motion::prepare (double sampleRate, int maxBlock)
 void Motion::reset ()
 {
     std::fill (buf.begin (), buf.end (), 0.0f);
+    std::fill (hist.begin (), hist.end (), 0.0f);
     writePos = 0;
+    histPos = 0;
     stepLeft = 0;
     dry.reset ();
     dSm = distance;
@@ -73,6 +105,13 @@ void Motion::reset ()
         t.fill ({});
     started = false;
     updateRates ();
+    std::fill (orbBuf.begin (), orbBuf.end (), 0.0f);
+    grainPath = grains;
+    gMix = grains ? 1.0f : 0.0f;
+    quiet = 0;
+    for (int k = 0; k < kMaxOrbs; ++k)
+        grainOrbs[(size_t)k].rng = 0x51ED270Bu + 0x9E3779B9u * (uint32_t)k;
+    startGrains ();
 }
 
 void Motion::setOrbs (int n) { numOrbs = std::clamp (n, 1, kMaxOrbs); }
@@ -199,6 +238,177 @@ void Motion::retarget ()
 
 void Motion::process (float* l, float* r, int n)
 {
+    if (grains && !grainPath)
+    {
+        // Grains on: each orb's line starts as a copy of the input's (what its taps read now), then the
+        // grains fade in
+        const int size = mask + 1;
+        for (int k = 0; k < kMaxOrbs; ++k)
+        {
+            float* o = orbBuf.data () + (size_t)k * (size_t)size;
+            for (int i = 0; i < size; ++i)
+                o[(writePos - i) & mask] = buf[(size_t)((writePos - i) & mask)];
+        }
+        gMix = 0.0f;
+        quiet = 0;
+        startGrains ();
+        grainPath = true;
+    }
+    else if (!grains && grainPath && quiet > mask)
+        grainPath = false; // faded out, and the orbs' lines hold nothing but the input any more: back to the input's
+    if (grainPath)
+        processGrains (l, r, n);
+    else
+        processPlain (l, r, n);
+}
+
+float Motion::grainLevel (int k) const
+{
+    if (!grainPath || k < 0 || k >= kMaxOrbs)
+        return 0.0f;
+    const auto& go = grainOrbs[(size_t)k];
+    return go.newest >= 0 && go.g[(size_t)go.newest].on ? hann (go.g[(size_t)go.newest].phase) * gMix : 0.0f;
+}
+
+void Motion::startGrains ()
+{
+    // each orb's first grain a share of the gap between grains after the one before
+    const double gap = grainMs * 0.001 * sr / density;
+    for (int k = 0; k < kMaxOrbs; ++k)
+    {
+        auto& go = grainOrbs[(size_t)k];
+        for (auto& g : go.g)
+            g.on = false;
+        go.newest = -1;
+        go.wait = 1.0 + gap * k / std::max (1, numOrbs);
+    }
+}
+
+void Motion::startGrain (int k)
+{
+    auto& go = grainOrbs[(size_t)k];
+    Lcg rng {go.rng};
+    const double u = 0.5 * (rng.next () + 1.0), v = rng.next ();
+    go.rng = rng.s;
+    const double len = std::max (16.0, grainMs * 0.001 * sr);
+    const double speed = std::pow (2.0, grainPitch / 12.0);
+    go.wait += len / density * (1.0 + 0.5 * scatter * v);
+    if (go.wait < 1.0)
+        go.wait = 1.0;
+    int slot = -1;
+    for (int i = 0; i < kMaxGrains; ++i)
+        if (!go.g[(size_t)i].on)
+        {
+            slot = i;
+            break;
+        }
+    if (slot < 0)
+        return; // (all busy: this one is dropped)
+    Grain& g = go.g[(size_t)slot];
+    g.drift = 1.0 - speed;
+    // where it starts reading: the orb's slice, scattered further back; a grain faster than the input
+    // starts far enough back not to catch up with it (Hermite reads two samples ahead)
+    double back = (kSliceSpan * k / std::max (1, numOrbs) + kScatterSpan * scatter * u) * sr;
+    back = std::max (back, 3.0 - std::min (0.0, g.drift) * len);
+    back = std::min (back, histMax - std::max (0.0, g.drift) * len);
+    g.back = back;
+    g.phase = 0.0;
+    g.phaseStep = 1.0 / len;
+    g.amp = density <= 2.0 ? 1.0f : (float)std::sqrt (2.0 / density);
+    g.on = true;
+    go.newest = slot;
+}
+
+inline float Motion::cloud (int k)
+{
+    auto& go = grainOrbs[(size_t)k];
+    go.wait -= 1.0;
+    if (go.wait <= 0.0)
+        startGrain (k);
+    const float* h = hist.data ();
+    const int hm = histMask;
+    float y = 0.0f;
+    for (auto& g : go.g)
+    {
+        if (!g.on)
+            continue;
+        const double pos = (double)histPos - g.back;
+        const double fl = std::floor (pos);
+        const int i0 = (int)fl;
+        const float fr = (float)(pos - fl);
+        y += dsp::hermite (h[(i0 - 1) & hm], h[i0 & hm], h[(i0 + 1) & hm], h[(i0 + 2) & hm], fr) * hann (g.phase) * g.amp;
+        g.phase += g.phaseStep;
+        g.back += g.drift;
+        if (g.phase >= 1.0)
+            g.on = false;
+    }
+    return y;
+}
+
+void Motion::processGrains (float* l, float* r, int n)
+{
+    const float m = mix, target = grains ? 1.0f : 0.0f;
+    float* b = buf.data ();
+    const int size = mask + 1;
+    for (int i = 0; i < n; ++i)
+    {
+        if (stepLeft == 0)
+        {
+            retarget ();
+            stepLeft = kStep;
+        }
+        --stepLeft;
+        const float x = 0.5f * (l[i] + r[i]);
+        b[writePos] = x;
+        hist[(size_t)histPos] = x;
+        // the crossfade between the input and the grains in the orbs' lines
+        if (gMix != target)
+            gMix = target > gMix ? std::min (target, gMix + gMixStep) : std::max (target, gMix - gMixStep);
+        quiet = gMix == 0.0f ? std::min (quiet + 1, 1 << 30) : 0;
+        const int w = writePos;
+        const float dryPart = (1.0f - gMix) * x;
+        for (int k = 0; k < kMaxOrbs; ++k)
+        {
+            float s = dryPart;
+            if (k < numOrbs && gMix > 0.0f)
+                s += gMix * cloud (k);
+            orbBuf[(size_t)k * (size_t)size + (size_t)w] = s;
+        }
+        float wl = 0.0f, wr = 0.0f;
+        for (int k = 0; k < kMaxOrbs; ++k)
+        {
+            auto& t = taps[(size_t)k];
+            const float* o = orbBuf.data () + (size_t)k * (size_t)size;
+            for (int j = 0; j < 4; ++j)
+            {
+                Tap& tap = t[(size_t)j];
+                if (tap.gain == 0.0f && tap.gainStep == 0.0f)
+                    continue;
+                const float pos = (float)w - tap.delay;
+                int i0 = (int)pos;
+                if ((float)i0 > pos)
+                    --i0;
+                const float fr = pos - (float)i0;
+                const float y = dsp::hermite (o[(i0 - 1) & mask], o[i0 & mask], o[(i0 + 1) & mask], o[(i0 + 2) & mask], fr) * tap.gain;
+                if (j & 1)
+                    wr += y;
+                else
+                    wl += y;
+                tap.delay += tap.delayStep;
+                tap.gain += tap.gainStep;
+            }
+        }
+        writePos = (writePos + 1) & mask;
+        histPos = (histPos + 1) & histMask;
+        float dl = l[i], dr = r[i];
+        dry.tick (dl, dr);
+        l[i] = dl + (wl - dl) * m;
+        r[i] = dr + (wr - dr) * m;
+    }
+}
+
+void Motion::processPlain (float* l, float* r, int n)
+{
     const float m = mix;
     float* b = buf.data ();
     for (int i = 0; i < n; ++i)
@@ -210,6 +420,7 @@ void Motion::process (float* l, float* r, int n)
         }
         --stepLeft;
         b[writePos] = 0.5f * (l[i] + r[i]);
+        hist[(size_t)histPos] = b[writePos]; // (for the grains, should they start)
         float wl = 0.0f, wr = 0.0f;
         for (int k = 0; k < kMaxOrbs; ++k)
         {
@@ -234,6 +445,7 @@ void Motion::process (float* l, float* r, int n)
             }
         }
         writePos = (writePos + 1) & mask;
+        histPos = (histPos + 1) & histMask;
         float dl = l[i], dr = r[i];
         dry.tick (dl, dr);
         l[i] = dl + (wl - dl) * m;
