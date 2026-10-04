@@ -156,7 +156,12 @@ is cutting. The readouts at the top show each band's frequency and its cut now.
 **Output** (±24 dB, before the smacheratr at the end) sit at the right of the controls.
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB), with all
-its controls, its own gentlr included.
+its controls, its own gentlr included. While it is off it folds to its header strips; click a strip (or
+switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+
+Grabbing any of a band's controls (its handle or edge in the display, a knob or switch of its own, its
+Threshold slider in Advanced mode) selects the band: its handle lights, and so do its header and its
+Threshold slider.
 
 gentlr is also in smemplr's effects rack.
 

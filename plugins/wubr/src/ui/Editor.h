@@ -1,6 +1,6 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailDisplays.h"
+#include "smacheratr/src/ui/TailPanel.h"
 
 #include "../core/Params.h"
 
@@ -20,7 +20,8 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 900.0;
-    static constexpr double kHeight = 704.0;
+    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 448, 8 px clear under it
+    static constexpr double kHeight = 448.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
     // layout (also used by the host test)
     static constexpr double kBandTop = 40.0, kBandBottom = 220.0, kRowTop = 228.0, kShapeTop = 258.0, kShapeBottom = 440.0;
     static constexpr double kShapeLeft = 8.0, kShapeRight = 592.0;
@@ -37,7 +38,7 @@ private:
     void updateLooks ();
 
     Controller* ctl;
-    std::unique_ptr<smacheratr::TailDisplays> tailDisplays;
+    std::unique_ptr<smacheratr::TailPanel> tail;
     BandView* bands = nullptr;
     ShapeView* shapes[kBands] {};
     int shown = 0;

@@ -47,6 +47,24 @@ ColorView::ColorView (const CRect& r, pk::ParamHost* h, RateSource rs, MeterSour
 {
 }
 
+void ColorView::setLayer (Layer l)
+{
+    if (l == front)
+        return;
+    front = l;
+    hoverLink = -1;
+    invalid ();
+}
+
+void ColorView::setSelectedBand (int band)
+{
+    band = band < 0 ? -1 : std::min (band, kGentlrBands - 1);
+    if (band == selected)
+        return;
+    selected = band;
+    invalid ();
+}
+
 double ColorView::sampleRate () const
 {
     const double r = rate ? rate () : 0.0;
@@ -59,7 +77,7 @@ GentlrLayout ColorView::layoutNow () const { return shownLayout (host, smacherat
 
 int ColorView::links (GlueBorder out[kGentlrBands], CPoint at[kGentlrBands]) const
 {
-    if (host->plainValue (kClarity) < 0.5)
+    if (host->plainValue (kClarity) < 0.5 || front != Layer::Gentlr)
         return 0;
     const int n = linkBorders (host, smacheratrBandParams (), out);
     for (int i = 0; i < n; ++i)
@@ -171,17 +189,19 @@ void ColorView::paintBase (CDrawContext* ctx, const bool clarity[], const Clarit
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
     }
 
-    // Gentlr's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
+    // Gentlr's bands, behind the curves: their ranges shaded, their edges (drag them for the width); fainter
+    // while the colour layer is in front
+    const bool gentlrFront = front == Layer::Gentlr;
     for (int k = 0; k < kGentlrBands; ++k)
     {
         if (!clarity[k])
             continue;
         const double x0 = xOfHz (bands[k].lowHz), x1 = xOfHz (bands[k].highHz);
-        ctx->setFillColor (clarityColor (k, 16));
+        ctx->setFillColor (clarityColor (k, gentlrFront ? 16 : 8));
         ctx->drawRect (CRect (x0, all.top, x1, all.bottom), kDrawFilled);
         ctx->setLineWidth (1.0);
         const bool edgeActive = dragBand == k && (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth);
-        ctx->setFrameColor (edgeActive ? theme::kEnergyLive : clarityColor (k, 90));
+        ctx->setFrameColor (edgeActive ? theme::kEnergyLive : clarityColor (k, gentlrFront ? 90 : 36));
         ctx->drawLine (CPoint (x0, all.top), CPoint (x0, all.bottom));
         ctx->drawLine (CPoint (x1, all.top), CPoint (x1, all.bottom));
     }
@@ -202,11 +222,16 @@ void ColorView::paintBase (CDrawContext* ctx, const bool clarity[], const Clarit
         }
         path->addLine (CPoint (all.right, yOfDb (0.0)));
         path->closeSubpath ();
-        // the colour filters' response: a faint copper body under a text-coloured trace (dim when off)
-        ctx->setFillColor (on ? theme::withAlpha (theme::kCopper, 40) : theme::withAlpha (theme::kLineDim, 60));
-        ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
+        // the colour filters' response: a faint copper body under a text-coloured trace (dim when off); with
+        // Gentlr in front, only a faint trace behind it
+        if (!gentlrFront)
+        {
+            ctx->setFillColor (on ? theme::withAlpha (theme::kCopper, 40) : theme::withAlpha (theme::kLineDim, 60));
+            ctx->drawGraphicsPath (path, CDrawContext::kPathFilled);
+        }
         ctx->setLineWidth (1.0);
-        ctx->setFrameColor (on ? theme::kText : theme::kTextDim);
+        const CColor trace = on ? theme::kText : theme::kTextDim;
+        ctx->setFrameColor (gentlrFront ? theme::withAlpha (trace, 70) : trace);
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 }
@@ -228,7 +253,7 @@ void ColorView::draw (CDrawContext* ctx)
     // up there (Gentlr's cuts and ranges lie below 0 dB, its readouts start under the labels), so while
     // the colour handles stay clear of them they go into the layer too, the same as drawn last.
     const bool labelsUnder = std::min (loHandle ().y, hiHandle ().y) - kHandleRadius - 2.0 >= all.top + 34.0;
-    const uint64_t key = pk::LayerKey ().params (host).add (sampleRate (), edgeHeld ? dragBand : -1, labelsUnder);
+    const uint64_t key = pk::LayerKey ().params (host).add (sampleRate (), edgeHeld ? dragBand : -1, labelsUnder, (int)front);
     baseLayer.draw (ctx, all, key, [&] (CDrawContext* c) {
         paintBase (c, clarity, bands);
         if (labelsUnder)
@@ -242,16 +267,22 @@ void ColorView::draw (CDrawContext* ctx)
 
     // Gentlr at work, as a multiband compressor shows its bands: the most each can cut outlined, the
     // cut it is making right now filled in from the 0 dB line, a handle at its centre and its readout
+    // (with the colour layer in front: the cuts and the most each band can cut, faint, no handles to grab
+    // and no readouts)
+    const bool gentlrFront = front == Layer::Gentlr;
+    auto faintHandle = [ctx] (const CPoint& c) {
+        ctx->setLineWidth (1.0);
+        ctx->setFrameColor (theme::kLineDim);
+        ctx->drawEllipse (CRect (c.x - 3.5, c.y - 3.5, c.x + 3.5, c.y + 3.5), kDrawStroked);
+    };
     int pills = 0;
     for (int k = 0; k < kGentlrBands; ++k)
     {
         if (!clarity[k])
         {
-            // Gentlr on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down
-            if (clarityShown (k))
-            {
-                pk::draw::handle (ctx, clarityHandle (k), kHandleRadius, false, false);
-            }
+            // Gentlr on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down (lit while shown)
+            if (clarityShown (k) && gentlrFront)
+                pk::draw::handle (ctx, clarityHandle (k), kHandleRadius, selected == k, false);
             continue;
         }
         const ClarityBand& band = bands[k];
@@ -281,7 +312,7 @@ void ColorView::draw (CDrawContext* ctx)
         if (auto range = gainPath (-host->plainValue (kGentlrRangeIds[k]), false))
         {
             ctx->setLineWidth (1.0);
-            ctx->setFrameColor (clarityColor (k, 110));
+            ctx->setFrameColor (clarityColor (k, gentlrFront ? 110 : 45));
             ctx->setLineStyle (theme::dashed ());
             ctx->drawGraphicsPath (range, CDrawContext::kPathStroked);
             ctx->setLineStyle (kLineSolid);
@@ -290,13 +321,18 @@ void ColorView::draw (CDrawContext* ctx)
             if (auto live = gainPath (shownCut[k], true))
             {
                 // the cut it makes now: the lit part of the display
-                ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 70));
+                ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, gentlrFront ? 70 : 30));
                 ctx->drawGraphicsPath (live, CDrawContext::kPathFilled);
                 ctx->setLineWidth (1.0);
-                ctx->setFrameColor (theme::kEnergyLive);
+                ctx->setFrameColor (gentlrFront ? theme::kEnergyLive : theme::withAlpha (theme::kEnergyLive, 110));
                 ctx->drawGraphicsPath (live, CDrawContext::kPathStroked);
             }
         const CPoint h = clarityHandle (k);
+        if (!gentlrFront)
+        {
+            faintHandle (h);
+            continue;
+        }
         // the readout, in a pill above the band (a second pill goes under the first)
         char cb[64];
         std::snprintf (cb, sizeof (cb), "%s  %s   %.1f dB", k == 0 ? "Gentlr" : k == 1 ? "Gentlr 2" : k == kSubBand ? "Sub" : "High",
@@ -309,7 +345,7 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawRect (pill, kDrawFilled);
         pk::draw::outline (ctx, pill, theme::kCopper, 0);
         text (ctx, cb, pill, theme::kCopperPale, 9.5, kCenterText, true);
-        pk::draw::handle (ctx, h, kHandleRadius + 1, drag != Drag::None && dragBand == k);
+        pk::draw::handle (ctx, h, kHandleRadius + 1, (drag != Drag::None && dragBand == k) || selected == k);
     }
 
     // the glue links on the borders where two bands touch (lit while glued), and where a dragged edge
@@ -324,9 +360,14 @@ void ColorView::draw (CDrawContext* ctx)
             drawLink (ctx, CPoint (xOfHz (std::exp2 (push.snappedAt ())), all.bottom - 26.0), true, true);
     }
 
-    // handles
+    // the colour handles (faint behind Gentlr)
     for (const CPoint& h : {loHandle (), hiHandle ()})
-        pk::draw::handle (ctx, h, kHandleRadius, false, on);
+    {
+        if (gentlrFront)
+            faintHandle (h);
+        else
+            pk::draw::handle (ctx, h, kHandleRadius, false, on);
+    }
 
     // labels (in the cached layer while no handle comes up to them)
     if (!labelsUnder)
@@ -338,6 +379,13 @@ void ColorView::draw (CDrawContext* ctx)
 void ColorView::paintLabels (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
+    if (front == Layer::Gentlr)
+    {
+        const bool g = host->plainValue (kClarity) >= 0.5;
+        text (ctx, g ? "GENTLR" : "GENTLR  (off)", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18),
+              g ? theme::kCopperPale : theme::kTextDim, 10.5, kLeftText, true);
+        return;
+    }
     const bool on = host->plainValue (kColorOn) >= 0.5;
     text (ctx, on ? "COLOR" : "COLOR  (off)", CRect (all.left + 6, all.top + 4, all.right - 6, all.top + 18),
           on ? theme::kCopperPale : theme::kTextDim, 10.5, kLeftText, true);
@@ -349,6 +397,8 @@ void ColorView::paintLabels (CDrawContext* ctx)
 
 int ColorView::bandUnder (const CPoint& p) const
 {
+    if (front != Layer::Gentlr)
+        return -1;
     // the second band is drawn on top, so it is found first (Sub and High have no width to drag: skipped)
     for (int k = kClarityBands - 1; k >= 0; --k)
         if (clarityOn (k) && p.x >= clarityEdgeX (k, false) - 4.0 && p.x <= clarityEdgeX (k, true) + 4.0)
@@ -359,10 +409,15 @@ int ColorView::bandUnder (const CPoint& p) const
 ColorView::Drag ColorView::hit (const CPoint& p, int* band) const
 {
     auto near = [&] (const CPoint& h) { return std::hypot (p.x - h.x, p.y - h.y) <= kHandleRadius + 4.0; };
-    if (near (hiHandle ()))
-        return Drag::Hi;
-    if (near (loHandle ()))
-        return Drag::Lo;
+    // only the layer in front can be grabbed
+    if (front == Layer::Color)
+    {
+        if (near (hiHandle ()))
+            return Drag::Hi;
+        if (near (loHandle ()))
+            return Drag::Lo;
+        return Drag::None;
+    }
     // the second band is drawn on top, so it is found first
     for (int k = kGentlrBands - 1; k >= 0; --k)
     {

@@ -163,10 +163,14 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kPreLimit) >= 0.5, "pre-limit switched on from the editor");
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
-            // Gentlr (called Clarity before): its band appears in the colour display
+            // Gentlr (called Clarity before): its band appears in the colour display, with Gentlr's layer in front
+            // (the Color | Gentlr switch above the display; Color, the default, has it faint behind)
+            const double layerY = Editor::kLayerTop + 9.0;
+            const double colorLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.25, gentlrLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.75;
             const double gentlrX = Editor::kGentlrButtonX, gentlrY = Editor::kGentlrTop + 40;
             win.click (gentlrX, gentlrY);
             CHECK (plainOf (rig, kClarity) >= 0.5, "Gentlr switched on from the editor");
+            win.click (gentlrLayerX, layerY);
             CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr.png"), "gentlr screenshot");
             win.click (gentlrX, gentlrY);
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
@@ -209,11 +213,17 @@ int main (int argc, char** argv)
             rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -18.0));
 
             // the Sub and High bands have no button: a fresh instance has them at Range 0 (no cut), their
-            // handles flat at 0 dB; pulling the High band's handle (7 kHz) down gives it a Range, and it cuts
+            // handles flat at 0 dB; pulling the High band's handle (7 kHz) down gives it a Range, and it cuts.
+            // With Color in front Gentlr's handles cannot be grabbed: the same drag does nothing
             CHECK (plainOf (rig, kClaritySubRange) == 0.0 && plainOf (rig, kClarityHighRange) == 0.0, "Sub and High start at Range 0");
             {
                 const double gx = Editor::kColorLeft + std::log (7000.0 / 20.0) / std::log (1000.0) * Editor::kColorViewWidth;
                 const double gy = Editor::kColorTop + Editor::kColorViewHeight / 2; // (0 dB)
+                win.click (colorLayerX, layerY);
+                win.drag (gx, gy, gx, gy + 30);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityHighRange) == 0.0, "Color in front: Gentlr's handles stay put");
+                win.click (gentlrLayerX, layerY);
                 win.drag (gx, gy, gx, gy + 30);
                 pump (0.05);
                 CHECK (plainOf (rig, kClarityHighRange) > 2.0 && clarityHighOn (plainOf (rig, kClarity), plainOf (rig, kClarityHighRange)),
@@ -268,6 +278,30 @@ int main (int argc, char** argv)
             }
             rig.param (kClarity, 0.0);
             rig.param (kClarity2Range, 0.0);
+
+            // band 2's Threshold slider (Advanced) grabbed with Color in front: Gentlr's layer comes to the front and
+            // band 2 is selected (its knobs under the display)
+            {
+                rig.param (kClarity, 1.0);
+                rig.param (kClarityAdvanced, 1.0);
+                pump (0.05);
+                win.click (colorLayerX, layerY);
+                const double s2x = Editor::kColorLeft + Editor::kColorViewWidth - ThresholdSlider::kStripWidth + ThresholdSlider::kGap +
+                                   ThresholdSlider::kWidth * 1.5 + ThresholdSlider::kGap;
+                win.click (s2x, Editor::kColorTop + Editor::kColorViewHeight / 2);
+                pump (0.05);
+                CHECK (win.savePng (outDir + "/ui_smacheratr_band_select.png"), "band 2 selected by its Threshold slider");
+                // its Range knob (the third under the display) turned up with the mouse: band 2's Range moves
+                const double r0 = plainOf (rig, kClarity2Range);
+                const double kx = Editor::kLayerKnobsLeft + 2 * Editor::kLayerKnobStep + 28.0, ky = Editor::kLayerKnobsTop + 34.0;
+                win.drag (kx, ky, kx, ky - 40);
+                CHECK (plainOf (rig, kClarity2Range) > r0 + 1.0, "band 2's Range knob shown and turned: %.1f -> %.1f dB", r0,
+                       plainOf (rig, kClarity2Range));
+                rig.param (kClarity2Range, 0.0);
+                rig.param (kClarityAdvanced, 0.0);
+                rig.param (kClarity, 0.0);
+                win.click (colorLayerX, layerY);
+            }
 
             // shaper display: drag down lowers Drive, double-click resets it
             const double sx = Editor::kShaperLeft + Editor::kShaperWidth / 2, sy = Editor::kShaperTop + Editor::kShaperHeight / 2;

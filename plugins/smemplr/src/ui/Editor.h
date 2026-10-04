@@ -185,10 +185,20 @@ private:
     multidyn::DynDisplay* fxDynDisplay = nullptr;
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
     smacheratr::ColorView* fxColorView = nullptr;
-    // Gentlr's (Clarity's) band selector on the Smacheratr page: the band shown
+    // Gentlr's (Clarity's) band selector on the Smacheratr page: the band shown (its knobs with Gentlr's
+    // layer in front of the colour display, its handle and Threshold slider lit)
     int clarityBand = 0;
     std::vector<VSTGUI::CView*> rackBandViews[4], rackBandButtons;
+    std::vector<VSTGUI::CView*> rackColorKnobs; // the colour amounts (with Color in front)
+    VSTGUI::CView* rackLayerSwitch = nullptr;   // Color | Gentlr, above the colour display
     void showClarityBand (int band);
+    void setSatLayer (int layer); // 0 Color, 1 Gentlr (kept per instance: the controller's uiColorLayer)
+    // the Gentlr page: a band is selected by grabbing any of its controls (through gentlrWatch, in front of
+    // the page's host); its handle is lit and so is its Threshold
+    std::unique_ptr<pk::WatchedParamHost> gentlrWatch;
+    pk::NumberBox* gentlrThresh[4] = {nullptr, nullptr, nullptr, nullptr};
+    int gentlrBand = 0;
+    void selectGentlrBand (int band);
     // Gentlr's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
     // display and the region Drive's controls, shown while Advanced is on (satHost: the page's host)
     smacheratr::ThresholdSlider* fxThresholds[4] = {nullptr, nullptr, nullptr, nullptr};

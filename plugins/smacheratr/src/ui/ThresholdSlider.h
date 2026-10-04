@@ -5,7 +5,9 @@
 //   drag up / down              the Threshold (Shift: fine)
 //   double-click or right-click reset it (-18 dB: where Gentlr starts without Advanced)
 //   mouse wheel                 step it
-// Used by Smacheratr, the saturator at the end of the other plug-ins (TailDisplays) and the Smacheratr
+// Grabbing a slider picks its band (onPicked: the editor shows that band's controls and lights its handle
+// in the colour display); the band picked is drawn selected (setSelected: a lit lamp under its name).
+// Used by Smacheratr, the saturator at the end of the other plug-ins (TailPanel) and the Smacheratr
 // in Smemplr's rack; layout() puts the sliders at the right edge of the colour display.
 #pragma once
 
@@ -33,6 +35,18 @@ public:
     void onMouseCancelEvent (VSTGUI::MouseCancelEvent& e) override;
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
     void idle (); // follows the band's level
+    int bandIndex () const { return band; }
+    // the band shown in the editor (its Gentlr controls, its handle lit): this slider lit too
+    void setSelected (bool s)
+    {
+        if (s != selected)
+        {
+            selected = s;
+            invalid ();
+        }
+    }
+    bool isSelected () const { return selected; }
+    std::function<void (int)> onPicked; // the slider was grabbed (its band)
 
     // Lays the colour display and all four bands' sliders out in `area` (where the display alone sits
     // without Advanced): with `advanced` the sliders take a strip at its right edge (kStripWidth wide)
@@ -48,7 +62,7 @@ private:
     int band;
     MeterSource meters;
     float shownDb = -120.0f; // the band's level, eased
-    bool dragging = false;
+    bool dragging = false, selected = false;
     double startY = 0.0, startValue = 0.0;
 };
 

@@ -43,7 +43,7 @@ void Editor::onClose ()
 {
     display = nullptr;
     latencyLabel = nullptr;
-    tailDisplays.reset ();
+    tail.reset ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -92,12 +92,10 @@ void Editor::buildUI (CFrame* f)
     bind (out, new Knob (CRect (104, 24, 160, 88), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 530, 752, 604 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                               [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                               [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 734, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail->add (root, CRect (8, 530, 752, 530 + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -106,16 +104,16 @@ void Editor::buildUI (CFrame* f)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (display && id < kTailBase)
         display->invalid ();
 }
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (display)
         display->idle ();
     if (latencyLabel)

@@ -205,7 +205,9 @@ The slots, named as the tabs show them:
   the mono sum is untouched.
 - **smacheratr**: the full saturator: Pre-Limit, gentlr with its two bands, Sub and High bands,
   **Slope**, **No Overlap**, glue and Advanced mode, Mid/Side, colour, post clip and **Oversampling**
-  (Off, 2x, 4x; a project saved before it keeps its Hi-Quality setting as 4x or Off).
+  (Off, 2x, 4x; a project saved before it keeps its Hi-Quality setting as 4x or Off). The **Color** |
+  **Gentlr** switch above the colour display picks the layer in front (its handles, and its knobs at the
+  right); grabbing a gentlr band's handle, button or Threshold slider selects the band and lights them.
 - **widr**: the stereo widener with its left and right voices. In the rack it works alone: sharing the
   stereo field needs widr's own plug-in instances.
 - **wubr**: wubr's two drawn bands.
@@ -214,6 +216,7 @@ The slots, named as the tabs show them:
   Slope**, **No Overlap**, glue, **Advanced** and its region Drive. In gentlr and smacheratr slots the
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag
   a band's edge onto a neighbour's to glue them; click the link icon on the border to detach them.
+  Grabbing a band's handle or any value in its row selects the band: its handle and its Threshold are lit.
 - **smoothr**: smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
   off in the rack: put a smacheratr slot before it for that.
 

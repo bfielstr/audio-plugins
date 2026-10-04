@@ -147,7 +147,8 @@ exactly what it is without it. Switched on or off it fades over 30 ms; the laten
 ![The Sub band](../../docs/multidyn/ui_multidyn_sub.png)
 
 **smacheratr** (bottom panel, end of the chain): the saturator every plug-in here can end with, after
-the Output gain. Off by default, Drive 0 dB.
+the Output gain. Off by default, Drive 0 dB. While it is off it folds to its header strips; click a strip
+(or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 Every control is an automatable parameter.
 

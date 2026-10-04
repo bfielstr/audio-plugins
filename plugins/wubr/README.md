@@ -41,7 +41,8 @@ Point at any control for help in the info box at the bottom (**?** also switches
     (**Sens**: how far it must jump over the recent level); they hold until the next hit.
 - **Dry/Wet** and **Output**.
 - **smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
-  and displays (off by default, Drive 0 dB).
+  and displays (off by default, Drive 0 dB). While it is off it folds to its header strips; click a strip
+  (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ![Envelope mode](../../docs/wubr/ui_wubr_envelope.png)
 

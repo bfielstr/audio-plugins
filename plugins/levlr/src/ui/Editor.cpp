@@ -96,7 +96,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tailDisplays.reset ();
+    tail.reset ();
     levels = nullptr;
     headers.clear ();
     for (auto& c : columns)
@@ -170,16 +170,13 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 16), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel =
-        addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (
+    tail = std::make_unique<smacheratr::TailPanel> (
         this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
         [c = ctl] () -> const smacheratr::Meters* {
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;
         });
-    tailDisplays->add (tailPanel, CRect (10, 24, 874, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail->add (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     updateBands ();
@@ -206,8 +203,8 @@ void Editor::updateBands ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (isTailParam (id))
         return;
     if (levels)
@@ -221,8 +218,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (levels)
         levels->idle ();
 }

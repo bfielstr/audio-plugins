@@ -56,8 +56,8 @@ std::string hzText (double hz)
 class BandHeader : public CView
 {
 public:
-    BandHeader (const CRect& r, pk::ParamHost* h, int b, std::function<double ()> rate)
-        : CView (r), host (h), band (b), sampleRate (std::move (rate))
+    BandHeader (const CRect& r, pk::ParamHost* h, int b, std::function<double ()> rate, std::function<bool ()> isSelected)
+        : CView (r), host (h), band (b), sampleRate (std::move (rate)), selected (std::move (isSelected))
     {
     }
     void draw (CDrawContext* ctx) override
@@ -66,13 +66,15 @@ public:
         const bool on = bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
         // a header as linework: a ticked dim rule under it, and a lamp at the left, lit while the band
         // works (idle otherwise); the name in pale copper (text dim while it does not work)
-        pk::draw::tickRule (ctx, r.left, r.right, r.bottom - 1, pk::theme::kLineDim, 8);
+        // (the band selected: the rule in pale copper and the name in the text colour)
+        const bool sel = selected && selected ();
+        pk::draw::tickRule (ctx, r.left, r.right, r.bottom - 1, sel ? pk::theme::kCopperPale : pk::theme::kLineDim, 8);
         ctx->setFillColor (on ? pk::theme::kEnergyLive : pk::theme::kEnergyIdle);
         ctx->drawRect (CRect (r.left, r.top + 4, r.left + 2, r.bottom - 5), kDrawFilled);
         char name[16];
         std::snprintf (name, sizeof (name), band == kSub ? "SUB" : band == kHigh ? "HIGH" : "BAND %d", band + 1);
         ctx->setFont (pk::theme::font (10.5, true));
-        ctx->setFontColor (on ? pk::theme::kCopperPale : pk::theme::kTextDim);
+        ctx->setFontColor (sel ? pk::theme::kText : on ? pk::theme::kCopperPale : pk::theme::kTextDim);
         ctx->drawString (name, CRect (r.left + 9, r.top, r.right, r.bottom), kLeftText, true);
         ctx->setFont (pk::theme::font (9.5));
         ctx->setFontColor (on ? pk::theme::kText : pk::theme::kTextDim);
@@ -94,16 +96,27 @@ private:
     pk::ParamHost* host;
     int band;
     std::function<double ()> sampleRate;
+    std::function<bool ()> selected;
 };
+
+// The band (0 .. kAllBands - 1) a parameter belongs to, or -1.
+int bandOf (uint32_t id)
+{
+    for (int k = 0; k < kAllBands; ++k)
+        if (id == freqParam (k) || id == rangeParam (k) || id == thresholdParam (k) || (hasOn (k) && id == onParam (k)) ||
+            (hasWidth (k) && id == bandParam (k, gentlr::kWidth)))
+            return k;
+    return -1;
+}
 } // namespace
 
 Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    if (tailDisplays)
-        tailDisplays->closed ();
-    tailDisplays.reset ();
+    if (tail)
+        tail->closed ();
+    tail.reset ();
     view = nullptr;
     for (auto& s : sliders)
         s = nullptr;
@@ -161,7 +174,7 @@ void Editor::buildUI (CFrame* f)
     for (int k = 0; k < kBands; ++k)
     {
         const double x = kViewLeft + k * kBandW;
-        auto* h = new BandHeader (CRect (x, kRowTop, x + 132, kRowTop + 18), this, k, rateOf);
+        auto* h = new BandHeader (CRect (x, kRowTop, x + 132, kRowTop + 18), this, k, rateOf, [this, k] { return selectedBand == k; });
         root->addView (h);
         headers.push_back (h);
         bind (root, new Toggle (CRect (x + 138, kRowTop - 1, x + kBandW - 10, kRowTop + 19), this, bandParam (k, kOn), "On"));
@@ -173,7 +186,7 @@ void Editor::buildUI (CFrame* f)
     for (int k : {kSub, kHigh})
     {
         const double x = k == kSub ? kSubLeft : kHighLeft;
-        auto* h = new BandHeader (CRect (x, kRowTop, x + kSubW - 8, kRowTop + 18), this, k, rateOf);
+        auto* h = new BandHeader (CRect (x, kRowTop, x + kSubW - 8, kRowTop + 18), this, k, rateOf, [this, k] { return selectedBand == k; });
         root->addView (h);
         headers.push_back (h);
         bandViews[k].push_back (bind (root, new Knob (knobRect (x, kRowTop + 24), this, freqParam (k), "Freq")));
@@ -199,20 +212,37 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 24), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + 78 + smacheratr::TailDisplays::kHeight), kTailBase,
-                                    kTailExtBase, kTailExt2Base, kTailExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
-                                                               [c = ctl] () -> const smacheratr::Meters* {
-                                                                   auto* s = c->getShared ();
-                                                                   return s ? &s->tailMeters : nullptr;
-                                                               });
-    tailDisplays->add (tailPanel, CRect (10, 24, kViewRight - kViewLeft - 10, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
+                                                    [c = ctl] () -> const smacheratr::Meters* {
+                                                        auto* s = c->getShared ();
+                                                        return s ? &s->tailMeters : nullptr;
+                                                    });
+    tail->add (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     layoutAdvanced ();
     updateLooks ();
+    selectBand (selectedBand);
     idle ();
+}
+
+void Editor::beginEdit (uint32_t id)
+{
+    pk::EditorBase::beginEdit (id);
+    if (const int k = bandOf (id); k >= 0)
+        selectBand (k);
+}
+
+void Editor::selectBand (int band)
+{
+    selectedBand = band < 0 ? 0 : band >= kAllBands ? kAllBands - 1 : band;
+    if (view)
+        view->setSelectedBand (selectedBand);
+    for (int k = 0; k < kAllBands; ++k)
+        if (sliders[k])
+            sliders[k]->setSelected (k == selectedBand);
+    for (auto* h : headers)
+        h->invalid ();
 }
 
 void Editor::layoutAdvanced ()
@@ -252,8 +282,8 @@ void Editor::updateLooks ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (isTailParam (id))
         return;
     if (view)
@@ -274,8 +304,8 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (view)
         view->idle ();
     for (auto* s : sliders)

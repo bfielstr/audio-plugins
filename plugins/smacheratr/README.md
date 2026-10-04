@@ -48,10 +48,19 @@ much of each frequency range is saturated without changing the balance of the ou
 same around **Freq**, with the bandwidth set by **Width**. The Colour EQ display shows the EQ before the
 curve; drag the left handle for Amt Lo, the right handle up and down for Amt Hi or sideways for Freq.
 
+The Colour EQ display also shows gentlr's bands. The **Color** | **Gentlr** switch above it picks the
+layer in front: only that layer's handles can be dragged and are drawn at full strength, the other is
+drawn faint behind it. The knobs under the display follow the switch too: with Color in front they are
+**Amt Lo**, **Amt Hi**, **Freq** and **Width**, with Gentlr in front the selected gentlr band's **Freq**,
+**Width** and **Range**. Color is in front in a new instance; the choice is kept with the project.
+
 ## gentlr
 
 gentlr keeps a hard-pushed drive from going muddy or harsh. Switch it on with **gentlr** in the GENTLR
-panel. It has four bands, chosen with **Band 1**, **Band 2**, **Sub** and **High**. Each turns its
+panel. It has four bands, chosen with **Band 1**, **Band 2**, **Sub** and **High** (or by grabbing a
+band's handle in the display, or its Threshold slider in Advanced mode: any of them brings Gentlr's
+layer to the front and selects that band). The selected band's handle is lit, and so is its Threshold
+slider; its knobs are under the display. Each turns its
 region down only while that region is loud: before the curve when the band hits it hard, and after it
 by half as much. The cut is 3 dB for every 5 dB the band is over -18 dBFS, at most the band's **Range**,
 so it does nothing at gentle settings.
@@ -84,8 +93,8 @@ their own shape) sets the shape of the two bands:
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Slope existed.
 
 Every band is scaled to peak at 0 dB, a band at an end of the spectrum is still a shelf there, and the
-display draws the shape selected. The end saturator in the other plug-ins has the same Slope (above its
-Colour EQ display).
+display draws the shape selected. The end saturator in the other plug-ins has the same Slope (in its
+GENTLR part).
 
 **No Overlap** (off by default): gentlr's working bands never cover the same frequencies. Dragging or
 widening a band in the display pushes its neighbours' edges along (a neighbour narrows, and once it is
@@ -129,6 +138,18 @@ Advanced off, every band starts cutting at -18 dB.
 - **Mid/Side** saturates the mid and the side apart, so the side is driven by its own, lower level and
   a wide sound stays wide when you push the drive. (widr's end saturator always works this way.)
 - **Interface Size**, **Copy Settings** / **Paste Settings**.
+
+## At the end of the other plug-ins
+
+Every other plug-in in the suite ends with this smacheratr, in a section at the bottom of its window
+(off by default). The section has two parts, each with a header strip: **SMACHERATR** (the curve, the
+Colour EQ display with its Color | Gentlr switch in the strip, the switches, Drive, Dry/Wet and Output)
+and **GENTLR** (gentlr's On in its strip, then Advanced with the region Drive, Slope and No Overlap).
+Each part folds away to its strip and opens on its own: click its strip, or switch it on (switching it
+off folds it). A new instance opens the saturator only while it is on, so a plug-in starts compact; the
+window gets shorter while a part is folded and taller when it opens (a host that does not let plug-ins
+resize their window keeps the space). What you open and fold, and the layer in front, are kept with the
+project.
 
 ## Presets
 

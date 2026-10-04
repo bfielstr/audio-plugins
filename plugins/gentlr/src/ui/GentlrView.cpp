@@ -332,7 +332,7 @@ void GentlrView::paintBase (CDrawContext* ctx, const bool on[], const ClarityBan
     {
         if (!on[k])
             continue;
-        const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k);
+        const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k) || selected == k;
         ctx->setFillColor (bandColor (k, hot ? 26 : 16));
         ctx->drawRect (CRect (xOfHz (bands[k].lowHz), all.top, xOfHz (bands[k].highHz), bot), kDrawFilled);
     }
@@ -372,7 +372,7 @@ void GentlrView::draw (CDrawContext* ctx)
         bands[k] = bandNow (k);
     }
     const int hotBand = hoverBand >= 0 ? hoverBand : (drag != Drag::None ? dragBand : -1);
-    const uint64_t key = pk::LayerKey ().params (host).add (sr, hoverBand, drag != Drag::None ? dragBand : -1, hotBand);
+    const uint64_t key = pk::LayerKey ().params (host).add (sr, hoverBand, drag != Drag::None ? dragBand : -1, hotBand, selected);
     baseLayer.draw (ctx, all, key, [&] (CDrawContext* c) { paintBase (c, on, bands); });
     ctx->setClipRect (all);
     ctx->setLineWidth (1.0);
@@ -533,7 +533,7 @@ void GentlrView::draw (CDrawContext* ctx)
     for (int k = 0; k < kAllBands; ++k)
     {
         const CPoint h = handle (k);
-        const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k);
+        const bool hot = hoverBand == k || (drag != Drag::None && dragBand == k) || selected == k;
         const double rad = kHandleRadius + (on[k] ? 1.0 : 0.0);
         pk::draw::handle (ctx, h, rad, hot, on[k]);
     }
@@ -609,6 +609,16 @@ GentlrView::Drag GentlrView::hit (const CPoint& p, int* band) const
         }
     }
     return Drag::None;
+}
+
+void GentlrView::setSelectedBand (int band)
+{
+    band = band < 0 ? -1 : std::min (band, kAllBands - 1);
+    if (band != selected)
+    {
+        selected = band;
+        invalid ();
+    }
 }
 
 void GentlrView::setHover (int band)

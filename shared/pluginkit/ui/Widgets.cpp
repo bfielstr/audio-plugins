@@ -445,6 +445,8 @@ void NumberBox::draw (CDrawContext* ctx)
     // a readout: the value in a well inside a thin copper bracket (corner marks, no box), the unit dim;
     // the bracket lights cinnabar while the value is dragged
     fill (ctx, r, theme::kWell);
+    if (selected && !dragging)
+        draw::outline (ctx, r, theme::kCopperPale, 0);
     draw::brackets (ctx, r, 4, dragging ? theme::kEnergyLive : (enabledLook ? theme::kCopper : theme::kLineDim));
     if (dragging)
         text (ctx, host->valueText (param), r, theme::kEnergyLive, 10.0);
@@ -546,6 +548,61 @@ void Toggle::onMouseDownEvent (MouseDownEvent& e)
 }
 
 //==============================================================================
+ViewSwitch::ViewSwitch (const CRect& r, std::vector<std::string> l, std::function<int ()> g, std::function<void (int)> s)
+: CView (r), labels (std::move (l)), get (std::move (g)), set (std::move (s))
+{
+}
+
+void ViewSwitch::draw (CDrawContext* ctx)
+{
+    // as Segmented draws a choice: one copper outline, dim dividers, a lamp per segment, the picked one lit
+    const CRect r = getViewSize ();
+    const int n = std::max (1, (int)labels.size ());
+    const int sel = get ? get () : 0;
+    draw::outline (ctx, r, theme::kCopper);
+    const double w = r.getWidth () / n;
+    for (int i = 0; i < n; ++i)
+    {
+        CRect s (r.left + i * w, r.top, r.left + (i + 1) * w, r.bottom);
+        if (i > 0)
+        {
+            const double x = std::floor (s.left) + 0.5;
+            ctx->setFrameColor (theme::kLineDim);
+            ctx->setLineWidth (1.0);
+            ctx->drawLine (CPoint (x, s.top + 4), CPoint (x, s.bottom - 4));
+        }
+        const bool on = i == sel;
+        draw::marker (ctx, s, on ? theme::kEnergyLive : theme::kEnergyIdle);
+        CRect t = s;
+        if (s.getHeight () >= 16)
+            t.bottom -= 2;
+        text (ctx, labels[(size_t)i], t, on ? theme::kText : theme::kCopperPale, 10.5, on);
+    }
+}
+
+std::vector<TextSpot> ViewSwitch::textSpots () const
+{
+    const CRect r = getViewSize ();
+    const double w = r.getWidth () / std::max<size_t> (1, labels.size ());
+    std::vector<TextSpot> out;
+    for (size_t i = 0; i < labels.size (); ++i)
+        out.push_back ({CRect (r.left + (double)i * w, r.top, r.left + (double)(i + 1) * w, r.bottom), labels[i], 10.5, true, 1, 4});
+    return out;
+}
+
+void ViewSwitch::onMouseDownEvent (MouseDownEvent& e)
+{
+    if (!e.buttonState.isLeft ())
+        return;
+    const CRect r = getViewSize ();
+    const int n = std::max (1, (int)labels.size ());
+    const int i = std::clamp ((int)((e.mousePosition.x - r.left) / (r.getWidth () / n)), 0, n - 1);
+    if (set)
+        set (i);
+    invalid ();
+    e.consumed = true;
+}
+
 Segmented::Segmented (const CRect& r, ParamHost* h, uint32_t id, std::vector<std::string> l)
 : ParamView (r, h, id), labels (std::move (l))
 {

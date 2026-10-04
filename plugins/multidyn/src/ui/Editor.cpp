@@ -71,7 +71,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tailDisplays.reset ();
+    tail.reset ();
     display = nullptr;
     scStatus = nullptr;
     rmsWindowBox = nullptr;
@@ -189,12 +189,10 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
     // the end-of-chain Smacheratr, after the Output gain
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    auto* tailPanel = addTailPanel (root, CRect (8, 424, 912, 502 + smacheratr::TailDisplays::kHeight), kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base);
-    tailDisplays = std::make_unique<smacheratr::TailDisplays> (this, smacheratr::TailBases {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base},
-                                                               [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
-                                                               [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
-    tailDisplays->add (tailPanel, CRect (10, 24, 894, 24 + smacheratr::TailDisplays::kHeight - 22));
-    tailDisplays->onBandPicked ([this] (int k) { showTailBand (k); });
+    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base},
+                                                    [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
+    tail->add (root, CRect (8, 424, 912, 424 + smacheratr::TailPanel::kOpenHeight));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
@@ -278,8 +276,8 @@ void Editor::setNorm (uint32_t id, double v)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tailDisplays)
-        tailDisplays->paramChanged (id);
+    if (tail)
+        tail->paramChanged (id);
     if (display)
         display->invalid ();
     if (id == kBands || id == kSubOn)
@@ -301,8 +299,8 @@ void Editor::updateLooks ()
 
 void Editor::idle ()
 {
-    if (tailDisplays)
-        tailDisplays->idle ();
+    if (tail)
+        tail->idle ();
     if (display)
         display->idle ();
     if (scStatus)

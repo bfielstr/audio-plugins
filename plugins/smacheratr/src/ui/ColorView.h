@@ -22,6 +22,10 @@
 // With No Overlap on, a band dragged or widened pushes its neighbours' edges along (BandPush), and the
 // bands are drawn where the engine has them (glued borders held, overlaps from automation split, as
 // applyGlue and resolveOverlaps do).
+//   The colour filters and Gentlr are two layers of the display (setLayer: the editors' Color | Gentlr
+// switch, LayerSwitch): only the layer in front has its handles drawn full strength and grabbable (the
+// colour handles, or Gentlr's handles, edges and link icons); the other is drawn faint behind it. The
+// Gentlr band shown in the editor (setSelectedBand) has its handle lit.
 // Used by Smacheratr and, through a pk::MappedParamHost, by the Smacheratr in Smemplr's rack; the
 // sample rate and the levels come from functions so it does not depend on a controller.
 #pragma once
@@ -47,7 +51,13 @@ public:
     using RateSource = std::function<double ()>;
     using MeterSource = std::function<const Meters* ()>;
 
+    enum class Layer { Color, Gentlr };
+
     ColorView (const VSTGUI::CRect& r, pk::ParamHost* host, RateSource rate, MeterSource meters);
+    void setLayer (Layer l);
+    Layer layer () const { return front; }
+    void setSelectedBand (int band); // -1: none
+    int selectedBand () const { return selected; }
     void draw (VSTGUI::CDrawContext* ctx) override;
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
@@ -90,6 +100,8 @@ private:
     bool movedH = false, movedV = false;
     BandPush push; // No Overlap and glue: the neighbours a band drag pushes or drags along, the edge it snaps
     int hoverLink = -1; // the link icon under the mouse (its border's index), lit brighter
+    Layer front = Layer::Color; // the layer whose handles are drawn and grabbed
+    int selected = -1;          // the Gentlr band shown in the editor (its handle lit)
     float shownCut[kGentlrBands] = {0.0f, 0.0f, 0.0f, 0.0f}; // the Clarity bands' cuts (dB, 0 or less), eased
     // The well, the grid and its scale, Gentlr's band regions and the colour response: everything drawn
     // before Gentlr's live cuts, kept in a cached layer (pk::CachedLayer) until a setting or a drag

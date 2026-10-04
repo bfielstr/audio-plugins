@@ -66,7 +66,9 @@ Saturation first, then limiting: the Analog curve rounds the tops of the peaks, 
 to catch. All of smacheratr's controls and displays, before the limiter. On by default and mild:
 **Drive** 0 dB (the curve only shapes what goes over half scale), **Dry/Wet** 50 %, **Pre-Limit** off (it
 is a fast full-band limiter, the very thing that roughens the lows; the limiter after it does that job
-smoothly). Off, it only delays the signal, so the latency never changes.
+smoothly). Off, it only delays the signal, so switching it off never changes the latency. Its section
+folds to its header strips and opens again with a click on a strip (it starts open here, since it is
+on); see [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## The display
 

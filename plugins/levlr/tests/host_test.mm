@@ -172,6 +172,66 @@ int main (int argc, char** argv)
         const double old = dbfs (rms (out, out.size () / 2, out.size ())) - dbfs (0.1 / std::sqrt (2.0));
         CHECK (std::fabs (old) < 0.2, "0.6.0's defaults: flat (%.2f dB)", old);
 
+        // the end saturator's section folds: a new instance (the saturator off) shows its two strips only (this
+        // host keeps the window's size, so the space under them stays); a click on the saturator's strip opens
+        // it (its Pre-Limit can be clicked), another folds it; switching it on in its strip opens it, and a new
+        // window opens as it was left. Its Color | Gentlr switch: with Gentlr in front the row under the
+        // displays holds the selected band's values
+        {
+            const double tx = Editor::kViewLeft, ty = Editor::kTailTop, tw = Editor::kViewRight - Editor::kViewLeft;
+            const double stripX = tx + 300.0, stripY = ty + 11.0, onX = tx + 42.0;
+            const double preX = tx + 45.0, preY = ty + smacheratr::TailPanel::kRowA + 9.0;
+            const uint32_t pre = kTailBase + pk::kTailPreLimit;
+            CHECK (plainOf (rig, kTailBase + pk::kTailOn) < 0.5 && plainOf (rig, pre) >= 0.5, "the saturator off, its Pre-Limit on");
+            {
+                EditorWindow win (rig.controller);
+                CHECK (win.ok (), "editor");
+                CHECK (win.savePng (outDir + "/ui_levlr_tail_folded.png"), "screenshot, the end saturator folded");
+                win.click (preX, preY);
+                pump (0.05);
+                CHECK (plainOf (rig, pre) >= 0.5, "folded: its Pre-Limit is not there to click");
+                win.click (stripX, stripY);
+                pump (0.05);
+                win.click (preX, preY);
+                pump (0.05);
+                CHECK (plainOf (rig, pre) < 0.5, "a click on the strip opens it: Pre-Limit clicked off");
+                win.click (stripX, stripY);
+                pump (0.05);
+                win.click (preX, preY);
+                pump (0.05);
+                CHECK (plainOf (rig, pre) < 0.5, "another click folds it again");
+                win.click (onX, stripY);
+                pump (0.05);
+                CHECK (plainOf (rig, kTailBase + pk::kTailOn) >= 0.5, "switched on in its strip");
+                win.click (preX, preY);
+                pump (0.05);
+                CHECK (plainOf (rig, pre) >= 0.5, "and opened: Pre-Limit clicked on again");
+            }
+            {
+                EditorWindow win (rig.controller);
+                CHECK (win.ok (), "editor");
+                win.click (preX, preY);
+                pump (0.05);
+                CHECK (plainOf (rig, pre) < 0.5, "a new window: open as it was left");
+                win.click (preX, preY);
+                pump (0.05);
+                // Gentlr in front: band 1's Range where the colour Width is with Color in front
+                const uint32_t range1 = kTailExtBase + pk::kTailExtClarityRange, cWidth = kTailExtBase + pk::kTailExtColorWidth;
+                const double r0 = plainOf (rig, range1), w0 = plainOf (rig, cWidth);
+                const double boxX = tx + 225.0, boxY = ty + smacheratr::TailPanel::kRowB + 9.0;
+                win.click (tx + tw - 10.0 - 35.0, stripY); // (the switch's Gentlr half)
+                pump (0.05);
+                win.drag (boxX, boxY, boxX, boxY - 30.0);
+                pump (0.05);
+                CHECK (plainOf (rig, range1) > r0 + 1.0 && plainOf (rig, cWidth) == w0, "Gentlr in front: band 1's Range dragged (%.1f -> %.1f dB)",
+                       r0, plainOf (rig, range1));
+                win.click (tx + tw - 10.0 - 105.0, stripY); // (Color again)
+                pump (0.05);
+                rig.param (range1, toNormalized (range1, r0));
+            }
+            rig.param (kTailBase + pk::kTailOn, 0.0);
+        }
+
         // editor screenshot: a signal playing, the bands at different levels, the saturator on
         rig.param (kSlope, toNormalized (kSlope, kSlope24));
         rig.param (xoverParam (1), toNormalized (xoverParam (1), 1000.0));

@@ -50,7 +50,9 @@ between).
 The display shows the orbs from above, with their trails: you at the bottom, facing up, the swarm's ball
 ahead at the Distance, rings every metre (every 5 m when far).
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB).
+**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+it is off it folds to its header strips; click a strip (or switch it on) to open it. See
+[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## Presets
 

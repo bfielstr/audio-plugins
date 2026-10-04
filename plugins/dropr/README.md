@@ -94,7 +94,9 @@ Right-click or double-click a handle, point or line to reset it.
   the bands so any blend lines up in phase.
 - **Output** (±24 dB): after the blend, before the saturator.
 
-**smacheratr** (bottom panel): the saturator at the end of the chain, with all its controls.
+**smacheratr** (bottom panel): the saturator at the end of the chain, with all its controls. While it is
+off it folds to its header strips; click a strip (or switch it on) to open it. See
+[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ## The gain law
 

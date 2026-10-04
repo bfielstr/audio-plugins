@@ -1,6 +1,6 @@
 // The optional Smacheratr at the end of every plug-in's chain: a block of parameters each plug-in
 // appends to its table at some base ID. The processing is smacheratr::Tail, the editor panel
-// pk::EditorBase::addTailPanel. Off by default, Drive 0 dB.
+// smacheratr::TailPanel. Off by default, Drive 0 dB.
 #pragma once
 
 #include "pluginkit/ParamTable.h"
