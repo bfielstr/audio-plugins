@@ -22,7 +22,10 @@ enum ParamId : uint32_t
     kColorWidth,        // peak width (1 / Q)
     kOutput,            // dB, final attenuation
     kDryWet,
-    kHiQuality, // 4x oversampling around the shaper
+    // Oversampling around the shaper: Off, 2x or 4x (OversamplingMode; 4x by default). It was
+    // Hi-Quality, a switch for 4x: the ID and its two ends kept their meaning (normalized 0 is Off,
+    // 1 is 4x), so a state or an automation lane from then plays as it did (oversamplingFromHiQuality)
+    kOversampling,
     kDcFilter,  // high-pass at the input
     kMidSide,   // saturate the mid and the side apart (keeps the width when pushed)
     kClarity,   // Gentlr (called Clarity before) on (both bands; see Engine.h)
@@ -91,6 +94,25 @@ enum ClaritySlope : int
 inline int claritySlopeOf (double plain) { return std::clamp ((int)std::lround (plain), 0, kNumSlopes - 1); }
 
 enum PostClipMode { kPostOff = 0, kPostSoft, kPostHard };
+
+// kOversampling's choices (in this order: persisted, and Off / 4x are the old Hi-Quality's off / on)
+enum OversamplingMode : int
+{
+    kOsOff = 0,
+    kOs2x,
+    kOs4x,
+    kNumOsModes
+};
+// the oversampling factor (1, 2 or 4) a plain value picks
+inline int oversamplingFactor (double plain)
+{
+    const int m = std::clamp ((int)std::lround (plain), 0, kNumOsModes - 1);
+    return m == kOs4x ? 4 : m == kOs2x ? 2 : 1;
+}
+// A state saved while kOversampling was the Hi-Quality switch (normalized): on (0.5 and up) -> 4x, off
+// -> Off. Its two ends already mean that; a value in between (a host may store any) is put on the end
+// the switch read it as, so it does not land on 2x.
+inline double oversamplingFromHiQuality (double hiQualityNorm) { return hiQualityNorm >= 0.5 ? 1.0 : 0.0; }
 
 // Clarity's bands: their Frequency, Width and Range parameters. Clarity has one button (kClarity);
 // a band works while Clarity is on and its Range is above 0 dB.

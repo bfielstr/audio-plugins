@@ -165,6 +165,8 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Choice (CRect (cx + 42, kRowTop + 61, cx + 194, kRowTop + 81), this, kSlope));
     root->addView (new Label (CRect (cx, kBandsTop + 1, cx + 40, kBandsTop + 19), "Bands", 10.5, false));
     bind (root, new Segmented (CRect (kBandsLeft, kBandsTop, kBandsRight, kBandsTop + 20), this, kBandCount, {"1", "2", "3", "4"}));
+    root->addView (new Label (CRect (cx, kOsTop + 1, cx + 84, kOsTop + 19), "Oversampling", 10.5, false));
+    bind (root, new Segmented (CRect (kOsLeft, kOsTop, kBandsRight, kOsTop + 20), this, kDriveOversampling, {"Off", "2x", "4x"}));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 16), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
@@ -213,7 +215,7 @@ void Editor::paramChanged (uint32_t id)
     if ((id >= kXover && id < kXover + kCrossovers) || id == kBandCount)
         for (auto* h : headers)
             h->invalid ();
-    if (id == kBandCount || (id >= kDriveBase && id < kNumParams))
+    if (id == kBandCount || (id >= kDriveBase && id < kDriveBase + kBands * kDriveBlock))
         updateBands ();
 }
 

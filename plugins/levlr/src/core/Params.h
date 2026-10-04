@@ -1,7 +1,8 @@
 // Levlr parameters. IDs are persisted in projects: only ever append. The end saturator's blocks
 // (kTailBase, kTailExtBase, kTailExt2Base) are closed now: the band count and the bands' drives come
 // after them, at 49 (pinned below, so a saturator block that grows can't move them), and the end
-// saturator's fourth block (Gentlr's High band and No Overlap) after those, at 58.
+// saturator's fourth block (Gentlr's High band and No Overlap) after those, at 58, its fifth (the glue)
+// at 64, then the drives' Oversampling at 69 (so the fifth block is closed in too).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -58,12 +59,29 @@ enum ParamId : uint32_t
     kBandCount = 49,                                // Bands: how many are in use (a choice: 1 .. 4, 4 by default)
     kDriveBase,                                     // kBands x kDriveBlock: each band's drive
     kTailExt3Base = kDriveBase + kBands * kDriveBlock, // Gentlr's High band, No Overlap and Slope in the end Smacheratr: pk::kTailExt3Fields entries
-    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries
+    kDriveOversampling = kTailExt4Base + pk::kTailExt4Fields, // the band drives' oversampling: Off, 2x, 4x (4x before it, and by default)
+    kNumParams
 };
 static_assert (kTailExt2Base + pk::kTailExt2Fields == kBandCount, "the end saturator's blocks end where the band count starts");
-static_assert (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kNumParams == 69,
-               "saved IDs: Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63");
+static_assert (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kDriveOversampling == 69 &&
+                   kNumParams == 70,
+               "saved IDs: Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63, its fifth at 64 .. 68, "
+               "the drives' Oversampling at 69");
+
+// kDriveOversampling's choices (in this order: persisted; the same as Smacheratr's Oversampling) and the
+// factor a plain value picks (1, 2 or 4)
+enum DriveOversampling : int
+{
+    kDriveOsOff = 0,
+    kDriveOs2x,
+    kDriveOs4x
+};
+inline int driveOversamplingFactor (double plain)
+{
+    const int m = (int)(plain + 0.5);
+    return m <= kDriveOsOff ? 1 : m == kDriveOs2x ? 2 : 4;
+}
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return kBandBase + (uint32_t)band * kBandBlock + field; }
 constexpr uint32_t xoverParam (int k) { return kXover + (uint32_t)k; }
@@ -97,12 +115,15 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 
 // The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives; 4: the
 // end saturator's Sub and High bands have no buttons (they work while their Range is above 0 dB); 5: the
-// end saturator's Gentlr Slope.
-constexpr int kStateVersion = 5;
+// end saturator's Gentlr Slope; 6: Oversampling (the drives' and the end saturator's, Off / 2x / 4x).
+constexpr int kStateVersion = 6;
+constexpr int kOversamplingChoiceVersion = 6;
 // Brings the normalized values of a state saved by `version` to this one: version 1's three slopes
 // among the eight; before 3, four bands and every drive off (the sound it was saved with); before 4,
 // the end saturator's Sub and High bands that were off get Range 0 (smacheratr::subHighStateToRange);
-// before 5, the end saturator's Gentlr Slope is Classic (the shape there was).
+// before 5, the end saturator's Gentlr Slope is Classic (the shape there was); before 6, the end
+// saturator's Oversampling was its Hi-Quality switch (on 4x, off Off), and the drives were always 4x (the
+// new Oversampling's default, so a state without it needs nothing).
 // `has`: the IDs the state had (the rest hold their defaults).
 void migrateState (int version, double norm[kNumParams], const bool has[kNumParams]);
 // The parameters added after 0.6.0 (Bands and the drives). A host that stored Levlr's parameters

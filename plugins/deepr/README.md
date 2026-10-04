@@ -67,5 +67,5 @@ README](../../README.md#presets).
 ## Latency
 
 None of deepr's own: everything runs sample by sample (IIR filters and an envelope follower). The only
-latency is the end saturator's, about 1.7 ms, which is always in the path so it never changes. It is
-reported to the host for automatic compensation.
+latency is the end saturator's, about 1.7 ms, which is always in the path, so switching the saturator on
+or off never changes it. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told. It is reported to the host for automatic compensation.

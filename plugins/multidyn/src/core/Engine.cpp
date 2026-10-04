@@ -60,7 +60,7 @@ Engine::Engine (bool withTail) : hasTail (withTail)
     color.setParam (smacheratr::kPreLimit, 0.0);
     color.setParam (kPostClip, kPostOff);
     color.setParam (smacheratr::kOutput, 0.0);
-    color.setParam (kHiQuality, 1.0);
+    color.setParam (kOversampling, smacheratr::kOs4x); // (always 4x: its latency is part of Multidyn's fixed one)
     color.setParam (kDcFilter, 0.0);
     color.setParam (kMidSide, 0.0);
     color.setParam (kClarity, 0.0);

@@ -130,6 +130,19 @@ int main ()
         CHECK (readOld (6, {{kClarity, 1.0}}, none) && std::lround (plain (none, kClaritySlope)) == kSlope12, "version 6, not saved: 12 / 12");
         CHECK (defaultNormalized (kClaritySlope) == 0.0, "a new instance: 12 / 12");
     }
+    // Oversampling (version 7) was the Hi-Quality switch: on -> 4x, off -> Off, a value in between on the
+    // end the switch read it as; a state of version 7 keeps 2x; a new instance (and a state without it) 4x
+    {
+        auto osOf = [] (const State& st) { return oversamplingFactor (plain (st, kOversampling)); };
+        State on, off, half, low, none, now;
+        CHECK (readOld (6, {{kOversampling, 1.0}}, on) && osOf (on) == 4, "Hi-Quality on: 4x (%d)", osOf (on));
+        CHECK (readOld (6, {{kOversampling, 0.0}}, off) && osOf (off) == 1, "Hi-Quality off: Off (%d)", osOf (off));
+        CHECK (readOld (6, {{kOversampling, 0.6}}, half) && osOf (half) == 4, "Hi-Quality 0.6 (on): 4x (%d)", osOf (half));
+        CHECK (readOld (6, {{kOversampling, 0.4}}, low) && osOf (low) == 1, "Hi-Quality 0.4 (off): Off (%d)", osOf (low));
+        CHECK (readOld (3, {{kDrive, 0.5}}, none) && osOf (none) == 4, "not saved: 4x, as Hi-Quality was (%d)", osOf (none));
+        CHECK (readOld (7, {{kOversampling, toNormalized (kOversampling, kOs2x)}}, now) && osOf (now) == 2, "version 7: 2x as saved");
+        CHECK (oversamplingFactor (toPlain (kOversampling, defaultNormalized (kOversampling))) == 4, "a new instance: 4x");
+    }
     std::printf ("smacheratr state: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }

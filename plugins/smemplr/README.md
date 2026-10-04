@@ -204,11 +204,12 @@ The slots, named as the tabs show them:
   display's handle (while holding it, or with Shift) steps through them. The mid is never filtered, so
   the mono sum is untouched.
 - **smacheratr**: the full saturator: Pre-Limit, gentlr with its two bands, Sub and High bands,
-  **Slope**, **No Overlap**, glue and Advanced mode, Mid/Side, colour and post clip.
+  **Slope**, **No Overlap**, glue and Advanced mode, Mid/Side, colour, post clip and **Oversampling**
+  (Off, 2x, 4x; a project saved before it keeps its Hi-Quality setting as 4x or Off).
 - **widr**: the stereo widener with its left and right voices. In the rack it works alone: sharing the
   stereo field needs widr's own plug-in instances.
 - **wubr**: wubr's two drawn bands.
-- **levlr**: levlr's bands, each with its Drive and Type.
+- **levlr**: levlr's bands, each with its Drive and Type, and the drives' **Oversampling**.
 - **gentlr**: gentlr's two bands, Sub and High bands on its display, a row of values for each, **Band
   Slope**, **No Overlap**, glue, **Advanced** and its region Drive. In gentlr and smacheratr slots the
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag

@@ -108,4 +108,4 @@ README](../../README.md#presets).
 ## Latency
 
 About 1.8 ms (85 samples at 48 kHz, the saturator's, the same whether it is on or off), reported to the
-host for automatic compensation.
+host for automatic compensation. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told.

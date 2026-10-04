@@ -123,6 +123,17 @@ int main (int argc, char** argv)
         CHECK (peak / std::pow (10.0, (driven + dbfs (0.25 / std::sqrt (2.0))) / 20.0) < 1.3, "hard-clipped: a flat top (crest %.2f)",
                peak / std::pow (10.0, (driven + dbfs (0.25 / std::sqrt (2.0))) / 20.0));
         CHECK (rig.processor->getLatencySamples () == lat0, "a drive keeps the latency");
+        // the drives' Oversampling: Off takes their latency away (once the processor has it), 4x (the
+        // default) brings it back
+        rig.param (kDriveOversampling, toNormalized (kDriveOversampling, kDriveOsOff));
+        out.clear ();
+        rig.render (0.05, out, nullptr, tone (346.0, 0.25));
+        CHECK (rig.processor->getLatencySamples () < lat0, "Oversampling Off: less latency (%u vs %u)",
+               (unsigned)rig.processor->getLatencySamples (), (unsigned)lat0);
+        rig.param (kDriveOversampling, toNormalized (kDriveOversampling, kDriveOs4x));
+        out.clear ();
+        rig.render (0.05, out, nullptr, tone (346.0, 0.25));
+        CHECK (rig.processor->getLatencySamples () == lat0, "Oversampling 4x: the latency it had");
         rig.param (driveParam (1, kDriveDb), 0.0);
         rig.param (kBandCount, 1.0);
         rig.param (bandParam (1, kGain), toNormalized (bandParam (1, kGain), 12.0));

@@ -1,5 +1,5 @@
-// Each band's drive: a gain into a curve, 4x oversampled with Smacheratr's oversampler, left and
-// right apart. The curves (small-signal gain 1 each, so a quiet signal goes through level):
+// Each band's drive: a gain into a curve, oversampled with Smacheratr's oversampler (4x, 2x or not at
+// all: the drives' Oversampling, setFactor), left and right apart. The curves (small-signal gain 1 each, so a quiet signal goes through level):
 //   Analog     Smacheratr's curve (smacheratr::analogClip): clean up to 0.5, a soft knee to 1 at 1.5
 //   Tape       tanh: soft all the way, odd harmonics
 //   Tube       tanh leaning to one side (tanh (x + 0.35), re-centred): the top squashes before the
@@ -11,8 +11,8 @@
 // level it went in at, at every Drive (a table made once, DriveMakeup). So the types sound about
 // equally loud at the same Drive, turning Drive up adds colour rather than level, and a hotter band
 // (its Gain up) pushes into the curve: louder parts squash, quieter ones come up a little.
-//   The stage's latency is the oversampler's, always: Levlr delays every band by it whether its drive is
-// on or not (Engine). Drive at 0 dB is off: the band skips the curve (bit-exact, only delayed). Turning
+//   The stage's latency is the oversampler's, always (none with Oversampling off): Levlr delays every band
+// by it whether its drive is on or not (Engine). Drive at 0 dB is off: the band skips the curve (bit-exact, only delayed). Turning
 // it on or off crossfades (15 ms) between the clean band and the curve's output, a new type
 // crossfades between the two curves (inside the oversampled signal, so both line up), and Drive
 // glides (10 ms).
@@ -113,7 +113,8 @@ public:
         mFrom.assign ((size_t)maxBlock, 0.0f);
         fadeStep = (float)(1.0 / (0.015 * sampleRate));
         dbSmooth = 1.0 - std::exp (-1.0 / (0.010 * sampleRate));
-        dcR = (float)std::exp (-2.0 * M_PI * kTubeDcHz / (4.0 * sampleRate));
+        sr = sampleRate;
+        dcR = (float)std::exp (-2.0 * M_PI * kTubeDcHz / (factor * sr));
         reset ();
     }
     void reset ()
@@ -130,7 +131,20 @@ public:
         typeFade = 1.0f;
     }
     // Input samples; the same whether the drive is on or off.
-    int latency () const { return os[0].latency (); }
+    int latency () const { return os[0].latency (factor); }
+    int latencyAt (int f) const { return os[0].latency (f); }
+    int oversampling () const { return factor; }
+    // The oversampling factor (1, 2 or 4). A new one starts the stage from silence (reset): the engine
+    // changes every band's delay with it.
+    void setFactor (int f)
+    {
+        f = f >= 4 ? 4 : f == 2 ? 2 : 1;
+        if (f == factor)
+            return;
+        factor = f;
+        dcR = (float)std::exp (-2.0 * M_PI * kTubeDcHz / (factor * sr));
+        reset ();
+    }
 
     // This block's settings. on: Drive above 0 and the band in use.
     void set (bool on, int type, double driveDb)
@@ -194,29 +208,40 @@ public:
             mFrom[(size_t)i] = fading ? makeup.at (typeFrom, db) * (1.0f - typeFade) : 0.0f;
         }
         const int typeA = typeNow, typeB = typeFrom;
+        const int m = factor * n, shift = factor == 4 ? 2 : factor == 2 ? 1 : 0;
         for (int c = 0; c < 2; ++c)
         {
             float* o = osBuf.data ();
-            os[c].up (in[c], o, n);
+            if (factor == 4)
+                os[c].up (in[c], o, n);
+            else if (factor == 2)
+                os[c].up2x (in[c], o, n);
+            else
+                std::copy (in[c], in[c] + n, o);
             if (primeDc)
             {
                 // the DC filter starts from Tube's DC in this block, so turning to Tube doesn't thump
                 double sum = 0.0;
-                for (int k = 0; k < 4 * n; ++k)
-                    sum += driveCurve (kDriveTube, o[k] * preGain[(size_t)(k >> 2)]);
-                dcX[c] = (float)(sum / (4 * n));
+                for (int k = 0; k < m; ++k)
+                    sum += driveCurve (kDriveTube, o[k] * preGain[(size_t)(k >> shift)]);
+                dcX[c] = (float)(sum / m);
                 dcY[c] = 0.0f;
             }
-            for (int k = 0; k < 4 * n; ++k)
+            for (int k = 0; k < m; ++k)
             {
-                const int i = k >> 2;
+                const int i = k >> shift;
                 const float v = o[k] * preGain[(size_t)i];
                 float y = mNow[(size_t)i] * curve (typeA, v, c);
                 if (fading)
                     y += mFrom[(size_t)i] * curve (typeB, v, c);
                 o[k] = y;
             }
-            os[c].down (o, wet[c], n);
+            if (factor == 4)
+                os[c].down (o, wet[c], n);
+            else if (factor == 2)
+                os[c].down2x (o, wet[c], n);
+            else
+                std::copy (o, o + n, wet[c]);
         }
         primeDc = false;
         if (amtT <= 0.0f && amt <= 0.0f && warm == 0)
@@ -243,7 +268,8 @@ private:
 
     smacheratr::Oversampler os[2];
     std::vector<float> osBuf, preGain, mNow, mFrom;
-    int maxBlock = 256, warm = 0;
+    int maxBlock = 256, warm = 0, factor = 4;
+    double sr = 48000.0;
     float amt = 0.0f, amtT = 0.0f, fadeStep = 0.001f, typeFade = 1.0f, gainNow = 1.0f;
     double db = 0.0, dbT = 0.0, dbSmooth = 0.01;
     int typeNow = kDriveAnalog, typeFrom = kDriveAnalog, typeT = kDriveAnalog;

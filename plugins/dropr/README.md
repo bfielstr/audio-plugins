@@ -138,7 +138,8 @@ README](../../README.md#presets).
 ## Latency
 
 Only the end saturator's (about 1.8 ms at 48 kHz, always in the path): the crossovers add none and
-there is no look-ahead. It never changes and is reported to the host for automatic compensation.
+there is no look-ahead. Switching the saturator on or off never changes it. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told. It is reported to
+the host for automatic compensation.
 
 ## Older projects
 

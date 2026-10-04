@@ -14,13 +14,14 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50455252; // 'PERR'
-constexpr int32 kVersion = 7;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 8;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kPerBandDrive = 4;     // 4: a drive per filter, slopes 6 .. 96 dB and Brickwall
 constexpr int32 kSeparateSlopes = 5;   // 5: a slope per filter, the gain locks, Fade 1 .. 60 semitones
 constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
 constexpr int32 kClassicSlope = 7;     // 7: the end saturator's Gentlr Slope (Classic for states from before it)
+constexpr int32 kOversamplingChoice = 8; // 8: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -119,6 +120,9 @@ bool readState (IBStream* stream, State& st)
     // instance gets 12 / 12)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
+    // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version < kOversamplingChoice)
+        smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
     return true;
 }
 

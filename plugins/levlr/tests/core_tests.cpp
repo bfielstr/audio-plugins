@@ -150,8 +150,8 @@ TEST (parameters_and_defaults)
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
            "the end Smacheratr: off, Pre-Limit on");
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
-    CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kNumParams == 69,
-           "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63, its fifth at 64 .. 68");
+    CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kDriveOversampling == 69 && kNumParams == 70,
+           "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63, its fifth at 64 .. 68, Oversampling at 69");
     CHECK (std::string (t.info (kTailExt4Base + pk::kTailExt4GlueSub1).name) == "Saturator Gentlr Glue Sub / 1", "the fifth block");
     CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the fourth block");
     CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
@@ -583,6 +583,31 @@ static double worstAliasDb (const std::vector<float>& x, size_t a, double f0, do
     return 20.0 * std::log10 (worst / fund + 1e-15);
 }
 
+// All of it that is not a harmonic of f0 (nor DC) below maxHz, in dB against the fundamental (as
+// worstAliasDb, summed: the aliases' energy).
+static double aliasEnergyDb (const std::vector<float>& x, size_t a, double f0, double maxHz, double sr = kSr)
+{
+    constexpr size_t kN = 16384;
+    std::vector<std::complex<double>> s (kN);
+    for (size_t i = 0; i < kN; ++i)
+    {
+        const double p = 2.0 * M_PI * (double)i / (double)kN;
+        const double w = 0.35875 - 0.48829 * std::cos (p) + 0.14128 * std::cos (2 * p) - 0.01168 * std::cos (3 * p);
+        s[i] = w * (double)x[a + i];
+    }
+    fft (s);
+    const double bin = sr / (double)kN;
+    const double fund = std::abs (s[(size_t)std::lround (f0 / bin)]);
+    double sum = 0.0;
+    for (size_t k = 1; k < kN / 2 && (double)k * bin < maxHz; ++k)
+    {
+        const double f = (double)k * bin;
+        if (std::fabs (f - std::round (f / f0) * f0) > 6.0 * bin)
+            sum += std::norm (s[k]);
+    }
+    return 10.0 * std::log10 (sum / (fund * fund) + 1e-30);
+}
+
 static void setBands (Engine& e, int count) { e.setParam (kBandCount, (double)(count - 1)); }
 static void setDrive (Engine& e, int band, double db, int type)
 {
@@ -826,6 +851,85 @@ TEST (aliasing_is_low)
     }
 }
 
+TEST (drive_oversampling)
+{
+    // Oversampling: 4x by default (what the drives always ran at, so the latency an old project knows),
+    // 2x the first half-band stage alone, Off no latency at all; each exact (one band, no drive: the input
+    // that many samples later, bit for bit, run or bypassed) and the same at every Drive while it is held
+    CHECK (std::lround (toPlain (kDriveOversampling, defaultNormalized (kDriveOversampling))) == kDriveOs4x, "4x by default");
+    int lat[3];
+    for (int m = 0; m < 3; ++m)
+    {
+        auto e = engine ([m] (Engine& en) {
+            setBands (en, 1);
+            en.setParam (kDriveOversampling, m);
+        });
+        lat[m] = e->latency ();
+        std::vector<float> outL;
+        long long t = 0;
+        const Signal in = noise (0.5, 3);
+        run (*e, in, t, 6000, outL, nullptr, 333);
+        bool exact = true;
+        for (int i = 0; i < 6000; ++i)
+            exact &= outL[(size_t)i] == (i < lat[m] ? 0.0f : in (i - lat[m], 0));
+        CHECK (exact, "Oversampling %d: the input %d samples later, bit for bit", m, lat[m]);
+        setDrive (*e, 0, 24.0, kDriveTape);
+        run (*e, in, t, 3000, outL);
+        CHECK (e->latency () == lat[m], "Oversampling %d: the same latency with the drive on", m);
+        auto b = engine ([m] (Engine& en) { en.setParam (kDriveOversampling, m); });
+        std::vector<float> l (3000), r (3000);
+        for (int i = 0; i < 3000; ++i)
+            l[(size_t)i] = r[(size_t)i] = in (i, 0);
+        for (int pos = 0; pos < 3000; pos += 500)
+            b->processBypassed (l.data () + pos, r.data () + pos, 500);
+        bool delayed = true;
+        for (int i = 0; i < 3000; ++i)
+            delayed &= l[(size_t)i] == (i < lat[m] ? 0.0f : in (i - lat[m], 0));
+        CHECK (delayed, "Oversampling %d bypassed: the same %d samples", m, lat[m]);
+    }
+    std::printf ("    latency at 48 kHz: Off %d, 2x %d, 4x %d samples\n", lat[0], lat[1], lat[2]);
+    CHECK (lat[0] == 0 && lat[1] > 0 && lat[1] < lat[2] && lat[2] == engine ()->latency (), "Off 0 < 2x < 4x (the default)");
+
+    // switched while running: the next block runs at the new latency, and the meters say so
+    {
+        Meters m;
+        auto e = engine ([] (Engine& en) { setBands (en, 1); });
+        e->setMeters (&m);
+        CHECK (m.driveLatency.load () == lat[2], "published: 4x's %d", m.driveLatency.load ());
+        std::vector<float> out;
+        long long t = 0;
+        run (*e, noise (0.3), t, 2000, out);
+        e->setParam (kDriveOversampling, kDriveOsOff);
+        CHECK (e->latency () == 0, "reports Off's once set");
+        out.clear ();
+        const Signal in = noise (0.3, 9);
+        long long t2 = 0;
+        run (*e, in, t2, 2000, out, nullptr, 500);
+        bool exact = true;
+        for (int i = 0; i < 2000; ++i)
+            exact &= out[(size_t)i] == in (i, 0);
+        CHECK (exact && m.driveLatency.load () == 0, "runs at Off's: no delay (%d)", m.driveLatency.load ());
+    }
+
+    // aliasing: a 5 kHz sine hard-clipped at 18 dB (the worst case): what folds back below 19 kHz (above
+    // it the downsampling filter's transition is the same at 2x and 4x) is the least at 4x
+    double worst[3];
+    for (int m = 0; m < 3; ++m)
+    {
+        auto e = engine ([m] (Engine& en) {
+            setBands (en, 1);
+            setDrive (en, 0, 18.0, kDriveHard);
+            en.setParam (kDriveOversampling, m);
+        });
+        std::vector<float> out;
+        long long t = 0;
+        run (*e, sine (4987.3, kDriveRefPeak), t, 16384 + 9600, out);
+        worst[m] = aliasEnergyDb (out, 9600, 4987.3, 19000.0);
+    }
+    std::printf ("    Hard Clip 18 dB at 5 kHz, alias energy below 19 kHz: Off %.1f, 2x %.1f, 4x %.1f dB\n", worst[0], worst[1], worst[2]);
+    CHECK (worst[1] < worst[0] - 6.0 && worst[2] < worst[1] - 3.0, "4x the least aliasing, then 2x, then Off");
+}
+
 TEST (bands_count)
 {
     CHECK (bandsOf (0.0) == 1 && bandsOf (3.0) == 4 && bandsOf (-5.0) == 1 && bandsOf (9.0) == 4, "the choice as a count");
@@ -973,6 +1077,24 @@ TEST (old_state_migration)
         migrateState (3, n, h);
         CHECK (n[kTailExt2Base + pk::kTailExt2SubRange] == 0.5 && n[kTailExt3Base + pk::kTailExt3HighRange] == 0.0 && n[kSlope] == 0.5,
                "version 3: Sub (on) kept, High (off) at 0, the rest as saved");
+    }
+    // version 5: the end saturator's Oversampling was its Hi-Quality switch (on 4x, off Off, a value in
+    // between on the end the switch read it as); the drives' Oversampling, not in it, is 4x (their default)
+    for (double hq : {0.0, 0.3, 0.7, 1.0})
+    {
+        double n[kNumParams];
+        bool h[kNumParams];
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            n[id] = defaultNormalized (id);
+            h[id] = id != kDriveOversampling;
+        }
+        const uint32_t os = kTailExtBase + pk::kTailExtOversampling;
+        n[os] = hq;
+        migrateState (5, n, h);
+        const int want = hq >= 0.5 ? 2 : 0;
+        CHECK (std::lround (toPlain (os, n[os])) == want, "Hi-Quality %.1f: %s", hq, want ? "4x" : "Off");
+        CHECK (std::lround (toPlain (kDriveOversampling, n[kDriveOversampling])) == kDriveOs4x, "the drives at 4x");
     }
     // this version's own state is kept as it is
     double n3[kNumParams];

@@ -15,6 +15,7 @@ using namespace Steinberg::Vst;
 
 tresult PLUGIN_API Controller::terminate ()
 {
+    unwatchLatency ();
     if (session)
     {
         session->release ();
@@ -63,9 +64,11 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
             if (s != session)
             {
                 s->retain ();
+                unwatchLatency ();
                 if (session)
                     session->release ();
                 session = s;
+                watchLatency (&session->tailMeters.latency); // (the end saturator's moves with its Oversampling)
             }
         }
         return kResultOk;

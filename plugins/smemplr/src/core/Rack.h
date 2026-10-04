@@ -102,6 +102,12 @@ void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool,
 // off, their default (the places held nothing that was used). Same sound.
 void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 22: the rack's Smacheratrs had the Hi-Quality switch where Oversampling is
+// (on -> 4x, off -> Off: smacheratr::oversamplingFromHiQuality), and so had the old saturator after the
+// rack; a Levlr slot's drives' Oversampling (its place held nothing that was used) gets 4x, what the
+// drives always ran at. Same sound.
+void migrateOversamplingInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+
 // States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an
 // "OTT pushed further" then: multidyn::migrateOldBaked moves the difference into its controls) and its
 // later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).

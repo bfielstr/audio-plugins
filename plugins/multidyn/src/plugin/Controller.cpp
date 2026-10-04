@@ -15,6 +15,7 @@ using namespace Steinberg::Vst;
 
 tresult PLUGIN_API Controller::terminate ()
 {
+    unwatchLatency ();
     if (meters)
     {
         meters->release ();
@@ -53,9 +54,11 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
             if (m != meters)
             {
                 m->retain ();
+                unwatchLatency ();
                 if (meters)
                     meters->release ();
                 meters = m;
+                watchLatency (&meters->satMeters.latency); // (the end saturator's moves with its Oversampling)
             }
         }
         return kResultOk;

@@ -1468,7 +1468,7 @@ void Editor::buildBody ()
             add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gentlr"), tip (kClarity));
             add (new Toggle (CRect (436, 8, 478, 26), h, kMidSide, "M/S"), tip (kMidSide));
             add (new Choice (CRect (482, 8, 580, 26), h, kPostClip), tip (kPostClip));
-            add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
+            add (new Choice (CRect (584, 8, 634, 26), h, kOversampling), tip (kOversampling));
             add (new Toggle (CRect (638, 8, 712, 26), h, kDcFilter, "DC Filter"), tip (kDcFilter));
             add (new Toggle (CRect (716, 8, 766, 26), h, kColorOn, "Color"), tip (kColorOn));
             add (new Toggle (CRect (770, 8, 834, 26), h, kClarityAdvanced, "Advanced"), tip (kClarityAdvanced));
@@ -1593,6 +1593,8 @@ void Editor::buildBody ()
             add (new Choice (CRect (636, 198, 690, 218), h, levlr::kBandCount), tip (levlr::kBandCount));
             g->addView (new Label (CRect (704, 176, 750, 192), "Output", 10.5, false, 0));
             add (new NumberBox (CRect (752, 174, 834, 192), h, levlr::kOutput), tip (levlr::kOutput));
+            g->addView (new Label (CRect (700, 200, 776, 216), "Oversampling", 10.0, false, 0));
+            add (new Choice (CRect (778, 198, 834, 218), h, levlr::kDriveOversampling), tip (levlr::kDriveOversampling));
             break;
         }
         case kFxGentlr:

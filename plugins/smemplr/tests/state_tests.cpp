@@ -163,6 +163,31 @@ int main ()
                    back2.norm[kGridSize] == toNormalized (kGridSize, 4),
                "the Grid saved");
     }
+    // a version 21 state (before Oversampling): its Smacheratrs' Hi-Quality (slot 0 on at 0.7, slot 1 off
+    // at 0.3) becomes 4x and Off, a Levlr's drives (slot 2; the place held 0) get 4x, and the old
+    // saturator after the rack's Hi-Quality too. A version 22 state keeps them as saved (2x)
+    for (int32 version : {21, 22})
+    {
+        PluginState st = someState (), back;
+        st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
+        st.norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxSmacheratr);
+        st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxLevlr);
+        const uint32_t os0 = slotBlockParam (0, smacheratr::kOversampling), os1 = slotBlockParam (1, smacheratr::kOversampling);
+        const uint32_t lv = slotBlockParam (2, (uint32_t)fxBlockOf (kFxLevlr, levlr::kDriveOversampling));
+        const uint32_t end = kTailExtBase + pk::kTailExtOversampling;
+        const bool old = version < 22;
+        st.norm[os0] = old ? 0.7 : 0.5;
+        st.norm[os1] = old ? 0.3 : 0.5;
+        st.norm[lv] = old ? 0.0 : 0.5;
+        st.norm[end] = old ? 0.0 : 0.5;
+        CHECK (roundTrip (st, back, version), "read version %d", version);
+        if (old)
+            CHECK (back.norm[os0] == 1.0 && back.norm[os1] == 0.0 && back.norm[lv] == 1.0 && back.has[lv] && back.norm[end] == 0.0,
+                   "version 21: Hi-Quality on 4x, off Off, the Levlr's drives 4x (%.2f %.2f %.2f %.2f)", back.norm[os0], back.norm[os1],
+                   back.norm[lv], back.norm[end]);
+        else
+            CHECK (back.norm[os0] == 0.5 && back.norm[os1] == 0.5 && back.norm[lv] == 0.5 && back.norm[end] == 0.5, "version 22: as saved");
+    }
     // cut short in the mappings: the rest of the state still loads, without them
     {
         PluginState st = someState (), back;

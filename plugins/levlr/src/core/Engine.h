@@ -12,7 +12,9 @@
 //   Each band then: its level, then its drive (Drive.h), then all of them add up. The drive's
 // oversampling delays a band, so every band is delayed by that latency, driven or not (and the
 // output's level with them): with every drive off the output is today's Levlr's, bit for bit, only
-// latency () samples later (37 at 48 kHz, 59 at 44.1, 14 at 96).
+// latency () samples later (at 4x, the default: 37 at 48 kHz, 59 at 44.1, 14 at 96; at 2x the first
+// half-band stage's alone, 32 at 48 kHz; Off: none). A new Oversampling takes effect at the start of the
+// next block: the delays take their new length and the drives start again from silence (a short gap).
 #pragma once
 
 #include "Crossover.h"
@@ -67,6 +69,9 @@ struct Meters
     std::atomic<float> xover[kCrossovers] = {120.0f, 1000.0f, 6000.0f}; // the crossovers now (they glide)
     std::atomic<uint32_t> blocks {0};                           // counts processed blocks
     std::atomic<float> sampleRate {48000.0f};
+    // the band drives' latency as the engine runs it (-1 before it is prepared); a controller watching
+    // it tells the host when Oversampling moves it (pk::ControllerBase::watchLatency)
+    std::atomic<int> driveLatency {-1};
 };
 
 class Engine
@@ -78,10 +83,15 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    // the drives' oversampling (always, whatever is on), and the end saturator's
+    // the drives' oversampling (always, whatever is on), and the end saturator's: at the Oversampling
+    // settings set (what the next block runs at)
     int latency () const { return driveLatency () + (hasTail ? tail.latency () : 0); }
-    int driveLatency () const { return drive[0].latency (); }
-    void setMeters (Meters* m) { meters = m; }
+    int driveLatency () const { return drive[0].latencyAt (driveOversamplingFactor (p[kDriveOversampling])); }
+    void setMeters (Meters* m)
+    {
+        meters = m;
+        publishLatency ();
+    }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
     int slopeInUse () const { return slopeNow; }
 
@@ -97,6 +107,8 @@ private:
     void processChunk (const float* inL, const float* inR, float* outL, float* outR, int n); // n <= kChunk
     void retune ();       // the filters to xfNow and slopeNow
     void resetFilters ();
+    void applyOversampling (); // a new drive Oversampling: every band's delay and the drives, from silence
+    void publishLatency ();
     int countTarget () const { return bandsOf (p[kBandCount]); }
 
     float inMono[kChunk] {}; // the chunk's input, for the analyser
@@ -120,8 +132,8 @@ private:
     // latency () samples long
     BandDrive drive[kBands];
     static constexpr int kRingStride = 2 * kBands + kBands + 1 + 2;
-    std::vector<float> ring, bypassRing;
-    int ringPos = 0, bypassPos = 0;
+    std::vector<float> ring, bypassRing; // room for 4x's latency; ringLen of it in use (0: no delay)
+    int ringPos = 0, bypassPos = 0, ringLen = 0;
     // the chunk's bands for the drives: into them, the clean bands delayed, the drives' outputs
     float pre[kBands][2][kChunk] {}, dry[kBands][2][kChunk] {}, wet[kBands][2][kChunk] {}, mix[kBands][kChunk] {};
     float levelD[kChunk] {};

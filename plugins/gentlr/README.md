@@ -172,8 +172,8 @@ Default** to make every new gentlr start from the current settings. The menu is 
 
 The region Drive's 4x oversampler delays the signal a little (37 samples at 48 kHz). Its delay is always
 in the path, with the dry signal delayed to match, so the latency never changes with the settings. The
-end saturator adds its own (about 1.7 ms), also always in the path. Both are reported to the host for
-automatic compensation.
+end saturator adds its own (about 1.7 ms), also always in the path. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told. Both are reported to
+the host for automatic compensation.
 
 ## Older projects
 

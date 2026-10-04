@@ -23,16 +23,20 @@ inline const char* forParam (uint32_t id)
             return "How many bands are in use (1 to 4): N bands use the first N-1 crossovers, the last band reaches to the "
                    "top. 1: no split at all. The bands past it (their level, mute, solo and drive) are left out, and a "
                    "change crossfades over 20 ms.";
+        case kDriveOversampling:
+            return "How the band drives are oversampled: 4x (the default) leaves the least aliasing, 2x a little more, Off "
+                   "none of the drives' latency but the most aliasing when a band is driven hard. Every band is delayed "
+                   "the same whether its drive is on or not.";
         default: break;
     }
-    if (id >= kDriveBase && id < kNumParams)
+    if (id >= kDriveBase && id < kDriveBase + kBands * kDriveBlock)
         switch ((id - kDriveBase) % kDriveBlock)
         {
             case kDriveDb:
                 return "Saturates the band (after its level): how hard it drives the curve, 0 to 36 dB. 0 dB is off: the "
                        "band stays clean. The level is kept about the same (auto gain), so more Drive adds colour, not "
-                       "volume; a louder band (its level up) is pushed harder. 4x oversampled; the latency is the same "
-                       "whether a drive is on or off.";
+                       "volume; a louder band (its level up) is pushed harder. Oversampled as Oversampling says (4x by "
+                       "default); the latency is the same whether a drive is on or off.";
             case kDriveType:
                 return "The band's drive curve. Analog: Smacheratr's (clean up to a soft knee). Tape: soft all the way "
                        "(tanh). Tube: leans to one side, adds even harmonics. Hard Clip: a flat top, the most edge. "

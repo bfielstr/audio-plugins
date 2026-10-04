@@ -97,6 +97,28 @@ int main (int argc, char** argv)
             err = std::max (err, (double)std::fabs (out[i] - ref[i - latency]));
         CHECK (err < 2e-3, "passthrough error %g", err);
 
+        // Oversampling: Off and 2x report less latency once the processor has the setting (4x, the default,
+        // the most), and the output is the input that much later
+        for (int mode : {(int)kOsOff, (int)kOs2x, (int)kOs4x})
+        {
+            rig.param (kOversampling, toNormalized (kOversampling, mode));
+            std::vector<float> o;
+            rig.render (0.05, o, nullptr, tone (1000.0, 0.2)); // (the setting arrives with this block)
+            const uint32 lat = rig.processor->getLatencySamples ();
+            CHECK (mode == kOs4x ? lat == latency : lat < latency, "Oversampling %d: latency %u (4x %u)", mode, lat, latency);
+            o.clear ();
+            long long first = -1; // (where this render starts: the input's position)
+            rig.render (1.0, o, nullptr, [&first] (int b, int c, float* buf, int n, long long pos) {
+                if (first < 0)
+                    first = pos;
+                tone (1000.0, 0.2) (b, c, buf, n, pos);
+            });
+            double e = 0.0;
+            for (size_t i = 4800; i + lat < 48000; ++i)
+                e = std::max (e, std::fabs (o[i + lat] - 0.2 * std::sin (2 * M_PI * 1000.0 * (double)(first + (long long)i) / 48000.0)));
+            CHECK (e < 2e-3, "Oversampling %d: the input %u samples later (error %g)", mode, lat, e);
+        }
+
         // drive through the plug-in: harmonics appear, the curve holds the peak at 0 dB
         rig.param (kDrive, toNormalized (kDrive, 18.0));
         out.clear ();
@@ -104,7 +126,7 @@ int main (int argc, char** argv)
         const size_t a = 24000, b = 48000;
         CHECK (toneDb (out, 3000.0, a, b) > -30.0, "third harmonic %.1f dB", toneDb (out, 3000.0, a, b));
         {
-            // the curve holds 1.0; Hi-Quality's downsampling filter rings a little past it
+            // the curve holds 1.0; the 4x oversampling's downsampling filter rings a little past it
             float pk = 0.0f;
             for (size_t i = a; i < b; ++i)
                 pk = std::max (pk, std::fabs (out[i]));

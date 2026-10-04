@@ -22,7 +22,6 @@ Processor::Processor ()
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);
-    shared->latency.store (engine.latency ());
 }
 
 Processor::~Processor ()
@@ -70,7 +69,6 @@ tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
     engine.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
     for (uint32_t id = 0; id < kNumParams; ++id)
         engine.setParam (id, toPlain (id, normMirror[id].load ()));
-    shared->latency.store (engine.latency ());
     shared->sampleRate.store (setup.sampleRate);
     return AudioEffect::setupProcessing (setup);
 }

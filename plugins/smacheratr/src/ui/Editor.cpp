@@ -242,9 +242,9 @@ void Editor::idle ()
         if (auto* s = ctl->getShared ())
         {
             char buf[96];
-            std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples",
-                           plainValue (kHiQuality) >= 0.5 ? "Hi-Quality: 4x oversampling" : "Hi-Quality off",
-                           plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", s->latency.load ());
+            const int f = oversamplingFactor (plainValue (kOversampling));
+            std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples", f == 4 ? "4x oversampling" : f == 2 ? "2x oversampling" : "Oversampling off",
+                           plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", std::max (0, s->meters.latency.load ()));
             status->setText (buf);
         }
 }
@@ -262,7 +262,11 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     menu->addSeparator ();
-    menu->addEntry ("Hi-Quality (4x oversampling)", -1, plainValue (kHiQuality) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
+    // Oversampling: one entry per setting, the one in use checked
+    const int osNow = std::clamp ((int)std::lround (plainValue (kOversampling)), 0, kNumOsModes - 1);
+    static const char* const osNames[kNumOsModes] = {"Oversampling Off", "Oversampling 2x", "Oversampling 4x"};
+    for (int k = 0; k < kNumOsModes; ++k)
+        menu->addEntry (osNames[k], -1, k == osNow ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     menu->addEntry ("Pre-DC Filter", -1, plainValue (kDcFilter) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     menu->addEntry ("Mid/Side (saturate mid and side apart)", -1,
                     plainValue (kMidSide) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
@@ -273,11 +277,11 @@ void Editor::showMenu (CPoint where)
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
-        else if (r == (int32_t)sizes.size () + 1)
-            ctl->setPlainFromUI (kHiQuality, plainValue (kHiQuality) >= 0.5 ? 0.0 : 1.0);
-        else if (r == (int32_t)sizes.size () + 2)
+        else if (r > (int32_t)sizes.size () && r <= (int32_t)sizes.size () + kNumOsModes)
+            ctl->setPlainFromUI (kOversampling, r - (int32_t)sizes.size () - 1);
+        else if (r == (int32_t)sizes.size () + kNumOsModes + 1)
             ctl->setPlainFromUI (kDcFilter, plainValue (kDcFilter) >= 0.5 ? 0.0 : 1.0);
-        else if (r == (int32_t)sizes.size () + 3)
+        else if (r == (int32_t)sizes.size () + kNumOsModes + 2)
             ctl->setPlainFromUI (kMidSide, plainValue (kMidSide) >= 0.5 ? 0.0 : 1.0);
     });
 }

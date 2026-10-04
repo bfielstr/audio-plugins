@@ -40,8 +40,11 @@ with **Bands** next to Slope.
 
   An auto gain brings a sine at -12 dBFS back to the level it went in at, at every Drive and type, so
   more Drive adds colour rather than level, and a band turned up drives its curve harder. The curves run
-  4x oversampled. Turning a drive on or off crossfades (15 ms), a new type crossfades between the two
-  curves, and Drive glides (10 ms).
+  oversampled as **Oversampling** says. Turning a drive on or off crossfades (15 ms), a new type
+  crossfades between the two curves, and Drive glides (10 ms).
+- **Oversampling** (**Off** / **2x** / **4x**, under Bands): how the band drives are oversampled. 4x (the
+  default) leaves the least aliasing when a band is driven hard, 2x a little more, Off the most, but
+  without the drives' latency.
 - **Crossovers**: three, at 120 Hz, 1 kHz and 6 kHz by default. Each stays at least 1/6 octave from its
   neighbours; one moved past them pushes the ones above it up. Moving one glides it there (no clicks).
 - **Slope**: **12 dB/oct** to **96 dB/oct** in 12 dB steps, **24 dB/oct** by default. Every slope adds
@@ -89,11 +92,15 @@ README](../../README.md#presets).
 ## Latency
 
 The drives' oversampling delays every band, driven or not, so the latency is the same whatever the
-drives, their types and Bands are: 37 samples at 48 kHz (59 at 44.1 kHz, 14 at 96 kHz), plus the end
-smacheratr's. It is reported to the host. With every drive off the output is the undriven output bit
-for bit, only that much later.
+drives, their types and Bands are: at 4x (the default) 37 samples at 48 kHz (59 at 44.1 kHz, 14 at
+96 kHz), at 2x 32 at 48 kHz, with Oversampling off none, plus the end smacheratr's (which its own
+Oversampling sets in the same way). It is reported to the host, and the host is told when an
+Oversampling change moves it. With every drive off the output is the undriven output bit for bit, only
+that much later.
 
 ## Older projects
 
 Projects from 0.6.0 and earlier (no Bands, no drives) load with four bands and every drive off: they
-sound as they did, later by the drives' latency (which the host compensates).
+sound as they did, later by the drives' latency (which the host compensates). Projects from before
+Oversampling load with the drives at 4x, what they always ran at, and the end smacheratr's old
+**Hi-Quality** switch as 4x (on) or Off (off).

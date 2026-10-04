@@ -57,6 +57,7 @@ Parameter* Controller::makeParameter (uint32_t id)
 
 tresult PLUGIN_API Controller::terminate ()
 {
+    unwatchLatency ();
     if (shared)
     {
         shared->release ();
@@ -95,9 +96,11 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
             if (m != shared)
             {
                 m->retain ();
+                unwatchLatency ();
                 if (shared)
                     shared->release ();
                 shared = m;
+                watchLatency (&shared->tailMeters.latency); // (the end saturator's moves with its Oversampling)
             }
         }
         return kResultOk;

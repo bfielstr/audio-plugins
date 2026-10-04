@@ -20,7 +20,8 @@ constexpr int32 kOttDefaults = 4;      // 4: Live's OTT preset's gain staging ba
 constexpr int32 kStyleAdded = 5;       // 5: Style (OTT for new instances; older states keep Character)
 constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the saturator (a band works while its Range is above 0)
 constexpr int32 kClassicSlope = 7;     // 7: the saturator's Gentlr Slope (Classic for states from before it)
-static_assert (kStateVersion == kClassicSlope);
+constexpr int32 kOversamplingChoice = 8; // 8: the saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
+static_assert (kStateVersion == kOversamplingChoice);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -101,6 +102,9 @@ bool readState (IBStream* stream, State& st)
     // instance gets 12 / 12)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kSatExt3Base);
+    // the saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
+    if (version < kOversamplingChoice)
+        smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kSatExtBase);
     return true;
 }
 

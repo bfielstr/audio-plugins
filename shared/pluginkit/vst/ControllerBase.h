@@ -10,6 +10,7 @@
 #include "public.sdk/source/vst/vsteditcontroller.h"
 #include "public.sdk/source/vst/vstparameters.h"
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -99,6 +100,17 @@ public:
     std::string settingsText ();
     bool applySettingsText (const std::string& text);
 
+    // Latency the processor can change while it runs (a saturator's Oversampling): the processor
+    // publishes what it runs at in an atomic (-1: not known yet) shared in-process with the controller,
+    // which watches it here and tells the host (restartComponent (kLatencyChanged)) when it moves. The
+    // first value seen is what the host was told at activation. Checked on every parameter the
+    // controller hears of and 30 times a second while an editor is open (the processor takes a new
+    // setting on its next block, so the check that follows a change is the one that sees it). A
+    // source must outlive the watch: unwatchLatency () before releasing what holds it.
+    void watchLatency (const std::atomic<int>* source);
+    void unwatchLatency ();
+    void checkLatency ();
+
     double uiScale = 1.0;
     bool uiShowTips = true;
 
@@ -130,6 +142,9 @@ protected:
     bool lastSaveOk = false;
     std::vector<presets::FactoryPreset> factory;
     bool factoryParsed = false;
+
+    std::vector<const std::atomic<int>*> latencySources;
+    std::vector<int> latencySeen; // per source: the value the host knows (-1: none yet)
 
 private:
     void applyValues (const SettingValues& values); // every parameter: the default unless in `values`
