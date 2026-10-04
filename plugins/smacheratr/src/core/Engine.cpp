@@ -24,7 +24,7 @@ ParamArray defaultParams ()
 
 void Engine::Channel::reset ()
 {
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         bandHp[k].reset ();
         bandLp[k].reset ();
@@ -50,7 +50,7 @@ void Engine::prepare (double sampleRate, int mb)
     look = std::clamp ((int)std::lround (0.001 * sr), 1, kMaxLook);
     lmAtk = 1.0 - std::exp (-1.0 / (0.015 * sr));
     lmRel = 1.0 - std::exp (-1.0 / (0.15 * sr));
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
         bandFreq[k] = bandWidth[k] = -1.0; // Clarity's bands are designed for this rate on the next block
     // the limiter's gain (in dB) reaches its target within the look-ahead and releases in 50 ms
     limAtk = (float)std::exp (-5.0 / look);
@@ -145,7 +145,7 @@ void Engine::clipCeiling (float* yl, float* yr, int n) const
 {
     // Soft and Hard Clip: nothing leaves above 0 dBFS. The clip after the curve (in the oversampled
     // path) is the sound, soft or hard; what comes after it can rise above it again (Hi-Quality's downsampling filter
-    // overshooting the clipped edges, Gently's band filters, the dry part of a mix, Output, Mid/Side
+    // overshooting the clipped edges, Gentlr's band filters, the dry part of a mix, Output, Mid/Side
     // back to left / right), so the very end is held to 0 dBFS too: only those overshoots are cut.
     if ((int)std::lround (p[kPostClip]) == kPostOff)
         return;
@@ -259,7 +259,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         gMix[(size_t)i] = mix;
     }
 
-    // Gently (called Clarity before), a compressor on up to four bands (one button; a band works while
+    // Gentlr (called Clarity before), a compressor on up to four bands (one button; a band works while
     // its Range is above 0; the third and fourth are the Sub and High bands, shelves at the ends of the
     // spectrum, which also need their own buttons) (ClarityBand.h: 12 dB/oct below, 6 dB/oct above,
     // around each band's frequency): when the drive pushes a band past its threshold into the curve (-18 dBFS, or the
@@ -268,21 +268,21 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     // after it by half as much (the curve squashes the cut before it back up). The bands work one
     // after the other, each measuring its own band.
     const bool advanced = p[kClarityAdvanced] >= 0.5;
-    bool clarity[kGentlyBands];
-    double levelDb[kGentlyBands] = {-120.0, -120.0, -120.0, -120.0};
-    for (int k = 0; k < kGentlyBands; ++k)
-        clarity[k] = clarityBandOn (p[kClarity], p[kGentlyRangeIds[k]]); // (Sub and High too: no button of their own)
+    bool clarity[kGentlrBands];
+    double levelDb[kGentlrBands] = {-120.0, -120.0, -120.0, -120.0};
+    for (int k = 0; k < kGentlrBands; ++k)
+        clarity[k] = clarityBandOn (p[kClarity], p[kGentlrRangeIds[k]]); // (Sub and High too: no button of their own)
     // where the bands sit: as set, or with No Overlap kept apart (what the editors push is left as it is)
-    GentlyLayout layout;
-    for (int k = 0; k < kGentlyBands; ++k)
+    GentlrLayout layout;
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         layout.on[k] = clarity[k];
-        layout.freq[k] = p[kGentlyFreqIds[k]];
+        layout.freq[k] = p[kGentlrFreqIds[k]];
         layout.width[k] = hasWidth (k) ? p[kClarityWidthIds[k]] : 0.0; // (the Sub and High bands have none)
     }
     if (p[kClarityNoOverlap] >= 0.5)
         resolveOverlaps (layout);
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         if (clarity[k] != clarityWas[k])
         {
@@ -301,8 +301,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         if (!clarity[k])
             continue;
         levelDb[k] = 10.0 * std::log10 (std::max (1e-12, lmEnv[k]));
-        const double thresholdDb = advanced ? p[kGentlyThresholdIds[k]] : kClarityThresholdDb;
-        lmCutDb[k] = (float)clarityCutDb (levelDb[k], thresholdDb, p[kGentlyRangeIds[k]]);
+        const double thresholdDb = advanced ? p[kGentlrThresholdIds[k]] : kClarityThresholdDb;
+        lmCutDb[k] = (float)clarityCutDb (levelDb[k], thresholdDb, p[kGentlrRangeIds[k]]);
         if (layout.freq[k] != bandFreq[k] || layout.width[k] != bandWidth[k])
         {
             bandFreq[k] = layout.freq[k];
@@ -319,7 +319,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
     }
 
-    // Gently's region drive (Advanced): faded in and out, and only running while it is in, so with it
+    // Gentlr's region drive (Advanced): faded in and out, and only running while it is in, so with it
     // off nothing here touches the sound
     const float regionMixT = advanced && p[kClarityDrive] >= 0.5 && (clarity[0] || clarity[1] || clarity[kSubBand] || clarity[kHighBand]) ? 1.0f : 0.0f;
     const float regionGainT = dbToGain (std::clamp (p[kClarityDriveAmount], 0.0, 36.0));
@@ -344,15 +344,15 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
     // DC filter, look-ahead delay and the stereo-linked pre-limiter, then the drive
     float inPk = 0.0f, outPk = 0.0f;
-    float gPreTarget[kGentlyBands], gPostTarget[kGentlyBands];
-    for (int k = 0; k < kGentlyBands; ++k)
+    float gPreTarget[kGentlrBands], gPostTarget[kGentlrBands];
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         gPreTarget[k] = dbToGain (-lmCutDb[k]);
         gPostTarget[k] = dbToGain (-0.5 * lmCutDb[k]);
     }
     for (int i = 0; i < n; ++i)
     {
-        for (int k = 0; k < kGentlyBands; ++k)
+        for (int k = 0; k < kGentlrBands; ++k)
             if (clarity[k])
             {
                 gBandPre[k] += (gPreTarget[k] - gBandPre[k]) * smooth;
@@ -383,12 +383,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         else
             limGainDb = 0.0f;
-        double lmPower[kGentlyBands] = {0.0, 0.0, 0.0, 0.0};
+        double lmPower[kGentlrBands] = {0.0, 0.0, 0.0, 0.0};
         for (int c = 0; c < 2; ++c)
         {
             float d = chan[c].lookDelay.push (v[c]) * limGain * gDrive[(size_t)i];
             double cutBands = 0.0; // the bands as they leave, after their cuts (the region drive's input)
-            for (int k = 0; k < kGentlyBands; ++k)
+            for (int k = 0; k < kGentlrBands; ++k)
                 if (clarity[k])
                 {
                     const double band = chan[c].bandLp[k].process (chan[c].bandHp[k].process (d)) * bandNorm[k];
@@ -401,7 +401,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 region[c][(size_t)i] = (float)cutBands;
             inPk = std::max (inPk, std::fabs (d));
         }
-        for (int k = 0; k < kGentlyBands; ++k)
+        for (int k = 0; k < kGentlrBands; ++k)
             if (clarity[k])
                 lmEnv[k] += (lmPower[k] - lmEnv[k]) * (lmPower[k] > lmEnv[k] ? lmAtk : lmRel);
     }
@@ -435,7 +435,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             for (int i = 0; i < n; ++i)
                 wet[(size_t)i] = ch.wetDelay.push (shapeChain (ch, pre[c][(size_t)i], color, post));
         }
-        for (int k = 0; k < kGentlyBands; ++k)
+        for (int k = 0; k < kGentlrBands; ++k)
             if (clarity[k])
                 for (int i = 0; i < n; ++i)
                 {

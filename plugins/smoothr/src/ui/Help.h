@@ -29,7 +29,7 @@ inline const char* forParam (uint32_t id)
         case kCharacter:
             return "A dip in the low mids (somewhere in 80 - 250 Hz), before the limiter, that only opens when the low "
                    "mids get loud: the boxy build-up stops eating headroom, so the lows get pulled down less. It is "
-                   "Smacheratr's Gently (Clarity), tuned: turning it up deepens the dip (up to 6 dB), widens it and "
+                   "Smacheratr's Gentlr (Clarity), tuned: turning it up deepens the dip (up to 6 dB), widens it and "
                    "slides it down. 0: off.";
         default: break;
     }

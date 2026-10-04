@@ -129,7 +129,7 @@ void ShaperView::draw (CDrawContext* ctx)
     else
         std::snprintf (buf, sizeof (buf), "Drive %s", host->valueText (kDrive).c_str ());
     text (ctx, buf, CRect (all.left + 6, all.top + 19, all.right - 6, all.top + 32), theme::kTextDim, 9.5, kLeftText);
-    // Gently at work: how far each band is turned down before the curve (band 2 under band 1, each
+    // Gentlr at work: how far each band is turned down before the curve (band 2 under band 1, each
     // named; the cut as a lit cinnabar bar on a dim track)
     int rowsShown = 0;
     for (int k = 0; k < kClarityBands; ++k)
@@ -139,7 +139,7 @@ void ShaperView::draw (CDrawContext* ctx)
         const CColor c = theme::kCopperPale;
         const double range = std::max (1.0, host->plainValue (kClarityRangeIds[k]));
         const double cut = std::clamp (-(double)(k == 0 ? shownClarity : shownClarity2), 0.0, range);
-        std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Gently" : "Gently 2", -cut);
+        std::snprintf (buf, sizeof (buf), "%s %.1f dB", k == 0 ? "Gentlr" : "Gentlr 2", -cut);
         const double top = all.top + 4 + 24 * rowsShown++;
         text (ctx, buf, CRect (all.right - 130, top, all.right - 6, top + 14), c, 9.5, kRightText, true);
         const CRect bar (all.right - 86, top + 17, all.right - 6, top + 21);

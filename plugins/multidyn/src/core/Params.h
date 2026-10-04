@@ -38,7 +38,7 @@ enum ParamId : uint32_t
     kRmsWindow,                 // ms, the RMS detector's window (Character: 2.5 times as long)
     kSoften,                    // the top band: softens what upward compression lifts as its thresholds close in
     kSatExtBase,                // the rest of the built-in Smacheratr: pk::kTailExtFields entries
-    kSatExt2Base = kSatExtBase + pk::kTailExtFields, // Gently's Advanced mode in it: pk::kTailExt2Fields entries
+    kSatExt2Base = kSatExtBase + pk::kTailExtFields, // Gentlr's Advanced mode in it: pk::kTailExt2Fields entries
     kXoverSlope = kSatExt2Base + pk::kTailExt2Fields, // the crossovers' slope (an XoverSlope, Crossover.h)
     kSoftenColor,                                     // Soften's Color: Smacheratr's high colour after Output (see Engine.h)
     // the Sub band (see Engine.h): an extra band below band 1, split off below its corner and compressed
@@ -51,7 +51,7 @@ enum ParamId : uint32_t
     kSubOutput,  // dB, its level after the compression
     kStyle,      // OTT (a model of Xfer's OTT, see Ott.h) / Character (Multidyn's own, see Engine.h)
     kSubInput,   // dB, the Sub band's level before its compression (as a band's Input)
-    kSatExt3Base, // Gently's High band and No Overlap in the built-in Smacheratr: pk::kTailExt3Fields entries
+    kSatExt3Base, // Gentlr's High band and No Overlap in the built-in Smacheratr: pk::kTailExt3Fields entries
     kNumParams = kSatExt3Base + pk::kTailExt3Fields
 };
 

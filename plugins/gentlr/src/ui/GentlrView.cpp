@@ -1,4 +1,4 @@
-#include "GentlyView.h"
+#include "GentlrView.h"
 
 #include "smacheratr/src/ui/ColorView.h"
 
@@ -15,7 +15,7 @@
 #include <cstdio>
 #include <string>
 
-namespace gently {
+namespace gentlr {
 
 using namespace VSTGUI;
 namespace theme = pk::theme;
@@ -84,11 +84,11 @@ void fft (std::vector<std::complex<float>>& a)
 }
 } // namespace
 
-CColor GentlyView::bandColor (int band, uint8_t alpha) { return smacheratr::ColorView::bandColor (band, alpha); }
+CColor GentlrView::bandColor (int band, uint8_t alpha) { return smacheratr::ColorView::bandColor (band, alpha); }
 
-const smacheratr::GentlyBandParams& GentlyView::bandParams ()
+const smacheratr::GentlrBandParams& GentlrView::bandParams ()
 {
-    static const smacheratr::GentlyBandParams bp {
+    static const smacheratr::GentlrBandParams bp {
         {freqParam (0), freqParam (1), freqParam (kSub), freqParam (kHigh)},
         {bandParam (0, kWidth), bandParam (1, kWidth), -1, -1},
         kNoOverlap,
@@ -96,7 +96,7 @@ const smacheratr::GentlyBandParams& GentlyView::bandParams ()
     return bp;
 }
 
-GentlyView::GentlyView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
+GentlrView::GentlrView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
 {
     window.resize (kFftSize);
     for (int i = 0; i < kFftSize; ++i)
@@ -107,28 +107,28 @@ GentlyView::GentlyView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView
     specOut.assign (kFftSize / 2 + 1, (float)kSpecFloorDb);
 }
 
-double GentlyView::sampleRate () const
+double GentlrView::sampleRate () const
 {
     const Meters* m = meters ? meters () : nullptr;
     return m ? std::max (8000.0, (double)m->sampleRate.load ()) : 48000.0;
 }
 
-bool GentlyView::works (int band) const
+bool GentlrView::works (int band) const
 {
     return bandWorks (band, host->plainValue (onParam (band)), host->plainValue (rangeParam (band)));
 }
 
-smacheratr::GentlyLayout GentlyView::layoutNow () const
+smacheratr::GentlrLayout GentlrView::layoutNow () const
 {
-    smacheratr::GentlyLayout l = smacheratr::readLayout (host, bandParams ());
+    smacheratr::GentlrLayout l = smacheratr::readLayout (host, bandParams ());
     if (host->plainValue (kNoOverlap) >= 0.5)
         smacheratr::resolveOverlaps (l);
     return l;
 }
 
-ClarityBand GentlyView::bandNow (int band) const
+ClarityBand GentlrView::bandNow (int band) const
 {
-    const smacheratr::GentlyLayout l = layoutNow ();
+    const smacheratr::GentlrLayout l = layoutNow ();
     if (band == kSub)
         return smacheratr::subBand (sampleRate (), l.freq[band]);
     if (band == kHigh)
@@ -136,36 +136,36 @@ ClarityBand GentlyView::bandNow (int band) const
     return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band]);
 }
 
-double GentlyView::xOfHz (double hz) const
+double GentlrView::xOfHz (double hz) const
 {
     const CRect r = getViewSize ();
     return r.left + std::log (std::clamp (hz, kMinHz, kMaxHz) / kMinHz) / std::log (kMaxHz / kMinHz) * r.getWidth ();
 }
 
-double GentlyView::hzOfX (double x) const
+double GentlrView::hzOfX (double x) const
 {
     const CRect r = getViewSize ();
     return kMinHz * std::pow (kMaxHz / kMinHz, std::clamp ((x - r.left) / r.getWidth (), 0.0, 1.0));
 }
 
-double GentlyView::yOfDb (double db) const
+double GentlrView::yOfDb (double db) const
 {
     const double t = plotTop (), b = plotBottom ();
     return t + (kTopDb - std::clamp (db, kBottomDb, kTopDb)) / (kTopDb - kBottomDb) * (b - t);
 }
 
-CPoint GentlyView::handle (int band) const
+CPoint GentlrView::handle (int band) const
 {
     return CPoint (xOfHz (layoutNow ().freq[band]), yOfDb (-host->plainValue (rangeParam (band))));
 }
 
-double GentlyView::edgeX (int band, bool high) const
+double GentlrView::edgeX (int band, bool high) const
 {
     const ClarityBand b = bandNow (band);
     return xOfHz (high ? b.highHz : b.lowHz);
 }
 
-CRect GentlyView::pill (int band) const
+CRect GentlrView::pill (int band) const
 {
     // above its band, in the first row where it overlaps none of the bands before it
     const CRect all = getViewSize ();
@@ -190,7 +190,7 @@ CRect GentlyView::pill (int band) const
     return CRect (x, y, x + kPillW, y + kPillH);
 }
 
-double GentlyView::pillsBottom () const
+double GentlrView::pillsBottom () const
 {
     double b = getViewSize ().top;
     for (int k = 0; k < kAllBands; ++k)
@@ -198,9 +198,9 @@ double GentlyView::pillsBottom () const
     return b + 4.0;
 }
 
-bool GentlyView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
+bool GentlrView::live () const { return lastBlocks != 0 && idleSinceBlock < 10; }
 
-void GentlyView::analyse (const std::vector<float>& in, std::vector<float>& spec)
+void GentlrView::analyse (const std::vector<float>& in, std::vector<float>& spec)
 {
     std::vector<std::complex<float>> a ((size_t)kFftSize);
     float wsum = 0.0f;
@@ -219,7 +219,7 @@ void GentlyView::analyse (const std::vector<float>& in, std::vector<float>& spec
     }
 }
 
-double GentlyView::specAt (const std::vector<float>& spec, double f0, double f1) const
+double GentlrView::specAt (const std::vector<float>& spec, double f0, double f1) const
 {
     const double binHz = sampleRate () / kFftSize;
     const double b0 = f0 / binHz, b1 = f1 / binHz;
@@ -237,7 +237,7 @@ double GentlyView::specAt (const std::vector<float>& spec, double f0, double f1)
     return mx;
 }
 
-void GentlyView::idle ()
+void GentlrView::idle ()
 {
     const Meters* m = meters ? meters () : nullptr;
     bool changed = false;
@@ -295,7 +295,7 @@ void GentlyView::idle ()
         invalid ();
 }
 
-void GentlyView::draw (CDrawContext* ctx)
+void GentlrView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const double top = plotTop (), bot = plotBottom ();
@@ -343,7 +343,7 @@ void GentlyView::draw (CDrawContext* ctx)
     }
 
     // the spectra on their own scale (0 dBFS at the top), tilted so a mix reads level: the output
-    // filled, the input as a line (where it stands above the output, Gently is cutting)
+    // filled, the input as a line (where it stands above the output, Gentlr is cutting)
     if (haveSpectrum)
     {
         auto ySpec = [&] (double db) { return top + std::clamp (db, kSpecFloorDb, 0.0) / kSpecFloorDb * (bot - top); };
@@ -502,7 +502,7 @@ void GentlyView::draw (CDrawContext* ctx)
     ctx->resetClipRect ();
 }
 
-int GentlyView::bandUnder (const CPoint& p) const
+int GentlrView::bandUnder (const CPoint& p) const
 {
     // the second band is drawn on top, so it is found first (Sub and High have no width: not here)
     for (int k = kBands - 1; k >= 0; --k)
@@ -511,7 +511,7 @@ int GentlyView::bandUnder (const CPoint& p) const
     return -1;
 }
 
-GentlyView::Drag GentlyView::hit (const CPoint& p, int* band) const
+GentlrView::Drag GentlrView::hit (const CPoint& p, int* band) const
 {
     auto near = [&] (const CPoint& h) { return std::hypot (p.x - h.x, p.y - h.y) <= kHandleRadius + 4.0; };
     for (int k = kAllBands - 1; k >= 0; --k)
@@ -540,7 +540,7 @@ GentlyView::Drag GentlyView::hit (const CPoint& p, int* band) const
     return Drag::None;
 }
 
-void GentlyView::setHover (int band)
+void GentlrView::setHover (int band)
 {
     if (band != hoverBand)
     {
@@ -549,7 +549,7 @@ void GentlyView::setHover (int band)
     }
 }
 
-void GentlyView::onMouseDownEvent (MouseDownEvent& e)
+void GentlrView::onMouseDownEvent (MouseDownEvent& e)
 {
     const bool right = e.buttonState.isRight (); // a right click resets, like a double-click
     if (!e.buttonState.isLeft () && !right)
@@ -593,7 +593,7 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     const uint32_t freq = freqParam (k), width = sub ? freq : bandParam (k, kWidth), range = rangeParam (k);
     if (e.clickCount == 2 || right)
     {
-        const smacheratr::GentlyLayout before = smacheratr::readLayout (host, bandParams ());
+        const smacheratr::GentlrLayout before = smacheratr::readLayout (host, bandParams ());
         host->setOnce (freq, host->table ().defaultNormalized (freq));
         if (!sub)
             host->setOnce (width, host->table ().defaultNormalized (width));
@@ -622,7 +622,7 @@ void GentlyView::onMouseDownEvent (MouseDownEvent& e)
     e.consumed = true;
 }
 
-void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
+void GentlrView::onMouseMoveEvent (MouseMoveEvent& e)
 {
     if (drag == Drag::None)
     {
@@ -672,7 +672,7 @@ void GentlyView::onMouseMoveEvent (MouseMoveEvent& e)
     e.consumed = true;
 }
 
-void GentlyView::onMouseUpEvent (MouseUpEvent& e)
+void GentlrView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag == Drag::None)
         return;
@@ -689,14 +689,14 @@ void GentlyView::onMouseUpEvent (MouseUpEvent& e)
     e.consumed = true;
 }
 
-void GentlyView::onMouseCancelEvent (MouseCancelEvent& e)
+void GentlrView::onMouseCancelEvent (MouseCancelEvent& e)
 {
     MouseUpEvent up;
     onMouseUpEvent (up); // closes the edit of the drag
     e.consumed = true;
 }
 
-void GentlyView::onMouseExitEvent (MouseExitEvent& e)
+void GentlrView::onMouseExitEvent (MouseExitEvent& e)
 {
     if (auto* f = getFrame ())
         f->setCursor (kCursorDefault);
@@ -705,7 +705,7 @@ void GentlyView::onMouseExitEvent (MouseExitEvent& e)
     e.consumed = true;
 }
 
-void GentlyView::onMouseWheelEvent (MouseWheelEvent& e)
+void GentlrView::onMouseWheelEvent (MouseWheelEvent& e)
 {
     // the suite's wheel on a filter handle (held, or with Shift over it): here the band's width, wheel up wider
     int k = dragBand;
@@ -716,7 +716,7 @@ void GentlyView::onMouseWheelEvent (MouseWheelEvent& e)
     const double dn = pk::wheelStep (e, host->table (), id);
     if (dn == 0.0)
         return;
-    const smacheratr::GentlyLayout before = smacheratr::readLayout (host, bandParams ());
+    const smacheratr::GentlrLayout before = smacheratr::readLayout (host, bandParams ());
     host->setOnce (id, std::clamp (host->norm (id) + dn, 0.0, 1.0));
     if (push.active ())
         push.update (host, bandParams ());
@@ -726,4 +726,4 @@ void GentlyView::onMouseWheelEvent (MouseWheelEvent& e)
     e.consumed = true;
 }
 
-} // namespace gently
+} // namespace gentlr

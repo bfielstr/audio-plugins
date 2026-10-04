@@ -1,9 +1,9 @@
-// Smacheratr's two displays (the Analog curve, and the colour curve with Gently's bands) for the
+// Smacheratr's two displays (the Analog curve, and the colour curve with Gentlr's bands) for the
 // saturator at the end of another plug-in's chain: the displays work on the plug-in's tail
-// parameters (its four blocks, TailBases: pk::addTailParams, the extended block, Gently's Advanced
+// parameters (its four blocks, TailBases: pk::addTailParams, the extended block, Gentlr's Advanced
 // block, its High band and No Overlap) through a mapping, and read the tail's levels and the sample
-// rate through functions. While Gently's Advanced is on, a strip at the right of the colour display
-// holds the region Drive (on / amount) and the bands' Threshold sliders. Gently's No Overlap button
+// rate through functions. While Gentlr's Advanced is on, a strip at the right of the colour display
+// holds the region Drive (on / amount) and the bands' Threshold sliders. Gentlr's No Overlap button
 // goes above the colour display's right end (in the tail panel's title row).
 #pragma once
 
@@ -30,7 +30,7 @@ public:
     void idle ();
     void paramChanged (uint32_t id); // redraws when a tail parameter changes
     void closed ();                  // the editor closed: its views are gone
-    void onBandPicked (std::function<void (int)> f); // a Gently band grabbed in the display
+    void onBandPicked (std::function<void (int)> f); // a Gentlr band grabbed in the display
 
     // Extra height the tail panel needs for the displays.
     static constexpr double kHeight = 170.0;
@@ -48,7 +48,7 @@ private:
     ShaperView* shaper = nullptr;
     ColorView* color = nullptr;
     VSTGUI::CRect colorArea;
-    ThresholdSlider* sliders[kGentlyBands] = {nullptr, nullptr, nullptr, nullptr};
+    ThresholdSlider* sliders[kGentlrBands] = {nullptr, nullptr, nullptr, nullptr};
     pk::ParamView* noOverlap = nullptr;
     pk::ParamView* driveOn = nullptr;
     pk::ParamView* driveAmount = nullptr;

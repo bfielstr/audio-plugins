@@ -219,7 +219,7 @@ int main (int argc, char** argv)
             pump (0.05);
             CHECK (bandsOf (plainOf (rig, kBandCount)) == 4, "Bands 4 again");
 
-            // the end saturator's Gently with Advanced on: the Threshold sliders and the region Drive at
+            // the end saturator's Gentlr with Advanced on: the Threshold sliders and the region Drive at
             // the right of its colour display
             rig.param (kTailExtBase + pk::kTailExtClarity, 1.0);
             rig.param (kTailExt2Base + pk::kTailExt2Advanced, 1.0);
@@ -232,8 +232,8 @@ int main (int argc, char** argv)
                 rig.render (0.05, out, nullptr, music ());
                 pump (0.03);
             }
-            CHECK (plainOf (rig, kTailExt2Base + pk::kTailExt2Advanced) >= 0.5, "the end saturator's Gently: Advanced on");
-            CHECK (win.savePng (outDir + "/ui_levlr_gently_advanced.png"), "screenshot, Gently Advanced in the end saturator");
+            CHECK (plainOf (rig, kTailExt2Base + pk::kTailExt2Advanced) >= 0.5, "the end saturator's Gentlr: Advanced on");
+            CHECK (win.savePng (outDir + "/ui_levlr_gentlr_advanced.png"), "screenshot, Gentlr Advanced in the end saturator");
         }
         return finish ("levlr host test");
     }

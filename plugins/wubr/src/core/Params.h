@@ -48,8 +48,8 @@ enum ParamId : uint32_t
     kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
     // --- after the end saturator's block (which stays as it is from here on) ---
     kLinkRate = kTailExtBase + 17, // both bands run at band 1's rate (Sync/Free, division, Hz); each keeps its phase
-    kTailExt2Base, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kTailExt2Base, // Gentlr's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 

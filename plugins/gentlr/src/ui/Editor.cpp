@@ -1,6 +1,6 @@
 #include "Editor.h"
 
-#include "GentlyView.h"
+#include "GentlrView.h"
 #include "Help.h"
 #include "plugin/Controller.h"
 
@@ -18,7 +18,7 @@
 #include <functional>
 #include <string>
 
-namespace gently {
+namespace gentlr {
 
 using namespace VSTGUI;
 using pk::ActionButton;
@@ -84,7 +84,7 @@ public:
         else
         {
             const smacheratr::ClarityBand b = smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)),
-                                                                       host->plainValue (bandParam (band, gently::kWidth)));
+                                                                       host->plainValue (bandParam (band, gentlr::kWidth)));
             edges = hzText (b.lowHz) + " - " + hzText (b.highHz);
         }
         ctx->drawString (edges.c_str (), CRect (r.left, r.top, r.right - 6, r.bottom), kRightText, true);
@@ -118,7 +118,7 @@ void Editor::buildUI (CFrame* f)
 {
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
-    root->addView (new Label (CRect (12, 6, 200, 28), "gently", 14.0, true));
+    root->addView (new Label (CRect (12, 6, 200, 28), "gentlr", 14.0, true));
     root->addView (new pk::PresetBar (CRect (840, 6, 1036, 28), ctl));
     auto* helpBtn = new ActionButton (CRect (1044, 6, 1066, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                       [this] { return tooltipsEnabled (); });
@@ -134,11 +134,11 @@ void Editor::buildUI (CFrame* f)
         auto* s = c->getShared ();
         return s ? s->sampleRate.load () : 48000.0;
     };
-    view = new GentlyView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), this, metersOf);
+    view = new GentlrView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), this, metersOf);
     view->setTooltipText (help::kDisplay);
     root->addView (view);
 
-    // the Threshold sliders are Smacheratr's, on Gently's Thresholds (the same range) and levels
+    // the Threshold sliders are Smacheratr's, on Gentlr's Thresholds (the same range) and levels
     sliderHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) { return fromSmacheratr (id); });
     for (int k = 0; k < kAllBands; ++k)
     {
@@ -153,7 +153,7 @@ void Editor::buildUI (CFrame* f)
     // each band: its name and edges, On, Frequency, Width, Range
     headers.clear ();
     const char* knobLabels[3] = {"Freq", "Width", "Range"};
-    const uint32_t knobFields[3] = {gently::kFreq, gently::kWidth, gently::kRange}; // (Editor::kWidth is the window's)
+    const uint32_t knobFields[3] = {gentlr::kFreq, gentlr::kWidth, gentlr::kRange}; // (Editor::kWidth is the window's)
     for (int k = 0; k < kBands; ++k)
     {
         const double x = kViewLeft + k * kBandW;
@@ -190,7 +190,7 @@ void Editor::buildUI (CFrame* f)
     advancedViews.push_back (driveAmount);
 
     // No Overlap (the bands push each other), Mix and Output
-    bind (root, new smacheratr::NoOverlapToggle (CRect (kNoOverlapLeft, kRowTop - 1, kViewRight - 4, kRowTop + 19), this, GentlyView::bandParams ()));
+    bind (root, new smacheratr::NoOverlapToggle (CRect (kNoOverlapLeft, kRowTop - 1, kViewRight - 4, kRowTop + 19), this, GentlrView::bandParams ()));
     bind (root, new Knob (knobRect (kViewRight - 2 * kKnobW - 12, kRowTop + 24), this, kMix));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 24), this, kOutput));
 
@@ -215,7 +215,7 @@ void Editor::layoutAdvanced ()
 {
     const bool advanced = plainValue (kAdvanced) >= 0.5;
     const CRect area (kViewLeft, kViewTop, kViewRight, kViewBottom);
-    // the sliders take a strip at the right of the display (the display itself is Gently's, so it is
+    // the sliders take a strip at the right of the display (the display itself is Gentlr's, so it is
     // sized here rather than by ThresholdSlider::layout)
     smacheratr::ThresholdSlider::layout (nullptr, sliders, area, advanced);
     if (view)
@@ -301,4 +301,4 @@ void Editor::showMenu (CPoint where)
     });
 }
 
-} // namespace gently
+} // namespace gentlr

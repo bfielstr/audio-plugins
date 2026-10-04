@@ -2,10 +2,10 @@
 // The first six (pk::TailField) came first and sit in a block in the middle of each plug-in's IDs;
 // these came later, so each plug-in appends them as a second block (pk::kTailExtFields entries).
 // Field i is Smacheratr parameter kTailExtIds[i], with Smacheratr's name, range and default (the
-// colour filters start off, and Mid/Side where the plug-in asks for it). Gently's Advanced mode and its Sub band came
+// colour filters start off, and Mid/Side where the plug-in asks for it). Gentlr's Advanced mode and its Sub band came
 // after that block was closed in (plug-ins have parameters right after it): a third block
 // (pk::kTailExt2Fields entries, kTailExt2Ids) at the end of each plug-in's IDs. Some plug-ins have
-// parameters after that one too, so Gently's High band and No Overlap are a fourth block
+// parameters after that one too, so Gentlr's High band and No Overlap are a fourth block
 // (pk::kTailExt3Fields entries, kTailExt3Ids), again at the very end of each plug-in's IDs.
 #pragma once
 
@@ -47,7 +47,7 @@ inline void addTailExtParams (std::vector<pk::ParamInfo>& t, uint32_t base, bool
     }
 }
 
-// The third block (Gently's Advanced mode), at `base`.
+// The third block (Gentlr's Advanced mode), at `base`.
 inline void addTailExt2Params (std::vector<pk::ParamInfo>& t, uint32_t base)
 {
     for (uint32_t i = 0; i < pk::kTailExt2Fields; ++i)
@@ -59,7 +59,7 @@ inline void addTailExt2Params (std::vector<pk::ParamInfo>& t, uint32_t base)
     }
 }
 
-// The fourth block (Gently's High band and No Overlap), at `base`.
+// The fourth block (Gentlr's High band and No Overlap), at `base`.
 inline void addTailExt3Params (std::vector<pk::ParamInfo>& t, uint32_t base)
 {
     for (uint32_t i = 0; i < pk::kTailExt3Fields; ++i)

@@ -1,5 +1,5 @@
 // Smoothr parameters. IDs are persisted in projects: only ever append. The saturator's blocks come
-// after Smoothr's own, Gently's Advanced block last; a new Smoothr parameter goes in a block after it
+// after Smoothr's own, Gentlr's Advanced block last; a new Smoothr parameter goes in a block after it
 // (and from then on that block stays as it is).
 #pragma once
 
@@ -22,8 +22,8 @@ enum ParamId : uint32_t
     kCharacter,   // 0..1, the dynamic dip in the low mids before the limiter (0: none; Character.h)
     kTailBase,                                  // the Smacheratr before the limiter: pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields, // the rest of that Smacheratr
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gently's Advanced mode: pk::kTailExt2Fields entries
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gently's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gentlr's Advanced mode: pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band and No Overlap in it: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 

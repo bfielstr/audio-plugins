@@ -38,8 +38,8 @@ class LevelView;
 namespace smoothr {
 class HistoryView;
 }
-namespace gently {
-class GentlyView;
+namespace gentlr {
+class GentlrView;
 }
 namespace pk {
 class ScopeView;
@@ -181,11 +181,11 @@ private:
     multidyn::DynDisplay* fxDynDisplay = nullptr;
     smacheratr::ShaperView* fxShaperView = nullptr; // the selected slot's
     smacheratr::ColorView* fxColorView = nullptr;
-    // Gently's (Clarity's) band selector on the Smacheratr page: the band shown
+    // Gentlr's (Clarity's) band selector on the Smacheratr page: the band shown
     int clarityBand = 0;
     std::vector<VSTGUI::CView*> rackBandViews[4], rackBandButtons;
     void showClarityBand (int band);
-    // Gently's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
+    // Gentlr's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
     // display and the region Drive's controls, shown while Advanced is on (satHost: the page's host)
     smacheratr::ThresholdSlider* fxThresholds[4] = {nullptr, nullptr, nullptr, nullptr};
     std::vector<pk::ParamView*> fxSatAdvanced;
@@ -198,7 +198,7 @@ private:
     wubr::BandView* wubrBands = nullptr;
     levlr::LevelView* levlrView = nullptr; // the Levlr page's band display
     smoothr::HistoryView* smoothrView = nullptr; // the Smoothr page's history
-    gently::GentlyView* gentlyView = nullptr;    // the Gently page's band display
+    gentlr::GentlrView* gentlrView = nullptr;    // the Gentlr page's band display
     wubr::ShapeView* wubrShapes[2] {};
     int wubrBand = 0;
     std::vector<VSTGUI::CView*> wubrBandViews[2], wubrBandButtons;

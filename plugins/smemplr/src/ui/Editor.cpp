@@ -37,8 +37,8 @@
 #include "levlr/src/ui/LevelView.h"
 #include "smoothr/src/ui/Help.h"
 #include "smoothr/src/ui/HistoryView.h"
-#include "gently/src/ui/GentlyView.h"
-#include "gently/src/ui/Help.h"
+#include "gentlr/src/ui/GentlrView.h"
+#include "gentlr/src/ui/Help.h"
 
 #include "vstgui/lib/cdrawcontext.h"
 #include "vstgui/lib/cfileselector.h"
@@ -265,7 +265,7 @@ void Editor::onClose ()
     wubrBands = nullptr;
     levlrView = nullptr;
     smoothrView = nullptr;
-    gentlyView = nullptr;
+    gentlrView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -591,11 +591,11 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
-static_assert (smacheratr::kGentlyBands == 4, "Editor.h sizes Gently's band arrays for four bands");
+static_assert (smacheratr::kGentlrBands == 4, "Editor.h sizes Gentlr's band arrays for four bands");
 
 void Editor::updateSatAdvanced ()
 {
-    // the Smacheratr page: Gently's Threshold sliders and region Drive while Advanced is on, dimmed
+    // the Smacheratr page: Gentlr's Threshold sliders and region Drive while Advanced is on, dimmed
     // where they do nothing (a band that does not work, the Drive's amount while it is off)
     if (!satHost || !fxColorView)
         return;
@@ -603,7 +603,7 @@ void Editor::updateSatAdvanced ()
     const bool advanced = satHost->plainValue (kClarityAdvanced) >= 0.5;
     ThresholdSlider::layout (fxColorView, fxThresholds, CRect (236, 34, 526, 204), advanced);
     const double on = satHost->plainValue (kClarity);
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
         if (fxThresholds[k])
             fxThresholds[k]->setEnabledLook (smacheratrBandParams ().works (satHost, k));
     for (size_t i = 0; i < fxSatAdvanced.size (); ++i)
@@ -615,8 +615,8 @@ void Editor::updateSatAdvanced ()
 
 void Editor::showClarityBand (int band)
 {
-    clarityBand = band < 0 ? 0 : band >= smacheratr::kGentlyBands ? smacheratr::kGentlyBands - 1 : band;
-    for (int k = 0; k < smacheratr::kGentlyBands; ++k)
+    clarityBand = band < 0 ? 0 : band >= smacheratr::kGentlrBands ? smacheratr::kGentlrBands - 1 : band;
+    for (int k = 0; k < smacheratr::kGentlrBands; ++k)
         for (auto* v : rackBandViews[k])
             v->setVisible (k == clarityBand);
     for (auto* b : rackBandButtons)
@@ -1046,7 +1046,7 @@ bool Editor::applySlotSettingsText (int slot, const std::string& text)
         return false;
     const int type = ctl->slotType (slot);
     pk::SettingValues v;
-    if (type == kFxEmpty || !pk::settingsFromText (text, fxName (type), v))
+    if (type == kFxEmpty || !pk::settingsFromText (text, fxName (type), v, fxFormerName (type)))
         return false;
     for (const auto& [id, n] : v)
     {
@@ -1211,7 +1211,7 @@ void Editor::clearBody ()
     wubrBands = nullptr;
     levlrView = nullptr;
     smoothrView = nullptr;
-    gentlyView = nullptr;
+    gentlrView = nullptr;
     for (int b = 0; b < 2; ++b)
     {
         wubrShapes[b] = nullptr;
@@ -1402,7 +1402,7 @@ void Editor::buildBody ()
                 return b ? &b->rack.sat[(size_t)s] : nullptr;
             });
             add (fxShaperView, smacheratr::help::kShaperDisplay);
-            // the colour curve and Gently's bands, as in Smacheratr
+            // the colour curve and Gentlr's bands, as in Smacheratr
             fxColorView = new ColorView (
                 CRect (236, 34, 526, 204), h,
                 [this] () {
@@ -1419,7 +1419,7 @@ void Editor::buildBody ()
             add (new NoOverlapToggle (CRect (446, 208, 526, 226), h, smacheratrBandParams ()), tip (kClarityNoOverlap));
             add (new Toggle (CRect (236, 8, 306, 26), h, kPreLimit, "Pre-Limit"), tip (kPreLimit));
             add (new NumberBox (CRect (310, 8, 366, 26), h, kPreLimitThreshold), tip (kPreLimitThreshold));
-            add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gently"), tip (kClarity));
+            add (new Toggle (CRect (372, 8, 432, 26), h, kClarity, "Gentlr"), tip (kClarity));
             add (new Toggle (CRect (436, 8, 478, 26), h, kMidSide, "M/S"), tip (kMidSide));
             add (new Choice (CRect (482, 8, 580, 26), h, kPostClip), tip (kPostClip));
             add (new Toggle (CRect (584, 8, 634, 26), h, kHiQuality, "Hi-Q"), tip (kHiQuality));
@@ -1429,11 +1429,11 @@ void Editor::buildBody ()
             const uint32_t ids[7] = {kDrive, kOutput, kDryWet, kColorLo, kColorHi, kColorFreq, kColorWidth};
             for (int i = 0; i < 7; ++i)
                 add (new Knob (knobRect (534 + (i % 5) * 58, 36 + (i / 5) * 76), h, ids[i], nullptr, i == 3 || i == 4), tip (ids[i]));
-            // Gently: the selected band's controls (every band's are made, one is shown): Frequency, Width
+            // Gentlr: the selected band's controls (every band's are made, one is shown): Frequency, Width
             // and Range; Sub and High have Frequency and Range (no Width, no switch: a band works while its
             // Range is above 0 dB)
             rackBandButtons.clear ();
-            for (int k = 0; k < kGentlyBands; ++k)
+            for (int k = 0; k < kGentlrBands; ++k)
             {
                 rackBandViews[k].clear ();
                 auto addKnob = [&] (double x, uint32_t id, const char* name) {
@@ -1445,37 +1445,37 @@ void Editor::buildBody ()
                 if (!hasWidth (k))
                 {
                     // (where the other bands have their Frequency and Range; the Width's place stays empty)
-                    addKnob (534 + 2 * 58, kGentlyFreqIds[k], "Gently Hz");
-                    addKnob (534 + 4 * 58, kGentlyRangeIds[k], "Gently dB");
+                    addKnob (534 + 2 * 58, kGentlrFreqIds[k], "Gentlr Hz");
+                    addKnob (534 + 4 * 58, kGentlrRangeIds[k], "Gentlr dB");
                 }
                 else
                 {
                     const uint32_t bandIds[3] = {kClarityFreqIds[k], kClarityWidthIds[k], kClarityRangeIds[k]};
-                    const char* bandNames[3] = {"Gently Hz", "Gently W", "Gently dB"};
+                    const char* bandNames[3] = {"Gentlr Hz", "Gentlr W", "Gentlr dB"};
                     for (int i = 0; i < 3; ++i)
                         addKnob (534 + (i + 2) * 58, bandIds[i], bandNames[i]);
                 }
-                static const char* const names[kGentlyBands] = {"1", "2", "Sub", "High"};
+                static const char* const names[kGentlrBands] = {"1", "2", "Sub", "High"};
                 auto* bt = new ActionButton (CRect (534 + k * 41, 194, 573 + k * 41, 212), names[k],
                                              [this, k] { showClarityBand (k); }, [this, k] { return clarityBand == k; });
-                bt->setTooltipText (k == 0   ? "Show Gently's first band (Gently in the display)."
-                                    : k == 1 ? "Show Gently's second band (Gently 2 in the display: it works once its Range is above 0 dB)."
-                                    : k == 2 ? "Show Gently's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; "
+                bt->setTooltipText (k == 0   ? "Show Gentlr's first band (Gentlr in the display)."
+                                    : k == 1 ? "Show Gentlr's second band (Gentlr 2 in the display: it works once its Range is above 0 dB)."
+                                    : k == 2 ? "Show Gentlr's Sub band (from the bottom of the spectrum, it starts to taper at its Freq; "
                                                "it works once its Range is above 0 dB)."
-                                             : "Show Gently's High band (from its Freq, where it starts to taper, to the top of the "
+                                             : "Show Gentlr's High band (from its Freq, where it starts to taper, to the top of the "
                                                "spectrum; it works once its Range is above 0 dB).");
                 g->addView (bt);
                 rackBandButtons.push_back (bt);
             }
             showClarityBand (clarityBand);
-            // Gently's Advanced mode: the region Drive beside the band buttons, the Threshold sliders at
+            // Gentlr's Advanced mode: the region Drive beside the band buttons, the Threshold sliders at
             // the right of the colour display (updateSatAdvanced shows them while Advanced is on)
             fxSatAdvanced.clear ();
             fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new Toggle (CRect (700, 194, 752, 212), h, kClarityDrive, "Drive"), tip (kClarityDrive))));
             fxSatAdvanced.push_back (static_cast<pk::ParamView*> (add (new NumberBox (CRect (756, 194, 814, 212), h, kClarityDriveAmount), tip (kClarityDriveAmount))));
-            for (int k = 0; k < kGentlyBands; ++k)
+            for (int k = 0; k < kGentlrBands; ++k)
             {
-                const uint32_t tid = kGentlyThresholdIds[k];
+                const uint32_t tid = kGentlrThresholdIds[k];
                 fxThresholds[k] = new ThresholdSlider (CRect (0, 0, 1, 1), h, k, [this, s] () -> const smacheratr::Meters* {
                     auto* b = ctl->getBridge ();
                     return b ? &b->rack.sat[(size_t)s] : nullptr;
@@ -1544,17 +1544,17 @@ void Editor::buildBody ()
             add (new NumberBox (CRect (752, 174, 834, 192), h, levlr::kOutput), tip (levlr::kOutput));
             break;
         }
-        case kFxGently:
+        case kFxGentlr:
         {
-            // Gently's own IDs throughout (gently::)
-            auto tip = [] (uint32_t id) { return gently::help::forParam (id); };
-            gentlyView = new gently::GentlyView (CRect (8, 8, 470, 204), h, [this, s] () -> const gently::Meters* {
+            // Gentlr's own IDs throughout (gentlr::)
+            auto tip = [] (uint32_t id) { return gentlr::help::forParam (id); };
+            gentlrView = new gentlr::GentlrView (CRect (8, 8, 470, 204), h, [this, s] () -> const gentlr::Meters* {
                 auto* b = ctl->getBridge ();
-                return b ? &b->rack.gently[(size_t)s] : nullptr;
+                return b ? &b->rack.gentlr[(size_t)s] : nullptr;
             });
-            add (gentlyView, gently::help::kDisplay);
+            add (gentlrView, gentlr::help::kDisplay);
             // No Overlap, under the display (switched on, it splits what overlaps)
-            add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gently::GentlyView::bandParams ()), tip (gently::kNoOverlap));
+            add (new smacheratr::NoOverlapToggle (CRect (8, 208, 96, 226), h, gentlr::GentlrView::bandParams ()), tip (gentlr::kNoOverlap));
             // the bands: a row each (band 1, band 2, Sub, High), On and its values (Sub and High: their name, no
             // On, they work while their Range is above 0 dB)
             const char* heads[5] = {"", "Freq", "Width", "Range", "Thresh"};
@@ -1564,26 +1564,26 @@ void Editor::buildBody ()
                 hl->setDim (true);
                 g->addView (hl);
             }
-            for (int k = 0; k < gently::kAllBands; ++k)
+            for (int k = 0; k < gentlr::kAllBands; ++k)
             {
                 const double y = 22 + k * 24;
-                if (gently::hasOn (k))
-                    add (new Toggle (CRect (480, y, 536, y + 20), h, gently::onParam (k), k == 0 ? "Band 1" : "Band 2"), tip (gently::onParam (k)));
+                if (gentlr::hasOn (k))
+                    add (new Toggle (CRect (480, y, 536, y + 20), h, gentlr::onParam (k), k == 0 ? "Band 1" : "Band 2"), tip (gentlr::onParam (k)));
                 else
-                    g->addView (new Label (CRect (480, y + 2, 536, y + 18), k == gently::kSub ? "Sub" : "High", 10.5, false, 0));
-                add (new NumberBox (CRect (540, y, 610, y + 20), h, gently::freqParam (k)), tip (gently::freqParam (k)));
-                if (gently::hasWidth (k))
-                    add (new NumberBox (CRect (614, y, 684, y + 20), h, gently::bandParam (k, gently::kWidth)), tip (gently::bandParam (k, gently::kWidth)));
-                add (new NumberBox (CRect (688, y, 758, y + 20), h, gently::rangeParam (k)), tip (gently::rangeParam (k)));
-                add (new NumberBox (CRect (762, y, 832, y + 20), h, gently::thresholdParam (k)), tip (gently::thresholdParam (k)));
+                    g->addView (new Label (CRect (480, y + 2, 536, y + 18), k == gentlr::kSub ? "Sub" : "High", 10.5, false, 0));
+                add (new NumberBox (CRect (540, y, 610, y + 20), h, gentlr::freqParam (k)), tip (gentlr::freqParam (k)));
+                if (gentlr::hasWidth (k))
+                    add (new NumberBox (CRect (614, y, 684, y + 20), h, gentlr::bandParam (k, gentlr::kWidth)), tip (gentlr::bandParam (k, gentlr::kWidth)));
+                add (new NumberBox (CRect (688, y, 758, y + 20), h, gentlr::rangeParam (k)), tip (gentlr::rangeParam (k)));
+                add (new NumberBox (CRect (762, y, 832, y + 20), h, gentlr::thresholdParam (k)), tip (gentlr::thresholdParam (k)));
             }
             // Advanced (the Thresholds and the region Drive work), the Drive; the detector, stereo, mix, output
-            add (new Toggle (CRect (480, 122, 568, 142), h, gently::kAdvanced, "Advanced"), tip (gently::kAdvanced));
-            add (new Toggle (CRect (574, 122, 630, 142), h, gently::kDrive, "Drive"), tip (gently::kDrive));
-            add (new NumberBox (CRect (634, 122, 704, 142), h, gently::kDriveAmount), tip (gently::kDriveAmount));
+            add (new Toggle (CRect (480, 122, 568, 142), h, gentlr::kAdvanced, "Advanced"), tip (gentlr::kAdvanced));
+            add (new Toggle (CRect (574, 122, 630, 142), h, gentlr::kDrive, "Drive"), tip (gentlr::kDrive));
+            add (new NumberBox (CRect (634, 122, 704, 142), h, gentlr::kDriveAmount), tip (gentlr::kDriveAmount));
             g->addView (new Label (CRect (712, 124, 758, 140), "Stereo", 10.0, false, 2));
-            add (new Choice (CRect (762, 122, 832, 142), h, gently::kStereo), tip (gently::kStereo));
-            const uint32_t knobs[4] = {gently::kAttack, gently::kRelease, gently::kMix, gently::kOutput};
+            add (new Choice (CRect (762, 122, 832, 142), h, gentlr::kStereo), tip (gentlr::kStereo));
+            const uint32_t knobs[4] = {gentlr::kAttack, gentlr::kRelease, gentlr::kMix, gentlr::kOutput};
             for (int i = 0; i < 4; ++i)
                 add (new Knob (knobRect (484 + i * 88, 150), h, knobs[i], nullptr, i == 3), tip (knobs[i]));
             break;
@@ -2010,8 +2010,8 @@ void Editor::idle ()
         levlrView->idle ();
     if (smoothrView)
         smoothrView->idle ();
-    if (gentlyView)
-        gentlyView->idle ();
+    if (gentlrView)
+        gentlrView->idle ();
     for (auto* shape : wubrShapes)
         if (shape)
             shape->idle ();

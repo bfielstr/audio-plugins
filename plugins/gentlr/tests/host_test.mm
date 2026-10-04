@@ -1,10 +1,10 @@
-// End-to-end test of the built Gently.vst3. usage: gently_hosttest <Gently.vst3> <output dir>
+// End-to-end test of the built Gentlr.vst3. usage: gentlr_hosttest <Gentlr.vst3> <output dir>
 #include "Engine.h"
 #include "Params.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
-#include "ui/GentlyView.h"
+#include "ui/GentlrView.h"
 
 #include "public.sdk/source/common/memorystream.h"
 
@@ -17,7 +17,7 @@
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 using namespace pk::testing;
-using namespace gently;
+using namespace gentlr;
 #define CHECK PK_CHECK
 
 static InputFn tone (double hz, double amp)
@@ -60,16 +60,16 @@ static InputFn harshMix ()
 
 static double plainOf (Rig& rig, uint32_t id) { return toPlain (id, rig.controller->getParamNormalized (id)); }
 
-// where the display puts things (GentlyView's layout, the display at its full width: Advanced off)
+// where the display puts things (GentlrView's layout, the display at its full width: Advanced off)
 static double xOfHz (double hz)
 {
     const double l = Editor::kViewLeft, r = Editor::kViewRight;
-    return l + std::log (hz / GentlyView::kMinHz) / std::log (GentlyView::kMaxHz / GentlyView::kMinHz) * (r - l);
+    return l + std::log (hz / GentlrView::kMinHz) / std::log (GentlrView::kMaxHz / GentlrView::kMinHz) * (r - l);
 }
 static double yOfDb (double db)
 {
     const double t = Editor::kViewTop + 8.0, b = Editor::kViewBottom - 16.0;
-    return t + (GentlyView::kTopDb - db) / (GentlyView::kTopDb - GentlyView::kBottomDb) * (b - t);
+    return t + (GentlrView::kTopDb - db) / (GentlrView::kTopDb - GentlrView::kBottomDb) * (b - t);
 }
 
 static double gainDb (Rig& rig, double hz, double amp)
@@ -90,7 +90,7 @@ int main (int argc, char** argv)
         Rig rig;
         CHECK (rig.load (argv[1]), "load");
         if (gFail)
-            return finish ("gently host test");
+            return finish ("gentlr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
@@ -129,7 +129,7 @@ int main (int argc, char** argv)
         CHECK (std::fabs (subOff) < 0.3 && subOn < -5.0 && subOn > -9.0, "a loud 40 Hz: Sub at Range 0 %.2f dB, 8 dB %.2f dB", subOff, subOn);
 
         // state round trip
-        rig.param (gently::kAdvanced, 1.0);
+        rig.param (gentlr::kAdvanced, 1.0);
         rig.param (kStereo, toNormalized (kStereo, kMidSide));
         rig.param (bandParam (1, kFreq), toNormalized (bandParam (1, kFreq), 5000.0));
         rig.param (bandParam (0, kThreshold), toNormalized (bandParam (0, kThreshold), -30.0));
@@ -143,7 +143,7 @@ int main (int argc, char** argv)
         saved.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
         CHECK (readState (&saved, back), "readState");
-        CHECK (back.norm[gently::kAdvanced] >= 0.5, "Advanced saved");
+        CHECK (back.norm[gentlr::kAdvanced] >= 0.5, "Advanced saved");
         CHECK (std::lround (toPlain (kStereo, back.norm[kStereo])) == kMidSide, "the stereo mode saved");
         CHECK (std::fabs (toPlain (bandParam (1, kFreq), back.norm[bandParam (1, kFreq)]) - 5000.0) < 1.0, "band 2's frequency saved");
         CHECK (std::fabs (toPlain (bandParam (0, kThreshold), back.norm[bandParam (0, kThreshold)]) + 30.0) < 0.01, "band 1's threshold saved");
@@ -155,11 +155,11 @@ int main (int argc, char** argv)
         CHECK (std::fabs (plainOf (rig, kSubFreq) - 70.0) < 0.1 && std::fabs (plainOf (rig, kSubRange) - 10.0) < 0.01, "the Sub band loaded");
 
         // back to the defaults for the screenshots, the Sub band at 8 dB
-        for (uint32_t id : {(uint32_t)gently::kAdvanced, (uint32_t)kStereo, bandParam (1, kFreq), bandParam (0, kThreshold), (uint32_t)kSubFreq,
+        for (uint32_t id : {(uint32_t)gentlr::kAdvanced, (uint32_t)kStereo, bandParam (1, kFreq), bandParam (0, kThreshold), (uint32_t)kSubFreq,
                             (uint32_t)kSubThreshold})
             rig.param (id, defaultNormalized (id));
         rig.param (kSubRange, toNormalized (kSubRange, 8.0));
-        rig.param (gently::kAdvanced, 0.0); // (Advanced is on by default: off first, the display at its full width, see xOfHz)
+        rig.param (gentlr::kAdvanced, 0.0); // (Advanced is on by default: off first, the display at its full width, see xOfHz)
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");
@@ -170,7 +170,7 @@ int main (int argc, char** argv)
                 rig.render (0.05, out, nullptr, harshMix ());
                 pump (0.03);
             }
-            CHECK (win.savePng (outDir + "/ui_gently.png"), "screenshot");
+            CHECK (win.savePng (outDir + "/ui_gentlr.png"), "screenshot");
 
             // drag band 1's handle down 30 px: its Range grows
             const double before = plainOf (rig, bandParam (0, kRange));
@@ -208,7 +208,7 @@ int main (int argc, char** argv)
             CHECK (hf1 < hf0 - 500.0 && hf1 >= 2000.0 && hr1 > hr0 + 2.0, "dragging the High handle: Freq %.0f -> %.0f Hz, Range %.1f -> %.1f dB",
                    hf0, hf1, hr0, hr1);
             CHECK (bandWorks (kHigh, plainOf (rig, kHighOn), hr1), "and the High band works");
-            CHECK (win.savePng (outDir + "/ui_gently_high.png"), "screenshot, the High band");
+            CHECK (win.savePng (outDir + "/ui_gentlr_high.png"), "screenshot, the High band");
             // it now reaches into band 2 (3 kHz, 2 octaves: up to 6 kHz); No Overlap switched on in the editor
             // splits them at the middle of the overlap, in their parameters
             auto band2Top = [&] { return plainOf (rig, bandParam (1, kFreq)) * std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth))); };
@@ -227,13 +227,13 @@ int main (int argc, char** argv)
                 CHECK (plainOf (rig, kHighFreq) > f0 * 1.2 && band2Top () <= plainOf (rig, kHighFreq) * 1.001,
                        "band 2 pushes High: %.0f -> %.0f Hz (band 2 up to %.0f Hz)", f0, plainOf (rig, kHighFreq), band2Top ());
             }
-            CHECK (win.savePng (outDir + "/ui_gently_no_overlap.png"), "screenshot, No Overlap");
+            CHECK (win.savePng (outDir + "/ui_gentlr_no_overlap.png"), "screenshot, No Overlap");
             for (uint32_t id : {(uint32_t)kNoOverlap, (uint32_t)kHighFreq, (uint32_t)kHighRange, bandParam (1, kFreq),
                                 bandParam (1, kWidth)})
                 rig.param (id, defaultNormalized (id));
 
             // Advanced: a Threshold per band on the sliders at the right of the display, the region Drive
-            rig.param (gently::kAdvanced, 1.0);
+            rig.param (gentlr::kAdvanced, 1.0);
             rig.param (kDrive, 1.0);
             rig.param (bandParam (0, kThreshold), toNormalized (bandParam (0, kThreshold), -26.0));
             rig.param (bandParam (1, kThreshold), toNormalized (bandParam (1, kThreshold), -22.0));
@@ -244,7 +244,7 @@ int main (int argc, char** argv)
                 rig.render (0.05, out, nullptr, harshMix ());
                 pump (0.03);
             }
-            CHECK (win.savePng (outDir + "/ui_gently_advanced.png"), "screenshot, Advanced");
+            CHECK (win.savePng (outDir + "/ui_gentlr_advanced.png"), "screenshot, Advanced");
 
             // drag band 2's Threshold slider up 40 px: its threshold rises
             const double t0 = plainOf (rig, bandParam (1, kThreshold));
@@ -263,6 +263,6 @@ int main (int argc, char** argv)
             const double u1 = plainOf (rig, kSubThreshold);
             CHECK (u1 < u0 - 5.0, "dragging the Sub Threshold slider down: %.1f -> %.1f dB", u0, u1);
         }
-        return finish ("gently host test");
+        return finish ("gentlr host test");
     }
 }

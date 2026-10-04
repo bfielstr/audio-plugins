@@ -26,7 +26,7 @@ bool isFine (const Modifiers& m) { return m.has (ModifierKey::Shift) || m.has (M
 } // namespace
 
 ThresholdSlider::ThresholdSlider (const CRect& r, pk::ParamHost* h, int b, MeterSource m)
-    : ParamView (r, h, kGentlyThresholdIds[std::clamp (b, 0, kGentlyBands - 1)]), band (std::clamp (b, 0, kGentlyBands - 1)), meters (std::move (m))
+    : ParamView (r, h, kGentlrThresholdIds[std::clamp (b, 0, kGentlrBands - 1)]), band (std::clamp (b, 0, kGentlrBands - 1)), meters (std::move (m))
 {
 }
 
@@ -195,7 +195,7 @@ void ThresholdSlider::layout (ColorView* color, ThresholdSlider* const* sliders,
         v->setMouseableArea (r);
         top += 22;
     }
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
         if (auto* s = sliders[k])
         {
             const CRect r (left + k * (kWidth + kGap), top, left + k * (kWidth + kGap) + kWidth, area.bottom);

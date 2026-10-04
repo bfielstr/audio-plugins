@@ -63,8 +63,8 @@ public:
     bool loadPreset (const std::string& path);
     void resetToDefaults (); // every parameter back to its default, as complete gestures
 
-    // Copy / Paste Settings (SettingsText.h, under the plug-in's name from setPresetInfo): every
-    // parameter; a paste sets the ones in the text as complete gestures and returns false (changing
+    // Copy / Paste Settings (SettingsText.h, under the plug-in's name from setPresetInfo; a paste also
+    // takes texts under its former name): every parameter; a paste sets the ones in the text as complete gestures and returns false (changing
     // nothing) when the text is not this plug-in's settings.
     std::string settingsText ();
     bool applySettingsText (const std::string& text);

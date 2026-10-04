@@ -1,7 +1,7 @@
 // Levlr parameters. IDs are persisted in projects: only ever append. The end saturator's blocks
 // (kTailBase, kTailExtBase, kTailExt2Base) are closed now: the band count and the bands' drives come
 // after them, at 49 (pinned below, so a saturator block that grows can't move them), and the end
-// saturator's fourth block (Gently's High band and No Overlap) after those, at 58.
+// saturator's fourth block (Gentlr's High band and No Overlap) after those, at 58.
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -54,10 +54,10 @@ enum ParamId : uint32_t
     kTailBase = kXover + kCrossovers,               // the Smacheratr at the end of the chain: pk::kTailFields entries
     kBandBase = kTailBase + pk::kTailFields,        // kBands x kBandBlock
     kTailExtBase = kBandBase + kBands * kBandBlock, // the rest of the end Smacheratr
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gently's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
     kBandCount = 49,                                // Bands: how many are in use (a choice: 1 .. 4, 4 by default)
     kDriveBase,                                     // kBands x kDriveBlock: each band's drive
-    kTailExt3Base = kDriveBase + kBands * kDriveBlock, // Gently's High band and No Overlap in the end Smacheratr: pk::kTailExt3Fields entries (the last block)
+    kTailExt3Base = kDriveBase + kBands * kDriveBlock, // Gentlr's High band and No Overlap in the end Smacheratr: pk::kTailExt3Fields entries (the last block)
     kNumParams = kTailExt3Base + pk::kTailExt3Fields
 };
 static_assert (kTailExt2Base + pk::kTailExt2Fields == kBandCount, "the end saturator's blocks end where the band count starts");

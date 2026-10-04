@@ -33,7 +33,7 @@ CColor clarityColor (int band, uint8_t alpha = 255) { return ColorView::bandColo
 double clarityGainDb (const ClarityBand& b, double hz, double sr, double cutDb) { return clarityCutAtDb (b, hz, sr, cutDb); }
 } // namespace
 
-// One colour for every Gently band (docs/THEME.md allows one metal and one energy colour): pale copper
+// One colour for every Gentlr band (docs/THEME.md allows one metal and one energy colour): pale copper
 // for their regions, edges, outlines and labels. The bands are told apart by where they sit and by
 // their names (1, 2, Sub, High); the cut each makes right now is drawn in cinnabar by the views.
 CColor ColorView::bandColor (int band, uint8_t alpha)
@@ -55,9 +55,9 @@ double ColorView::sampleRate () const
 
 bool ColorView::clarityShown (int) const { return host->plainValue (kClarity) >= 0.5; } // (every band, Sub and High too)
 
-GentlyLayout ColorView::layoutNow () const
+GentlrLayout ColorView::layoutNow () const
 {
-    GentlyLayout l = readLayout (host, smacheratrBandParams ());
+    GentlrLayout l = readLayout (host, smacheratrBandParams ());
     if (host->plainValue (kClarityNoOverlap) >= 0.5)
         resolveOverlaps (l);
     return l;
@@ -65,7 +65,7 @@ GentlyLayout ColorView::layoutNow () const
 
 ClarityBand ColorView::bandOf (int band) const
 {
-    const GentlyLayout l = layoutNow ();
+    const GentlrLayout l = layoutNow ();
     if (band == kSubBand)
         return subBand (sampleRate (), l.freq[band]);
     if (band == kHighBand)
@@ -79,7 +79,7 @@ void ColorView::idle ()
 {
     const Meters* m = meters ? meters () : nullptr;
     bool changed = false;
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         const float cut = !m ? 0.0f : clarityCutMeter (*m, k).load (std::memory_order_relaxed);
         const float target = clarityOn (k) ? cut : 0.0f;
@@ -114,7 +114,7 @@ CPoint ColorView::hiHandle () const
 
 CPoint ColorView::clarityHandle (int band) const
 {
-    return CPoint (xOfHz (layoutNow ().freq[band]), yOfDb (-host->plainValue (kGentlyRangeIds[band])));
+    return CPoint (xOfHz (layoutNow ().freq[band]), yOfDb (-host->plainValue (kGentlrRangeIds[band])));
 }
 
 double ColorView::clarityEdgeX (int band, bool high) const
@@ -151,10 +151,10 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawLine (CPoint (all.left, yOfDb (db)), CPoint (all.right, yOfDb (db)));
     }
 
-    // Gently's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
-    bool clarity[kGentlyBands];
-    ClarityBand bands[kGentlyBands];
-    for (int k = 0; k < kGentlyBands; ++k)
+    // Gentlr's bands, behind the curves: their ranges shaded, their edges (drag them for the width)
+    bool clarity[kGentlrBands];
+    ClarityBand bands[kGentlrBands];
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         clarity[k] = clarityOn (k);
         bands[k] = bandOf (k);
@@ -194,14 +194,14 @@ void ColorView::draw (CDrawContext* ctx)
         ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
     }
 
-    // Gently at work, as a multiband compressor shows its bands: the most each can cut outlined, the
+    // Gentlr at work, as a multiband compressor shows its bands: the most each can cut outlined, the
     // cut it is making right now filled in from the 0 dB line, a handle at its centre and its readout
     int pills = 0;
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         if (!clarity[k])
         {
-            // Gently on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down
+            // Gentlr on, this band's Range at 0 (flat at 0 dB): a dim handle to pull down
             if (clarityShown (k))
             {
                 pk::draw::handle (ctx, clarityHandle (k), kHandleRadius, false, false);
@@ -232,7 +232,7 @@ void ColorView::draw (CDrawContext* ctx)
             }
             return gp;
         };
-        if (auto range = gainPath (-host->plainValue (kGentlyRangeIds[k]), false))
+        if (auto range = gainPath (-host->plainValue (kGentlrRangeIds[k]), false))
         {
             ctx->setLineWidth (1.0);
             ctx->setFrameColor (clarityColor (k, 110));
@@ -253,8 +253,8 @@ void ColorView::draw (CDrawContext* ctx)
         const CPoint h = clarityHandle (k);
         // the readout, in a pill above the band (a second pill goes under the first)
         char cb[64];
-        std::snprintf (cb, sizeof (cb), "%s  %s   %.1f dB", k == 0 ? "Gently" : k == 1 ? "Gently 2" : k == kSubBand ? "Sub" : "High",
-                       host->valueText (kGentlyFreqIds[k]).c_str (), (double)shownCut[k]);
+        std::snprintf (cb, sizeof (cb), "%s  %s   %.1f dB", k == 0 ? "Gentlr" : k == 1 ? "Gentlr 2" : k == kSubBand ? "Sub" : "High",
+                       host->valueText (kGentlrFreqIds[k]).c_str (), (double)shownCut[k]);
         const double pw = 160.0, px = std::clamp (h.x - pw / 2, all.left + 4, all.right - pw - 4);
         const double py = all.top + 36 + 20 * pills++;
         const CRect pill (px, py, px + pw, py + 16);
@@ -298,7 +298,7 @@ ColorView::Drag ColorView::hit (const CPoint& p, int* band) const
     if (near (loHandle ()))
         return Drag::Lo;
     // the second band is drawn on top, so it is found first
-    for (int k = kGentlyBands - 1; k >= 0; --k)
+    for (int k = kGentlrBands - 1; k >= 0; --k)
     {
         if (!clarityShown (k))
             continue;
@@ -340,7 +340,7 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     if (drag == Drag::None)
         return;
     const bool isSub = !hasWidth (dragBand); // (Sub or High: no width)
-    const uint32_t cFreq = kGentlyFreqIds[dragBand], cRange = kGentlyRangeIds[dragBand];
+    const uint32_t cFreq = kGentlrFreqIds[dragBand], cRange = kGentlrRangeIds[dragBand];
     const uint32_t cWidth = isSub ? 0u : kClarityWidthIds[dragBand]; // Sub and High have none (never used)
     const bool onBand = drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth;
     if (onBand && onBandPicked)
@@ -349,7 +349,7 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     {
         if (drag == Drag::Clarity || drag == Drag::ClarityLow || drag == Drag::ClarityHigh)
         {
-            const GentlyLayout before = readLayout (host, smacheratrBandParams ());
+            const GentlrLayout before = readLayout (host, smacheratrBandParams ());
             host->setOnce (cFreq, host->table ().defaultNormalized (cFreq));
             if (!isSub)
                 host->setOnce (cWidth, host->table ().defaultNormalized (cWidth));
@@ -424,11 +424,11 @@ void ColorView::onMouseMoveEvent (MouseMoveEvent& e)
     {
         // sideways the frequency, down the Range (the handle follows the depth of the cut)
         const double hz = startClarity * std::pow (kMaxHz / kMinHz, dx / r.getWidth ());
-        setPlain (kGentlyFreqIds[dragBand], dragBand == kSubBand    ? std::clamp (hz, kSubMinHz, kSubMaxHz)
+        setPlain (kGentlrFreqIds[dragBand], dragBand == kSubBand    ? std::clamp (hz, kSubMinHz, kSubMaxHz)
                                             : dragBand == kHighBand ? std::clamp (hz, kHighMinHz, kHighMaxHz)
                                                                     : hz);
         const double dbPerPixel = kMaxDb / (r.getHeight () * 0.5 - 12.0);
-        setPlain (kGentlyRangeIds[dragBand], std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
+        setPlain (kGentlrRangeIds[dragBand], std::clamp (startRange + dy * dbPerPixel, 0.0, 24.0));
         push.update (host, smacheratrBandParams ());
     }
     else if (drag == Drag::ClarityWidth)
@@ -474,8 +474,8 @@ void ColorView::onMouseUpEvent (MouseUpEvent& e)
     push.end (host);
     if (drag == Drag::Clarity)
     {
-        host->endEdit (kGentlyFreqIds[dragBand]);
-        host->endEdit (kGentlyRangeIds[dragBand]);
+        host->endEdit (kGentlrFreqIds[dragBand]);
+        host->endEdit (kGentlrRangeIds[dragBand]);
     }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth)
         host->endEdit (kClarityWidthIds[dragBand]);
@@ -496,7 +496,7 @@ void ColorView::onMouseWheelEvent (MouseWheelEvent& e)
     const bool active = drag != Drag::None || (e.modifiers.has (ModifierKey::Shift) && hit (e.mousePosition) != Drag::None);
     if (!active)
         return;
-    // Gently's band: wheel up widens it
+    // Gentlr's band: wheel up widens it
     int overBand = dragBand;
     const Drag over = drag != Drag::None ? drag : hit (e.mousePosition, &overBand);
     if (!hasWidth (overBand) && over != Drag::None && over != Drag::Lo && over != Drag::Hi)
@@ -506,7 +506,7 @@ void ColorView::onMouseWheelEvent (MouseWheelEvent& e)
     const double dn = pk::wheelStep (e, host->table (), id);
     if (dn == 0.0)
         return;
-    const GentlyLayout before = readLayout (host, smacheratrBandParams ());
+    const GentlrLayout before = readLayout (host, smacheratrBandParams ());
     host->setOnce (id, std::clamp (host->norm (id) + (band ? dn : -dn), 0.0, 1.0));
     if (band)
     {

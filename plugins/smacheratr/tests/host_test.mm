@@ -125,26 +125,26 @@ int main (int argc, char** argv)
             CHECK (plainOf (rig, kPreLimit) >= 0.5, "pre-limit switched on from the editor");
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
-            // Gently (called Clarity before): its band appears in the colour display
-            const double gentlyX = Editor::kGentlyButtonX, gentlyY = Editor::kGentlyTop + 40;
-            win.click (gentlyX, gentlyY);
-            CHECK (plainOf (rig, kClarity) >= 0.5, "Gently switched on from the editor");
-            CHECK (win.savePng (outDir + "/ui_smacheratr_gently.png"), "gently screenshot");
-            win.click (gentlyX, gentlyY);
+            // Gentlr (called Clarity before): its band appears in the colour display
+            const double gentlrX = Editor::kGentlrButtonX, gentlrY = Editor::kGentlrTop + 40;
+            win.click (gentlrX, gentlrY);
+            CHECK (plainOf (rig, kClarity) >= 0.5, "Gentlr switched on from the editor");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr.png"), "gentlr screenshot");
+            win.click (gentlrX, gentlrY);
             CHECK (plainOf (rig, kClarity) < 0.5, "and off again");
             rig.param (kClarity, 1.0);
             rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
-            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2Range) > 7.9, "both Gently bands on from the host");
-            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_host.png"), "gently screenshot, both bands (set by the host)");
+            CHECK (plainOf (rig, kClarity) >= 0.5 && plainOf (rig, kClarity2Range) > 7.9, "both Gentlr bands on from the host");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr_host.png"), "gentlr screenshot, both bands (set by the host)");
             {
                 // a window opened with both bands on: its first picture is drawn from scratch
                 EditorWindow both (rig.controller);
-                CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_gently_both.png"), "both bands, fresh window");
+                CHECK (both.ok () && both.savePng (outDir + "/ui_smacheratr_gentlr_both.png"), "both bands, fresh window");
             }
 
             // Advanced: the Threshold sliders at the right of the colour display (with the bands' levels
-            // next to them) and the region Drive in the GENTLY panel
-            win.click (Editor::kGentlyAdvancedX, gentlyY);
+            // next to them) and the region Drive in the GENTLR panel
+            win.click (Editor::kGentlrAdvancedX, gentlrY);
             CHECK (plainOf (rig, kClarityAdvanced) >= 0.5, "Advanced switched on from the editor");
             rig.param (kClarityDrive, 1.0);
             rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -30.0));
@@ -154,7 +154,7 @@ int main (int argc, char** argv)
                 rig.render (0.05, out, nullptr, tone (250.0, 0.4));
                 pump (0.03);
             }
-            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_advanced.png"), "gently advanced screenshot");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr_advanced.png"), "gentlr advanced screenshot");
             {
                 // band 1's slider: dragging it up raises its Threshold
                 const double sliderX = Editor::kColorLeft + Editor::kColorViewWidth - ThresholdSlider::kStripWidth +
@@ -165,7 +165,7 @@ int main (int argc, char** argv)
                 CHECK (plainOf (rig, kClarityThreshold) > t0 + 5.0, "drag up raises the Threshold: %.1f -> %.1f", t0,
                        plainOf (rig, kClarityThreshold));
             }
-            win.click (Editor::kGentlyAdvancedX, gentlyY);
+            win.click (Editor::kGentlrAdvancedX, gentlrY);
             CHECK (plainOf (rig, kClarityAdvanced) < 0.5, "and Advanced off again");
             rig.param (kClarityDrive, 0.0);
             rig.param (kClarityThreshold, toNormalized (kClarityThreshold, -18.0));
@@ -183,16 +183,16 @@ int main (int argc, char** argv)
             }
 
             // the High band (rose, from 7 kHz up) over band 2 (5 kHz, 2 octaves: up to 10 kHz); No Overlap,
-            // switched on in the GENTLY panel, splits them at the middle of the overlap
+            // switched on in the GENTLR panel, splits them at the middle of the overlap
             rig.param (kClarityHighRange, toNormalized (kClarityHighRange, 6.0));
             rig.param (kClarityHighFreq, toNormalized (kClarityHighFreq, 7000.0));
             rig.param (kClarity2Range, toNormalized (kClarity2Range, 8.0));
             rig.param (kClarity2Freq, toNormalized (kClarity2Freq, 5000.0));
             rig.param (kClarity2Width, toNormalized (kClarity2Width, 2.0));
             pump (0.05);
-            CHECK (win.savePng (outDir + "/ui_smacheratr_gently_high.png"), "gently high band screenshot");
+            CHECK (win.savePng (outDir + "/ui_smacheratr_gentlr_high.png"), "gentlr high band screenshot");
             auto band2Top = [&] { return plainOf (rig, kClarity2Freq) * std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
-            win.click (Editor::kNoOverlapX, gentlyY);
+            win.click (Editor::kNoOverlapX, gentlrY);
             pump (0.05);
             CHECK (plainOf (rig, kClarityNoOverlap) >= 0.5, "No Overlap switched on from the editor");
             CHECK (band2Top () <= plainOf (rig, kClarityHighFreq) * 1.001 && plainOf (rig, kClarityHighFreq) > 7000.0,

@@ -351,9 +351,9 @@ TEST (rack_smoothr)
     }
 }
 
-TEST (rack_gently)
+TEST (rack_gentlr)
 {
-    // Gently in a slot: its latency counts, on or off; a band on the sample's pitch turns a loud note
+    // Gentlr in a slot: its latency counts, on or off; a band on the sample's pitch turns a loud note
     // down; off, the slot is dry (same latency)
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
@@ -363,13 +363,13 @@ TEST (rack_gently)
     e->noteOn (60, 1.0f);
     auto o = run (*e, 48000);
     const double dry = rms (o.l, 24000, 48000);
-    loadFx (*e, 0, kFxGently);
-    gently::Engine alone (false);
+    loadFx (*e, 0, kFxGentlr);
+    gentlr::Engine alone (false);
     alone.prepare (kHostSr, 512);
     CHECK (e->latency () == base + alone.latency (), "its latency is reported: %d (%d + %d)", e->latency (), base, alone.latency ());
-    setFx (*e, 0, gently::bandParam (0, gently::kFreq), 440.0);
-    setFx (*e, 0, gently::bandParam (0, gently::kRange), 12.0);
-    setFx (*e, 0, gently::bandParam (1, gently::kOn), 0.0);
+    setFx (*e, 0, gentlr::bandParam (0, gentlr::kFreq), 440.0);
+    setFx (*e, 0, gentlr::bandParam (0, gentlr::kRange), 12.0);
+    setFx (*e, 0, gentlr::bandParam (1, gentlr::kOn), 0.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
@@ -621,16 +621,25 @@ TEST (settings_text_roundtrip)
     CHECK (!pk::settingsFromText ("hello", "para", back), "not settings");
     CHECK (pk::settingsEffect (t) == "Para", "the effect: %s", pk::settingsEffect (t).c_str ());
     CHECK (t.find ("High-Pass") != std::string::npos, "names for the reader");
+    // Gentlr was called Gently: settings copied from a Gently (its plug-in or a rack slot, same IDs)
+    // still paste into Gentlr, in both places
+    const std::string old = pk::settingsToText ("Gently", v, &gentlr::paramTable ());
+    CHECK (pk::settingsFromText (old, "Gentlr", back, "Gently") && back == v, "the plug-in takes Gently's settings");
+    CHECK (pk::settingsFromText (old, fxName (kFxGentlr), back, fxFormerName (kFxGentlr)) && back == v, "a rack slot takes them");
+    CHECK (!pk::settingsFromText (old, "Gentlr", back), "only with the former name given");
+    CHECK (!pk::settingsFromText (old, fxName (kFxPara), back, fxFormerName (kFxPara)), "no other kind takes them");
+    const std::string now = pk::settingsToText ("Gentlr", v, &gentlr::paramTable ());
+    CHECK (pk::settingsFromText (now, fxName (kFxGentlr), back, fxFormerName (kFxGentlr)) && back == v, "and its new name");
 }
 
 TEST (old_slot_types_keep_their_effect)
 {
-    // the slot type was stored normalized over the kinds there were: a state from before Gently and
+    // the slot type was stored normalized over the kinds there were: a state from before Gentlr and
     // Smoothr (version 12: 8 kinds) keeps Levlr as Levlr on the longer list (StateIO.cpp does it; here
     // the arithmetic it relies on)
     const uint32_t typeId = slotParam (0, kSlotType);
-    const double old = (double)kFxLevlr / (kFxTypesBeforeGently - 1);
-    CHECK (std::lround (toPlain (typeId, toNormalized (typeId, std::round (old * (kFxTypesBeforeGently - 1))))) == kFxLevlr, "Levlr");
+    const double old = (double)kFxLevlr / (kFxTypesBeforeGentlr - 1);
+    CHECK (std::lround (toPlain (typeId, toNormalized (typeId, std::round (old * (kFxTypesBeforeGentlr - 1))))) == kFxLevlr, "Levlr");
     CHECK (std::lround (toPlain (typeId, 1.0)) == kNumFxTypes - 1 && kFxSmoothr == kNumFxTypes - 1, "Smoothr last");
 }
 
@@ -662,9 +671,9 @@ TEST (rack_block_mapping)
     CHECK (std::fabs (e->param (slotBlockParam (0, multidyn::kSatPreLimit)) - 1.0) < 1e-9, "Soften stored in its place");
 }
 
-TEST (gently_sub_band_in_slots)
+TEST (gentlr_sub_band_in_slots)
 {
-    // Gently's Sub band parameters have places in a Smacheratr slot's block, and keep their values there
+    // Gentlr's Sub band parameters have places in a Smacheratr slot's block, and keep their values there
     static_assert (smacheratr::kNumParams <= kSlotBlock, "Smacheratr's block");
     auto e = std::make_unique<Engine> ();
     e->prepare (48000.0, 256);
@@ -707,7 +716,7 @@ TEST (gently_sub_band_in_slots)
             has[slotBlockParam (0, id)] = true;
         }
         norm[slotBlockParam (1, smacheratr::kClaritySubFreq)] = 0.7; // Widr's own value in that place
-        migrateGentlyInSlots (norm, has, version);
+        migrateGentlrInSlots (norm, has, version);
         for (uint32_t id = smacheratr::kClaritySub; id <= smacheratr::kClaritySubThreshold; ++id)
             CHECK (norm[slotBlockParam (0, id)] == smacheratr::defaultNormalized (id) && has[slotBlockParam (0, id)], "version %d: %u default", version, id);
         CHECK (smacheratr::toPlain (smacheratr::kClaritySub, norm[slotBlockParam (0, smacheratr::kClaritySub)]) == 0.0, "Sub off");
@@ -723,10 +732,10 @@ TEST (gently_sub_band_in_slots)
         norm[typeId] = toNormalized (typeId, kFxSmacheratr);
         has[typeId] = true;
         norm[slotBlockParam (0, smacheratr::kClaritySub)] = 1.0;
-        migrateGentlyInSlots (norm, has, 12);
+        migrateGentlrInSlots (norm, has, 12);
         CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0, "version 12 untouched");
     }
-    // states from before 17: the High band and No Overlap in a Smacheratr slot and a Gently slot get their
+    // states from before 17: the High band and No Overlap in a Smacheratr slot and a Gentlr slot get their
     // defaults (off), whatever the places held; the Sub band's values from 12 on are kept
     for (int version : {13, 16, 17})
     {
@@ -734,7 +743,7 @@ TEST (gently_sub_band_in_slots)
         std::array<bool, kNumParams> has {};
         const uint32_t smType = slotParam (0, kSlotType), gType = slotParam (1, kSlotType);
         norm[smType] = toNormalized (smType, kFxSmacheratr);
-        norm[gType] = toNormalized (gType, kFxGently);
+        norm[gType] = toNormalized (gType, kFxGentlr);
         has[smType] = has[gType] = true;
         for (uint32_t j = 0; j < kSlotBlockAll; ++j)
             for (int slot : {0, 1})
@@ -742,31 +751,31 @@ TEST (gently_sub_band_in_slots)
                 norm[slotBlockParam (slot, j)] = 1.0;
                 has[slotBlockParam (slot, j)] = true;
             }
-        migrateGentlyInSlots (norm, has, version);
+        migrateGentlrInSlots (norm, has, version);
         const bool migrated = version < 17;
         for (uint32_t id = smacheratr::kClarityHigh; id <= smacheratr::kClarityNoOverlap; ++id)
             CHECK ((norm[slotBlockParam (0, id)] == smacheratr::defaultNormalized (id)) == migrated, "version %d: Smacheratr %u", version, id);
-        for (uint32_t id = gently::kHighOn; id <= gently::kNoOverlap; ++id)
-            CHECK ((norm[slotBlockParam (1, id)] == gently::defaultNormalized (id)) == migrated, "version %d: Gently %u", version, id);
-        CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0 && norm[slotBlockParam (1, gently::kSubOn)] == 1.0,
+        for (uint32_t id = gentlr::kHighOn; id <= gentlr::kNoOverlap; ++id)
+            CHECK ((norm[slotBlockParam (1, id)] == gentlr::defaultNormalized (id)) == migrated, "version %d: Gentlr %u", version, id);
+        CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0 && norm[slotBlockParam (1, gentlr::kSubOn)] == 1.0,
                "version %d: the Sub bands kept", version);
         if (migrated)
             CHECK (smacheratr::toPlain (smacheratr::kClarityHigh, norm[slotBlockParam (0, smacheratr::kClarityHigh)]) == 0.0 &&
-                       gently::toPlain (gently::kHighOn, norm[slotBlockParam (1, gently::kHighOn)]) == 0.0,
+                       gentlr::toPlain (gentlr::kHighOn, norm[slotBlockParam (1, gentlr::kHighOn)]) == 0.0,
                    "version %d: High off", version);
     }
 }
 
 TEST (sub_high_without_buttons_in_slots)
 {
-    // states from before 19: a rack Smacheratr's and Gently's Sub and High bands that were off get Range 0,
+    // states from before 19: a rack Smacheratr's and Gentlr's Sub and High bands that were off get Range 0,
     // those that were on keep their Range (the same sound); 19 on, nothing changes. Slot 0 Smacheratr,
-    // slot 1 Gently, slot 2 Para (its own saturator is not used in the rack: left alone)
+    // slot 1 Gentlr, slot 2 Para (its own saturator is not used in the rack: left alone)
     for (int version : {17, 18, 19})
     {
         std::array<double, kNumParams> norm {};
         std::array<bool, kNumParams> has {};
-        const int types[3] = {kFxSmacheratr, kFxGently, kFxPara};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
         for (int slot = 0; slot < 3; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
@@ -780,7 +789,7 @@ TEST (sub_high_without_buttons_in_slots)
         }
         auto set = [&] (int slot, uint32_t id, double v) { norm[slotBlockParam (slot, id)] = v; };
         set (0, smacheratr::kClaritySub, 0.0), set (0, smacheratr::kClarityHigh, 1.0);
-        set (1, gently::kSubOn, 1.0), set (1, gently::kHighOn, 0.0);
+        set (1, gentlr::kSubOn, 1.0), set (1, gentlr::kHighOn, 0.0);
         const uint32_t paraSub = para::kTailExt2Base + pk::kTailExt2SubRange;
         set (2, para::kTailExt2Base + pk::kTailExt2Sub, 0.0);
         migrateSubHighInSlots (norm, has, version);
@@ -788,11 +797,11 @@ TEST (sub_high_without_buttons_in_slots)
         const bool migrated = version < 19;
         CHECK (at (0, smacheratr::kClaritySubRange) == (migrated ? 0.0 : 0.5) && at (0, smacheratr::kClarityHighRange) == 0.5,
                "version %d: Smacheratr's Sub (off) %s, High (on) kept", version, migrated ? "0" : "kept");
-        CHECK (at (1, gently::kSubRange) == 0.5 && at (1, gently::kHighRange) == (migrated ? 0.0 : 0.5),
-               "version %d: Gently's Sub (on) kept, High (off) %s", version, migrated ? "0" : "kept");
+        CHECK (at (1, gentlr::kSubRange) == 0.5 && at (1, gentlr::kHighRange) == (migrated ? 0.0 : 0.5),
+               "version %d: Gentlr's Sub (on) kept, High (off) %s", version, migrated ? "0" : "kept");
         CHECK (at (2, paraSub) == 0.5, "version %d: Para's own saturator left alone", version);
     }
-    // and the rack's Smacheratr and Gently pages have no Sub or High buttons: those IDs are not in the rack
+    // and the rack's Smacheratr and Gentlr pages have no Sub or High buttons: those IDs are not in the rack
     auto hidden = [] (int type, uint32_t id) {
         for (const auto& h : rackHiddenParams (type))
             if (id >= h.first && id <= h.last)
@@ -802,9 +811,9 @@ TEST (sub_high_without_buttons_in_slots)
     CHECK (hidden (kFxSmacheratr, smacheratr::kClaritySub) && hidden (kFxSmacheratr, smacheratr::kClarityHigh) &&
                !hidden (kFxSmacheratr, smacheratr::kClaritySubRange) && !hidden (kFxSmacheratr, smacheratr::kClarityHighRange),
            "Smacheratr: the buttons hidden, the Ranges there");
-    CHECK (hidden (kFxGently, gently::kSubOn) && hidden (kFxGently, gently::kHighOn) && !hidden (kFxGently, gently::kSubRange) &&
-               !hidden (kFxGently, gently::kHighRange) && !hidden (kFxGently, gently::bandParam (0, gently::kOn)),
-           "Gently: the Sub and High On hidden, the Ranges and band 1's On there");
+    CHECK (hidden (kFxGentlr, gentlr::kSubOn) && hidden (kFxGentlr, gentlr::kHighOn) && !hidden (kFxGentlr, gentlr::kSubRange) &&
+               !hidden (kFxGentlr, gentlr::kHighRange) && !hidden (kFxGentlr, gentlr::bandParam (0, gentlr::kOn)),
+           "Gentlr: the Sub and High On hidden, the Ranges and band 1's On there");
 }
 
 TEST (rack_order_and_widr)

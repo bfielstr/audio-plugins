@@ -2,8 +2,8 @@
 
 #include "projectversion.h"
 
-#define stringOriginalFilename "Gently.vst3"
-#define stringFileDescription "Gently VST3"
+#define stringOriginalFilename "Gentlr.vst3"
+#define stringFileDescription "Gentlr VST3"
 #define stringCompanyName "bfielstr\0"
 #define stringCompanyWeb "https://github.com/bfielstr/audio-plugins"
 #define stringCompanyEmail "mailto:bfielstr@users.noreply.github.com"

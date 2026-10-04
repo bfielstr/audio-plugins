@@ -232,7 +232,7 @@ std::string ControllerBase::settingsText ()
 bool ControllerBase::applySettingsText (const std::string& text)
 {
     SettingValues v;
-    if (presetPlugin.empty () || !settingsFromText (text, presetPlugin, v))
+    if (presetPlugin.empty () || !settingsFromText (text, presetPlugin, v, presetFormer))
         return false;
     for (const auto& [id, n] : v)
     {

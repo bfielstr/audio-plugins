@@ -6,7 +6,7 @@
 
 #include <array>
 
-namespace gently {
+namespace gentlr {
 
 struct State
 {
@@ -17,4 +17,4 @@ struct State
 bool writeState (Steinberg::IBStream* stream, const State& s);
 bool readState (Steinberg::IBStream* stream, State& s);
 
-} // namespace gently
+} // namespace gentlr

@@ -347,12 +347,12 @@ TEST (defaults_and_the_end_saturator)
                    t.info (bandParam (b, kGain)).def == 0.0,
                "band %d: on, Frequency, free at 0.75 Hz, Gain 0 dB", b + 1);
     CHECK (t.info (kLinkRate).def == 1.0 && kLinkRate == kTailExtBase + pk::kTailExtFields, "rates linked, after the saturator's block");
-    CHECK (kTailExt2Base == kLinkRate + 1, "then Gently's Advanced block");
+    CHECK (kTailExt2Base == kLinkRate + 1, "then Gentlr's Advanced block");
     CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields &&
-               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" &&
-               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's) is the last");
+           "Gentlr's Advanced block (the end saturator's) is the last");
     CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailExtBase + pk::kTailExtClarity).id == kTailExtBase + pk::kTailExtClarity,
            "the end Smacheratr, off");
     // dry passes when the bands are off and the mix is 0

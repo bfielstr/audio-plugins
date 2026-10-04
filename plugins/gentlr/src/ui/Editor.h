@@ -10,10 +10,10 @@
 #include <memory>
 #include <vector>
 
-namespace gently {
+namespace gentlr {
 
 class Controller;
-class GentlyView;
+class GentlrView;
 
 // The band display on top (with Advanced, the bands' Threshold sliders at its right edge: band 1, band
 // 2, Sub, High), a row of controls (each band's On, Frequency, Width and Range; the Sub and High bands'
@@ -45,8 +45,8 @@ private:
 
     Controller* ctl;
     std::unique_ptr<smacheratr::TailDisplays> tailDisplays;
-    std::unique_ptr<pk::MappedParamHost> sliderHost; // Smacheratr's Threshold sliders on Gently's Thresholds
-    GentlyView* view = nullptr;
+    std::unique_ptr<pk::MappedParamHost> sliderHost; // Smacheratr's Threshold sliders on Gentlr's Thresholds
+    GentlrView* view = nullptr;
     smacheratr::ThresholdSlider* sliders[kAllBands] = {nullptr, nullptr, nullptr, nullptr}; // (ThresholdSlider::layout takes all four)
     std::vector<VSTGUI::CView*> headers;              // each band's name and edges (the Sub and High bands' too)
     std::vector<pk::ParamView*> bandViews[kAllBands]; // each band's knobs (dim while it is off)
@@ -54,4 +54,4 @@ private:
     pk::ParamView* driveAmount = nullptr;
 };
 
-} // namespace gently
+} // namespace gentlr

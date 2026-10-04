@@ -8,7 +8,7 @@
 #include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
-namespace gently {
+namespace gentlr {
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -149,4 +149,4 @@ tresult PLUGIN_API Processor::notify (IMessage* message)
     return AudioEffect::notify (message);
 }
 
-} // namespace gently
+} // namespace gentlr

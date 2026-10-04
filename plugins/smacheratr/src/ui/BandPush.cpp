@@ -7,21 +7,21 @@
 
 namespace smacheratr {
 
-const GentlyBandParams& smacheratrBandParams ()
+const GentlrBandParams& smacheratrBandParams ()
 {
-    static const GentlyBandParams bp {
+    static const GentlrBandParams bp {
         {kClarityFreq, kClarity2Freq, kClaritySubFreq, kClarityHighFreq},
         {kClarityWidth, kClarity2Width, -1, -1},
         kClarityNoOverlap,
         // (every band the same way: Sub and High have no button of their own)
-        [] (pk::ParamHost* h, int k) { return clarityBandOn (h->plainValue (kClarity), h->plainValue (kGentlyRangeIds[k])); }};
+        [] (pk::ParamHost* h, int k) { return clarityBandOn (h->plainValue (kClarity), h->plainValue (kGentlrRangeIds[k])); }};
     return bp;
 }
 
-GentlyLayout readLayout (pk::ParamHost* host, const GentlyBandParams& bp)
+GentlrLayout readLayout (pk::ParamHost* host, const GentlrBandParams& bp)
 {
-    GentlyLayout l;
-    for (int k = 0; k < kGentlyBands; ++k)
+    GentlrLayout l;
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         l.on[k] = bp.works (host, k);
         l.freq[k] = host->plainValue (bp.freq[k]);
@@ -30,7 +30,7 @@ GentlyLayout readLayout (pk::ParamHost* host, const GentlyBandParams& bp)
     return l;
 }
 
-void writeLayout (pk::ParamHost* host, const GentlyBandParams& bp, const GentlyLayout& l, bool once)
+void writeLayout (pk::ParamHost* host, const GentlrBandParams& bp, const GentlrLayout& l, bool once)
 {
     auto set = [&] (uint32_t id, double plain) {
         if (std::fabs (plain - host->plainValue (id)) <= 1e-9 * std::max (1.0, std::fabs (plain)))
@@ -41,7 +41,7 @@ void writeLayout (pk::ParamHost* host, const GentlyBandParams& bp, const GentlyL
         else
             host->setNorm (id, n);
     };
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         if (!l.on[k])
             continue;
@@ -51,7 +51,7 @@ void writeLayout (pk::ParamHost* host, const GentlyBandParams& bp, const GentlyL
     }
 }
 
-void BandPush::begin (pk::ParamHost* host, const GentlyBandParams& bp, int b, const std::vector<uint32_t>& open)
+void BandPush::begin (pk::ParamHost* host, const GentlrBandParams& bp, int b, const std::vector<uint32_t>& open)
 {
     end (host);
     if (host->plainValue (bp.noOverlap) < 0.5)
@@ -60,7 +60,7 @@ void BandPush::begin (pk::ParamHost* host, const GentlyBandParams& bp, int b, co
     band = b;
     start = readLayout (host, bp);
     // every working band may be pushed (the display has opened the grabbed band's own gestures)
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         if (!start.on[k])
             continue;
@@ -77,11 +77,11 @@ void BandPush::begin (pk::ParamHost* host, const GentlyBandParams& bp, int b, co
     writeLayout (host, bp, start, false);
 }
 
-void BandPush::update (pk::ParamHost* host, const GentlyBandParams& bp)
+void BandPush::update (pk::ParamHost* host, const GentlrBandParams& bp)
 {
     if (!on)
         return;
-    GentlyLayout l = start;
+    GentlrLayout l = start;
     l.freq[band] = host->plainValue (bp.freq[band]);
     if (bp.width[band] >= 0)
         l.width[band] = host->plainValue ((uint32_t)bp.width[band]);
@@ -97,14 +97,14 @@ void BandPush::end (pk::ParamHost* host)
     on = false;
 }
 
-void pushOnce (pk::ParamHost* host, const GentlyBandParams& bp, int band, const GentlyLayout& before)
+void pushOnce (pk::ParamHost* host, const GentlrBandParams& bp, int band, const GentlrLayout& before)
 {
     if (host->plainValue (bp.noOverlap) < 0.5)
         return;
-    GentlyLayout was = before;
+    GentlrLayout was = before;
     resolveOverlaps (was);
-    GentlyLayout l = readLayout (host, bp);
-    for (int k = 0; k < kGentlyBands; ++k)
+    GentlrLayout l = readLayout (host, bp);
+    for (int k = 0; k < kGentlrBands; ++k)
         if (k != band)
         {
             l.freq[k] = was.freq[k];
@@ -114,7 +114,7 @@ void pushOnce (pk::ParamHost* host, const GentlyBandParams& bp, int band, const 
     writeLayout (host, bp, l, true);
 }
 
-NoOverlapToggle::NoOverlapToggle (const VSTGUI::CRect& r, pk::ParamHost* h, const GentlyBandParams& bp, const char* label)
+NoOverlapToggle::NoOverlapToggle (const VSTGUI::CRect& r, pk::ParamHost* h, const GentlrBandParams& bp, const char* label)
     : pk::Toggle (r, h, bp.noOverlap, label), bands (bp)
 {
 }
@@ -126,7 +126,7 @@ void NoOverlapToggle::onMouseDownEvent (VSTGUI::MouseDownEvent& e)
     if (was || host->plainValue (param) < 0.5)
         return;
     // switched on: bands that overlap are split at the middle of the overlap
-    GentlyLayout l = readLayout (host, bands);
+    GentlrLayout l = readLayout (host, bands);
     resolveOverlaps (l);
     writeLayout (host, bands, l, true);
 }

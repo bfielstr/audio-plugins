@@ -1,4 +1,4 @@
-// Headless tests for the Gently DSP. Run: ./gently_tests [filter]
+// Headless tests for the Gentlr DSP. Run: ./gentlr_tests [filter]
 #include "Engine.h"
 #include "Params.h"
 
@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-using namespace gently;
+using namespace gentlr;
 
 static int gFailures = 0, gChecks = 0;
 #define CHECK(cond, ...)                                                   \
@@ -57,7 +57,7 @@ struct Sig
     std::vector<float> l, r;
 };
 
-// Gently alone (no end saturator), with `set` applied before it starts.
+// Gentlr alone (no end saturator), with `set` applied before it starts.
 static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr, Meters* meters = nullptr)
 {
     auto e = std::make_unique<Engine> (false);
@@ -156,8 +156,8 @@ TEST (parameters_and_defaults)
     CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
                kHighOn == kTailExt2Base + pk::kTailExt2Fields && kNumParams == kTailExt3Base + pk::kTailExt3Fields,
            "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block last");
-    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced", "the third block");
-    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)", "the last block");
+    CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced", "the third block");
+    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the last block");
     // every end saturator parameter reaches the tail's field it stands for, and only those are tail parameters
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
@@ -197,7 +197,7 @@ TEST (parameters_and_defaults)
                fromSmacheratr (smacheratr::kDrive) == -1,
            "the Sub slider mapped");
     for (int k = 0; k < kAllBands; ++k)
-        CHECK (fromSmacheratr (smacheratr::kGentlyThresholdIds[k]) == (int64_t)thresholdParam (k), "slider %d on its band", k);
+        CHECK (fromSmacheratr (smacheratr::kGentlrThresholdIds[k]) == (int64_t)thresholdParam (k), "slider %d on its band", k);
     // the IDs are persisted in projects (also pinned with static_asserts in Params.h): each name at its number
     const std::pair<uint32_t, const char*> pinned[] = {
         {0, "Advanced"},          {1, "Drive"},           {2, "Drive Amount"},          {3, "Attack"},
@@ -205,13 +205,13 @@ TEST (parameters_and_defaults)
         {8, "Band 1 On"},         {9, "Band 1 Frequency"}, {10, "Band 1 Width"},        {11, "Band 1 Range"},
         {12, "Band 1 Threshold"}, {13, "Band 2 On"},      {17, "Band 2 Threshold"},     {18, "Sub (unused)"},
         {19, "Sub Frequency"},    {20, "Sub Range"},      {21, "Sub Threshold"},        {22, "Saturator"},
-        {28, "Saturator Output"}, {45, "Saturator Gently Advanced"}, {53, "Saturator Gently Sub Threshold"},
+        {28, "Saturator Output"}, {45, "Saturator Gentlr Advanced"}, {53, "Saturator Gentlr Sub Threshold"},
         {54, "High (unused)"},             {55, "High Frequency"}, {56, "High Range"},           {57, "High Threshold"},
-        {58, "No Overlap"},       {59, "Saturator Gently High (unused)"}, {63, "Saturator Gently No Overlap"}};
+        {58, "No Overlap"},       {59, "Saturator Gentlr High (unused)"}, {63, "Saturator Gentlr No Overlap"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
     CHECK (kNumParams == 64, "64 parameters: %u", (unsigned)kNumParams);
-    std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gently block at %u)\n", (unsigned)kNumParams,
+    std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gentlr block at %u)\n", (unsigned)kNumParams,
                  (unsigned)kBandBase, (unsigned)kSubOn, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
 }
 
@@ -518,7 +518,7 @@ TEST (high_band)
         en.setParam (kHighThreshold, -40.0);
     });
     CHECK (adv < -4.5 && std::fabs (m.bands.clarityHighDb.load () + 6.0) < 0.01, "the High Threshold works with Advanced (%.2f dB)", adv);
-    // High at Range 0 is Gently as it was: the same output (to the bit) whatever its other controls say
+    // High at Range 0 is Gentlr as it was: the same output (to the bit) whatever its other controls say
     // (its old On too), with every other band working
     auto render = [] (bool on, double freq, double threshold) {
         auto e = engine ([&] (Engine& en) {
@@ -556,7 +556,7 @@ TEST (no_overlap)
     // overlapping: the engine keeps them apart, as smacheratr::resolveOverlaps says
     const auto kept = render (set (true, 250.0, 2.0, 400.0, 2.0));
     CHECK (kept != render (set (false, 250.0, 2.0, 400.0, 2.0)), "overlapping: No Overlap moves them");
-    smacheratr::GentlyLayout l;
+    smacheratr::GentlrLayout l;
     l.on[0] = l.on[1] = true;
     l.freq[0] = 250.0, l.width[0] = 2.0, l.freq[1] = 400.0, l.width[1] = 2.0;
     l.freq[kSub] = smacheratr::kSubDefaultHz, l.freq[kHigh] = smacheratr::kHighDefaultHz;

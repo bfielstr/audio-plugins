@@ -1,6 +1,6 @@
-# Gently
+# Gentlr
 
-Smacheratr's **Gently** (it was called Clarity) on its own: a gentle dynamic de-muddier and
+Smacheratr's **Gentlr** (it was called Clarity) on its own: a gentle dynamic de-muddier and
 de-harsher. Two bands, a Sub band and a High band watch their part of the spectrum and turn it down only while it
 gets loud, so a mix, a bus or a synth keeps its body at normal levels and stops going boomy, muddy or
 harsh when it is pushed. Nothing is cut while a band stays under its threshold. Install instructions
@@ -38,7 +38,7 @@ band that is not cutting leaves the signal exactly as it was, bit for bit.
   of it around 3.5 kHz where harshness starts, and leaves the presence region (1 to 3 kHz) that
   carries a voice or a lead alone. It has a **Range** and a Threshold, the same law, and no width. Like
   the Sub band it has no On button: it starts at Range 0 dB (no cut) and works once its Range is above
-  0 dB; at 0 dB Gently is exactly what it was, bit for bit.
+  0 dB; at 0 dB Gentlr is exactly what it was, bit for bit.
 - Projects saved before the Sub and High bands lost their On buttons sound the same: a band that was
   off loads with its Range at 0 dB, one that was on keeps its Range.
 
@@ -59,21 +59,21 @@ cut follows its level going up and lets go after it (Smacheratr's times by defau
 
 **Stereo**: **Stereo** (left and right share one detector per band, so the image stays put),
 **Mid/Side** (the mid and the side are worked on apart, each with its own detectors), **Mid** or
-**Side** (only that one; the other passes). A change of mode fades Gently out and back in (5 ms each
+**Side** (only that one; the other passes). A change of mode fades Gentlr out and back in (5 ms each
 way), so it does not click.
 
 ## Advanced
 
 **Advanced** gives each band its own **Threshold** instead of the fixed -18 dB: a vertical slider per
-band (band 1, band 2, Sub, High) at the right edge of the display, with the band's level as Gently measures
+band (band 1, band 2, Sub, High) at the right edge of the display, with the band's level as Gentlr measures
 it rising beside it, bright where it is over the threshold (there the band is being cut). The law
 over the threshold stays the same. Drag a slider (Shift: fine); a double-click or right-click puts it
-back to -18 dB. Advanced is on in a new Gently (the Thresholds at -18 dB sound the same as Advanced
+back to -18 dB. Advanced is on in a new Gentlr (the Thresholds at -18 dB sound the same as Advanced
 off, so the sliders are there to move); with Advanced off, the Thresholds are kept but not used.
 
 Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB, 12 dB by default): the bands
 as they leave, after their cuts, go through Smacheratr's Analog curve on their own, level-matched
-(the curve's output divided by the gain) and added back, so the region Gently works on gets denser
+(the curve's output divided by the gain) and added back, so the region Gentlr works on gets denser
 and gains harmonics without getting louder, while the rest of the sound stays clean. It runs 4x
 oversampled, fades in and out when switched, and a quiet region passes it unchanged.
 
@@ -84,7 +84,7 @@ it can cut outlined (dashed), the cut it is making now lit (cinnabar) from the 0
 the audio, a handle at its centre (Sub, High: at their Freq) as deep as its Range, and the whole response as
 the bright line (every band at its cut now, with its phase: the curve is what the sound gets). Behind them, the
 output's spectrum (filled) and the input's (dotted), tilted 4.5 dB/oct so a mix reads level: where
-the input stands above the output, Gently is cutting. The readouts at the top show each band's
+the input stands above the output, Gentlr is cutting. The readouts at the top show each band's
 frequency and its cut now.
 
 - Drag a handle sideways for the band's frequency (Sub: 20 to 100 Hz, High: 2 to 16 kHz), down for its Range.
@@ -97,10 +97,10 @@ frequency and its cut now.
 - Click a band's readout at the top to switch the band on or off.
 
 **No Overlap** (above Mix and Output), **Mix** (dry / wet: the input, delayed to line up, against
-Gently's output) and **Output** (+-24 dB, before the Smacheratr at the end).
+Gentlr's output) and **Output** (+-24 dB, before the Smacheratr at the end).
 
 **Smacheratr** (bottom panel): the optional saturator at the end of the chain (off, Drive 0 dB), with
-all its controls, its own Gently included.
+all its controls, its own Gentlr included.
 
 ## Latency
 

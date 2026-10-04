@@ -220,7 +220,7 @@ TEST (param_table)
         ids &= paramTable ().info (i).id == i;
     CHECK (ids, "every entry sits at its id");
     CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kTailExt3Base + pk::kTailExt3Fields == kNumParams,
-           "the saturator's Gently Advanced block, then its High band block last");
+           "the saturator's Gentlr Advanced block, then its High band block last");
     CHECK (paramTable ().info (kTailBase + pk::kTailOn).def == 1.0, "the saturator is on by default");
     CHECK (paramTable ().info (kTailBase + pk::kTailPreLimit).def == 0.0, "its pre-limiter is off");
     CHECK (paramTable ().info (kTailBase + pk::kTailMix).def == 0.5, "half wet");

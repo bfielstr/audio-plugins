@@ -1,6 +1,6 @@
-// Gently's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a state from a
-// newer Gently (IDs this one does not know), a state with parameters missing, and a stream that is
-// not Gently's. Run: ./gently_state_tests
+// Gentlr's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a state from a
+// newer Gentlr (IDs this one does not know), a state with parameters missing, and a stream that is
+// not Gentlr's. Run: ./gentlr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
 
@@ -13,7 +13,7 @@
 #include <vector>
 
 using namespace Steinberg;
-using namespace gently;
+using namespace gentlr;
 
 static int gFailures = 0, gChecks = 0;
 #define CHECK(cond, ...)                                                   \
@@ -90,7 +90,7 @@ int main ()
         CHECK (!back.has[kHighOn] && toPlain (kHighOn, back.norm[kHighOn]) == 0.0 && toPlain (kNoOverlap, back.norm[kNoOverlap]) == 0.0 &&
                    toPlain (kTailExt3Base + pk::kTailExt3High, back.norm[kTailExt3Base + pk::kTailExt3High]) == 0.0 &&
                    toPlain (kTailExt3Base + pk::kTailExt3NoOverlap, back.norm[kTailExt3Base + pk::kTailExt3NoOverlap]) == 0.0,
-               "an old state: High and No Overlap off (Gently's and the end saturator's)");
+               "an old state: High and No Overlap off (Gentlr's and the end saturator's)");
     }
     // a version 1 state (before the Sub and High bands lost their On): a band that was off gets Range 0,
     // one that was on keeps its Range (or, not saved, the old default: Sub 8 dB, High 6 dB); the end
@@ -143,7 +143,31 @@ int main ()
                "nothing saved for them (off by default then): Range 0");
         CHECK (defaultNormalized (kSubRange) == 0.0 && defaultNormalized (kHighRange) == 0.0, "a new instance: Sub and High at Range 0");
     }
-    // a state from a newer Gently: the IDs this one does not know are skipped, the rest read
+    // a state saved by Gently (Gentlr's name until 0.11: the same class IDs and the same magic, GNTL,
+    // at version 2), written by hand as Gently wrote it: every value it saved loads into Gentlr
+    {
+        MemoryStream s;
+        const uint32_t gentlyParams = kTailExt3Base + pk::kTailExt3Fields; // every ID Gently had
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x474E544C); // GNTL
+            w.writeInt32 (2);
+            w.writeInt32 ((int32)gentlyParams);
+            for (uint32_t id = 0; id < gentlyParams; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.071 * (id + 3), 1.0));
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "Gently's state read");
+        int wrong = 0;
+        for (uint32_t id = 0; id < gentlyParams; ++id)
+            wrong += back.has[id] && back.norm[id] == std::fmod (0.071 * (id + 3), 1.0) ? 0 : 1;
+        CHECK (wrong == 0, "every value Gently saved, as it was (%d not)", wrong);
+    }
+    // a state from a newer Gentlr: the IDs this one does not know are skipped, the rest read
     {
         MemoryStream s;
         {
@@ -161,7 +185,7 @@ int main ()
         CHECK (readState (&s, back), "read");
         CHECK (back.has[kSubRange] && back.norm[kSubRange] == 0.75, "the known one read");
     }
-    // not Gently's
+    // not Gentlr's
     {
         MemoryStream s;
         {
@@ -174,6 +198,6 @@ int main ()
         State back;
         CHECK (!readState (&s, back), "refused");
     }
-    std::printf ("gently state: %d checks, %d failures\n", gChecks, gFailures);
+    std::printf ("gentlr state: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
 }

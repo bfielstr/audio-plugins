@@ -484,19 +484,19 @@ int main (int argc, char** argv)
             const double slope = smemplr::mseq::paramTable ().toPlain (smemplr::mseq::kSlope, b8.norm[smemplr::slotBlockParam (1, smemplr::mseq::kSlope)]);
             const double drive = smacheratr::paramTable ().toPlain (smacheratr::kDrive, b8.norm[smemplr::slotBlockParam (2, smacheratr::kDrive)]);
             CHECK (std::lround (slope) == smemplr::MsEq::k12 && std::fabs (drive - 6.0) < 1e-6, "slope %f (12 dB), drive %f", slope, drive);
-            // the old saturator never had Gently's Advanced mode: its slot gets the defaults
+            // the old saturator never had Gentlr's Advanced mode: its slot gets the defaults
             for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 CHECK (b8.norm[smemplr::slotBlockParam (2, id)] == smacheratr::defaultNormalized (id), "version 8: %s at its default",
                        smacheratr::paramTable ().info (id).name);
         }
 
-        // States from before version 11: Gently's Advanced places in a Smacheratr slot held nothing that
+        // States from before version 11: Gentlr's Advanced places in a Smacheratr slot held nothing that
         // was used; they get their defaults (Advanced off: the same sound)
         {
             auto v10 = baseState (wav);
             const uint32_t typeId = smemplr::slotParam (0, smemplr::kSlotType);
-            // (version 10 stored the slot type over the kinds before Gently and Smoothr)
-            v10.norm[typeId] = (double)smemplr::kFxSmacheratr / (smemplr::kFxTypesBeforeGently - 1);
+            // (version 10 stored the slot type over the kinds before Gentlr and Smoothr)
+            v10.norm[typeId] = (double)smemplr::kFxSmacheratr / (smemplr::kFxTypesBeforeGentlr - 1);
             for (uint32_t id = smacheratr::kClarityAdvanced; id <= smacheratr::kClaritySubThreshold; ++id)
                 v10.norm[smemplr::slotBlockParam (0, id)] = 1.0;
             MemoryStream raw;
@@ -665,21 +665,21 @@ int main (int argc, char** argv)
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 
-        // the kinds that did not fit the rack above (it has 8 slots): Gently and Smoothr, their pages (every
+        // the kinds that did not fit the rack above (it has 8 slots): Gentlr and Smoothr, their pages (every
         // parameter with a control, or listed as not shown), and Copy / Paste between two Smoothr slots
         {
-            loadFx (0, smemplr::kFxGently);
+            loadFx (0, smemplr::kFxGentlr);
             loadFx (1, smemplr::kFxSmoothr);
             loadFx (2, smemplr::kFxSmoothr);
             const uint32_t ceil1 = smemplr::slotBlockParam (1, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
             const uint32_t ceil2 = smemplr::slotBlockParam (2, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
             rig.param (ceil1, 0.2);
             EditorWindow fx (rig.controller);
-            CHECK (fx.ok (), "fx editor (gently, smoothr)");
+            CHECK (fx.ok (), "fx editor (gentlr, smoothr)");
             const double tabY = smemplr::Editor::kFxTabTop + 10, ctlY = smemplr::Editor::kFxCtlTop + 10;
             auto tabX = [] (int pos) { return 8 + pos * smemplr::Editor::kFxTabWidth + 40; };
-            const int more[2] = {smemplr::kFxGently, smemplr::kFxSmoothr};
-            const char* moreNames[2] = {"gently", "smoothr"};
+            const int more[2] = {smemplr::kFxGentlr, smemplr::kFxSmoothr};
+            const char* moreNames[2] = {"gentlr", "smoothr"};
             for (int t = 0; t < 2; ++t)
             {
                 fx.click (tabX (t), tabY);

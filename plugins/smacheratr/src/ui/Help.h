@@ -30,49 +30,49 @@ inline const char* forParam (uint32_t id)
         case kHiQuality: return "Runs the curve 4x oversampled to reduce aliasing (a little more CPU).";
         case kDcFilter: return "Removes DC offset from the input before the curve.";
         case kClarity:
-            return "Gently: a compressor on a band (two if you like), so a hard-pushed drive does not go muddy or harsh: "
+            return "Gentlr: a compressor on a band (two if you like), so a hard-pushed drive does not go muddy or harsh: "
                    "when the band hits the curve hard it is turned down before it (up to Range, 8 dB by default, only "
                    "when pushed) and after it by half as much. The band slopes 12 dB/oct below and 6 dB/oct above; set "
                    "it with Freq and Width, or drag its handle in the frequency display (edges or Alt-drag: width; "
                    "wheel: width). A band works while its Range is above 0 dB. Advanced gives each band a Threshold "
                    "and can drive the region it cuts.";
-        case kClarityFreq: return "Gently: the centre of the band it compresses (20 Hz to 20 kHz).";
-        case kClarityWidth: return "Gently: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
-        case kClarity2Freq: return "Gently band 2: the centre of its band.";
-        case kClarity2Width: return "Gently band 2: the band's width in octaves.";
+        case kClarityFreq: return "Gentlr: the centre of the band it compresses (20 Hz to 20 kHz).";
+        case kClarityWidth: return "Gentlr: the band's width in octaves, between its 12 dB/oct low edge and 6 dB/oct high edge.";
+        case kClarity2Freq: return "Gentlr band 2: the centre of its band.";
+        case kClarity2Width: return "Gentlr band 2: the band's width in octaves.";
         case kClarity2Range:
-            return "Gently band 2 (marked 2 in the display): the most it turns its band down. At 0 dB (the default) the band "
+            return "Gentlr band 2 (marked 2 in the display): the most it turns its band down. At 0 dB (the default) the band "
                    "does nothing; give it a range to use it on a second muddy or harsh spot.";
         case kClarityRange:
-            return "Gently: the most it turns its band down before the curve (after it, half as much). 8 dB by default, "
+            return "Gentlr: the most it turns its band down before the curve (after it, half as much). 8 dB by default, "
                    "0 to 24 dB.";
         case kClarityAdvanced:
-            return "Gently's Advanced mode: each band gets a Threshold (the vertical sliders at the right of the frequency "
-                   "display, with the band's level beside them) and the region it cuts can be driven (Drive). Off, Gently "
+            return "Gentlr's Advanced mode: each band gets a Threshold (the vertical sliders at the right of the frequency "
+                   "display, with the band's level beside them) and the region it cuts can be driven (Drive). Off, Gentlr "
                    "works exactly as before: its bands start cutting at -18 dB.";
         case kClaritySub:
-            return "Unused: Gently's Sub band works while its Range is above 0 dB (it had a button of its own before).";
+            return "Unused: Gentlr's Sub band works while its Range is above 0 dB (it had a button of its own before).";
         case kClaritySubFreq:
-            return "Gently Sub: where the band starts to taper off, 20 to 100 Hz (40 Hz by default). Everything below it, "
+            return "Gentlr Sub: where the band starts to taper off, 20 to 100 Hz (40 Hz by default). Everything below it, "
                    "to the very bottom, is compressed.";
         case kClaritySubRange:
-            return "Gently's Sub band (marked Sub in the display): compresses the sub region, as a shelf from the very bottom of the "
+            return "Gentlr's Sub band (marked Sub in the display): compresses the sub region, as a shelf from the very bottom of the "
                    "spectrum up to where its cut starts to let go (Freq). Range is the most it turns that region down before "
                    "the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; pull its "
                    "handle down in the display, or turn this up, and it starts cutting.";
         case kClarityHigh:
-            return "Unused: Gently's High band works while its Range is above 0 dB (it had a button of its own before).";
+            return "Unused: Gentlr's High band works while its Range is above 0 dB (it had a button of its own before).";
         case kClarityHighFreq:
-            return "Gently High: where the band starts to taper off going down, 2 to 16 kHz (7 kHz by default: the cut is half "
+            return "Gentlr High: where the band starts to taper off going down, 2 to 16 kHz (7 kHz by default: the cut is half "
                    "as deep around half that, and nearly gone an octave below, so the presence region is left alone). "
                    "Everything above it, to the very top, is compressed.";
         case kClarityHighRange:
-            return "Gently's High band (marked High in the display): compresses the top of the spectrum (harshness, fizz, sibilance), "
+            return "Gentlr's High band (marked High in the display): compresses the top of the spectrum (harshness, fizz, sibilance), "
                    "as a shelf from where its cut starts to let go (Freq) up to the very top. Range is the most it turns that "
                    "down before the curve (after it, half as much), 0 to 24 dB. At 0 dB (the default) the band does nothing; "
                    "pull its handle down in the display, or turn this up, and it starts cutting.";
         case kClarityNoOverlap:
-            return "Gently's bands never cover the same frequencies: dragging or widening a band in the display pushes its "
+            return "Gentlr's bands never cover the same frequencies: dragging or widening a band in the display pushes its "
                    "neighbours' edges along (a neighbour narrows, then moves; the band stops where they cannot move further). "
                    "Switched on, bands that overlap are split at the middle of the overlap; automation that makes them "
                    "overlap is kept apart the same way.";
@@ -80,16 +80,16 @@ inline const char* forParam (uint32_t id)
         case kClaritySubThreshold:
         case kClarityThreshold:
         case kClarity2Threshold:
-            return "Gently (Advanced): the band's level where it starts cutting (-18 dB by default, where it starts without "
+            return "Gentlr (Advanced): the band's level where it starts cutting (-18 dB by default, where it starts without "
                    "Advanced). Over it, 3 dB of cut for every 5 dB, up to the band's Range. The bar beside it is the "
                    "band's level going into the curve, bright where it is over the threshold. Drag up/down, double-click "
                    "to reset.";
         case kClarityDrive:
-            return "Gently (Advanced): drive the region Gently works on. Its bands are split out again, put through the "
+            return "Gentlr (Advanced): drive the region Gentlr works on. Its bands are split out again, put through the "
                    "Analog curve on their own and put back, so the cut region gets density and harmonics while the rest "
                    "stays clean. Level-matched: quiet parts pass as they are.";
         case kClarityDriveAmount:
-            return "Gently (Advanced): how hard the region Drive pushes the band region into the Analog curve (0 to 36 dB). "
+            return "Gentlr (Advanced): how hard the region Drive pushes the band region into the Analog curve (0 to 36 dB). "
                    "Level-matched: it gets denser, not louder.";
         case kMidSide:
             return "Saturate the mid and the side apart: the side is driven by its own, lower level, so a wide sound "
@@ -106,7 +106,7 @@ constexpr const char* kShaperDisplay =
 constexpr const char* kColorDisplay =
     "The colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
-    "With Gently on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
+    "With Gentlr on, its bands: drag a handle sideways for the frequency and down for the Range, an edge for the width, "
     "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub and High bands (named in their readouts) "
     "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. Shift: fine.";
 

@@ -1,10 +1,10 @@
-// Gently's No Overlap (kClarityNoOverlap): its working bands never cover the same frequencies. A band
+// Gentlr's No Overlap (kClarityNoOverlap): its working bands never cover the same frequencies. A band
 // covers the octaves between its edges (centre / 2^(Width / 2) to centre * 2^(Width / 2)), the Sub band
 // everything below its Freq, the High band everything above its Freq. Along the spectrum they sit in
 // one order, Sub first, the bands by their centres, High last, and each one's high edge stays at or
 // below the next one's low edge.
 //
-// Two ways to get there, both pure functions on a GentlyLayout:
+// Two ways to get there, both pure functions on a GentlrLayout:
 //   pushBands        a band was dragged or widened (in an editor): its neighbours' edges are pushed
 //                    along (a neighbour gets narrower, and once it is as narrow as a band can be, 0.5
 //                    octaves, it moves as a whole), and where they cannot move further (the Sub band
@@ -26,12 +26,12 @@
 
 namespace smacheratr {
 
-// Gently's bands as No Overlap sees them, in Smacheratr's order (the two bands, Sub, High).
-struct GentlyLayout
+// Gentlr's bands as No Overlap sees them, in Smacheratr's order (the two bands, Sub, High).
+struct GentlrLayout
 {
-    bool on[kGentlyBands] {};      // the band works (only working bands push and are pushed)
-    double freq[kGentlyBands] {};  // Hz: a band's centre, the Sub and High bands' Freq (where they taper)
-    double width[kGentlyBands] {}; // octaves between a band's edges (the Sub and High bands have none)
+    bool on[kGentlrBands] {};      // the band works (only working bands push and are pushed)
+    double freq[kGentlrBands] {};  // Hz: a band's centre, the Sub and High bands' Freq (where they taper)
+    double width[kGentlrBands] {}; // octaves between a band's edges (the Sub and High bands have none)
 };
 
 namespace noOverlap {
@@ -44,7 +44,7 @@ struct Span
     double lo, hi; // log2 Hz
 };
 
-inline Span spanOf (const GentlyLayout& l, int k)
+inline Span spanOf (const GentlrLayout& l, int k)
 {
     const double c = std::log2 (std::max (1.0, l.freq[k]));
     if (k == kSubBand)
@@ -54,7 +54,7 @@ inline Span spanOf (const GentlyLayout& l, int k)
     return {c - 0.5 * l.width[k], c + 0.5 * l.width[k]};
 }
 
-inline void setSpan (GentlyLayout& l, int k, const Span& s)
+inline void setSpan (GentlrLayout& l, int k, const Span& s)
 {
     if (k == kSubBand)
         l.freq[k] = std::exp2 (s.hi);
@@ -73,7 +73,7 @@ constexpr double kNarrowest = kMinWidthOct;
 
 // The working bands in their order along the spectrum: Sub, the bands by their centres (`centres`, the
 // layout whose centres decide, e.g. before a drag), High. Returns how many there are.
-inline int orderOf (const GentlyLayout& l, int order[kGentlyBands], const GentlyLayout& centres)
+inline int orderOf (const GentlrLayout& l, int order[kGentlrBands], const GentlrLayout& centres)
 {
     int n = 0;
     if (l.on[kSubBand])
@@ -158,10 +158,10 @@ inline void pushFrom (const int* order, int n, int p, Span* span, bool* moved, b
 } // namespace noOverlap
 
 // Whether two working bands of `l` cover the same frequencies.
-inline bool bandsOverlap (const GentlyLayout& l)
+inline bool bandsOverlap (const GentlrLayout& l)
 {
     using namespace noOverlap;
-    int order[kGentlyBands];
+    int order[kGentlrBands];
     const int n = orderOf (l, order, l);
     for (int p = 0; p + 1 < n; ++p)
         if (spanOf (l, order[p]).hi > spanOf (l, order[p + 1]).lo + kTouch)
@@ -172,14 +172,14 @@ inline bool bandsOverlap (const GentlyLayout& l)
 // Overlapping working bands, with nobody to blame: each overlap split at its middle (a band with no
 // room left pushes on, as far as the others can go). Bands that do not overlap are left exactly as
 // they are.
-inline void resolveOverlaps (GentlyLayout& l)
+inline void resolveOverlaps (GentlrLayout& l)
 {
     using namespace noOverlap;
-    int order[kGentlyBands];
+    int order[kGentlrBands];
     const int n = orderOf (l, order, l);
-    Span span[kGentlyBands];
-    bool moved[kGentlyBands] {};
-    double floorHi[kGentlyBands], ceilLo[kGentlyBands];
+    Span span[kGentlrBands];
+    bool moved[kGentlrBands] {};
+    double floorHi[kGentlrBands], ceilLo[kGentlrBands];
     for (int p = 0; p < n; ++p)
         span[p] = spanOf (l, order[p]);
     limits (order, n, floorHi, ceilLo);
@@ -207,10 +207,10 @@ inline void resolveOverlaps (GentlyLayout& l)
 // band whose Width changed keeps its centre (it narrows where it meets a neighbour that cannot move);
 // one that moved keeps its Width (squeezed only where the room between the neighbours is narrower).
 // The order along the spectrum is `before`'s, so a band pushes its neighbour rather than jumping it.
-inline void pushBands (GentlyLayout& l, int moved, const GentlyLayout& before)
+inline void pushBands (GentlrLayout& l, int moved, const GentlrLayout& before)
 {
     using namespace noOverlap;
-    int order[kGentlyBands];
+    int order[kGentlrBands];
     const int n = orderOf (l, order, before);
     int p = -1;
     for (int q = 0; q < n; ++q)
@@ -218,9 +218,9 @@ inline void pushBands (GentlyLayout& l, int moved, const GentlyLayout& before)
             p = q;
     if (p < 0)
         return; // (it does not work: it pushes nothing)
-    Span span[kGentlyBands];
-    bool movedAt[kGentlyBands] {};
-    double floorHi[kGentlyBands], ceilLo[kGentlyBands];
+    Span span[kGentlrBands];
+    bool movedAt[kGentlrBands] {};
+    double floorHi[kGentlrBands], ceilLo[kGentlrBands];
     for (int q = 0; q < n; ++q)
         span[q] = spanOf (l, order[q]);
     limits (order, n, floorHi, ceilLo);

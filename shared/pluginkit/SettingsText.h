@@ -24,8 +24,10 @@ using SettingValues = std::vector<std::pair<uint32_t, double>>; // (own ID, norm
 // names: the effect's table, for the names after the values (nullptr: no names)
 std::string settingsToText (const std::string& effect, const SettingValues& values, const ParamTable* names = nullptr);
 // The values of a text written by settingsToText for `effect`; false when it is not one (another
-// effect's, or not settings at all). Values are clamped to 0 .. 1.
-bool settingsFromText (const std::string& text, const std::string& effect, SettingValues& out);
+// effect's, or not settings at all). Values are clamped to 0 .. 1. formerEffect: the name the effect
+// had before a rename ("" for none), whose texts are taken too (they carry the same IDs).
+bool settingsFromText (const std::string& text, const std::string& effect, SettingValues& out,
+                       const std::string& formerEffect = "");
 // The effect a settings text is for ("" when it is not one).
 std::string settingsEffect (const std::string& text);
 

@@ -159,9 +159,9 @@ TEST (params_roundtrip)
     const auto& t = paramTable ();
     CHECK (t.size () == kNumParams, "table size %u", t.size ());
     CHECK (kXoverSlope == kSatExt2Base + pk::kTailExt2Fields &&
-               std::string (t.info (kSatExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               std::string (t.info (kSatExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kSatExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kSatExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's), then the Slope");
+           "Gentlr's Advanced block (the end saturator's), then the Slope");
     CHECK (kSoftenColor == kXoverSlope + 1 && t.info (kXoverSlope).choices.size () == kNumXoverSlopes &&
                t.info (kXoverSlope).def == (double)kXover24 && t.toText (kXoverSlope, kXoverBrickwall) == "Brickwall" &&
                t.toText (kXoverSlope, kXover6) == "6 dB" && t.toText (kXoverSlope, kXover18) == "18 dB" &&
@@ -170,9 +170,9 @@ TEST (params_roundtrip)
     CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kSubInput == kStyle + 1 && kSatExt3Base == kSubInput + 1 && kNumParams == kSatExt3Base + pk::kTailExt3Fields && t.info (kSubInput).def == 0.0 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
                t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
            "the Sub band, then the built-in Smacheratr's fourth block last: off, 40 Hz in 20 .. 100 Hz");
-    CHECK (std::string (t.info (kSatExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)" && t.info (kSatExt3Base + pk::kTailExt3High).def == 0.0 &&
+    CHECK (std::string (t.info (kSatExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" && t.info (kSatExt3Base + pk::kTailExt3High).def == 0.0 &&
                t.info (kSatExt3Base + pk::kTailExt3NoOverlap).def == 0.0,
-           "the built-in Smacheratr's Gently High band and No Overlap: off");
+           "the built-in Smacheratr's Gentlr High band and No Overlap: off");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& p = t.info (id);

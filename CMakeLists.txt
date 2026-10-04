@@ -7,7 +7,7 @@ set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH
 
 project(AudioPlugins
     VERSION 0.11.0
-    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gently, Dropr and Orbitr VST3 plug-ins"
+    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr and Orbitr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -50,6 +50,6 @@ add_subdirectory(plugins/wubr)
 add_subdirectory(plugins/levlr)
 add_subdirectory(plugins/deepr)
 add_subdirectory(plugins/dropr)
-add_subdirectory(plugins/gently)
+add_subdirectory(plugins/gentlr)
 add_subdirectory(plugins/smoothr)
 add_subdirectory(plugins/orbitr)

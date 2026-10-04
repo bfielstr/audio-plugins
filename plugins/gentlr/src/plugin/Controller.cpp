@@ -7,7 +7,7 @@
 
 #include <cstring>
 
-namespace gently {
+namespace gentlr {
 
 using namespace Steinberg;
 using namespace Steinberg::Vst;
@@ -62,4 +62,4 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
     return pk::ControllerBase::notify (message);
 }
 
-} // namespace gently
+} // namespace gentlr

@@ -37,7 +37,7 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
     noOverlap = new NoOverlapToggle (CRect (area.right - 90, area.top - 22, area.right, area.top - 4), host.get (), smacheratrBandParams ());
     noOverlap->setTooltipText (help::forParam (kClarityNoOverlap));
     parent->addView (noOverlap);
-    // Gently's Advanced mode: the region Drive and the Threshold sliders, in a strip at the right of
+    // Gentlr's Advanced mode: the region Drive and the Threshold sliders, in a strip at the right of
     // the colour display (hidden while Advanced is off)
     driveOn = new pk::Toggle (CRect (0, 0, 1, 1), host.get (), kClarityDrive, "Drive");
     driveOn->setTooltipText (help::forParam (kClarityDrive));
@@ -45,10 +45,10 @@ void TailDisplays::add (CViewContainer* parent, const CRect& area)
     driveAmount = new pk::NumberBox (CRect (0, 0, 1, 1), host.get (), kClarityDriveAmount);
     driveAmount->setTooltipText (help::forParam (kClarityDriveAmount));
     parent->addView (driveAmount);
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
     {
         sliders[k] = new ThresholdSlider (CRect (0, 0, 1, 1), host.get (), k, meters);
-        sliders[k]->setTooltipText (help::forParam (kGentlyThresholdIds[k]));
+        sliders[k]->setTooltipText (help::forParam (kGentlrThresholdIds[k]));
         parent->addView (sliders[k]);
     }
     layoutAdvanced ();
@@ -65,7 +65,7 @@ void TailDisplays::layoutAdvanced ()
 void TailDisplays::updateLooks ()
 {
     const double on = host->plainValue (kClarity);
-    for (int k = 0; k < kGentlyBands; ++k)
+    for (int k = 0; k < kGentlrBands; ++k)
         if (sliders[k])
             sliders[k]->setEnabledLook (smacheratrBandParams ().works (host.get (), k));
     if (noOverlap)

@@ -25,8 +25,8 @@ void addTailParams (std::vector<ParamInfo>& table, uint32_t base, bool onByDefau
 
 // The rest of Smacheratr's controls, a second block each plug-in appends to its IDs (the parameters
 // themselves: smacheratr/src/core/TailExt.h, addTailExtParams). This block is full: some plug-ins
-// have their own parameters right after it. Clarity is called Gently now (the names keep the old
-// word, the parameters' names say Gently).
+// have their own parameters right after it. Clarity is called Gentlr now (the names keep the old
+// word, the parameters' names say Gentlr).
 enum TailExtField : uint32_t
 {
     kTailExtOutput = 0,
@@ -49,7 +49,7 @@ enum TailExtField : uint32_t
     kTailExtFields
 };
 
-// Gently's Advanced mode and its Sub band, a third block each plug-in appended at the very end of its IDs (the
+// Gentlr's Advanced mode and its Sub band, a third block each plug-in appended at the very end of its IDs (the
 // parameters: smacheratr/src/core/TailExt.h, addTailExt2Params). In smacheratr::Tail::setParam field
 // kTailFields + kTailExtFields + i is this block's field i.
 enum TailExt2Field : uint32_t
@@ -57,26 +57,26 @@ enum TailExt2Field : uint32_t
     kTailExt2Advanced = 0, // the bands' Thresholds and the region Drive work
     kTailExt2Threshold,    // dB, band 1
     kTailExt2Threshold2,   // dB, band 2
-    kTailExt2Drive,        // drive the band region Gently works on
+    kTailExt2Drive,        // drive the band region Gentlr works on
     kTailExt2DriveAmount,  // dB
-    kTailExt2Sub,          // unused: Gently's Sub band works while its Range is above 0 dB
+    kTailExt2Sub,          // unused: Gentlr's Sub band works while its Range is above 0 dB
     kTailExt2SubFreq,      // Hz, where the Sub band starts to taper off
     kTailExt2SubRange,     // dB (0 by default: the band does nothing)
     kTailExt2SubThreshold, // dB
     kTailExt2Fields
 };
 
-// Gently's High band and No Overlap, a fourth block each plug-in appends at the very end of its IDs
+// Gentlr's High band and No Overlap, a fourth block each plug-in appends at the very end of its IDs
 // (the third is closed in: some plug-ins have parameters right after it; the parameters:
 // smacheratr/src/core/TailExt.h, addTailExt3Params). In smacheratr::Tail::setParam field
 // kTailFields + kTailExtFields + kTailExt2Fields + i is this block's field i.
 enum TailExt3Field : uint32_t
 {
-    kTailExt3High = 0,      // unused: Gently's High band works while its Range is above 0 dB
+    kTailExt3High = 0,      // unused: Gentlr's High band works while its Range is above 0 dB
     kTailExt3HighFreq,      // Hz, where the High band starts to taper off
     kTailExt3HighRange,     // dB (0 by default: the band does nothing)
     kTailExt3HighThreshold, // dB
-    kTailExt3NoOverlap,     // Gently's bands never cover the same frequencies
+    kTailExt3NoOverlap,     // Gentlr's bands never cover the same frequencies
     kTailExt3Fields
 };
 

@@ -64,10 +64,10 @@ a plain limiter (a loud little mix pushed 9 dB in: 1.7 dB quieter at 50 %, the s
 ## Character
 
 A dip in the low mids, somewhere in 80 - 250 Hz, just before the limiter, that only opens when the low
-mids get loud. It is Smacheratr's **Gently** (Clarity) at work: it listens through Gently's band (run
-twice, so only the low mids open it, not a loud bass or a loud upper mid), sets its cut with Gently's
-law (3 dB for every 5 dB the band is over -18 dBFS), and cuts the way Gently cuts, through a resonant
-band-pass so the dip has no bump either side of it (Gently's own band, subtracted, would lift the bass
+mids get loud. It is Smacheratr's **Gentlr** (Clarity) at work: it listens through Gentlr's band (run
+twice, so only the low mids open it, not a loud bass or a loud upper mid), sets its cut with Gentlr's
+law (3 dB for every 5 dB the band is over -18 dBFS), and cuts the way Gentlr cuts, through a resonant
+band-pass so the dip has no bump either side of it (Gentlr's own band, subtracted, would lift the bass
 under it). Turned up, the dip gets deeper (up to 6 dB), wider (0.9 to 1.5 octaves) and slides down
 (175 to 140 Hz). At 0 it is off and the signal passes bit for bit; 30 % by default.
 

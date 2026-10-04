@@ -135,11 +135,11 @@ TEST (parameters_and_defaults)
     CHECK (t.size () == kNumParams, "every parameter: %u of %u", (unsigned)t.size (), (unsigned)kNumParams);
     for (uint32_t id = 0; id < t.size (); ++id)
         CHECK (t.info (id).id == id, "id %u in its place", id);
-    CHECK (kTailExt2Base == kTailExtBase + pk::kTailExtFields, "the end saturator's extended block, then Gently's Advanced block");
+    CHECK (kTailExt2Base == kTailExtBase + pk::kTailExtFields, "the end saturator's extended block, then Gentlr's Advanced block");
     CHECK (kBandCount == kTailExt2Base + pk::kTailExt2Fields &&
-               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gently Advanced" &&
+               std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gently's Advanced block (the end saturator's) is the last");
+           "Gentlr's Advanced block (the end saturator's) is the last");
     CHECK (t.info (kSlope).def == (double)kSlope24, "24 dB/oct by default");
     CHECK (t.info (xoverParam (0)).def == 120.0 && t.info (xoverParam (1)).def == 1000.0 && t.info (xoverParam (2)).def == 6000.0,
            "crossovers at 120 Hz, 1 kHz, 6 kHz");
@@ -152,7 +152,7 @@ TEST (parameters_and_defaults)
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
     CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kNumParams == 63,
            "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 62");
-    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gently High (unused)", "the fourth block");
+    CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the fourth block");
     CHECK (std::string (t.info (kBandCount).name) == "Bands" && bandsOf (t.info (kBandCount).def) == 4, "four bands by default");
     for (int b = 0; b < kBands; ++b)
         CHECK (t.info (driveParam (b, kDriveDb)).def == 0.0 && t.info (driveParam (b, kDriveDb)).max == kMaxDriveDb &&
