@@ -1964,10 +1964,13 @@ TEST (gentlr_slopes_shape_the_bands)
     {
         const ClarityBand c = clarityBand (kSr, 300.0, 1.5, kSlopeClassic), d = clarityBand (kSr, 300.0, 1.5);
         const BiquadCoeffs hp = highPass (kSr, c.lowHz, M_SQRT1_2), lp = lowPass1 (kSr, c.highHz);
-        auto same = [] (const BiquadCoeffs& x, const BiquadCoeffs& y) {
-            return x.b0 == y.b0 && x.b1 == y.b1 && x.b2 == y.b2 && x.a1 == y.a1 && x.a2 == y.a2;
+        // (to the last few bits: MSVC may round an inlined expression differently from the same one computed
+        // here; the bit-exact check of the whole render is gentlr_classic_slope_is_the_engine_before)
+        auto near = [] (double x, double y) { return std::fabs (x - y) <= 1e-12 * std::max (1.0, std::fabs (y)); };
+        auto same = [&] (const BiquadCoeffs& x, const BiquadCoeffs& y) {
+            return near (x.b0, y.b0) && near (x.b1, y.b1) && near (x.b2, y.b2) && near (x.a1, y.a1) && near (x.a2, y.a2);
         };
-        CHECK (same (c.hp, hp) && same (c.lp, lp) && !c.hp2On && same (d.hp, hp) && same (d.lp, lp) && d.norm == c.norm,
+        CHECK (same (c.hp, hp) && same (c.lp, lp) && !c.hp2On && same (d.hp, hp) && same (d.lp, lp) && near (d.norm, c.norm),
                "Classic: a 12 dB/oct Butterworth high-pass and a first-order low-pass, as before");
         const ClarityBand at = clarityBandAt (kSr, 500.0, 1.5, c.norm, kSlopeClassic);
         CHECK (same (at.lp, lowPass1 (kSr, at.highHz)) && !at.hp2On, "and retuned the same way");
