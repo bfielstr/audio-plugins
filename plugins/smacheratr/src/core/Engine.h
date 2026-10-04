@@ -171,6 +171,7 @@ private:
     double cLo = 0.0, cHi = 0.0, cFreq = 0.0, cWidth = 0.0, cRate = 0.0; // colour settings in use
     Meters* meters = nullptr;
     bool wetIdle = false; // fully dry: the curve is skipped (see process)
+    bool prepared = false; // (the latency is published from then on)
 };
 
 } // namespace smacheratr

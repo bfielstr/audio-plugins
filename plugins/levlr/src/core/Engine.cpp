@@ -110,6 +110,7 @@ std::complex<double> totalResponse (const double xover[kCrossovers], int slope, 
 void Engine::prepare (double sampleRate, int maxBlock)
 {
     sr = sampleRate;
+    prepared = true;
     tail.prepare (sr, maxBlock);
     for (uint32_t id = 0; id < kNumParams; ++id)
         if (isTailParam (id))
@@ -192,7 +193,7 @@ void Engine::applyOversampling ()
 
 void Engine::publishLatency ()
 {
-    if (meters)
+    if (meters && prepared) // (before prepare the oversamplers have no filters yet: nothing to tell)
         meters->driveLatency.store (drive[0].latency (), std::memory_order_relaxed);
 }
 
