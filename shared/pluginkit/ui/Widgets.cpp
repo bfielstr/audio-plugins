@@ -91,6 +91,18 @@ static void hairlines (CDrawContext* ctx, const std::vector<std::pair<CPoint, CP
     ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
 }
 
+void arc (CDrawContext* ctx, const CRect& r, double startDeg, double endDeg)
+{
+    auto path = owned (ctx->createGraphicsPath ());
+    if (!path)
+    {
+        ctx->drawArc (r, (float)startDeg, (float)endDeg, kDrawStroked);
+        return;
+    }
+    path->addArc (r, startDeg, endDeg, true);
+    ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+}
+
 void outline (CDrawContext* ctx, const CRect& r, const CColor& c, double radius)
 {
     CRect o = r;
@@ -236,13 +248,13 @@ void Knob::draw (CDrawContext* ctx)
     ctx->setLineStyle (CLineStyle (CLineStyle::kLineCapButt));
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (theme::kLineDim);
-    ctx->drawArc (kr, start, start + sweep, kDrawStroked);
+    draw::arc (ctx, kr, start, start + sweep);
     const float a0 = bipolar ? start + sweep * 0.5f : start;
     const float a1 = start + sweep * (float)v;
     ctx->setLineWidth (2.0);
     ctx->setFrameColor (enabledLook ? theme::kEnergyLive : theme::kEnergyIdle);
     if (std::fabs (a1 - a0) > 0.5f)
-        ctx->drawArc (kr, std::min (a0, a1), std::max (a0, a1), kDrawStroked);
+        draw::arc (ctx, kr, std::min (a0, a1), std::max (a0, a1));
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (copper);
     // the body: a clear gap inside the arc (about a fifth of the radius, at least 4 px) so the two

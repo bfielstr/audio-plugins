@@ -34,6 +34,11 @@ inline void tickRule (VSTGUI::CDrawContext* ctx, double x0, double x1, double y,
 {
     rule (ctx, x0, x1, y, c);
 }
+// An arc of the ellipse in `r` from startDeg to endDeg (degrees, clockwise from 3 o'clock, as
+// CDrawContext::drawArc takes them), stroked in the context's frame colour, line width and style. Drawn
+// as a graphics path: VSTGUI's cairo drawArc passes the degrees on as radians, so on Linux it drew
+// nearly whole rings (every knob's value arc), and slowly; the path takes degrees on every platform.
+void arc (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, double startDeg, double endDeg);
 // A button's lamp: a short 2 px bar above the bottom edge of `r`.
 void marker (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& r, const VSTGUI::CColor& c);
 struct ButtonState
