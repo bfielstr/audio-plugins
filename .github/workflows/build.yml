@@ -9,6 +9,11 @@ on:
   pull_request:
     paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
+    inputs:
+      screenshots:
+        description: "Commit the macOS host tests' editor screenshots to docs/<plug-in>/ on this branch"
+        type: boolean
+        default: false
 
 # A newer push to a pull request stops the run for the older one. Runs on main and on tags always finish
 # (a release must never be cancelled half-way).
@@ -108,6 +113,27 @@ jobs:
         # other (four failed "too slow" on Linux's 4 shared vCPUs), and the host tests drive real editor
         # windows.
         run: ctest --test-dir build -C Release --output-on-failure --timeout 600
+
+      # Run by hand (Run workflow, screenshots ticked) on a branch: the editors the macOS host tests just
+      # drew replace docs/<plug-in>/ui_*.png, committed back to that branch (never on main or a tag).
+      - name: Commit screenshots
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch' && inputs.screenshots && github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          for dir in build/test-output/*/; do
+            name=$(basename "$dir" | tr '[:upper:]' '[:lower:]')
+            shopt -s nullglob
+            shots=("$dir"ui_*.png)
+            [ ${#shots[@]} -gt 0 ] || continue
+            mkdir -p "docs/$name"
+            cp "${shots[@]}" "docs/$name/"
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --cached --quiet; then echo "no screenshot changes"; exit 0; fi
+          git commit -m "Docs: editor screenshots from the macOS host tests (run ${{ github.run_id }})"
+          git push origin "HEAD:${GITHUB_REF#refs/heads/}"
 
       - name: Package
         shell: bash
