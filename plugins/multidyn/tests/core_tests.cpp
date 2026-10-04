@@ -1624,7 +1624,10 @@ TEST (crossover_lanes_match_scalar)
             CHECK (peak > 0.1, "slope %d at %.0f Hz: no output", slope, fc);
         }
     std::printf ("    largest difference %.3g\n", worst);
-    CHECK (worst < 1e-5, "%g", worst);
+    // (0 with GCC/Clang on x86; arm64 and MSVC round some steps their own way: 1.6e-5 / 1.7e-5 on signals of
+    // about 1 there, where a
+    // wrong lane would differ by tenths)
+    CHECK (worst < 1e-4, "%g", worst);
 }
 
 TEST (silence_costs_no_more)
