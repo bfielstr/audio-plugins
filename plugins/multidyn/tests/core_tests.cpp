@@ -1571,6 +1571,90 @@ TEST (ott_migration_round_trip)
            "an old state (without them) gets the old sound");
 }
 
+TEST (crossover_lanes_match_scalar)
+{
+    // the four-lane split and all-pass (XoverSplit4 / XoverAllpass4, what the engine runs) give each
+    // lane what the scalar filters give that signal, for every slope (on x86 to the bit; a compiler
+    // that fuses multiply-adds in the scalar code may round a little differently)
+    double worst = 0.0;
+    for (int slope = 0; slope < kNumXoverSlopes; ++slope)
+        for (double fc : {30.0, 1000.0, 15000.0})
+        {
+            const float g = xoverG (fc, kSr);
+            XoverSplit4 s4;
+            XoverAllpass4 a4;
+            XoverSplit s1[2];   // two channels each
+            XoverAllpass a1[2];
+            s4.setup (g, slope);
+            a4.setup (g, slope);
+            s4.reset ();
+            a4.reset ();
+            for (int k = 0; k < 2; ++k)
+            {
+                s1[k].setup (g, slope);
+                a1[k].setup (g, slope);
+                s1[k].reset ();
+                a1[k].reset ();
+            }
+            uint32_t seed = 5 + (uint32_t)slope;
+            double peak = 0.0;
+            for (int i = 0; i < 4000; ++i)
+            {
+                alignas (16) float x[kLanes], lo[kLanes], hi[kLanes], ap[kLanes];
+                for (float& v : x)
+                {
+                    seed = seed * 1664525u + 1013904223u;
+                    v = (float)((int32_t)seed / 2147483648.0) * (i < 2000 ? 1.0f : 1e-3f);
+                }
+                F4 l, h;
+                s4.tick (F4::load (x), l, h);
+                l.store (lo);
+                h.store (hi);
+                a4.tick (F4::load (x)).store (ap);
+                for (int c = 0; c < kLanes; ++c)
+                {
+                    float rl, rh;
+                    s1[c / 2].tick (x[c], c % 2, rl, rh);
+                    const float ra = a1[c / 2].tick (x[c], c % 2);
+                    worst = std::max ({worst, (double)std::fabs (lo[c] - rl), (double)std::fabs (hi[c] - rh),
+                                       (double)std::fabs (ap[c] - ra)});
+                    peak = std::max ({peak, (double)std::fabs (rl), (double)std::fabs (rh)});
+                }
+            }
+            CHECK (peak > 0.1, "slope %d at %.0f Hz: no output", slope, fc);
+        }
+    std::printf ("    largest difference %.3g\n", worst);
+    CHECK (worst < 1e-5, "%g", worst);
+}
+
+TEST (silence_costs_no_more)
+{
+    // after the music stops the filters' states decay towards denormals; with them flushed, silence
+    // costs what sound does (without, here: ten times as much, and several cores with the Color on too)
+    auto e = engine (false);
+    e->setParam (kScOn, 1);
+    e->setParam (kBands, 3);
+    e->setParam (kXoverSlope, kXoverBrickwall);
+    e->setParam (kSubOn, 1.0);
+    e->reset ();
+    auto in = sine (440.0, -12.0, 2.0);
+    Sig quiet;
+    quiet.l.assign (in.l.size () * 2, 0.0f);
+    quiet.r = quiet.l;
+    double sound = 1e9, silence = 1e9;
+    for (int k = 0; k < 3; ++k)
+    {
+        const std::clock_t t0 = std::clock ();
+        run (*e, in, &in);
+        sound = std::min (sound, (double)(std::clock () - t0) / CLOCKS_PER_SEC / 2.0);
+        const std::clock_t t1 = std::clock ();
+        run (*e, quiet, &quiet);
+        silence = std::min (silence, (double)(std::clock () - t1) / CLOCKS_PER_SEC / 4.0);
+    }
+    std::printf ("    CPU: %.2f%% with sound, %.2f%% in the silence after it\n", 100.0 * sound, 100.0 * silence);
+    CHECK (silence < 2.0 * sound + 0.01, "silence costs %.2f%%, sound %.2f%%", 100.0 * silence, 100.0 * sound);
+}
+
 TEST (performance)
 {
     auto e = engine (false);
@@ -1585,7 +1669,7 @@ TEST (performance)
     run (*e, in, &in);
     const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
     std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
-    CHECK (secs / 10.0 < 0.08, "too slow"); // 4 bands plus the 4x oversampled saturator
+    CHECK (secs / 10.0 < 0.05, "too slow"); // 4 bands plus the 4x oversampled saturator (about 1.4 % here)
     // four bands with the side-chain, the new parts one by one, up to the heaviest: the brickwall with
     // the Sub band and Soften's Color
     struct Setup
@@ -1599,7 +1683,7 @@ TEST (performance)
                             {kXover24, false, true, "24 dB, Color"},
                             {kXoverBrickwall, false, false, "brickwall"},
                             {kXoverBrickwall, true, true, "brickwall, Sub band, Color"}};
-    double heaviest = 0.0;
+    double heaviest = 0.0, brickwall = 0.0;
     for (const Setup& s : setups)
     {
         e->setParam (kBands, 3);
@@ -1615,8 +1699,11 @@ TEST (performance)
             heaviest = std::min (heaviest, (double)(std::clock () - t1) / CLOCKS_PER_SEC / 10.0);
         }
         std::printf ("    CPU: %.2f%% of one core (4 bands + side-chain: %s)\n", 100.0 * heaviest, s.name);
+        if (s.slope == kXoverBrickwall && !s.sub && !s.color)
+            brickwall = heaviest;
     }
-    CHECK (heaviest < 0.3, "too slow"); // (about 20 % on CI's macOS machines, 16 % here)
+    CHECK (brickwall < 0.08, "the brickwall too slow"); // (about 3 % here)
+    CHECK (heaviest < 0.12, "too slow");                // (about 5 % here; 16 % before the crossovers ran four lanes at once)
 }
 
 // ---------------------------------------------------------------------------
