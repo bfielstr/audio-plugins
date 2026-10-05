@@ -1,6 +1,6 @@
 # Levlr: the spectrum in four touching bands (movable Linkwitz-Riley crossovers, their phase shift
 # kept), a level for each, into Smacheratr.
-project(Levlr VERSION 0.15.0.0)
+project(Levlr VERSION 0.16.0.0)
 
 add_library(levlr_core STATIC
     src/core/Params.h

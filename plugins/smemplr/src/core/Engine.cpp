@@ -95,6 +95,32 @@ int playheadsFor (const ParamArray& p)
     return idx (p[kMode]) == kModeClassic ? std::clamp (idx (p[kPlayheads]) + 1, 1, kMaxPlayheads) : 1;
 }
 
+bool loopSyncApplies (const ParamArray& p)
+{
+    return on (p[kLoopSync]) && idx (p[kMode]) == kModeClassic && (!on (p[kWarp]) || idx (p[kWarpMode]) == kWarpRePitch);
+}
+
+double loopSyncSeconds (const ParamArray& p, double bpm)
+{
+    return gridBeats (idx (p[kGridSize])) * 60.0 / (bpm > 0.0 ? bpm : 120.0);
+}
+
+double loopSyncFrames (const SampleData& s, const ParamArray& p, double bpm)
+{
+    if (!loopSyncApplies (p))
+        return 0.0;
+    if (bpm <= 0.0)
+        bpm = 120.0;
+    const bool warp = on (p[kWarp]);
+    // the sample's frames read per second at the root note (Re-Pitch: at the warped speed too)
+    double perSec = s.sampleRate * std::exp2 ((p[kTranspose] + p[kDetune] / 100.0) / 12.0);
+    if (warp)
+        perSec *= bpm / sampleBpmFor (s, p);
+    // (the crossfade is a share of the loop: Voice::renderClassic)
+    const double fe = warp ? 0.0 : std::clamp (p[kLoopFade], 0.0, 0.5);
+    return loopSyncSeconds (p, bpm) * perSec / (1.0 - fe);
+}
+
 EnvSettings envSettingsFor (const ParamArray& p, int env)
 {
     const uint32_t b = envAdsrBase (env);
@@ -268,6 +294,10 @@ void Voice::ClassicHead::start (const PlayRegion& r)
     done = wrapped = false;
     wraps = 0;
     jumpLeft = 0;
+    passT = 0.0;
+    syncing = false;
+    sinceWrap = 0;
+    beatSlot = kNoSlot;
 }
 
 void Voice::ClassicHead::follow (const PlayRegion& r)
@@ -517,6 +547,32 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
         fade = r.loop && fades ? std::min (fadeShare * loopLen, 0.5 * loopLen) : 0.0;
         wrapLen = loopLen - fade;
     };
+    // Sync: a pass lasts syncT output samples whatever the speed. The loop's end is where the playhead will
+    // be when this pass's time is up at the speed it reads now (worked out anew at every render, ~16
+    // samples, so a bend or an envelope moves it and the pass still lasts as long); its start stays. A
+    // pass runs from where a wrap lands (the loop's start plus the crossfade) to the end, so the loop is
+    // the crossfade longer than the pass reads (headT: that crossfade, in output samples). Held to the end
+    // flag (a shorter pass then) and at least a frame long.
+    const double syncT = r.loop ? c.loopSyncOut : 0.0;
+    const double syncFade = fades ? std::clamp (fadeShare, 0.0, 0.5) : 0.0;
+    const double headT = syncT * syncFade / (1.0 - syncFade);
+    auto anchor = [&] { h.passT = (pos - r.loopStart) / std::max (1e-9, rate) - headT; };
+    if (syncT > 0.0)
+    {
+        if (!h.syncing)
+        {
+            anchor ();
+            h.syncing = true;
+        }
+        const double e = std::clamp (pos + (syncT - h.passT) * rate, r.loopStart + 1.0, std::max (r.loopStart + 1.0, r.end));
+        r.loopEnd = h.liveEnd = h.nextEnd = e;
+    }
+    else
+        h.syncing = false;
+    // Beat: the loop starts again when the host's song position crosses into the next beat slot
+    const bool beatOn = r.loop && c.beatEvery > 0.0 && st.mode == kModeClassic;
+    if (!beatOn)
+        h.beatSlot = ClassicHead::kNoSlot;
     setup ();
     // The loop this pass ends into: where it is now, unless the crossfade into it has begun (moved
     // again during the crossfade, it waits for the next pass). Moved: the playhead finishes this pass,
@@ -547,6 +603,33 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
             L[i] = R[i] = 0.0f;
             continue;
         }
+        if (beatOn)
+        {
+            const long long slot = (long long)std::floor ((subPpq + i * c.ppqPerSample - c.beatBase) / c.beatEvery);
+            const bool restart = h.beatSlot != ClassicHead::kNoSlot && slot != h.beatSlot;
+            h.beatSlot = slot;
+            // (a pass that just ended, or the note that just began, is on the beat already)
+            if (restart && loopLen >= 1.0 && h.sinceWrap > 2)
+            {
+                ++h.wraps;
+                h.wrapped = true;
+                if (!moved && r.loopEnd - pos <= 2.0 * rate)
+                    pos -= wrapLen; // the pass was ending anyway: the wrap, now (through the loop's own crossfade)
+                else
+                {
+                    // back to where a wrap lands, the old place fading out under it (as long as Loop Fade's
+                    // crossfade takes at this speed, a short one without it)
+                    h.jumpFrom = pos;
+                    h.jumpLen = h.jumpLeft = fade > 1.0 ? std::max (jumpSamples, (int)std::min (fade / std::max (1e-9, rate), sr)) : jumpSamples;
+                    if (moved)
+                        adoptNext ();
+                    pos = r.loopStart + fade;
+                }
+                if (syncT > 0.0)
+                    anchor ();
+                h.sinceWrap = 0;
+            }
+        }
         if (r.loop && loopLen >= 1.0 && pos >= r.loopEnd)
         {
             const double over = pos - r.loopEnd;
@@ -563,6 +646,9 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
                 }
                 else
                     pos -= (std::floor (over / std::max (1.0, wrapLen)) + 1.0) * std::max (1.0, wrapLen);
+                if (syncT > 0.0)
+                    anchor ();
+                h.sinceWrap = 0;
             }
             else
             {
@@ -584,6 +670,9 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
                     if (pos >= r.loopEnd)
                         pos = r.loopStart + std::fmod (pos - r.loopStart, std::max (1.0, loopLen));
                 }
+                if (syncT > 0.0)
+                    anchor ();
+                h.sinceWrap = 0;
             }
         }
         else if (pos >= r.end)
@@ -639,6 +728,10 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
         L[i] = l;
         R[i] = rr;
         pos += rate;
+        if (syncT > 0.0)
+            h.passT += 1.0;
+        if (h.sinceWrap < (1 << 30))
+            ++h.sinceWrap;
     }
 }
 
@@ -744,6 +837,7 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
                              st.spreadSemis;
         const double ratio = std::exp2 (semis / 12.0);
         const double rem0 = remainingOut ();
+        subPpq = c.host.ppq + done * c.ppqPerSample;
         sourceRender (tmpL, tmpR, m, c, ratio);
         if (passLen > 0.0)
         {
@@ -757,7 +851,10 @@ void Voice::render (float* outL, float* outR, int n, const BlockCtx& c)
                     pitchEnv.retrigger ();
             }
             // a pass at the speed the sample is read now (the pitch, the warp)
-            const double passMs = 1000.0 * passLen / std::max (1e-6, lastRate) / sr;
+            // (with Sync, a pass lasts its time whatever the speed)
+            const double passMs = c.loopSyncOut > 0.0 && source == Source::Classic && head.region.loop
+                                      ? 1000.0 * c.loopSyncOut / sr
+                                      : 1000.0 * passLen / std::max (1e-6, lastRate) / sr;
             if (filtLock == kLoopLockFit)
                 fit (filtS, filtS0, passMs);
             if (pitchLock == kLoopLockFit)
@@ -1306,6 +1403,20 @@ void Engine::makeCtx (const HostInfo& host, BlockCtx& c) const
     c.constantPowerFade = on (p[kLoopFadePower]);
     c.ppqPerSample = c.host.bpm / 60.0 / sr;
     c.globalLfoPhase = globalLfoPhase;
+    if (idx (p[kMode]) == kModeClassic)
+    {
+        // the loop's Sync at the host's tempo (the last one it gave, 120 BPM before it gave one), and Beat
+        // while the host plays (every beat; with Sync and a Grid Size of a beat or more, every Grid Size)
+        const bool sync = on (p[kLoopSync]);
+        if (sync)
+            c.loopSyncOut = loopSyncSeconds (p, syncBpm) * sr;
+        if (on (p[kLoopBeat]) && host.playing && host.ppqValid)
+        {
+            const double g = gridBeats (idx (p[kGridSize]));
+            c.beatEvery = sync && g >= 1.0 ? g : 1.0;
+            c.beatBase = host.barValid ? host.barPpq : 0.0;
+        }
+    }
 }
 
 void Engine::setModMappings (const ModMapping* list, int count)
@@ -1427,6 +1538,8 @@ void Engine::renderStep (float* L, float* R, int n, const HostInfo& host)
         return;
     }
     updateSlices ();
+    if (host.tempoValid && host.bpm > 0.0)
+        syncBpm = host.bpm;
     BlockCtx c;
     makeCtx (host, c);
 

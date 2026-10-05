@@ -30,7 +30,19 @@ inline const char* forParam (uint32_t id)
             return "Grid (off by default): dragging the loop's start, its end or the whole loop in the waveform snaps to "
                    "a beat grid, so the loop is always a whole number of grid steps long. The grid follows the sample's "
                    "tempo while Warp is on, the host's tempo otherwise (120 BPM without one). Automation is not snapped.";
-        case kGridSize: return "The Grid's step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar.";
+        case kGridSize: return "The Grid's step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar. With Sync on, one pass of the loop.";
+        case kLoopSync:
+            return "Sync (Classic, Loop on; off by default): one pass of the loop lasts the Grid Size (1/16 to 1 bar) at the "
+                   "host's tempo, whatever note you play. The pitch still follows the keyboard: a higher note (or a bend up) "
+                   "reads a longer stretch of the sample in that time, a lower note a shorter one. The loop's start stays; its "
+                   "end moves. Length and the waveform show the loop at the root note (with Transpose and Detune). Dragging "
+                   "the loop's end picks the Grid Size nearest to it. Works with Warp off or Re-Pitch.";
+        case kLoopBeat:
+            return "Beat (Classic, Loop on; off by default): while the host plays, the loop starts again on every beat, "
+                   "so its passes stay in step with the song. With Sync on and a Grid Size of 1/4 or more, on every Grid "
+                   "Size from the bar's start instead (1 bar: on the bar lines). The note still starts when you play it; "
+                   "the first restart is on the next beat. The jump crossfades over the Loop Fade (5 ms without it). "
+                   "The host stopped: it does nothing.";
         case kPlayheads:
             return "Playheads (Classic): 1 to 4. Every note plays each playhead's region at once, all through the same "
                    "envelopes, filter, LFO and effects. The first is the loop; the others have regions of their own "
@@ -46,7 +58,7 @@ inline const char* forParam (uint32_t id)
     if (id >= kHeadChannelBase && id < kHeadChannelBase + kMaxPlayheads)
         return "Which channels of a stereo sample this playhead reads: St (both), L (the left in both) or R (the "
                "right in both). A mono sample ignores it.";
-    if (id >= kHeadRegionBase && id < kNumParams)
+    if (id >= kHeadRegionBase && id < kLoopSync)
         return (id - kHeadRegionBase) % kHeadFields == kHeadStart
                    ? "Where this playhead's region starts, as a share of the region between the flags (drag its "
                      "start in the waveform)."
@@ -117,15 +129,20 @@ inline const char* forParam (uint32_t id)
                    "of the region.";
         case kWarp: return "Warp on: the sample follows the host tempo whatever note you play; notes change pitch only.";
         case kWarpMode:
-            return "Beats: drums and loops. Tones: monophonic pitched material. Texture: pads and noise. Re-Pitch: "
-                   "speed follows tempo like a turntable. Complex / Complex Pro: full mixes (more CPU).";
+            return "Beats: drums and loops. Tones (Granular): monophonic pitched material, played as short grains. "
+                   "Texture (Granular): pads and noise, grains scattered by Flux. Re-Pitch: speed follows tempo like a "
+                   "turntable. Complex / Complex Pro: full mixes (more CPU).";
         case kWarpBeats: return "How many beats the region between the flags lasts. Sets the sample's tempo.";
         case kBeatsPreserve: return "Beats mode: where the audio is cut into segments (at transients or on a beat grid).";
         case kBeatsLoop: return "Beats mode: what fills the gap when a segment ends early (slower tempos): silence, a forward loop or back-and-forth loop.";
         case kBeatsEnvelope: return "Beats mode: fades each segment. 100 = no fade, lower = tighter, gated segments.";
-        case kTonesGrain: return "Tones mode: grain size. Larger suits lower-pitched material.";
-        case kTextureGrain: return "Texture mode: grain size.";
-        case kTextureFlux: return "Texture mode: randomness of the grain positions.";
+        case kTonesGrain:
+            return "Tones (granular): the size of the grains the sample is played as. Larger suits lower-pitched material; "
+                   "smaller follows fast notes more tightly.";
+        case kTextureGrain: return "Texture (granular): the size of the grains. Larger is smoother and more washed out.";
+        case kTextureFlux:
+            return "Texture (granular): how far each grain's position is scattered at random. 0 plays the grains in order; "
+                   "higher smears the sound into a cloud.";
         case kFormants: return "Complex Pro: how much the vocal/instrument formants are kept when transposing.";
         case kCproEnvelope: return "Complex Pro: detail of the spectral envelope used for formant preservation.";
         case kFilterOn: return "Switch the filter on or off (off saves CPU).";
@@ -206,9 +223,15 @@ inline const char* forParam (uint32_t id)
 
 constexpr const char* kScope = "The final output (after every effect): left bright, right dim, 0 dBFS in cinnabar. Click to change the time span.";
 
+constexpr const char* kGranular =
+    "Tones and Texture are smemplr's granular engines: with Warp on, they play the sample as a stream of short, "
+    "overlapping grains, so its speed (the host's tempo) and its pitch (the keyboard) are set apart. Grain Size sets "
+    "how long each grain is; Texture's Flux scatters where the grains are taken from.";
+
 constexpr const char* kWaveform =
     "Waveform. Drag the flags to set the sample region. Classic: drag the bright markers for Start / Length, "
     "click the loop bar (lit while looping) to switch looping on or off, drag it to move the loop, drag its edges to resize. "
+    "With Sync on, dragging the loop's end picks the Grid Size nearest to it. "
     "With more Playheads, drag a numbered dashed bar to move that playhead's region, its edges to resize it. "
     "Slicing: double-click to add or remove a slice, drag to move, Alt-click to toggle manual/auto. Click the "
     "waveform to audition. Scroll or drag the ruler to pan; Cmd + scroll or drag the ruler vertically to zoom; "

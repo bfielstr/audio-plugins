@@ -38,7 +38,7 @@ public:
     void idle ();
     // The ruler's right end, this wide, is the editor's (its Grid controls sit over it): the ruler's
     // marks and the sample's name stay left of it.
-    static constexpr double kToolsWidth = 270.0;
+    static constexpr double kToolsWidth = 366.0;
     // The Grid's step in the sample's frames (0: Grid off): its note length (Grid Size) at the sample's
     // tempo while Warp is on, at the host's otherwise (120 BPM without one), counted from the start flag.
     double gridFrames (const SampleData& s) const;
@@ -94,6 +94,12 @@ private:
                         uint32_t startId = kStart, uint32_t lengthId = kLength);
 
     void setZoomedToSelection (bool z);
+    // The loop's Sync (loopSyncApplies): its length at Grid Size `index` in frames (the root note), and the
+    // Grid Size whose length is nearest `frames` (dragging the loop's end picks it)
+    bool syncOn () const;
+    double syncFrames (const SampleData& s, int index) const;
+    int nearestSyncGrid (const SampleData& s, double frames) const;
+    bool dragGrid = false; // the drag edits the Grid Size too (Sync: the loop's end)
 
     Controller* controller;
     ParamHost* host;

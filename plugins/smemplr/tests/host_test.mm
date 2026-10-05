@@ -195,11 +195,11 @@ static void uiInteraction (Rig& rig)
         CHECK (std::fabs (plain (smemplr::kLength) - lengthBefore) < 0.004 && plain (smemplr::kLoopOn) >= 0.5,
                "the region drag keeps the length and the loop on");
     }
-    // --- the Grid (over the ruler's right end: Grid at 836..874 x 39..53): with Warp on (8 beats over the
+    // --- the Grid (over the ruler's right end: Grid at 740..778 x 39..53): with Warp on (8 beats over the
     // flags 0.1 .. 0.8) a 1/4 step is an eighth of the flagged region; a drag of the loop puts its start
     // on a step and makes it whole steps long, and a drag of its end keeps the start ---
     {
-        win.click (855, 46);
+        win.click (759, 46);
         CHECK (plain (smemplr::kGridOn) >= 0.5, "clicking Grid should switch it on");
         win.click (780, 17); // Warp on
         CHECK (plain (smemplr::kWarp) >= 0.5, "warp on for the grid");
@@ -224,8 +224,22 @@ static void uiInteraction (Rig& rig)
         CHECK (std::fabs (rs2 - rs1) < 1e-9 && onGrid (len2 / step) && std::fabs (len2 - len1 - step) < 1e-6,
                "the loop's end dragged on the grid: start %f -> %f, length %f -> %f", rs1, rs2, len1, len2);
         win.click (780, 17);
-        win.click (855, 46);
+        win.click (759, 46);
         CHECK (plain (smemplr::kGridOn) < 0.5 && plain (smemplr::kWarp) < 0.5, "the Grid and Warp off again");
+    }
+    // --- the loop's Sync and Beat beside the Grid (846..884 and 888..932 x 39..53): a click switches each ---
+    {
+        const double lengthBefore = plain (smemplr::kLength);
+        win.click (865, 46);
+        CHECK (plain (smemplr::kLoopSync) >= 0.5, "clicking Sync should switch it on");
+        win.click (865, 46);
+        CHECK (plain (smemplr::kLoopSync) < 0.5, "and off again");
+        win.click (910, 46);
+        CHECK (plain (smemplr::kLoopBeat) >= 0.5, "clicking Beat should switch it on");
+        win.click (910, 46);
+        CHECK (plain (smemplr::kLoopBeat) < 0.5, "and off again");
+        // (Sync may have set Length to its loop: back to where it was for what follows)
+        rig.controller->setParamNormalized (smemplr::kLength, smemplr::toNormalized (smemplr::kLength, lengthBefore));
     }
     // --- a second playhead: its region (Start 50 %, Length 20 % of the flags: 0.45 .. 0.59) has a dashed
     // bar of its own just above the loop's (y 265 .. 275); dragging the bar moves the region and keeps its

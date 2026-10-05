@@ -30,6 +30,10 @@ struct HostInfo
     double ppq = 0.0; // quarter notes at the start of the block
     bool playing = false;
     bool ppqValid = false;
+    // the host gave its tempo (false: bpm is a stand-in; the loop's Sync keeps the last tempo it was given)
+    bool tempoValid = true;
+    double barPpq = 0.0; // where the bar the block starts in began (quarter notes), when barValid
+    bool barValid = false;
 };
 
 using ParamArray = std::array<double, kNumParams>; // plain values
@@ -50,6 +54,14 @@ bool classicRegion (const SampleData& s, const ParamArray& p, PlayRegion& r);
 bool headRegion (const SampleData& s, const ParamArray& p, int head, PlayRegion& r);
 // How many playheads a note gets: Playheads in Classic mode, 1 otherwise.
 int playheadsFor (const ParamArray& p);
+// The loop's Sync (Classic, Loop on, Warp off or Re-Pitch): whether it applies to what the parameters have
+// now, and the loop's length in the sample's frames at the root note (Transpose and Detune, no bend or
+// modulation) so that one pass lasts the Grid Size at `bpm`: its read at the root's speed, plus the
+// crossfade Loop Fade adds (the wrap skips it). The engine works the length out per voice at the speed it
+// reads (Voice::renderClassic); this one is for the waveform and the Length control (0: Sync off).
+bool loopSyncApplies (const ParamArray& p);
+double loopSyncSeconds (const ParamArray& p, double bpm); // one pass
+double loopSyncFrames (const SampleData& s, const ParamArray& p, double bpm);
 SliceSettings sliceSettingsFor (const SampleData& s, const ParamArray& p);
 // Envelope settings (ADSR, curves, breakpoints) for env 0 amp, 1 filter, 2 pitch.
 EnvSettings envSettingsFor (const ParamArray& p, int env);
@@ -66,6 +78,11 @@ struct BlockCtx
     bool constantPowerFade = true;
     double ppqPerSample = 0.0;
     double globalLfoPhase = 0.0;
+    // the loop's Sync: one pass in output samples (0: off) ...
+    double loopSyncOut = 0.0;
+    // ... and Beat: the loop starts again every beatEvery quarter notes from beatBase (0: off; the host
+    // playing, its song position known)
+    double beatEvery = 0.0, beatBase = 0.0;
 };
 
 class Voice
@@ -141,6 +158,13 @@ private:
         // ms as the new one fades in (where it was, how many samples are left)
         double jumpFrom = 0.0;
         int jumpLeft = 0, jumpLen = 1;
+        // Sync: output samples into this pass (from where a wrap lands), while it works
+        double passT = 0.0;
+        bool syncing = false;
+        // samples since the last pass ended (or the note began); Beat: the beat slot it is in (kNoSlot: none yet)
+        int sinceWrap = 0;
+        static constexpr long long kNoSlot = -(1ll << 62);
+        long long beatSlot = kNoSlot;
 
         void start (const PlayRegion& r);
         // the loop as the parameters have it now (its start held at or after the region's: Voice::updateLoop)
@@ -152,6 +176,7 @@ private:
     float sourceRender (float* L, float* R, int n, const BlockCtx& c, double pitchRatio);
     double remainingOut () const; // output samples until the region end (large if looping)
     double lastSrcPerOut = 1.0;
+    double subPpq = 0.0; // the host's song position at the sub-block render reads (Beat)
 
     Start st;
     bool active = false, released = false, killing = false;
@@ -323,6 +348,7 @@ private:
     std::vector<int> monoStack;
     uint32_t seed = 0x1234567u;
     double globalLfoPhase = 0.0;
+    double syncBpm = 120.0; // the host's last tempo (the loop's Sync)
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
     // the effects rack and the old saturator after it (before 0.9; off unless an old project needs it)

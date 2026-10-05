@@ -1,6 +1,6 @@
 # Gentlr: Smacheratr's Gentlr on its own, a gentle dynamic de-muddier / de-harsher: two bands and a
 # Sub band that turn their region down when it gets loud, into Smacheratr.
-project(Gentlr VERSION 0.15.0.0)
+project(Gentlr VERSION 0.16.0.0)
 
 add_library(gentlr_core STATIC
     src/core/Params.h

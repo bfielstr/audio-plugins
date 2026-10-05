@@ -191,13 +191,21 @@ enum ParamId : uint32_t
     kHeadSpread,                                     // 1006, -1 .. 1: the playheads spread across the stereo field
     kHeadChannelBase,                                // 1007 .. 1010: per playhead (the first is the main one), a HeadChannel
     kHeadRegionBase = kHeadChannelBase + 4,          // 1011 .. 1016: playheads 2 .. 4's Start and Length (headParam)
+    // --- added in 0.16 (a state without them reads their defaults, off: the loop as it always was) ---
+    // Sync (Classic, Loop on): one pass of the loop lasts the Grid Size at the host's tempo whatever the
+    // pitch; each voice reads more or less of the sample for it (its loop's end moves, the start stays;
+    // Engine.cpp: Voice::renderClassic, loopSyncFrames)
+    kLoopSync = kHeadRegionBase + 3 * 2, // 1017
+    // Beat (Classic, Loop on, the host playing): the loop starts again on the host's beats (every beat; with
+    // Sync and a Grid Size of a beat or more, every Grid Size from the bar's start)
+    kLoopBeat, // 1018
 
-    // The next free ID is 1017 (kHeadRegionBase + 3 * 2: the enumerator after the playheads' regions). New parameters are appended, never in a block above: every ID is
+    // The next free ID is 1019 (the enumerator after kLoopBeat). New parameters are appended, never in a block above: every ID is
     // stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
     // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
     // second extension block from here (kRackSlots times the new count, slot by slot), which
     // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
-    kNumParams = kHeadRegionBase + 3 * 2
+    kNumParams
 };
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
@@ -209,7 +217,8 @@ static_assert (kFiltLoopLock == 998 && kPitchLoopLock == 999 && kMidiParamsAt ==
 static_assert (kGridOn == 1003 && kGridSize == 1004 && kPlayheads == 1005 && kHeadSpread == 1006 && kHeadChannelBase == 1007 &&
                    kHeadRegionBase == 1011,
                "stored IDs moved: append, never insert");
-static_assert (kNumParams == 1017, "a new parameter: update the next free ID in the comment above (and this)");
+static_assert (kLoopSync == 1017 && kLoopBeat == 1018, "stored IDs moved: append, never insert");
+static_assert (kNumParams == 1019, "a new parameter: update the next free ID in the comment above (and this)");
 
 // More playheads: up to kMaxPlayheads, the first the main one (Start, Length, the loop); the others
 // (2 .. 4) each a region of their own, a Start and a Length like the main loop's (shares of the flagged
@@ -220,7 +229,7 @@ enum HeadField : uint32_t { kHeadStart = 0, kHeadLength, kHeadFields };
 // playhead `head`'s (1 .. 3: the second to the fourth) Start or Length
 constexpr uint32_t headParam (int head, uint32_t field) { return kHeadRegionBase + (uint32_t)(head - 1) * kHeadFields + field; }
 constexpr uint32_t headChannelParam (int head) { return kHeadChannelBase + (uint32_t)head; } // (0: the main playhead)
-static_assert (headParam (kMaxPlayheads - 1, kHeadLength) + 1 == kNumParams, "the playheads' regions fill their block (the last one)");
+static_assert (headParam (kMaxPlayheads - 1, kHeadLength) + 1 == kLoopSync, "the playheads' regions fill their block");
 
 // The modulation LFOs' parameters: kModLfos LFOs, each a block of kModLfoFields (a new field goes in a
 // block of its own after kModLfoEnd: the blocks follow each other).
