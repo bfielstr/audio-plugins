@@ -212,8 +212,15 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
             host.ppq = ctx->projectTimeMusic;
             host.ppqValid = true;
         }
+        if (ctx->state & ProcessContext::kBarPositionValid)
+        {
+            host.barPpq = ctx->barPositionMusic;
+            host.barValid = true;
+        }
         host.playing = (ctx->state & ProcessContext::kPlaying) != 0;
     }
+    // (without a tempo from the host: 120 BPM, but the loop's Sync keeps the last one it gave)
+    host.tempoValid = data.processContext && (data.processContext->state & ProcessContext::kTempoValid) && host.bpm > 0.0;
     if (host.bpm <= 0.0)
         host.bpm = 120.0;
     bridge->hostBpm.store (host.bpm, std::memory_order_relaxed);

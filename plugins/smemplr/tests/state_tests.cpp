@@ -162,6 +162,14 @@ int main ()
         CHECK (roundTrip (st2, back2) && back2.has[kGridOn] && back2.norm[kGridOn] == 1.0 &&
                    back2.norm[kGridSize] == toNormalized (kGridSize, 4),
                "the Grid saved");
+        // the loop's Sync and Beat (1017, 1018): saved, and off in a state without them
+        PluginState st3 = someState (), back3;
+        st3.norm[kLoopSync] = 1.0;
+        st3.norm[kLoopBeat] = 1.0;
+        CHECK (roundTrip (st3, back3) && back3.has[kLoopSync] && back3.norm[kLoopSync] == 1.0 && back3.has[kLoopBeat] &&
+                   back3.norm[kLoopBeat] == 1.0,
+               "Sync and Beat saved");
+        CHECK (defaultNormalized (kLoopSync) == 0.0 && defaultNormalized (kLoopBeat) == 0.0, "Sync and Beat off by default");
     }
     // a version 21 state (before Oversampling): its Smacheratrs' Hi-Quality (slot 0 on at 0.7, slot 1 off
     // at 0.3) becomes 4x and Off, a Levlr's drives (slot 2; the place held 0) get 4x, and the old

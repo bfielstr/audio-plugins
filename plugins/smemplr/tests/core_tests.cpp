@@ -4065,6 +4065,357 @@ TEST (mod_without_mappings_changes_nothing)
     CHECK (render (false) == render (true), "the LFOs change the sound with nothing mapped");
 }
 
+// ---------------------------------------------------------------------------
+// the loop's Sync (a pass lasts the Grid Size at the host's tempo whatever the pitch) and Beat (the loop
+// starts again on the host's beats)
+
+// A long sine with the sampler's extras out of the way (no filter, no effects), looping from Start.
+static Engine* loopEngine (double secs = 10.0, double fileSr = 44100.0)
+{
+    Engine* e = makeEngine (sine (220.0, secs, fileSr));
+    e->setParam (slotParam (0, kSlotType), kFxEmpty);
+    e->setParam (kFilterOn, 0);
+    e->setParam (kLoopOn, 1);
+    e->setParam (kStart, 0.0);
+    e->setParam (kLength, 0.05);
+    return e;
+}
+
+// Renders one sample at a time, the host's song position moving on, and gives where the main playhead
+// (or playhead `head`) jumped back: the output samples at which its position fell. `each` runs before
+// each sample (bends, tempo changes).
+static std::vector<long> loopRestarts (Engine& e, long frames, HostInfo& host, int head = 0,
+                                       const std::function<void (long)>& each = {}, double* furthest = nullptr)
+{
+    std::vector<long> at;
+    float l, r;
+    double last = -1.0;
+    const double len = e.sample ()->length;
+    for (long i = 0; i < frames; ++i)
+    {
+        if (each)
+            each (i);
+        e.render (&l, &r, 1, host);
+        host.ppq += host.bpm / 60.0 / kHostSr;
+        float pos[16];
+        const int n = e.playPositions (pos, 16);
+        if (n <= head)
+            break;
+        const double p = (double)pos[head] * len;
+        if (last >= 0.0 && p < last - 1.0)
+            at.push_back (i);
+        if (furthest)
+            *furthest = std::max (*furthest, p);
+        last = p;
+    }
+    return at;
+}
+
+static bool periodsNear (const std::vector<long>& at, size_t from, double period, double tol, double* worst = nullptr)
+{
+    double w = 0.0;
+    for (size_t k = from + 1; k < at.size (); ++k)
+        w = std::max (w, std::fabs ((double)(at[k] - at[k - 1]) - period));
+    if (worst)
+        *worst = w;
+    return at.size () >= from + 2 && w <= tol;
+}
+
+TEST (loop_sync_pass_lasts_the_grid)
+{
+    // 120 BPM, 1 Bar: 2 s a pass (96000 samples at 48 kHz) at the root, the loop 2 s of the 44.1 kHz file
+    const double pass = 2.0 * kHostSr;
+    CHECK (paramTable ().info (kLoopSync).def == 0.0 && paramTable ().info (kLoopBeat).def == 0.0, "Sync and Beat are off by default");
+    for (int note : {60, 72, 53})
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4); // 1 Bar
+        e->noteOn (note, 1.0f);
+        HostInfo host;
+        double furthest = 0.0;
+        const auto at = loopRestarts (*e, (long)(pass * 3.5), host, 0, {}, &furthest);
+        double worst = 0.0;
+        CHECK (at.size () == 3 && std::fabs ((double)at[0] - pass) <= 1.0 && periodsNear (at, 0, pass, 1.0, &worst),
+               "note %d: a pass every %.0f samples (%zu passes, the first at %ld, off by %.1f)", note, pass, at.size (),
+               at.empty () ? -1L : at[0], worst);
+        // the loop reads 2 s of the file at the root, twice that an octave up, less a fifth down
+        const double frames = 2.0 * 44100.0 * std::exp2 ((note - 60) / 12.0);
+        CHECK (std::fabs (furthest - frames) < 2.0 * 44100.0 / kHostSr * std::exp2 ((note - 60) / 12.0) + 1.0,
+               "note %d: the loop is %.0f frames long (%.0f expected)", note, furthest, frames);
+    }
+    // the root-note length the editor shows (Transpose and Detune count)
+    {
+        auto s = sine (220.0, 10.0, 44100.0);
+        ParamArray p = defaultParams ();
+        p[kLoopSync] = 1;
+        p[kGridSize] = 4;
+        CHECK (std::fabs (loopSyncFrames (*s, p, 120.0) - 88200.0) < 1e-6, "1 Bar at 120 BPM: %.1f frames", loopSyncFrames (*s, p, 120.0));
+        p[kTranspose] = 12;
+        CHECK (std::fabs (loopSyncFrames (*s, p, 120.0) - 176400.0) < 1e-6, "an octave up: twice the frames");
+        p[kTranspose] = 0;
+        p[kGridSize] = 2; // 1/4
+        CHECK (std::fabs (loopSyncFrames (*s, p, 60.0) - 44100.0) < 1e-6, "1/4 at 60 BPM: one second");
+        p[kLoopSync] = 0;
+        CHECK (loopSyncFrames (*s, p, 120.0) == 0.0, "Sync off: nothing");
+    }
+}
+
+TEST (loop_sync_holds_through_bends_and_follows_tempo)
+{
+    const double pass = 2.0 * kHostSr;
+    // a bend up in the middle of the second pass, and down again in the fourth: every pass still 2 s
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->setParam (kPbRange, 7);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(pass * 5.5), host, 0, [&] (long i) {
+            if (i == (long)(pass * 1.4))
+                e->setPitchBend (1.0f);
+            if (i == (long)(pass * 3.7))
+                e->setPitchBend (-0.6f);
+        });
+        double worst = 0.0;
+        CHECK (at.size () == 5 && periodsNear (at, 0, pass, 1.0, &worst), "bent: %zu passes, off by %.1f samples", at.size (), worst);
+    }
+    // the pitch envelope moves the speed all the time: still 2 s
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->setParam (kPitchEnvAmt, 12.0);
+        e->setParam (kPitchD, 3000.0);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(pass * 3.5), host);
+        double worst = 0.0;
+        CHECK (at.size () == 3 && periodsNear (at, 0, pass, 1.0, &worst), "pitch envelope: %zu passes, off by %.1f", at.size (), worst);
+    }
+    // the tempo changes to 140 BPM in the second pass: from that pass on, a bar at 140
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(pass * 4.0), host, 0, [&] (long i) {
+            if (i == (long)(pass * 1.5))
+                host.bpm = 140.0;
+        });
+        const double fast = 4.0 * 60.0 / 140.0 * kHostSr;
+        double worst = 0.0;
+        CHECK (at.size () >= 4 && std::fabs ((double)at[0] - pass) <= 1.0 && std::fabs ((double)(at[1] - at[0]) - fast) <= 1.0 &&
+                   periodsNear (at, 1, fast, 1.0, &worst),
+               "140 BPM: %zu passes, the second %ld samples (%.0f), off by %.1f", at.size (), at.size () > 1 ? at[1] - at[0] : -1L, fast, worst);
+        // a host that stops giving its tempo: the last one stays
+        host.tempoValid = false;
+        host.bpm = 120.0;
+        const auto later = loopRestarts (*e, (long)(fast * 2.5), host);
+        CHECK (periodsNear (later, 0, fast, 1.0, &worst), "no tempo: the last one (off by %.1f)", worst);
+    }
+    // Grid Size 1/4 at 120 BPM: half a second
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 2);
+        e->noteOn (67, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(kHostSr * 2.2), host);
+        double worst = 0.0;
+        CHECK (at.size () == 4 && periodsNear (at, 0, 0.5 * kHostSr, 1.0, &worst), "1/4: %zu passes, off by %.1f", at.size (), worst);
+    }
+}
+
+TEST (loop_sync_end_flag_fade_and_playheads)
+{
+    const double pass = 2.0 * kHostSr;
+    // the end flag at 1.5 s of the file: the loop stops there (a shorter pass: 1.5 s of the file at the root)
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->setParam (kSampleEnd, 0.15);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        double furthest = 0.0;
+        const auto at = loopRestarts (*e, (long)(pass * 2.5), host, 0, {}, &furthest);
+        const double capped = 1.5 * kHostSr;
+        double worst = 0.0;
+        CHECK (periodsNear (at, 0, capped, 1.0, &worst) && furthest <= 1.5 * 44100.0 + 1.0,
+               "capped at the end flag: %zu passes, off by %.1f, read up to %.0f", at.size (), worst, furthest);
+    }
+    // Loop Fade: the loop is the crossfade longer, a pass still 2 s (after the first, which fades in)
+    for (double fade : {0.25, 0.8})
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->setParam (kLoopFade, fade);
+        e->noteOn (65, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(pass * 4.8), host);
+        double worst = 0.0;
+        CHECK (at.size () >= 3 && periodsNear (at, 0, pass, 1.0, &worst), "Fade %.2f: %zu passes, off by %.1f", fade, at.size (), worst);
+    }
+    // an extra playhead loops its own region a pass in the same time
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 3); // 1/2: 1 s
+        e->setParam (kPlayheads, 1);
+        e->setParam (headParam (1, kHeadStart), 0.5);
+        e->setParam (headParam (1, kHeadLength), 0.02);
+        e->noteOn (64, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(kHostSr * 3.5), host, 1);
+        double worst = 0.0;
+        CHECK (at.size () == 3 && periodsNear (at, 0, kHostSr, 1.0, &worst), "the second playhead: %zu passes, off by %.1f", at.size (), worst);
+    }
+    // Fit squeezes the locked envelope into a pass of Sync's time
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 2); // 0.5 s
+        e->setParam (kPitchLoopLock, kLoopLockFit);
+        e->setParam (kPitchEnvAmt, 12.0);
+        e->setParam (kPitchD, 20000.0);
+        e->setParam (kPitchS, 0.0);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        const auto at = loopRestarts (*e, (long)(kHostSr * 2.2), host);
+        double worst = 0.0;
+        CHECK (at.size () == 4 && periodsNear (at, 0, 0.5 * kHostSr, 1.0, &worst), "Fit: %zu passes, off by %.1f", at.size (), worst);
+    }
+}
+
+TEST (loop_sync_and_beat_off_change_nothing)
+{
+    // Sync and Beat off, the sampler is as it was (bit for bit: compared with the build before them too);
+    // Sync with Loop off, and Beat with the host stopped, change nothing either
+    auto render = [] (int mode, double loopOn, double sync, double beat, int grid, bool playing) {
+        std::unique_ptr<Engine> e (makeEngine (sine (220.0, 1.0, 44100.0, true)));
+        e->setParam (kLoopOn, loopOn);
+        e->setParam (kLength, 0.3);
+        e->setParam (kLoopFade, 0.2);
+        e->setParam (kPlayheads, mode == 1 ? 2 : 0);
+        e->setParam (kWarp, mode == 2 ? 1 : 0);
+        e->setParam (kWarpMode, kWarpRePitch);
+        e->setParam (kGridSize, grid);
+        if (sync >= 0.0)
+            e->setParam (kLoopSync, sync);
+        if (beat >= 0.0)
+            e->setParam (kLoopBeat, beat);
+        e->noteOn (60, 1.0f);
+        e->noteOn (67, 0.7f);
+        HostInfo host;
+        host.playing = playing;
+        host.ppqValid = true;
+        host.ppq = 0.3;
+        Out o = run (*e, 60000, host, 333);
+        o.l.insert (o.l.end (), o.r.begin (), o.r.end ());
+        return o.l;
+    };
+    for (int mode = 0; mode < 3; ++mode)
+    {
+        const auto ref = render (mode, 1, -1, -1, 2, true);
+        CHECK (ref == render (mode, 1, 0, 0, 4, true), "mode %d: Sync and Beat off (and the Grid Size) change the sound", mode);
+        CHECK (ref != render (mode, 1, 1, 0, 2, true), "mode %d: Sync on changes it", mode);
+        CHECK (render (mode, 1, -1, -1, 2, false) == render (mode, 1, 0, 1, 2, false), "mode %d: Beat with the host stopped changes the sound", mode);
+        CHECK (render (mode, 0, -1, -1, 2, true) == render (mode, 0, 1, 1, 2, true), "mode %d: Sync and Beat with Loop off change the sound", mode);
+    }
+}
+
+TEST (loop_beat_restarts_on_the_beat)
+{
+    // 120 BPM: a beat every 24000 samples. The note starts half way through a beat and at once; its
+    // loop (far longer than a beat) starts again on the next beat and every one after
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLength, 0.9);
+        e->setParam (kLoopBeat, 1);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        host.playing = host.ppqValid = true;
+        host.ppq = 4.5;
+        const auto at = loopRestarts (*e, 85000, host);
+        bool onBeat = at.size () == 4;
+        for (size_t k = 0; k < at.size (); ++k)
+            onBeat = onBeat && std::labs (at[k] - (long)(12000 + 24000 * k)) <= 1;
+        CHECK (onBeat, "%zu restarts, the first at %ld (12000)", at.size (), at.empty () ? -1L : at[0]);
+    }
+    // sample-accurate inside a block: rendered in blocks of 256, where the playhead is says when it restarted
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLength, 0.9);
+        e->setParam (kLoopBeat, 1);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        host.playing = host.ppqValid = true;
+        host.ppq = 0.37;
+        run (*e, 20000, host, 256); // a beat at (1 - 0.37) * 24000 = 15120
+        float pos[4];
+        e->playPositions (pos, 4);
+        const double since = (double)pos[0] * e->sample ()->length / (44100.0 / kHostSr);
+        CHECK (std::fabs (20000.0 - since - 15120.0) <= 1.0, "restarted at %.1f (15120)", 20000.0 - since);
+    }
+    // a 1-bar Sync loop restarts on the bar lines (the first a bar line away from the note, then every bar)
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLoopSync, 1);
+        e->setParam (kGridSize, 4);
+        e->setParam (kLoopBeat, 1);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        host.playing = host.ppqValid = true;
+        host.ppq = 1.5; // bar lines at 4 and 8: 60000 and 156000 samples on
+        const auto at = loopRestarts (*e, 260000, host);
+        CHECK (at.size () == 3 && std::labs (at[0] - 60000) <= 1 && std::labs (at[1] - 156000) <= 1 && std::labs (at[2] - 252000) <= 1,
+               "%zu restarts, at %ld, %ld (60000, 156000, 252000)", at.size (), at.empty () ? -1L : at[0], at.size () > 1 ? at[1] : -1L);
+        // the bar's start from the host, a 1/2 grid: on the half bars from it
+        std::unique_ptr<Engine> h (loopEngine ());
+        h->setParam (kLoopSync, 1);
+        h->setParam (kGridSize, 3);
+        h->setParam (kLoopBeat, 1);
+        h->noteOn (60, 1.0f);
+        HostInfo hb;
+        hb.playing = hb.ppqValid = hb.barValid = true;
+        hb.ppq = 3.25;
+        hb.barPpq = 3.0; // (a bar from 3: half bars at 5, 7)
+        const auto half = loopRestarts (*h, 100000, hb);
+        CHECK (half.size () == 2 && std::labs (half[0] - 42000) <= 1 && std::labs (half[1] - 90000) <= 1,
+               "1/2: %zu restarts, at %ld (42000, 90000)", half.size (), half.empty () ? -1L : half[0]);
+    }
+    // a loop shorter than a beat loops within it and starts again on each beat
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLength, 0.01); // 0.1 s of the file
+        e->setParam (kLoopBeat, 1);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        host.playing = host.ppqValid = true;
+        host.ppq = 0.5;
+        int onBeat = 0;
+        const auto at = loopRestarts (*e, 60000, host);
+        for (long x : at)
+            onBeat += std::labs (x - 12000) <= 1 || std::labs (x - 36000) <= 1 ? 1 : 0;
+        CHECK (onBeat == 2 && at.size () > 4, "short loop: %zu restarts, %d on the beats", at.size (), onBeat);
+    }
+    // the host stopped: no restarts
+    {
+        std::unique_ptr<Engine> e (loopEngine ());
+        e->setParam (kLength, 0.9);
+        e->setParam (kLoopBeat, 1);
+        e->noteOn (60, 1.0f);
+        HostInfo host;
+        host.ppqValid = true;
+        host.ppq = 0.5;
+        CHECK (loopRestarts (*e, 60000, host).empty (), "host stopped: no restart");
+    }
+}
+
 TEST (performance)
 {
     auto s = sine (220.0, 4.0, 44100.0, true);

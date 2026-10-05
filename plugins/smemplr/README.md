@@ -62,11 +62,11 @@ switches a slice between manual and automatic.
 ![smemplr in Slicing mode](../../docs/smemplr/ui_slicing.png)
 
 **Warp**, in every mode, locks the sample to the host tempo. **Warp Mode**: **Beats** (**Preserve**,
-**Loop Mode**, **Envelope**), **Tones** (**Grain Size**), **Texture** (**Grain Size**, **Flux**),
-**Re-Pitch**, **Complex** and **Complex Pro** (**Formants**, **Envelope**). **Warp as** sets the length
-in beats, with ÷2 and ×2. Beats plays the sample in segments cut at its transients, Tones aligns grains
-by waveform, Texture scatters grains, Complex is a phase-locked phase vocoder, and Complex Pro adds
-formant correction on top.
+**Loop Mode**, **Envelope**), **Tones (Granular)** (**Grain Size**), **Texture (Granular)** (**Grain
+Size**, **Flux**), **Re-Pitch**, **Complex** and **Complex Pro** (**Formants**, **Envelope**). **Warp as**
+sets the length in beats, with ÷2 and ×2. Beats plays the sample in segments cut at its transients, Tones
+aligns grains by waveform, Texture scatters grains (see [Granular](#granular)), Complex is a phase-locked
+phase vocoder, and Complex Pro adds formant correction on top.
 
 **The waveform**: click to audition (in Slicing mode it plays the slice under the mouse). The loop bar
 can be clicked and dragged, and so can the shaded loop above the waveform (a click there still
@@ -86,6 +86,29 @@ beside it sets the step: 1/16, 1/8, 1/4 (the default), 1/2 or 1 bar. The tempo i
 while Warp is on (from **Warp as**) and the host's otherwise (120 BPM without one). Only drags snap,
 not automation. The grid lines are drawn while it is on, and it is saved with the project.
 
+**Sync**, beside the Grid's menu (Classic, off by default), makes one pass of the loop last exactly the
+Grid's step (1/16 to 1 bar) at the host's tempo, whatever note you play. The pitch still follows the
+keyboard (nothing is time-stretched): instead, each note reads more or less of the sample in that time.
+A higher note, or a bend up, reads a longer stretch; a lower note a shorter one. The loop's start stays
+where it is and its end moves, all the time, so pitch bend, glide, the pitch envelope and the LFOs keep
+the pass the same length too. **Length** and the waveform show the loop as it is at the root note (with
+**Transpose** and **Detune**): turning Sync on, or changing the step, Transpose, Detune, **Fade** or the
+host's tempo, sets Length to it. With Fade the loop is longer by its crossfade, so that a pass (which
+skips the crossfade) still lasts the step. Dragging the loop's end in the waveform picks the step whose
+loop is nearest to where you drag it; moving the loop or its start keeps its length (on the Grid, the
+start goes to grid lines). The loop never reaches past the end flag: a step longer than what is left
+there makes a shorter pass. The extra playheads' regions follow the same rule, each from its own start.
+Sync works with Warp off or in Re-Pitch (the other Warp modes keep their own timing), and uses the
+host's tempo (the last one it gave, or 120 BPM).
+
+**Beat**, beside Sync (Classic, off by default), starts the loop again on the host's beats while the
+host plays, so its passes stay in step with the song. A note still starts the moment you play it; its
+loop jumps back to its start on the next beat, and on every beat after that. With Sync on and a step of
+1/4 or more, it jumps on every step counted from the start of the bar instead (1 bar: on the bar lines,
+1/2: on the half bars); shorter steps loop inside the beat and start again on each one. The jump
+crossfades over the loop's **Fade** (a short 5 ms crossfade with Fade off). With the host stopped, Beat
+does nothing.
+
 **The right-click menu**: **Normalize Volume**, **Reverse**, **Crop to Sample Start/End** (and **Undo
 Crop**), **Use Constant Power Fade for Loops**, **Reset Slice Edits**, **Show in Finder** (Explorer, File
 Manager), **Load Sample...**, **Clear Sample**. None of it changes the file on disk.
@@ -93,6 +116,25 @@ Manager), **Load Sample...**, **Clear Sample**. None of it changes the file on d
 A clip dropped from a DAW carries its name as text beside its audio file; the file is what gets
 loaded. A temporary file (a render the DAW deletes later) is first copied to
 `Documents/bfielstr/Samples`.
+
+## Granular
+
+smemplr's granular engines are two of the **Warp Mode** choices. To use them, switch **WARP** on (at the
+top) and pick **Tones (Granular)** or **Texture (Granular)** in **Warp Mode**; their controls appear
+beside the menu, under a **GRANULAR** caption. Both play the sample as a stream of short, overlapping
+grains, so its speed (it follows the host's tempo, set by **Warp as**) and its pitch (the keyboard,
+**Transpose**) no longer depend on each other.
+
+- **Tones (Granular)** lines each grain up with the waveform before it, which keeps pitched, monophonic
+  material (a voice, a bass line, a lead) smooth. **Grain Size** sets how long the grains are: larger
+  suits lower notes, smaller follows fast notes more tightly.
+- **Texture (Granular)** takes its grains from scattered places around where the sample is playing, for
+  pads, noise and sound beds. **Grain Size** sets how long the grains are (larger is smoother and more
+  washed out) and **Flux** how far their positions are scattered: at 0 they come in order, turned up they
+  smear the sound into a cloud.
+
+Both work in every playback mode, with the loop, and with more **Playheads** (each playhead its own
+stream of grains).
 
 ## Filter, envelopes, LFO and global
 
@@ -289,6 +331,8 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
 - Projects from before the modulation LFOs load with no mappings and sound exactly as before.
 - Projects from before the Grid and Playheads load with the Grid off and one playhead reading both
   channels: they sound exactly as before.
+- Projects from before Sync and Beat load with both off: they sound exactly as before. The Warp Mode
+  choices that now read **Tones (Granular)** and **Texture (Granular)** are the same Tones and Texture.
 
 ## Credits
 

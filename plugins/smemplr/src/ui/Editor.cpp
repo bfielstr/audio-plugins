@@ -345,9 +345,12 @@ void Editor::buildUI (CFrame* f)
     pk::setHelp (waveform, "Waveform", help::kWaveform);
     root->addView (waveform);
     // over the ruler's right end (WaveformView::kToolsWidth, which the ruler leaves to them): the Grid the
-    // loop's drags snap to and its step
-    bind (root, new Toggle (CRect (836, 39, 874, 53), this, kGridOn, "Grid"));
-    bind (root, new Choice (CRect (878, 39, 936, 53), this, kGridSize));
+    // loop's drags snap to and its step, the loop's Sync (a pass lasts the step) and Beat (it starts again on
+    // the host's beats)
+    bind (root, new Toggle (CRect (740, 39, 778, 53), this, kGridOn, "Grid"));
+    bind (root, new Choice (CRect (782, 39, 840, 53), this, kGridSize));
+    bind (root, new Toggle (CRect (846, 39, 884, 53), this, kLoopSync, "Sync"));
+    bind (root, new Toggle (CRect (888, 39, 932, 53), this, kLoopBeat, "Beat"));
     // ... and the view's own: zoom to the loop (or the flags) and back, and the waveform's height
     auto* zoomButton = new ActionButton (CRect (946, 39, 990, 53), "Zoom", [this] {
         if (waveform)
@@ -435,20 +438,32 @@ void Editor::buildUI (CFrame* f)
 
     warpOnGroup = new Group (CRect (706, 0, 1094, 98));
     sp->addView (warpOnGroup);
-    bind (warpOnGroup, new Choice (CRect (8, 24, 110, 58), this, kWarpMode, "Warp Mode"));
-    beatsGroup = new Group (CRect (116, 0, 388, 66));
+    bind (warpOnGroup, new Choice (CRect (8, 24, 126, 58), this, kWarpMode, "Warp Mode"));
+    beatsGroup = new Group (CRect (132, 0, 388, 66));
     warpOnGroup->addView (beatsGroup);
     bind (beatsGroup, new Choice (CRect (4, 24, 92, 58), this, kBeatsPreserve, "Preserve"));
     bind (beatsGroup, new Choice (CRect (98, 24, 190, 58), this, kBeatsLoop, "Loop Mode"));
     bind (beatsGroup, new Knob (CRect (200, 4, 256, 66), this, kBeatsEnvelope, "Envelope"));
-    tonesGroup = new Group (CRect (116, 0, 388, 66));
+    // Tones and Texture are the granular engines: a caption beside their knobs says so
+    auto granularCaption = [this] (CViewContainer* g, double x) {
+        auto* t = new Label (CRect (x, 22, x + 118, 36), "GRANULAR", 10.0, true, 0);
+        auto* d = new Label (CRect (x, 38, x + 118, 52), "the sample as grains", 10.0, false, 0);
+        d->setDim (true);
+        pk::setHelp (t, "Granular", help::kGranular);
+        pk::setHelp (d, "Granular", help::kGranular);
+        g->addView (t);
+        g->addView (d);
+    };
+    tonesGroup = new Group (CRect (132, 0, 388, 66));
     warpOnGroup->addView (tonesGroup);
     bind (tonesGroup, new Knob (CRect (4, 4, 64, 66), this, kTonesGrain, "Grain Size"));
-    textureGroup = new Group (CRect (116, 0, 388, 66));
+    granularCaption (tonesGroup, 76);
+    textureGroup = new Group (CRect (132, 0, 388, 66));
     warpOnGroup->addView (textureGroup);
     bind (textureGroup, new Knob (CRect (4, 4, 64, 66), this, kTextureGrain, "Grain Size"));
     bind (textureGroup, new Knob (CRect (70, 4, 126, 66), this, kTextureFlux, "Flux"));
-    cproGroup = new Group (CRect (116, 0, 388, 66));
+    granularCaption (textureGroup, 134);
+    cproGroup = new Group (CRect (132, 0, 388, 66));
     warpOnGroup->addView (cproGroup);
     bind (cproGroup, new Knob (CRect (4, 4, 64, 66), this, kFormants, "Formants"));
     bind (cproGroup, new Knob (CRect (70, 4, 126, 66), this, kCproEnvelope, "Envelope"));
@@ -2191,6 +2206,7 @@ void Editor::idle ()
                 waveform->resetZoom ();
         }
     }
+    syncLoopLength ();
     if (auto* b = ctl->getBridge ())
     {
         char buf[96];
@@ -2212,6 +2228,44 @@ void Editor::idle ()
         }
         b->collectGarbage ();
     }
+}
+
+// The loop's Sync: Length (and the extra playheads' lengths) show the loop at the root note. Set when what
+// decides it changes (Sync coming on, the Grid Size, Transpose, Detune, Loop Fade, the host's tempo, the
+// flags, the sample), not otherwise: Length moved by hand or by automation stays until one of them does (the
+// engine works the loop out itself while Sync is on: Length is what the editor shows of it).
+void Editor::syncLoopLength ()
+{
+    auto* b = ctl->getBridge ();
+    SamplePtr s = b && plainValue (kLoopSync) >= 0.5 ? b->sample () : nullptr;
+    if (!s)
+    {
+        syncKey.clear ();
+        return;
+    }
+    ParamArray p {};
+    for (uint32_t i = 0; i < kNumParams; ++i)
+        p[i] = plainValue (i);
+    const double frames = loopSyncFrames (*s, p, b->hostBpm.load (std::memory_order_relaxed));
+    if (frames <= 0.0)
+    {
+        syncKey.clear ();
+        return;
+    }
+    std::vector<double> key {frames, (double)(uintptr_t)s.get (), p[kSampleStart], p[kSampleEnd], p[kSnap], p[kPlayheads]};
+    if (key == syncKey)
+        return;
+    syncKey = key;
+    double fs, fe;
+    flagRegion (*s, p, fs, fe);
+    const double share = std::clamp (frames / std::max (1.0, fe - fs), 0.0, 1.0);
+    auto put = [&] (uint32_t id) {
+        if (std::fabs (norm (id) - share) > 1e-9)
+            setOnce (id, share);
+    };
+    put (kLength);
+    for (int h = 1; h < playheadsFor (p); ++h)
+        put (headParam (h, kHeadLength));
 }
 
 // --- sample actions ---------------------------------------------------------------

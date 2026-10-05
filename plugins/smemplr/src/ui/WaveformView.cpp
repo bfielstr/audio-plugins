@@ -223,6 +223,36 @@ void WaveformView::setLoopOnGrid (double rs, double len, double fs, double fe, d
     host->setNorm (lengthId, std::clamp (l / span, 0.0, 1.0));
 }
 
+bool WaveformView::syncOn () const
+{
+    return host->plainValue (kLoopSync) >= 0.5 && loopSyncApplies (paramsFrom (host));
+}
+
+double WaveformView::syncFrames (const SampleData& s, int index) const
+{
+    ParamArray p = paramsFrom (host);
+    p[kGridSize] = index;
+    auto* b = controller->getBridge ();
+    return loopSyncFrames (s, p, b ? b->hostBpm.load (std::memory_order_relaxed) : 120.0);
+}
+
+int WaveformView::nearestSyncGrid (const SampleData& s, double frames) const
+{
+    int best = (int)std::lround (host->plainValue (kGridSize));
+    double bestD = 1e300;
+    for (int i = 0; i < 5; ++i)
+        if (const double f = syncFrames (s, i); f > 0.0)
+        {
+            const double d = std::fabs (std::log (std::max (1.0, frames) / f));
+            if (d < bestD)
+            {
+                bestD = d;
+                best = i;
+            }
+        }
+    return best;
+}
+
 int WaveformView::extraHeads () const
 {
     if ((int)std::lround (host->plainValue (kMode)) != kModeClassic)
@@ -854,12 +884,20 @@ void WaveformView::onMouseDownEvent (MouseDownEvent& e)
             loopDragLen = he - hs;
             host->beginEdit (headParam (dragHead, kHeadStart));
             host->beginEdit (headParam (dragHead, kHeadLength));
+            dragGrid = h == Handle::HeadEnd && syncOn ();
+            if (dragGrid)
+                host->beginEdit (kGridSize);
             break;
         }
         case Handle::FlagStart: host->beginEdit (kSampleStart); break;
         case Handle::FlagEnd: host->beginEdit (kSampleEnd); break;
         case Handle::Start: host->beginEdit (kStart); break;
-        case Handle::LoopEnd: host->beginEdit (kLength); break;
+        case Handle::LoopEnd:
+            host->beginEdit (kLength);
+            dragGrid = syncOn ();
+            if (dragGrid)
+                host->beginEdit (kGridSize);
+            break;
         case Handle::LoopBody:
         case Handle::LoopRegion:
         {
@@ -950,18 +988,37 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
     const double minGap = 64.0 / len;
     // the Grid (Classic: the loop's drags snap to it; automation does not)
     const double step = (int)std::lround (host->plainValue (kMode)) == kModeClassic ? gridFrames (*s) : 0.0;
+    // Sync: the loop's length is Sync's (moving its start or all of it keeps it; on the Grid the start goes
+    // to grid lines), and dragging its end picks the Grid Size nearest to where it is dragged
+    const bool sync = syncOn ();
+    auto syncStart = [&] (double start, uint32_t startId) {
+        if (step > 0.0)
+            start = fs + std::round ((start - fs) / step) * step;
+        start = std::clamp (start, fs, std::max (fs, fe - 16.0));
+        host->setNorm (startId, std::clamp ((start - fs) / std::max (1.0, fe - fs), 0.0, 1.0));
+    };
+    auto syncEnd = [&] (double from, uint32_t lengthId) {
+        const int g = nearestSyncGrid (*s, pos * len - from);
+        if (dragGrid)
+            host->setNorm (kGridSize, host->table ().toNormalized (kGridSize, g));
+        host->setNorm (lengthId, std::clamp (syncFrames (*s, g) / std::max (1.0, fe - fs), 0.0, 1.0));
+    };
     switch (drag)
     {
         case Handle::FlagStart: host->setNorm (kSampleStart, std::min (pos, fe / len - minGap)); break;
         case Handle::FlagEnd: host->setNorm (kSampleEnd, std::max (pos, fs / len + minGap)); break;
         case Handle::Start:
-            if (step > 0.0) // the loop's start on the grid, its length whole steps
+            if (sync)
+                syncStart (pos * len, kStart);
+            else if (step > 0.0) // the loop's start on the grid, its length whole steps
                 setLoopOnGrid (pos * len, le - rs, fs, fe, step);
             else
                 host->setNorm (kStart, std::clamp ((pos * len - fs) / (fe - fs), 0.0, 1.0));
             break;
         case Handle::LoopEnd:
-            if (step > 0.0) // the end a whole number of steps after the start
+            if (sync)
+                syncEnd (rs, kLength);
+            else if (step > 0.0) // the end a whole number of steps after the start
                 setLoopOnGrid (rs, pos * len - rs, fs, fe, step, true);
             else
                 host->setNorm (kLength, std::clamp ((pos * len - rs) / std::max (1.0, fe - fs), 0.0, 1.0));
@@ -975,6 +1032,11 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
         {
             // move the whole loop: it begins at Start, so Start moves with it and Length stays
             const double span = std::max (1.0, fe - fs);
+            if (sync)
+            {
+                syncStart (loopDragRs + (pos * len - loopDragDownPos), kStart);
+                break;
+            }
             if (step > 0.0) // (on the grid: from grid line to grid line, whole steps long)
             {
                 setLoopOnGrid (loopDragRs + (pos * len - loopDragDownPos), loopDragLen, fs, fe, step);
@@ -995,7 +1057,11 @@ void WaveformView::onMouseMoveEvent (MouseMoveEvent& e)
             const double span = std::max (1.0, fe - fs);
             double hs, he;
             headPositions (*s, dragHead, hs, he);
-            if (drag == Handle::HeadStart)
+            if (sync && drag != Handle::HeadEnd)
+                syncStart (drag == Handle::HeadStart ? pos * len : loopDragRs + (pos * len - loopDragDownPos), sId);
+            else if (sync)
+                syncEnd (hs, lId);
+            else if (drag == Handle::HeadStart)
             {
                 if (step > 0.0)
                     setLoopOnGrid (pos * len, he - hs, fs, fe, step, false, sId, lId);
@@ -1052,11 +1118,17 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
         case Handle::HeadBody:
             host->endEdit (headParam (dragHead, kHeadStart));
             host->endEdit (headParam (dragHead, kHeadLength));
+            if (dragGrid)
+                host->endEdit (kGridSize);
             break;
         case Handle::FlagStart: host->endEdit (kSampleStart); break;
         case Handle::FlagEnd: host->endEdit (kSampleEnd); break;
         case Handle::Start: host->endEdit (kStart); break;
-        case Handle::LoopEnd: host->endEdit (kLength); break;
+        case Handle::LoopEnd:
+            host->endEdit (kLength);
+            if (dragGrid)
+                host->endEdit (kGridSize);
+            break;
         case Handle::LoopBody:
             host->endEdit (kStart);
             host->endEdit (kLength);
@@ -1078,6 +1150,7 @@ void WaveformView::onMouseUpEvent (MouseUpEvent& e)
     drag = Handle::None;
     dragSlice = -1;
     dragHead = 0;
+    dragGrid = false;
     invalid ();
     e.consumed = true;
 }

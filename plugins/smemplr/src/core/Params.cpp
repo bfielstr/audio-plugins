@@ -87,7 +87,7 @@ std::vector<ParamInfo> buildTable ()
 
     add (toggle (kWarp, "Warp", "Warp", false));
     add (choice (kWarpMode, "Warp Mode", "Warp Mode",
-                 {"Beats", "Tones", "Texture", "Re-Pitch", "Complex", "Complex Pro"}, 0));
+                 {"Beats", "Tones (Granular)", "Texture (Granular)", "Re-Pitch", "Complex", "Complex Pro"}, 0));
     add (in (kWarpBeats, "Warp Length", "Warp As", 1.0, 1024.0, 16.0, Disp::Beats));
     add (choice (kBeatsPreserve, "Preserve", "Preserve", kPreserveNames, 0));
     add (choice (kBeatsLoop, "Transient Loop Mode", "Loop Mode", {"Off", "Forward", "Back-Forth"}, 1));
@@ -291,6 +291,9 @@ std::vector<ParamInfo> buildTable ()
         add (pct ((ParamId)headParam (h, kHeadStart), keep (n + " Start"), "Start", 0.25 * h));
         add (pct ((ParamId)headParam (h, kHeadLength), keep (n + " Length"), "Length", 0.25));
     }
+    // the loop's Sync and Beat (off: the loop as it always was)
+    add (toggle (kLoopSync, "Loop Sync", "Sync", false));
+    add (toggle (kLoopBeat, "Loop Retrigger on Beat", "Beat", false));
     return t;
 }
 

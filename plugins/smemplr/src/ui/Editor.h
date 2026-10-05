@@ -142,6 +142,8 @@ private:
     void browseForSample ();
     void stepSample (int dir);
     void loadFile (const std::string& path);
+    void syncLoopLength ();      // (the loop's Sync: Length shows the loop at the root note)
+    std::vector<double> syncKey; // what Length was last set from
 
     void onClose () override;
 
