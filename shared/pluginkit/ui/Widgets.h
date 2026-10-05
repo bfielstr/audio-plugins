@@ -376,13 +376,17 @@ private:
     int align; // 0 left, 1 centre, 2 right
 };
 
-// Container with a titled, rounded panel background.
+// Container with a titled, rounded panel background. In an arranged layout a panel that is its block's
+// whole content grows to fill the block (EditorBase): its frame and title reach the block's sides and its
+// children are moved by its transform to stay centred in it (frame conversions follow the transform).
 class Panel : public VSTGUI::CViewContainer
 {
 public:
     Panel (const VSTGUI::CRect& r, std::string title = {});
     void drawBackgroundRect (VSTGUI::CDrawContext* ctx, const VSTGUI::CRect& update) override;
     const std::string& titleText () const { return title; }
+    VSTGUI::CPoint& frameToLocal (VSTGUI::CPoint& point) const override;
+    VSTGUI::CPoint& localToFrame (VSTGUI::CPoint& point) const override;
 
 private:
     std::string title;

@@ -192,7 +192,7 @@ void Editor::buildUI (CFrame* f)
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base},
                                                     [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
                                                     [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
-    tail->add (root, CRect (8, 424, 912, 424 + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (8, 424, 912, 424 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
@@ -359,7 +359,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"crossover", "crossover", {kBandColLeft, 350, 342, 420}, 0, 0},
         {"sidechain", "", {350, 344, 640, 416}, 0, 0},
         {"prelimit", "", {648, 344, 822, 416}, 0, 0},
-        {"tail", "end of the chain", {8, 424, kWidth - 8, 424 + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {8, 424, kWidth - 8, 424 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     s.fallback = "bands";
     return s;

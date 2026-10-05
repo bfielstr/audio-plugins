@@ -45,11 +45,11 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.14.0**
   info box is always there.
 - **Free resizing.** Drag the window corner to any shape. The interface keeps its proportions, zoomed
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
-- **Layouts.** **Menu > Layout** picks how the window is laid out: **Default** (the layout it always
-  had) or **Wide**, a long, short strip for a DAW's device area, with the sections side by side as
-  titled blocks and stacked in rows by purpose (see [Layouts](#layouts) below). In Wide, or a layout
-  of your own, drag a block by its title strip to move it and drag its right edge to make it wider, then
-  save the result under a name.
+- **Layouts.** **Menu > Layout** picks how the window is laid out: **Wide** (what a new instance
+  opens in), a long, short strip for a DAW's device area, with the sections side by side as titled
+  blocks in rows by purpose, or **Classic** (the fixed layout the plug-ins had before; see
+  [Layouts](#layouts) below). In Wide, or a layout of your own, drag a block by its title strip to move
+  it and drag its right edge to make it wider, then save the result under a name.
 - **Reset and fine control.** A right click (or a double-click) on a control or a display handle puts
   it back to its default. Hold Shift while dragging for fine steps. The mouse wheel on a filter handle,
   while you hold it or with Shift over it, sets its resonance.
@@ -166,23 +166,32 @@ same folder: delete it (or use **Reset Default**) to go back to the factory defa
 
 Every plug-in has a **Layout** sub-menu in its **Menu**:
 
-- **Default**: the layout the plug-in has always had. A new instance and every project saved before
-  layouts open in it.
-- **Wide**: the same controls as titled blocks side by side, so the window is wide and short, like a
-  device in Live's device view. Blocks are stacked in rows by purpose: for most plug-ins the display and
-  the plug-in's own controls in the first row and smacheratr at the end of the chain in a row under it.
-  smemplr has two rows: the instrument (waveform, sample, filter, envelopes, LFO, global) and then the
-  effects rack, the output, the modulation LFOs and their mappings.
+- **Wide**: the controls as titled blocks side by side, so the window is wide and short, like a device
+  in Live's device view. A new instance opens in it, and so does a project saved before layouts.
+  Blocks are in rows by purpose: for most plug-ins the display and the plug-in's own controls in the
+  first row and smacheratr at the end of the chain in a row of its own under it, as wide as the window.
+  smemplr has two rows of about the same width: the sound (waveform over the sample row, filter,
+  envelopes, the list of mappings) and then the effects rack, the output, the global controls, the LFO
+  and the modulation LFOs. smacheratr shows its Gentlr controls as a column beside the two displays.
+- **Classic**: the fixed layout every plug-in had before layouts (it was called Default then). A
+  project saved in it keeps it.
 - Your **saved layouts**, by name.
 - **Save Layout As...** stores the layout you have now under a name (saving under a name that exists
-  replaces it). **Use as Default Layout** makes every new instance open in it. **Delete Layout** removes a
-  saved one.
+  replaces it). **Use as Default Layout** makes every new instance open in it instead of Wide (Classic
+  too). **Delete Layout** removes a saved one.
 
-In Wide or a saved layout, each block has a title strip with a grip at its left. Drag the strip to move
-the block: a cinnabar line shows where it will land, beside another block, above or below one (they
-then share a column), or in a row of its own above or below the others. Drag a block's right edge to
-make its column wider (up to twice its width; the block's controls stay centred in it). A layout you
-change this way shows as **Custom (not saved)** until you save it.
+In Wide or a saved layout, the blocks fill their rows: every row runs the full width of the window, with
+the same 8 pixel gap between blocks, between rows and at the edges. The window is as wide as the widest
+row needs, and the blocks of a narrower row are stretched to that width, each in proportion to its own
+width. The blocks of a row are all as tall as its tallest one. A section's panel grows to fill its
+block, with its controls centred in it, and smacheratr at the end of the chain is built as wide as its
+block.
+
+Each block has a title strip with a grip at its left. Drag the strip to move the block: a cinnabar line
+shows where it will land, beside another block, above or below one (they then share a column), or in a
+row of its own above or below the others. Drag a block's right edge to make it wider (the other blocks
+of its row give it room; a block can ask for up to twice its own width). A layout you change this way
+shows as **Custom (not saved)** until you save it.
 
 The window takes the layout's shape at the size it shows. If the host keeps the window as it is, the
 interface is zoomed to fit inside it, so every control is still there. The layout you pick is saved

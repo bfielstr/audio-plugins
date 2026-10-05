@@ -168,11 +168,15 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
         uiTailOpen = values[0] < 0 ? -1 : values[0] & (kTailOpenSaturator | kTailOpenGentlr);
         uiColorLayer = values[1] == 1 ? 1 : 0;
     }
-    // the layout after that, tagged (a state from before layouts: the Default layout, as it was then)
-    uiLayout.clear ();
-    uiLayoutName.clear ();
+    // the layout after that, tagged. A state with it keeps the layout it saved, whatever it is ("" too:
+    // 0.14 wrote that for its Default, the Classic layout now); a state from before layouts has none and
+    // opens in the layout a new instance has (Wide; pluginkit/Layout.h)
+    uiLayout = layout::kDefaultLayout;
+    uiLayoutName = layout::templateName (uiLayout);
     if (s.readInt32 (tag) && tag == kLayoutTag)
     {
+        uiLayout.clear ();
+        uiLayoutName.clear ();
         if (char8* text = s.readStr8 ())
         {
             uiLayout = text;
@@ -574,10 +578,8 @@ void ControllerBase::applyStartupDefault ()
         for (const auto& n : saved.layouts)
             if (n.layout == uiLayout)
                 uiLayoutName = n.name;
-        if (layout::isDefault (uiLayout))
-            uiLayoutName = "Default";
-        else if (uiLayout == "wide")
-            uiLayoutName = "Wide";
+        if (!layout::templateName (uiLayout).empty ())
+            uiLayoutName = layout::templateName (uiLayout);
     }
     if (!presetClassId.isValid () || !hasDefault ())
         return;

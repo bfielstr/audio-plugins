@@ -1,8 +1,10 @@
 // Headless tests for the layout model (pluginkit/Layout.h, issue #11): layout texts, the Wide template,
-// placing blocks, dragging them to other places and widths, and the saved layouts file.
+// placing blocks (rows that fill the window, blocks of a row as tall as it, content centred, one gap
+// everywhere), dragging them to other places and widths, and the saved layouts file.
 // Run: ./pluginkit_layout_tests [filter]
 #include "pluginkit/Layout.h"
 
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -93,18 +95,23 @@ TEST (textRoundTrip)
     // spaces and empty parts are tolerated
     CHECK (toString (parse (" a , b ;; c/ /d ")) == "a,b;c/d", "%s", toString (parse (" a , b ;; c/ /d ")).c_str ());
     // the templates' names and the empty text are not arrangements
-    CHECK (parse ("").empty () && parse ("default").empty () && parse ("Default").empty () && parse ("wide").empty (), "names");
-    CHECK (isDefault ("") && isDefault (" Default ") && !isDefault ("wide") && !isDefault ("a,b"), "isDefault");
+    CHECK (parse ("").empty () && parse ("default").empty () && parse ("Default").empty () && parse ("classic").empty () && parse ("wide").empty (),
+           "names");
+    // the Classic layout: "" (0.14's Default), "default" (how it is written) and "classic"
+    CHECK (isClassic ("") && isClassic (" Default ") && isClassic ("Classic") && !isClassic ("wide") && !isClassic ("a,b"), "isClassic");
+    CHECK (isClassic (kClassicText) && std::string (kDefaultLayout) == "wide", "the texts");
+    CHECK (templateName ("") == "Classic" && templateName ("default") == "Classic" && templateName ("Wide") == "Wide" && templateName ("a,b").empty (),
+           "template names");
 }
 
-TEST (defaultLayoutIsTheBuild)
+TEST (classicLayoutIsTheBuild)
 {
-    // the Default layout is no arrangement at all: the editor's content stays where it was built (the
-    // draw benchmark compares every editor's Default rendering with one from before layouts)
+    // the Classic layout is no arrangement at all: the editor's content stays where it was built (the
+    // draw benchmark compares every editor's Classic rendering with one from before layouts)
     const Spec s = testSpec ();
-    CHECK (resolve (s, "").empty () && resolve (s, "default").empty (), "Default resolves to nothing to move");
-    // an editor without panels has only the Default layout, whatever its state says
-    CHECK (resolve (Spec {}, "wide").empty () && resolve (Spec {}, "a,b").empty (), "no panels: Default");
+    CHECK (resolve (s, "").empty () && resolve (s, "default").empty () && resolve (s, "classic").empty (), "Classic resolves to nothing to move");
+    // an editor without panels has only the Classic layout, whatever its state says
+    CHECK (resolve (Spec {}, "wide").empty () && resolve (Spec {}, "a,b").empty (), "no panels: Classic");
     // and the regions an editor declares do not overlap (each control belongs to one panel)
     for (size_t i = 0; i < s.panels.size (); ++i)
         for (size_t j = i + 1; j < s.panels.size (); ++j)
@@ -139,43 +146,126 @@ TEST (normalizeKeepsEveryPanelOnce)
     CHECK (b.rows[0][0].width == 0 && b.rows[0][1].width == 0 && b.rows[0][2].width == 388, "%s", toString (b).c_str ());
 }
 
+// The rules every arranged layout's geometry keeps: each row from margin to margin with one gap between
+// its columns, its columns and their blocks as tall as the row, each block's content centred in it under
+// its strip (a filling panel as wide as its block), nothing overlapping, and the window around the rows.
+static void checkTidy (const Spec& s, const Arrangement& a, const Geometry& g, const char* what)
+{
+    CHECK (g.rows.size () == a.rows.size (), "%s: rows", what);
+    double y = s.top;
+    for (size_t r = 0; r < g.rows.size (); ++r)
+    {
+        const Box& row = g.rows[r];
+        CHECK (row.left == kMargin && row.right == g.width - kMargin, "%s: row %zu from margin to margin", what, r);
+        CHECK (row.top == y, "%s: row %zu one gap under the last", what, r);
+        y = row.bottom + kGap;
+        const auto& cols = g.columns[r];
+        CHECK (!cols.empty () && cols.front ().left == row.left && cols.back ().right == row.right, "%s: row %zu filled", what, r);
+        for (size_t c = 0; c < cols.size (); ++c)
+        {
+            CHECK (cols[c].top == row.top && cols[c].bottom == row.bottom, "%s: row %zu column %zu as tall as the row", what, r, c);
+            CHECK (cols[c].width () == std::round (cols[c].width ()), "%s: whole pixels", what);
+            if (c > 0)
+                CHECK (cols[c].left - cols[c - 1].right == kGap, "%s: row %zu one gap between columns", what, r);
+        }
+    }
+    CHECK (g.height == (g.rows.empty () ? s.top : g.rows.back ().bottom) + kMargin, "%s: the window under the last row", what);
+    CHECK (g.width >= s.width, "%s: never narrower than Classic", what);
+    for (const auto& b : g.blocks)
+    {
+        const Panel* p = s.find (b.id);
+        const Box& col = g.columns[(size_t)b.row][(size_t)b.column];
+        CHECK (b.box.left == col.left && b.box.right == col.right, "%s: %s as wide as its column", what, b.id.c_str ());
+        CHECK (b.box.top >= col.top && b.box.bottom <= col.bottom, "%s: %s in its column", what, b.id.c_str ());
+        // the content: the region's size (a filling panel: the block's width), centred both ways under the strip
+        CHECK (b.content.height () <= p->region.height () && b.content.width () == (p->fill ? b.box.width () : p->region.width ()), "%s: %s content size",
+               what, b.id.c_str ());
+        const double l = b.content.left - b.box.left, rr = b.box.right - b.content.right;
+        const double t = b.content.top - (b.box.top + kStrip), bt = b.box.bottom - b.content.bottom;
+        CHECK (l >= 0 && rr >= 0 && std::fabs (l - rr) <= 1, "%s: %s centred across (%g, %g)", what, b.id.c_str (), l, rr);
+        CHECK (t >= 0 && bt >= 0 && std::fabs (t - bt) <= 1, "%s: %s centred down (%g, %g)", what, b.id.c_str (), t, bt);
+        for (const auto& o : g.blocks)
+            if (&o != &b)
+                CHECK (!overlaps (b.box, o.box), "%s: %s x %s", what, b.id.c_str (), o.id.c_str ());
+    }
+    // the last block of each column reaches the row's bottom, the others one gap over the next
+    for (const auto& b : g.blocks)
+    {
+        const Block* next = nullptr;
+        for (const auto& o : g.blocks)
+            if (o.row == b.row && o.column == b.column && o.index == b.index + 1)
+                next = &o;
+        CHECK (next ? next->box.top - b.box.bottom == kGap : b.box.bottom == g.rows[(size_t)b.row].bottom, "%s: %s stacked", what, b.id.c_str ());
+    }
+}
+
 TEST (placeBlocks)
 {
     const Spec s = testSpec ();
     const Arrangement w = wide (s);
     const Geometry g = place (s, w);
     CHECK (g.blocks.size () == s.panels.size (), "%zu blocks", g.blocks.size ());
-    for (const auto& b : g.blocks)
-    {
-        const Panel* p = s.find (b.id);
-        // the content is the region's size, under the strip, inside its block
-        CHECK (b.content.width () == p->region.width () && b.content.height () == p->region.height (), "%s: content size", b.id.c_str ());
-        CHECK (b.content.top == b.box.top + kStrip && b.content.bottom == b.box.bottom, "%s: under the strip", b.id.c_str ());
-        CHECK (b.content.left >= b.box.left && b.content.right <= b.box.right, "%s: inside", b.id.c_str ());
-        CHECK (b.box.left >= kMargin && b.box.right <= g.width - kMargin && b.box.top >= s.top && b.box.bottom <= g.height - kMargin,
-               "%s: inside the window", b.id.c_str ());
-        for (const auto& o : g.blocks)
-            if (&o != &b)
-                CHECK (!overlaps (b.box, o.box), "%s x %s", b.id.c_str (), o.id.c_str ());
-    }
+    checkTidy (s, w, g, "wide");
     // the first row: the display and the sample row stacked, the filter and envelope beside them
     const Block* d = g.find ("display");
     const Block* sm = g.find ("sample");
     const Block* f = g.find ("filter");
     CHECK (d && sm && f && sm->box.top == d->box.bottom + kGap && f->box.left == d->box.right + kGap && f->box.top == d->box.top, "stack");
-    // wide and short: wider than the Default, not taller
+    // the widest row at its natural width sets the window: 592 + 192 + 194 and two gaps, and the margins
+    CHECK (g.width == 592 + 192 + 194 + 2 * kGap + 2 * kMargin, "window %g", g.width);
+    CHECK (f->box.width () == 192 && g.find ("env")->box.width () == 194 && d->box.width () == 592, "the widest row as it is");
+    // wide and short: wider than Classic, not taller
     CHECK (g.width > s.width && g.height <= s.height, "%g x %g", g.width, g.height);
-    // the second row starts under the first one's tallest column
-    CHECK (g.find ("rack")->box.top == g.rows[0].bottom + kGap, "row 2");
+    // the second row stretched to the first one's width, its columns in proportion to their natural widths
+    const Block* rack = g.find ("rack");
+    const Block* mod = g.find ("mod");
+    CHECK (rack->box.top == g.rows[0].bottom + kGap, "row 2");
+    CHECK (rack->box.width () + mod->box.width () + kGap == g.width - 2 * kMargin, "row 2 fills");
+    CHECK (std::fabs (rack->box.width () / mod->box.width () - 592.0 / 186.0) < 0.02, "in proportion (%g, %g)", rack->box.width (), mod->box.width ());
+    // the blocks of a row as tall as it: the filter (164) beside the display/sample stack (276 with strips)
+    CHECK (f->box.height () == g.rows[0].height () && f->box.height () == 2 * kStrip + 162 + 74 + kGap, "filter %g", f->box.height ());
+    CHECK (mod->box.height () == rack->box.height (), "row 2 heights");
     // a panel shown shorter (a folded section) moves what is under it up
-    const Geometry folded = place (s, parse ("filter;rack;display/sample,env,mod"), {{"rack", 40.0}});
+    const Arrangement fa = parse ("filter;rack;display/sample,env,mod");
+    const Geometry folded = place (s, fa, {{"rack", 40.0}});
     CHECK (folded.find ("rack")->box.height () == kStrip + 40 && folded.find ("display")->box.top == folded.find ("rack")->box.bottom + kGap,
            "folded");
-    // a column wider than its panel centres it
-    const Geometry wider = place (s, parse ("filter:292;env,display,sample,rack,mod"));
-    CHECK (wider.find ("filter")->box.width () == 292 && wider.find ("filter")->content.left == kMargin + 50, "centred");
-    // never narrower than the Default (the header's controls keep their room)
-    CHECK (place (s, parse ("filter;env;display;sample;rack;mod")).width == s.width, "min width");
+    checkTidy (s, fa, folded, "folded");
+    // never narrower than Classic (the header's controls keep their room): the rows stretched to it
+    const Arrangement narrow = parse ("filter;env;display;sample;rack;mod");
+    const Geometry ng = place (s, narrow);
+    CHECK (ng.width == s.width && ng.find ("filter")->box.width () == s.width - 2 * kMargin, "min width");
+    checkTidy (s, narrow, ng, "narrow");
+}
+
+TEST (rowsFillEvenly)
+{
+    const Spec s = testSpec ();
+    // columns past their range's end: the others take the rest; when every one is at its end, past them
+    const Arrangement a = parse ("display,rack;filter,env,mod");
+    const Geometry g = place (s, a);
+    checkTidy (s, a, g, "two rows");
+    CHECK (g.width == 592 + 592 + kGap + 2 * kMargin, "%g", g.width);
+    const double row2 = g.find ("filter")->box.width () + g.find ("env")->box.width () + g.find ("mod")->box.width () + 2 * kGap;
+    CHECK (row2 == g.width - 2 * kMargin, "row 2 fills (%g)", row2);
+    // a column's natural width (dragged wider) is its share's weight
+    const Arrangement b = parse ("display,rack;filter:300,env,mod");
+    const Geometry gb = place (s, b);
+    checkTidy (s, b, gb, "weighted");
+    CHECK (gb.find ("filter")->box.width () > g.find ("filter")->box.width (), "a wider column takes more");
+    // a filling panel: its content as wide as its block, wherever it is
+    Spec f = s;
+    for (auto& p : f.panels)
+        if (p.id == "rack")
+            p.fill = true;
+    for (const char* text : {"wide", "display,rack;filter,env,mod", "rack;display/sample,filter,env,mod"})
+    {
+        const Arrangement fa = resolve (f, text);
+        const Geometry fg = place (f, fa);
+        checkTidy (f, fa, fg, text);
+        const Block* r = fg.find ("rack");
+        CHECK (r->content.left == r->box.left && r->content.right == r->box.right, "%s: rack fills", text);
+    }
 }
 
 TEST (dragToReorder)
@@ -238,6 +328,13 @@ TEST (resizeWithinLimits)
     const Arrangement r = resize (s, w, "env", 300);
     CHECK (resolve (s, toString (r)) == r, "round trip with widths");
     CHECK (place (s, r).find ("env")->box.width () == 300, "placed at its width");
+    // in a stretched row the width asked for is the width shown: its natural width is what gives it that
+    const double shownNow = place (s, w).find ("mod")->box.width ();
+    const Arrangement m = resize (s, w, "mod", 300);
+    CHECK (std::fabs (place (s, m).find ("mod")->box.width () - 300) <= 1, "mod shown %g", place (s, m).find ("mod")->box.width ());
+    CHECK (place (s, m).width == place (s, w).width, "the window as it was (its row is not the widest)");
+    // narrower than it is shown at its natural width: as narrow as it goes (its natural width)
+    CHECK (resize (s, w, "mod", shownNow - 20) == w, "no narrower than its share");
 }
 
 TEST (savedLayouts)
@@ -260,6 +357,7 @@ TEST (savedLayouts)
     const Saved p = parseSaved ("# c\n\nno equals\n Wide = a\nDefault = b\n@other = c\n ok = a,b \n");
     CHECK (p.layouts.size () == 1 && p.layouts[0].name == "ok" && p.layouts[0].layout == "a,b" && !p.hasDefault, "%s", savedText (p).c_str ());
     CHECK (validName ("My layout") && !validName ("") && !validName ("  ") && !validName ("a=b") && !validName ("wide") && !validName ("DEFAULT") &&
+               !validName ("Classic") &&
                !validName ("@x") && !validName ("two\nlines"),
            "names");
     // the file beside the presets

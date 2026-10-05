@@ -217,7 +217,7 @@ void Editor::buildUI (CFrame* f)
                                                         auto* s = c->getShared ();
                                                         return s ? &s->tailMeters : nullptr;
                                                     });
-    tail->add (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     layoutAdvanced ();
@@ -349,7 +349,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"detector", "detector", {kHighLeft + kSubW + 8, kRowTop - 1, kHighLeft + kSubW + 128, kRowTop + 88}, 0},
         {"advanced", "advanced", {kHighLeft + kSubW + 154, kRowTop - 1, kHighLeft + kSubW + 274, kRowTop + 88}, 0},
         {"output", "output", {kNoOverlapLeft, kRowTop - 1, kViewRight, kRowTop + 88}, 0},
-        {"tail", "end of the chain", {kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

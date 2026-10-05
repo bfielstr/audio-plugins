@@ -796,6 +796,25 @@ void Panel::drawBackgroundRect (CDrawContext* ctx, const CRect& update)
     }
 }
 
+// (CViewContainer's conversions add up offsets only; a grown panel moves its children by its transform)
+CPoint& Panel::frameToLocal (CPoint& point) const
+{
+    if (auto* parent = getParentView ())
+        parent->frameToLocal (point);
+    point.offset (-getViewSize ().left, -getViewSize ().top);
+    getTransform ().inverse ().transform (point);
+    return point;
+}
+
+CPoint& Panel::localToFrame (CPoint& point) const
+{
+    getTransform ().transform (point);
+    point.offset (getViewSize ().left, getViewSize ().top);
+    if (auto* parent = getParentView ())
+        return parent->localToFrame (point);
+    return point;
+}
+
 Group::Group (const CRect& r) : CViewContainer (r)
 {
     setBackgroundColor (kTransparentCColor);

@@ -37,6 +37,10 @@ public:
     // (kNoOverlapX, kNoOverlapY); the region Drive last
     static constexpr double kGentlrTop = 432.0, kGentlrButtonX = 56.0, kGentlrAdvancedX = 527.0, kSlopeX = 194.0;
     static constexpr double kNoOverlapX = kGentlrAdvancedX, kNoOverlapY = kGentlrTop + 64.0;
+    // In an arranged layout (Menu > Layout, other than Classic) the GENTLR panel is a column instead, so the
+    // Wide row stays short: built right of the window as made (where nothing else is), its groups one under
+    // another (layoutSpec)
+    static constexpr double kGentlrColLeft = 768.0, kGentlrColTop = 40.0, kGentlrColW = 214.0, kGentlrColH = 260.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;

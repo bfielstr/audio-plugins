@@ -140,9 +140,14 @@ void Editor::buildUI (CFrame* f)
     // bottom: Gentlr (one button), a band selector (the selected band's Frequency, Width and Range are under
     // the colour display, with Gentlr in front); the bands' Slope under the selector; Advanced, and with it
     // the region Drive; No Overlap
-    auto* cp = new pk::Panel (CRect (8, kGentlrTop, 752, kGentlrTop + 80), "GENTLR");
+    // (arranged: a column, the groups one under another; the rectangles below are the panel's own)
+    const bool column = arrangedLayout ();
+    auto* cp = new pk::Panel (column ? CRect (kGentlrColLeft, kGentlrColTop, kGentlrColLeft + kGentlrColW, kGentlrColTop + kGentlrColH)
+                                     : CRect (8, kGentlrTop, 752, kGentlrTop + 80),
+                              "GENTLR");
     root->addView (cp);
     bind (cp, new Toggle (CRect (12, 30, 84, 50), this, kClarity, "Gentlr"));
+    const double bandsDx = column ? -80.0 : 0.0, bandsY = column ? 60.0 : 30.0;
     clarityBandButtons.clear ();
     for (int k = 0; k < kGentlrBands; ++k)
     {
@@ -156,7 +161,7 @@ void Editor::buildUI (CFrame* f)
             "its Range is above 0 dB)."};
         // (Band 1 and Band 2 wider than Sub and High, for their longer names)
         static const double left[kGentlrBands] = {92, 145, 198, 241}, right[kGentlrBands] = {142, 195, 238, 281};
-        auto* bt = new ActionButton (CRect (left[k], 30, right[k], 50), names[k],
+        auto* bt = new ActionButton (CRect (left[k] + bandsDx, bandsY, right[k] + bandsDx, bandsY + 20), names[k],
                                      [this, k] {
                                          setLayer (1); // (its knobs are Gentlr's layer's)
                                          showClarityBand (k);
@@ -184,15 +189,16 @@ void Editor::buildUI (CFrame* f)
     }
     color->onBandPicked = [this] (int k) { showClarityBand (k); };
     setLayer (layer ());
-    cp->addView (new Label (CRect (92, 54, 132, 74), "Slope", 10.5));
-    slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 50, 54, kSlopeX - 8 + 50, 74), this, kClaritySlope));
+    const double slopeY = column ? 90.0 : 54.0;
+    cp->addView (new Label (CRect (92 + bandsDx, slopeY, 132 + bandsDx, slopeY + 20), "Slope", 10.5));
+    slopeView = bind (cp, new Choice (CRect (kSlopeX - 8 - 50 + bandsDx, slopeY, kSlopeX - 8 + 50 + bandsDx, slopeY + 20), this, kClaritySlope));
     // how the bands sit together: Advanced, No Overlap under it (both columns 82 wide)
-    bind (cp, new Toggle (CRect (kGentlrAdvancedX - 8 - 41, 30, kGentlrAdvancedX - 8 + 41, 50), this, kClarityAdvanced, "Advanced"));
-    noOverlapView = bind (cp, new NoOverlapToggle (CRect (kNoOverlapX - 8 - 41, kNoOverlapY - kGentlrTop - 10, kNoOverlapX - 8 + 41,
-                                                          kNoOverlapY - kGentlrTop + 10),
-                                                   this, smacheratrBandParams ()));
-    advancedViews.push_back (bind (cp, new Toggle (CRect (566, 30, 616, 50), this, kClarityDrive, "Drive")));
-    advancedViews.push_back (bind (cp, new Knob (knobRect (622, 10), this, kClarityDriveAmount, "Amount")));
+    const double advX = column ? 12.0 + 41 : kGentlrAdvancedX - 8, advY = column ? 132.0 : 30.0;
+    bind (cp, new Toggle (CRect (advX - 41, advY, advX + 41, advY + 20), this, kClarityAdvanced, "Advanced"));
+    noOverlapView = bind (cp, new NoOverlapToggle (CRect (advX - 41, advY + 24, advX + 41, advY + 44), this, smacheratrBandParams ()));
+    const double driveX = column ? 12.0 : 566.0, driveY = column ? 208.0 : 30.0;
+    advancedViews.push_back (bind (cp, new Toggle (CRect (driveX, driveY, driveX + 50, driveY + 20), this, kClarityDrive, "Drive")));
+    advancedViews.push_back (bind (cp, new Knob (knobRect (driveX + 56, driveY - 20), this, kClarityDriveAmount, "Amount")));
     layoutAdvanced ();
 
     applyParamTooltips (&help::forParam);
@@ -342,11 +348,12 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the Analog curve with its controls, the colour display with its own, Gentlr: one row
+    // the Analog curve with its controls, the colour display with its own, Gentlr: one row (Gentlr's
+    // panel built as a column for it: buildUI)
     s.panels = {
         {"analog", "analog", {8, 40, 312, 428}, 0},
         {"color", "color", {316, 40, 752, 428}, 0},
-        {"gentlr", "", {8, kGentlrTop, 752, kGentlrTop + 80}, 0},
+        {"gentlr", "", {kGentlrColLeft, kGentlrColTop, kGentlrColLeft + kGentlrColW, kGentlrColTop + kGentlrColH}, 0},
     };
     return s;
 }

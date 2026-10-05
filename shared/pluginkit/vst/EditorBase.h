@@ -40,7 +40,7 @@ public:
     bool PLUGIN_API open (void* parent, const VSTGUI::PlatformType& platformType) override;
     void PLUGIN_API close () override;
     Steinberg::tresult PLUGIN_API canResize () override { return Steinberg::kResultTrue; }
-    // (the size of the layout the window opens with: the Default's, or an arrangement's)
+    // (the size of the layout the window opens with: the Classic one's, or an arrangement's)
     Steinberg::tresult PLUGIN_API getSize (Steinberg::ViewRect* size) override;
     Steinberg::tresult PLUGIN_API checkSizeConstraint (Steinberg::ViewRect* rect) override;
     Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) override;
@@ -84,19 +84,23 @@ public:
     }
     // ---- layouts (pluginkit/Layout.h, issue #11)
     // The editor's panels: the regions of its content and the Wide template's rows. `arranged`: for a
-    // layout other than the Default (an editor may build some content differently for those, and declare
-    // its regions as built that way: smemplr splits its modulation column in two). None (the default):
-    // the editor has only the Default layout and no Layout menu.
+    // layout other than the Classic one (an editor may build some content differently for those, and
+    // declare its regions as built that way: smemplr splits its modulation column in two). None (the
+    // default): the editor has only the Classic layout and no Layout menu.
     virtual layout::Spec layoutSpec (bool /*arranged*/) const { return {}; }
-    // While building (and after): whether this build is arranged (not the Default layout).
+    // While building (and after): whether this build is arranged (not the Classic layout).
     bool arrangedLayout () const { return arranged; }
+    // While building: where to build the content of panel `id` that the Classic build has at `built`. The
+    // same rectangle, but for a panel that fills its block (Panel::fill) in an arranged build: as wide as
+    // its block (the end saturator's section is built at its row's width).
+    VSTGUI::CRect layoutRegion (const std::string& id, const VSTGUI::CRect& built) const;
     // A point of the build (a menu's place under its button, in the editor's coordinates as built) where
     // it is shown now: moved with its panel's block, or with the window's right edge in the header.
     VSTGUI::CPoint layoutPoint (VSTGUI::CPoint built) const;
     // Picks a layout (its text, see Layout.h, and the name the menu shows it by): kept in the controller's
     // state; the editor is built again in it at the next tick (now: at once).
     void setLayout (const std::string& text, const std::string& name, bool now = false);
-    // The Layout sub-menu at the end of a menu (after a separator): Default, Wide, the saved layouts, Save
+    // The Layout sub-menu at the end of a menu (after a separator): Wide, Classic, the saved layouts, Save
     // Layout As..., Use as Default Layout, Delete Layout. Its entries act by themselves: a menu's callback
     // must ignore picks from sub-menus (pickedInSubMenu).
     void addLayoutMenu (VSTGUI::COptionMenu* menu);
@@ -107,7 +111,7 @@ public:
     // What an arranged build could not place (views of the root in no panel's region, named with their
     // rectangles): empty when every view went to a block. The draw benchmark's layout check fails on it.
     const std::vector<std::string>& layoutProblems () const { return problems; }
-    // The blocks now (panel id and rectangle in the root's coordinates; none in the Default layout).
+    // The blocks now (panel id and rectangle in the root's coordinates; none in the Classic layout).
     std::vector<std::pair<std::string, VSTGUI::CRect>> layoutBlocks () const;
 
     // The window size including the info strip, at 100 %.
@@ -158,7 +162,7 @@ protected:
     virtual void onClose () {}
 
     ControllerBase* controller;
-    const double madeWidth, madeHeight; // the plug-in's own content as it builds it (the Default layout)
+    const double madeWidth, madeHeight; // the plug-in's own content as it builds it (the Classic layout)
     double fullContentHeight;           // the content's height in this layout, every section open
     double contentHeight;               // its height now (where the info strip starts; less while a section is folded)
     double baseWidth;                   // the whole window at 100 %, the info strip included
@@ -196,15 +200,27 @@ private:
     void promptLayoutName ();
 
     layout::Spec spec;               // the editor's panels (as built for this layout)
-    layout::Arrangement arrangement; // empty: the Default layout
+    layout::Arrangement arrangement; // empty: the Classic layout
     layout::Geometry geometry;       // where the blocks are now
+    std::map<std::string, layout::Box> regions; // each panel's region as built now (a filling panel's at its block's width)
+    const layout::Box& regionOf (const layout::Panel& p) const;
     bool arranged = false;
     bool resolved = false;           // spec and size known for controller->uiLayout (getSize, open)
     bool building = false;           // inside buildUI: a section folding only records its height
     bool detached = false;           // openDetached: no window to ask for a size
     std::string appliedLayout;       // the layout text the frame was built in
+    bool rebuildPending = false;     // built again at the next tick (a filling panel's block changed width)
     double foldedBy = 0;             // how much shorter the last section is now (folded) than built
     std::vector<PanelBox*> boxes;    // owned by the root view
+    // A block whose whole content is one pk::Panel (its rectangle the panel's region): the panel grows to
+    // fill the block under its strip, its children kept where they are (centred) by its transform.
+    struct Framed
+    {
+        PanelBox* box;
+        Panel* panel;
+        VSTGUI::CRect built; // the panel's rectangle as built
+    };
+    std::vector<Framed> framed;
     std::vector<VSTGUI::CView*> overlays;                              // views over the whole content (smemplr's modulation rings)
     std::vector<std::pair<VSTGUI::CView*, VSTGUI::CRect>> headerRight; // header controls at the right, as built
     DropMark* dropMark = nullptr;

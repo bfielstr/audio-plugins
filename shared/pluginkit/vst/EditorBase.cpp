@@ -132,7 +132,7 @@ bool EditorBase::resizeBase (double w, double contentH, bool keepIfRefused)
     baseHeight = contentH + kInfoHeight;
     if (detached)
     {
-        // (the draw benchmark's frame: no window, the frame itself takes the size; the Default's is the
+        // (the draw benchmark's frame: no window, the frame itself takes the size; the Classic one's is the
         // size openDetached gives it, every section open, so it draws as it did before)
         if (frame)
             frame->setSize ((arranged ? baseWidth : madeWidth) * frame->getZoom (),
@@ -215,6 +215,7 @@ void PLUGIN_API EditorBase::close ()
         hoverWatch.hovered = nullptr;
         info = nullptr;
         boxes.clear ();
+        framed.clear ();
         overlays.clear ();
         headerRight.clear ();
         dropMark = nullptr;
@@ -340,8 +341,11 @@ CMessageResult EditorBase::notify (CBaseObject* sender, const char* message)
     if (message == CVSTGUITimer::kMsgTimer && frame)
     {
         // another layout picked (the menu, a project loaded): built again in it, between two ticks
-        if (!building && appliedLayout != controller->uiLayout)
+        if (!building && (rebuildPending || appliedLayout != controller->uiLayout))
+        {
+            rebuildPending = false;
             relayout ();
+        }
         idle ();
         controller->checkLatency ();
     }
@@ -428,14 +432,14 @@ std::string lowerText (std::string s)
 
 void EditorBase::resolveLayout ()
 {
-    // The Default layout is the editor as it builds itself: nothing is moved, so it is what it was before
-    // layouts, pixel for pixel. Any other is an arrangement of the editor's panels (none: Default).
+    // The Classic layout is the editor as it builds itself: nothing is moved, so it is what it was before
+    // layouts, pixel for pixel. Any other is an arrangement of the editor's panels (none: Classic).
     resolved = true;
     appliedLayout = controller->uiLayout;
     arranged = false;
     arrangement = {};
     spec = {};
-    if (!layout::isDefault (appliedLayout))
+    if (!layout::isClassic (appliedLayout))
     {
         spec = layoutSpec (true);
         if (spec.width <= 0)
@@ -449,10 +453,34 @@ void EditorBase::resolveLayout ()
     }
     foldedBy = 0;
     geometry = arranged ? layout::place (spec, arrangement) : layout::Geometry {};
+    // the regions the build will have: a filling panel's as wide as its block's content
+    regions.clear ();
+    for (const auto& p : spec.panels)
+    {
+        layout::Box r = p.region;
+        if (const layout::Block* b = arranged && p.fill ? geometry.find (p.id) : nullptr)
+            r.right = r.left + b->content.width ();
+        regions[p.id] = r;
+    }
     baseWidth = arranged ? geometry.width : madeWidth;
     fullContentHeight = arranged ? geometry.height : madeHeight;
     contentHeight = fullContentHeight;
     baseHeight = contentHeight + kInfoHeight;
+}
+
+const layout::Box& EditorBase::regionOf (const layout::Panel& p) const
+{
+    auto it = regions.find (p.id);
+    return it != regions.end () ? it->second : p.region;
+}
+
+CRect EditorBase::layoutRegion (const std::string& id, const CRect& built) const
+{
+    CRect r = built;
+    if (const layout::Panel* p = arranged ? spec.find (id) : nullptr)
+        if (p->fill)
+            r.right = r.left + regionOf (*p).width () + (built.getWidth () - p->region.width ());
+    return r;
 }
 
 std::map<std::string, double> EditorBase::foldHeights () const
@@ -504,7 +532,7 @@ void EditorBase::arrangeViews ()
         }
         PanelBox* to = nullptr;
         for (auto* box : boxes)
-            if (r.isEmpty () ? box->panelId () == spec.fallback : inside (r, spec.find (box->panelId ())->region))
+            if (r.isEmpty () ? box->panelId () == spec.fallback : inside (r, regionOf (*spec.find (box->panelId ()))))
             {
                 to = box;
                 break;
@@ -516,6 +544,23 @@ void EditorBase::arrangeViews ()
         }
         root->removeView (v, false); // (the reference the root adopted goes over to the block)
         to->addView (v);
+    }
+    // the blocks whose content is one panel (it grows to fill the block: placeBlocks)
+    for (auto* box : boxes)
+    {
+        const layout::Box& g = regionOf (*spec.find (box->panelId ()));
+        Panel* only = nullptr;
+        int count = 0;
+        box->forEachChild ([&] (CView* v) {
+            ++count;
+            const CRect r = v->getViewSize ();
+            if (auto* p = dynamic_cast<Panel*> (v))
+                if (std::fabs (r.left - g.left) <= 1 && std::fabs (r.top - g.top) <= 1 && std::fabs (r.right - g.right) <= 1 &&
+                    std::fabs (r.bottom - g.bottom) <= 1)
+                    only = p;
+        });
+        if (only && count == 1)
+            framed.push_back ({box, only, only->getViewSize ()});
     }
     for (auto* box : boxes)
         root->addView (box);
@@ -532,7 +577,24 @@ void EditorBase::placeBlocks ()
     for (auto* box : boxes)
         if (const layout::Block* b = geometry.find (box->panelId ()))
             if (const layout::Panel* p = spec.find (b->id))
-                box->place (toRect (b->box), toRect (p->region), toRect (b->content));
+                box->place (toRect (b->box), toRect (regionOf (*p)), toRect (b->content));
+    // a block's only panel fills the block under its strip: as much larger on each side as the block is
+    // larger than the content there (in the build's coordinates), its children moved back by its transform
+    for (const auto& f : framed)
+        if (const layout::Block* b = geometry.find (f.box->panelId ()))
+        {
+            const double l = b->content.left - b->box.left, t = b->content.top - (b->box.top + layout::kStrip);
+            const double r = b->box.right - b->content.right, bt = b->box.bottom - b->content.bottom;
+            const CRect grown (f.built.left - l, f.built.top - t, f.built.right + r, f.built.bottom + bt);
+            if (f.panel->getViewSize () != grown)
+            {
+                f.panel->invalid ();
+                f.panel->setViewSize (grown);
+                f.panel->setMouseableArea (grown);
+            }
+            f.panel->setTransform (CGraphicsTransform ().translate (l, t));
+            f.panel->invalid ();
+        }
     const double dx = geometry.width - madeWidth;
     for (auto& [v, built] : headerRight)
     {
@@ -573,6 +635,7 @@ void EditorBase::relayout ()
     hoverWatch.hovered = nullptr;
     info = nullptr;
     boxes.clear ();
+    framed.clear ();
     overlays.clear ();
     headerRight.clear ();
     dropMark = nullptr;
@@ -583,7 +646,7 @@ void EditorBase::relayout ()
     buildContent ();
     prepareTooltips (frame);
     frame->enableTooltips (controller->uiShowTips, 600);
-    // (refused: an arranged layout is zoomed to fit the window; the Default keeps its full content
+    // (refused: an arranged layout is zoomed to fit the window; the Classic one keeps its full content
     // height, as open () leaves it, with a folded section's space empty)
     if (!resizeBase (baseWidth, contentHeight, arranged) && !arranged)
     {
@@ -627,7 +690,14 @@ void EditorBase::commitArrangement (const layout::Arrangement& a, bool keep)
     if (layout::resolve (spec, controller->uiLayout) == arrangement)
         text = controller->uiLayout, name = controller->uiLayoutName; // (dropped where it was)
     setLayout (text, name);
-    appliedLayout = controller->uiLayout; // (the frame shows it already: nothing to build again)
+    // the frame shows it already, but a filling panel built at another width than its block has now is
+    // built again at the new one (everything is: the editor builds as one)
+    bool rebuild = false;
+    for (const auto& p : spec.panels)
+        if (const layout::Block* b = p.fill ? geometry.find (p.id) : nullptr)
+            rebuild = rebuild || std::fabs (b->content.width () - regionOf (p).width ()) > 0.5;
+    appliedLayout = controller->uiLayout;
+    rebuildPending = rebuildPending || rebuild; // (at the next tick: this runs in a block's mouse event)
 }
 
 void EditorBase::blockDragged (PanelBox* box, CPoint where, bool drop)
@@ -691,7 +761,7 @@ CPoint EditorBase::layoutPoint (CPoint p) const
     for (const auto& b : geometry.blocks)
         if (const layout::Panel* panel = spec.find (b.id))
         {
-            const layout::Box& g = panel->region;
+            const layout::Box& g = regionOf (*panel);
             if (p.x >= g.left && p.x <= g.right && p.y >= g.top && p.y <= g.bottom)
                 return CPoint (p.x - g.left + b.content.left, p.y - g.top + b.content.top);
         }
@@ -708,7 +778,7 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
 {
     if (!menu || layoutSpec (true).empty ())
         return;
-    // Default and Wide, the saved layouts, then the commands. Each entry does its own work when picked
+    // Wide and Classic, the saved layouts, then the commands. Each entry does its own work when picked
     // (a command item); the layout changes at the next tick (the menu's button is built again with it).
     const layout::Saved saved = controller->savedLayouts ();
     const std::string now = controller->uiLayout, name = controller->uiLayoutName;
@@ -727,21 +797,26 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
     for (const auto& n : saved.layouts)
         if (n.name == name && n.layout == now)
             savedNow = &n;
-    const bool isDefault = !savedNow && layout::isDefault (now), isWide = !savedNow && lowerText (now) == "wide";
-    add (sub, "Default", [this] { setLayout ("", "Default"); }, isDefault);
+    // (Classic: the fixed layout every editor had before layouts, called Default then; written as
+    // "default", which 0.14 reads as its Default too)
+    const bool isClassic = !savedNow && layout::isClassic (now), isWide = !savedNow && lowerText (now) == "wide";
     add (sub, "Wide", [this] { setLayout ("wide", "Wide"); }, isWide);
+    add (sub, "Classic", [this] { setLayout (layout::kClassicText, "Classic"); }, isClassic);
     if (!saved.layouts.empty ())
         sub->addSeparator ();
     for (const auto& n : saved.layouts)
         add (sub, n.name, [this, n] { setLayout (n.layout, n.name); }, savedNow == &n);
-    if (!savedNow && !isDefault && !isWide)
+    if (!savedNow && !isClassic && !isWide)
         add (sub, "Custom (not saved)", {}, true, false);
     sub->addSeparator ();
     add (sub, "Save Layout As...", [this] { promptLayoutName (); });
-    const bool isTheDefault = saved.hasDefault ? saved.defaultLayout == now : layout::isDefault (now);
+    auto same = [] (const std::string& a, const std::string& b) {
+        return a == b || (layout::isClassic (a) && layout::isClassic (b)) || (lowerText (a) == "wide" && lowerText (b) == "wide");
+    };
+    const bool isTheDefault = same (saved.hasDefault ? saved.defaultLayout : std::string (layout::kDefaultLayout), now);
     add (sub, "Use as Default Layout", [this] {
         layout::Saved s = controller->savedLayouts ();
-        s.defaultLayout = controller->uiLayout;
+        s.defaultLayout = layout::isClassic (controller->uiLayout) ? std::string (layout::kClassicText) : controller->uiLayout;
         s.hasDefault = true;
         controller->writeSavedLayouts (s);
     },
@@ -775,9 +850,9 @@ void EditorBase::promptLayoutName ()
         while (!n.empty () && std::isspace ((unsigned char)n.front ()))
             n.erase (n.begin ());
         if (!layout::validName (n))
-            return "Give it a name of its own (not Default or Wide, no \"=\").";
+            return "Give it a name of its own (not Classic, Default or Wide, no \"=\").";
         layout::Saved s = controller->savedLayouts ();
-        s.put (n, layout::isDefault (controller->uiLayout) ? "default" : controller->uiLayout);
+        s.put (n, layout::isClassic (controller->uiLayout) ? std::string (layout::kClassicText) : controller->uiLayout);
         if (!controller->writeSavedLayouts (s))
             return "The layout could not be saved in the presets folder.";
         setLayout (s.find (n)->layout, s.find (n)->name);

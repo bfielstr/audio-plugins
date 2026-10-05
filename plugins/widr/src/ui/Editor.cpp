@@ -114,7 +114,7 @@ void Editor::buildUI (CFrame* f)
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
                                                     [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-    tail->add (root, CRect (8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -187,7 +187,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"levels", "levels", {8, 556, 752, 596}, 0, 0},
         {"space", "", {8, 440, 376, 548}, 0, 1},
         {"mix", "", {384, 440, 752, 548}, 0, 1},
-        {"tail", "end of the chain", {8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

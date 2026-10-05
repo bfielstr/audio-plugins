@@ -144,7 +144,7 @@ void Editor::buildUI (CFrame* f)
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;
         });
-    tail->add (root, CRect (8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     showBand (shown);
@@ -246,7 +246,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"display", "bands", {8, 40, 892, 250}, 0},
         {"shapes", "shapes", {8, 258, 592, 440}, 0},
         {"controls", "band", {600, 258, 892, 414}, 0},
-        {"tail", "end of the chain", {8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }
