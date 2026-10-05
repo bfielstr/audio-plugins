@@ -32,6 +32,8 @@ enum ParamId : uint32_t
     kGrainDensity, // x: how many grains of an orb overlap (its grains per second x the grain's length)
     kGrainScatter, // 0 .. 1: how far each grain's slice of the input jumps about (and its start in time)
     kGrainPitch,   // semitones: the grains' own transposition (before the orb's Doppler)
+    // after the grains (their IDs are in saved projects)
+    kAngle, // degrees: where the swarm's centre is round the listener (0 ahead, + right, +-180 behind)
     kNumParams
 };
 
@@ -40,8 +42,8 @@ static_assert (kPattern == 1 && kSpeed == 2 && kDistance == 3 && kRadius == 4 &&
                    kMix == 8 && kDryWet == 9 && kOutput == 10 && kTailBase == 11,
                "Orbitr's parameter IDs are fixed");
 static_assert (kTailExt4Base == 49 && kGrains == 54 && kGrainSize == 55 && kGrainDensity == 56 && kGrainScatter == 57 &&
-                   kGrainPitch == 58 && kNumParams == 59,
-               "saved IDs: the end saturator's fifth block at 49 .. 53, Grains at 54 .. 58");
+                   kGrainPitch == 58 && kAngle == 59 && kNumParams == 60,
+               "saved IDs: the end saturator's fifth block at 49 .. 53, Grains at 54 .. 58, Angle at 59");
 
 enum Pattern { kPatternOrbit = 0, kPatternSwarm };
 

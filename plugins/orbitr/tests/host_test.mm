@@ -1,4 +1,5 @@
 // End-to-end test of the built Orbitr.vst3. usage: orbitr_hosttest <Orbitr.vst3> <output dir>
+#include "OrbGeometry.h"
 #include "Params.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
@@ -29,6 +30,9 @@ static State baseState ()
 }
 
 static double plainOf (Rig& rig, uint32_t id) { return toPlain (id, rig.controller->getParamNormalized (id)); }
+
+// the display's place in the editor (Editor::buildUI): left, top, right, bottom
+constexpr double kDisplay[4] = {8.0, 40.0, 752.0, 290.0};
 
 static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
 {
@@ -139,6 +143,58 @@ int main (int argc, char** argv)
                 pump (0.03);
             }
             CHECK (win.savePng (outDir + "/ui_orbitr.png"), "screenshot");
+
+            // the display: drag the ball 2 m right and 1 m up (Distance and Angle follow), double-click it
+            // (back to 3 m ahead), drag the listener (the ball moves the other way relative to it), and a
+            // Shift drag (fine). Its mapping is the one OrbView fits (core/OrbGeometry.h), in the display's
+            // place in the editor (Editor::buildUI)
+            auto mapNow = [&] {
+                return geo::fit (kDisplay[0], kDisplay[1], kDisplay[2], kDisplay[3], {plainOf (rig, kDistance), plainOf (rig, kAngle)},
+                                 plainOf (rig, kRadius));
+            };
+            auto ballAt = [&] (const geo::Map& m) {
+                const geo::Point c = geo::centreOf ({plainOf (rig, kDistance), plainOf (rig, kAngle)});
+                return geo::Point {m.px (c.x), m.py (c.y)};
+            };
+            {
+                const geo::Map m = mapNow ();
+                const geo::Point b = ballAt (m);
+                win.drag (b.x, b.y, b.x + 2.0 * m.scale, b.y - 1.0 * m.scale);
+                pump (0.05);
+                const double d = plainOf (rig, kDistance), a = plainOf (rig, kAngle);
+                CHECK (std::fabs (d - std::sqrt (20.0)) < 0.05 && std::fabs (a - std::atan2 (2.0, 4.0) * 180.0 / M_PI) < 1.0,
+                       "the ball dragged right and up: %.2f m, %.1f degrees", d, a);
+            }
+            {
+                const geo::Point b = ballAt (mapNow ()); // (the view fitted again after the drag)
+                win.click (b.x, b.y, 2);
+                pump (0.05);
+                CHECK (std::fabs (plainOf (rig, kDistance) - 3.0) < 1e-3 && std::fabs (plainOf (rig, kAngle)) < 1e-3,
+                       "double-click: %.2f m, %.1f degrees", plainOf (rig, kDistance), plainOf (rig, kAngle));
+            }
+            {
+                const geo::Map m = mapNow ();
+                win.drag (m.ox, m.oy, m.ox + 1.0 * m.scale, m.oy);
+                pump (0.05);
+                const double d = plainOf (rig, kDistance), a = plainOf (rig, kAngle);
+                CHECK (std::fabs (d - std::sqrt (10.0)) < 0.05 && std::fabs (a + std::atan2 (1.0, 3.0) * 180.0 / M_PI) < 1.0,
+                       "the listener dragged right: the ball %.2f m, %.1f degrees (to the left)", d, a);
+                const geo::Point b = ballAt (mapNow ());
+                win.click (b.x, b.y, 2);
+                pump (0.05);
+            }
+            {
+                const geo::Map m = mapNow ();
+                const geo::Point b = ballAt (m);
+                win.drag (b.x, b.y, b.x + 2.0 * m.scale, b.y, kShift);
+                pump (0.05);
+                const double a = plainOf (rig, kAngle), coarse = std::atan2 (2.0, 3.0) * 180.0 / M_PI;
+                CHECK (a > 1.0 && a < 0.4 * coarse, "a Shift drag is fine: %.1f degrees (%.1f without Shift)", a, coarse);
+                const geo::Point back = ballAt (mapNow ());
+                win.click (back.x, back.y, 2);
+                pump (0.05);
+                CHECK (std::fabs (plainOf (rig, kAngle)) < 1e-3, "reset again");
+            }
         }
         rig.stop ();
         return finish ("orbitr host test");

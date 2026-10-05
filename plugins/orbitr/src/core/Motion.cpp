@@ -92,6 +92,9 @@ void Motion::reset ()
     dry.reset ();
     dSm = distance;
     rSm = radius;
+    aSm = angle;
+    aSin = std::sin (aSm);
+    aCos = std::cos (aSm);
     Lcg rng {0x9E3779B9u};
     for (int k = 0; k < kMaxOrbs; ++k)
     {
@@ -118,6 +121,18 @@ void Motion::setOrbs (int n) { numOrbs = std::clamp (n, 1, kMaxOrbs); }
 void Motion::setPattern (int p) { pattern = p == kOrbit ? kOrbit : kSwarm; }
 void Motion::setSpeed (double v) { speed = std::clamp (v, 0.0, 100.0); }
 void Motion::setRandomness (double r) { randomness = std::clamp (r, 0.0, 1.0); }
+
+void Motion::setAngle (double degrees)
+{
+    if (!std::isfinite (degrees))
+        return;
+    double a = std::fmod (degrees, 360.0);
+    if (a > 180.0)
+        a -= 360.0;
+    else if (a < -180.0)
+        a += 360.0;
+    angle = a * dsp::kPi / 180.0;
+}
 
 void Motion::updateRates ()
 {
@@ -168,7 +183,9 @@ Motion::Vec Motion::position (int k, double ago) const
         p.y = v[1];
         p.z = v[2];
     }
-    p.y += dSm;
+    // the centre (at Angle 0: aSin 0, aCos 1, so exactly x + 0 and y + dSm, as before Angle)
+    p.x += dSm * aSin;
+    p.y += dSm * aCos;
     return p;
 }
 
@@ -176,6 +193,14 @@ void Motion::retarget ()
 {
     dSm += (distance - dSm) * smooth;
     rSm += (radius - rSm) * smooth;
+    if (aSm != angle) // (glides the shorter way round; left alone at rest, so Angle 0 stays exactly 0)
+    {
+        aSm = std::remainder (aSm + std::remainder (angle - aSm, 2.0 * dsp::kPi) * smooth, 2.0 * dsp::kPi);
+        if (std::fabs (std::remainder (angle - aSm, 2.0 * dsp::kPi)) < 1e-9)
+            aSm = angle;
+        aSin = std::sin (aSm);
+        aCos = std::cos (aSm);
+    }
     // a tap whose gain ramped to nothing stops
     for (auto& t : taps)
         for (auto& tap : t)

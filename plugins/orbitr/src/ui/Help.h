@@ -11,7 +11,10 @@ inline const char* forParam (uint32_t id)
         case kOrbs: return "How many moving sources play the sound.";
         case kPattern: return "Orbit: the orbs circle round the centre. Swarm: each wanders on its own smooth path.";
         case kSpeed: return "How fast the orbs move (m/s): the faster, the bigger the Doppler pitch shifts.";
-        case kDistance: return "How far ahead of you the swarm's centre is (m).";
+        case kDistance: return "How far from you the swarm's centre is (m). Drag the ball in the display to move it.";
+        case kAngle:
+            return "Where the swarm is round you: 0 straight ahead, negative to the left, positive to the right, 180 behind. "
+                   "Drag the ball (or yourself) in the display to move it.";
         case kRadius: return "How far from the centre the orbs move (m).";
         case kSpread: return "How wide the orbs spread across the stereo field.";
         case kRandom: return "How much the orbs differ: their speeds, sizes and tilts (orbit), or their paths' rates (swarm).";
@@ -35,7 +38,8 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kOrbView =
-    "The orbs seen from above: you at the bottom, facing up, the swarm's ball ahead at the Distance. Rings every metre "
-    "(every 5 m when far). With Grains on, each orb swells with its grains.";
+    "The orbs seen from above: you facing up, the swarm's ball at its Distance and Angle, rings every metre (every 5 m "
+    "when far). Drag the ball, or yourself, to move the swarm round you (Shift: fine); double-click to bring it back "
+    "ahead at 3 m; the mouse wheel over it sets the Distance. With Grains on, each orb swells with its grains.";
 
 } // namespace orbitr::help

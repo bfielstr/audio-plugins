@@ -63,6 +63,7 @@ void Engine::applyMotion (uint32_t id, double v)
         case kGrainDensity: motion.setGrainDensity (v); break;
         case kGrainScatter: motion.setGrainScatter (v); break;
         case kGrainPitch: motion.setGrainPitch (v); break;
+        case kAngle: motion.setAngle (v); break;
         default: break;
     }
 }
@@ -127,6 +128,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         meters->distance.store ((float)motion.currentDistance (), rx);
         meters->radius.store ((float)motion.currentRadius (), rx);
+        meters->angle.store ((float)motion.currentAngle (), rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
     tail.process (yl, yr, n);
