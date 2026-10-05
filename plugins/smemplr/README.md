@@ -238,6 +238,23 @@ loading one loads its sample, and so does a saved default (a new smemplr then st
 sample, if the file is still there). **Init** and the factory presets set the controls only and
 clear the LFO mappings; the loaded sample stays.
 
+## Layouts
+
+**Menu > Layout** switches between the **Default** layout (the window as it has always been: the
+modulation column at the right, the rack under the instrument) and **Wide**, two long rows for a
+DAW's device area:
+
+- the instrument: the waveform over the sample row, then the filter, the envelopes, the LFO and the
+  global controls;
+- the effects and the modulation: the effects rack, the output scope, the four modulation LFOs (two by
+  two) and the list of their mappings.
+
+Each section is a block with a title strip. In Wide (or a layout of your own) drag a block by its strip
+to put it somewhere else, and drag its right edge to widen it; **Save Layout As...** keeps the result
+under a name, and **Use as Default Layout** makes every new smemplr open in it. The layout is saved
+with the project; presets do not change it. Dragging an LFO onto a control works the same in every
+layout. The [top-level README](../../README.md#layouts) describes the menu.
+
 ## Notes and limits
 
 - The warp algorithms are smemplr's own. They are tempo-accurate and tested. Manual warp markers are

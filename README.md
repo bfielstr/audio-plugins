@@ -45,6 +45,11 @@ licensed. The current version is **0.13.0**.
   info box is always there.
 - **Free resizing.** Drag the window corner to any shape. The interface keeps its proportions, zoomed
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
+- **Layouts.** **Menu > Layout** picks how the window is laid out: **Default** (the layout it always
+  had) or **Wide**, a long, short strip for a DAW's device area, with the sections side by side as
+  titled blocks and stacked in rows by purpose (see [Layouts](#layouts) below). In Wide, or a layout
+  of your own, drag a block by its title strip to move it and drag its right edge to make it wider, then
+  save the result under a name.
 - **Reset and fine control.** A right click (or a double-click) on a control or a display handle puts
   it back to its default. Hold Shift while dragging for fine steps. The mouse wheel on a filter handle,
   while you hold it or with Shift over it, sets its resonance.
@@ -156,6 +161,35 @@ They live in
 
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
+
+## Layouts
+
+Every plug-in has a **Layout** sub-menu in its **Menu**:
+
+- **Default**: the layout the plug-in has always had. A new instance and every project saved before
+  layouts open in it.
+- **Wide**: the same controls as titled blocks side by side, so the window is wide and short, like a
+  device in Live's device view. Blocks are stacked in rows by purpose: for most plug-ins the display and
+  the plug-in's own controls in the first row and smacheratr at the end of the chain in a row under it.
+  smemplr has two rows: the instrument (waveform, sample, filter, envelopes, LFO, global) and then the
+  effects rack, the output, the modulation LFOs and their mappings.
+- Your **saved layouts**, by name.
+- **Save Layout As...** stores the layout you have now under a name (saving under a name that exists
+  replaces it). **Use as Default Layout** makes every new instance open in it. **Delete Layout** removes a
+  saved one.
+
+In Wide or a saved layout, each block has a title strip with a grip at its left. Drag the strip to move
+the block: a cinnabar line shows where it will land, beside another block, above or below one (they
+then share a column), or in a row of its own above or below the others. Drag a block's right edge to
+make its column wider (up to twice its width; the block's controls stay centred in it). A layout you
+change this way shows as **Custom (not saved)** until you save it.
+
+The window takes the layout's shape at the size it shows. If the host keeps the window as it is, the
+interface is zoomed to fit inside it, so every control is still there. The layout you pick is saved
+with the project. Loading a preset does not change it.
+
+Saved layouts and the default layout are kept in `.layouts.txt` in the plug-in's preset folder (see
+the table above), one `name = layout` per line.
 
 The factory presets are text files in `plugins/<plug-in>/presets/<category>/` in the source, built
 into the plug-in. Each line sets one control by its name, as the plug-in shows its value (for example
