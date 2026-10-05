@@ -114,6 +114,8 @@ namespace {
 // The view state's tag in the controller's state, then a count and that many values (uiTailOpen,
 // uiColorLayer): a reader takes the ones it knows.
 constexpr int32 kViewStateTag = 0x56575354; // 'VWST'
+// The editor's layout after it, tagged: its text and its name (uiLayout, uiLayoutName; 0.14).
+constexpr int32 kLayoutTag = 0x4c594f54; // 'LYOT'
 } // namespace
 
 tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
@@ -166,6 +168,22 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
         uiTailOpen = values[0] < 0 ? -1 : values[0] & (kTailOpenSaturator | kTailOpenGentlr);
         uiColorLayer = values[1] == 1 ? 1 : 0;
     }
+    // the layout after that, tagged (a state from before layouts: the Default layout, as it was then)
+    uiLayout.clear ();
+    uiLayoutName.clear ();
+    if (s.readInt32 (tag) && tag == kLayoutTag)
+    {
+        if (char8* text = s.readStr8 ())
+        {
+            uiLayout = text;
+            delete[] text;
+        }
+        if (char8* name = s.readStr8 ())
+        {
+            uiLayoutName = name;
+            delete[] name;
+        }
+    }
     refreshEditor ();
     return kResultOk;
 }
@@ -180,7 +198,8 @@ tresult PLUGIN_API ControllerBase::getState (IBStream* stream)
     const std::string ref = std::to_string ((int)currentKind) + ":" + currentPath;
     return s.writeDouble (uiScale) && s.writeBool (uiShowTips) && s.writeStr8 (presetTitle.c_str ()) &&
                    s.writeStr8 (ref.c_str ()) && s.writeInt32 (kViewStateTag) && s.writeInt32 (2) &&
-                   s.writeInt32 (uiTailOpen) && s.writeInt32 (uiColorLayer)
+                   s.writeInt32 (uiTailOpen) && s.writeInt32 (uiColorLayer) && s.writeInt32 (kLayoutTag) &&
+                   s.writeStr8 (uiLayout.c_str ()) && s.writeStr8 (uiLayoutName.c_str ())
                ? kResultOk
                : kResultFalse;
 }
@@ -233,6 +252,10 @@ void ControllerBase::setPresetInfo (const FUID& processorClassId, const char* pl
     presetPlugin = pluginName ? pluginName : "";
     presetFormer = formerName ? formerName : "";
 }
+
+layout::Saved ControllerBase::savedLayouts () const { return layout::readSaved (presetFolder ()); }
+
+bool ControllerBase::writeSavedLayouts (const layout::Saved& s) const { return layout::writeSaved (presetFolder (), s); }
 
 std::string ControllerBase::presetFolder () const
 {
@@ -305,8 +328,12 @@ bool ControllerBase::loadPreset (const std::string& path)
     }
     if (!controllerState.empty ())
     {
+        // (the preset's editor state, but the layout the editor has now: a preset does not rearrange it)
+        const std::string layoutNow = uiLayout, layoutName = uiLayoutName;
         MemoryStream ms (controllerState.data (), (TSize)controllerState.size ());
         setState (&ms);
+        uiLayout = layoutNow;
+        uiLayoutName = layoutName;
     }
     if (path == defaultPath ())
     {
@@ -538,6 +565,20 @@ bool ControllerBase::resetDefault ()
 
 void ControllerBase::applyStartupDefault ()
 {
+    // the user's default layout (Menu > Layout > Use as Default Layout), then the saved default preset's
+    // settings (which keep it, as every preset does)
+    if (const layout::Saved saved = savedLayouts (); saved.hasDefault)
+    {
+        uiLayout = saved.defaultLayout;
+        uiLayoutName.clear ();
+        for (const auto& n : saved.layouts)
+            if (n.layout == uiLayout)
+                uiLayoutName = n.name;
+        if (layout::isDefault (uiLayout))
+            uiLayoutName = "Default";
+        else if (uiLayout == "wide")
+            uiLayoutName = "Wide";
+    }
     if (!presetClassId.isValid () || !hasDefault ())
         return;
     std::vector<char> component, controllerState;
@@ -548,8 +589,11 @@ void ControllerBase::applyStartupDefault ()
         return;
     if (!controllerState.empty ())
     {
+        const std::string layoutNow = uiLayout, layoutName = uiLayoutName;
         MemoryStream cs (controllerState.data (), (TSize)controllerState.size ());
         setState (&cs);
+        uiLayout = layoutNow;
+        uiLayoutName = layoutName;
     }
     currentKind = presets::Kind::Default;
     currentPath.clear ();
@@ -638,6 +682,33 @@ tresult PLUGIN_API ControllerBase::notify (IMessage* message)
             }
         }
         pendingSavePath.clear ();
+        return kResultOk;
+    }
+    if (std::strcmp (id, kMsgSetLayout) == 0)
+    {
+        auto text = [&] (const char* attr) {
+            const void* data = nullptr;
+            uint32 size = 0;
+            return message->getAttributes ()->getBinary (attr, data, size) == kResultOk && data ? std::string ((const char*)data, size)
+                                                                                               : std::string ();
+        };
+        uiLayout = text ("text");
+        uiLayoutName = text ("name");
+        markDirty ();
+        for (auto* e : editors)
+            e->setLayout (uiLayout, uiLayoutName, true);
+        return kResultOk;
+    }
+    if (std::strcmp (id, kMsgFindControl) == 0)
+    {
+        int64 param = -1;
+        VSTGUI::CRect r;
+        if (message->getAttributes ()->getInt ("id", param) == kResultOk && param >= 0 && !editors.empty () &&
+            editors.front ()->findControl ((uint32_t)param, r))
+        {
+            const double v[4] = {r.left, r.top, r.right, r.bottom};
+            message->getAttributes ()->setBinary ("rect", v, sizeof (v));
+        }
         return kResultOk;
     }
     if (std::strcmp (id, presets::kMsgMenu) == 0)

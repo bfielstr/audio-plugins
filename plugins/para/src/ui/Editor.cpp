@@ -84,7 +84,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
+    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (672, 28))); }));
 
     // the gains, the display's handles and the locks go through lockHost: a locked gain stops at 0 dB
     GainLockHost* lh = lockHost.get ();
@@ -197,13 +197,31 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the response, the two filters, the split over the output; the end saturator under them
+    s.panels = {
+        {"display", "response", {8, 40, 752, 290}, 0},
+        {"highpass", "", {8, kRow1Top, 190, kRow1Bottom}, 0},
+        {"lowpass", "", {196, kRow1Top, 378, kRow1Bottom}, 0},
+        {"split", "", {384, kRow1Top, 752, kRow1Bottom}, 0, 0},
+        {"output", "", {8, kRow2Top, 752, kRow2Top + 102}, 0, 0},
+        {"tail", "end of the chain", {8, 536, 752, 536 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace para

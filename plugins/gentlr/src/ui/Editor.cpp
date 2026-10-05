@@ -137,7 +137,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide these help tooltips.");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (1072, 6, 1152, 28), "Menu", [this] { showMenu (CPoint (1072, 28)); }));
+    root->addView (new ActionButton (CRect (1072, 6, 1152, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (1072, 28))); }));
     // the bands' Slope (bands 1 and 2, both at once), in the header, left of the presets (over the
     // detector's column)
     root->addView (new Label (CRect (kSlopeLeft - 72, 6, kSlopeLeft - 6, 28), "Band Slope", 10.5));
@@ -326,13 +326,32 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the band display (with its Threshold sliders), the bands' controls, the detector, Advanced and the
+    // output in a row; the end saturator under them
+    s.panels = {
+        {"display", "display", {kViewLeft, kViewTop, kViewRight, kViewBottom}, 0},
+        {"bands", "bands", {kViewLeft, kRowTop - 1, kHighLeft + kSubW, kRowTop + 88}, 0},
+        {"detector", "detector", {kHighLeft + kSubW + 8, kRowTop - 1, kHighLeft + kSubW + 128, kRowTop + 88}, 0},
+        {"advanced", "advanced", {kHighLeft + kSubW + 154, kRowTop - 1, kHighLeft + kSubW + 274, kRowTop + 88}, 0},
+        {"output", "output", {kNoOverlapLeft, kRowTop - 1, kViewRight, kRowTop + 88}, 0},
+        {"tail", "end of the chain", {kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace gentlr

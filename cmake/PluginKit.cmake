@@ -128,6 +128,9 @@ function(pk_add_draw_bench target)
     target_link_libraries(${bench} PRIVATE $<TARGET_PROPERTY:${target},LINK_LIBRARIES> sdk_hosting ${CMAKE_DL_LIBS})
     set_target_properties(${bench} PROPERTIES ENABLE_EXPORTS ON) # (dlopen (nullptr) finds the module's symbols)
     add_test(NAME ${bench} COMMAND ${bench} 10)
+    # the layouts (issue #11): Wide and a dragged arrangement place every panel once, with nothing
+    # overlapping, and Default after them draws as before
+    add_test(NAME ${bench}_layouts COMMAND ${bench} --check-layouts)
 endfunction()
 
 # pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...> INCLUDES <dirs...>)

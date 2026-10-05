@@ -66,7 +66,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
+    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (672, 28))); }));
 
     stage = new StageView (CRect (kStageLeft, kStageTop, kStageRight, kStageBottom), this, ctl);
     pk::setHelp (stage, "Stage", help::kStage);
@@ -164,13 +164,32 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the stage, the goniometer, the width over the levels, the space over the mix; the end saturator under them
+    s.panels = {
+        {"stage", "stage", {8, 40, 560, 300}, 0},
+        {"gonio", "goniometer", {568, 40, 752, 300}, 0},
+        {"width", "", {8, 308, 752, 432}, 0, 0},
+        {"levels", "levels", {8, 556, 752, 596}, 0, 0},
+        {"space", "", {8, 440, 376, 548}, 0, 1},
+        {"mix", "", {384, 440, 752, 548}, 0, 1},
+        {"tail", "end of the chain", {8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace widr

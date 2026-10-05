@@ -296,7 +296,12 @@ void PresetBar::showMenu ()
 
 void PresetBar::prompt (const std::string& title, std::vector<Field> fields, const std::string& okLabel, PromptOk onOk)
 {
-    auto* frame = getFrame ();
+    showPrompt (getFrame (), title, std::move (fields), okLabel, std::move (onOk));
+}
+
+void showPrompt (CFrame* frame, const std::string& title, std::vector<PresetBar::Field> fields, const std::string& okLabel,
+                 PresetBar::PromptOk onOk)
+{
     if (!frame || frame->getNbViews () == 0)
         return;
     // over the plug-in's root view (the window's content), the last child: drawn on top, gets the mouse

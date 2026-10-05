@@ -334,8 +334,7 @@ void Editor::buildUI (CFrame* f)
                                           [this] { return ctl->uiShowTips; }),
                         help::kHelpButton));
     root->addView (tip (new ActionButton (CRect (kWidth - 60, 6, kWidth - 8, 28), "Menu", [this] {
-                            CPoint p (kWidth - 60, 28);
-                            showMenu (p);
+                            showMenu (layoutPoint (CPoint (kWidth - 60, 28)));
                         }),
                         help::kMenu));
 
@@ -591,32 +590,48 @@ void Editor::buildUI (CFrame* f)
 
     // ---- the modulation (the column at the right): four LFOs, each with a handle to drag onto a control,
     // and the list of what they modulate ----
-    auto* mp = new Panel (CRect (kModLeft, 38, kWidth - 8, kFxPanelTop + 234), "MODULATION");
+    // In an arranged layout (Menu > Layout, other than the Default) the column is two panels instead, so
+    // the rows stay short: the LFOs two by two (MODULATION), and the list (MAPPINGS); each is a block of
+    // its own (layoutSpec). They are built right of the window as made, where nothing else is.
+    const bool split = arrangedLayout ();
+    auto* mp = new Panel (split ? CRect (kModLeft, 38, kModLeft + kModSplitW, 38 + kModSplitH) : CRect (kModLeft, 38, kWidth - 8, kFxPanelTop + 234),
+                          "MODULATION");
     root->addView (mp);
     modLive.clear ();
     for (int l = 0; l < kModLfos; ++l)
     {
-        const double y = 24 + l * 120;
-        if (l > 0)
+        const double y = split ? 24 + (l / 2) * 120 : 24 + l * 120;
+        const double x0 = split ? (l % 2) * 212.0 : 0.0; // (the LFO's controls are laid out from x 8 in its column)
+        if (split ? l >= 2 : l > 0)
         {
-            auto* line = new Group (CRect (8, y - 6, 204, y - 5));
+            auto* line = new Group (CRect (x0 + 8, y - 6, x0 + 204, y - 5));
             line->setBackgroundColor (theme::kLineDim);
             mp->addView (line);
         }
-        modLive.push_back (titled (new LfoHandle (CRect (8, y, 66, y + 40), l, this), "LFO", help::kLfoHandle));
+        auto at = [x0] (CRect r) { return r.offset (x0, 0); };
+        modLive.push_back (titled (new LfoHandle (at (CRect (8, y, 66, y + 40)), l, this), "LFO", help::kLfoHandle));
         mp->addView (modLive.back ());
-        bind (mp, new Choice (CRect (72, y, 204, y + 18), this, modLfoParam (l, kModShape)));
-        bind (mp, new Choice (CRect (72, y + 22, 140, y + 40), this, modLfoParam (l, kModSync)));
-        bind (mp, new Toggle (CRect (144, y + 22, 204, y + 40), this, modLfoParam (l, kModRetrig), "Retrig"));
-        modRateKnobs[(size_t)l] = bind (mp, new Knob (knobRect (8, y + 46), this, modLfoParam (l, kModRate)));
-        bind (mp, new Knob (knobRect (66, y + 46), this, modLfoParam (l, kModPhase)));
-        modLive.push_back (titled (new LfoScope (CRect (126, y + 50, 204, y + 104), l, this), "LFO Shape", help::kLfoScope));
+        bind (mp, new Choice (at (CRect (72, y, 204, y + 18)), this, modLfoParam (l, kModShape)));
+        bind (mp, new Choice (at (CRect (72, y + 22, 140, y + 40)), this, modLfoParam (l, kModSync)));
+        bind (mp, new Toggle (at (CRect (144, y + 22, 204, y + 40)), this, modLfoParam (l, kModRetrig), "Retrig"));
+        modRateKnobs[(size_t)l] = bind (mp, new Knob (at (knobRect (8, y + 46)), this, modLfoParam (l, kModRate)));
+        bind (mp, new Knob (at (knobRect (66, y + 46)), this, modLfoParam (l, kModPhase)));
+        modLive.push_back (titled (new LfoScope (at (CRect (126, y + 50, 204, y + 104)), l, this), "LFO Shape", help::kLfoScope));
         mp->addView (modLive.back ());
     }
-    mp->addView (new Label (CRect (8, 506, 204, 520), "MAPPINGS", 10.0, true));
-    modList = new ModList (CRect (8, 524, 204, 524 + kMaxModMappings * ModList::kRow), this);
+    CViewContainer* listPanel = mp; // the list's panel: the column's lower part, or its own
+    double listTop = 524;
+    if (split)
+    {
+        listPanel = new Panel (CRect (kModLeft, kMapTop, kModLeft + 212, kMapTop + kMapH), "MAPPINGS");
+        root->addView (listPanel);
+        listTop = 24;
+    }
+    else
+        mp->addView (new Label (CRect (8, 506, 204, 520), "MAPPINGS", 10.0, true));
+    modList = new ModList (CRect (8, listTop, 204, listTop + kMaxModMappings * ModList::kRow), this);
     pk::setHelp (modList, "Mappings", help::kModList);
-    mp->addView (modList);
+    listPanel->addView (modList);
     modListShown = ~0ull;
 
     applyParamTooltips (&help::forParam);
@@ -1204,7 +1219,7 @@ void Editor::rebuildRack ()
     const double x = n * kFxTabWidth;
     if (anyEmpty)
     {
-        auto* add = new ActionButton (CRect (x, 0, x + 26, 20), "+", [this, x] { showAddMenu (CPoint (8 + x, kFxTabTop + 20)); });
+        auto* add = new ActionButton (CRect (x, 0, x + 26, 20), "+", [this, x] { showAddMenu (layoutPoint (CPoint (8 + x, kFxTabTop + 20))); });
         add->setTooltipText ("Add an effect to the end of the rack (after the sampler; the rack runs left to right).");
         fxRow->addView (add);
     }
@@ -1984,7 +1999,7 @@ void forEachParamView (CViewContainer* c, CPoint offset, const std::function<voi
         CRect r = v->getViewSize ();
         r.offset (offset.x, offset.y);
         if (auto* cc = v->asViewContainer ())
-            forEachParamView (cc, r.getTopLeft (), fn);
+            forEachParamView (cc, pk::childOrigin (cc, r.getTopLeft ()), fn); // (a layout's block moves its children)
         else if (auto* pv = dynamic_cast<pk::ParamView*> (v))
             fn (pv, r);
     });
@@ -2379,13 +2394,38 @@ void Editor::showMenu (CPoint where)
         std::snprintf (buf, sizeof (buf), "Interface Size %d%%", (int)std::lround (s * 100));
         add (buf, [this, s] { resizeTo (s); }, true, std::fabs (scale - s) < 0.01);
     }
+    addLayoutMenu (menu);
 
     auto shared = std::make_shared<std::vector<std::function<void ()>>> (std::move (actions));
     menu->popup (frame, where, [shared, menu] (COptionMenu* m) {
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         const int32_t r = m->getLastResult ();
         if (r >= 0 && r < (int32_t)shared->size () && (*shared)[(size_t)r])
             (*shared)[(size_t)r]();
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    // Wide: the instrument in the first row (the waveform over the sample row, the filter, the envelopes,
+    // the LFO, the global controls), the rack, the output, the modulation LFOs and their mappings in the
+    // second. (Regions as an arranged layout builds them: the modulation column split in two, buildUI.)
+    pk::layout::Spec s;
+    s.headerSplit = kModLeft; // (only ? and Menu follow the window's right edge)
+    s.panels = {
+        {"waveform", "waveform", {8, 38, 1102, 300}, 0, 0},
+        {"sample", "", {8, 306, 1102, 404}, 0, 0},
+        {"filter", "", {8, 410, 380, 716}, 0},
+        {"envelope", "", {386, 410, 704, 716}, 0},
+        {"lfo", "", {710, 410, 918, 716}, 0},
+        {"global", "", {924, 410, 1102, 716}, 0},
+        {"rack", "effects rack", {8, kFxTabTop, 846, kFxPanelTop + 234}, 1},
+        {"output", "", {852, kFxTabTop, 1102, kFxPanelTop + 234}, 1},
+        {"modulation", "", {kModLeft, 38, kModLeft + kModSplitW, 38 + kModSplitH}, 1},
+        {"mappings", "", {kModLeft, kMapTop, kModLeft + 212, kMapTop + kMapH}, 1},
+    };
+    return s;
 }
 
 } // namespace smemplr

@@ -62,6 +62,9 @@ public:
     void setNorm (uint32_t id, double v) override;
     // the modulation section is the column at the right (kModLeft ..)
     static constexpr double kWidth = 1328.0, kModLeft = 1108.0;
+    // the modulation column split in two in an arranged layout (Menu > Layout): the LFOs two by two, and
+    // the mappings' list under them (where they are built: right of the Default window)
+    static constexpr double kModSplitW = 424.0, kModSplitH = 256.0, kMapTop = 300.0, kMapH = 24.0 + 24 * 17.0 + 8.0;
     static constexpr double kHeight = 1012.0;
     // the effects rack at the bottom (also used by the host test): the slots' tabs in chain order (drag
     // one sideways to move the effect) and "+"; the selected slot's controls; its panel
@@ -71,6 +74,8 @@ public:
     explicit Editor (Controller* c);
 
     void buildUI (VSTGUI::CFrame* f) override;
+    // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's two rows, instrument and effects
+    pk::layout::Spec layoutSpec (bool arranged) const override;
     void idle () override;
     void paramChanged (uint32_t id) override;
     void bridgeChanged ();
