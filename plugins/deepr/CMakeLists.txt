@@ -1,5 +1,5 @@
 # Deepr: makes a bass sound deeper by contrast (the low mids dipped while the sub plays, the sub in mono).
-project(Deepr VERSION 0.13.0.0)
+project(Deepr VERSION 0.14.0.0)
 
 add_library(deepr_core STATIC
     src/core/Params.cpp
