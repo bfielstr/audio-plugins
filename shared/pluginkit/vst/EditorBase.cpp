@@ -583,7 +583,16 @@ void EditorBase::relayout ()
     buildContent ();
     prepareTooltips (frame);
     frame->enableTooltips (controller->uiShowTips, 600);
-    resizeBase (baseWidth, contentHeight, true);
+    // (refused: an arranged layout is zoomed to fit the window; the Default keeps its full content
+    // height, as open () leaves it, with a folded section's space empty)
+    if (!resizeBase (baseWidth, contentHeight, arranged) && !arranged)
+    {
+        contentHeight = fullContentHeight;
+        baseHeight = contentHeight + kInfoHeight;
+        placeInfoStrip ();
+        if (!detached)
+            layoutFrame (rect.getWidth (), rect.getHeight ());
+    }
     frame->invalid ();
 }
 

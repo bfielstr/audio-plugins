@@ -172,6 +172,37 @@ void pump (double seconds)
     [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:seconds]];
 }
 
+namespace {
+// The window's side of the editor (IPlugFrame): resizes the window to what the editor asks for, while
+// allowed, and tells the view its new size as a host does.
+class Resizer : public IPlugFrame
+{
+public:
+    NSWindow* win = nil;
+    bool allow = false;
+    tresult PLUGIN_API resizeView (IPlugView* view, ViewRect* r) override
+    {
+        if (!allow || !view || !r || !win)
+            return kResultFalse;
+        [win setContentSize:NSMakeSize (r->getWidth (), r->getHeight ())];
+        view->onSize (r);
+        return kResultTrue;
+    }
+    tresult PLUGIN_API queryInterface (const TUID iid, void** obj) override
+    {
+        if (FUnknownPrivate::iidEqual (iid, IPlugFrame::iid) || FUnknownPrivate::iidEqual (iid, FUnknown::iid))
+        {
+            *obj = this;
+            return kResultOk;
+        }
+        *obj = nullptr;
+        return kNoInterface;
+    }
+    uint32 PLUGIN_API addRef () override { return 1; } // (owned by the EditorWindow)
+    uint32 PLUGIN_API release () override { return 1; }
+};
+} // namespace
+
 EditorWindow::EditorWindow (IEditController* controller)
 {
     plugView = controller->createView (ViewType::kEditor);
@@ -185,6 +216,10 @@ EditorWindow::EditorWindow (IEditController* controller)
                                                     defer:NO];
     win.releasedWhenClosed = NO;
     window = (__bridge_retained void*)win;
+    auto* rs = new Resizer ();
+    rs->win = win;
+    resizer = rs;
+    plugView->setFrame (rs);
     // the layout check (pk::layoutReport): the editor appends what overlaps, touches or spills to the
     // file in PK_LAYOUT_REPORT when it opens; printed here the first time an editor opens in this test
     // (a note for whoever reads the log, not a failure: some layouts wait for their rework)
@@ -219,8 +254,10 @@ EditorWindow::~EditorWindow ()
     {
         if (attached)
             plugView->removed ();
+        plugView->setFrame (nullptr);
         plugView->release ();
     }
+    delete static_cast<Resizer*> (resizer);
     if (window)
     {
         NSWindow* win = (__bridge_transfer NSWindow*)window;
@@ -300,6 +337,106 @@ bool EditorWindow::savePng (const std::string& file)
     [content cacheDisplayInRect:[content bounds] toBitmapImageRep:rep];
     NSData* png = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
     return [png writeToFile:[NSString stringWithUTF8String:file.c_str ()] atomically:YES];
+}
+
+void EditorWindow::allowResize (bool on)
+{
+    if (resizer)
+        static_cast<Resizer*> (resizer)->allow = on;
+}
+
+double EditorWindow::width () const
+{
+    return window ? [[(__bridge NSWindow*)window contentView] bounds].size.width : 0.0;
+}
+
+double EditorWindow::height () const
+{
+    return window ? [[(__bridge NSWindow*)window contentView] bounds].size.height : 0.0;
+}
+
+void setLayout (IEditController* controller, const std::string& text, const std::string& name)
+{
+    FUnknownPtr<IConnectionPoint> cp (controller);
+    if (!cp)
+        return;
+    auto msg = owned (new HostMessage ());
+    msg->setMessageID ("pk.layout.set");
+    msg->getAttributes ()->setBinary ("text", text.data (), (uint32)text.size ());
+    msg->getAttributes ()->setBinary ("name", name.data (), (uint32)name.size ());
+    cp->notify (msg);
+    pump (0.1);
+}
+
+bool findControl (IEditController* controller, ParamID id, ControlRect& r)
+{
+    FUnknownPtr<IConnectionPoint> cp (controller);
+    if (!cp)
+        return false;
+    auto msg = owned (new HostMessage ());
+    msg->setMessageID ("pk.ui.find");
+    msg->getAttributes ()->setInt ("id", (int64)id);
+    cp->notify (msg);
+    const void* data = nullptr;
+    uint32 size = 0;
+    if (msg->getAttributes ()->getBinary ("rect", data, size) != kResultOk || !data || size != 4 * sizeof (double))
+        return false;
+    const double* v = static_cast<const double*> (data);
+    r = {v[0], v[1], v[2], v[3]};
+    return true;
+}
+
+void checkLayouts (Rig& rig, EditorWindow& win, const std::vector<ParamID>& knobs, const std::string& png)
+{
+    win.allowResize (true);
+    const double w0 = win.width (), h0 = win.height ();
+    std::vector<ControlRect> before (knobs.size ());
+    for (size_t i = 0; i < knobs.size (); ++i)
+        PK_CHECK (findControl (rig.controller, knobs[i], before[i]), "Default: the control of parameter %u is found", knobs[i]);
+    // a knob turned by a drag up: its value rises (then put back)
+    auto turn = [&] (ParamID id, const ControlRect& r, const char* where) {
+        const double v0 = rig.controller->getParamNormalized (id);
+        rig.param (id, 0.25);
+        win.drag (r.cx (), r.cy (), r.cx (), r.cy () - 30.0);
+        pump (0.05);
+        const double v1 = rig.controller->getParamNormalized (id);
+        PK_CHECK (v1 > 0.26, "%s: dragging the knob of parameter %u up turns it (%.3f)", where, id, v1);
+        rig.param (id, v0);
+    };
+    setLayout (rig.controller, "wide", "Wide");
+    pump (0.2);
+    PK_CHECK (win.width () > w0 && win.height () <= h0 + 1, "Wide: the window wider and not taller (%.0f x %.0f -> %.0f x %.0f)", w0, h0, win.width (),
+              win.height ());
+    bool moved = false;
+    for (size_t i = 0; i < knobs.size (); ++i)
+    {
+        ControlRect r;
+        const bool found = findControl (rig.controller, knobs[i], r);
+        PK_CHECK (found, "Wide: the control of parameter %u is found", knobs[i]);
+        if (!found)
+            continue;
+        PK_CHECK (r.left >= 0 && r.top >= 0 && r.right <= win.width () + 0.5 && r.bottom <= win.height () + 0.5,
+                  "Wide: the control of parameter %u is in the window", knobs[i]);
+        moved = moved || std::fabs (r.left - before[i].left) > 1 || std::fabs (r.top - before[i].top) > 1;
+        turn (knobs[i], r, "Wide");
+    }
+    PK_CHECK (moved, "Wide: the controls are elsewhere than in the Default");
+    if (!png.empty ())
+        PK_CHECK (win.savePng (png), "screenshot, Wide");
+    setLayout (rig.controller, "", "Default");
+    pump (0.2);
+    // (as wide as it was; as tall, or shorter by a section folded since it opened, which a window that
+    // may resize now follows)
+    PK_CHECK (std::fabs (win.width () - w0) < 1 && win.height () <= h0 + 1, "Default again: the window as it was (%.0f x %.0f)", win.width (),
+              win.height ());
+    for (size_t i = 0; i < knobs.size (); ++i)
+    {
+        ControlRect r;
+        PK_CHECK (findControl (rig.controller, knobs[i], r) && std::fabs (r.left - before[i].left) < 0.5 && std::fabs (r.top - before[i].top) < 0.5,
+                  "Default again: the control of parameter %u where it was", knobs[i]);
+        turn (knobs[i], r, "Default again");
+    }
+    win.allowResize (false);
 }
 
 double rms (const std::vector<float>& x, size_t a, size_t b)
