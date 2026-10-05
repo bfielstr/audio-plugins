@@ -111,7 +111,7 @@ EOF
 
 sed "s/@VERSION@/$version/g" "$here/resources/welcome.html" >"$work/resources/welcome.html"
 cp "$here/resources/conclusion.html" "$work/resources/conclusion.html"
-cp "$REPO_ROOT/LICENSE" "$work/resources/LICENSE.txt"
+{ cat "$REPO_ROOT/LICENSE"; printf '\n\n'; cat "$REPO_ROOT/THIRD_PARTY_NOTICES.md"; } >"$work/resources/LICENSE.txt"
 
 if [ "$dry_run" = 1 ]; then
     echo "Dry run: layout and distribution.xml in $work"

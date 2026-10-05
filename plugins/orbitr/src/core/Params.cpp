@@ -37,7 +37,9 @@ const ParamTable& paramTable ()
         v.push_back (real (kGrainDensity, "Grain Density", "Density", 0.1, 8.0, 2.0, Curve::Log, Disp::Number));
         v.push_back (percent (kGrainScatter, "Grain Scatter", "Scatter", 0.3));
         v.push_back (real (kGrainPitch, "Grain Pitch", "Pitch", -12.0, 12.0, 0.0, Curve::Linear, Disp::Semis));
-        static_assert (kNumParams == kGrainPitch + 1, "the grains' Pitch is the last");
+        // the swarm's place round the listener: 0, straight ahead, by default (as before it)
+        v.push_back (real (kAngle, "Angle", "Angle", -180.0, 180.0, 0.0, Curve::Linear, Disp::Degrees));
+        static_assert (kNumParams == kAngle + 1, "Angle is the last");
         return v;
     }());
     return t;

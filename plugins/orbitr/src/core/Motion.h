@@ -4,7 +4,9 @@
 // pitch shifts with its radial speed (true Doppler) and its level with its distance.
 //
 // Geometry (metres; x right, y ahead, z up; the listener's head at the origin, its ears 8.75 cm to
-// either side, 1.7 m over the floor): the orbs move around a centre Distance ahead of the listener,
+// either side, 1.7 m over the floor): the orbs move around a centre Distance from the listener, in the
+// direction Angle (0 straight ahead, + to the right, +-180 behind; the swarm is moved there, not
+// turned: its shape stays the same whichever side it is on),
 //   Orbit  on circles of Radius round the centre, spread evenly, at Speed (m/s along the circle);
 //          Randomness tilts each orbit, shrinks it (up to 30 %), varies its speed (up to 35 %) and
 //          its place on the circle.
@@ -18,6 +20,9 @@
 // distance (at most +12 dB), then equal-power panned by the orb's direction (Spread: 0 centred,
 // 1 full width; Spread also scales the ears' spacing, so it sets the time difference between the
 // ears too). Floor adds each orb's reflection off the floor (an image source under it, 0.4 x).
+// A source behind is heard as one ahead at its mirror place (the pan follows its left / right
+// direction only; no front / back cue beyond its own path, Doppler and level). Angle changes glide
+// as Distance does (the shorter way round).
 // The orbs are summed / sqrt (Orbs) and mixed with the input (Mix).
 //
 // Latency: the delays are taken relative to the centre (the delay of a source at the centre is
@@ -59,6 +64,7 @@ public:
     void setPattern (int p);
     void setSpeed (double metresPerSecond);
     void setDistance (double m) { distance = std::clamp (m, 0.5, 50.0); }
+    void setAngle (double degrees); // -180 .. 180 (wrapped)
     void setRadius (double m) { radius = std::clamp (m, 0.05, kMaxRadius); }
     void setSpread (double s) { spread = std::clamp (s, 0.0, 1.0); }
     void setRandomness (double r);
@@ -84,6 +90,7 @@ public:
     // where orb k is now (for the display, and the tests)
     Vec orbPosition (int k) const { return position (k, 0.0); }
     double currentDistance () const { return dSm; }
+    double currentAngle () const { return aSm * 180.0 / dsp::kPi; } // degrees
     double currentRadius () const { return rSm; }
     bool grainsOn () const { return grainPath; }
     // orb k's newest grain's window now (0 .. 1; 0 without Grains), for the display
@@ -116,6 +123,7 @@ private:
     int baseDelay = 480, numOrbs = 6, pattern = kSwarm;
     double speed = 18.0, distance = 3.0, radius = 2.0, spread = 0.8, randomness = 0.6;
     double dSm = 3.0, rSm = 2.0, smooth = 0.01;
+    double angle = 0.0, aSm = 0.0, aSin = 0.0, aCos = 1.0; // radians: Angle, gliding, and its sine and cosine
     bool floor = true, started = false;
     float mix = 0.5f;
     std::array<Orb, kMaxOrbs> orbList {};

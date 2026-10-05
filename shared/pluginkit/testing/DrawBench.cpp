@@ -374,10 +374,10 @@ void splitReport (const std::vector<std::string>& lines, std::vector<std::string
             clutter.push_back (l);
 }
 
-// Default, Wide, a dragged arrangement and Default again, each built in the same editor as the Layout
+// Classic, Wide, a dragged arrangement and Classic again, each built in the same editor as the Layout
 // menu builds it: the arranged ones place every view of the build in a block and every panel exactly once,
-// show every control the Default shows, inside the window, with nothing overlapping or touching; Default
-// after them draws the same pixels as Default first (and as another build's rendering, --compare).
+// show every control the Classic shows, inside the window, with nothing overlapping or touching; Classic
+// after them draws the same pixels as Classic first (and as another build's rendering, --compare).
 int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, const std::string& name, const std::string& dumpDir,
                     const std::string& compareDir)
 {
@@ -386,7 +386,7 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         std::printf ("  FAIL: %s\n", what.c_str ());
         ++failures;
     };
-    ctl->uiLayout.clear ();
+    ctl->uiLayout = pk::layout::kClassicText;
     auto view = Steinberg::owned (controller->createView (Vst::ViewType::kEditor));
     auto* editor = dynamic_cast<pk::EditorBase*> (view.get ());
     CFrame* frame = editor ? editor->openDetached (1.0) : nullptr;
@@ -409,15 +409,15 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
     }
     const auto base = [&] (const char* tag) { return dumpDir.empty () ? std::string () : dumpDir + "/" + name + "-layout-" + tag; };
 
-    // Default: the editor as built
-    const Pixels first = render (frame, base ("default"));
+    // Classic: the editor as built
+    const Pixels first = render (frame, base ("classic"));
     const double defW = editor->fullWidth (), defH = editor->fullHeight ();
     std::set<uint32> defParams;
     visibleParams (frame, defParams);
     std::vector<std::string> defClutter;
     size_t defSpills = 0;
     splitReport (pk::layoutReport (frame), defClutter, defSpills);
-    std::printf ("  default: %.0f x %.0f, %zu controls shown, %zu overlaps or touches, %zu spills\n", defW, defH, defParams.size (), defClutter.size (),
+    std::printf ("  classic: %.0f x %.0f, %zu controls shown, %zu overlaps or touches, %zu spills\n", defW, defH, defParams.size (), defClutter.size (),
                  defSpills);
     if (!compareDir.empty ())
     {
@@ -425,12 +425,12 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         if (readFile (compareDir + "/" + name + "-100", other))
         {
             const Diff d = compare (other, first);
-            std::printf ("  default against %s: %ld px differ (largest channel difference %d)\n", compareDir.c_str (), d.count, d.maxDelta);
+            std::printf ("  classic against %s: %ld px differ (largest channel difference %d)\n", compareDir.c_str (), d.count, d.maxDelta);
             if (d.count != 0)
-                fail ("the Default layout draws differently from the rendering compared with");
+                fail ("the Classic layout draws differently from the rendering compared with");
         }
         else
-            std::printf ("  default against %s: no rendering to compare\n", compareDir.c_str ());
+            std::printf ("  classic against %s: no rendering to compare\n", compareDir.c_str ());
     }
 
     // an arranged layout, checked
@@ -458,6 +458,22 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
                 fail (std::string (tag) + ": panel " + p.id + " shown " + std::to_string (seen[p.id]) + " times");
         if (seen.size () != spec.panels.size ())
             fail (std::string (tag) + ": blocks of panels the spec does not have");
+        // the rows fill the window: each block's sides are at the window's margins or one gap from the
+        // next block's (no ragged right edge, nothing floating)
+        const double right = editor->fullWidth () - pk::layout::kMargin;
+        for (const auto& [id, r] : blocks)
+        {
+            bool leftOk = std::fabs (r.left - pk::layout::kMargin) < 0.5, rightOk = std::fabs (r.right - right) < 0.5;
+            for (const auto& [oid, o] : blocks)
+            {
+                const bool beside = o.top < r.bottom && r.top < o.bottom;
+                leftOk = leftOk || (beside && std::fabs (o.right + pk::layout::kGap - r.left) < 0.5);
+                rightOk = rightOk || (beside && std::fabs (r.right + pk::layout::kGap - o.left) < 0.5);
+            }
+            if (!leftOk || !rightOk)
+                fail (std::string (tag) + ": block " + id + " does not reach its row's ends (" + std::to_string ((int)r.left) + ".." +
+                      std::to_string ((int)r.right) + " in " + std::to_string ((int)editor->fullWidth ()) + ")");
+        }
         std::set<uint32> params;
         visibleParams (frame, params);
         for (uint32 id : defParams)
@@ -469,12 +485,12 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         for (const auto& l : clutter)
             fail (std::string (tag) + ": " + l);
         if (spills > defSpills)
-            fail (std::string (tag) + ": texts spill that do not in the Default layout");
+            fail (std::string (tag) + ": texts spill that do not in the Classic layout");
     };
     checkArranged ("wide", "wide");
-    // wide and short: no taller than the Default
+    // wide and short: no taller than the Classic
     if (editor->fullHeight () > defH)
-        fail ("wide: taller than the Default layout");
+        fail ("wide: taller than the Classic layout");
     // dragged: the Wide template's first panel moved into a row of its own at the bottom, and its second
     // panel's column widened (as the editor does on a drop and on an edge's drag)
     if (!spec.empty ())
@@ -489,15 +505,15 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         checkArranged ("dragged", toString (m));
     }
 
-    // Default again: the same pixels as at first
-    editor->setLayout ("", "Default", true);
-    const Pixels back = render (frame, base ("default-again"));
+    // Classic again: the same pixels as at first
+    editor->setLayout (pk::layout::kClassicText, "Classic", true);
+    const Pixels back = render (frame, base ("classic-again"));
     const Diff d = compare (first, back);
-    std::printf ("  default again: %ld px differ from the first (largest channel difference %d)\n", d.count, d.maxDelta);
+    std::printf ("  classic again: %ld px differ from the first (largest channel difference %d)\n", d.count, d.maxDelta);
     if (d.count != 0)
-        fail ("the Default layout after Wide draws differently");
+        fail ("the Classic layout after Wide draws differently");
     if (editor->arrangedLayout () || editor->fullWidth () != defW || editor->fullHeight () != defH)
-        fail ("the Default layout after Wide has another size");
+        fail ("the Classic layout after Wide has another size");
     view->removed ();
     std::printf ("%s: %d failures\n", name.c_str (), failures);
     return failures ? 1 : 0;

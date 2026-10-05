@@ -27,10 +27,11 @@ ParamArray defaultParams ();
 struct Meters
 {
     std::atomic<uint32_t> blocks {0}; // counts the blocks, so the display knows when there is news
-    // the orbs (x right, y ahead, metres), how many, and the centre's distance and the radius now
+    // the orbs (x right, y ahead, metres), how many, and the centre's distance, angle (degrees) and the
+    // radius now
     std::atomic<int> orbs {0};
     std::array<std::atomic<float>, Motion::kMaxOrbs> orbX {}, orbY {};
-    std::atomic<float> distance {3.0f}, radius {2.0f};
+    std::atomic<float> distance {3.0f}, radius {2.0f}, angle {0.0f};
     // Grains: whether the orbs play grains, and each orb's newest grain's window now (0 .. 1)
     std::atomic<bool> grains {false};
     std::array<std::atomic<float>, Motion::kMaxOrbs> orbGrain {};

@@ -121,12 +121,14 @@ public:
     static constexpr int kTailOpenSaturator = 1, kTailOpenGentlr = 2;
     int uiTailOpen = -1;
     int uiColorLayer = 0;
-    // The editor's layout (pluginkit/Layout.h): its text ("" the Default) and the name the Layout menu
-    // shows it by (a template's or a saved layout's; "" once it is dragged out of shape). Editor state,
-    // saved with the controller's after the view state (an older version ignores it). A new instance
-    // starts with the user's default layout (the layouts file beside the presets); loading a preset keeps
-    // the layout the editor has.
-    std::string uiLayout, uiLayoutName;
+    // The editor's layout (pluginkit/Layout.h): its text ("wide", "default" the Classic layout, or an
+    // arrangement) and the name the Layout menu shows it by (a template's or a saved layout's; "" once it
+    // is dragged out of shape). Editor state, saved with the controller's after the view state (an older
+    // version ignores it). A new instance starts with the user's default layout (the layouts file beside
+    // the presets) or else Wide; a state saved without the field (before 0.14) opens in Wide too, one
+    // saved with it keeps its layout ("" there is the Classic layout); loading a preset keeps the layout
+    // the editor has.
+    std::string uiLayout = layout::kDefaultLayout, uiLayoutName = layout::templateName (layout::kDefaultLayout);
     // The layouts file (<preset folder>/.layouts.txt): the user's saved layouts and default layout.
     layout::Saved savedLayouts () const;
     bool writeSavedLayouts (const layout::Saved& s) const;

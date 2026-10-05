@@ -1,21 +1,57 @@
-MIT License
+audio-plugins Free Use Licence
 
-Copyright (c) 2026 bfielstr
+Copyright (c) 2026 bfielstr. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This licence covers the plug-ins in this repository (smemplr, multidyn, locus, stretchr, smacheratr,
+para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr), their source code, presets,
+installers and documentation (together, "the Software"). It applies to version 0.15.0 and later.
+Versions 0.14.0 and earlier were released under the MIT licence and stay under it.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. What you may do
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+   a. Download, install and use the Software free of charge, for any purpose, including commercial
+      music production, performance, mixing, mastering, sound design, broadcast and teaching.
+   b. Keep, sell and license any audio or music you make with the Software. You own your work; this
+      licence places no conditions on it and no credit is required.
+   c. Read and study the source code, and modify it for your own private use.
+   d. Share unmodified copies of the Software free of charge, as long as this licence and
+      THIRD_PARTY_NOTICES.md go with them and you link to https://github.com/bfielstr/audio-plugins.
+
+2. What you may not do without written permission from the copyright holder
+
+   a. Sell, rent, lease or sublicense the Software, or charge any fee for access to it or for
+      downloading it.
+   b. Include the Software, or any part of its source code, in a product, bundle, sample pack,
+      subscription or service that is sold or paid for.
+   c. Distribute modified versions of the Software, or works derived from its source code, in any
+      form, paid or free.
+   d. Remove or change this licence, the copyright notice, or the third-party notices.
+   e. Use the names of the plug-ins or of the copyright holder to promote another product, or
+      present the Software as your own.
+
+3. Ownership
+
+   The copyright holder keeps all rights, title and interest in the Software. Any right not granted
+   above is reserved. Making the source code public does not place it in the public domain or under
+   an open-source licence.
+
+4. Third-party components
+
+   The Software includes third-party components (the Steinberg VST 3 SDK, VSTGUI, dr_libs and
+   constants from the Faust libraries). Each stays under its own licence, listed in
+   THIRD_PARTY_NOTICES.md, and nothing in this licence restricts the rights those licences give.
+
+5. Termination
+
+   If you break this licence, your rights under it end automatically. Audio and music you made
+   before then remain yours.
+
+6. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+   NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+For permission requests, open an issue at https://github.com/bfielstr/audio-plugins/issues.

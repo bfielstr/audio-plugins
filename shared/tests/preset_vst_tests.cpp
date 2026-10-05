@@ -2,8 +2,9 @@
 // connects them (in a temporary preset folder, $PK_PRESETS_DIR): .vstpreset round trips with tags,
 // files without metadata (saved before 0.13), Init, factory presets, the tag filter, Save as Default
 // (a new instance starts from it, a project's state still wins), Reset Default, rename / delete and
-// the menu message the macOS host tests use; the editor's layout in the controller's state (older states
-// without it, presets keeping the layout, the user's default layout). Run: ./pluginkit_preset_tests
+// the menu message the macOS host tests use; the editor's layout in the controller's state (Wide for a new
+// instance and for older states without it, an explicit Classic kept, presets keeping the layout, the
+// user's default layout winning over Wide). Run: ./pluginkit_preset_tests
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/Presets.h"
 
@@ -435,6 +436,12 @@ int main ()
 
     std::printf ("layoutInTheControllerState\n");
     {
+        // a new instance (no layouts file): Wide
+        {
+            Instance n (host);
+            CHECK (n.ctrl->uiLayout == "wide" && n.ctrl->uiLayoutName == "Wide", "a new instance: Wide (%s / %s)", n.ctrl->uiLayout.c_str (),
+                   n.ctrl->uiLayoutName.c_str ());
+        }
         // the layout and its name after the view state, read back
         Instance a (host);
         a.ctrl->uiLayout = "display/sample,filter:400;rack";
@@ -449,7 +456,7 @@ int main ()
                b.ctrl->uiLayoutName.c_str ());
         CHECK (b.ctrl->uiTailOpen == pk::ControllerBase::kTailOpenGentlr, "the view state before it still read");
 
-        // a state from before layouts (it ends after the view state): the Default layout, as then
+        // a state from before layouts (it ends after the view state): Wide, as a new instance
         MemoryStream old;
         {
             IBStreamer s (&old, kLittleEndian);
@@ -464,7 +471,7 @@ int main ()
         }
         old.seek (0, IBStream::kIBSeekSet, nullptr);
         CHECK (b.ctrl->setState (&old) == kResultOk, "old state");
-        CHECK (b.ctrl->uiLayout.empty () && b.ctrl->uiLayoutName.empty (), "no layout: Default (%s)", b.ctrl->uiLayout.c_str ());
+        CHECK (b.ctrl->uiLayout == "wide" && b.ctrl->uiLayoutName == "Wide", "no layout field: Wide (%s)", b.ctrl->uiLayout.c_str ());
         CHECK (std::fabs (b.ctrl->uiScale - 1.25) < 1e-9 && b.ctrl->uiTailOpen == pk::ControllerBase::kTailOpenSaturator && b.ctrl->uiColorLayer == 1,
                "the rest of an old state");
 
@@ -484,6 +491,21 @@ int main ()
         CHECK (tailOpen == pk::ControllerBase::kTailOpenGentlr, "its view state");
         delete[] name;
         delete[] ref;
+
+        // an explicit Classic layout is kept: as this version writes it ("default", name "Classic"), and as
+        // 0.14 wrote its Default ("", name "Default"), which is not the same as no field at all
+        for (const auto& [text, label] : std::vector<std::pair<std::string, std::string>> {{"default", "Classic"}, {"", "Default"}})
+        {
+            a.ctrl->uiLayout = text;
+            a.ctrl->uiLayoutName = label;
+            MemoryStream cs;
+            a.ctrl->getState (&cs);
+            cs.seek (0, IBStream::kIBSeekSet, nullptr);
+            Instance c (host);
+            CHECK (c.ctrl->setState (&cs) == kResultOk, "set");
+            CHECK (c.ctrl->uiLayout == text && pk::layout::isClassic (c.ctrl->uiLayout) && c.ctrl->uiLayoutName == label,
+                   "explicit Classic kept (\"%s\" -> \"%s\")", text.c_str (), c.ctrl->uiLayout.c_str ());
+        }
     }
 
     std::printf ("presetsKeepTheLayout\n");
@@ -492,10 +514,10 @@ int main ()
         a.ctrl->uiLayout = "wide";
         a.ctrl->uiLayoutName = "Wide";
         CHECK (a.ctrl->saveUserPreset ("Laid out", "", {}), "save");
-        a.ctrl->uiLayout.clear ();
-        a.ctrl->uiLayoutName = "Default";
+        a.ctrl->uiLayout = "default";
+        a.ctrl->uiLayoutName = "Classic";
         CHECK (a.ctrl->loadPreset ((folder / "Laid out.vstpreset").string ()), "load");
-        CHECK (a.ctrl->uiLayout.empty () && a.ctrl->uiLayoutName == "Default", "the editor's layout stays (%s)", a.ctrl->uiLayout.c_str ());
+        CHECK (a.ctrl->uiLayout == "default" && a.ctrl->uiLayoutName == "Classic", "the editor's layout stays (%s)", a.ctrl->uiLayout.c_str ());
         a.ctrl->deletePreset ((folder / "Laid out.vstpreset").string ());
     }
 
@@ -512,11 +534,12 @@ int main ()
         CHECK (fs::exists (folder / ".layouts.txt"), "beside the presets");
         Instance n (host);
         CHECK (n.ctrl->uiLayout == "a,b;c" && n.ctrl->uiLayoutName == "Tracking", "%s / %s", n.ctrl->uiLayout.c_str (), n.ctrl->uiLayoutName.c_str ());
+        CHECK (a.ctrl->uiLayout == "wide", "an instance made before the file: Wide (%s)", a.ctrl->uiLayout.c_str ());
         MemoryStream st;
-        a.ctrl->getState (&st); // (a's layout: Default)
+        a.ctrl->getState (&st); // (a's layout: Wide)
         st.seek (0, IBStream::kIBSeekSet, nullptr);
         n.ctrl->setState (&st);
-        CHECK (n.ctrl->uiLayout.empty (), "the project's layout wins");
+        CHECK (n.ctrl->uiLayout == "wide", "the project's layout wins (%s)", n.ctrl->uiLayout.c_str ());
         // the message the host tests use
         auto msg = owned (new HostMessage ());
         msg->setMessageID (pk::ControllerBase::kMsgSetLayout);
@@ -524,9 +547,18 @@ int main ()
         msg->getAttributes ()->setBinary ("name", "Wide", 4);
         n.ctrl->notify (msg);
         CHECK (n.ctrl->uiLayout == "wide" && n.ctrl->uiLayoutName == "Wide", "set by message");
+        // the user's default may be the Classic layout (written "default"; 0.14 wrote "" for its Default)
+        for (const char* classic : {"default", ""})
+        {
+            s.defaultLayout = classic;
+            CHECK (a.ctrl->writeSavedLayouts (s), "write");
+            Instance c (host);
+            CHECK (pk::layout::isClassic (c.ctrl->uiLayout) && c.ctrl->uiLayoutName == "Classic", "user default Classic (\"%s\": %s / %s)", classic,
+                   c.ctrl->uiLayout.c_str (), c.ctrl->uiLayoutName.c_str ());
+        }
         fs::remove (folder / ".layouts.txt");
         Instance m (host);
-        CHECK (m.ctrl->uiLayout.empty (), "no file: Default");
+        CHECK (m.ctrl->uiLayout == "wide" && m.ctrl->uiLayoutName == "Wide", "no file: Wide (%s)", m.ctrl->uiLayout.c_str ());
     }
 
     std::printf ("menuMessage\n");

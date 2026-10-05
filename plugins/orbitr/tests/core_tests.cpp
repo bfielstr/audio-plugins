@@ -2,6 +2,7 @@
 // The Motion tests are Detonatr's (its Motion stage is Orbitr's effect), then the engine around it.
 #include "Engine.h"
 #include "Motion.h"
+#include "OrbGeometry.h"
 #include "Params.h"
 
 #include <algorithm>
@@ -342,6 +343,158 @@ TEST (finite_everywhere)
         ok = ok && sig::finite (sig::run (m, x, 1 + (int)(u (rng) * 600)));
     }
     CHECK (ok, "finite with random settings, loud input and silence");
+}
+
+// --- Angle: the swarm's place round the listener ----------------------------------------
+
+namespace {
+// the Liquid Debris-like swarm (all orbs heard), at an Angle; its left and right over noise
+void swarmAt (double angle, std::vector<float>& l, std::vector<float>& r, Motion* out = nullptr)
+{
+    Motion m;
+    m.setMix (1.0);
+    m.setAngle (angle);
+    m.prepare (kSr, 256);
+    const auto x = sig::noise (0.1, 3.0, kSr, 8);
+    l = sig::run (m, x, 256, &r);
+    if (out)
+        *out = m;
+}
+} // namespace
+
+TEST (angle_zero_is_untouched)
+{
+    // Angle 0 (set, or never set) is the swarm straight ahead as before Angle, sample for sample (it
+    // was also checked against the code before Angle when it came in: identical in Orbit, Swarm,
+    // Grains and with a Distance change); +-360 is 0 too
+    const auto x = sig::noise (0.2, 2.0, kSr, 21);
+    std::vector<float> refR;
+    Motion plain = make ();
+    const auto ref = sig::run (plain, x, 256, &refR);
+    for (double a : {0.0, -0.0, 360.0, -360.0})
+    {
+        Motion m;
+        m.setAngle (a);
+        m.prepare (kSr, 256);
+        std::vector<float> r;
+        const auto l = sig::run (m, x, 256, &r);
+        CHECK (l == ref && r == refR, "Angle %g: the output before Angle", a);
+    }
+    // the same through the engine, the Angle parameter at its default (as a project from before it reads)
+    CHECK (toPlain (kAngle, defaultNormalized (kAngle)) == 0.0 && defaultNormalized (kAngle) == 0.5, "Angle's default is 0 (norm 0.5)");
+    auto e0 = engine (), e1 = engine ();
+    e1->setParam (kAngle, toPlain (kAngle, defaultNormalized (kAngle)));
+    e1->reset ();
+    CHECK (sig::run (*e0, x, 300) == sig::run (*e1, x, 300), "the engine with Angle 0: the same");
+    // the orbs' centre at 0: exactly Distance ahead
+    Motion m = make ();
+    double sx = 0.0, sy = 0.0;
+    for (int k = 0; k < m.orbs (); ++k)
+    {
+        sx += m.orbPosition (k).x;
+        sy += m.orbPosition (k).y;
+    }
+    CHECK (m.currentAngle () == 0.0, "the angle stays exactly 0: %g", m.currentAngle ());
+    std::printf ("    Angle 0: the orbs' mean at x %.2f, y %.2f m\n", sx / m.orbs (), sy / m.orbs ());
+}
+
+TEST (angle_sideways_moves_the_energy)
+{
+    // Angle +90: the swarm to the right, most of its energy on the right (and -90 the left)
+    for (double a : {90.0, -90.0})
+    {
+        std::vector<float> l, r;
+        Motion m;
+        swarmAt (a, l, r, &m);
+        const double dl = sig::db (sig::rms (l, 48000, l.size ())), dr = sig::db (sig::rms (r, 48000, r.size ()));
+        const double side = a > 0 ? dr - dl : dl - dr;
+        std::printf ("    Angle %+.0f: left %.1f dB, right %.1f dB\n", a, dl, dr);
+        CHECK (side > 6.0, "Angle %+.0f: that side %.1f dB louder", a, side);
+        CHECK (std::fabs (m.currentAngle () - a) < 1e-6, "the angle reached: %g", m.currentAngle ());
+        double sx = 0.0, sy = 0.0;
+        bool inside = true;
+        for (int k = 0; k < m.orbs (); ++k)
+        {
+            const auto p = m.orbPosition (k);
+            sx += p.x;
+            sy += p.y;
+            const double cx = a > 0 ? 3.0 : -3.0;
+            inside = inside && std::sqrt ((p.x - cx) * (p.x - cx) + p.y * p.y + p.z * p.z) <= 2.0 + 1e-6;
+        }
+        CHECK (inside, "every orb in the ball round its new centre");
+        CHECK ((a > 0 ? sx : -sx) / m.orbs () > 1.5 && std::fabs (sy / m.orbs ()) < 1.5, "the orbs to that side: x %.2f, y %.2f",
+               sx / m.orbs (), sy / m.orbs ());
+    }
+}
+
+TEST (angle_behind_mirrors_ahead)
+{
+    // Angle 180: the swarm behind. The pan follows left / right only, so it is as balanced as ahead,
+    // about as loud (level from distance), and still bends in pitch (Doppler from its paths)
+    std::vector<float> l0, r0, l, r;
+    swarmAt (0.0, l0, r0);
+    Motion m;
+    swarmAt (180.0, l, r, &m);
+    const size_t a = 48000, b = l.size ();
+    const double dl = sig::db (sig::rms (l, a, b)), dr = sig::db (sig::rms (r, a, b));
+    const double ahead = sig::db (0.5 * (sig::rms (l0, a, b) + sig::rms (r0, a, b)));
+    const double behind = sig::db (0.5 * (sig::rms (l, a, b) + sig::rms (r, a, b)));
+    std::printf ("    Angle 180: left %.1f, right %.1f dB; %.1f dB against ahead's %.1f\n", dl, dr, behind, ahead);
+    CHECK (std::fabs (dl - dr) < 2.0, "balanced: %.1f / %.1f dB", dl, dr);
+    CHECK (std::fabs (behind - ahead) < 2.0, "about as loud as ahead: %.1f / %.1f dB", behind, ahead);
+    double sy = 0.0;
+    for (int k = 0; k < m.orbs (); ++k)
+        sy += m.orbPosition (k).y;
+    CHECK (sy / m.orbs () < -1.5, "the orbs behind: y %.2f", sy / m.orbs ());
+    // a tone is bent off its pitch about as much as ahead: what is left at 1 kHz, against the output
+    auto leftAtPitch = [] (double angle) {
+        Motion t;
+        t.setMix (1.0);
+        t.setAngle (angle);
+        t.prepare (kSr, 256);
+        const auto x = sig::sine (1000.0, 0.25, 2.0, kSr);
+        const auto y = sig::run (t, x);
+        double s = 0.0, c = 0.0;
+        for (size_t i = 48000; i < y.size (); ++i)
+        {
+            s += y[i] * std::sin (2.0 * sig::kPi * 1000.0 * (double)i / kSr);
+            c += y[i] * std::cos (2.0 * sig::kPi * 1000.0 * (double)i / kSr);
+        }
+        const double amp = 2.0 * std::sqrt (s * s + c * c) / (double)(y.size () - 48000);
+        return sig::db (amp / (sig::rms (y, 48000, y.size ()) * std::sqrt (2.0)));
+    };
+    const double off0 = leftAtPitch (0.0), off180 = leftAtPitch (180.0);
+    std::printf ("    1 kHz left at its pitch: %.1f dB ahead, %.1f dB behind (of the output)\n", off0, off180);
+    CHECK (off180 < -3.0 && std::fabs (off180 - off0) < 4.0, "Doppler behind as ahead: %.1f / %.1f dB", off180, off0);
+}
+
+TEST (angle_glides_the_short_way)
+{
+    // from 170 to -170: the centre glides through 180 (behind), not round the front
+    Motion m;
+    m.setAngle (170.0);
+    m.prepare (kSr, 256);
+    m.setAngle (-170.0);
+    const auto x = sig::noise (0.1, 0.6, kSr, 3);
+    std::vector<float> buf (64), r (64);
+    double nearest = 180.0;
+    for (size_t a = 0; a + 64 <= x.size (); a += 64)
+    {
+        std::copy (x.begin () + (ptrdiff_t)a, x.begin () + (ptrdiff_t)a + 64, buf.begin ());
+        r = buf;
+        m.process (buf.data (), r.data (), 64);
+        nearest = std::min (nearest, std::fabs (m.currentAngle ()));
+    }
+    std::printf ("    170 to -170: nearest the front %.1f degrees, ends at %.2f\n", nearest, m.currentAngle ());
+    CHECK (nearest > 169.9, "never round the front: %.1f", nearest);
+    CHECK (std::fabs (m.currentAngle () + 170.0) < 0.01, "arrives: %.2f", m.currentAngle ());
+    // a wild value is wrapped or ignored
+    m.setAngle (540.0);
+    m.reset ();
+    CHECK (std::fabs (m.currentAngle () - 180.0) < 1e-9, "540 is 180: %g", m.currentAngle ());
+    m.setAngle (std::nan (""));
+    m.reset ();
+    CHECK (std::fabs (m.currentAngle () - 180.0) < 1e-9, "NaN ignored: %g", m.currentAngle ());
 }
 
 // --- the plug-in around it -------------------------------------------------------------
@@ -818,6 +971,93 @@ TEST (grains_finite_and_cpu)
                      heaviest ? "500 ms at Density 8" : "at their defaults");
         CHECK (secs / 10.0 < (heaviest ? 0.30 : 0.20), "too slow");
     }
+}
+
+// --- the display's geometry (the ball and the listener dragged) -------------------------
+
+TEST (geometry_mapping_both_ways)
+{
+    // the display's rectangle in the editor (8, 40, 752, 290): at the defaults, the listener at the
+    // bottom middle and the scale the display always had
+    const geo::Polar def {3.0, 0.0};
+    const geo::Map m = geo::fit (8, 40, 752, 290, def, 2.0);
+    const double oldScale = std::min ((264.0 - 40.0 - 26.0) / (3.0 + 2.0 * 1.15), (744.0 / 2.0 - 12.0) / (2.0 * 1.15));
+    CHECK (std::fabs (m.ox - 380.0) < 1e-9 && std::fabs (m.oy - 264.0) < 1e-9 && std::fabs (m.scale - oldScale) < 1e-9,
+           "Angle 0: the listener at (%.1f, %.1f), %.2f px/m (%.2f before)", m.ox, m.oy, m.scale, oldScale);
+    // metres to pixels and back
+    bool round = true;
+    for (double mx : {-7.0, 0.0, 2.5})
+        for (double my : {-3.0, 0.0, 11.0})
+            round = round && std::fabs (m.mx (m.px (mx)) - mx) < 1e-9 && std::fabs (m.my (m.py (my)) - my) < 1e-9;
+    CHECK (round, "pixels and metres round trip");
+    CHECK (m.py (1.0) < m.py (0.0) && m.px (1.0) > m.px (0.0), "ahead is up, right is right");
+    // every place in sight: the listener and the whole ball inside the view
+    bool inSight = true;
+    for (double d : {0.5, 3.0, 20.0})
+        for (double a : {-180.0, -135.0, -90.0, -30.0, 0.0, 45.0, 90.0, 150.0, 180.0})
+            for (double rad : {0.1, 2.0, 3.0})
+            {
+                const geo::Map f = geo::fit (8, 40, 752, 290, {d, a}, rad);
+                const geo::Point c = geo::centreOf ({d, a});
+                const double l = f.px (c.x - rad), rr = f.px (c.x + rad), t = f.py (c.y + rad), b = f.py (c.y - rad);
+                const bool in = l >= 8 - 1e-6 && rr <= 752 + 1e-6 && t >= 40 - 1e-6 && b <= 290 + 1e-6 && f.oy >= 40 && f.oy <= 290;
+                if (!in && inSight)
+                    std::printf ("    out of sight: %g m, %g degrees, radius %g\n", d, a, rad);
+                inSight = inSight && in;
+            }
+    CHECK (inSight, "the listener and the ball always in sight");
+    // centre and polar, Angle wrapped, Distance kept in its range
+    CHECK (std::fabs (geo::centreOf ({2.0, 90.0}).x - 2.0) < 1e-9 && std::fabs (geo::centreOf ({2.0, 90.0}).y) < 1e-9, "90 degrees is right");
+    CHECK (std::fabs (geo::polarOf ({0.0, -4.0}).angle - 180.0) < 1e-9, "straight behind is 180");
+    CHECK (geo::polarOf ({0.0, 0.1}).distance == geo::kMinDistance && geo::polarOf ({0.0, 99.0}).distance == geo::kMaxDistance,
+           "Distance kept in 0.5 .. 20 m");
+    CHECK (paramTable ().info (kDistance).min == geo::kMinDistance && paramTable ().info (kDistance).max == geo::kMaxDistance,
+           "the Distance parameter's range");
+    CHECK (geo::wrapDegrees (270.0) == -90.0 && geo::wrapDegrees (-190.0) == 170.0, "wrapped");
+}
+
+TEST (geometry_drag_both_ways)
+{
+    const geo::Polar start {3.0, 0.0};
+    const geo::Map m = geo::fit (8, 40, 752, 290, start, 2.0);
+    // the ball dragged straight right by 2 m: (3.6 m, 33.7 degrees); up by 1 m: 4 m ahead
+    const geo::Polar p = geo::dragTo (m, geo::Grab::Ball, start, 2.0 * m.scale, 0.0);
+    CHECK (std::fabs (p.distance - std::sqrt (13.0)) < 1e-9 && std::fabs (p.angle - std::atan2 (2.0, 3.0) * 180.0 / geo::kPi) < 1e-9,
+           "sideways: %.3f m, %.2f degrees", p.distance, p.angle);
+    const geo::Polar q = geo::dragTo (m, geo::Grab::Ball, start, 0.0, -1.0 * m.scale);
+    CHECK (std::fabs (q.distance - 4.0) < 1e-9 && std::fabs (q.angle) < 1e-9, "up: %.3f m, %.2f degrees", q.distance, q.angle);
+    // the listener dragged up by 1 m: the ball 1 m nearer; right by 3 m: the ball to the left
+    const geo::Polar u = geo::dragTo (m, geo::Grab::Listener, start, 0.0, -1.0 * m.scale);
+    CHECK (std::fabs (u.distance - 2.0) < 1e-9 && std::fabs (u.angle) < 1e-9, "you up: %.3f m", u.distance);
+    const geo::Polar v = geo::dragTo (m, geo::Grab::Listener, start, 3.0 * m.scale, 0.0);
+    CHECK (std::fabs (v.angle + 45.0) < 1e-9, "you right: the ball at %.2f degrees", v.angle);
+    // past the ball (the listener dragged 6 m up): the ball behind
+    const geo::Polar w = geo::dragTo (m, geo::Grab::Listener, start, 0.0, -6.0 * m.scale);
+    CHECK (std::fabs (w.distance - 3.0) < 1e-9 && std::fabs (std::fabs (w.angle) - 180.0) < 1e-9, "you past it: %.2f degrees", w.angle);
+    // both ways: the drag that reaches a place, then that drag, lands there (for the ball and the listener)
+    bool ok = true;
+    for (geo::Grab g : {geo::Grab::Ball, geo::Grab::Listener})
+        for (double d : {0.5, 1.0, 3.0, 7.5, 20.0})
+            for (double a : {-179.0, -90.0, -10.0, 0.0, 33.0, 90.0, 135.0, 180.0})
+            {
+                const geo::Point px = geo::dragFor (m, g, start, {d, a});
+                const geo::Polar r = geo::dragTo (m, g, start, px.x, px.y);
+                ok = ok && std::fabs (r.distance - d) < 1e-9 && std::fabs (geo::wrapDegrees (r.angle - a)) < 1e-7;
+            }
+    CHECK (ok, "dragFor and dragTo are each other's inverse");
+    // no drag: no change; the ball and the listener move the swarm opposite ways
+    const geo::Polar same = geo::dragTo (m, geo::Grab::Ball, {5.0, 40.0}, 0.0, 0.0);
+    CHECK (std::fabs (same.distance - 5.0) < 1e-9 && std::fabs (same.angle - 40.0) < 1e-9, "no drag, no change");
+    const geo::Point viaBall = geo::dragFor (m, geo::Grab::Ball, start, {4.0, 30.0});
+    const geo::Point viaYou = geo::dragFor (m, geo::Grab::Listener, start, {4.0, 30.0});
+    CHECK (std::fabs (viaBall.x + viaYou.x) < 1e-9 && std::fabs (viaBall.y + viaYou.y) < 1e-9, "opposite drags");
+    // what a click takes: the listener (also where the ball covers it), the ball inside or on its edge, else nothing
+    const geo::Point c = geo::centreOf (start);
+    CHECK (geo::grabAt (m, start, 2.0, m.ox, m.oy) == geo::Grab::Listener, "the listener");
+    CHECK (geo::grabAt (m, start, 2.0, m.px (c.x), m.py (c.y)) == geo::Grab::Ball, "the ball's centre");
+    CHECK (geo::grabAt (m, start, 2.0, m.px (c.x + 2.0) + 3.0, m.py (c.y)) == geo::Grab::Ball, "the ball's edge");
+    CHECK (geo::grabAt (m, start, 2.0, m.px (c.x + 2.0) + 12.0, m.py (c.y)) == geo::Grab::None, "beside the ball");
+    CHECK (geo::grabAt (m, {0.5, 0.0}, 3.0, m.ox + 2.0, m.oy - 2.0) == geo::Grab::Listener, "the listener inside the ball");
 }
 
 int main (int argc, char** argv)

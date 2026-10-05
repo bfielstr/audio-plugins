@@ -240,16 +240,17 @@ clear the LFO mappings; the loaded sample stays.
 
 ## Layouts
 
-**Menu > Layout** switches between the **Default** layout (the window as it has always been: the
-modulation column at the right, the rack under the instrument) and **Wide**, two long rows for a
-DAW's device area:
+**Menu > Layout** switches between **Wide**, two long rows of about the same width for a DAW's device
+area (a new smemplr opens in it), and **Classic** (the fixed layout smemplr had before, called Default
+then: the modulation column at the right, the rack under the instrument):
 
-- the instrument: the waveform over the sample row, then the filter, the envelopes, the LFO and the
-  global controls;
-- the effects and the modulation: the effects rack, the output scope, the four modulation LFOs (two by
-  two) and the list of their mappings.
+- the sound: the waveform over the sample row, then the filter, the envelopes and the list of LFO
+  mappings;
+- the effects and the modulation: the effects rack, the output scope, the global controls, the LFO and
+  the four modulation LFOs (two by two, under their mappings).
 
-Each section is a block with a title strip. In Wide (or a layout of your own) drag a block by its strip
+Each section is a block with a title strip. The blocks fill both rows from edge to edge, each row as
+tall as its tallest block, with the controls centred in each block. In Wide (or a layout of your own) drag a block by its strip
 to put it somewhere else, and drag its right edge to widen it; **Save Layout As...** keeps the result
 under a name, and **Use as Default Layout** makes every new smemplr open in it. The layout is saved
 with the project; presets do not change it. Dragging an LFO onto a control works the same in every
@@ -291,6 +292,6 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
 
 ## Credits
 
-smemplr is released under the MIT licence (see [LICENSE](../../LICENSE)). It builds on the Steinberg
+smemplr is free to use but not for sale (see [LICENSE](../../LICENSE)). It builds on the Steinberg
 VST 3 SDK (MIT), VSTGUI (BSD 3-clause) and dr_libs by David Reed (public domain / MIT-0); see
 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).

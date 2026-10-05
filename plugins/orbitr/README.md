@@ -14,8 +14,10 @@ Install instructions are in the [top-level README](../../README.md).
    input.
 2. Raise **Speed** for more pitch bend, lower **Distance** to bring the swarm closer, and pick
    **Orbit** for circles instead of **Swarm**.
-3. Use **Mix** to set how much of the orbs you hear against the input.
-4. For a granular cloud, switch on **Grains**: each orb then plays short grains cut from the last
+3. Drag the swarm's ball in the display to move it round you: closer, further, to one side or
+   behind you. You can also drag yourself (the head marked "you").
+4. Use **Mix** to set how much of the orbs you hear against the input.
+5. For a granular cloud, switch on **Grains**: each orb then plays short grains cut from the last
    second of the input, still flying round you.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -34,8 +36,15 @@ distance, at most +12 dB).
   moves each orb on its own smooth path inside a ball round the centre.
 - **Floor** (on): each orb's reflection off the floor (an image source 1.7 m under the ears, 0.4 x).
 - **Orbs** (1 to 16, 6 by default).
-- **Speed** (0 to 80 m/s, 18 by default), **Distance** (0.5 to 20 m, 3: the centre ahead of the
-  listener), **Radius** (0.1 to 3 m, 2: how far from the centre the orbs move).
+- **Speed** (0 to 80 m/s, 18 by default), **Distance** (0.5 to 20 m, 3: how far the centre is from
+  the listener), **Radius** (0.1 to 3 m, 2: how far from the centre the orbs move).
+- **Angle** (-180 to 180 degrees, 0 by default): which way the centre is from the listener. 0 is
+  straight ahead, negative values to the left, positive to the right, 180 straight behind. The swarm
+  keeps its shape and is moved there, so its pan, Doppler and level follow its new place. Panning
+  only tells left from right, so a swarm behind you sounds like the same swarm in front, just as wide
+  and as loud. A change of Angle glides over about 50 ms (the short way round, so going from 170 to
+  -170 passes behind you, not in front). It has no knob: set it by dragging in the display (below),
+  or automate it. At 0 orbitr sounds exactly as it did before Angle, so older projects are unchanged.
 - **Spread** (80 %): from centred to equal-power panning by each orb's direction. It also sets the ears'
   spacing (8.75 cm each side at 100 %), so the time difference between the ears.
 - **Random** (Randomness, 60 %): in Orbit, each orbit's tilt, size, speed and place; in Swarm, the
@@ -69,9 +78,27 @@ The orbs are summed / sqrt (Orbs), so the swarm stays about as loud as the input
 The delays are read with 4-point Hermite interpolation and worked out every 16 samples (ramped in
 between).
 
-The display shows the orbs from above, with their trails: you at the bottom, facing up, the swarm's ball
-ahead at the Distance, rings every metre (every 5 m when far). With **Grains** on each orb wears a ring
-and swells with its grains.
+The display shows the orbs from above, with their trails: you facing up, the swarm's ball at its
+Distance and Angle, and rings every metre round you (every 5 m when far). The view zooms to keep both
+you and the whole ball in sight; with the swarm ahead you sit at the bottom. The current place is
+shown at the top right ("Distance 3.0 m, Angle 0°"). With **Grains** on each orb wears a ring and
+swells with its grains.
+
+Moving the swarm in the display:
+
+- **Drag the ball** (anywhere inside its dashed circle, or on its edge): the ball follows the mouse
+  and you stay put. Drag it up to push it further away, down to bring it closer, sideways to move it
+  to the left or right, and past you to put it behind you.
+- **Drag yourself** (the head marked "you"): you follow the mouse and the ball stays put, so walking
+  up to the ball brings it closer and walking past it puts it behind you. When you let go, the view
+  zooms back so you are in the middle again.
+- Hold **Shift** while dragging for fine moves (a fifth of the mouse's movement).
+- **Double-click** the ball (or yourself) to put the swarm back 3 m straight ahead.
+- The **mouse wheel** over the ball (or yourself) changes the Distance.
+
+The ball and the head light up when you point at them and turn cinnabar while you hold them. A drag edits
+Distance and Angle the way turning their knobs would, so the host can undo it and record it as
+automation.
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See

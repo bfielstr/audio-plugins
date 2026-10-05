@@ -63,7 +63,7 @@ public:
     // the modulation section is the column at the right (kModLeft ..)
     static constexpr double kWidth = 1328.0, kModLeft = 1108.0;
     // the modulation column split in two in an arranged layout (Menu > Layout): the LFOs two by two, and
-    // the mappings' list under them (where they are built: right of the Default window)
+    // the mappings' list under them (where they are built: right of the Classic window)
     static constexpr double kModSplitW = 424.0, kModSplitH = 256.0, kMapTop = 300.0, kMapH = 24.0 + 24 * 17.0 + 8.0;
     static constexpr double kHeight = 1012.0;
     // the effects rack at the bottom (also used by the host test): the slots' tabs in chain order (drag

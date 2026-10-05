@@ -97,7 +97,7 @@ void Editor::buildUI (CFrame* f)
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;
         }, "smacheratr  (before the limiter)");
-    tail->add (root, CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -153,7 +153,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"history", "history", {kViewLeft, kViewTop, kViewRight, 300}, 0},
         {"limiter", "", {kViewLeft, kRowTop, 560, kRowTop + 92}, 0, 0},
         {"character", "", {568, kRowTop, kViewRight, kRowTop + 92}, 0, 0},
-        {"tail", "end of the chain", {kViewLeft, 408, kViewRight, 408 + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {kViewLeft, 408, kViewRight, 408 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

@@ -2,24 +2,37 @@
 //
 // An editor declares its panels: rectangles of its content, each with an id, a title and the row of the
 // Wide template it belongs to (a Spec). The editor still builds its content as it always has, at fixed
-// coordinates; a panel's region is where that content is in the build (the Default layout, or the
+// coordinates; a panel's region is where that content is in the build (the Classic layout, or the
 // arranged build an editor makes for the other layouts: smemplr's modulation column splits in two).
 //
-// The Default layout is the editor as built: nothing moves, so it is the same as before layouts, pixel for
-// pixel. Every other layout is an Arrangement: rows from top to bottom, each a run of columns from left to
-// right, each column a stack of panels (most hold one). EditorBase moves each panel's content into a block
-// placed where the arrangement puts it (place ()): a title strip to drag it by, then the content, centred
-// in its column. A column is as wide as its widest panel, or wider when the user drags its edge (up to
-// twice that). The window is as wide as the widest row (at least the Default width: the header's controls
-// keep their room) and as tall as the rows.
+// The Classic layout (called Default before 0.15) is the editor as built: nothing moves, so it is the same
+// as before layouts, pixel for pixel. Every other layout is an Arrangement: rows from top to bottom, each a
+// run of columns from left to right, each column a stack of panels (most hold one). EditorBase moves each
+// panel's content into a block placed where the arrangement puts it (place ()): a title strip to drag it
+// by, then the content, centred in its block both ways (a panel that fills its block is built at the
+// block's width instead: Panel::fill).
+//
+// Rows fill the window: the window is as wide as the widest row at its natural width (at least the Classic
+// width: the header's controls keep their room), and every row's columns share that width, each stretched
+// in proportion to its natural width (held to its range while that can fill the row). The blocks of a row
+// are all as tall as its tallest column (in a stack, the extra height is shared among its blocks). One gap
+// (kGap) between blocks and rows, one margin (kMargin) at the window's sides and under the last row.
+// A column's natural width is its widest panel's, or more when the user drags its edge (up to twice that):
+// that width is kept in the layout text and decides its share of the row.
 //
 // Layouts as text (saved in the controller's state and in the layouts file):
-//   ""  or "default"                      the Default layout
-//   "wide"                                the Wide template (wide (spec))
+//   "" , "default" or "classic"           the Classic layout (written as "default", which 0.14 reads too)
+//   "wide"                                the Wide template (wide (spec)), the layout a new instance has
 //   "waveform/sample,filter:400,env;fx"   rows split by ';', columns by ',', a column's stacked panels by
-//                                         '/'; ":<px>" after a column's last panel is its width
+//                                         '/'; ":<px>" after a column's last panel is its natural width
 // A text naming panels the editor does not have (an older or newer version) drops them; panels it does not
 // name are added at the end (normalize ()), so every panel is always shown exactly once.
+//
+// Which layout an instance has: a new instance has the user's default layout (Use as Default Layout, the
+// layouts file) or else Wide (kDefaultLayout). A project or preset state that carries the layout field
+// (0.14 and later) keeps the layout it saved, "" included (0.14 wrote "" for its Default: the Classic
+// layout); a state without the field (from before 0.14) opens in Wide. So "no field" and "explicitly
+// Classic" never mix: the first has no text at all, the second always has one ("" or "default").
 #pragma once
 
 #include <map>
@@ -44,11 +57,13 @@ struct Panel
     Box region;        // its content in the build (editor coordinates)
     int row = 0;       // the Wide template's row (by purpose: 0 the instrument or the effect, 1 what follows)
     int stack = -1;    // Wide: panels of a row with the same stack (>= 0) share one column, top to bottom
+    bool fill = false; // its content can be built at any width from the region's up: an arranged build makes
+                       // it as wide as its block (EditorBase::layoutRegion), so it fills the block
 };
 
 struct Spec
 {
-    double width = 0, height = 0; // the Default content (the window without the info strip)
+    double width = 0, height = 0; // the Classic content (the window without the info strip)
     double headerHeight = 34;     // the header band (title, presets, Menu): stays at the top
     double headerSplit = 0;       // header controls from this x move with the window's right edge (0: half the width)
     double top = 40;              // an arranged layout's first row
@@ -71,17 +86,25 @@ struct Arrangement
     bool operator== (const Arrangement& o) const;
 };
 
+// The layout a new instance has when the user has not picked a default of their own, and the text the
+// Classic layout is written as.
+constexpr const char* kDefaultLayout = "wide";
+constexpr const char* kClassicText = "default";
+
 // spacing in an arranged layout
 constexpr double kMargin = 8;  // at the window's sides and under the last row
-constexpr double kGap = 8;     // between blocks
+constexpr double kGap = 8;     // between blocks and between rows
 constexpr double kStrip = 16;  // a block's title strip (the handle it is dragged by)
 constexpr double kEdge = 5;    // a block's right edge, dragged to change its column's width
 
 // ---- text
 std::string toString (const Arrangement& a);
-Arrangement parse (const std::string& text); // (empty for "", "default" and "wide": see resolve)
-bool isDefault (const std::string& text);    // "" or "default"
-// The arrangement a layout text stands for, normalized (empty: the Default layout).
+Arrangement parse (const std::string& text); // (empty for "", "default", "classic" and "wide": see resolve)
+bool isClassic (const std::string& text);    // "", "default" or "classic" (any case)
+bool isDefault (const std::string& text);    // (the same: the name before 0.15)
+// The name the Layout menu shows a template's text by ("Classic", "Wide"; "" for an arrangement).
+std::string templateName (const std::string& text);
+// The arrangement a layout text stands for, normalized (empty: the Classic layout).
 Arrangement resolve (const Spec& spec, const std::string& text);
 
 // ---- templates
@@ -96,20 +119,21 @@ struct Block
 {
     std::string id;
     Box box;          // the block: its strip, then its content
-    Box content;      // where the panel's region goes (as wide and tall as the region, centred in the column)
+    Box content;      // where the panel's region goes (as large as the region, centred in the block under its
+                      // strip; a filling panel's as wide as the block)
     int row = 0, column = 0, index = 0;
 };
 struct Geometry
 {
     double width = 0, height = 0; // the content (the window without the info strip)
     std::vector<Block> blocks;
-    std::vector<Box> rows;                 // each row's extent (its columns' tops to the tallest one's bottom)
-    std::vector<std::vector<Box>> columns; // each row's columns
+    std::vector<Box> rows;                 // each row's extent (margin to margin, as tall as its tallest column)
+    std::vector<std::vector<Box>> columns; // each row's columns (as tall as the row)
     const Block* find (const std::string& id) const;
 };
 // heights: panels shown shorter than their region now (a folded end saturator), by id.
 Geometry place (const Spec& spec, const Arrangement& a, const std::map<std::string, double>& heights = {});
-// A column's width range: its widest panel .. twice that.
+// A column's natural width range: its widest panel .. twice that.
 double naturalWidth (const Spec& spec, const Column& c);
 double maxWidth (const Spec& spec, const Column& c);
 
@@ -133,7 +157,8 @@ struct Drop
 Drop dropAt (const Arrangement& a, const Geometry& g, double x, double y);
 // The panel moved where the drop says (normalized again; unchanged when it is not in the arrangement).
 Arrangement move (const Spec& spec, const Arrangement& a, const std::string& id, const Drop& d);
-// The column holding the panel at `width` (held to its range).
+// The column holding the panel shown `width` wide, as near as its natural width's range allows (the
+// natural width that, placed, gives it that width: the other columns of its row share what is left).
 Arrangement resize (const Spec& spec, const Arrangement& a, const std::string& id, double width);
 
 // ---- saved layouts: a small text file per plug-in beside its presets (<preset folder>/.layouts.txt)
@@ -147,7 +172,7 @@ struct Named
 struct Saved
 {
     std::vector<Named> layouts;
-    std::string defaultLayout; // "" : the Default layout
+    std::string defaultLayout; // (when hasDefault) "" or "default": the Classic layout
     bool hasDefault = false;
     const Named* find (const std::string& name) const;
     void put (const std::string& name, const std::string& layout); // adds or replaces (same name, any case)

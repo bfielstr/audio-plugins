@@ -286,7 +286,7 @@ void Editor::buildUI (CFrame* f)
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
                                                     [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
-    tail->add (root, CRect (8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight));
+    tail->add (root, layoutRegion ("tail", CRect (8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight)));
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
     // the Gain knob, then Trigger and Outside Clip under it, each label over its selector (the knob
@@ -597,7 +597,7 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"pitch", "", {324, 388, 636, 592}, 0},
         {"time", "", {644, 388, 836, 592}, 0},
         {"output", "", {844, 388, 972, 592}, 0},
-        {"tail", "end of the chain", {8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight}, 1},
+        {"tail", "end of the chain", {8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

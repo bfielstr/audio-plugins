@@ -109,17 +109,26 @@ std::string toString (const Arrangement& a)
     return out;
 }
 
-bool isDefault (const std::string& text)
+bool isClassic (const std::string& text)
 {
     const std::string t = lower (trim (text));
-    return t.empty () || t == "default";
+    return t.empty () || t == "default" || t == "classic";
+}
+
+bool isDefault (const std::string& text) { return isClassic (text); }
+
+std::string templateName (const std::string& text)
+{
+    if (isClassic (text))
+        return "Classic";
+    return lower (trim (text)) == "wide" ? "Wide" : std::string ();
 }
 
 Arrangement parse (const std::string& text)
 {
     Arrangement a;
     const std::string t = trim (text);
-    if (isDefault (t) || lower (t) == "wide")
+    if (isClassic (t) || lower (t) == "wide")
         return a;
     for (const auto& rowText : split (t, ';'))
     {
@@ -147,7 +156,7 @@ Arrangement parse (const std::string& text)
 
 Arrangement resolve (const Spec& spec, const std::string& text)
 {
-    if (spec.empty () || isDefault (text))
+    if (spec.empty () || isClassic (text))
         return {};
     if (lower (trim (text)) == "wide")
         return wide (spec);
@@ -228,49 +237,148 @@ Arrangement normalize (const Spec& spec, Arrangement a)
 
 // ---- geometry --------------------------------------------------------------------------------------
 
+namespace {
+// `total` shared among columns of natural widths `pref`: each gets a part of what is over in proportion to
+// its natural width, held to its `cap` while the others can take the rest (when every one is at its cap
+// and some is still over, in proportion again past the caps: the row always fills). Whole pixels, adding
+// up to `total` exactly. (A row at its natural width keeps it.)
+std::vector<double> share (const std::vector<double>& pref, const std::vector<double>& cap, double total)
+{
+    const size_t n = pref.size ();
+    std::vector<double> w = pref;
+    double sum = 0;
+    for (double p : pref)
+        sum += p;
+    double extra = total - sum;
+    std::vector<bool> held (n, false);
+    for (size_t pass = 0; pass <= n && extra > 0.01; ++pass)
+    {
+        double base = 0;
+        for (size_t i = 0; i < n; ++i)
+            if (!held[i])
+                base += pref[i];
+        if (base <= 0)
+            break;
+        // the columns that would pass their cap take it and leave the round; the others share the rest
+        bool capped = false;
+        for (size_t i = 0; i < n; ++i)
+            if (!held[i] && w[i] + extra * pref[i] / base >= cap[i])
+            {
+                extra -= std::max (0.0, cap[i] - w[i]);
+                w[i] = std::max (w[i], cap[i]);
+                held[i] = true;
+                capped = true;
+            }
+        if (capped)
+            continue;
+        for (size_t i = 0; i < n; ++i)
+            if (!held[i])
+                w[i] += extra * pref[i] / base;
+        extra = 0;
+    }
+    if (extra > 0.01) // every column at its cap: past them, in proportion
+        for (size_t i = 0; i < n; ++i)
+            w[i] += extra * pref[i] / std::max (1e-9, sum);
+    // whole pixels by their running total (the last edge at `total` exactly)
+    std::vector<double> out (n);
+    double run = 0, edge = 0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        run += w[i];
+        const double next = i + 1 == n ? std::round (total) : std::round (run);
+        out[i] = next - edge;
+        edge = next;
+    }
+    return out;
+}
+} // namespace
+
 Geometry place (const Spec& spec, const Arrangement& a, const std::map<std::string, double>& heights)
 {
-    Geometry g;
-    double y = spec.top, right = 0;
+    // each column's panels and their heights now, its natural width, its range's end and its height
+    struct Col
+    {
+        std::vector<const Panel*> panels;
+        std::vector<double> heights;
+        double pref = 0, cap = 0, height = 0;
+    };
+    std::vector<std::vector<Col>> cols (a.rows.size ());
+    double inner = std::max (0.0, std::round (spec.width) - 2 * kMargin);
     for (size_t r = 0; r < a.rows.size (); ++r)
     {
-        double x = kMargin, bottom = y;
-        std::vector<Box> cols;
-        for (size_t c = 0; c < a.rows[r].size (); ++c)
+        double rowWidth = 0;
+        for (const Column& column : a.rows[r])
         {
-            const Column& col = a.rows[r][c];
-            const double w = std::max (col.width, naturalWidth (spec, col));
+            Col c;
+            for (const auto& id : column.ids)
+                if (const Panel* p = spec.find (id))
+                {
+                    double h = p->region.height ();
+                    if (auto it = heights.find (p->id); it != heights.end ())
+                        h = std::clamp (it->second, 0.0, h);
+                    c.height += (c.panels.empty () ? 0.0 : kGap) + kStrip + h;
+                    c.panels.push_back (p);
+                    c.heights.push_back (h);
+                }
+            c.pref = std::round (std::max (column.width, naturalWidth (spec, column)));
+            c.cap = std::max (c.pref, std::round (maxWidth (spec, column)));
+            rowWidth += (cols[r].empty () ? 0.0 : kGap) + c.pref;
+            cols[r].push_back (c);
+        }
+        inner = std::max (inner, rowWidth);
+    }
+
+    Geometry g;
+    g.width = inner + 2 * kMargin;
+    double y = spec.top;
+    for (size_t r = 0; r < a.rows.size (); ++r)
+    {
+        const auto& row = cols[r];
+        std::vector<double> pref, cap;
+        double rowHeight = 0;
+        for (const auto& c : row)
+        {
+            pref.push_back (c.pref);
+            cap.push_back (c.cap);
+            rowHeight = std::max (rowHeight, c.height);
+        }
+        const std::vector<double> widths = share (pref, cap, inner - kGap * (double)(row.empty () ? 0 : row.size () - 1));
+        double x = kMargin;
+        std::vector<Box> boxes;
+        for (size_t c = 0; c < row.size (); ++c)
+        {
+            const double w = widths[c];
+            const size_t n = row[c].panels.size ();
+            // the row's height shared out: each block of a stack taller by an even part of what is over
+            // (the last one reaches the row's bottom)
+            const double spare = rowHeight - row[c].height;
             double cy = y;
-            for (size_t i = 0; i < col.ids.size (); ++i)
+            for (size_t i = 0; i < n; ++i)
             {
-                const Panel* p = spec.find (col.ids[i]);
-                if (!p)
-                    continue;
-                double h = p->region.height ();
-                if (auto it = heights.find (p->id); it != heights.end ())
-                    h = std::clamp (it->second, 0.0, h);
+                const Panel* p = row[c].panels[i];
+                const double h = row[c].heights[i];
+                const double add = i + 1 == n ? (y + rowHeight) - (cy + kStrip + h) : std::floor (spare / (double)n);
                 Block b;
                 b.id = p->id;
                 b.row = (int)r;
                 b.column = (int)c;
                 b.index = (int)i;
-                b.box = {x, cy, x + w, cy + kStrip + h};
-                const double cx = x + std::floor ((w - p->region.width ()) / 2);
-                b.content = {cx, cy + kStrip, cx + p->region.width (), cy + kStrip + h};
+                b.box = {x, cy, x + w, cy + kStrip + h + add};
+                // the content centred under the strip, both ways (a filling panel: as wide as the block)
+                const double cw = p->fill ? w : std::min (w, p->region.width ());
+                const double cx = x + std::floor ((w - cw) / 2);
+                const double top = cy + kStrip + std::floor (add / 2);
+                b.content = {cx, top, cx + cw, top + h};
                 g.blocks.push_back (b);
                 cy = b.box.bottom + kGap;
             }
-            const double colBottom = cy - kGap;
-            cols.push_back ({x, y, x + w, colBottom});
-            bottom = std::max (bottom, colBottom);
+            boxes.push_back ({x, y, x + w, y + rowHeight});
             x += w + kGap;
         }
-        right = std::max (right, x - kGap);
-        g.rows.push_back ({kMargin, y, x - kGap, bottom});
-        g.columns.push_back (cols);
-        y = bottom + kGap;
+        g.rows.push_back ({kMargin, y, kMargin + inner, y + rowHeight});
+        g.columns.push_back (boxes);
+        y += rowHeight + kGap;
     }
-    g.width = std::max (spec.width, right + kMargin);
     g.height = (a.rows.empty () ? spec.top : y - kGap) + kMargin;
     return g;
 }
@@ -393,12 +501,36 @@ Arrangement move (const Spec& spec, const Arrangement& a, const std::string& id,
 
 Arrangement resize (const Spec& spec, const Arrangement& a, const std::string& id, double width)
 {
-    Arrangement b = a;
-    for (auto& row : b.rows)
-        for (auto& col : row)
-            if (std::find (col.ids.begin (), col.ids.end (), id) != col.ids.end ())
-                col.width = std::clamp (width, naturalWidth (spec, col), maxWidth (spec, col));
-    return normalize (spec, b);
+    Arrangement b = normalize (spec, a);
+    for (size_t r = 0; r < b.rows.size (); ++r)
+        for (size_t c = 0; c < b.rows[r].size (); ++c)
+        {
+            Column& col = b.rows[r][c];
+            if (std::find (col.ids.begin (), col.ids.end (), id) == col.ids.end ())
+                continue;
+            // the natural width that shows it `width` wide (a wider natural width shows it wider: a search)
+            const double lo = naturalWidth (spec, col), hi = maxWidth (spec, col);
+            auto shown = [&] (double natural) {
+                col.width = natural;
+                return place (spec, b).columns[r][c].width ();
+            };
+            double natural = lo;
+            if (shown (hi) <= width)
+                natural = hi;
+            else if (shown (lo) < width)
+            {
+                double l = lo, h = hi;
+                for (int i = 0; i < 40 && h - l > 0.25; ++i)
+                {
+                    const double m = 0.5 * (l + h);
+                    (shown (m) < width ? l : h) = m;
+                }
+                natural = std::round (h);
+            }
+            col.width = natural;
+            return normalize (spec, b);
+        }
+    return b;
 }
 
 // ---- saved layouts ---------------------------------------------------------------------------------
@@ -479,7 +611,7 @@ bool validName (const std::string& name)
         if (c == '=' || c == '\n' || c == '\r')
             return false;
     const std::string l = lower (t);
-    return l != "default" && l != "wide";
+    return l != "default" && l != "classic" && l != "wide";
 }
 
 std::string savedPath (const std::string& presetFolder)

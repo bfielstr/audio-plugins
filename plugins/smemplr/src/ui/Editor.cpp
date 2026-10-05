@@ -590,7 +590,7 @@ void Editor::buildUI (CFrame* f)
 
     // ---- the modulation (the column at the right): four LFOs, each with a handle to drag onto a control,
     // and the list of what they modulate ----
-    // In an arranged layout (Menu > Layout, other than the Default) the column is two panels instead, so
+    // In an arranged layout (Menu > Layout, other than Classic) the column is two panels instead, so
     // the rows stay short: the LFOs two by two (MODULATION), and the list (MAPPINGS); each is a block of
     // its own (layoutSpec). They are built right of the window as made, where nothing else is.
     const bool split = arrangedLayout ();
@@ -2408,9 +2408,11 @@ void Editor::showMenu (CPoint where)
 
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
-    // Wide: the instrument in the first row (the waveform over the sample row, the filter, the envelopes,
-    // the LFO, the global controls), the rack, the output, the modulation LFOs and their mappings in the
-    // second. (Regions as an arranged layout builds them: the modulation column split in two, buildUI.)
+    // Wide: two rows of about the same width. The sound in the first (the waveform over the sample row,
+    // the filter, the envelopes) with the list of mappings at its end (it is tall, and so is the first
+    // row); the rack, the output, the global controls, the LFO and the modulation LFOs in the second (the
+    // modulation under its mappings). (Regions as an arranged layout builds them: the modulation column
+    // split in two, buildUI.)
     pk::layout::Spec s;
     s.headerSplit = kModLeft; // (only ? and Menu follow the window's right edge)
     s.panels = {
@@ -2418,12 +2420,12 @@ pk::layout::Spec Editor::layoutSpec (bool) const
         {"sample", "", {8, 306, 1102, 404}, 0, 0},
         {"filter", "", {8, 410, 380, 716}, 0},
         {"envelope", "", {386, 410, 704, 716}, 0},
-        {"lfo", "", {710, 410, 918, 716}, 0},
-        {"global", "", {924, 410, 1102, 716}, 0},
+        {"mappings", "", {kModLeft, kMapTop, kModLeft + 212, kMapTop + kMapH}, 0},
         {"rack", "effects rack", {8, kFxTabTop, 846, kFxPanelTop + 234}, 1},
         {"output", "", {852, kFxTabTop, 1102, kFxPanelTop + 234}, 1},
+        {"global", "", {924, 410, 1102, 716}, 1},
+        {"lfo", "", {710, 410, 918, 716}, 1},
         {"modulation", "", {kModLeft, 38, kModLeft + kModSplitW, 38 + kModSplitH}, 1},
-        {"mappings", "", {kModLeft, kMapTop, kModLeft + 212, kMapTop + kMapH}, 1},
     };
     return s;
 }

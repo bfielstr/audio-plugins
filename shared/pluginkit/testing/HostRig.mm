@@ -203,8 +203,9 @@ public:
 };
 } // namespace
 
-EditorWindow::EditorWindow (IEditController* controller)
+EditorWindow::EditorWindow (IEditController* controller, const std::string& layout, const std::string& name)
 {
+    setLayout (controller, layout, name); // (no editor yet: the layout it opens in)
     plugView = controller->createView (ViewType::kEditor);
     if (!plugView)
         return;
@@ -392,7 +393,7 @@ void checkLayouts (Rig& rig, EditorWindow& win, const std::vector<ParamID>& knob
     const double w0 = win.width (), h0 = win.height ();
     std::vector<ControlRect> before (knobs.size ());
     for (size_t i = 0; i < knobs.size (); ++i)
-        PK_CHECK (findControl (rig.controller, knobs[i], before[i]), "Default: the control of parameter %u is found", knobs[i]);
+        PK_CHECK (findControl (rig.controller, knobs[i], before[i]), "Classic: the control of parameter %u is found", knobs[i]);
     // a knob turned by a drag up: its value rises (then put back)
     auto turn = [&] (ParamID id, const ControlRect& r, const char* where) {
         const double v0 = rig.controller->getParamNormalized (id);
@@ -420,21 +421,21 @@ void checkLayouts (Rig& rig, EditorWindow& win, const std::vector<ParamID>& knob
         moved = moved || std::fabs (r.left - before[i].left) > 1 || std::fabs (r.top - before[i].top) > 1;
         turn (knobs[i], r, "Wide");
     }
-    PK_CHECK (moved, "Wide: the controls are elsewhere than in the Default");
+    PK_CHECK (moved, "Wide: the controls are elsewhere than in the Classic layout");
     if (!png.empty ())
         PK_CHECK (win.savePng (png), "screenshot, Wide");
-    setLayout (rig.controller, "", "Default");
+    setLayout (rig.controller, "default", "Classic");
     pump (0.2);
     // (as wide as it was; as tall, or shorter by a section folded since it opened, which a window that
     // may resize now follows)
-    PK_CHECK (std::fabs (win.width () - w0) < 1 && win.height () <= h0 + 1, "Default again: the window as it was (%.0f x %.0f)", win.width (),
+    PK_CHECK (std::fabs (win.width () - w0) < 1 && win.height () <= h0 + 1, "Classic again: the window as it was (%.0f x %.0f)", win.width (),
               win.height ());
     for (size_t i = 0; i < knobs.size (); ++i)
     {
         ControlRect r;
         PK_CHECK (findControl (rig.controller, knobs[i], r) && std::fabs (r.left - before[i].left) < 0.5 && std::fabs (r.top - before[i].top) < 0.5,
-                  "Default again: the control of parameter %u where it was", knobs[i]);
-        turn (knobs[i], r, "Default again");
+                  "Classic again: the control of parameter %u where it was", knobs[i]);
+        turn (knobs[i], r, "Classic again");
     }
     win.allowResize (false);
 }

@@ -124,7 +124,7 @@ range, its default and now). A control placed wholly on a display (a readout, a 
 is by design and not listed. Set `PK_LAYOUT_REPORT` to a file and every editor opened appends its list
 there; the macOS host tests print it.
 
-An arranged layout (Menu > Layout, other than the Default; `shared/pluginkit/Layout.h`) shows each
+An arranged layout (Menu > Layout, other than Classic; `shared/pluginkit/Layout.h`) shows each
 section as a block under a title strip: a grip of copper dots and the title in small uppercase pale
 copper on plain space, no frame of its own (the section's panel keeps its frame). A block being dragged
 is outlined in energy live, and where it would land is a 2 px energy-live bar (the selection colour).
