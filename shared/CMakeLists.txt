@@ -1,7 +1,7 @@
 # pluginkit: code shared by all plug-ins.
 
 # Parameter tables (no SDK dependency, used by DSP tests too).
-add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp)
+add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp pluginkit/Layout.h pluginkit/Layout.cpp)
 target_include_directories(pluginkit_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(WIN32)
     target_link_libraries(pluginkit_core PUBLIC dbghelp)
@@ -17,6 +17,11 @@ add_test(NAME pluginkit_core COMMAND pluginkit_tests)
 add_executable(pluginkit_preset_store_tests tests/preset_store_tests.cpp)
 target_link_libraries(pluginkit_preset_store_tests PRIVATE pluginkit_core)
 add_test(NAME pluginkit_preset_store COMMAND pluginkit_preset_store_tests)
+
+# The editors' layout model without VSTGUI (layout texts, the Wide template, dragging, saved layouts).
+add_executable(pluginkit_layout_tests tests/layout_tests.cpp)
+target_link_libraries(pluginkit_layout_tests PRIVATE pluginkit_core)
+add_test(NAME pluginkit_layout COMMAND pluginkit_layout_tests)
 
 if(PK_BUILD_PLUGINS)
     # VST3 controller/editor bases and VSTGUI widgets.
