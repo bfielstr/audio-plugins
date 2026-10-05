@@ -2,7 +2,8 @@
 // connects them (in a temporary preset folder, $PK_PRESETS_DIR): .vstpreset round trips with tags,
 // files without metadata (saved before 0.13), Init, factory presets, the tag filter, Save as Default
 // (a new instance starts from it, a project's state still wins), Reset Default, rename / delete and
-// the menu message the macOS host tests use. Run: ./pluginkit_preset_tests
+// the menu message the macOS host tests use; the editor's layout in the controller's state (older states
+// without it, presets keeping the layout, the user's default layout). Run: ./pluginkit_preset_tests
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/Presets.h"
 
@@ -430,6 +431,102 @@ int main ()
         CHECK (b.ctrl->presetName () == "Tame" && b.ctrl->presetKind () == pk::presets::Kind::Factory &&
                    b.ctrl->presetPath () == "Mixing/Tame.txt",
                "%s", b.ctrl->presetPath ().c_str ());
+    }
+
+    std::printf ("layoutInTheControllerState\n");
+    {
+        // the layout and its name after the view state, read back
+        Instance a (host);
+        a.ctrl->uiLayout = "display/sample,filter:400;rack";
+        a.ctrl->uiLayoutName = "Mixing";
+        a.ctrl->uiTailOpen = pk::ControllerBase::kTailOpenGentlr;
+        MemoryStream st;
+        CHECK (a.ctrl->getState (&st) == kResultOk, "get");
+        st.seek (0, IBStream::kIBSeekSet, nullptr);
+        Instance b (host);
+        CHECK (b.ctrl->setState (&st) == kResultOk, "set");
+        CHECK (b.ctrl->uiLayout == "display/sample,filter:400;rack" && b.ctrl->uiLayoutName == "Mixing", "%s / %s", b.ctrl->uiLayout.c_str (),
+               b.ctrl->uiLayoutName.c_str ());
+        CHECK (b.ctrl->uiTailOpen == pk::ControllerBase::kTailOpenGentlr, "the view state before it still read");
+
+        // a state from before layouts (it ends after the view state): the Default layout, as then
+        MemoryStream old;
+        {
+            IBStreamer s (&old, kLittleEndian);
+            s.writeDouble (1.25);
+            s.writeBool (true);
+            s.writeStr8 ("Old preset");
+            s.writeStr8 ("0:");
+            s.writeInt32 (0x56575354); // 'VWST'
+            s.writeInt32 (2);
+            s.writeInt32 (pk::ControllerBase::kTailOpenSaturator);
+            s.writeInt32 (1);
+        }
+        old.seek (0, IBStream::kIBSeekSet, nullptr);
+        CHECK (b.ctrl->setState (&old) == kResultOk, "old state");
+        CHECK (b.ctrl->uiLayout.empty () && b.ctrl->uiLayoutName.empty (), "no layout: Default (%s)", b.ctrl->uiLayout.c_str ());
+        CHECK (std::fabs (b.ctrl->uiScale - 1.25) < 1e-9 && b.ctrl->uiTailOpen == pk::ControllerBase::kTailOpenSaturator && b.ctrl->uiColorLayer == 1,
+               "the rest of an old state");
+
+        // what an older version reads of a new state: the fields it knows, in order, then it stops
+        MemoryStream st2;
+        a.ctrl->getState (&st2);
+        st2.seek (0, IBStream::kIBSeekSet, nullptr);
+        IBStreamer r (&st2, kLittleEndian);
+        double scale = 0;
+        bool tips = false;
+        int32 tag = 0, count = 0, tailOpen = -1, layer = -1;
+        char8* name = nullptr;
+        char8* ref = nullptr;
+        CHECK (r.readDouble (scale) && r.readBool (tips) && (name = r.readStr8 ()) && (ref = r.readStr8 ()) && r.readInt32 (tag) &&
+                   tag == 0x56575354 && r.readInt32 (count) && count == 2 && r.readInt32 (tailOpen) && r.readInt32 (layer),
+               "an older reader's fields");
+        CHECK (tailOpen == pk::ControllerBase::kTailOpenGentlr, "its view state");
+        delete[] name;
+        delete[] ref;
+    }
+
+    std::printf ("presetsKeepTheLayout\n");
+    {
+        Instance a (host);
+        a.ctrl->uiLayout = "wide";
+        a.ctrl->uiLayoutName = "Wide";
+        CHECK (a.ctrl->saveUserPreset ("Laid out", "", {}), "save");
+        a.ctrl->uiLayout.clear ();
+        a.ctrl->uiLayoutName = "Default";
+        CHECK (a.ctrl->loadPreset ((folder / "Laid out.vstpreset").string ()), "load");
+        CHECK (a.ctrl->uiLayout.empty () && a.ctrl->uiLayoutName == "Default", "the editor's layout stays (%s)", a.ctrl->uiLayout.c_str ());
+        a.ctrl->deletePreset ((folder / "Laid out.vstpreset").string ());
+    }
+
+    std::printf ("defaultLayoutForNewInstances\n");
+    {
+        // Use as Default Layout: the layouts file beside the presets; a new instance starts with it, a
+        // project's state still wins
+        Instance a (host);
+        pk::layout::Saved s = a.ctrl->savedLayouts ();
+        s.put ("Tracking", "a,b;c");
+        s.defaultLayout = "a,b;c";
+        s.hasDefault = true;
+        CHECK (a.ctrl->writeSavedLayouts (s), "write");
+        CHECK (fs::exists (folder / ".layouts.txt"), "beside the presets");
+        Instance n (host);
+        CHECK (n.ctrl->uiLayout == "a,b;c" && n.ctrl->uiLayoutName == "Tracking", "%s / %s", n.ctrl->uiLayout.c_str (), n.ctrl->uiLayoutName.c_str ());
+        MemoryStream st;
+        a.ctrl->getState (&st); // (a's layout: Default)
+        st.seek (0, IBStream::kIBSeekSet, nullptr);
+        n.ctrl->setState (&st);
+        CHECK (n.ctrl->uiLayout.empty (), "the project's layout wins");
+        // the message the host tests use
+        auto msg = owned (new HostMessage ());
+        msg->setMessageID (pk::ControllerBase::kMsgSetLayout);
+        msg->getAttributes ()->setBinary ("text", "wide", 4);
+        msg->getAttributes ()->setBinary ("name", "Wide", 4);
+        n.ctrl->notify (msg);
+        CHECK (n.ctrl->uiLayout == "wide" && n.ctrl->uiLayoutName == "Wide", "set by message");
+        fs::remove (folder / ".layouts.txt");
+        Instance m (host);
+        CHECK (m.ctrl->uiLayout.empty (), "no file: Default");
     }
 
     std::printf ("menuMessage\n");

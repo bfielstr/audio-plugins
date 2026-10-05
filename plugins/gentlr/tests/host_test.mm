@@ -316,6 +316,9 @@ int main (int argc, char** argv)
             pump (0.05);
             const double u1 = plainOf (rig, kSubThreshold);
             CHECK (u1 < u0 - 5.0, "dragging the Sub Threshold slider down: %.1f -> %.1f dB", u0, u1);
+            // Menu > Layout: Wide (the display and the controls in a row, the end saturator under them) and
+            // back to the Default; the controls found by parameter through the view tree
+            checkLayouts (rig, win, {bandParam (0, kFreq), (uint32_t)kAttack, (uint32_t)kMix}, outDir + "/ui_gentlr_wide.png");
         }
         return finish ("gentlr host test");
     }

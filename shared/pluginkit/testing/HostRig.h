@@ -88,14 +88,40 @@ public:
     void click (double x, double y, int clicks = 1, unsigned long mods = 0);
     void drag (double x0, double y0, double x1, double y1, unsigned long mods = 0, int steps = 8);
     bool savePng (const std::string& file);
+    // Lets the editor resize its window (a frame that takes every size the editor asks for: a layout's
+    // shape, a section folding). Off by default: the editor keeps the window it opened with, as a host
+    // that refuses resizing (an arranged layout is then zoomed to fit it).
+    void allowResize (bool on);
+    double width () const;  // the window's content now
+    double height () const;
 
 private:
     void send (int type, double x, double y, int clicks, unsigned long mods);
     void* window = nullptr;
     void* captured = nullptr;
+    void* resizer = nullptr; // the IPlugFrame given to the view
     Steinberg::IPlugView* plugView = nullptr;
     bool attached = false;
 };
+
+// ---- layouts (Menu > Layout; pluginkit/Layout.h)
+// The controller's open editor in another layout (pk::ControllerBase::kMsgSetLayout): "" the Default,
+// "wide", or an arrangement's text; it is built in it again at once.
+void setLayout (Steinberg::Vst::IEditController* controller, const std::string& text, const std::string& name = {});
+// Where the control bound to parameter `id` is shown in the open editor, in the coordinates
+// EditorWindow's mouse functions take (pk::ControllerBase::kMsgFindControl, through the view tree:
+// right in any layout and at any zoom). False when none is shown.
+struct ControlRect
+{
+    double left = 0, top = 0, right = 0, bottom = 0;
+    double cx () const { return 0.5 * (left + right); }
+    double cy () const { return 0.5 * (top + bottom); }
+};
+bool findControl (Steinberg::Vst::IEditController* controller, Steinberg::Vst::ParamID id, ControlRect& r);
+// Default, Wide and Default again in an open editor (its window resizing): each knob of `knobs` is found
+// in each layout (in Wide elsewhere, in the window made wider and shorter) and turned there by a drag (its
+// value follows), and in Default again it is back where it was. `png`: Wide's screenshot.
+void checkLayouts (Rig& rig, EditorWindow& win, const std::vector<Steinberg::Vst::ParamID>& knobs, const std::string& png);
 
 double rms (const std::vector<float>& x, size_t a, size_t b);
 double dbfs (double linear);

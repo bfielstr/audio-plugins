@@ -892,6 +892,9 @@ int main (int argc, char** argv)
             win.click (smemplr::Editor::kModLeft + 204 - 7, 38 + 524 + 8);
             pump (0.1);
             CHECK (stateMods ().list.empty (), "removed from the list");
+            // Menu > Layout: Wide (two rows, the modulation column split in two) and back to the Default;
+            // the controls found by parameter through the view tree, wherever the layout puts them
+            checkLayouts (rig, win, {smemplr::kFilterFreq, smemplr::kVolume, smemplr::modLfoParam (2, smemplr::kModRate)}, outDir + "/ui_smemplr_wide.png");
             rig.stop ();
         }
 
