@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr
 
-VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. MIT
-licensed. The current version is **0.14.0**.
+VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.14.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -249,7 +249,9 @@ state, drive the real editor with synthetic mouse events and save screenshots.
 
 ## Credits and licences
 
-The plug-ins are MIT licensed (see [LICENSE](LICENSE)). They are built on the Steinberg VST 3 SDK
+The plug-ins are free to use, including for commercial music, but may not be sold, bundled into paid
+products or redistributed in modified form (see [LICENSE](LICENSE)). The copyright holder keeps all
+rights. Versions 0.14.0 and earlier were released under the MIT licence and stay under it. They are built on the Steinberg VST 3 SDK
 (MIT licence) and VSTGUI (BSD 3-clause licence). smemplr reads audio files with dr_wav, dr_flac and
 dr_mp3 by David Reed (public domain / MIT-0). multidyn's OTT style uses the constants and laws of David
 Braun's fit of OTT (`co.xfer_ott` in the Faust libraries' `compressors.lib`, MIT licence). The full

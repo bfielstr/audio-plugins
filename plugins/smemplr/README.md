@@ -291,6 +291,6 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
 
 ## Credits
 
-smemplr is released under the MIT licence (see [LICENSE](../../LICENSE)). It builds on the Steinberg
+smemplr is free to use but not for sale (see [LICENSE](../../LICENSE)). It builds on the Steinberg
 VST 3 SDK (MIT), VSTGUI (BSD 3-clause) and dr_libs by David Reed (public domain / MIT-0); see
 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).

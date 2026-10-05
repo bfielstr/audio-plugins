@@ -50,7 +50,7 @@ if [ -z "${SETUP_WORK_DIR:-}" ] && [ "$dry_run" != 1 ]; then
     trap 'rm -rf "$work"' EXIT
 fi
 cp "$here/setup.iss" "$here/welcome.txt" "$work/"
-cp "$REPO_ROOT/LICENSE" "$work/LICENSE.txt"
+{ cat "$REPO_ROOT/LICENSE"; printf '\n\n'; cat "$REPO_ROOT/THIRD_PARTY_NOTICES.md"; } >"$work/LICENSE.txt"
 : >"$work/components.iss"
 : >"$work/files.iss"
 : >"$work/installdelete.iss"
