@@ -70,7 +70,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (CPoint (812, 28)); }));
+    root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (812, 28))); }));
 
     auto metersOf = [c = ctl] () -> const Meters* {
         auto* s = c->getShared ();
@@ -225,13 +225,30 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the band display (its switches under it), both bands' shapes, the selected band's controls; the end
+    // saturator under them
+    s.panels = {
+        {"display", "bands", {8, 40, 892, 250}, 0},
+        {"shapes", "shapes", {8, 258, 592, 440}, 0},
+        {"controls", "band", {600, 258, 892, 414}, 0},
+        {"tail", "end of the chain", {8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace wubr

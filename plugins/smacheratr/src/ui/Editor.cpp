@@ -77,7 +77,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
+    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (672, 28))); }));
 
     // left: the device as Live shows it, with the pre-limiter in front of the curve
     bind (root, new Toggle (CRect (kShaperLeft, 40, kShaperLeft + 76, 62), this, kPreLimit, "Pre-Limit"));
@@ -321,8 +321,11 @@ void Editor::showMenu (CPoint where)
     menu->addEntry ("Mid/Side (saturate mid and side apart)", -1,
                     plainValue (kMidSide) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
@@ -334,6 +337,18 @@ void Editor::showMenu (CPoint where)
         else if (r == (int32_t)sizes.size () + kNumOsModes + 2)
             ctl->setPlainFromUI (kMidSide, plainValue (kMidSide) >= 0.5 ? 0.0 : 1.0);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the Analog curve with its controls, the colour display with its own, Gentlr: one row
+    s.panels = {
+        {"analog", "analog", {8, 40, 312, 428}, 0},
+        {"color", "color", {316, 40, 752, 428}, 0},
+        {"gentlr", "", {8, kGentlrTop, 752, kGentlrTop + 80}, 0},
+    };
+    return s;
 }
 
 } // namespace smacheratr

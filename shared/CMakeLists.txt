@@ -46,6 +46,8 @@ if(PK_BUILD_PLUGINS)
         pluginkit/ui/InfoBox.cpp
         pluginkit/ui/LayoutCheck.h
         pluginkit/ui/LayoutCheck.cpp
+        pluginkit/ui/LayoutViews.h
+        pluginkit/ui/LayoutViews.cpp
         pluginkit/ui/ScopeView.h
         pluginkit/ui/DropFiles.h
         pluginkit/ui/ScopeView.cpp

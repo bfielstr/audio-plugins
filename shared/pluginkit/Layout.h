@@ -53,6 +53,7 @@ struct Spec
     double headerSplit = 0;       // header controls from this x move with the window's right edge (0: half the width)
     double top = 40;              // an arranged layout's first row
     std::vector<Panel> panels;    // in the Wide template's order, row by row
+    std::string fallback;         // the panel that takes views with no place yet (an empty rectangle: the editor places them later)
     const Panel* find (const std::string& id) const;
     bool empty () const { return panels.empty (); }
 };

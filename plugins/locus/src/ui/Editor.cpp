@@ -59,7 +59,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (CPoint (672, 28)); }));
+    root->addView (new ActionButton (CRect (672, 6, 752, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (672, 28))); }));
 
     spectrum = new SpectrumView (CRect (8, 40, 752, 300), this, ctl);
     pk::setHelp (spectrum, "Spectrum", help::kSpectrum);
@@ -123,13 +123,28 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the spectrum beside the focus controls; the end saturator under them
+    s.panels = {
+        {"spectrum", "spectrum", {8, 40, 752, 300}, 0},
+        {"focus", "", {8, 308, 752, 432}, 0},
+        {"tail", "end of the chain", {8, 440, 752, 440 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace locus

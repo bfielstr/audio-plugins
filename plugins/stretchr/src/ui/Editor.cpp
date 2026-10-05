@@ -167,7 +167,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (876, 6, 972, 28), "Menu", [this] { showMenu (CPoint (876, 28)); }));
+    root->addView (new ActionButton (CRect (876, 6, 972, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (876, 28))); }));
 
     // toolbar
     Session* s = ctl->getSession ();
@@ -575,13 +575,31 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - sz) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the clip (its toolbar over it) beside the algorithm, pitch, time and output; the end saturator under them
+    s.panels = {
+        {"clip", "clip", {8, 40, 972, 380}, 0},
+        {"algorithm", "", {8, 388, 316, 592}, 0},
+        {"pitch", "", {324, 388, 636, 592}, 0},
+        {"time", "", {644, 388, 836, 592}, 0},
+        {"output", "", {844, 388, 972, 592}, 0},
+        {"tail", "end of the chain", {8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace stretchr

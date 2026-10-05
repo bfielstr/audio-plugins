@@ -21,6 +21,7 @@
 // state: an end saturator switched on, its section open).
 #include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/LayoutCheck.h"
+#include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/EditorBase.h"
 
 #include "public.sdk/source/vst/hosting/eventlist.h"
@@ -49,6 +50,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -326,13 +329,188 @@ struct Sample
     double directMs = 0, cachedMs = 0;
 };
 
+// ---- the layouts' check (--check-layouts) ------------------------------------------------------------
+
+// The whole frame drawn directly (no cached layers) into a bitmap of its size.
+Pixels render (CFrame* frame, const std::string& dumpBase = {})
+{
+    const CRect all (0, 0, std::round (frame->getWidth ()), std::round (frame->getHeight ()));
+    auto off = COffscreenContext::create (all.getSize (), 1.0);
+    if (!off)
+        return {};
+    pk::CachedLayer::setEnabled (false);
+    off->beginDraw ();
+    frame->drawRect (off, all);
+    off->endDraw ();
+    pk::CachedLayer::setEnabled (true);
+    Pixels p = readPixels (off->getBitmap ());
+    if (!dumpBase.empty ())
+        writeFiles (off->getBitmap (), p, dumpBase);
+    return p;
+}
+
+// The parameters with a control shown (the control and every container above it visible).
+void visibleParams (CViewContainer* c, std::set<uint32>& out)
+{
+    c->forEachChild ([&] (CView* v) {
+        if (!v->isVisible ())
+            return;
+        if (auto* sub = v->asViewContainer ())
+            visibleParams (sub, out);
+        else if (auto* pv = dynamic_cast<pk::ParamView*> (v))
+            out.insert (pv->paramId ());
+    });
+}
+
+// What the layout check reports that is clutter (controls overlapping or touching), and the rest (texts
+// that spill out of their boxes, which do not depend on the layout).
+void splitReport (const std::vector<std::string>& lines, std::vector<std::string>& clutter, size_t& spills)
+{
+    spills = 0;
+    for (const auto& l : lines)
+        if (l.rfind ("spill", 0) == 0)
+            ++spills;
+        else
+            clutter.push_back (l);
+}
+
+// Default, Wide, a dragged arrangement and Default again, each built in the same editor as the Layout
+// menu builds it: the arranged ones place every view of the build in a block and every panel exactly once,
+// show every control the Default shows, inside the window, with nothing overlapping or touching; Default
+// after them draws the same pixels as Default first (and as another build's rendering, --compare).
+int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, const std::string& name, const std::string& dumpDir,
+                    const std::string& compareDir)
+{
+    int failures = 0;
+    auto fail = [&] (const std::string& what) {
+        std::printf ("  FAIL: %s\n", what.c_str ());
+        ++failures;
+    };
+    ctl->uiLayout.clear ();
+    auto view = Steinberg::owned (controller->createView (Vst::ViewType::kEditor));
+    auto* editor = dynamic_cast<pk::EditorBase*> (view.get ());
+    CFrame* frame = editor ? editor->openDetached (1.0) : nullptr;
+    if (!frame)
+    {
+        std::printf ("FAIL: no editor\n");
+        return 1;
+    }
+    const pk::layout::Spec spec = editor->layoutSpec (true);
+    std::printf ("layouts of %s: %zu panels\n", name.c_str (), spec.panels.size ());
+    if (spec.empty ())
+    {
+        fail ("the editor declares no panels (no Layout menu); its root's views are:");
+        if (frame->getNbViews () > 0)
+            if (auto* root = frame->getView (0)->asViewContainer ())
+                root->forEachChild ([] (CView* v) {
+                    const CRect r = v->getViewSize ();
+                    std::printf ("    %s [%g %g %g %g]\n", pk::typeName (typeid (*v)).c_str (), r.left, r.top, r.right, r.bottom);
+                });
+    }
+    const auto base = [&] (const char* tag) { return dumpDir.empty () ? std::string () : dumpDir + "/" + name + "-layout-" + tag; };
+
+    // Default: the editor as built
+    const Pixels first = render (frame, base ("default"));
+    const double defW = editor->fullWidth (), defH = editor->fullHeight ();
+    std::set<uint32> defParams;
+    visibleParams (frame, defParams);
+    std::vector<std::string> defClutter;
+    size_t defSpills = 0;
+    splitReport (pk::layoutReport (frame), defClutter, defSpills);
+    std::printf ("  default: %.0f x %.0f, %zu controls shown, %zu overlaps or touches, %zu spills\n", defW, defH, defParams.size (), defClutter.size (),
+                 defSpills);
+    if (!compareDir.empty ())
+    {
+        Pixels other;
+        if (readFile (compareDir + "/" + name + "-100", other))
+        {
+            const Diff d = compare (other, first);
+            std::printf ("  default against %s: %ld px differ (largest channel difference %d)\n", compareDir.c_str (), d.count, d.maxDelta);
+            if (d.count != 0)
+                fail ("the Default layout draws differently from the rendering compared with");
+        }
+        else
+            std::printf ("  default against %s: no rendering to compare\n", compareDir.c_str ());
+    }
+
+    // an arranged layout, checked
+    auto checkArranged = [&] (const char* tag, const std::string& text) {
+        editor->setLayout (text, tag, true);
+        std::printf ("  %s (%s): %.0f x %.0f\n", tag, text.c_str (), editor->fullWidth (), editor->fullHeight ());
+        render (frame, base (tag));
+        if (!editor->arrangedLayout ())
+        {
+            fail (std::string (tag) + ": not arranged");
+            return;
+        }
+        for (const auto& p : editor->layoutProblems ())
+            fail (std::string (tag) + ": in no panel: " + p);
+        std::map<std::string, int> seen;
+        const auto blocks = editor->layoutBlocks ();
+        for (const auto& [id, r] : blocks)
+        {
+            ++seen[id];
+            if (r.left < 0 || r.top < 0 || r.right > editor->fullWidth () || r.bottom > editor->contentHeightNow ())
+                fail (std::string (tag) + ": block " + id + " outside the window");
+        }
+        for (const auto& p : spec.panels)
+            if (seen[p.id] != 1)
+                fail (std::string (tag) + ": panel " + p.id + " shown " + std::to_string (seen[p.id]) + " times");
+        if (seen.size () != spec.panels.size ())
+            fail (std::string (tag) + ": blocks of panels the spec does not have");
+        std::set<uint32> params;
+        visibleParams (frame, params);
+        for (uint32 id : defParams)
+            if (!params.count (id))
+                fail (std::string (tag) + ": the control of parameter " + std::to_string (id) + " is not shown");
+        std::vector<std::string> clutter;
+        size_t spills = 0;
+        splitReport (pk::layoutReport (frame), clutter, spills);
+        for (const auto& l : clutter)
+            fail (std::string (tag) + ": " + l);
+        if (spills > defSpills)
+            fail (std::string (tag) + ": texts spill that do not in the Default layout");
+    };
+    checkArranged ("wide", "wide");
+    // wide and short: no taller than the Default
+    if (editor->fullHeight () > defH)
+        fail ("wide: taller than the Default layout");
+    // dragged: the Wide template's first panel moved into a row of its own at the bottom, and its second
+    // panel's column widened (as the editor does on a drop and on an edge's drag)
+    if (!spec.empty ())
+    {
+        using namespace pk::layout;
+        const Arrangement w = wide (spec);
+        const Geometry g = place (spec, w);
+        Drop d = dropAt (w, g, 40, g.rows.back ().bottom + 20);
+        Arrangement m = move (spec, w, w.rows[0][0].ids[0], d);
+        if (m.rows.size () > 0 && m.rows[0].size () > 0)
+            m = resize (spec, m, m.rows[0][0].ids[0], naturalWidth (spec, m.rows[0][0]) + 40);
+        checkArranged ("dragged", toString (m));
+    }
+
+    // Default again: the same pixels as at first
+    editor->setLayout ("", "Default", true);
+    const Pixels back = render (frame, base ("default-again"));
+    const Diff d = compare (first, back);
+    std::printf ("  default again: %ld px differ from the first (largest channel difference %d)\n", d.count, d.maxDelta);
+    if (d.count != 0)
+        fail ("the Default layout after Wide draws differently");
+    if (editor->arrangedLayout () || editor->fullWidth () != defW || editor->fullHeight () != defH)
+        fail ("the Default layout after Wide has another size");
+    view->removed ();
+    std::printf ("%s: %d failures\n", name.c_str (), failures);
+    return failures ? 1 : 0;
+}
+
 } // namespace
 
 int main (int argc, char** argv)
 {
     int ticks = 30;
     std::string dumpDir, compareDir;
-    bool allViews = false, listQuiet = false;
+    bool allViews = false, listQuiet = false, checkLayouts = false;
+    const char* layoutText = nullptr;
     std::vector<std::pair<uint32, double>> sets;
     for (int i = 1; i < argc; ++i)
     {
@@ -352,6 +530,10 @@ int main (int argc, char** argv)
             allViews = true;
         else if (!std::strcmp (argv[i], "--quiet-rects"))
             listQuiet = true;
+        else if (!std::strcmp (argv[i], "--layout") && i + 1 < argc)
+            layoutText = argv[++i];
+        else if (!std::strcmp (argv[i], "--check-layouts"))
+            checkLayouts = true;
         else
             ticks = std::max (1, std::atoi (argv[i]));
     }
@@ -389,9 +571,20 @@ int main (int argc, char** argv)
             std::printf ("FAIL: the plug-in does not start\n");
             return 1;
         }
-        std::printf ("draw benchmark: %s, median of %d draws per figure, ms per draw\n", pluginName.c_str (), ticks);
         for (const auto& [id, v] : sets)
             audio.controller->setParamNormalized (id, v);
+        auto* ctlBase = dynamic_cast<pk::ControllerBase*> (audio.controller.get ());
+        if (ctlBase && layoutText)
+            ctlBase->uiLayout = layoutText;
+        if (checkLayouts)
+        {
+            result = ctlBase ? checkLayoutsOf (audio.controller, ctlBase, pluginName, dumpDir, compareDir) : 1;
+            audio.stop ();
+            audio.provider = nullptr;
+            ModuleExit ();
+            return result;
+        }
+        std::printf ("draw benchmark: %s, median of %d draws per figure, ms per draw\n", pluginName.c_str (), ticks);
 
         for (double zoom : {1.0, 1.5, 2.0})
         {

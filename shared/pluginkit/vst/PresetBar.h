@@ -43,4 +43,8 @@ private:
     ControllerBase* ctl;
 };
 
+// The same prompt over any editor's content (Menu > Layout > Save Layout As... uses it).
+void showPrompt (VSTGUI::CFrame* frame, const std::string& title, std::vector<PresetBar::Field> fields, const std::string& okLabel,
+                 PresetBar::PromptOk onOk);
+
 } // namespace pk

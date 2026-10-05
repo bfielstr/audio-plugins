@@ -1,16 +1,20 @@
 #include "EditorBase.h"
 
 #include "pluginkit/vst/Clipboard.h"
+#include "pluginkit/vst/PresetBar.h"
 #include "pluginkit/ui/LayoutCheck.h"
 #include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cframe.h"
+#include "vstgui/lib/controls/coptionmenu.h"
 #include "vstgui/lib/cvstguitimer.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <typeinfo>
 
 namespace pk {
 
@@ -18,7 +22,8 @@ using namespace VSTGUI;
 using namespace Steinberg;
 
 EditorBase::EditorBase (ControllerBase* c, double w, double h)
-: VSTGUIEditor (c), controller (c), fullContentHeight (h), contentHeight (h), baseWidth (w), baseHeight (h + kInfoHeight)
+: VSTGUIEditor (c), controller (c), madeWidth (w), madeHeight (h), fullContentHeight (h), contentHeight (h), baseWidth (w),
+  baseHeight (h + kInfoHeight)
 {
     scale = std::clamp (c->uiScale, kMinZoom, kMaxZoom);
     ViewRect vr (0, 0, (int32)std::lround (baseWidth * scale), (int32)std::lround (baseHeight * scale));
@@ -31,16 +36,15 @@ bool PLUGIN_API EditorBase::open (void* parent, const PlatformType& platformType
 {
     if (frame)
         return false;
-    // built with every section open; one that folds while building sets the height again (setContentHeight)
-    contentHeight = fullContentHeight;
-    baseHeight = contentHeight + kInfoHeight;
+    // built in the layout the controller holds, with every section open; one that folds while building
+    // sets the height again (setContentHeight)
+    detached = false;
+    resolveLayout ();
     frame = new CFrame (CRect (0, 0, baseWidth, baseHeight), this);
     // the margins left when the window's shape differs from the UI's (layoutFrame) show the ground
     frame->setBackgroundColor (theme::kGround);
     byParam.clear ();
-    buildUI (frame);
-    addInfoStrip ();
-    writeLayoutReport ();
+    buildContent ();
     // every tooltip set while building, wrapped to lines (views made later are wrapped when the mouse
     // first enters them: helpFor, from HoverWatch)
     prepareTooltips (frame);
@@ -58,41 +62,100 @@ bool PLUGIN_API EditorBase::open (void* parent, const PlatformType& platformType
     // the host may have given the window another shape than the UI's (a size it kept, or one it chose)
     layoutFrame (rect.getWidth (), rect.getHeight ());
     // the window at the content's height, if the host lets it be resized (otherwise the content keeps
-    // its full height and the folded section's space stays empty)
-    if (foldedHeight != fullContentHeight && !setContentHeight (foldedHeight))
+    // its full height and the folded section's space stays empty; arranged, the blocks are already
+    // placed for the folded section: the UI is zoomed to fit the window instead)
+    if (arranged && foldedHeight != fullContentHeight)
+        resizeBase (baseWidth, foldedHeight, true);
+    else if (foldedHeight != fullContentHeight && !setContentHeight (foldedHeight))
         placeInfoStrip (); // (the strip back at the full content's end)
     return true;
 }
 
+void EditorBase::buildContent ()
+{
+    building = true;
+    buildUI (frame);
+    building = false;
+    if (arranged)
+        arrangeViews ();
+    addInfoStrip ();
+    writeLayoutReport ();
+}
+
+tresult PLUGIN_API EditorBase::getSize (ViewRect* size)
+{
+    // before the window opens, the layout in the controller's state decides the size it opens at
+    if (!frame && (!resolved || appliedLayout != controller->uiLayout))
+    {
+        resolveLayout ();
+        ViewRect vr (0, 0, (int32)std::lround (baseWidth * scale), (int32)std::lround (baseHeight * scale));
+        setRect (vr);
+    }
+    return VSTGUIEditor::getSize (size);
+}
+
 bool EditorBase::setContentHeight (double h)
 {
+    if (arranged)
+    {
+        // the last section (the one that folds) is shorter by as much as the build's content would be:
+        // its block gets shorter, what is under it moves up, the window follows
+        foldedBy = std::clamp (madeHeight - h, 0.0, madeHeight);
+        geometry = layout::place (spec, arrangement, foldHeights ());
+        if (building || boxes.empty () || !frame || !frame->isAttached ())
+        {
+            contentHeight = geometry.height;
+            baseHeight = contentHeight + kInfoHeight;
+            return true;
+        }
+        placeBlocks ();
+        return resizeBase (geometry.width, geometry.height, true);
+    }
     h = std::clamp (h, 40.0, fullContentHeight);
     if (h == contentHeight)
         return true;
-    if (!frame || !frame->isAttached ())
+    if (building || !frame || !frame->isAttached ())
     {
         // building: only recorded (addInfoStrip places the strip there, open () asks the host)
         contentHeight = h;
         baseHeight = h + kInfoHeight;
         return true;
     }
-    const double oldContent = contentHeight, oldBase = baseHeight;
-    contentHeight = h;
-    baseHeight = h + kInfoHeight;
-    // the window at the zoom it shows now, only its height changed (the host calls onSize, which lays
-    // the frame out with the new base height)
+    return resizeBase (baseWidth, h, false);
+}
+
+bool EditorBase::resizeBase (double w, double contentH, bool keepIfRefused)
+{
+    const double oldWidth = baseWidth, oldContent = contentHeight, oldBase = baseHeight;
+    baseWidth = w;
+    contentHeight = contentH;
+    baseHeight = contentH + kInfoHeight;
+    if (detached)
+    {
+        // (the draw benchmark's frame: no window, the frame itself takes the size; the Default's is the
+        // size openDetached gives it, every section open, so it draws as it did before)
+        if (frame)
+            frame->setSize ((arranged ? baseWidth : madeWidth) * frame->getZoom (),
+                            (arranged ? baseHeight : madeHeight + kInfoHeight) * frame->getZoom ());
+        placeInfoStrip ();
+        return true;
+    }
+    // the window at the zoom it shows now (the host calls onSize, which lays the frame out with the new
+    // base size)
     ViewRect vr (0, 0, (int32)std::lround (baseWidth * scale), (int32)std::lround (baseHeight * scale));
     const bool ok = plugFrame && plugFrame->resizeView (this, &vr) == kResultTrue;
-    if (!ok)
+    if (!ok && !keepIfRefused)
     {
         // kept as it was: the content keeps its height, the folded section's space stays empty
+        baseWidth = oldWidth;
         contentHeight = oldContent;
         baseHeight = oldBase;
         return false;
     }
+    // (refused but kept: the new shape is zoomed to fit the window the host keeps, nothing is cut off)
     placeInfoStrip ();
     layoutFrame (rect.getWidth (), rect.getHeight ());
-    return true;
+    return ok;
 }
 
 void EditorBase::placeInfoStrip ()
@@ -121,12 +184,14 @@ VSTGUI::CFrame* EditorBase::openDetached (double zoom, const RootWrapper& wrap)
     if (frame)
         return nullptr;
     // as open () builds it, without the window, the tooltips and the hover help
+    detached = true;
+    resolveLayout ();
     frame = new CFrame (CRect (0, 0, baseWidth, baseHeight), this);
     frame->setBackgroundColor (theme::kGround);
     byParam.clear ();
-    buildUI (frame);
-    addInfoStrip ();
-    writeLayoutReport (); // (PK_LAYOUT_REPORT: the draw benchmark checks the layout on Linux this way)
+    buildContent (); // (PK_LAYOUT_REPORT: the draw benchmark checks the layout on Linux this way)
+    if (arranged)
+        frame->setSize (baseWidth, baseHeight); // (a section folded while building: the frame as the content)
     if (wrap && frame->getNbViews () > 0)
     {
         CView* root = frame->getView (0);
@@ -149,6 +214,10 @@ void PLUGIN_API EditorBase::close ()
         frame->unregisterMouseObserver (&hoverWatch);
         hoverWatch.hovered = nullptr;
         info = nullptr;
+        boxes.clear ();
+        overlays.clear ();
+        headerRight.clear ();
+        dropMark = nullptr;
         frame->forget ();
         frame = nullptr;
     }
@@ -186,8 +255,11 @@ void EditorBase::writeLayoutReport ()
         return;
     if (FILE* f = std::fopen (path, "a"))
     {
-        const auto lines = layoutReport (frame);
-        std::fprintf (f, "== %s: %zu\n", typeName (typeid (*this)).c_str (), lines.size ());
+        auto lines = layoutReport (frame);
+        for (const auto& p : problems)
+            lines.push_back ("unplaced: " + p);
+        std::fprintf (f, "== %s%s%s: %zu\n", typeName (typeid (*this)).c_str (), arranged ? " " : "", arranged ? appliedLayout.c_str () : "",
+                      lines.size ());
         for (const auto& l : lines)
             std::fprintf (f, "%s\n", l.c_str ());
         std::fclose (f);
@@ -267,6 +339,9 @@ CMessageResult EditorBase::notify (CBaseObject* sender, const char* message)
 {
     if (message == CVSTGUITimer::kMsgTimer && frame)
     {
+        // another layout picked (the menu, a project loaded): built again in it, between two ticks
+        if (!building && appliedLayout != controller->uiLayout)
+            relayout ();
         idle ();
         controller->checkLatency ();
     }
@@ -326,6 +401,414 @@ bool EditorBase::settingsMenuPicked (int index, int first)
     else
         return false;
     return true;
+}
+
+} // namespace pk
+
+// ---- layouts (pluginkit/Layout.h) --------------------------------------------------------------------
+namespace pk {
+
+namespace {
+CRect toRect (const layout::Box& b) { return CRect (b.left, b.top, b.right, b.bottom); }
+
+std::string rectText (const CRect& r)
+{
+    char buf[80];
+    std::snprintf (buf, sizeof (buf), "[%g %g %g %g]", r.left, r.top, r.right, r.bottom);
+    return buf;
+}
+
+std::string lowerText (std::string s)
+{
+    for (auto& c : s)
+        c = (char)std::tolower ((unsigned char)c);
+    return s;
+}
+} // namespace
+
+void EditorBase::resolveLayout ()
+{
+    // The Default layout is the editor as it builds itself: nothing is moved, so it is what it was before
+    // layouts, pixel for pixel. Any other is an arrangement of the editor's panels (none: Default).
+    resolved = true;
+    appliedLayout = controller->uiLayout;
+    arranged = false;
+    arrangement = {};
+    spec = {};
+    if (!layout::isDefault (appliedLayout))
+    {
+        spec = layoutSpec (true);
+        if (spec.width <= 0)
+            spec.width = madeWidth;
+        if (spec.height <= 0)
+            spec.height = madeHeight;
+        if (spec.headerSplit <= 0)
+            spec.headerSplit = spec.width / 2;
+        arrangement = layout::resolve (spec, appliedLayout);
+        arranged = !arrangement.empty ();
+    }
+    foldedBy = 0;
+    geometry = arranged ? layout::place (spec, arrangement) : layout::Geometry {};
+    baseWidth = arranged ? geometry.width : madeWidth;
+    fullContentHeight = arranged ? geometry.height : madeHeight;
+    contentHeight = fullContentHeight;
+    baseHeight = contentHeight + kInfoHeight;
+}
+
+std::map<std::string, double> EditorBase::foldHeights () const
+{
+    // the section that folds is the last of the content as built (the end saturator's, at the bottom)
+    if (foldedBy <= 0 || spec.empty ())
+        return {};
+    const layout::Panel* last = nullptr;
+    for (const auto& p : spec.panels)
+        if (!last || p.region.bottom > last->region.bottom)
+            last = &p;
+    return {{last->id, last->region.height () - foldedBy}};
+}
+
+void EditorBase::arrangeViews ()
+{
+    // The plug-in built its content as always, into one root view. Each of the root's views goes to the
+    // block of the panel whose region holds it (its coordinates stay the build's: the block's transform
+    // moves it); the header's views stay (those at the right follow the window's right edge); a view over
+    // the whole content (smemplr's modulation rings) grows with it and stays on top.
+    problems.clear ();
+    auto* root = frame && frame->getNbViews () > 0 ? frame->getView (0)->asViewContainer () : nullptr;
+    if (!root)
+    {
+        problems.push_back ("no root view");
+        return;
+    }
+    std::vector<CView*> kids;
+    root->forEachChild ([&] (CView* v) { kids.push_back (v); });
+    for (const auto& b : geometry.blocks)
+        if (const layout::Panel* p = spec.find (b.id))
+            boxes.push_back (new PanelBox (toRect (b.box), p->id, p->title, this));
+    auto inside = [] (const CRect& r, const layout::Box& g) {
+        return r.left >= g.left - 1 && r.right <= g.right + 1 && r.top >= g.top - 1 && r.bottom <= g.bottom + 1;
+    };
+    for (CView* v : kids)
+    {
+        const CRect r = v->getViewSize ();
+        if (r.getWidth () >= madeWidth * 0.9 && r.getHeight () >= madeHeight * 0.9)
+        {
+            overlays.push_back (v);
+            continue;
+        }
+        if (r.bottom <= spec.headerHeight + 1)
+        {
+            if (r.left >= spec.headerSplit)
+                headerRight.emplace_back (v, r);
+            continue;
+        }
+        PanelBox* to = nullptr;
+        for (auto* box : boxes)
+            if (r.isEmpty () ? box->panelId () == spec.fallback : inside (r, spec.find (box->panelId ())->region))
+            {
+                to = box;
+                break;
+            }
+        if (!to)
+        {
+            problems.push_back (typeName (typeid (*v)) + " " + rectText (r));
+            continue;
+        }
+        root->removeView (v, false); // (the reference the root adopted goes over to the block)
+        to->addView (v);
+    }
+    for (auto* box : boxes)
+        root->addView (box);
+    for (auto* o : overlays)
+    {
+        root->removeView (o, false);
+        root->addView (o);
+    }
+    placeBlocks ();
+}
+
+void EditorBase::placeBlocks ()
+{
+    for (auto* box : boxes)
+        if (const layout::Block* b = geometry.find (box->panelId ()))
+            if (const layout::Panel* p = spec.find (b->id))
+                box->place (toRect (b->box), toRect (p->region), toRect (b->content));
+    const double dx = geometry.width - madeWidth;
+    for (auto& [v, built] : headerRight)
+    {
+        CRect r = built;
+        r.offset (dx, 0);
+        if (v->getViewSize () != r)
+        {
+            v->invalid ();
+            v->setViewSize (r);
+            v->setMouseableArea (r);
+        }
+    }
+    for (auto* o : overlays)
+    {
+        const CRect r (0, 0, geometry.width, geometry.height);
+        o->setViewSize (r);
+        o->setMouseableArea (r);
+    }
+    if (frame && frame->getNbViews () > 0)
+        if (auto* root = frame->getView (0)->asViewContainer ())
+        {
+            CRect rr = root->getViewSize ();
+            rr.right = rr.left + geometry.width;
+            root->setViewSize (rr);
+            root->setMouseableArea (rr);
+        }
+    if (frame)
+        frame->invalid ();
+}
+
+void EditorBase::relayout ()
+{
+    if (!frame)
+        return;
+    // everything built again (the plug-in lets go of its views first, as when the window closes), in
+    // the layout the controller holds now, then the window asked for its size at the zoom it shows
+    onClose ();
+    hoverWatch.hovered = nullptr;
+    info = nullptr;
+    boxes.clear ();
+    overlays.clear ();
+    headerRight.clear ();
+    dropMark = nullptr;
+    problems.clear ();
+    frame->removeAll ();
+    byParam.clear ();
+    resolveLayout ();
+    buildContent ();
+    prepareTooltips (frame);
+    frame->enableTooltips (controller->uiShowTips, 600);
+    resizeBase (baseWidth, contentHeight, true);
+    frame->invalid ();
+}
+
+void EditorBase::setLayout (const std::string& text, const std::string& name, bool now)
+{
+    if (controller->uiLayout != text || controller->uiLayoutName != name)
+    {
+        controller->uiLayout = text;
+        controller->uiLayoutName = name;
+        controller->markDirty ();
+    }
+    if (now && frame && !building && appliedLayout != controller->uiLayout)
+        relayout ();
+}
+
+void EditorBase::commitArrangement (const layout::Arrangement& a, bool keep)
+{
+    if (!(a == arrangement))
+    {
+        arrangement = a;
+        geometry = layout::place (spec, arrangement, foldHeights ());
+        fullContentHeight = layout::place (spec, arrangement).height;
+        placeBlocks ();
+        resizeBase (geometry.width, geometry.height, true);
+    }
+    if (!keep)
+        return;
+    // into the state: Wide again when that is what it is, else a custom arrangement (no name)
+    std::string text = layout::toString (arrangement), name;
+    if (text == layout::toString (layout::wide (spec)))
+        text = "wide", name = "Wide";
+    if (layout::resolve (spec, controller->uiLayout) == arrangement)
+        text = controller->uiLayout, name = controller->uiLayoutName; // (dropped where it was)
+    setLayout (text, name);
+    appliedLayout = controller->uiLayout; // (the frame shows it already: nothing to build again)
+}
+
+void EditorBase::blockDragged (PanelBox* box, CPoint where, bool drop)
+{
+    const layout::Drop d = layout::dropAt (arrangement, geometry, where.x, where.y);
+    if (!drop)
+    {
+        showDropMark (d.kind == layout::Drop::None ? nullptr : &d.mark);
+        return;
+    }
+    showDropMark (nullptr);
+    commitArrangement (layout::move (spec, arrangement, box->panelId (), d), true);
+}
+
+void EditorBase::blockDragCancelled (PanelBox*) { showDropMark (nullptr); }
+
+void EditorBase::blockResized (PanelBox* box, double width, bool done)
+{
+    commitArrangement (layout::resize (spec, arrangement, box->panelId (), width), done);
+}
+
+void EditorBase::showDropMark (const layout::Box* mark)
+{
+    auto* root = frame && frame->getNbViews () > 0 ? frame->getView (0)->asViewContainer () : nullptr;
+    if (!root)
+        return;
+    if (!mark)
+    {
+        if (dropMark && dropMark->isVisible ())
+        {
+            dropMark->invalid ();
+            dropMark->setVisible (false);
+        }
+        return;
+    }
+    const CRect r = toRect (*mark);
+    if (!dropMark)
+    {
+        dropMark = new DropMark (r);
+        root->addView (dropMark);
+    }
+    else if (dropMark->getViewSize () != r)
+    {
+        dropMark->invalid ();
+        dropMark->setViewSize (r);
+    }
+    dropMark->setVisible (true);
+    dropMark->invalid ();
+}
+
+CPoint EditorBase::layoutPoint (CPoint p) const
+{
+    if (!arranged)
+        return p;
+    if (p.y <= spec.headerHeight + 1)
+    {
+        if (p.x >= spec.headerSplit)
+            p.x += geometry.width - madeWidth;
+        return p;
+    }
+    for (const auto& b : geometry.blocks)
+        if (const layout::Panel* panel = spec.find (b.id))
+        {
+            const layout::Box& g = panel->region;
+            if (p.x >= g.left && p.x <= g.right && p.y >= g.top && p.y <= g.bottom)
+                return CPoint (p.x - g.left + b.content.left, p.y - g.top + b.content.top);
+        }
+    return p;
+}
+
+bool EditorBase::pickedInSubMenu (COptionMenu* menu)
+{
+    int32_t index = -1;
+    return menu && menu->getLastItemMenu (index) != menu;
+}
+
+void EditorBase::addLayoutMenu (COptionMenu* menu)
+{
+    if (!menu || layoutSpec (true).empty ())
+        return;
+    // Default and Wide, the saved layouts, then the commands. Each entry does its own work when picked
+    // (a command item); the layout changes at the next tick (the menu's button is built again with it).
+    const layout::Saved saved = controller->savedLayouts ();
+    const std::string now = controller->uiLayout, name = controller->uiLayoutName;
+    auto sub = makeOwned<COptionMenu> ();
+    auto add = [] (COptionMenu* m, const std::string& title, std::function<void ()> fn, bool checked = false, bool enabled = true) {
+        auto* item = new CCommandMenuItem (CCommandMenuItem::Desc (title.c_str ()));
+        item->setActions ([fn] (CCommandMenuItem*) {
+            if (fn)
+                fn ();
+        });
+        item->setChecked (checked);
+        item->setEnabled (enabled);
+        m->addEntry (item);
+    };
+    const layout::Named* savedNow = nullptr;
+    for (const auto& n : saved.layouts)
+        if (n.name == name && n.layout == now)
+            savedNow = &n;
+    const bool isDefault = !savedNow && layout::isDefault (now), isWide = !savedNow && lowerText (now) == "wide";
+    add (sub, "Default", [this] { setLayout ("", "Default"); }, isDefault);
+    add (sub, "Wide", [this] { setLayout ("wide", "Wide"); }, isWide);
+    if (!saved.layouts.empty ())
+        sub->addSeparator ();
+    for (const auto& n : saved.layouts)
+        add (sub, n.name, [this, n] { setLayout (n.layout, n.name); }, savedNow == &n);
+    if (!savedNow && !isDefault && !isWide)
+        add (sub, "Custom (not saved)", {}, true, false);
+    sub->addSeparator ();
+    add (sub, "Save Layout As...", [this] { promptLayoutName (); });
+    const bool isTheDefault = saved.hasDefault ? saved.defaultLayout == now : layout::isDefault (now);
+    add (sub, "Use as Default Layout", [this] {
+        layout::Saved s = controller->savedLayouts ();
+        s.defaultLayout = controller->uiLayout;
+        s.hasDefault = true;
+        controller->writeSavedLayouts (s);
+    },
+         isTheDefault);
+    if (!saved.layouts.empty ())
+    {
+        auto del = makeOwned<COptionMenu> ();
+        for (const auto& n : saved.layouts)
+            add (del, n.name, [this, n] {
+                layout::Saved s = controller->savedLayouts ();
+                s.remove (n.name);
+                controller->writeSavedLayouts (s);
+                if (controller->uiLayoutName == n.name)
+                    controller->uiLayoutName.clear (); // (the layout stays, as a custom one)
+            });
+        sub->addEntry (del, "Delete Layout");
+    }
+    menu->addSeparator ();
+    menu->addEntry (sub, "Layout");
+}
+
+void EditorBase::promptLayoutName ()
+{
+    std::string suggestion = controller->uiLayoutName;
+    if (!layout::validName (suggestion))
+        suggestion = "My Layout";
+    showPrompt (frame, "Save Layout", {{"Name", suggestion}}, "Save", [this] (const std::vector<std::string>& v) -> std::string {
+        std::string n = v.empty () ? std::string () : v[0];
+        while (!n.empty () && std::isspace ((unsigned char)n.back ()))
+            n.pop_back ();
+        while (!n.empty () && std::isspace ((unsigned char)n.front ()))
+            n.erase (n.begin ());
+        if (!layout::validName (n))
+            return "Give it a name of its own (not Default or Wide, no \"=\").";
+        layout::Saved s = controller->savedLayouts ();
+        s.put (n, layout::isDefault (controller->uiLayout) ? "default" : controller->uiLayout);
+        if (!controller->writeSavedLayouts (s))
+            return "The layout could not be saved in the presets folder.";
+        setLayout (s.find (n)->layout, s.find (n)->name);
+        appliedLayout = controller->uiLayout; // (the same arrangement: nothing to build again)
+        return {};
+    });
+}
+
+bool EditorBase::findControl (uint32_t id, CRect& out) const
+{
+    auto it = byParam.find (id);
+    if (!frame || it == byParam.end ())
+        return false;
+    for (CView* v : it->second)
+    {
+        bool shown = v->isVisible ();
+        for (CView* p = v->getParentView (); shown && p && p != frame; p = p->getParentView ())
+            shown = p->isVisible ();
+        if (!shown)
+            continue;
+        // the view's rectangle into the frame (through the blocks' transforms), then the frame's zoom and
+        // margins: window pixels
+        const CRect r = v->getViewSize ();
+        CPoint tl = r.getTopLeft (), br = r.getBottomRight ();
+        v->localToFrame (tl);
+        v->localToFrame (br);
+        CRect w (tl.x, tl.y, br.x, br.y);
+        frame->getTransform ().transform (w);
+        out = w;
+        return true;
+    }
+    return false;
+}
+
+std::vector<std::pair<std::string, CRect>> EditorBase::layoutBlocks () const
+{
+    std::vector<std::pair<std::string, CRect>> out;
+    for (auto* box : boxes)
+        out.emplace_back (box->panelId (), box->getViewSize ());
+    return out;
 }
 
 } // namespace pk

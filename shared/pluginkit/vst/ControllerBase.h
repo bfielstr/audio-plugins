@@ -3,6 +3,7 @@
 // presets (.vstpreset files in the user's preset folder).
 #pragma once
 
+#include "pluginkit/Layout.h"
 #include "pluginkit/ParamTable.h"
 #include "pluginkit/PresetStore.h"
 #include "pluginkit/SettingsText.h"
@@ -120,6 +121,22 @@ public:
     static constexpr int kTailOpenSaturator = 1, kTailOpenGentlr = 2;
     int uiTailOpen = -1;
     int uiColorLayer = 0;
+    // The editor's layout (pluginkit/Layout.h): its text ("" the Default) and the name the Layout menu
+    // shows it by (a template's or a saved layout's; "" once it is dragged out of shape). Editor state,
+    // saved with the controller's after the view state (an older version ignores it). A new instance
+    // starts with the user's default layout (the layouts file beside the presets); loading a preset keeps
+    // the layout the editor has.
+    std::string uiLayout, uiLayoutName;
+    // The layouts file (<preset folder>/.layouts.txt): the user's saved layouts and default layout.
+    layout::Saved savedLayouts () const;
+    bool writeSavedLayouts (const layout::Saved& s) const;
+    // Messages for tests and tools (a host test talks to the controller this way; an IAttributeList
+    // binary "text" holds a UTF-8 string): kMsgSetLayout sets the layout ("text", optional "name") and
+    // rebuilds an open editor at once; kMsgFindControl asks the open editor where the control of
+    // parameter "id" (int) is: the answer, on the message, is "rect" (4 doubles: left, top, right, bottom
+    // in window pixels), absent when it is not shown.
+    static constexpr const char* kMsgSetLayout = "pk.layout.set";
+    static constexpr const char* kMsgFindControl = "pk.ui.find";
 
 protected:
     void refreshEditor ();

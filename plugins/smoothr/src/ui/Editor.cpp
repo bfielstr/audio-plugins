@@ -59,7 +59,7 @@ void Editor::buildUI (CFrame* f)
                                       [this] { return tooltipsEnabled (); });
     helpBtn->setTooltipText ("Show or hide the floating help tooltips (the info box at the bottom shows the same help either way).");
     root->addView (helpBtn);
-    root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (CPoint (812, 28)); }));
+    root->addView (new ActionButton (CRect (812, 6, 892, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (812, 28))); }));
 
     history = new HistoryView (CRect (kViewLeft, kViewTop, kViewRight, kViewBottom), this, [c = ctl] () -> Meters* {
         auto* s = c->getShared ();
@@ -133,13 +133,29 @@ void Editor::showMenu (CPoint where)
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the history beside the limiter over the character; the end saturator under them
+    s.panels = {
+        {"history", "history", {kViewLeft, kViewTop, kViewRight, 300}, 0},
+        {"limiter", "", {kViewLeft, kRowTop, 560, kRowTop + 92}, 0, 0},
+        {"character", "", {568, kRowTop, kViewRight, kRowTop + 92}, 0, 0},
+        {"tail", "end of the chain", {kViewLeft, 408, kViewRight, 408 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    return s;
 }
 
 } // namespace smoothr

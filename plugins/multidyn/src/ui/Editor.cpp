@@ -113,7 +113,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (tip (new ActionButton (CRect (786, 6, 808, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
                                           [this] { return tooltipsEnabled (); }),
                         "Show or hide the floating help tooltips (the info box at the bottom shows the same help either way)."));
-    root->addView (new ActionButton (CRect (814, 6, 912, 28), "Menu", [this] { showMenu (CPoint (814, 28)); }));
+    root->addView (new ActionButton (CRect (814, 6, 912, 28), "Menu", [this] { showMenu (layoutPoint (CPoint (814, 28))); }));
 
     // column headers outside the display
     auto header = [&] (double x0, double x1, const char* t) {
@@ -329,8 +329,11 @@ void Editor::showMenu (CPoint where)
     menu->addSeparator ();
     menu->addEntry ("Reset All Ratios to 1:1");
     const int settingsAt = pk::addSettingsMenuEntries (menu);
+    addLayoutMenu (menu);
     menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
+        if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
+            return;
         if (settingsMenuPicked (r, settingsAt))
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
@@ -343,6 +346,23 @@ void Editor::showMenu (CPoint where)
             if (r == (int32_t)sizes.size () + 1)
                 ctl->setPlainFromUI (kSubRatio, 1.0);
     });
+}
+
+pk::layout::Spec Editor::layoutSpec (bool) const
+{
+    pk::layout::Spec s;
+    // the bands (the display with each band's controls around it) beside the crossover row, the side-chain
+    // and the pre-limiter stacked; the end saturator under them. The band controls the display places as
+    // the band count changes (those not shown yet have no place) go with the bands.
+    s.panels = {
+        {"bands", "bands", {kBandColLeft, kDisplayTop, kWidth - 8, 348}, 0},
+        {"crossover", "crossover", {kBandColLeft, 350, 342, 420}, 0, 0},
+        {"sidechain", "", {350, 344, 640, 416}, 0, 0},
+        {"prelimit", "", {648, 344, 822, 416}, 0, 0},
+        {"tail", "end of the chain", {8, 424, kWidth - 8, 424 + smacheratr::TailPanel::kOpenHeight}, 1},
+    };
+    s.fallback = "bands";
+    return s;
 }
 
 } // namespace multidyn

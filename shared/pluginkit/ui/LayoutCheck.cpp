@@ -2,6 +2,7 @@
 
 #include "pluginkit/ui/HelpText.h"
 #include "pluginkit/ui/InfoBox.h"
+#include "pluginkit/ui/LayoutViews.h"
 #include "pluginkit/ui/Theme.h"
 #include "pluginkit/ui/Widgets.h"
 
@@ -123,7 +124,9 @@ void collect (CView* v, double ox, double oy, const CRect& rootSize, std::vector
             const CRect tr (r.left + 8, r.top + 3, r.left + 8 + w, r.top + 18);
             out.push_back ({{tr.left, tr.top, tr.right, tr.bottom, "Panel title \"" + t + "\" " + rectText (tr)}, true});
         }
-        c->forEachChild ([&] (CView* child) { collect (child, r.left, r.top, rootSize, out, spills); });
+        // (a layout's block moves its children by its transform: pk::childOrigin)
+        const CPoint o = childOrigin (c, r.getTopLeft ());
+        c->forEachChild ([&] (CView* child) { collect (child, o.x, o.y, rootSize, out, spills); });
         return;
     }
     // overlays over the whole window (Smemplr's modulation layer) cover everything by design

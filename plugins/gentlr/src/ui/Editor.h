@@ -38,6 +38,8 @@ public:
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
+    // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
+    pk::layout::Spec layoutSpec (bool arranged) const override;
     void idle () override;
     void paramChanged (uint32_t id) override;
     // a gesture on one of a band's controls selects the band
