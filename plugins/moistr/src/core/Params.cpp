@@ -50,6 +50,15 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        // the multiband split (0.19)
+        v.push_back (choice (kBandCount, "Bands", "Bands", {"3 Bands", "4 Bands"}, kBands3));
+        v.push_back (real (kXoverMid, "Mid X", "Mid X", 400.0, 6000.0, 1500.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kXoverHigh, "High X", "High X", 1500.0, 16000.0, 5000.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kAirLevel, "Air Level", "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (percent (kAirMove, "Air Move", "Air Move", 1.0));
+        v.push_back (real (kRise, "Rise", "Rise", 0.25, 4.0, 1.0, Curve::Log, Disp::Plain));
+        v.push_back (real (kFall, "Fall", "Fall", 0.25, 4.0, 1.0, Curve::Log, Disp::Plain));
+        v.push_back (real (kDepth, "Depth", "Depth", 0.0, 48.0, 24.0, Curve::Linear, Disp::Db));
         return v;
     }());
     return t;
