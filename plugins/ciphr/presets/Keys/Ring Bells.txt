@@ -1,0 +1,14 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: keys, bell, metallic, ring
+comment: Ring modulation between neighbouring oscillators for struck, metallic bells.
+Variant = 41
+Cross = 70 %
+Attack = 2 ms
+Decay = 1200 ms
+Sustain = 0 %
+Release = 1500 ms
+Velocity = 80 %
+Space = 30 %
+Length = 350 ms
+Regen = 30 %
+Blend = 30 %

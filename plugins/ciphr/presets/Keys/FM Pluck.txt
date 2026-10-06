@@ -1,0 +1,16 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: keys, pluck, fm, delay
+comment: A short FM pluck with a filter sweep, into clean multi-tap echoes.
+Variant = 5
+Cross = -60 %
+Decay = 350 ms
+Sustain = 10 %
+Release = 300 ms
+Cutoff = 1500 Hz
+Env Amount = 60 %
+Filter Decay = 250 ms
+Filter Sustain = 0 %
+Space = 0 %
+Length = 300 ms
+Regen = 40 %
+Blend = 25 %
