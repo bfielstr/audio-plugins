@@ -4,6 +4,7 @@
 // choices) for writing presets.
 #include "pluginkit/PresetStore.h"
 
+#include "ciphr/src/core/Params.h"
 #include "deepr/src/core/Params.h"
 #include "dropr/src/core/Params.h"
 #include "gentlr/src/core/Params.h"
@@ -43,7 +44,8 @@ struct Plugin
 };
 
 const Plugin kPlugins[] = {
-    {"deepr", deepr::paramTable},       {"dropr", dropr::paramTable},   {"gentlr", gentlr::paramTable},
+    {"ciphr", ciphr::paramTable},       {"deepr", deepr::paramTable},   {"dropr", dropr::paramTable},
+    {"gentlr", gentlr::paramTable},
     {"levlr", levlr::paramTable},       {"locus", locus::paramTable},   {"multidyn", multidyn::paramTable},
     {"orbitr", orbitr::paramTable},     {"para", para::paramTable},     {"smacheratr", smacheratr::paramTable},
     {"smemplr", smemplr::paramTable},   {"smoothr", smoothr::paramTable}, {"stretchr", stretchr::paramTable},

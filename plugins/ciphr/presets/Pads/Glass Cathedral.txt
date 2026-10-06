@@ -1,0 +1,15 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pad, reverb, slow, wide
+comment: A slow cluster that drifts through its waves into a long diffuse wash.
+Variant = 12
+Timbre = 35 %
+Character = 70 %
+Drift = 40 %
+Attack = 900 ms
+Release = 2500 ms
+Cutoff = 5000 Hz
+Space = 90 %
+Length = 900 ms
+Movement = 50 %
+Regen = 60 %
+Blend = 55 %

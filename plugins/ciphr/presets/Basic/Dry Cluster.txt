@@ -1,0 +1,10 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: init, dry, basic
+comment: The plain voices: no processor, no detune, no drift. A starting point for your own sounds.
+Character = 0 %
+Blend = 0 %
+Regen = 0 %
+Space = 0 %
+Movement = 0 %
+Cutoff = 12000 Hz
+Env Amount = 0 %

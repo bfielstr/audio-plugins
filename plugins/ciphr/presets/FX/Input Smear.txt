@@ -1,0 +1,11 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: fx, input, notch, reverb
+comment: Feed a track into the side-chain input: it is smeared into a diffuse wash with slowly moving notches.
+Input = 100 %
+Input Path = Direct
+Space = 100 %
+Length = 700 ms
+Movement = 40 %
+Regen = -60 %
+Shift = 0.7 Hz
+Blend = 70 %

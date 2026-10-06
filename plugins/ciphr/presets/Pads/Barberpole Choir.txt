@@ -1,0 +1,14 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pad, shifter, endless, motion
+comment: Echoes that climb forever: Regen sends only the shifted sound round the loop, 4 Hz higher each time.
+Variant = 23
+Timbre = 60 %
+Drift = 30 %
+Attack = 600 ms
+Release = 3000 ms
+Filter Type = 20 %
+Space = 60 %
+Length = 600 ms
+Regen = 85 %
+Shift = 4 Hz
+Blend = 60 %
