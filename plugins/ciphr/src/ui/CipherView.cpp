@@ -36,10 +36,12 @@ CipherView::CipherView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView
 const Patch& CipherView::patch ()
 {
     const int v = (int)std::lround (host->plainValue (kVariant));
-    if (v != cachedVariant)
+    const int set = (int)std::lround (host->plainValue (kWaveSet));
+    if (v != cachedVariant || set != cachedSet)
     {
-        cached = makePatch (v);
+        cached = makePatch (v, set);
         cachedVariant = v;
+        cachedSet = set;
     }
     return cached;
 }
@@ -168,7 +170,10 @@ void CipherView::paintBase (CDrawContext* ctx)
     }
 
     char title[64];
-    std::snprintf (title, sizeof (title), "CLUSTER  VARIANT %d", cachedVariant);
+    if (cachedSet == kSetClassic)
+        std::snprintf (title, sizeof (title), "CLUSTER  VARIANT %d", cachedVariant);
+    else
+        std::snprintf (title, sizeof (title), "CLUSTER  VARIANT %d  %s", cachedVariant, host->valueText (kWaveSet).c_str ());
     text (ctx, title, CRect (c.left, all.top + 3.0, c.right, all.top + 17.0), theme::kCopperPale, 10.0, kLeftText, true);
     if (ta.getWidth () > 20.0)
         text (ctx, "TAPS", CRect (ta.left, all.top + 3.0, ta.right, all.top + 17.0), theme::kCopperPale, 10.0, kLeftText, true);
@@ -180,6 +185,7 @@ void CipherView::draw (CDrawContext* ctx)
     patch ();
     const pk::LayerKey key = pk::LayerKey ()
                                  .add (cachedVariant)
+                                 .add (cachedSet)
                                  .add (host->plainValue (kCharacter))
                                  .add (host->plainValue (kSpace))
                                  .add (host->plainValue (kLength))

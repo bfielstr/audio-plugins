@@ -10,6 +10,7 @@
 #include "gentlr/src/core/Params.h"
 #include "levlr/src/core/Params.h"
 #include "locus/src/core/Params.h"
+#include "moistr/src/core/Params.h"
 #include "multidyn/src/core/Params.h"
 #include "orbitr/src/core/Params.h"
 #include "para/src/core/Params.h"
@@ -47,6 +48,7 @@ const Plugin kPlugins[] = {
     {"ciphr", ciphr::paramTable},       {"deepr", deepr::paramTable},   {"dropr", dropr::paramTable},
     {"gentlr", gentlr::paramTable},
     {"levlr", levlr::paramTable},       {"locus", locus::paramTable},   {"multidyn", multidyn::paramTable},
+    {"moistr", moistr::paramTable},
     {"orbitr", orbitr::paramTable},     {"para", para::paramTable},     {"smacheratr", smacheratr::paramTable},
     {"smemplr", smemplr::paramTable},   {"smoothr", smoothr::paramTable}, {"stretchr", stretchr::paramTable},
     {"widr", widr::paramTable},         {"wubr", wubr::paramTable},

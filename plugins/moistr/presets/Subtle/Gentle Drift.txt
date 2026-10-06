@@ -1,0 +1,9 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: subtle, movement
+comment: A little movement and a light glue: the bands drift slowly, nothing more.
+Drive = 0 %
+Movement = 20 %
+Rate = 0.12 Hz
+Level Move = 2 dB
+Glue = 20 %
+Grit = 5 %

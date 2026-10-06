@@ -53,6 +53,23 @@ inline const char* forParam (uint32_t id)
         case kShift: return "How far the frequency shifter moves the echoes' frequencies each time round (Hz).";
         case kBlend: return "Dry voices against the processor's output.";
         case kOutput: return "Overall output level.";
+        case kStretch:
+            return "Pulls the oscillators off their pitches to uneven ratios, like a struck bar or plate: from clean (0) "
+                   "to clanging metal (100 %). Strongest with the Metal waves and Cross.";
+        case kWaveSet:
+            return "Which waves Variant deals from. Classic: the original twelve. Alien, Metal and Voice: each "
+                   "oscillator's list goes from calm to harsh (or from a closed vowel to an open one), so Timbre "
+                   "sweeps into screeches, scrapes or voices.";
+        case kDisperseOn: return "Switches Disperse on: the sound is split into bands that the Disperse dial raises one by one.";
+        case kDisperse:
+            return "The dial: at 0 every band is silent, turning it up raises the bands one after another (in the "
+                   "Seed's order), each from silent to full; at 100 % every band is full.";
+        case kDisperseBands: return "How many bands the sound is split into (4 to 32), spread from 80 Hz to 12 kHz.";
+        case kDisperseSeed: return "The order the bands rise in. The same Seed and Bands always give the same order.";
+        case kDisperseWidth:
+            return "How wide each band is. 100 %: the bands together sound like the input. Lower: narrow, ringing bands "
+                   "with gaps between them, like a vocoder.";
+        case kDisperseMix: return "The input against the bands: 100 % hears only the bands.";
         default: return nullptr;
     }
 }
@@ -61,5 +78,9 @@ constexpr const char* kCipherView =
     "Left: each oscillator's list of waves (rows), with its pitch offset under each wave and a cinnabar mark where "
     "Timbre (and Drift) has it now. Right: the processor's taps against time, their heights their levels, and a haze "
     "for Space's diffusion.";
+
+constexpr const char* kDisperseView =
+    "Disperse's bands from 80 Hz (left) to 12 kHz (right), each bar as tall as the band's level at the dial now "
+    "(no bar: silent; to the top: full). The outlined slot is the next band to rise.";
 
 } // namespace ciphr::help

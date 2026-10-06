@@ -1,0 +1,7 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: reese, neuro, bass
+comment: The classic moist bass: three bands with a clear hollow between the low mids and the high end, the High band moving the most.
+Movement = 50 %
+Rate = 0.3 Hz
+Glue = 40 %
+Grit = 20 %

@@ -6,7 +6,7 @@
 //   right  the processor: its taps against time (0 .. Length), each a line as tall as its level, a haze
 //          over them as thick as Space's diffusion, and the feedback's settings
 //
-// The waves, the taps and the haze change only with Variant, Character, Space, Length, Regen, Shift and the
+// The waves, the taps and the haze change only with Variant, Wave Set, Character, Space, Length, Regen, Shift and the
 // view's size: they are a cached layer (pk::CachedLayer); the marks and the voices' count are drawn over it.
 #pragma once
 
@@ -40,7 +40,7 @@ private:
     pk::ParamHost* host;
     MeterSource meters;
     Patch cached;
-    int cachedVariant = -1;
+    int cachedVariant = -1, cachedSet = -1;
     float pos[kOscs] {};
     bool havePos = false;
     int voices = 0;

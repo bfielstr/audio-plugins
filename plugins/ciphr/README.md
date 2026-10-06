@@ -6,8 +6,10 @@ pitches, so one knob turns a plain saw into an organ, a vowel or a glassy chord.
 oscillators bend or multiply each other for FM tones and metallic bells. After the voices comes a
 processor that goes from crisp multi-tap echoes to a dense reverb wash, with a frequency shifter in
 its feedback for endlessly climbing echoes or slowly moving notches. **Variant** deals out a new set
-of waves, pitches and echo taps at every number, and **Drift** lets them wander. ciphr can also take
-a track through its side-chain input and run it through the same filter and processor. Install
+of waves, pitches and echo taps at every number, and **Drift** lets them wander. **Waves** switches to
+sets of metallic, screeching and vocal waves, **Stretch** bends the cluster into clanging, inharmonic
+metal, and **Disperse** splits the sound into bands that one dial raises one by one. ciphr can also
+take a track through its side-chain input and run it through the same filter and processor. Install
 instructions are in the [top-level README](../../README.md).
 
 ![ciphr](../../docs/ciphr/ui_ciphr.png)
@@ -23,6 +25,9 @@ instructions are in the [top-level README](../../README.md).
    repeats. With a little **Shift** (a few Hz) the repeats climb (Regen right of centre) or sweep with
    moving notches (Regen left of centre).
 5. For a living, slowly changing pad, raise **Drift**.
+6. For alien textures, set **Waves** to Alien and turn **Timbre** from 0 to 100 %: every oscillator
+   goes from a calm wave to a screech. The *Alien* presets start from there.
+7. Switch **Disperse** on and turn its dial: the sound comes back band by band.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
 
@@ -30,9 +35,13 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 ```
 MIDI notes -> 8 voices: oscillator cluster -> Cross -> (+ input, Voices path) -> filter -> amp envelope
-           -> sum (+ input, Direct path) -> processor (taps, diffusion, shifter in the feedback)
+           -> sum (+ input, Direct path) -> Disperse (when on)
+           -> processor (taps, diffusion, shifter in the feedback)
            -> Blend -> Output -> smacheratr (the end saturator)
 ```
+
+Disperse comes before the processor and before Blend's dry and wet split, so the dry sound is the
+revealed bands too, and the processor's echoes and diffusion smear them and fill the gaps between them.
 
 The voices are mono and centred; the processor makes the stereo (its taps are panned). New notes take
 a silent voice; with all 8 sounding, a new note takes the quietest released voice, or else the one held
@@ -56,10 +65,11 @@ from where they are, so stealing does not click. Playing a note that is already 
   8 at 100 %, fading in one after another) and brightens the feedback loop (its damping filter goes
   from 2.5 kHz up to 16 kHz).
 - **Variant** (1 to 128, 1): a seed for a fixed random number generator. Each number sets every
-  oscillator's four entries (waves from the built-in set, pitch offsets in octaves, fifths and fourths
-  with a few cents of detune), the oscillators' start phases and the processor's tap pattern (eight tap
-  times, levels, pans and wobble rates). The first oscillator's first entry is always a saw at the
-  note, so every Variant has a solid root. The same Variant always gives the same patch.
+  oscillator's four entries (waves from the set **Waves** picks, pitch offsets in octaves, fifths and
+  fourths with a few cents of detune), the oscillators' start phases and the processor's tap pattern
+  (eight tap times, levels, pans and wobble rates). The first oscillator's first entry is always a
+  plain wave at the note (a saw with the Classic waves), so every Variant has a solid root. The same
+  Variant always gives the same patch.
 - **Drift** (0 %): slow random glides. Every oscillator's place in its list (up to three quarters of an
   entry either way) and tuning (up to 12 cents), and every tap's time (3 %) and level (30 %), glide
   smoothly towards new random targets, between 0.05 and 0.5 times a second as Drift goes up. At 0
@@ -70,6 +80,18 @@ from where they are, so stealing does not click. Playing a note that is already 
 default) adds it to the voices' sum just before the processor. **Voices** sends it, summed to mono,
 into every sounding voice before its filter, so the keys play the input through their filters and
 envelopes (each voice adds its own copy; with no note held you hear none of it).
+
+**TEXTURE**
+
+- **Waves** (Classic): which waves Variant deals from. Classic is the twelve waves ciphr has always
+  had, so every Variant number sounds as it did before 0.18. Alien, Metal and Voice keep each
+  Variant's pitches, start phases and taps and only change the waves, and they order each
+  oscillator's list: its first entry is the calmest wave, its last the harshest (or, in Voice, the
+  most open vowel), so **Timbre** sweeps from calm to harsh for every Variant. See [The waves](#the-waves).
+- **Stretch** (0 %): moves each oscillator's pitch by a fixed amount that is not a musical interval
+  (none for the first, up to about 11 semitones for the last), so the cluster's partials stop lining up
+  as harmonics and ring like a struck bar or plate. At 0 nothing changes. It glides when you move it.
+  It is strongest with the Metal waves and with **Cross** right of centre.
 
 **FILTER**: a morphing state-variable filter in each voice (zero-delay form). **Cutoff** (20 Hz to
 20 kHz, 6 kHz), **Resonance** (20 %), **Type** (0 %: low-pass at 0, band-pass at 50 %, high-pass at
@@ -105,13 +127,41 @@ A stereo multi-tap delay line with allpass diffusers and a feedback loop:
   shifts every frequency by the same number of Hz (a single sideband, made with an allpass Hilbert
   transformer), so even small values like 1 to 5 Hz give slow, phasing movement.
 
+**DISPERSE**
+
+A bank of band-pass filters that splits the sound into bands, like the first half of a vocoder, and
+raises them one at a time as its dial turns.
+
+- **On** (off): while it is off the bank is not running at all and ciphr sounds exactly as it does
+  without it. Switching it on or off fades over about 20 ms.
+- **Disperse** (50 %): the dial. At 0 every band is silent. Turning it up raises the bands one after
+  another, in the order **Seed** sets, each from silent to full. Each band rises over its own part of
+  the dial (2 / **Bands** of it, at least), and the parts overlap so that about two bands are on their
+  way up at any moment and the reveal never jumps: a band is silent at the start of its part, 12 dB
+  down half way and full at its end. At 100 % every band is full. The dial and every band's level
+  glide, so even a fast turn does not click.
+- **Bands** (4 to 32, 16): how many bands, spaced evenly in pitch from 80 Hz to 12 kHz. A change fades
+  the bank out and back in (10 ms each way).
+- **Seed** (1 to 128, 1): the order the bands rise in, a fixed shuffle for each number. The same
+  **Seed** and **Bands** always give the same order.
+- **Width** (100 %): how wide each band is. At 100 % the bands together sound like the input (with
+  every band full, flat within 2 dB from 100 Hz to 10 kHz; the bass below 80 Hz and the top
+  above 12 kHz fall away). Lower, the bands get up to 8 times narrower: they ring, with gaps between
+  them, the comb of a vocoder. The level is kept the same whatever **Bands** and **Width** are.
+- **Mix** (100 %): the sound going in against the bands. At 100 % you hear only the bands, so
+  **Disperse** at 0 is silence; lower, the rest of the sound stays underneath.
+
+The bars beside the knobs show each band's level at the dial now, from 80 Hz on the left to 12 kHz on
+the right (no bar: silent; to the top: full), with an outline round the next band to rise.
+
 **OUTPUT**: **Blend** (35 %: the dry voices against the processor's output) and **Output** (-24 to +12
 dB).
 
 The display shows the patch: on the left each oscillator's list of waves as small traces with their
 pitch offsets, and a cinnabar mark where each oscillator is in its list now (it follows Timbre, and
 Drift while notes play). On the right the processor's taps against time, each as tall as its level,
-dim when Character has faded it out, under a haze as thick as Space.
+dim when Character has faded it out, under a haze as thick as Space. With Alien, Metal or Voice
+**Waves** the title names the set.
 
 **smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
@@ -119,21 +169,86 @@ it is off it folds to its header strips; click a strip (or switch it on) to open
 
 ## The waves
 
-The oscillators read from twelve built-in waves, generated when the plug-in loads (no sample files):
-Sine, Triangle, Saw, Square, Pulse (25 %), Organ (harmonics 1, 2, 3, 4, 6 and 8), Vowel A and Vowel
-O (sloping spectra with two formant-like peaks), Hollow (odd harmonics, falling quickly), Buzz (every
-harmonic, very bright), Soft (a rounded saw) and Glass (sparse harmonics 1, 3, 7, 11 and 16).
+The oscillators read from twenty-one built-in waves, generated when the plug-in loads (no sample
+files). The twelve classic ones: Sine, Triangle, Saw, Square, Pulse (25 %), Organ (harmonics 1, 2, 3,
+4, 6 and 8), Vowel A and Vowel O (sloping spectra with two formant-like peaks), Hollow (odd harmonics,
+falling quickly), Buzz (every harmonic, very bright), Soft (a rounded saw) and Glass (sparse harmonics
+1, 3, 7, 11 and 16).
+
+Added in 0.18, for alien textures and voices:
+
+- **Plate**: sparse harmonics 2, 5, 8, 10, 13, 17 and 20 over a weak fundamental, a hollow, struck sound.
+- **Metal**: groups of three neighbouring harmonics (around the 7th, 14th, 23rd, 34th and 48th) that
+  beat against each other, a clang.
+- **Scrape**: a dense band of harmonics from the 12th to the 220th at uneven levels, a bright, gritty
+  scrape.
+- **Screech**: a narrow, strong peak around the 30th harmonic and a weaker one near the 47th, a
+  whistling howl.
+- **Deep OO**, **Deep AA** and **Deep OH**: vowels with the formants of a low voice (for "oo" 300, 870
+  and 2240 Hz; "aa" 730, 1090 and 2440 Hz; "oh" 570, 840 and 2410 Hz), placed for C2.
+- **Throat**: a low formant and a very narrow peak on the 12th harmonic, the whistle of throat singing
+  over a drone.
+- **Choir**: a sung "ah" (650, 1080 and 2650 Hz and the singer's peak near 3 kHz), placed for C3.
+
+Metal, Scrape, Screech and Choir have their harmonics' phases scattered, so the cycle has no single
+sharp peak and sounds denser. A wave's formants are fixed to its harmonics, so they move with the
+pitch: the vowels sound most like voices near the notes they are placed for, and higher up they turn
+smaller and stranger.
+
+A single-cycle wave can only hold harmonics, so none of these is truly inharmonic on its own: Metal and
+Scrape get their roughness from neighbouring harmonics beating. Real inharmonic metal comes from the
+cluster: **Stretch** moves the oscillators to ratios that are not harmonics of each other, **Cross**
+(ring modulation or FM between them) adds sum and difference tones, and the processor's **Shift** moves
+every echo by the same number of Hz.
+
+**Waves** picks which of them Variant deals from. With Classic each entry is one of the twelve classic
+waves (the numbers each Variant drew before 0.18). The other sets read the very same draws from four
+groups, one for each place in an oscillator's list:
+
+| Waves | 1st entry | 2nd entry | 3rd entry | 4th entry | root |
+| --- | --- | --- | --- | --- | --- |
+| Alien | Sine, Soft, Triangle, Vowel O, Deep OO | Hollow, Glass, Plate, Vowel A | Metal, Buzz, Throat, Plate | Screech, Scrape, Metal | Soft |
+| Metal | Glass, Plate, Triangle, Organ | Plate, Metal, Glass | Metal, Scrape, Plate | Scrape, Metal, Screech | Glass |
+| Voice | Deep OO, Deep OH | Deep OH, Vowel O, Deep OO, Throat | Deep AA, Vowel A, Choir | Choir, Throat, Deep AA | Deep OO |
+
+The root is the first oscillator's first entry. So with Alien or Metal, **Timbre** at 0 is calm and at
+100 % harsh for every Variant, and with Voice it opens the vowels.
 
 Each wave is stored as ten band-limited tables, one per octave, the fullest holding 512 harmonics. A
 note reads the fullest table whose highest harmonic stays below half the sample rate, so high notes
 never fold harmonics back as off-pitch tones (aliasing). The tests measure what is left: below -90 dB
-for a saw, square, pulse, Buzz and Vowel A at notes up to 7.8 kHz.
+for a saw, square, pulse, Buzz, Vowel A, Plate, Metal, Scrape, Screech, Deep AA, Choir and Throat at
+notes up to 7.8 kHz.
 
 ## Presets
 
 The **Presets** menu in the header starts with **Init** (every control at its default) and has these
-factory presets: *Basic*: Dry Cluster (the voices alone, a plain starting point); *FX*: Input Smear
-(for the side-chain input); *Keys*: FM Pluck, Ring Bells; *Pads*: Barberpole Choir, Glass Cathedral.
+factory presets: *Alien*: Deep Arrival, Metal Scrape, Screech Rise, Signal From Below, Throat Choir;
+*Basic*: Dry Cluster (the voices alone, a plain starting point); *FX*: Input Bands, Input Smear (both
+for the side-chain input); *Keys*: FM Pluck, Ring Bells; *Pads*: Barberpole Choir, Glass Cathedral.
+
+The *Alien* presets:
+
+- **Screech Rise**: Alien waves with **Timbre** at 0, a soft, hollow tone. Turn **Timbre** up (or
+  automate it) and every oscillator moves through glassy and metal waves into Screech and Scrape, with
+  a little FM (**Cross** -25 %) and a resonant filter (55 %) to sharpen it, and echoes that climb
+  (**Regen** +45 %, **Shift** +12 Hz).
+- **Metal Scrape**: Metal waves at **Timbre** 65 % (between the clang and the scrape), **Stretch**
+  70 % and ring modulation (**Cross** +55 %) for inharmonic, clanging partials, a resonant band-pass
+  filter that closes after the hit, and short echoes with moving notches (**Regen** -40 %, **Shift**
+  3.5 Hz) that scrape across it.
+- **Deep Arrival**: Voice waves an octave down (**Tune** -12), mostly "oo" and "oh" (**Timbre** 30 %),
+  a 2.5 s attack and a filter that opens over 4 s, so the voice arrives slowly, in a big space
+  (**Space** 85 %, **Length** 900 ms) whose echoes slide gently down (**Shift** -2 Hz). Turn
+  **Timbre** up to open the vowels towards "aa".
+- **Throat Choir**: Voice waves at **Timbre** 85 % (between the open vowels and the Choir and Throat
+  waves), spread apart by **Character** and **Drift** like a choir, with the throat whistle on top, in
+  a wide reverb.
+- **Signal From Below**: an Alien drone an octave down, a little **Stretch** and FM, its echoes falling
+  away (**Shift** -6 Hz), heard through **Disperse** at 35 % with 24 narrow bands (**Width** 40 %).
+  Turn the **Disperse** dial up to let the rest of the sound rise out of the dark.
+
+**Input Bands** sends the side-chain input through **Disperse** (32 bands) and the processor.
 Save your own with **Save As...** (a category and tags are optional), filter the menu by tag, and use
 **Save as Default** to make every new ciphr start from the current settings. The menu is described in
 the [top-level README](../../README.md#presets).
@@ -154,7 +269,10 @@ Each voice has six oscillators (a fixed number in the code, `kOscs` in `src/core
 voices held take about 2.4 % of one core at 48 kHz with the defaults, and about 8.6 % at the heaviest
 settings (FM, Drift, all eight taps, Space 100 %, the input on the Voices path and the end saturator
 on), measured as process CPU time, the best of three runs, on the build machine. Eight oscillators
-per voice measured about 3.0 % and 10.5 %.
+per voice measured about 3.0 % and 10.5 %. **Disperse** runs once after the voices (not in each voice):
+with 32 bands in stereo, every band sounding, it takes about 1 % of one core on its own (1.1 % on the
+machine the 0.18 tests ran on, where the two figures above measured 3.2 % and 11.2 %). Bands that are
+silent and staying silent are skipped.
 
 ## Credits
 

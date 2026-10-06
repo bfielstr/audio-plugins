@@ -1,0 +1,28 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: alien, disperse, drone, texture
+comment: A low, inharmonic drone heard through a few narrow bands, its echoes falling away. Turn the Disperse dial up to let the rest of the signal rise out of the dark, band by band.
+Wave Set = Alien
+Variant = 77
+Timbre = 45 %
+Tune = -12.0 st
+Stretch = 25 %
+Cross = -30 %
+Drift = 40 %
+Cutoff = 4.00 kHz
+Resonance = 30 %
+Env Amount = 10 %
+Attack = 1.20 s
+Decay = 2.00 s
+Sustain = 100 %
+Release = 3.00 s
+Space = 75 %
+Length = 1.20 s
+Movement = 35 %
+Regen = 55 %
+Shift = -6.00 Hz
+Blend = 60 %
+Disperse On = On
+Disperse = 35 %
+Disperse Bands = 24
+Disperse Seed = 17
+Disperse Width = 40 %

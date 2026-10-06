@@ -1,0 +1,28 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: alien, metal, scrape, texture
+comment: Clanging, scraping metal: the Metal waves pulled to uneven ratios by Stretch and multiplied together by Cross, through moving notches. Timbre goes from a struck plate (left) to a raw scrape (right).
+Wave Set = Metal
+Variant = 58
+Timbre = 65 %
+Cross = 55 %
+Stretch = 70 %
+Character = 80 %
+Drift = 35 %
+Cutoff = 2.50 kHz
+Resonance = 45 %
+Filter Type = 55 %
+Key Track = 40 %
+Env Amount = 40 %
+Filter Decay = 800 ms
+Filter Sustain = 30 %
+Attack = 5.0 ms
+Decay = 2.50 s
+Sustain = 60 %
+Release = 1.20 s
+Space = 35 %
+Length = 180 ms
+Movement = 60 %
+Regen = -40 %
+Shift = 3.50 Hz
+Blend = 40 %
+Output = 6.0 dB

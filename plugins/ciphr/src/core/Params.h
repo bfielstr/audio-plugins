@@ -52,7 +52,16 @@ enum ParamId : uint32_t
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
     kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields,
     kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields,
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    // 0.18: appended after the end saturator's blocks
+    kStretch = kTailExt4Base + pk::kTailExt4Fields, // 0 .. 1: pulls the oscillators off their pitches to inharmonic ratios
+    kWaveSet,       // Classic / Alien / Metal / Voice: which waves Variant's draws stand for (Variant.h)
+    kDisperseOn,    // the band reveal effect (Disperse.h) on / off (off: bypassed, bit for bit)
+    kDisperse,      // 0 .. 1: the dial (0 every band silent, 1 every band full)
+    kDisperseBands, // 4 .. 32
+    kDisperseSeed,  // 1 .. 128: the order the bands are raised in
+    kDisperseWidth, // 0 .. 1: the bands' width (1: they sum flat at full)
+    kDisperseMix,   // 0 .. 1: dry .. the bands
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
@@ -64,12 +73,16 @@ static_assert (kFilterAttack == 17 && kFilterDecay == 18 && kFilterSustain == 19
                    kSpace == 22 && kLength == 23 && kMovement == 24 && kRegen == 25 && kShift == 26 && kBlend == 27 &&
                    kOutput == 28 && kTailBase == 29,
                "Ciphr's parameter IDs are fixed");
-static_assert (kTailExtBase == 35 && kTailExt2Base == 52 && kTailExt3Base == 61 && kTailExt4Base == 67 && kNumParams == 72,
+static_assert (kTailExtBase == 35 && kTailExt2Base == 52 && kTailExt3Base == 61 && kTailExt4Base == 67 && kStretch == 72,
                "saved IDs: the end saturator's blocks at 29 .. 71");
+static_assert (kWaveSet == 73 && kDisperseOn == 74 && kDisperse == 75 && kDisperseBands == 76 && kDisperseSeed == 77 &&
+                   kDisperseWidth == 78 && kDisperseMix == 79 && kNumParams == 80,
+               "saved IDs: 0.18's at 72 .. 79");
 
 enum InputPath { kPathDirect = 0, kPathVoices };
 
 constexpr int kMinVariant = 1, kMaxVariant = 128;
+constexpr int kMinBands = 4, kMaxBands = 32, kMinSeed = 1, kMaxSeed = 128;
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

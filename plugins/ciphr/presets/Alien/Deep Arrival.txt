@@ -1,0 +1,28 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: alien, vocal, deep, pad
+comment: A huge, low voice that takes seconds to arrive: deep "oo" and "oh" vowels an octave down, the filter opening slowly, a big space whose echoes slide gently downwards. Timbre opens the vowels towards "aa".
+Wave Set = Voice
+Variant = 9
+Timbre = 30 %
+Tune = -12.0 st
+Character = 30 %
+Drift = 25 %
+Cutoff = 1.80 kHz
+Resonance = 25 %
+Key Track = 30 %
+Env Amount = 25 %
+Filter Attack = 4.00 s
+Filter Decay = 6.00 s
+Filter Sustain = 60 %
+Filter Release = 4.00 s
+Attack = 2.50 s
+Decay = 3.00 s
+Sustain = 90 %
+Release = 4.00 s
+Velocity = 30 %
+Space = 85 %
+Length = 900 ms
+Movement = 25 %
+Regen = 40 %
+Shift = -2.00 Hz
+Blend = 55 %

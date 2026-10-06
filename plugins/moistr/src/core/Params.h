@@ -1,0 +1,79 @@
+// Moistr parameters. IDs are persisted in projects: only ever append.
+#pragma once
+
+#include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
+
+#include <cstdint>
+
+namespace moistr {
+
+enum ParamId : uint32_t
+{
+    // INPUT
+    kDrive = 0, // 0 .. 1: light saturation before the split (0: untouched)
+    // BANDS
+    kLowFreq,   // Hz: the Low band's low-pass
+    kLowRes,    // 0 .. 1: its resonance (Q 0.5 .. 12)
+    kLowLevel,  // dB (the minimum: off)
+    kMidFreq,   // Hz: the Mid band's band-pass (the low mids)
+    kMidRes,    // 0 .. 1
+    kMidLevel,  // dB
+    kHighFreq,  // Hz: the High band's high-pass
+    kHighRes,   // 0 .. 1
+    kHighLevel, // dB
+    kGap,       // -1 .. 1: moves Mid down and High up (right) or both towards each other (left), +-1 octave each
+    kSlope,     // 12 dB / 24 dB per octave
+    // MOVEMENT
+    kMovement,  // 0 .. 1: how far every band's frequency and level drift (0: still)
+    kRate,      // Hz: how fast (free)
+    kSync,      // Off / On: the rate from the song tempo (Sync Rate) instead
+    kSyncRate,  // a cycle's length in beats (choice)
+    kLowMove,   // 0 .. 1: the Low band's share of the movement
+    kMidMove,   // 0 .. 1
+    kHighMove,  // 0 .. 1
+    kLevelMove, // dB: how far a band's level moves at full movement
+    kSeed,      // 1 .. 128: the movement's pattern
+    // GLUE
+    kGlue,   // 0 .. 1: the compressor after the bands (threshold and ratio together, makeup automatic)
+    kGrit,   // 0 .. 1: soft clipping after it
+    kPasses, // 1 / 2: the second pass runs the result through the bands again with its own movement
+    // OUTPUT
+    kMix,    // 0 .. 1: dry .. wet
+    kOutput, // dB
+    // the Smacheratr at the end of the chain (the suite's end saturator), every block of it
+    kTailBase,
+    kTailExtBase = kTailBase + pk::kTailFields,
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields,
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields,
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields,
+    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+};
+
+// pinned: these numbers are in saved projects
+static_assert (kDrive == 0 && kLowFreq == 1 && kLowRes == 2 && kLowLevel == 3 && kMidFreq == 4 && kMidRes == 5 && kMidLevel == 6 &&
+                   kHighFreq == 7 && kHighRes == 8 && kHighLevel == 9 && kGap == 10 && kSlope == 11,
+               "Moistr's parameter IDs are fixed");
+static_assert (kMovement == 12 && kRate == 13 && kSync == 14 && kSyncRate == 15 && kLowMove == 16 && kMidMove == 17 &&
+                   kHighMove == 18 && kLevelMove == 19 && kSeed == 20 && kGlue == 21 && kGrit == 22 && kPasses == 23 &&
+                   kMix == 24 && kOutput == 25 && kTailBase == 26,
+               "Moistr's parameter IDs are fixed");
+static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64 && kNumParams == 69,
+               "saved IDs: the end saturator's blocks at 26 .. 68");
+
+enum Slope { kSlope12 = 0, kSlope24 };
+enum Passes { kPasses1 = 0, kPasses2 };
+
+// Sync Rate: a movement cycle's length in beats (quarter notes)
+constexpr int kNumSyncRates = 6;
+constexpr double kSyncBeats[kNumSyncRates] = {16.0, 8.0, 4.0, 2.0, 1.0, 0.5};
+
+constexpr int kMinSeed = 1, kMaxSeed = 128;
+constexpr double kLevelOffDb = -48.0; // a band's Level at its minimum: off
+
+const pk::ParamTable& paramTable ();
+inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
+inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
+inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+
+} // namespace moistr

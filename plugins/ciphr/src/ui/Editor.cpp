@@ -1,6 +1,7 @@
 #include "Editor.h"
 
 #include "CipherView.h"
+#include "DisperseView.h"
 #include "Help.h"
 #include "plugin/Controller.h"
 
@@ -49,6 +50,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 void Editor::onClose ()
 {
     display = nullptr;
+    bars = nullptr;
     latencyLabel = nullptr;
     tail.reset ();
 }
@@ -81,11 +83,11 @@ void Editor::buildUI (CFrame* f)
     pk::setHelp (display, "Cluster and taps", help::kCipherView);
     root->addView (display);
 
-    auto knobs = [this] (Panel* panel, std::initializer_list<KnobDef> defs) {
+    auto knobs = [this] (Panel* panel, std::initializer_list<KnobDef> defs, double left = kKnobLeft) {
         int i = 0;
         for (const KnobDef& d : defs)
         {
-            const double x = kKnobLeft + kKnobStep * i++;
+            const double x = left + kKnobStep * i++;
             bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, d.id, nullptr, d.bipolar));
         }
     };
@@ -115,7 +117,22 @@ void Editor::buildUI (CFrame* f)
     root->addView (proc);
     knobs (proc, {{kSpace}, {kLength}, {kMovement}, {kRegen, true}, {kShift, true}});
 
-    // the output beside both rows (its knobs on their rows)
+    // the waves Variant deals from and the cluster's inharmonic stretch
+    auto* tex = new Panel (CRect (kTexLeft, kRow3, kTexRight, kRow3 + kRowH), "TEXTURE");
+    root->addView (tex);
+    bind (tex, new pk::Choice (CRect (kWavesLeft, kWavesTop, kWavesLeft + kWavesW, kWavesTop + kWavesH), this, kWaveSet, "Waves"));
+    bind (tex, new Knob (CRect (kStretchLeft, kKnobTop, kStretchLeft + kKnobW, kKnobTop + kKnobH), this, kStretch));
+
+    // the band reveal: its switch, its knobs and its bands as bars
+    auto* disp = new Panel (CRect (kDispLeft, kRow3, kDispRight, kRow3 + kRowH), "DISPERSE");
+    root->addView (disp);
+    bind (disp, new pk::Toggle (CRect (kDispOnLeft, kDispOnTop, kDispOnLeft + kDispOnW, kDispOnTop + kDispOnH), this, kDisperseOn, "On"));
+    knobs (disp, {{kDisperse}, {kDisperseBands}, {kDisperseSeed}, {kDisperseWidth}, {kDisperseMix}}, kDispKnobLeft);
+    bars = new DisperseView (CRect (kBarsLeft, kBarsTop, kDispRight - kDispLeft - 14.0, kBarsBottom), this);
+    pk::setHelp (bars, "Disperse bands", help::kDisperseView);
+    disp->addView (bars);
+
+    // the output beside the first two rows (its knobs on their rows)
     auto* out = new Panel (CRect (kOutLeft, kRow1, kOutRight, kRow2 + kRowH), "OUTPUT");
     root->addView (out);
     bind (out, new Knob (CRect (18, kKnobTop, 18 + kKnobW, kKnobTop + kKnobH), this, kBlend));
@@ -136,8 +153,11 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (display && (id == kVariant || id == kCharacter || id == kSpace || id == kLength || id == kRegen || id == kShift || id == kTimbre))
+    if (display && (id == kVariant || id == kWaveSet || id == kCharacter || id == kSpace || id == kLength || id == kRegen || id == kShift ||
+                    id == kTimbre))
         display->invalid ();
+    if (bars && (id == kDisperseOn || id == kDisperse || id == kDisperseBands || id == kDisperseSeed))
+        bars->invalid ();
 }
 
 void Editor::idle ()
@@ -186,7 +206,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
     // Wide: the display, then columns of two panels (generator over amp envelope, input over filter
-    // envelope, filter over processor) and the output; the end saturator in a row of its own under them
+    // envelope, filter over processor) and the output; texture and Disperse in the next row, the end
+    // saturator in a row of its own under them
     s.panels = {
         {"display", "cluster and taps", {d.left, d.top, d.right, d.bottom}, 0},
         {"generator", "", {kGenLeft, kRow1, kGenRight, kRow1 + kRowH}, 0, 0},
@@ -196,7 +217,9 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"filter", "", {kFilterLeft, kRow1, kFilterRight, kRow1 + kRowH}, 0, 2},
         {"processor", "", {kProcLeft, kRow2, kProcRight, kRow2 + kRowH}, 0, 2},
         {"output", "", {kOutLeft, kRow1, kOutRight, kRow2 + kRowH}, 0},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"texture", "", {kTexLeft, kRow3, kTexRight, kRow3 + kRowH}, 1},
+        {"disperse", "", {kDispLeft, kRow3, kDispRight, kRow3 + kRowH}, 1},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 2, -1, true},
     };
     return s;
 }

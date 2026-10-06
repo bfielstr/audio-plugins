@@ -32,6 +32,9 @@ void Engine::prepare (double sampleRate, int maxBlock)
     for (uint32_t id = kSpace; id <= kShift; ++id)
         setParam (id, p[id]);
     setParam (kCharacter, p[kCharacter]);
+    disperse.prepare (sr);
+    for (uint32_t id = kDisperseOn; id <= kDisperseMix; ++id)
+        setParam (id, p[id]);
     applyVariant ();
     tail.prepare (sr, std::max (1, maxBlock));
     for (uint32_t f = 0; f < smacheratr::kTailAllFields; ++f)
@@ -51,6 +54,7 @@ void Engine::reset ()
     timbre = p[kTimbre];
     cross = (float)p[kCross];
     cutoffLog = std::log (p[kCutoff]);
+    stretch = p[kStretch];
     blend = (float)p[kBlend];
     out = dbToGain (p[kOutput]);
     // Drift starts from the same place for a Variant every time
@@ -63,6 +67,7 @@ void Engine::reset ()
     }
     prepareBlock (kSlice); // (Drift's tap offsets first: the processor's reset puts the taps where they belong)
     space.reset ();
+    disperse.reset ();
     tail.reset ();
 }
 
@@ -75,7 +80,8 @@ void Engine::applyEnvelopes ()
 
 void Engine::applyVariant ()
 {
-    current = makePatch (std::clamp ((int)std::lround (p[kVariant]), kMinVariant, kMaxVariant));
+    current = makePatch (std::clamp ((int)std::lround (p[kVariant]), kMinVariant, kMaxVariant),
+                         std::clamp ((int)std::lround (p[kWaveSet]), 0, kNumWaveSets - 1));
     space.setPattern (current.taps);
 }
 
@@ -84,7 +90,19 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kTailExt4Base)
+    if (id >= kStretch)
+        switch (id)
+        {
+            case kWaveSet: applyVariant (); break;
+            case kDisperseOn: disperse.setOn (plain >= 0.5); break;
+            case kDisperse: disperse.setAmount (plain); break;
+            case kDisperseBands: disperse.setBands ((int)std::lround (plain)); break;
+            case kDisperseSeed: disperse.setSeed ((int)std::lround (plain)); break;
+            case kDisperseWidth: disperse.setWidth (plain); break;
+            case kDisperseMix: disperse.setMix (plain); break;
+            default: break; // (Stretch: read each slice)
+        }
+    else if (id >= kTailExt4Base)
         tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
     else if (id >= kTailExt3Base)
         tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
@@ -206,11 +224,18 @@ void Engine::prepareBlock (int n)
         timbre = p[kTimbre];
     const double pos = std::clamp (timbre, 0.0, 1.0) * (kEntries - 1);
     const double spread = std::clamp (p[kCharacter], 0.0, 1.0) * kDetuneCents;
+    // Stretch glides (a pitch move); at 0 it adds nothing at all
+    const double stretchT = std::clamp (p[kStretch], 0.0, 1.0);
+    stretch += (stretchT - stretch) * sliceSmooth;
+    if (std::fabs (stretch - stretchT) < 1e-6)
+        stretch = stretchT;
     for (int k = 0; k < kOscs; ++k)
     {
         block.oscPos[k] = std::clamp (pos + kDriftPos * drift[k], 0.0, (double)(kEntries - 1));
         const double side = kOscs > 1 ? (2.0 * k / (kOscs - 1) - 1.0) : 0.0;
         block.oscCents[k] = spread * side + kDriftCents * drift[kOscs + k];
+        if (stretch != 0.0)
+            block.oscCents[k] += 100.0 * stretch * kStretchSemis[k];
     }
     double tapTime[kTaps], tapGain[kTaps];
     for (int i = 0; i < kTaps; ++i)
@@ -269,6 +294,11 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
         {
             wl[i] = v[i] * kVoiceGain + xl[i] * direct;
             wr[i] = v[i] * kVoiceGain + xr[i] * direct;
+        }
+        if (!disperse.idle ())
+            disperse.process (wl, wr, m); // (off: skipped altogether, so nothing changes)
+        for (int i = 0; i < m; ++i)
+        {
             xl[i] = wl[i]; // (the dry signal)
             xr[i] = wr[i];
         }
