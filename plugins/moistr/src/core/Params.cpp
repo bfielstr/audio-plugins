@@ -1,0 +1,58 @@
+#include "Params.h"
+
+#include "smacheratr/src/core/TailExt.h"
+
+#include <vector>
+
+namespace moistr {
+
+using namespace pk;
+using namespace pk::make;
+
+const ParamTable& paramTable ()
+{
+    static const ParamTable t ([] {
+        std::vector<ParamInfo> v;
+        // INPUT
+        v.push_back (percent (kDrive, "Drive", "Drive", 0.1));
+        // BANDS: a clear gap between Mid (the low mids) and High by default, the hollow middle
+        v.push_back (real (kLowFreq, "Low Freq", "Freq", 40.0, 1000.0, 180.0, Curve::Log, Disp::Hz));
+        v.push_back (percent (kLowRes, "Low Res", "Res", 0.15));
+        v.push_back (real (kLowLevel, "Low Level", "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kMidFreq, "Mid Freq", "Freq", 100.0, 4000.0, 450.0, Curve::Log, Disp::Hz));
+        v.push_back (percent (kMidRes, "Mid Res", "Res", 0.35));
+        v.push_back (real (kMidLevel, "Mid Level", "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kHighFreq, "High Freq", "Freq", 500.0, 16000.0, 3000.0, Curve::Log, Disp::Hz));
+        v.push_back (percent (kHighRes, "High Res", "Res", 0.15));
+        v.push_back (real (kHighLevel, "High Level", "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kGap, "Gap", "Gap", -1.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
+        v.push_back (choice (kSlope, "Slope", "Slope", {"12 dB", "24 dB"}, kSlope12));
+        // MOVEMENT
+        v.push_back (percent (kMovement, "Movement", "Movement", 0.5));
+        v.push_back (real (kRate, "Rate", "Rate", 0.05, 2.0, 0.3, Curve::Log, Disp::Hz));
+        v.push_back (toggle (kSync, "Sync", "Sync", false));
+        v.push_back (choice (kSyncRate, "Sync Rate", "Sync Rate", {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8"}, 2));
+        v.push_back (percent (kLowMove, "Low Move", "Low Move", 0.2));
+        v.push_back (percent (kMidMove, "Mid Move", "Mid Move", 0.5));
+        v.push_back (percent (kHighMove, "High Move", "High Move", 1.0));
+        v.push_back (real (kLevelMove, "Level Move", "Levels", 0.0, 12.0, 4.0, Curve::Linear, Disp::Db));
+        v.push_back (integer (kSeed, "Seed", "Seed", kMinSeed, kMaxSeed, kMinSeed, Disp::Plain));
+        // GLUE
+        v.push_back (percent (kGlue, "Glue", "Glue", 0.4));
+        v.push_back (percent (kGrit, "Grit", "Grit", 0.2));
+        v.push_back (choice (kPasses, "Passes", "Passes", {"1", "2"}, kPasses1));
+        // OUTPUT
+        v.push_back (percent (kMix, "Mix", "Mix", 1.0));
+        v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        // the end saturator
+        pk::addTailParams (v, kTailBase);
+        smacheratr::addTailExtParams (v, kTailExtBase);
+        smacheratr::addTailExt2Params (v, kTailExt2Base);
+        smacheratr::addTailExt3Params (v, kTailExt3Base);
+        smacheratr::addTailExt4Params (v, kTailExt4Base);
+        return v;
+    }());
+    return t;
+}
+
+} // namespace moistr

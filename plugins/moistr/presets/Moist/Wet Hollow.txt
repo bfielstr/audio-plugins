@@ -1,0 +1,14 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: reese, wet, resonant
+comment: Resonant Mid and High bands drifting slowly against each other for a wet, vocal hollow.
+Mid Freq = 380 Hz
+Mid Res = 60 %
+High Freq = 2400 Hz
+High Res = 55 %
+Gap = 20 %
+Movement = 65 %
+Rate = 0.18 Hz
+Level Move = 6 dB
+Seed = 7
+Glue = 50 %
+Grit = 25 %

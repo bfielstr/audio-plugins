@@ -7,7 +7,7 @@ set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH
 
 project(AudioPlugins
     VERSION 0.17.0
-    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr and Ciphr VST3 plug-ins"
+    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr and Moistr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -54,11 +54,12 @@ add_subdirectory(plugins/gentlr)
 add_subdirectory(plugins/smoothr)
 add_subdirectory(plugins/orbitr)
 add_subdirectory(plugins/ciphr)
+add_subdirectory(plugins/moistr)
 
 # Every plug-in's factory presets (plugins/<plugin>/presets) parse against its parameters.
 add_executable(factory_presets_tests shared/tests/factory_presets_tests.cpp)
 target_compile_definitions(factory_presets_tests PRIVATE PK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(factory_presets_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugins)
 target_link_libraries(factory_presets_tests PRIVATE pluginkit_core ciphr_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
-    orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
+    moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
 add_test(NAME factory_presets COMMAND factory_presets_tests)
