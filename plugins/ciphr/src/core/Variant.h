@@ -2,6 +2,12 @@
 // (SplitMix64) that fills in the oscillators' lists of (wave, pitch offset) entries, their start phases
 // and the processor's tap pattern. The same number always gives the same patch, on every machine (only
 // integer arithmetic and exact conversions decide it).
+//
+// Wave Set (0.18) picks which waves the draws stand for. Classic draws from the twelve waves ciphr had
+// before (so every Variant keeps its patch). The other sets take the very same draws (so the pitches, the
+// phases and the taps stay the Variant's) and read each oscillator's entry e from a tier of waves: tier 0
+// the calmest, tier 3 the harshest (Alien, Metal) or the most open vowel (Voice), so Timbre sweeps from
+// calm to harsh for every Variant.
 #pragma once
 
 #include <cstdint>
@@ -50,14 +56,17 @@ struct Tap
     double lfoPhase = 0;  // 0 .. 1
 };
 
+enum WaveSet { kSetClassic = 0, kSetAlien, kSetMetal, kSetVoice, kNumWaveSets };
+
 struct Patch
 {
     int variant = 1;
+    int waveSet = kSetClassic;
     Entry osc[kOscs][kEntries];
     double phase0[kOscs] {}; // each oscillator's start phase (0 .. 1) for a fresh voice
     Tap taps[kTaps];
 };
 
-Patch makePatch (int variant);
+Patch makePatch (int variant, int waveSet = kSetClassic);
 
 } // namespace ciphr

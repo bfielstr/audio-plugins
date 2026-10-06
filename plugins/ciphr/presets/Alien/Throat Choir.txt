@@ -1,0 +1,23 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: alien, vocal, choir, pad
+comment: A choir of low voices with the whistling overtone of throat singing: the open vowels of the Voice waves, spread apart and drifting, in a wide reverb.
+Wave Set = Voice
+Variant = 98
+Timbre = 85 %
+Character = 70 %
+Drift = 45 %
+Cross = -8 %
+Cutoff = 5.00 kHz
+Resonance = 30 %
+Key Track = 40 %
+Env Amount = 15 %
+Attack = 600 ms
+Decay = 1.50 s
+Sustain = 100 %
+Release = 2.50 s
+Velocity = 30 %
+Space = 70 %
+Length = 600 ms
+Movement = 50 %
+Regen = 30 %
+Blend = 45 %

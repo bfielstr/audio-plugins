@@ -144,6 +144,15 @@ int main (int argc, char** argv)
             win.click (cx, cy, 2);
             pump (0.05);
             CHECK (std::fabs (plainOf (rig, kCross)) < 1e-6, "Cross back to the centre: %.2f", plainOf (rig, kCross));
+            // Disperse's On switch (the third row): a click switches it on, another off
+            const double ox = Editor::kDispLeft + Editor::kDispOnLeft + Editor::kDispOnW / 2;
+            const double oy = Editor::kRow3 + Editor::kDispOnTop + Editor::kDispOnH / 2;
+            win.click (ox, oy);
+            pump (0.05);
+            CHECK (plainOf (rig, kDisperseOn) >= 0.5, "Disperse switched on: %.0f", plainOf (rig, kDisperseOn));
+            win.click (ox, oy);
+            pump (0.05);
+            CHECK (plainOf (rig, kDisperseOn) < 0.5, "Disperse switched off: %.0f", plainOf (rig, kDisperseOn));
 
             for (int p : {45, 52, 57, 64})
                 rig.note (p, 0.8f);
@@ -155,7 +164,7 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_ciphr.png"), "screenshot");
             // Classic, Wide and Classic again: knobs found and turned in each (Wide's screenshot)
-            checkLayouts (rig, win, {(uint32_t)kTimbre, (uint32_t)kCutoff, (uint32_t)kSpace, (uint32_t)kBlend}, outDir + "/ui_ciphr_wide.png");
+            checkLayouts (rig, win, {(uint32_t)kTimbre, (uint32_t)kCutoff, (uint32_t)kSpace, (uint32_t)kBlend, (uint32_t)kDisperse}, outDir + "/ui_ciphr_wide.png");
             for (int p : {45, 52, 57, 64})
                 rig.note (p, 0.0f);
         }

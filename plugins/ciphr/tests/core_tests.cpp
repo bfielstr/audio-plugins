@@ -1,7 +1,9 @@
 // Headless tests for the Ciphr DSP. Run: ./ciphr_tests [filter]
 // The wavetables, a voice (Timbre, Cross, the envelopes), the voices together (polyphony and stealing),
 // the processor (taps, diffusion, Length, the feedback and its frequency shifter), Variant and Drift,
-// the input bus and the CPU budget.
+// the input bus, the wave sets and Stretch, Disperse (the band reveal), the factory presets and the CPU
+// budget.
+#include "Disperse.h"
 #include "Dsp.h"
 #include "Engine.h"
 #include "Params.h"
@@ -10,13 +12,18 @@
 #include "Voice.h"
 #include "Wavetable.h"
 
+#include "pluginkit/PresetStore.h"
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <sstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -212,7 +219,9 @@ TEST (wavetable_band_limited)
         int wave;
         double hz;
     };
-    const Case cases[] = {{kWaveSaw, 3137.0}, {kWaveSquare, 5011.0}, {kWaveBuzz, 1234.5}, {kWavePulse, 7777.0}, {kWaveVowelA, 2222.2}};
+    const Case cases[] = {{kWaveSaw, 3137.0},    {kWaveSquare, 5011.0}, {kWaveBuzz, 1234.5},   {kWavePulse, 7777.0},
+                          {kWaveVowelA, 2222.2}, {kWaveMetal, 1777.0},  {kWaveScrape, 2345.6}, {kWaveScreech, 1500.0},
+                          {kWavePlate, 3333.3},  {kWaveDeepAA, 2010.0}, {kWaveChoir, 1609.0},  {kWaveThroat, 2500.0}};
     const size_t n = 65536;
     for (const Case& c : cases)
     {
@@ -244,7 +253,9 @@ TEST (wavetable_band_limited)
         const double limited = alias (true), full = alias (false);
         std::printf ("    %s at %.0f Hz: off-harmonic energy %.1f dB (a full table: %.1f dB)\n", waveName (c.wave), c.hz, limited, full);
         CHECK (limited < -80.0, "%s band-limited: %.1f dB", waveName (c.wave), limited);
-        CHECK (full > limited + 20.0, "the full table aliases (the test can tell): %.1f dB", full);
+        // (the full table's aliasing shows only in the waves bright enough to reach Nyquist: not the vowels)
+        if (c.wave != kWaveDeepAA && c.wave != kWaveChoir && c.wave != kWaveThroat && c.wave != kWavePlate)
+            CHECK (full > limited + 20.0, "the full table aliases (the test can tell): %.1f dB", full);
     }
     // the levels: a step that would put a table's top harmonic above Nyquist never picks it
     for (double inc = 1e-4; inc < 0.5; inc *= 1.07)
@@ -862,12 +873,611 @@ TEST (defaults_play)
     CHECK (diff > 0.01, "stereo (the processor's taps are panned): %.3f", diff);
 }
 
+
+// ---- the wave sets and Stretch ------------------------------------------------------------
+
+namespace {
+// a wave's brightness: the centre of its harmonics' power (in harmonic numbers)
+double waveCentroid (int wave)
+{
+    double num = 0.0, den = 0.0;
+    for (int h = 1; h <= kMaxHarmonics; ++h)
+    {
+        const double a = waveHarmonic (wave, h);
+        num += h * a * a;
+        den += a * a;
+    }
+    return num / den;
+}
+// the share of a signal's power within 3 % of a multiple of `f0`
+double harmonicShare (const std::vector<float>& x, double f0)
+{
+    const size_t n = 65536;
+    const auto p = spectrum (x, n);
+    double on = 0.0, all = 0.0;
+    for (size_t k = 2; k < p.size (); ++k)
+    {
+        const double hz = (double)k * kSr / (double)n;
+        if (hz < 30.0 || hz > 16000.0)
+            continue;
+        const double h = hz / f0;
+        all += p[k];
+        if (std::fabs (h - std::round (h)) < 0.03 && std::round (h) >= 1.0)
+            on += p[k];
+    }
+    return on / all;
+}
+// the centre of a signal's power spectrum (Hz)
+double centroidHz (const std::vector<float>& x, size_t a, size_t b)
+{
+    std::vector<float> seg (x.begin () + (long)a, x.begin () + (long)std::min (b, x.size ()));
+    const size_t n = 32768;
+    seg.resize (std::max (seg.size (), n));
+    const auto p = spectrum (seg, n);
+    double num = 0.0, den = 0.0;
+    for (size_t k = 1; k < p.size (); ++k)
+    {
+        const double hz = (double)k * kSr / (double)n;
+        if (hz < 20.0)
+            continue;
+        num += hz * p[k];
+        den += p[k];
+    }
+    return den > 0.0 ? num / den : 0.0;
+}
+} // namespace
+
+TEST (wave_sets)
+{
+    // Classic: every draw one of the twelve waves ciphr always had; the root a saw
+    for (int v = kMinVariant; v <= kMaxVariant; ++v)
+    {
+        const Patch c = makePatch (v), c2 = makePatch (v, kSetClassic);
+        bool classic = c.osc[0][0].wave == kWaveSaw;
+        for (int k = 0; k < kOscs; ++k)
+            for (int e = 0; e < kEntries; ++e)
+                classic = classic && c.osc[k][e].wave < kNumClassicWaves && c.osc[k][e].wave == c2.osc[k][e].wave;
+        CHECK (classic, "Variant %d, Classic: the classic waves only", v);
+        // the other sets: the same pitches, phases and taps, waves from their tiers
+        for (int set = kSetAlien; set < kNumWaveSets; ++set)
+        {
+            const Patch s = makePatch (v, set);
+            bool same = true;
+            for (int k = 0; k < kOscs; ++k)
+            {
+                same = same && s.phase0[k] == c.phase0[k];
+                for (int e = 0; e < kEntries; ++e)
+                    same = same && s.osc[k][e].semis == c.osc[k][e].semis;
+            }
+            for (int i = 0; i < kTaps; ++i)
+                same = same && s.taps[i].time == c.taps[i].time && s.taps[i].gain == c.taps[i].gain && s.taps[i].pan == c.taps[i].pan;
+            CHECK (same, "Variant %d, set %d: the Variant's pitches, phases and taps", v, set);
+        }
+    }
+    // the tiers: Alien and Metal from calm to harsh (each entry brighter on average than the one before),
+    // Voice from a closed vowel to an open one
+    for (int set = kSetAlien; set < kNumWaveSets; ++set)
+    {
+        double mean[kEntries] {};
+        int count = 0;
+        for (int v = kMinVariant; v <= kMaxVariant; ++v)
+        {
+            const Patch s = makePatch (v, set);
+            for (int k = 1; k < kOscs; ++k, ++count)
+                for (int e = 0; e < kEntries; ++e)
+                    mean[e] += waveCentroid (s.osc[k][e].wave);
+        }
+        for (double& m : mean)
+            m /= count;
+        std::printf ("    set %d: mean brightness by entry %.1f, %.1f, %.1f, %.1f (harmonics)\n", set, mean[0], mean[1], mean[2], mean[3]);
+        if (set != kSetVoice)
+            CHECK (mean[0] < mean[1] && mean[1] < mean[2] && mean[2] < mean[3] && mean[3] > 4.0 * mean[0],
+                   "set %d gets harsher along the list", set);
+        else
+            CHECK (mean[2] > 1.2 * mean[0], "Voice opens up along the list (%.1f against %.1f)", mean[2], mean[0]);
+    }
+    // the phases: 0 for every classic wave (their tables are what they always were)
+    bool zero = true;
+    for (int w = 0; w < kNumClassicWaves; ++w)
+        for (int h = 1; h <= kMaxHarmonics; ++h)
+            zero = zero && wavePhase (w, h) == 0.0;
+    CHECK (zero, "the classic waves have no phases");
+    // the engine follows Wave Set
+    auto e = engine ();
+    e->setParam (kVariant, 12);
+    e->setParam (kWaveSet, kSetVoice);
+    CHECK (e->patch ().waveSet == kSetVoice && e->patch ().osc[0][0].wave == kWaveDeepOO, "Wave Set reaches the engine");
+}
+
+TEST (stretch_inharmonic)
+{
+    // a cluster on the note's octaves: harmonic at Stretch 0 (every partial on a multiple of half the note),
+    // inharmonic at Stretch 100 %
+    Patch p = makePatch (4, kSetMetal);
+    const double semis[kOscs] = {0, 12, -12, 24, 0, 12};
+    for (int k = 0; k < kOscs; ++k)
+        for (int e = 0; e < kEntries; ++e)
+            p.osc[k][e] = {kWaveMetal, semis[k]};
+    auto share = [&] (double stretch) {
+        VoiceBlock b = plainBlock (0.0);
+        for (int k = 0; k < kOscs; ++k)
+            b.oscCents[k] = 100.0 * stretch * Engine::kStretchSemis[k];
+        const auto y = voiceRender (p, 45, b, 1.6);
+        std::vector<float> tail (y.begin () + 4800, y.end ());
+        return harmonicShare (tail, 110.0 / 2.0);
+    };
+    const double clean = share (0.0), metal = share (1.0);
+    std::printf ("    power on the harmonics: Stretch 0 %.3f, Stretch 100 %% %.3f\n", clean, metal);
+    CHECK (clean > 0.9, "Stretch 0: harmonic (%.3f)", clean);
+    CHECK (metal < 0.4, "Stretch 100 %%: inharmonic (%.3f)", metal);
+    // the engine: at 0 Stretch changes nothing (Init's output, bit for bit)
+    auto a = engine (), b = engine ();
+    b->setParam (kStretch, 0.0);
+    a->noteOn (57, 0.8f);
+    b->noteOn (57, 0.8f);
+    CHECK (render (*a, 0.5) == render (*b, 0.5), "Stretch 0 is no Stretch");
+    // a jump to 100 % while a note plays (Stretch glides there over about 30 ms): finite
+    auto c = engine ();
+    dry (*c);
+    c->noteOn (57, 0.8f);
+    render (*c, 0.1);
+    c->setParam (kStretch, 1.0);
+    const auto y = render (*c, 0.5);
+    CHECK (finite (y), "finite");
+}
+
+// ---- Disperse -----------------------------------------------------------------------------
+
+namespace {
+Disperse bank (int bands, double amount, double width = 1.0, int seed = 1, double mix = 1.0)
+{
+    Disperse d;
+    d.setOn (true);
+    d.setBands (bands);
+    d.setSeed (seed);
+    d.setAmount (amount);
+    d.setWidth (width);
+    d.setMix (mix);
+    d.prepare (kSr);
+    return d;
+}
+// a mono signal through the bank (both channels), the left channel back
+std::vector<float> through (Disperse& d, const std::vector<float>& x, int block = 256)
+{
+    std::vector<float> l = x, r = x;
+    for (size_t a = 0; a < x.size (); a += (size_t)block)
+        d.process (l.data () + a, r.data () + a, (int)std::min<size_t> ((size_t)block, x.size () - a));
+    return l;
+}
+std::vector<float> sine (double hz, double seconds, double amp = 0.5)
+{
+    std::vector<float> x ((size_t)(seconds * kSr));
+    for (size_t i = 0; i < x.size (); ++i)
+        x[i] = (float)(amp * std::sin (2.0 * kPi * hz * (double)i / kSr));
+    return x;
+}
+// the engine at a factory preset's settings (path relative to the presets folder)
+bool applyPreset (Engine& e, const std::string& rel)
+{
+    std::ifstream f (std::string (CIPHR_PRESETS_DIR) + "/" + rel);
+    std::stringstream ss;
+    ss << f.rdbuf ();
+    pk::presets::FactoryPreset fp;
+    std::string err;
+    if (!pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err))
+        return false;
+    for (const auto& [id, n] : fp.values)
+        e.setParam (id, toPlain (id, n));
+    return true;
+}
+} // namespace
+
+TEST (disperse_off_is_bit_identical)
+{
+    // Disperse off (the default), whatever its other settings: the very output of an engine whose
+    // Disperse, Stretch and Wave Set were never touched, for Init and two factory presets
+    for (const char* preset : {"", "Keys/Ring Bells.txt", "Pads/Barberpole Choir.txt"})
+    {
+        auto play = [&] (bool touch) {
+            auto e = std::make_unique<Engine> ();
+            if (*preset)
+                CHECK (applyPreset (*e, preset), "%s loads", preset);
+            if (touch)
+            {
+                e->setParam (kDisperseOn, 0.0);
+                e->setParam (kDisperse, 0.13);
+                e->setParam (kDisperseBands, 29);
+                e->setParam (kDisperseSeed, 77);
+                e->setParam (kDisperseWidth, 0.2);
+                e->setParam (kDisperseMix, 0.6);
+                e->setParam (kStretch, 0.0);
+                e->setParam (kWaveSet, kSetClassic);
+            }
+            e->prepare (kSr, 512);
+            return render (*e, 2.0, nullptr, 256, [&] (size_t a) {
+                if (a == 0)
+                    for (int nn : {45, 52, 60, 64})
+                        e->noteOn (nn, 0.8f);
+                if (a == 256 * 200)
+                {
+                    e->noteOff (52);
+                    if (touch)
+                        e->setParam (kDisperse, 0.9); // (moving the dial while it is off changes nothing either)
+                }
+            });
+        };
+        const auto a = play (false), b = play (true);
+        CHECK (a == b && rms (a, 0, a.size ()) > 1e-3, "%s: Disperse off is no Disperse, bit for bit", *preset ? preset : "Init");
+    }
+}
+
+TEST (disperse_zero_and_mix)
+{
+    // On, the dial at 0, Mix 100 %: the bands are all silent, so is ciphr (Blend 0, no input)
+    auto play = [] (bool on, double mix) {
+        auto e = engine ();
+        e->setParam (kBlend, 0.0);
+        e->setParam (kDisperseOn, on ? 1.0 : 0.0);
+        e->setParam (kDisperse, 0.0);
+        e->setParam (kDisperseMix, mix);
+        e->reset ();
+        for (int nn : {45, 52, 60, 64})
+            e->noteOn (nn, 0.8f);
+        return render (*e, 1.0);
+    };
+    const auto silent = play (true, 1.0), off = play (false, 1.0), half = play (true, 0.5);
+    CHECK (rms (silent, 0, silent.size ()) == 0.0 && rms (off, 0, off.size ()) > 1e-3, "Disperse 0 %%: silence from the bands");
+    // Mix 50 %: only the dry half is left, exactly half the sound
+    double err = 0.0;
+    for (size_t i = 0; i < half.size (); ++i)
+        err = std::max (err, (double)std::fabs (half[i] - 0.5f * off[i]));
+    CHECK (err < 1e-6, "Disperse 0 %%, Mix 50 %%: half the dry sound (error %.2e)", err);
+}
+
+TEST (disperse_full_is_flat)
+{
+    // every band full, Width 100 %: sines from 100 Hz to 10 kHz pass at about their level
+    for (int bands : {4, 8, 16, 32})
+    {
+        double lo = 1e9, hi = -1e9;
+        for (int i = 0; i < 25; ++i)
+        {
+            const double hz = 100.0 * std::pow (100.0, i / 24.0);
+            Disperse d = bank (bands, 1.0);
+            const auto y = through (d, sine (hz, 0.3));
+            const double g = db (toneAt (y, hz, (size_t)(0.1 * kSr), y.size ()) / 0.5);
+            lo = std::min (lo, g);
+            hi = std::max (hi, g);
+        }
+        std::printf ("    %d bands at 100 %%: %.2f .. %.2f dB from 100 Hz to 10 kHz\n", bands, lo, hi);
+        CHECK (lo > -2.0 && hi < 2.0 && hi - lo < 3.0, "%d bands sum flat (%.2f .. %.2f dB)", bands, lo, hi);
+    }
+}
+
+TEST (disperse_reveal_order)
+{
+    // the reveal: as the dial turns, the bands rise one after another in the seeded order, each from silent
+    // to full. First from the gains themselves ...
+    for (int bands : {4, 9, 16, 32})
+    {
+        int bandAt[Disperse::kMaxBands], rankOf[Disperse::kMaxBands];
+        Disperse::order (bands, 11, rankOf, bandAt);
+        bool ok = Disperse::revealGain (0.0, 0, bands) == 0.0 && Disperse::revealGain (1.0, bands - 1, bands) == 1.0;
+        for (int j = 0; j < bands; ++j)
+        {
+            // just after band j starts: it and the ones before it are up, none after it
+            const double a = Disperse::revealStart (j, bands) + 1e-6;
+            for (int r = 0; r < bands; ++r)
+                ok = ok && ((Disperse::revealGain (a, r, bands) > 0.0) == (r <= j));
+            ok = ok && rankOf[bandAt[j]] == j;
+            ok = ok && Disperse::revealGain (Disperse::revealEnd (j, bands), j, bands) == 1.0;
+            ok = ok && (j == 0 || Disperse::revealStart (j, bands) > Disperse::revealStart (j - 1, bands));
+        }
+        // every band's gain rises smoothly (no step bigger than a 1000-step turn makes)
+        double biggest = 0.0;
+        for (int r = 0; r < bands; ++r)
+            for (int i = 1; i <= 1000; ++i)
+                biggest = std::max (biggest, std::fabs (Disperse::revealGain (i / 1000.0, r, bands) - Disperse::revealGain ((i - 1) / 1000.0, r, bands)));
+        CHECK (ok, "%d bands: raised one at a time, in the seeded order", bands);
+        CHECK (biggest < 0.02 * bands / 4.0 + 0.01, "%d bands: smooth ramps (largest step %.4f)", bands, biggest);
+    }
+    // ... then from what is heard: a sine at every band's centre, the dial in 200 steps; the step at which
+    // each band's tone comes up (within 6 dB of full) follows the order
+    const int bands = 12, seed = 5;
+    int bandAt[Disperse::kMaxBands];
+    Disperse::order (bands, seed, nullptr, bandAt);
+    std::vector<float> x ((size_t)(0.15 * kSr), 0.0f);
+    for (int b = 0; b < bands; ++b)
+    {
+        const auto s = sine (Disperse::centreHz (b, bands), 0.15, 0.08);
+        for (size_t i = 0; i < x.size (); ++i)
+            x[i] += s[i];
+    }
+    std::vector<double> full (bands);
+    {
+        Disperse d = bank (bands, 1.0, 0.0, seed);
+        const auto y = through (d, x);
+        for (int b = 0; b < bands; ++b)
+            full[b] = toneAt (y, Disperse::centreHz (b, bands), (size_t)(0.05 * kSr), y.size ());
+    }
+    std::vector<int> upAt (bands, -1);
+    for (int step = 0; step <= 200; ++step)
+    {
+        Disperse d = bank (bands, step / 200.0, 0.0, seed);
+        const auto y = through (d, x);
+        for (int b = 0; b < bands; ++b)
+            if (upAt[b] < 0 && toneAt (y, Disperse::centreHz (b, bands), (size_t)(0.05 * kSr), y.size ()) > 0.5 * full[b])
+                upAt[b] = step;
+    }
+    bool inOrder = upAt[bandAt[0]] >= 0;
+    for (int j = 1; j < bands; ++j)
+        inOrder = inOrder && upAt[bandAt[j]] > upAt[bandAt[j - 1]];
+    std::printf ("    heard rising at steps:");
+    for (int j = 0; j < bands; ++j)
+        std::printf (" %d (band %d)", upAt[bandAt[j]], bandAt[j]);
+    std::printf ("\n");
+    CHECK (inOrder, "the bands are heard rising in the seeded order");
+}
+
+TEST (disperse_seed_and_bands)
+{
+    // the same Seed and Bands: the same order; Seeds differ from their neighbours
+    int differ = 0;
+    for (int seed = kMinSeed; seed <= kMaxSeed; ++seed)
+    {
+        int a[Disperse::kMaxBands], b[Disperse::kMaxBands], c[Disperse::kMaxBands];
+        Disperse::order (16, seed, a);
+        Disperse::order (16, seed, b);
+        Disperse::order (16, seed + 1, c);
+        CHECK (std::equal (a, a + 16, b), "Seed %d twice: the same order", seed);
+        differ += std::equal (a, a + 16, c) ? 0 : 1;
+        bool perm = true;
+        std::vector<int> seen (16, 0);
+        for (int i = 0; i < 16; ++i)
+            perm = perm && a[i] >= 0 && a[i] < 16 && ++seen[(size_t)a[i]] == 1;
+        CHECK (perm, "Seed %d: every band once", seed);
+    }
+    CHECK (differ >= kMaxSeed - 2, "the Seeds give different orders (%d of %d)", differ, kMaxSeed);
+    // a fixed point: Seed 1 with 8 bands raises them in this order in every build
+    int fixed[Disperse::kMaxBands];
+    Disperse::order (8, 1, nullptr, fixed);
+    std::printf ("    Seed 1, 8 bands: %d %d %d %d %d %d %d %d\n", fixed[0], fixed[1], fixed[2], fixed[3], fixed[4], fixed[5], fixed[6], fixed[7]);
+    // the engine: the same Seed, the same output; another Seed another one
+    auto play = [] (int seed) {
+        auto e = engine ();
+        e->setParam (kDisperseOn, 1.0);
+        e->setParam (kDisperseSeed, seed);
+        e->setParam (kDisperse, 0.4);
+        e->reset ();
+        e->noteOn (48, 0.8f);
+        e->noteOn (55, 0.8f);
+        return render (*e, 1.0);
+    };
+    const auto s1 = play (3), s2 = play (3), s3 = play (4);
+    CHECK (s1 == s2 && s1 != s3, "Seed 3 twice: the same output; Seed 4 differs");
+
+    // Bands changed while it plays: the new bands after a short fade, no jump, finite
+    Disperse d = bank (16, 0.7);
+    std::vector<float> noise ((size_t)(0.6 * kSr));
+    uint32_t r = 9;
+    for (auto& v : noise)
+    {
+        r = r * 1664525u + 1013904223u;
+        v = (float)((int32_t)r / 2147483648.0) * 0.3f;
+    }
+    std::vector<float> l = noise, rr = noise;
+    const size_t change = 112 * 128;
+    float before = 0.0f, after = 0.0f;
+    for (size_t a = 0; a < noise.size (); a += 128)
+    {
+        if (a == change)
+            d.setBands (6);
+        d.process (l.data () + a, rr.data () + a, (int)std::min<size_t> (128, noise.size () - a));
+    }
+    for (size_t i = 0; i < l.size (); ++i)
+        (i < change ? before : after) = std::max (i < change ? before : after, std::fabs (l[i]));
+    CHECK (d.bands () == 6 && finite (l), "Bands 16 -> 6: %d bands now", d.bands ());
+    CHECK (after < 2.0f * before, "no jump on the change (peaks %.3f before, %.3f after)", before, after);
+}
+
+TEST (disperse_fast_dial)
+{
+    // the dial thrown about every 64 samples while a chord plays: every band's gain moves at most a few
+    // percent a slice (it glides), the output stays finite and bounded, its steps no bigger than steady ones
+    auto steadyStep = [] (double amount) {
+        auto e = engine ();
+        dry (*e);
+        e->setParam (kDisperseOn, 1.0);
+        e->setParam (kDisperse, amount);
+        e->setParam (kDisperseBands, 32);
+        e->reset ();
+        for (int nn : {40, 47, 52, 59})
+            e->noteOn (nn, 1.0f);
+        const auto y = render (*e, 1.0);
+        double big = 0.0;
+        for (size_t i = 4801; i < y.size (); ++i)
+            big = std::max (big, (double)std::fabs (y[i] - y[i - 1]));
+        return big;
+    };
+    double ref = 0.0;
+    for (double a : {0.25, 0.5, 0.75, 1.0})
+        ref = std::max (ref, steadyStep (a));
+    auto e = engine ();
+    dry (*e);
+    e->setParam (kDisperseOn, 1.0);
+    e->setParam (kDisperseBands, 32);
+    e->reset ();
+    for (int nn : {40, 47, 52, 59})
+        e->noteOn (nn, 1.0f);
+    uint32_t r = 1;
+    double gainStep = 0.0, prev[Disperse::kMaxBands] {};
+    std::vector<float> y ((size_t)(2.0 * kSr)), yr (y.size ());
+    for (size_t a = 0; a < y.size (); a += 32)
+    {
+        if (a % 64 == 0)
+        {
+            r = r * 1664525u + 1013904223u;
+            e->setParam (kDisperse, (r >> 8) / 16777216.0);
+        }
+        e->process (nullptr, nullptr, y.data () + a, yr.data () + a, 32);
+        for (int b = 0; b < 32; ++b)
+        {
+            const double g = e->disperseStage ().bandGain (b);
+            if (a > 0)
+                gainStep = std::max (gainStep, std::fabs (g - prev[b]));
+            prev[b] = g;
+        }
+    }
+    double big = 0.0, peak = 0.0;
+    for (size_t i = 4801; i < y.size (); ++i)
+    {
+        big = std::max (big, (double)std::fabs (y[i] - y[i - 1]));
+        peak = std::max (peak, (double)std::fabs (y[i]));
+    }
+    std::printf ("    largest gain step a slice %.4f; output step %.4f (steady %.4f), peak %.3f\n", gainStep, big, ref, peak);
+    CHECK (gainStep < 0.08, "the gains glide (%.4f a slice at most)", gainStep);
+    CHECK (finite (y) && finite (yr) && peak < 2.0, "finite and bounded");
+    CHECK (big < 1.5 * ref, "no clicks (%.4f against %.4f)", big, ref);
+    // switched off while it plays: it fades out and then is skipped altogether
+    e->setParam (kDisperseOn, 0.0);
+    render (*e, 0.3);
+    CHECK (e->disperseStage ().idle (), "off: idle after the fade");
+}
+
+// ---- the factory presets ------------------------------------------------------------------
+
+TEST (factory_presets_play)
+{
+    // every factory preset loads and plays a chord (with a tone on the input): finite, audible, not too loud
+    namespace fs = std::filesystem;
+    int count = 0;
+    std::vector<fs::path> files;
+    for (const auto& f : fs::recursive_directory_iterator (CIPHR_PRESETS_DIR))
+        if (f.path ().extension () == ".txt")
+            files.push_back (f.path ());
+    std::sort (files.begin (), files.end ());
+    std::vector<float> in ((size_t)(4.0 * kSr));
+    for (size_t i = 0; i < in.size (); ++i)
+        in[i] = (float)(0.2 * std::sin (2.0 * kPi * 220.0 * (double)i / kSr) + 0.1 * std::sin (2.0 * kPi * 1730.0 * (double)i / kSr));
+    for (const auto& path : files)
+    {
+        const std::string rel = fs::relative (path, CIPHR_PRESETS_DIR).generic_string ();
+        auto e = engine ();
+        CHECK (applyPreset (*e, rel), "%s parses", rel.c_str ());
+        e->reset ();
+        std::vector<float> r;
+        const auto l = render (*e, 4.0, &r, 256, [&] (size_t a) {
+            if (a == 0)
+                for (int nn : {48, 55, 60, 63})
+                    e->noteOn (nn, 0.8f);
+        }, &in);
+        double peak = 0.0;
+        for (size_t i = 0; i < l.size (); ++i)
+            peak = std::max (peak, (double)std::max (std::fabs (l[i]), std::fabs (r[i])));
+        // (the louder of the first second and the last 1.5 s: plucks have died away by then, slow pads only
+        // just arrived)
+        const double level = db (std::max (rms (l, (size_t)(0.2 * kSr), (size_t)(1.2 * kSr)), rms (l, (size_t)(2.5 * kSr), l.size ())));
+        std::printf ("    %-28s %.1f dBFS (peak %.2f)\n", rel.c_str (), level, peak);
+        CHECK (finite (l) && finite (r) && level > -40.0 && peak < 1.5, "%s plays (%.1f dBFS, peak %.2f)", rel.c_str (), level, peak);
+        ++count;
+    }
+    CHECK (count >= 12, "%d factory presets", count);
+}
+
+TEST (alien_presets_match_their_names)
+{
+    auto play = [] (const char* preset, const std::function<void (Engine&)>& tweak, double seconds, int note = 48) {
+        auto e = engine ();
+        CHECK (applyPreset (*e, preset), "%s loads", preset);
+        if (tweak)
+            tweak (*e);
+        e->reset ();
+        e->noteOn (note, 0.9f);
+        return render (*e, seconds);
+    };
+    // Screech Rise: Timbre 0 is soft and low, Timbre 100 % a bright screech
+    {
+        const auto calm = play ("Alien/Screech Rise.txt", {}, 2.0);
+        const auto screech = play ("Alien/Screech Rise.txt", [] (Engine& e) { e.setParam (kTimbre, 1.0); }, 2.0);
+        const double c0 = centroidHz (calm, (size_t)kSr, calm.size ()), c1 = centroidHz (screech, (size_t)kSr, screech.size ());
+        std::printf ("    Screech Rise: brightness %.0f Hz at Timbre 0, %.0f Hz at 100 %%\n", c0, c1);
+        CHECK (c1 > 2.5 * c0, "Screech Rise: Timbre sweeps into the screech (%.0f -> %.0f Hz)", c0, c1);
+    }
+    // Metal Scrape: inharmonic (much less of its power on the note's harmonics than the same patch without
+    // Stretch and Cross)
+    {
+        const auto metal = play ("Alien/Metal Scrape.txt", [] (Engine& e) {
+            e.setParam (kBlend, 0.0);
+            e.setParam (kDrift, 0.0);
+        }, 1.6, 45);
+        const auto plain = play ("Alien/Metal Scrape.txt", [] (Engine& e) {
+            e.setParam (kBlend, 0.0);
+            e.setParam (kDrift, 0.0);
+            e.setParam (kStretch, 0.0);
+            e.setParam (kCross, 0.0);
+            e.setParam (kCharacter, 0.0);
+        }, 1.6, 45);
+        std::vector<float> a (metal.begin () + 4800, metal.end ()), b (plain.begin () + 4800, plain.end ());
+        const double hm = harmonicShare (a, 110.0 / 2.0), hp = harmonicShare (b, 110.0 / 2.0);
+        std::printf ("    Metal Scrape: power on the harmonics %.3f (without Stretch and Cross %.3f)\n", hm, hp);
+        CHECK (hm < 0.1 && hm < 0.5 * hp, "Metal Scrape is inharmonic (%.3f against %.3f)", hm, hp);
+    }
+    // Deep Arrival: arrives slowly, dark and low
+    {
+        const auto y = play ("Alien/Deep Arrival.txt", {}, 4.0);
+        const double early = rms (y, (size_t)(0.1 * kSr), (size_t)(0.35 * kSr)), later = rms (y, (size_t)(3.0 * kSr), (size_t)(3.5 * kSr));
+        const double c = centroidHz (y, (size_t)(3.0 * kSr), y.size ());
+        std::printf ("    Deep Arrival: %.1f dB at 0.1 .. 0.35 s against 3 .. 3.5 s, brightness %.0f Hz\n", db (early / later), c);
+        CHECK (db (early / later) < -15.0, "Deep Arrival arrives slowly (%.1f dB)", db (early / later));
+        CHECK (c < 900.0, "Deep Arrival is dark (%.0f Hz)", c);
+    }
+    // Throat Choir: a vowel's formants (more power from 500 Hz to 1.2 kHz than from 1.5 to 3 kHz)
+    {
+        const auto y = play ("Alien/Throat Choir.txt", [] (Engine& e) {
+            e.setParam (kBlend, 0.0);
+            e.setParam (kDrift, 0.0);
+        }, 2.0, 48);
+        std::vector<float> seg (y.begin () + (long)kSr / 2, y.end ());
+        const auto p = spectrum (seg, 65536);
+        auto band = [&] (double lo, double hi) {
+            double s = 0.0;
+            for (size_t k = 0; k < p.size (); ++k)
+            {
+                const double hz = (double)k * kSr / 65536.0;
+                s += hz >= lo && hz < hi ? p[k] : 0.0;
+            }
+            return s;
+        };
+        const double f1 = band (500.0, 1200.0), mid = band (1500.0, 3000.0);
+        std::printf ("    Throat Choir: 0.5 .. 1.2 kHz against 1.5 .. 3 kHz: %.1f dB\n", 10.0 * std::log10 (f1 / mid));
+        CHECK (f1 > 2.0 * mid, "Throat Choir: vowel formants");
+    }
+    // Signal From Below: Disperse is on and holds most of the sound back until its dial turns
+    {
+        const auto some = play ("Alien/Signal From Below.txt", {}, 3.0);
+        const auto all = play ("Alien/Signal From Below.txt", [] (Engine& e) { e.setParam (kDisperse, 1.0); }, 3.0);
+        const double d = db (rms (some, (size_t)(2.0 * kSr), some.size ()) / rms (all, (size_t)(2.0 * kSr), all.size ()));
+        std::printf ("    Signal From Below: %.1f dB against the dial at 100 %%\n", d);
+        CHECK (d < -4.0, "Signal From Below: a few bands only (%.1f dB)", d);
+    }
+}
+
 TEST (cpu_budget)
 {
     // 8 voices held at the heaviest settings (FM, Drift, every tap, full diffusion, the end saturator on)
     // for 10 s: CPU time (other programs running do not count), the best of three renders
-    auto make = [] (bool heavy) {
+    // mode 0: the defaults; 1: the heaviest settings; 2: the heaviest with Disperse at 32 bands, every band
+    // sounding (100 %), and Stretch
+    auto make = [] (int mode) {
+        const bool heavy = mode > 0;
         auto e = engine (kSr, 512);
+        if (mode == 2)
+        {
+            e->setParam (kDisperseOn, 1.0);
+            e->setParam (kDisperse, 1.0);
+            e->setParam (kDisperseBands, 32);
+            e->setParam (kStretch, 0.6);
+        }
         if (heavy)
         {
             e->setParam (kCross, -0.6);
@@ -896,13 +1506,14 @@ TEST (cpu_budget)
         seed = seed * 1664525u + 1013904223u;
         v = (float)((int32_t)seed / 2147483648.0) * 0.5f;
     }
-    for (bool heavy : {false, true})
+    for (int mode : {0, 1, 2})
     {
+        const bool heavy = mode > 0;
         double secs = 1e9;
         std::vector<float> l, r;
         for (int i = 0; i < 3; ++i)
         {
-            auto e = make (heavy);
+            auto e = make (mode);
             const std::clock_t t0 = std::clock ();
             l = render (*e, 10.0, &r, 512, {}, &in);
             secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
@@ -913,8 +1524,26 @@ TEST (cpu_budget)
             ok = std::fabs (l[i]) < 8.0f && std::fabs (r[i]) < 8.0f;
         CHECK (ok, "finite and bounded");
         std::printf ("    CPU: %.2f%% of one core (8 voices x %d oscillators held, %s)\n", 100.0 * secs / 10.0, kOscs,
-                     heavy ? "FM, Drift, every tap, Space 100 %, the end saturator on" : "the defaults");
+                     mode == 2 ? "the heaviest and Disperse, 32 bands at 100 %"
+                     : heavy   ? "FM, Drift, every tap, Space 100 %, the end saturator on"
+                               : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.20 : 0.12), "too slow");
+    }
+    // Disperse on its own: 32 bands, stereo, every band sounding, 10 s of noise (the best of three)
+    {
+        double secs = 1e9;
+        for (int i = 0; i < 3; ++i)
+        {
+            Disperse d = bank (32, 1.0);
+            std::vector<float> l = in, r = in;
+            const std::clock_t t0 = std::clock ();
+            for (size_t a = 0; a < n; a += 512)
+                d.process (l.data () + a, r.data () + a, (int)std::min<size_t> (512, n - a));
+            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            CHECK (finite (l), "finite");
+        }
+        std::printf ("    CPU: %.2f%% of one core (Disperse alone, 32 bands stereo, every band sounding)\n", 100.0 * secs / 10.0);
+        CHECK (secs / 10.0 < 0.03, "Disperse too slow");
     }
 }
 

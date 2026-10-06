@@ -55,6 +55,15 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        // 0.18
+        v.push_back (percent (kStretch, "Stretch", "Stretch", 0.0));
+        v.push_back (choice (kWaveSet, "Wave Set", "Waves", {"Classic", "Alien", "Metal", "Voice"}, 0));
+        v.push_back (toggle (kDisperseOn, "Disperse On", "On", false));
+        v.push_back (percent (kDisperse, "Disperse", "Disperse", 0.5));
+        v.push_back (integer (kDisperseBands, "Disperse Bands", "Bands", kMinBands, kMaxBands, 16, Disp::Plain));
+        v.push_back (integer (kDisperseSeed, "Disperse Seed", "Seed", kMinSeed, kMaxSeed, kMinSeed, Disp::Plain));
+        v.push_back (percent (kDisperseWidth, "Disperse Width", "Width", 1.0));
+        v.push_back (percent (kDisperseMix, "Disperse Mix", "Mix", 1.0));
         return v;
     }());
     return t;

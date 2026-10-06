@@ -1,0 +1,14 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: fx, input, disperse, bands
+comment: Feed a track into the side-chain input and turn the Disperse dial: its 32 bands rise one by one, smeared by the processor.
+Input = 100 %
+Input Path = Direct
+Disperse On = On
+Disperse = 50 %
+Disperse Bands = 32
+Disperse Seed = 5
+Disperse Width = 70 %
+Space = 60 %
+Length = 500 ms
+Regen = 30 %
+Blend = 50 %

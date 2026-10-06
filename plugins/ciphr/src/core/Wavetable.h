@@ -33,12 +33,29 @@ enum Wave
     kWaveBuzz,   // every harmonic at 1 / sqrt (h): very bright
     kWaveSoft,   // every harmonic at 1 / h^2: a rounded saw
     kWaveGlass,  // sparse harmonics 1, 3, 7, 11, 16
+    // ---- 0.18: appended (the numbers above are in Variant's draws and must never move)
+    kWavePlate,   // sparse harmonics 2, 5, 8, 10, 13, 17, 20 over a weak fundamental: a hollow, struck plate
+    kWaveMetal,   // clusters of three neighbouring harmonics (around 7, 14, 23, 34, 48) that beat: a clang
+    kWaveScrape,  // a dense band of harmonics 12 .. 220, uneven levels and scattered phases: a bright scrape
+    kWaveScreech, // a narrow, strong peak around harmonic 30 (and a weaker one near 47): a whistling howl
+    kWaveDeepOO,  // vowel "oo" with the formants of a low voice (300, 870, 2240 Hz at C2)
+    kWaveDeepAA,  // vowel "aa" (730, 1090, 2440 Hz at C2)
+    kWaveDeepOH,  // vowel "oh" (570, 840, 2410 Hz at C2)
+    kWaveThroat,  // a low formant and a very narrow peak on harmonic 12: throat singing's whistle over a drone
+    kWaveChoir,   // a sung "ah" (650, 1080, 2650 Hz and the singer's peak near 3 kHz at C3), scattered phases
     kNumWaves
 };
+// The waves before 0.18: Variant draws from these alone with Wave Set at Classic, so every Variant number
+// keeps the patch it always had.
+constexpr int kNumClassicWaves = kWaveGlass + 1;
+static_assert (kNumClassicWaves == 12, "the classic waves are fixed");
 
 const char* waveName (int wave);
 // Harmonic h's amplitude (h >= 1) in a wave's spectrum, before the table's scaling.
 double waveHarmonic (int wave, int h);
+// Harmonic h's phase (radians, added to a sine): 0 for every classic wave; the noisy and choral waves
+// scatter theirs so the cycle has no single sharp peak.
+double wavePhase (int wave, int h);
 
 class WaveBank
 {

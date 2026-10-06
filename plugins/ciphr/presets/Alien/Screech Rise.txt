@@ -1,0 +1,24 @@
+# ciphr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: alien, screech, sweep, texture
+comment: Starts as a soft, hollow tone. Turn Timbre up and every oscillator moves through glassy and metal waves into a screech, fed back up a climbing spiral.
+Wave Set = Alien
+Variant = 23
+Timbre = 0 %
+Cross = -25 %
+Character = 40 %
+Drift = 20 %
+Cutoff = 3.50 kHz
+Resonance = 55 %
+Filter Type = 30 %
+Key Track = 50 %
+Env Amount = 20 %
+Attack = 300 ms
+Decay = 1.00 s
+Sustain = 100 %
+Release = 1.50 s
+Space = 45 %
+Length = 300 ms
+Movement = 40 %
+Regen = 45 %
+Shift = 12.0 Hz
+Blend = 40 %
