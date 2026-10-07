@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.18.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.19.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -20,7 +20,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.18.0**
 | [**dropr**](plugins/dropr/README.md) | Slams a sound flat in 6 bands and drives it into a saturator. Negative ratios turn loud hits down below quieter parts, so a snare's body comes up and its snap is tamed. |
 | [**orbitr**](plugins/orbitr/README.md) | Turns a sound into a swarm: 1 to 16 copies fly around you, each one bending in pitch as it moves towards or away from you. |
 | [**ciphr**](plugins/ciphr/README.md) | An 8-voice synthesizer: clusters of wavetable oscillators you sweep with one knob, FM and ring modulation between them, and echoes that turn into reverb, with a frequency shifter in the feedback for endlessly climbing repeats. Metallic, screeching and vocal waves for alien textures, and Disperse, a dial that brings the sound back band by band. Can also play a track through its side-chain input. |
-| [**moistr**](plugins/moistr/README.md) | Turns a bass (a detuned Reese, typically) into a wet, moving neuro texture: splits it into a low, a low-mid and a high band with a hollow between the low mids and the high end, lets each band drift on its own (the highs the most), then glues them back with a compressor and a little grit. The same Seed always moves the same way. |
+| [**moistr**](plugins/moistr/README.md) | Turns a bass (a detuned Reese, typically) into a wet, moving neuro texture: splits it into 3 or 4 bands, holds the low band steady and lets the bands above it rise and fall on their own, then glues them back with a compressor and a little grit; an optional frequency shifter moves the upper bands but never the sub. The Seed picks the timing, how quickly the bands rise and fall, and where the low band ends; the same Seed always moves the same way. |
 
 ## Gallery
 
@@ -119,7 +119,7 @@ installed versions. Copies that older installers put directly in the VST3 folder
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
-`SIMPLR_VERSION=v0.18.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
+`SIMPLR_VERSION=v0.19.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
 

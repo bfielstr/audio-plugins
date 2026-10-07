@@ -121,6 +121,7 @@ int main (int argc, char** argv)
 
         // state round trip
         rig.param (kSeed, toNormalized (kSeed, 42.0));
+        rig.param (kBandCount, toNormalized (kBandCount, kBands4));
         rig.render (0.05, out, nullptr, reese ());
         MemoryStream saved;
         CHECK (rig.component->getState (&saved) == kResultOk, "getState");
@@ -129,9 +130,11 @@ int main (int argc, char** argv)
         CHECK (readState (&saved, back), "readState");
         CHECK (std::lround (toPlain (kSeed, back.norm[kSeed])) == 42, "Seed saved");
         CHECK (std::fabs (toPlain (kMovement, back.norm[kMovement]) - 1.0) < 1e-9, "Movement saved");
+        CHECK (std::lround (toPlain (kBandCount, back.norm[kBandCount])) == kBands4, "Bands saved");
+        rig.param (kBandCount, toNormalized (kBandCount, kBands3));
 
-        // editor (Classic): the Slope and Passes switches, a double-click on Gap, then a screenshot while the
-        // bands move
+        // editor (Classic): the Bands, Passes and Sync switches, double-clicks on Mid X and Depth, then a
+        // screenshot while the bands move
         {
             EditorWindow win (rig.controller);
             CHECK (win.ok (), "editor");
@@ -140,35 +143,56 @@ int main (int argc, char** argv)
                        r.getHeight () == (int32)(Editor::kHeight + pk::EditorBase::kInfoHeight),
                    "editor size %d x %d", r.getWidth (), r.getHeight ());
             pump (0.1);
+            // Bands in SPLIT: 4 Bands, then back to 3
             const double sy = Editor::kRow1 + Editor::kSwitchTop + Editor::kSwitchH / 2;
             win.click (Editor::kSplitLeft + Editor::kSwitchLeft + Editor::kSwitchW * 3 / 4, sy);
             pump (0.05);
-            CHECK (std::lround (plainOf (rig, kSlope)) == kSlope24, "24 dB clicked: %.0f", plainOf (rig, kSlope));
+            CHECK (std::lround (plainOf (rig, kBandCount)) == kBands4, "4 Bands clicked: %.0f", plainOf (rig, kBandCount));
             win.click (Editor::kSplitLeft + Editor::kSwitchLeft + Editor::kSwitchW / 4, sy);
             pump (0.05);
-            CHECK (std::lround (plainOf (rig, kSlope)) == kSlope12, "12 dB clicked: %.0f", plainOf (rig, kSlope));
-            const double py = Editor::kRow2 + Editor::kSwitchTop + Editor::kSwitchH / 2;
-            win.click (Editor::kGlueLeft + Editor::kSwitchLeft + Editor::kSwitchW * 3 / 4, py);
+            CHECK (std::lround (plainOf (rig, kBandCount)) == kBands3, "3 Bands clicked: %.0f", plainOf (rig, kBandCount));
+            // Passes in GLUE (row 1)
+            win.click (Editor::kGlueLeft + Editor::kSwitchLeft + Editor::kSwitchW * 3 / 4, sy);
             pump (0.05);
             CHECK (std::lround (plainOf (rig, kPasses)) == kPasses2, "2 Passes clicked: %.0f", plainOf (rig, kPasses));
-            win.click (Editor::kGlueLeft + Editor::kSwitchLeft + Editor::kSwitchW / 4, py);
+            win.click (Editor::kGlueLeft + Editor::kSwitchLeft + Editor::kSwitchW / 4, sy);
             pump (0.05);
             CHECK (std::lround (plainOf (rig, kPasses)) == kPasses1, "1 Pass clicked: %.0f", plainOf (rig, kPasses));
-            // the Sync switch in MOVEMENT
+            // the shifter's On switch in SHIFT (row 1, a knob wide in the first knob's place)
+            win.click (Editor::kShiftLeft + Editor::kKnobLeft + Editor::kShiftSwitchW / 2, sy);
+            pump (0.05);
+            CHECK (plainOf (rig, kShiftOn) >= 0.5, "Shift clicked on");
+            win.click (Editor::kShiftLeft + Editor::kKnobLeft + Editor::kShiftSwitchW / 2, sy);
+            pump (0.05);
+            CHECK (plainOf (rig, kShiftOn) < 0.5, "Shift clicked off");
+            // the Sync switch in MOVEMENT (row 2)
+            const double py = Editor::kRow2 + Editor::kSwitchTop + Editor::kSwitchH / 2;
             win.click (Editor::kMoveLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, py);
             pump (0.05);
             CHECK (plainOf (rig, kSync) >= 0.5, "Sync clicked on");
             win.click (Editor::kMoveLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, py);
             pump (0.05);
             CHECK (plainOf (rig, kSync) < 0.5, "Sync clicked off");
-            // Gap's knob (the second beside SPLIT's switch): a double-click puts it back to 0
-            rig.param (kGap, toNormalized (kGap, 0.7));
+            // Mid X's knob (the second beside SPLIT's switch): a double-click puts it back to its default
+            const double midXDefault = toPlain (kXoverMid, defaultNormalized (kXoverMid));
+            rig.param (kXoverMid, toNormalized (kXoverMid, 3000.0));
             pump (0.05);
-            const double gx = Editor::kSplitLeft + Editor::kKnobBeside + Editor::kKnobStep + Editor::kKnobW / 2;
-            const double gy = Editor::kRow1 + Editor::kKnobTop + Editor::kKnobH / 2;
-            win.click (gx, gy, 2);
+            const double kx = Editor::kSplitLeft + Editor::kKnobBeside + Editor::kKnobStep + Editor::kKnobW / 2;
+            const double ky1 = Editor::kRow1 + Editor::kKnobTop + Editor::kKnobH / 2;
+            win.click (kx, ky1, 2);
             pump (0.05);
-            CHECK (std::fabs (plainOf (rig, kGap)) < 1e-6, "Gap back to 0: %.2f", plainOf (rig, kGap));
+            CHECK (std::fabs (plainOf (rig, kXoverMid) - midXDefault) < 1.0, "Mid X back to %.0f Hz: %.0f", midXDefault,
+                   plainOf (rig, kXoverMid));
+            // Depth (the third knob of RISE / FALL in row 2, centred in its panel): the same
+            const double depthDefault = toPlain (kDepth, defaultNormalized (kDepth));
+            rig.param (kDepth, toNormalized (kDepth, 6.0));
+            pump (0.05);
+            const double dx = Editor::kShapeLeft + Editor::centredLeft (Editor::kShapeRight - Editor::kShapeLeft, 3) +
+                              2 * Editor::kKnobStep + Editor::kKnobW / 2;
+            win.click (dx, Editor::kRow2 + Editor::kKnobTop + Editor::kKnobH / 2, 2);
+            pump (0.05);
+            CHECK (std::fabs (plainOf (rig, kDepth) - depthDefault) < 1e-6, "Depth back to %.0f dB: %.2f", depthDefault,
+                   plainOf (rig, kDepth));
 
             for (int i = 0; i < 20; ++i)
             {
@@ -178,7 +202,7 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_moistr.png"), "screenshot");
             // Classic, Wide and Classic again: knobs found and turned in each (Wide's screenshot)
-            checkLayouts (rig, win, {(uint32_t)kMidFreq, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix},
+            checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix},
                           outDir + "/ui_moistr_wide.png");
         }
         rig.stop ();

@@ -1,0 +1,13 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: reese, neuro, hollow
+comment: A deep hollow in the low mids: Mid sits low and barely moves while the High band rises and falls over it.
+Mid X = 900 Hz
+Mid Level = -12 dB
+Mid Move = 20 %
+High Move = 100 %
+Movement = 65 %
+Rate = 0.2 Hz
+Depth = 24 dB
+Seed = 7
+Glue = 50 %
+Grit = 25 %

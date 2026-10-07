@@ -1,13 +1,21 @@
-// Moistr's display: the three bands' filter responses against frequency (20 Hz .. 20 kHz, -36 .. +18 dB).
+// Moistr's display: the multiband split against frequency (20 Hz .. 20 kHz, the bands' levels from
+// -48 dB (off) at the bottom to +12 dB at the top).
 //
-//   base   the grid, each band's response at its set frequency, resonance and level (dim copper), and the
-//          hollow between Mid and High shaded, with its width in octaves at the top left
-//   live   while sound plays, each band's response where the movement has it now (the first pass solid,
-//          the second dashed), a cinnabar mark at each band's frequency, and the Glue's gain reduction
+//   base   the grid, the Low band (locked: a solid fill up to its Level, a lock and its crossover in Hz),
+//          the upper crossovers where they are set (dim, dashed), each moving band's Level (a dim copper
+//          line) and how far it falls (Level - Depth, dashed), the band names and, with the shifter on,
+//          how far the upper bands are shifted (over each of them; the Low band is never shifted)
+//   live   each moving band (Mid, High and, with 4 Bands, Air) as a region from its crossover to the next,
+//          filled up to its level now (it rises and falls with the movement), the crossovers where they
+//          are now, and the Glue's gain reduction
 //
-// The base changes only with the band settings, Gap, Slope and the view's size: it is a cached layer
-// (pk::CachedLayer). The live curves are drawn over it, and only repainted when a band moved: with the
-// movement at 0, or once the input has been quiet for half a second, the display asks for no repaints.
+// The base changes only with the settings it shows, the Low crossover and the view's size: it is a
+// cached layer (pk::CachedLayer). The live regions are drawn over it and only repainted when a band's
+// level or a crossover changed: with the movement at 0, or once the input has been quiet for half a
+// second, the display asks for no repaints.
+//
+// Everything the display reads from the engine goes through one adapter, BandSnapshot / snapshot ()
+// (BandView.cpp), so the engine's fields are wired in one place.
 #pragma once
 
 #include "Engine.h"
@@ -22,31 +30,47 @@
 
 namespace moistr {
 
+// What the display shows of the split now: filled by BandView::snapshot () from the engine's meters (or,
+// where the engine does not publish a value yet, estimated from the parameters).
+struct BandSnapshot
+{
+    static constexpr int kMax = 4;  // Low, Mid, High, Air
+    int bands = 3;                  // 3 or 4
+    double xover[3] {};             // Hz: Low | Mid, Mid | High, High | Air (4 bands)
+    double gainDb[kMax] {};         // each band's level now (dB, with the movement; kLevelOffDb: off)
+    bool lowLocked = true;          // the Low band and its crossover never move
+    bool lowKnown = false;          // xover[0] is the engine's (Seed's) pick, not an estimate
+    bool active = false;            // input heard in the last half second (the bands are moving)
+    double glueDb = 0.0;            // the Glue's gain reduction (dB, 0.1 dB steps)
+    bool operator== (const BandSnapshot& o) const;
+    bool operator!= (const BandSnapshot& o) const { return !(*this == o); }
+};
+
 class BandView : public VSTGUI::CView
 {
 public:
     using MeterSource = std::function<const Meters* ()>;
     BandView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters);
     void draw (VSTGUI::CDrawContext* ctx) override;
-    void idle (); // follows the meters
+    void idle (); // follows the meters and the parameters (repaints only when the snapshot changed)
 
-    // a band's response (dB, with its level) at f for a filter at fc (the analog shape the filter follows)
-    static double responseDb (int band, double f, double fc, double res, double levelDb, bool steep);
+    // The adapter: the split now, from the engine's meters (null: the parameters alone).
+    static BandSnapshot snapshot (const Meters* m, pk::ParamHost* host);
+    // The Low crossover estimated from Seed while the engine does not publish its pick (Hz, in
+    // kLowXoverMin .. kLowXoverMax).
+    static double estimatedLowXover (int seed);
+    // true for the parameters the display shows (the editor repaints it when one changes)
+    static bool shows (uint32_t id);
 
 private:
     void paintBase (VSTGUI::CDrawContext* ctx);
     VSTGUI::CRect plot () const;
     double xOf (double hz) const;
     double yOf (double db) const;
-    void curve (VSTGUI::CDrawContext* ctx, int band, double fc, double levelDb, bool dashed);
 
     pk::ParamHost* host;
     MeterSource meters;
-    bool active = false;
-    int passes = 1;
-    float freq[kMaxPasses][kBands] {}, level[kMaxPasses][kBands] {};
-    float glueDb = 0.0f;
-    uint32_t seen = 0;
+    BandSnapshot snap;
     pk::CachedLayer baseLayer;
 };
 

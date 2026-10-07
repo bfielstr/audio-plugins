@@ -47,7 +47,24 @@ enum ParamId : uint32_t
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
     kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields,
     kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields,
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    // --- added in 0.19 (append only): the multiband split. The bands are now a crossover split (Low, Mid,
+    // High and, with 4 bands, Air) instead of three separate filters. The Low band is locked (it never
+    // moves); the others rise and fall on a seeded pattern. Seed picks when each band rises and falls,
+    // how quickly, and the Low band's crossover (100 .. 500 Hz). Unused from 0.19 (kept for old
+    // projects): kLowFreq, kLowRes, kMidFreq, kMidRes, kHighFreq, kHighRes, kGap, kSlope, kLowMove, kLevelMove ---
+    kBandCount = kTailExt4Base + pk::kTailExt4Fields, // 3 / 4 bands
+    kXoverMid,  // Hz: the crossover above Mid (3 bands: Mid | High; 4 bands: Mid | High)
+    kXoverHigh, // Hz: the crossover above High (4 bands only: High | Air)
+    kAirLevel,  // dB: the Air band's level (4 bands)
+    kAirMove,   // 0 .. 1: the Air band's share of the movement
+    kRise,      // x0.25 .. x4: scales the seeded rise times
+    kFall,      // x0.25 .. x4: scales the seeded fall times
+    kDepth,     // dB: how far a moving band falls below its Level
+    // the frequency shifter on the bands above Low (the sub frequencies are never shifted)
+    kShiftOn,   // Off / On (off by default: moistr as without it)
+    kShift,     // Hz: -500 .. +500, up or down
+    kShiftMix,  // 0 .. 1: the shifted bands against the unshifted ones
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
@@ -58,11 +75,18 @@ static_assert (kMovement == 12 && kRate == 13 && kSync == 14 && kSyncRate == 15 
                    kHighMove == 18 && kLevelMove == 19 && kSeed == 20 && kGlue == 21 && kGrit == 22 && kPasses == 23 &&
                    kMix == 24 && kOutput == 25 && kTailBase == 26,
                "Moistr's parameter IDs are fixed");
-static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64 && kNumParams == 69,
+static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64,
                "saved IDs: the end saturator's blocks at 26 .. 68");
+static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLevel == 72 && kAirMove == 73 && kRise == 74 &&
+                   kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kNumParams == 80,
+               "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79");
 
 enum Slope { kSlope12 = 0, kSlope24 };
 enum Passes { kPasses1 = 0, kPasses2 };
+enum Bands { kBands3 = 0, kBands4 };
+
+// the Low band's crossover: picked by Seed in this range (Hz)
+constexpr double kLowXoverMin = 100.0, kLowXoverMax = 500.0;
 
 // Sync Rate: a movement cycle's length in beats (quarter notes)
 constexpr int kNumSyncRates = 6;
