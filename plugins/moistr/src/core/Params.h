@@ -60,6 +60,10 @@ enum ParamId : uint32_t
     kRise,      // x0.25 .. x4: scales the seeded rise times
     kFall,      // x0.25 .. x4: scales the seeded fall times
     kDepth,     // dB: how far a moving band falls below its Level
+    // the frequency shifter on the bands above Low (the sub frequencies are never shifted)
+    kShiftOn,   // Off / On (off by default: moistr as without it)
+    kShift,     // Hz: -500 .. +500, up or down
+    kShiftMix,  // 0 .. 1: the shifted bands against the unshifted ones
     kNumParams
 };
 
@@ -74,8 +78,8 @@ static_assert (kMovement == 12 && kRate == 13 && kSync == 14 && kSyncRate == 15 
 static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64,
                "saved IDs: the end saturator's blocks at 26 .. 68");
 static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLevel == 72 && kAirMove == 73 && kRise == 74 &&
-                   kFall == 75 && kDepth == 76 && kNumParams == 77,
-               "saved IDs: the multiband split at 69 .. 76");
+                   kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kNumParams == 80,
+               "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79");
 
 enum Slope { kSlope12 = 0, kSlope24 };
 enum Passes { kPasses1 = 0, kPasses2 };

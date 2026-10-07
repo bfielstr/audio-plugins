@@ -59,6 +59,10 @@ const ParamTable& paramTable ()
         v.push_back (real (kRise, "Rise", "Rise", 0.25, 4.0, 1.0, Curve::Log, Disp::Plain));
         v.push_back (real (kFall, "Fall", "Fall", 0.25, 4.0, 1.0, Curve::Log, Disp::Plain));
         v.push_back (real (kDepth, "Depth", "Depth", 0.0, 48.0, 24.0, Curve::Linear, Disp::Db));
+        // the frequency shifter (on the bands above Low only)
+        v.push_back (toggle (kShiftOn, "Shift On", "Shift", false));
+        v.push_back (real (kShift, "Shift", "Shift", -500.0, 500.0, 0.0, Curve::Linear, Disp::Hz));
+        v.push_back (percent (kShiftMix, "Shift Mix", "Shift Mix", 1.0));
         return v;
     }());
     return t;
