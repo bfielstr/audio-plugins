@@ -1,13 +1,13 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: neuro, tempo, wobble
-comment: The high end wobbles in time with the song (one cycle per bar) while the low end stays put.
+tags: neuro, tempo, pulse
+comment: The upper bands rise quickly and fall slowly in time with the song (one cycle per bar) while the low end stays put.
 Sync = On
 Sync Rate = 1 Bar
 Movement = 80 %
-Low Move = 0 %
+Rise = 0.5
+Fall = 2
 Mid Move = 30 %
 High Move = 100 %
-Level Move = 8 dB
 High Level = 2 dB
 Seed = 23
 Glue = 45 %

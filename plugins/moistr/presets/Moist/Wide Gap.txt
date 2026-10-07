@@ -1,9 +1,0 @@
-# moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: reese, neuro, hollow
-comment: A very wide hollow: the low mids pushed down and the high end pushed up, both moving.
-Gap = 60 %
-Mid Res = 45 %
-High Res = 30 %
-Movement = 55 %
-Rate = 0.25 Hz
-Glue = 45 %

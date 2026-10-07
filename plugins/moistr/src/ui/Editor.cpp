@@ -42,6 +42,7 @@ struct KnobDef
 {
     uint32_t id;
     bool bipolar = false;
+    const char* label = nullptr; // (nullptr: the parameter's short name)
 };
 } // namespace
 
@@ -82,64 +83,81 @@ void Editor::buildUI (CFrame* f)
     pk::setHelp (display, "Bands", help::kBandView);
     root->addView (display);
 
-    auto knobs = [this] (Panel* panel, std::initializer_list<KnobDef> defs) {
-        int i = 0;
-        for (const KnobDef& d : defs)
-        {
-            const double x = kKnobLeft + kKnobStep * i++;
-            bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, d.id, nullptr, d.bipolar));
-        }
-    };
-
     auto switchRect = [] { return CRect (kSwitchLeft, kSwitchTop, kSwitchLeft + kSwitchW, kSwitchTop + kSwitchH); };
+    // knobs beside a panel's switch
     auto besides = [this] (Panel* panel, std::initializer_list<KnobDef> defs) {
+        std::vector<Knob*> made;
         int i = 0;
         for (const KnobDef& d : defs)
         {
             const double x = kKnobBeside + kKnobStep * i++;
-            bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, d.id, nullptr, d.bipolar));
+            made.push_back (bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, d.id, d.label, d.bipolar)));
         }
+        return made;
+    };
+    // a panel of knobs only, centred in it
+    auto knobs = [this] (Panel* panel, double width, std::initializer_list<KnobDef> defs) {
+        std::vector<Knob*> made;
+        const double left = centredLeft (width, (int)defs.size ());
+        int i = 0;
+        for (const KnobDef& d : defs)
+        {
+            const double x = left + kKnobStep * i++;
+            made.push_back (bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, d.id, d.label, d.bipolar)));
+        }
+        return made;
     };
 
-    // the split: Slope, Drive before it, the Gap between Mid and High
+    // the split: 3 or 4 bands, Drive before it, the upper crossovers (the Low one is Seed's)
     auto* split = new Panel (CRect (kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH), "SPLIT");
     root->addView (split);
-    bind (split, new Segmented (switchRect (), this, kSlope, {"12 dB", "24 dB"}));
-    besides (split, {{kDrive}, {kGap, true}});
+    bind (split, new Segmented (switchRect (), this, kBandCount, {"3 Bands", "4 Bands"}));
+    highXKnob = besides (split, {{kDrive}, {kXoverMid}, {kXoverHigh}})[2];
 
-    auto* low = new Panel (CRect (kLowLeft, kRow1, kLowRight, kRow1 + kRowH), "LOW");
-    root->addView (low);
-    knobs (low, {{kLowFreq}, {kLowRes}, {kLowLevel, true}});
-    auto* mid = new Panel (CRect (kMidLeft, kRow1, kMidRight, kRow1 + kRowH), "MID");
-    root->addView (mid);
-    knobs (mid, {{kMidFreq}, {kMidRes}, {kMidLevel, true}});
-    auto* high = new Panel (CRect (kHighLeft, kRow1, kHighRight, kRow1 + kRowH), "HIGH");
-    root->addView (high);
-    knobs (high, {{kHighFreq}, {kHighRes}, {kHighLevel, true}});
+    // each band's level (Low: locked, the others' top when they rise)
+    auto* levels = new Panel (CRect (kLevelsLeft, kRow1, kLevelsRight, kRow1 + kRowH), "LEVELS");
+    root->addView (levels);
+    airLevelKnob = knobs (levels, kLevelsRight - kLevelsLeft,
+                          {{kLowLevel, true, "Low"}, {kMidLevel, true, "Mid"}, {kHighLevel, true, "High"}, {kAirLevel, true, "Air"}})[3];
 
-    // the movement: Sync and its rate, how far, how fast and which pattern
+    // how quickly the moving bands rise and fall, and how far they fall
+    auto* shape = new Panel (CRect (kShapeLeft, kRow2, kShapeRight, kRow2 + kRowH), "RISE / FALL");
+    root->addView (shape);
+    knobs (shape, kShapeRight - kShapeLeft, {{kRise}, {kFall}, {kDepth}});
+
+    // the movement: Sync and its rate, how much, how fast and which pattern
     auto* move = new Panel (CRect (kMoveLeft, kRow2, kMoveRight, kRow2 + kRowH), "MOVEMENT");
     root->addView (move);
     bind (move, new Toggle (switchRect (), this, kSync, "Sync"));
     bind (move, new pk::Choice (CRect (kSwitchLeft, 62, kSwitchLeft + kSwitchW, 82), this, kSyncRate));
     besides (move, {{kMovement}, {kRate}, {kSeed}});
 
-    // each band's share of the movement, and how far the levels move
-    auto* depth = new Panel (CRect (kDepthLeft, kRow2, kDepthRight, kRow2 + kRowH), "BAND MOVE");
-    root->addView (depth);
-    knobs (depth, {{kLowMove}, {kMidMove}, {kHighMove}, {kLevelMove}});
+    // each moving band's share of the movement
+    auto* bandMove = new Panel (CRect (kBandMoveLeft, kRow2, kBandMoveRight, kRow2 + kRowH), "BAND MOVE");
+    root->addView (bandMove);
+    airMoveKnob = knobs (bandMove, kBandMoveRight - kBandMoveLeft, {{kMidMove}, {kHighMove}, {kAirMove}})[2];
 
     // the glue after the bands: Passes, the compressor and the soft clipping
-    auto* glue = new Panel (CRect (kGlueLeft, kRow2, kGlueRight, kRow2 + kRowH), "GLUE");
+    auto* glue = new Panel (CRect (kGlueLeft, kRow1, kGlueRight, kRow1 + kRowH), "GLUE");
     root->addView (glue);
     bind (glue, new Segmented (switchRect (), this, kPasses, {"1 Pass", "2 Passes"}));
     besides (glue, {{kGlue}, {kGrit}});
 
-    // the output beside both rows (its knobs on their rows)
-    auto* out = new Panel (CRect (kOutLeft, kRow1, kOutRight, kRow2 + kRowH), "OUTPUT");
+    // the frequency shifter on the bands above Low: on, how far and how much
+    auto* shift = new Panel (CRect (kShiftLeft, kRow1, kShiftRight, kRow1 + kRowH), "SHIFT");
+    root->addView (shift);
+    bind (shift, new Toggle (CRect (kKnobLeft, kSwitchTop, kKnobLeft + kShiftSwitchW, kSwitchTop + kSwitchH), this, kShiftOn, "On"));
+    for (int i = 1; i <= 2; ++i)
+    {
+        const double x = kKnobLeft + kKnobStep * i;
+        auto* k = bind (shift, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, i == 1 ? kShift : kShiftMix, nullptr, i == 1));
+        (i == 1 ? shiftKnob : shiftMixKnob) = k;
+    }
+
+    // the output: Mix and Output
+    auto* out = new Panel (CRect (kOutLeft, kRow2, kOutRight, kRow2 + kRowH), "OUTPUT");
     root->addView (out);
-    bind (out, new Knob (CRect (18, kKnobTop, 18 + kKnobW, kKnobTop + kKnobH), this, kMix));
-    bind (out, new Knob (CRect (18, kKnobTop + kRow2 - kRow1, 18 + kKnobW, kKnobTop + kKnobH + kRow2 - kRow1), this, kOutput, nullptr, true));
+    knobs (out, kOutRight - kOutLeft, {{kMix}, {kOutput, true}});
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
@@ -148,7 +166,20 @@ void Editor::buildUI (CFrame* f)
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
+    updateLooks ();
     idle ();
+}
+
+void Editor::updateLooks ()
+{
+    const bool four = std::lround (plainValue (kBandCount)) == kBands4;
+    for (Knob* k : {highXKnob, airLevelKnob, airMoveKnob})
+        if (k)
+            k->setEnabledLook (four);
+    const bool shifting = plainValue (kShiftOn) >= 0.5;
+    for (Knob* k : {shiftKnob, shiftMixKnob})
+        if (k)
+            k->setEnabledLook (shifting);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -156,8 +187,13 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (display && id <= kSlope) // (the band settings, Gap and Slope: the display's cached layer)
+    if (id == kBandCount || id == kShiftOn)
+        updateLooks ();
+    if (display && BandView::shows (id))
+    {
+        display->idle (); // (the snapshot: levels, crossovers, bands)
         display->invalid ();
+    }
 }
 
 void Editor::idle ()
@@ -205,18 +241,18 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the display, then columns of two panels (split over glue, low over movement, mid over band
-    // move), high and the output; the end saturator in a row of its own under them
+    // Wide: the display, then columns of two panels (split over movement, levels over band move, shift
+    // over rise / fall, glue over the output); the end saturator in a row of its own under them
     s.panels = {
         {"display", "bands", {d.left, d.top, d.right, d.bottom}, 0},
         {"split", "", {kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH}, 0, 0},
-        {"glue", "", {kGlueLeft, kRow2, kGlueRight, kRow2 + kRowH}, 0, 0},
-        {"low", "", {kLowLeft, kRow1, kLowRight, kRow1 + kRowH}, 0, 1},
-        {"movement", "", {kMoveLeft, kRow2, kMoveRight, kRow2 + kRowH}, 0, 1},
-        {"mid", "", {kMidLeft, kRow1, kMidRight, kRow1 + kRowH}, 0, 2},
-        {"bandmove", "", {kDepthLeft, kRow2, kDepthRight, kRow2 + kRowH}, 0, 2},
-        {"high", "", {kHighLeft, kRow1, kHighRight, kRow1 + kRowH}, 0},
-        {"output", "", {kOutLeft, kRow1, kOutRight, kRow2 + kRowH}, 0},
+        {"movement", "", {kMoveLeft, kRow2, kMoveRight, kRow2 + kRowH}, 0, 0},
+        {"levels", "", {kLevelsLeft, kRow1, kLevelsRight, kRow1 + kRowH}, 0, 1},
+        {"bandmove", "", {kBandMoveLeft, kRow2, kBandMoveRight, kRow2 + kRowH}, 0, 1},
+        {"shift", "", {kShiftLeft, kRow1, kShiftRight, kRow1 + kRowH}, 0, 2},
+        {"risefall", "", {kShapeLeft, kRow2, kShapeRight, kRow2 + kRowH}, 0, 2},
+        {"glue", "", {kGlueLeft, kRow1, kGlueRight, kRow1 + kRowH}, 0, 3},
+        {"output", "", {kOutLeft, kRow2, kOutRight, kRow2 + kRowH}, 0, 3},
         {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;

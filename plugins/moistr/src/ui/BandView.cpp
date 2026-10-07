@@ -1,7 +1,5 @@
 #include "BandView.h"
 
-#include "Dsp.h"
-
 #include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cdrawcontext.h"
@@ -9,7 +7,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <complex>
 #include <cstdio>
 #include <string>
 
@@ -22,12 +19,10 @@ namespace {
 constexpr double kTitle = 18.0;
 constexpr double kPad = 6.0;
 constexpr double kFMin = 20.0, kFMax = 20000.0;
-constexpr double kDbMin = -36.0, kDbMax = 18.0;
-constexpr int kPoints = 160;
-constexpr uint32_t kFreqIds[kBands] = {kLowFreq, kMidFreq, kHighFreq};
-constexpr uint32_t kResIds[kBands] = {kLowRes, kMidRes, kHighRes};
-constexpr uint32_t kLevelIds[kBands] = {kLowLevel, kMidLevel, kHighLevel};
-const char* const kNames[kBands] = {"LOW", "MID", "HIGH"};
+constexpr double kDbMin = kLevelOffDb, kDbMax = 12.0;
+constexpr uint32_t kLevelIds[BandSnapshot::kMax] = {kLowLevel, kMidLevel, kHighLevel, kAirLevel};
+constexpr uint32_t kMoveIds[BandSnapshot::kMax] = {0, kMidMove, kHighMove, kAirMove}; // (Low: locked)
+const char* const kNames[BandSnapshot::kMax] = {"LOW", "MID", "HIGH", "AIR"};
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kLeftText,
            bool bold = false)
@@ -36,28 +31,122 @@ void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor
     ctx->setFontColor (c);
     ctx->drawString (s.c_str (), r, a, true);
 }
+
+std::string hzText (double hz)
+{
+    char buf[32];
+    if (hz >= 1000.0)
+        std::snprintf (buf, sizeof (buf), "%.1f kHz", hz / 1000.0);
+    else
+        std::snprintf (buf, sizeof (buf), "%.0f Hz", hz);
+    return buf;
+}
+
+// a small padlock, its body's top left at (x, y): 9 x 7, the shackle 5 px above it
+void lockGlyph (CDrawContext* ctx, double x, double y, const CColor& c)
+{
+    ctx->setFillColor (c);
+    ctx->drawRect (CRect (x, y, x + 9.0, y + 7.0), kDrawFilled);
+    ctx->setFrameColor (c);
+    ctx->setLineWidth (1.5);
+    ctx->drawLine (CPoint (x + 2.0, y), CPoint (x + 2.0, y - 3.0));
+    ctx->drawLine (CPoint (x + 7.0, y), CPoint (x + 7.0, y - 3.0));
+    ctx->drawLine (CPoint (x + 2.0, y - 3.0), CPoint (x + 3.5, y - 4.5));
+    ctx->drawLine (CPoint (x + 7.0, y - 3.0), CPoint (x + 5.5, y - 4.5));
+    ctx->drawLine (CPoint (x + 3.5, y - 4.5), CPoint (x + 5.5, y - 4.5));
+    ctx->setLineWidth (1.0);
+}
 } // namespace
 
-BandView::BandView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m)) {}
-
-double BandView::responseDb (int band, double f, double fc, double res, double levelDb, bool steep)
+bool BandSnapshot::operator== (const BandSnapshot& o) const
 {
-    if (levelDb <= kLevelOffDb)
-        return -200.0;
-    const double k1 = 1.0 / dsp::qOf (res), k2 = band == 1 ? k1 : 1.41421356237309504880;
-    const std::complex<double> s (0.0, f / fc);
-    auto stage = [&] (double k) {
-        const std::complex<double> d = s * s + k * s + 1.0;
-        if (band == 0)
-            return 1.0 / d;
-        if (band == 1)
-            return k * s / d;
-        return s * s / d;
-    };
-    std::complex<double> h = stage (k1);
-    if (steep)
-        h *= stage (k2);
-    return 20.0 * std::log10 (std::max (std::abs (h), 1e-12)) + levelDb;
+    if (bands != o.bands || lowLocked != o.lowLocked || lowKnown != o.lowKnown || active != o.active || glueDb != o.glueDb)
+        return false;
+    for (int i = 0; i < 3; ++i)
+        if (xover[i] != o.xover[i])
+            return false;
+    for (int b = 0; b < kMax; ++b)
+        if (gainDb[b] != o.gainDb[b])
+            return false;
+    return true;
+}
+
+BandView::BandView (const CRect& r, pk::ParamHost* h, MeterSource m) : CView (r), host (h), meters (std::move (m))
+{
+    snap = snapshot (nullptr, host);
+}
+
+double BandView::estimatedLowXover (int seed)
+{
+    // a fixed spread over the range (log scale): only a stand-in until the engine publishes Seed's pick
+    const double u = std::fmod (std::max (seed, 1) * 0.6180339887498949, 1.0);
+    return kLowXoverMin * std::pow (kLowXoverMax / kLowXoverMin, u);
+}
+
+bool BandView::shows (uint32_t id)
+{
+    switch (id)
+    {
+        case kBandCount:
+        case kXoverMid:
+        case kXoverHigh:
+        case kLowLevel:
+        case kMidLevel:
+        case kHighLevel:
+        case kAirLevel:
+        case kDepth:
+        case kMovement:
+        case kMidMove:
+        case kHighMove:
+        case kAirMove:
+        case kSeed:
+        case kShiftOn:
+        case kShift: return true;
+        default: return false;
+    }
+}
+
+// ---- the adapter: everything the display reads from the engine ------------------------------------------
+//
+// TODO(engine wiring): the multiband engine publishes the split in its Meters. Replace the marked
+// estimates below with its fields and nothing else in the display changes:
+//   s.xover[0]   the Low crossover Seed picked (Hz)                 (now: estimatedLowXover (Seed))
+//   s.lowKnown   true once xover[0] is the engine's                  (now: false: drawn as the 100 .. 500 Hz range)
+//   s.xover[1/2] the upper crossovers now, with their slight drift  (now: Mid X / High X as set)
+//   s.gainDb[b]  each band's gain now (dB, kLevelOffDb when off)    (now: the old meters' Mid / High level, else the Level)
+BandSnapshot BandView::snapshot (const Meters* m, pk::ParamHost* host)
+{
+    BandSnapshot s;
+    auto plain = [host] (uint32_t id) { return host->plainValue (id); };
+    s.bands = std::lround (plain (kBandCount)) == kBands4 ? 4 : 3;
+    s.lowLocked = true; // (the Low band never moves)
+    s.xover[0] = estimatedLowXover ((int)std::lround (plain (kSeed))); // TODO(engine wiring): the engine's Low crossover
+    s.lowKnown = false;                                                 // TODO(engine wiring): true with it
+    s.xover[1] = plain (kXoverMid);                                     // TODO(engine wiring): Mid X now
+    s.xover[2] = plain (kXoverHigh);                                    // TODO(engine wiring): High X now
+    for (int b = 0; b < BandSnapshot::kMax; ++b)
+        s.gainDb[b] = plain (kLevelIds[b]);
+    if (m)
+    {
+        constexpr auto rx = std::memory_order_relaxed;
+        s.active = m->active.load (rx);
+        if (s.active)
+        {
+            // TODO(engine wiring): the moving bands' gains now. The meters of today carry each band's
+            // level with the movement (Low, Mid, High); the Low band's is not used (it is locked).
+            constexpr int metered = kBands < BandSnapshot::kMax ? kBands : BandSnapshot::kMax;
+            for (int b = 1; b < metered; ++b)
+            {
+                const float l = m->level[0][(size_t)b].load (rx);
+                s.gainDb[b] = l <= -99.0f ? kLevelOffDb : (double)l;
+            }
+            s.glueDb = std::round (m->glueDb.load (rx) * 10.0f) / 10.0;
+        }
+    }
+    // (the display keeps the crossovers in order, a little apart)
+    s.xover[1] = std::max (s.xover[1], s.xover[0] * 1.06);
+    s.xover[2] = std::max (s.xover[2], s.xover[1] * 1.06);
+    return s;
 }
 
 CRect BandView::plot () const
@@ -78,74 +167,14 @@ double BandView::yOf (double db) const
     return p.top + p.getHeight () * (kDbMax - std::clamp (db, kDbMin, kDbMax)) / (kDbMax - kDbMin);
 }
 
-void BandView::curve (CDrawContext* ctx, int band, double fc, double levelDb, bool dashed)
-{
-    if (levelDb <= kLevelOffDb)
-        return;
-    const CRect p = plot ();
-    const double res = host->plainValue (kResIds[band]);
-    const bool steep = std::lround (host->plainValue (kSlope)) == kSlope24;
-    auto path = owned (ctx->createGraphicsPath ());
-    if (!path)
-        return;
-    for (int i = 0; i <= kPoints; ++i)
-    {
-        const double f = kFMin * std::pow (kFMax / kFMin, (double)i / kPoints);
-        const CPoint pt (p.left + p.getWidth () * i / kPoints, yOf (responseDb (band, f, fc, res, levelDb, steep)));
-        if (i == 0)
-            path->beginSubpath (pt);
-        else
-            path->addLine (pt);
-    }
-    // (round joins: the many short segments rasterize the same into the cached layer and onto the window)
-    static const CLineStyle round (CLineStyle::kLineCapRound, CLineStyle::kLineJoinRound);
-    if (dashed)
-    {
-        CLineStyle d = theme::dashed ();
-        d.setLineJoin (CLineStyle::kLineJoinRound);
-        ctx->setLineStyle (d);
-    }
-    else
-        ctx->setLineStyle (round);
-    ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
-    ctx->setLineStyle (kLineSolid);
-}
-
 void BandView::idle ()
 {
-    const Meters* m = meters ? meters () : nullptr;
-    if (!m)
-        return;
-    const uint32_t s = m->blocks.load (std::memory_order_acquire);
-    if (s == seen)
-        return;
-    seen = s;
-    constexpr auto rx = std::memory_order_relaxed;
-    const bool a = m->active.load (rx);
-    bool changed = a != active;
-    active = a;
-    if (!active)
+    const BandSnapshot s = snapshot (meters ? meters () : nullptr, host);
+    if (s != snap)
     {
-        if (changed)
-            invalid (); // (once, to take the live curves away)
-        return;
-    }
-    const int ps = m->passes.load (rx);
-    changed = changed || ps != passes;
-    passes = ps;
-    for (int k = 0; k < kMaxPasses; ++k)
-        for (int b = 0; b < kBands; ++b)
-        {
-            const float f = m->freq[(size_t)k][(size_t)b].load (rx), l = m->level[(size_t)k][(size_t)b].load (rx);
-            changed = changed || f != freq[k][b] || l != level[k][b];
-            freq[k][b] = f;
-            level[k][b] = l;
-        }
-    const float g = std::round (m->glueDb.load (rx) * 10.0f) / 10.0f; // (the readout's 0.1 dB steps)
-    changed = changed || g != glueDb;
-    glueDb = g;
-    if (changed)
+        snap = s;
         invalid ();
+    }
 }
 
 void BandView::paintBase (CDrawContext* ctx)
@@ -154,17 +183,16 @@ void BandView::paintBase (CDrawContext* ctx)
     ctx->setFillColor (theme::kWell);
     ctx->drawRect (all, kDrawFilled);
     const CRect p = plot ();
+    const int bands = snap.bands;
 
-    // the hollow between Mid and High (their set frequencies)
-    const double fMid = host->plainValue (kMidFreq) * std::exp2 (-host->plainValue (kGap));
-    const double fHigh = host->plainValue (kHighFreq) * std::exp2 (host->plainValue (kGap));
-    if (fHigh > fMid)
+    // where Seed may put the Low crossover, while the engine's pick is not known
+    if (!snap.lowKnown)
     {
         ctx->setFillColor (theme::withAlpha (theme::kLineDim, 90));
-        ctx->drawRect (CRect (xOf (fMid), p.top, xOf (fHigh), p.bottom), kDrawFilled);
+        ctx->drawRect (CRect (xOf (kLowXoverMin), p.top, xOf (kLowXoverMax), p.top + 6.0), kDrawFilled);
     }
 
-    // the grid: decades and their steps, 0 / -12 / -24 dB (and +12)
+    // the grid: decades and their steps, 0 / -12 / -24 / -36 dB
     ctx->setLineWidth (1.0);
     for (double dec = 10.0; dec < kFMax; dec *= 10.0)
         for (int k = 1; k <= 9; ++k)
@@ -176,7 +204,7 @@ void BandView::paintBase (CDrawContext* ctx)
             const double x = std::round (xOf (f)) + 0.5;
             ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
         }
-    for (double db : {12.0, 0.0, -12.0, -24.0})
+    for (double db : {0.0, -12.0, -24.0, -36.0})
     {
         ctx->setFrameColor (db == 0.0 ? theme::kGridZero : theme::kGridMinor);
         const double y = std::round (yOf (db)) + 0.5;
@@ -187,64 +215,121 @@ void BandView::paintBase (CDrawContext* ctx)
         const char* s = f == 100.0 ? "100" : f == 1000.0 ? "1k" : "10k";
         text (ctx, s, CRect (xOf (f) - 20.0, p.bottom + 1.0, xOf (f) + 20.0, p.bottom + 12.0), theme::kTextDim, 9.0, kCenterText);
     }
-    for (double db : {12.0, 0.0, -12.0, -24.0})
+    for (double db : {0.0, -12.0, -24.0, -36.0})
     {
         char buf[16];
         std::snprintf (buf, sizeof (buf), "%+.0f", db);
-        text (ctx, db == 0.0 ? "0" : buf, CRect (p.left + 2.0, yOf (db) - 11.0, p.left + 40.0, yOf (db) - 1.0), theme::kTextDim, 8.5);
+        text (ctx, db == 0.0 ? "0" : buf, CRect (p.right - 40.0, yOf (db) - 11.0, p.right - 2.0, yOf (db) - 1.0), theme::kTextDim,
+              8.5, kRightText);
     }
 
-    // each band at its set place
-    ctx->setFrameColor (theme::kCopper);
-    ctx->setLineWidth (1.0);
-    for (int b = 0; b < kBands; ++b)
+    // the Low band: locked, a solid fill up to its Level
+    const double xLow = xOf (snap.xover[0]);
+    const double lowDb = host->plainValue (kLowLevel);
+    if (lowDb > kLevelOffDb)
     {
-        const double fc = b == 0 ? host->plainValue (kLowFreq) : b == 1 ? fMid : fHigh;
-        curve (ctx, b, fc, host->plainValue (kLevelIds[b]), false);
-        text (ctx, kNames[b], CRect (xOf (fc) - 30.0, p.bottom - 13.0, xOf (fc) + 30.0, p.bottom - 1.0), theme::kCopperPale, 9.0,
-              kCenterText, true);
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, 110));
+        ctx->drawRect (CRect (p.left, yOf (lowDb), xLow, p.bottom), kDrawFilled);
+        ctx->setFrameColor (theme::kCopperPale);
+        ctx->setLineWidth (1.5);
+        ctx->drawLine (CPoint (p.left, yOf (lowDb)), CPoint (xLow, yOf (lowDb)));
+        ctx->setLineWidth (1.0);
     }
+    ctx->setFrameColor (theme::kCopperPale);
+    ctx->drawLine (CPoint (std::round (xLow) + 0.5, p.top), CPoint (std::round (xLow) + 0.5, p.bottom));
+    lockGlyph (ctx, p.left + 6.0, p.top + 9.0, theme::kCopperPale);
+    text (ctx, snap.lowKnown ? "LOW X " + hzText (snap.xover[0]) : "LOW X 100-500 Hz",
+          CRect (p.left + 20.0, p.top + 3.0, p.left + 160.0, p.top + 17.0), theme::kCopperPale, 9.5, kLeftText, true);
 
-    char buf[64];
-    if (fHigh > fMid)
-        std::snprintf (buf, sizeof (buf), "GAP %.1f OCT", std::log2 (fHigh / fMid));
-    else
-        std::snprintf (buf, sizeof (buf), "NO GAP");
-    text (ctx, buf, CRect (all.left + kPad, all.top + 3.0, all.left + 200.0, all.top + 17.0), theme::kCopperPale, 10.0, kLeftText, true);
+    // the upper crossovers as set (dashed: the live ones are drawn over them)
+    ctx->setFrameColor (theme::kLineDim);
+    ctx->setLineStyle (theme::dashed ());
+    for (int k = 1; k < bands - 1; ++k)
+    {
+        const double x = std::round (xOf (host->plainValue (k == 1 ? kXoverMid : kXoverHigh))) + 0.5;
+        ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
+    }
+    ctx->setLineStyle (kLineSolid);
+
+    // each moving band: its Level (where it rises to) and how far it falls (Level - Depth, scaled by
+    // Movement and its Move), between its set crossovers
+    const double depth = host->plainValue (kDepth) * host->plainValue (kMovement);
+    const bool shiftOn = host->plainValue (kShiftOn) >= 0.5;
+    char shiftText[32];
+    std::snprintf (shiftText, sizeof (shiftText), "%+.0f Hz", host->plainValue (kShift));
+    for (int b = 1; b < bands; ++b)
+    {
+        const double lo = b == 1 ? snap.xover[0] : host->plainValue (b == 2 ? kXoverMid : kXoverHigh);
+        const double hi = b == bands - 1 ? kFMax : host->plainValue (b == 1 ? kXoverMid : kXoverHigh);
+        const double x0 = xOf (lo) + 2.0, x1 = xOf (hi) - 2.0;
+        const double lvl = host->plainValue (kLevelIds[b]);
+        if (lvl > kLevelOffDb && x1 > x0)
+        {
+            ctx->setFrameColor (theme::kCopper);
+            ctx->drawLine (CPoint (x0, std::round (yOf (lvl)) + 0.5), CPoint (x1, std::round (yOf (lvl)) + 0.5));
+            const double fall = depth * host->plainValue (kMoveIds[b]);
+            if (fall > 0.05)
+            {
+                ctx->setFrameColor (theme::kLineDim);
+                ctx->setLineStyle (theme::dashed ());
+                const double y = std::round (yOf (lvl - fall)) + 0.5;
+                ctx->drawLine (CPoint (x0, y), CPoint (x1, y));
+                ctx->setLineStyle (kLineSolid);
+            }
+        }
+        const double xc = 0.5 * (xOf (lo) + xOf (hi));
+        text (ctx, kNames[b], CRect (xc - 30.0, p.bottom - 13.0, xc + 30.0, p.bottom - 1.0), theme::kCopperPale, 9.0, kCenterText, true);
+        // the frequency shifter (on the bands above Low only): how far, over each upper band
+        if (shiftOn && xOf (hi) - xOf (lo) > 46.0)
+            text (ctx, shiftText, CRect (xc - 40.0, p.top + 3.0, xc + 40.0, p.top + 15.0), theme::kEnergyLive, 9.0, kCenterText, true);
+    }
+    text (ctx, kNames[0], CRect (p.left, p.bottom - 13.0, std::max (xLow, p.left + 30.0), p.bottom - 1.0), theme::kText, 9.0,
+          kCenterText, true);
+
+    text (ctx, bands == 4 ? "4 BANDS" : "3 BANDS", CRect (all.left + kPad, all.top + 3.0, all.left + 200.0, all.top + 17.0),
+          theme::kCopperPale, 10.0, kLeftText, true);
 }
 
 void BandView::draw (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     pk::LayerKey key;
-    for (uint32_t id : {kLowFreq, kLowRes, kLowLevel, kMidFreq, kMidRes, kMidLevel, kHighFreq, kHighRes, kHighLevel, kGap, kSlope})
+    for (uint32_t id : {kBandCount, kXoverMid, kXoverHigh, kLowLevel, kMidLevel, kHighLevel, kAirLevel, kDepth, kMovement, kMidMove,
+                        kHighMove, kAirMove, kShiftOn, kShift})
         key.add (host->plainValue (id));
+    key.add (snap.xover[0], snap.lowKnown, snap.bands);
     baseLayer.draw (ctx, all, key, [this] (CDrawContext* c) { paintBase (c); });
 
     ctx->setClipRect (all);
-    if (active)
+    const CRect p = plot ();
+    // the moving bands, each filled up to its level now
+    for (int b = 1; b < snap.bands; ++b)
     {
-        const CRect p = plot ();
-        for (int k = passes - 1; k >= 0; --k)
-        {
-            ctx->setFrameColor (k == 0 ? theme::kCopperPale : theme::kCopper);
-            ctx->setLineWidth (k == 0 ? 1.5 : 1.0);
-            for (int b = 0; b < kBands; ++b)
-                curve (ctx, b, freq[k][b], level[k][b] <= -99.0f ? kLevelOffDb : level[k][b], k == 1);
-        }
-        // the bands' frequencies now (the first pass)
-        ctx->setFrameColor (theme::kEnergyLive);
-        ctx->setLineWidth (2.0);
-        for (int b = 0; b < kBands; ++b)
-        {
-            if (level[0][b] <= -99.0f)
-                continue;
-            const double x = xOf (freq[0][b]);
-            ctx->drawLine (CPoint (x, p.top), CPoint (x, p.top + 8.0));
-        }
+        if (snap.gainDb[b] <= kLevelOffDb)
+            continue;
+        const double x0 = xOf (snap.xover[b - 1]) + 1.0;
+        const double x1 = b == snap.bands - 1 ? p.right : xOf (snap.xover[b]) - 1.0;
+        if (x1 <= x0)
+            continue;
+        const double y = yOf (snap.gainDb[b]);
+        ctx->setFillColor (theme::withAlpha (theme::kCopperPale, snap.active ? 70 : 45));
+        ctx->drawRect (CRect (x0, y, x1, p.bottom), kDrawFilled);
+        ctx->setFrameColor (snap.active ? theme::kEnergyLive : theme::kCopperPale);
+        ctx->setLineWidth (snap.active ? 2.0 : 1.5);
+        ctx->drawLine (CPoint (x0, y), CPoint (x1, y));
         ctx->setLineWidth (1.0);
+    }
+    // the upper crossovers now
+    ctx->setFrameColor (theme::kCopper);
+    for (int k = 1; k < snap.bands - 1; ++k)
+    {
+        const double x = std::round (xOf (snap.xover[k])) + 0.5;
+        ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
+    }
+    if (snap.active)
+    {
         char buf[48];
-        std::snprintf (buf, sizeof (buf), "GLUE %.1f dB", glueDb >= 0.05f ? -(double)glueDb : 0.0);
+        std::snprintf (buf, sizeof (buf), "GLUE %.1f dB", snap.glueDb >= 0.05 ? -snap.glueDb : 0.0);
         text (ctx, buf, CRect (all.right - 160.0, all.top + 3.0, all.right - kPad, all.top + 17.0), theme::kText, 10.0, kRightText);
     }
     ctx->resetClipRect ();

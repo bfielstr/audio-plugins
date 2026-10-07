@@ -1,0 +1,13 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: neuro, air, bright
+comment: Four bands: an Air band above the High band, each rising and falling on its own over the locked low end.
+Bands = 4 Bands
+Mid X = 1200 Hz
+High X = 6000 Hz
+Air Level = -3 dB
+High Move = 70 %
+Air Move = 100 %
+Movement = 60 %
+Seed = 42
+Glue = 45 %
+Grit = 25 %
