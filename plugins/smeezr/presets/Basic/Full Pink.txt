@@ -1,0 +1,4 @@
+# smeezr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pink, balance
+comment: Halfway: every octave pulled all the way towards an equal share, no OTT boost yet.
+Squeeze = 50 %

@@ -1,0 +1,5 @@
+# smeezr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: pink, balance, gentle
+comment: A light pull towards the pink-noise balance, slow so it acts like a moving EQ.
+Squeeze = 20 %
+Speed = Slow
