@@ -14,6 +14,7 @@ pk_dsp_settings(smeezr_core)
 add_executable(smeezr_tests tests/core_tests.cpp)
 target_link_libraries(smeezr_tests PRIVATE smeezr_core)
 add_test(NAME smeezr_core COMMAND smeezr_tests)
+pk_cpu_test(smeezr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()
