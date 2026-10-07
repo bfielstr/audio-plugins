@@ -16,7 +16,7 @@ cmake --build build
 
 - One plug-in only (`orbitr`; the bundle target is capitalised):
   `cmake --build build --target orbitr_tests Orbitr` (add `orbitr_state_tests` where it exists:
-  ciphr, dropr, gentlr, moistr, smacheratr, smeezr, smemplr; `orbitr_drawbench` with the draw bench).
+  ciphr, dropr, gentlr, moistr, smacheratr, smeezr, smemplr, widr; `orbitr_drawbench` with the draw bench).
   Then `ctest --test-dir build -R '^orbitr_' --output-on-failure`.
 - A smaller build tree: `-DPK_ONLY_PLUGINS="orbitr;ciphr"` configures only those plug-ins (plus the
   libraries of the ones they use, tests disabled); empty means all.

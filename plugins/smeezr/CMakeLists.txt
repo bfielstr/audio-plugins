@@ -1,7 +1,7 @@
 # Smeezr: a one-knob compressor. Squeeze first moves the spectrum towards the balance of pink noise (ten
 # one-octave bands, each pulled towards an equal share of the power), then past the middle adds an
 # OTT-style boost on top (upward and downward compression in OTT's three bands, Multidyn's OTT model).
-project(Smeezr VERSION 0.20.0.0)
+project(Smeezr VERSION 0.21.0.0)
 
 add_library(smeezr_core STATIC
     src/core/Params.cpp
