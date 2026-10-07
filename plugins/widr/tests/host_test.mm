@@ -211,6 +211,8 @@ int main (int argc, char** argv)
             const double kx = Editor::kCinemaLeft + 12 + 40, ky = Editor::kLanesTop + 24 + 50;
             win.drag (kx, ky, kx, ky - 80);
             CHECK (plainOf (a, kCinema) > 0.2, "dragging Cinema up turns the cinema stage on: %.2f", plainOf (a, kCinema));
+            // (this rig has no component handler: a host passes the editor's edit on to the processor)
+            a.param (kCinema, a.controller->getParamNormalized (kCinema));
             for (int i = 0; i < 5; ++i)
             {
                 a.render (0.03, al, &ar, na.fn ());
@@ -221,6 +223,7 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_widr_cinema.png"), "screenshot 3");
             win.click (kx, ky, 2);
             CHECK (plainOf (a, kCinema) == 0.0, "double-click: Cinema back to 0 (%.2f)", plainOf (a, kCinema));
+            a.param (kCinema, a.controller->getParamNormalized (kCinema));
             a.render (0.03, al, &ar, na.fn ());
             CHECK (a.processor->getLatencySamples () == latency, "Cinema off: the latency as before (%u)", a.processor->getLatencySamples ());
         }
