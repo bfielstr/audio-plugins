@@ -59,6 +59,17 @@ inline const char* forParam (uint32_t id)
         case kLowDip:
             return "Lets the Low band dip back a little on its own seeded moments: at most this many dB under its Level "
                    "(6 dB at most, x Movement).";
+        case kLink:
+            return "How much the moving bands (Mid, High and Air) rise and fall together. 0: each on its own events. 100 %: "
+                   "all of them open and close at once, following the Mid band, each still at its own Level and Move. "
+                   "With Liquid on, Link also lifts the resonance as the bands open. The Low band is never linked.";
+        case kLiquid:
+            return "A moving resonance on the bands above Low: two peaks, like a vowel, that glide between Liquid's Low and "
+                   "High on the movement's clock (Rate or Sync, x Density), now and then jumping quickly. 0 switches it off. "
+                   "The Low band (the sub) never goes through it.";
+        case kLiquidRes: return "How sharp Liquid's peaks are: low is a broad wash, high a narrow, whistling vowel.";
+        case kLiquidLow: return "The lowest Liquid's first peak goes (Hz).";
+        case kLiquidHigh: return "The highest Liquid's first peak goes (Hz). The second peak sits above it, as in a vowel.";
         case kGlue: return "Compresses the bands back together: more Glue lowers the threshold and raises the ratio.";
         case kGrit: return "Soft clipping after the compressor, for a little dirt.";
         case kPasses:
@@ -81,6 +92,7 @@ inline const char* forParam (uint32_t id)
 constexpr const char* kBandView =
     "The bands against frequency. The Low band is locked (solid, with a lock and where it ends in Hz) unless Push or Dip "
     "lets it move; the other bands fill up to their level now and rise and fall while sound plays. The lines show each "
-    "band's Level and how far it can move (dashed). With the shifter on, each upper band shows how far it is shifted.";
+    "band's Level and how far it can move (dashed). With the shifter on, each upper band shows how far it is shifted. "
+    "With Liquid on, the bar at the top shows where its resonance may go and the markers where its two peaks are now.";
 
 } // namespace moistr::help

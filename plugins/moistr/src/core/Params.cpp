@@ -71,6 +71,12 @@ const ParamTable& paramTable ()
         v.push_back (real (kLowDip, "Low Dip", "Dip", 0.0, 6.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (toggle (kDropOut, "Drop Out", "Drop Out", false));
         v.push_back (real (kSpeed, "Speed", "Speed", 1.0, 16.0, 1.0, Curve::Log, Disp::Plain));
+        // Link and Liquid (0.23)
+        v.push_back (percent (kLink, "Link", "Link", 0.0));
+        v.push_back (percent (kLiquid, "Liquid", "Liquid", 0.0));
+        v.push_back (percent (kLiquidRes, "Liquid Res", "Res", 0.5));
+        v.push_back (real (kLiquidLow, "Liquid Low", "Low", kLiquidLowMin, kLiquidLowMax, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kLiquidHigh, "Liquid High", "High", kLiquidHighMin, kLiquidHighMax, 1600.0, Curve::Log, Disp::Hz));
         return v;
     }());
     return t;

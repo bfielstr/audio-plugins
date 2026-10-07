@@ -1,0 +1,18 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: reese, neuro, liquid, thick
+comment: Thicker and slower than Liquid: two passes, the bands mostly linked and a narrower, more resonant vowel lower down, so the mids clot together and drain away while the sub holds.
+Movement = 90 %
+Rate = 0.35 Hz
+Depth = 36 dB
+Mid Move = 100 %
+High Move = 100 %
+Fall = 2
+Link = 70 %
+Liquid = 70 %
+Liquid Res = 75 %
+Liquid Low = 200 Hz
+Liquid High = 1000 Hz
+Seed = 46
+Passes = 2
+Glue = 45 %
+Grit = 30 %

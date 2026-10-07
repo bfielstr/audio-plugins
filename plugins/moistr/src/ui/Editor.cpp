@@ -51,6 +51,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 void Editor::onClose ()
 {
     display = nullptr;
+    liquidKnobs.clear ();
     latencyLabel = nullptr;
     tail.reset ();
 }
@@ -154,10 +155,10 @@ void Editor::buildUI (CFrame* f)
         (i == 1 ? shiftKnob : shiftMixKnob) = k;
     }
 
-    // the second pattern: Seed B and how the two blend
-    auto* seedB = new Panel (CRect (kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH), "SEED B");
+    // the second pattern: Seed B and how the two blend; Link, how much the moving bands share one pattern
+    auto* seedB = new Panel (CRect (kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH), "SEED B / LINK");
     root->addView (seedB);
-    seedBKnob = knobs (seedB, kSeedBRight - kSeedBLeft, {{kSeedB}, {kSeedBlend}})[0];
+    seedBKnob = knobs (seedB, kSeedBRight - kSeedBLeft, {{kSeedB}, {kSeedBlend}, {kLink}})[0];
 
     // the Low band: how far it comes forward (Push) and dips back (Dip) on its own events
     auto* low = new Panel (CRect (kLowLeft, kRow3, kLowRight, kRow3 + kRowH), "LOW");
@@ -174,6 +175,12 @@ void Editor::buildUI (CFrame* f)
         const double x = ex + kKnobBeside - kSwitchLeft + kKnobStep * i;
         bind (extreme, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, i == 0 ? kDensity : kSpeed));
     }
+
+    // the moving resonance on the bands above Low: how strong, how sharp, and where it may go
+    auto* liquid = new Panel (CRect (kLiquidLeft, kRow3, kLiquidRight, kRow3 + kRowH), "LIQUID");
+    root->addView (liquid);
+    const auto made = knobs (liquid, kLiquidRight - kLiquidLeft, {{kLiquid}, {kLiquidRes}, {kLiquidLow}, {kLiquidHigh}});
+    liquidKnobs.assign (made.begin () + 1, made.end ());
 
     // the output: Mix and Output
     auto* out = new Panel (CRect (kOutLeft, kRow2, kOutRight, kRow2 + kRowH), "OUTPUT");
@@ -203,6 +210,8 @@ void Editor::updateLooks ()
             k->setEnabledLook (shifting);
     if (seedBKnob)
         seedBKnob->setEnabledLook (plainValue (kSeedBlend) > 0.0);
+    for (Knob* k : liquidKnobs)
+        k->setEnabledLook (plainValue (kLiquid) > 0.0);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -210,7 +219,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id == kBandCount || id == kShiftOn || id == kSeedBlend)
+    if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid)
         updateLooks ();
     if (display && BandView::shows (id))
     {
@@ -265,8 +274,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
     // Wide: the display, then columns of two panels (split over movement, levels over band move, shift over
-    // rise / fall, glue over the output); a row of the 0.22 panels (seed b, low, extreme) under them, and the
-    // end saturator in a row of its own at the bottom
+    // rise / fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid)
+    // under them, and the end saturator in a row of its own at the bottom
     s.panels = {
         {"display", "bands", {d.left, d.top, d.right, d.bottom}, 0},
         {"split", "", {kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH}, 0, 0},
@@ -280,6 +289,7 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"seedb", "", {kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH}, 1},
         {"low", "", {kLowLeft, kRow3, kLowRight, kRow3 + kRowH}, 1},
         {"extreme", "", {kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH}, 1},
+        {"liquid", "", {kLiquidLeft, kRow3, kLiquidRight, kRow3 + kRowH}, 1},
         {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 2, -1, true},
     };
     return s;

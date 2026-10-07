@@ -92,6 +92,27 @@ struct BandMotion
     double lift (double theta, double secPerCycle, double riseSec, double fallSec, double density, uint64_t bits) const;
 };
 
+// Liquid's path (0.23): where the moving resonance is, as a function of theta. The cycle is cut into `steps`
+// (x Density) points; at each a vowel (Liquid's two formants: F1's place between Liquid Low and Liquid High,
+// 0 .. 1, and F2 as a ratio of F1) dealt from the key, a little off the vowel's own place. Between two
+// points the resonance glides (a smoothstep over `glide` of the step, seeded per point: 0.45 .. 1), and on
+// some steps (about 1 in 4) it jumps quickly instead (over kLiquidJump of the step).
+struct LiquidPoint
+{
+    double pos = 0.0;   // 0 .. 1: F1 between Liquid Low and Liquid High (log scale)
+    double ratio = 2.0; // F2 / F1
+    double glide = 1.0; // the share of the step the glide to the next point takes
+};
+struct LiquidPath
+{
+    int steps = 4;      // points per cycle
+    double offset = 0;  // 0 .. 1: the points' shift off the grid (in steps)
+    uint64_t key = 0;   // the points
+    LiquidPoint point (int64_t i) const;
+    // F1's place (0 .. 1) and F2 / F1's log2 at theta, with Density
+    void at (double theta, double density, double& pos, double& logRatio) const;
+};
+
 struct Pattern
 {
     int seed = 1, pass = 0;
@@ -99,6 +120,7 @@ struct Pattern
     BandMotion band[kMaxBands];        // [kBandLow]: the Low band's pushes (its mask) and timing (0.22)
     Channel drift[kMaxXovers];         // [0] unused (the Low crossover does not move)
     uint64_t lowDipMask = 0;           // the Low band's dips (on band[kBandLow]'s grid; none on a push's step)
+    LiquidPath liquid;                 // Liquid's resonance (0.23: a stream of its own)
 };
 
 // The Low crossover a Seed picks (Hz, kLowXoverMin .. kLowXoverMax on a log scale): the fractional part of
@@ -128,6 +150,11 @@ constexpr double kXoverDriftOctaves = 1.0 / 3.0;
 constexpr double kRiseMin = 0.010, kRiseMax = 1.5, kFallMin = 0.030, kFallMax = 3.0;
 // the Low band's seeded times (seconds, before Rise / Fall): quicker, punchier pushes
 constexpr double kLowRiseMin = 0.005, kLowRiseMax = 0.25, kLowFallMin = 0.04, kLowFallMax = 1.2;
+// Liquid: a jump's share of a step, and the vowels its points pick from (F1, F2 in Hz: u, o, a, e, i)
+constexpr double kLiquidJump = 0.12;
+constexpr int kNumVowels = 5;
+constexpr double kVowelF1[kNumVowels] = {300.0, 570.0, 730.0, 530.0, 270.0};
+constexpr double kVowelF2[kNumVowels] = {870.0, 840.0, 1090.0, 1840.0, 2290.0};
 // the quickest a rise or fall can be (seconds, with Speed): still a smooth raised-cosine ramp
 constexpr double kMinRampSec = 0.001;
 

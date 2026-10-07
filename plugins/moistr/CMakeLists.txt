@@ -14,6 +14,8 @@ pk_dsp_settings(moistr_core)
 
 add_executable(moistr_tests tests/core_tests.cpp)
 target_link_libraries(moistr_tests PRIVATE moistr_core)
+# (the Liquid preset's statistics are checked on the preset file itself)
+target_compile_definitions(moistr_tests PRIVATE MOISTR_PRESETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/presets")
 add_test(NAME moistr_core COMMAND moistr_tests)
 pk_cpu_test(moistr_core) # times the DSP against a CPU budget
 
