@@ -108,37 +108,34 @@ bool BandView::shows (uint32_t id)
 
 // ---- the adapter: everything the display reads from the engine ------------------------------------------
 //
-// TODO(engine wiring): the multiband engine publishes the split in its Meters. Replace the marked
-// estimates below with its fields and nothing else in the display changes:
-//   s.xover[0]   the Low crossover Seed picked (Hz)                 (now: estimatedLowXover (Seed))
-//   s.lowKnown   true once xover[0] is the engine's                  (now: false: drawn as the 100 .. 500 Hz range)
-//   s.xover[1/2] the upper crossovers now, with their slight drift  (now: Mid X / High X as set)
-//   s.gainDb[b]  each band's gain now (dB, kLevelOffDb when off)    (now: the old meters' Mid / High level, else the Level)
+// From the engine's Meters once it has run (the Seed's Low crossover, the upper crossovers with their drift,
+// each band's gain now); before that, from the parameters (the Low crossover estimated from the Seed).
 BandSnapshot BandView::snapshot (const Meters* m, pk::ParamHost* host)
 {
     BandSnapshot s;
     auto plain = [host] (uint32_t id) { return host->plainValue (id); };
     s.bands = std::lround (plain (kBandCount)) == kBands4 ? 4 : 3;
     s.lowLocked = true; // (the Low band never moves)
-    s.xover[0] = estimatedLowXover ((int)std::lround (plain (kSeed))); // TODO(engine wiring): the engine's Low crossover
-    s.lowKnown = false;                                                 // TODO(engine wiring): true with it
-    s.xover[1] = plain (kXoverMid);                                     // TODO(engine wiring): Mid X now
-    s.xover[2] = plain (kXoverHigh);                                    // TODO(engine wiring): High X now
+    s.xover[0] = estimatedLowXover ((int)std::lround (plain (kSeed)));
+    s.lowKnown = false;
+    s.xover[1] = plain (kXoverMid);
+    s.xover[2] = plain (kXoverHigh);
     for (int b = 0; b < BandSnapshot::kMax; ++b)
         s.gainDb[b] = plain (kLevelIds[b]);
-    if (m)
+    if (m && m->blocks.load (std::memory_order_relaxed) > 0)
     {
         constexpr auto rx = std::memory_order_relaxed;
+        s.xover[0] = std::round (m->lowXover.load (rx));
+        s.lowKnown = true;
         s.active = m->active.load (rx);
         if (s.active)
         {
-            // TODO(engine wiring): the moving bands' gains now. The meters of today carry each band's
-            // level with the movement (Low, Mid, High); the Low band's is not used (it is locked).
-            constexpr int metered = kBands < BandSnapshot::kMax ? kBands : BandSnapshot::kMax;
-            for (int b = 1; b < metered; ++b)
+            for (int x = 1; x < 3; ++x)
+                s.xover[x] = std::round (m->xover[0][(size_t)x].load (rx));
+            for (int b = 1; b < BandSnapshot::kMax; ++b) // (the Low band is locked: its Level)
             {
-                const float l = m->level[0][(size_t)b].load (rx);
-                s.gainDb[b] = l <= -99.0f ? kLevelOffDb : (double)l;
+                const float g = m->gainDb[0][(size_t)b].load (rx);
+                s.gainDb[b] = g <= -99.0f ? kLevelOffDb : std::round ((double)g * 10.0) / 10.0;
             }
             s.glueDb = std::round (m->glueDb.load (rx) * 10.0f) / 10.0;
         }
