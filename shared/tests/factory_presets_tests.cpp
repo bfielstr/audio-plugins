@@ -148,7 +148,7 @@ const Plugin kPlugins[] = {
     {"stretchr", stretchr::paramTable},
 #endif
 #ifdef PK_WITH_widr
-    {"widr", widr::paramTable},
+    {"widr", widr::pluginParamTable},
 #endif
 #ifdef PK_WITH_wubr
     {"wubr", wubr::paramTable},

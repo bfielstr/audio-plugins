@@ -40,6 +40,14 @@ constexpr double kErMs[kErTaps] = {3.1, 5.3, 7.9, 11.2, 13.7, 17.3, 19.9, 23.4, 
 // The decorrelators' all-pass delays (samples at 48 kHz), mutually prime, 2 to 7 ms: one set per voice.
 constexpr int kDecorDelays[2][4] = {{113, 173, 241, 331}, {127, 181, 257, 347}};
 
+// The cinema stage's blend of the generators (Cinema leans the Character towards it, by up to 60 %):
+// stronger decorrelated voices, takes 20 ms late, wide reflections, louder.
+constexpr CharacterMix kCinemaMix = {0.70f, 0.85f, 0.45f, 0.70f, 20.0, 9.0, 2.0, 8, 1.6, 1.0f, 1.5f, 1.3f};
+// How hard a Wide and a Beyond lane feed the voices at their Width 100 %; the Beyond lanes'
+// decorrelators (samples at 48 kHz)
+constexpr float kWideFeed = 1.25f, kBeyondFeed = 1.6f;
+constexpr int kBeyondDecor[4] = {149, 199, 263, 317};
+
 // Butterworth-4 section Qs: an LR8 crossover is two of each.
 constexpr double kQ1 = 0.54119610, kQ2 = 1.30656296;
 
@@ -49,8 +57,8 @@ int idx (double v) { return (int)std::lround (v); }
 ParamArray defaultParams ()
 {
     ParamArray p {};
-    for (uint32_t i = 0; i < kNumParams; ++i)
-        p[i] = paramTable ().info (i).def;
+    for (uint32_t i = 0; i < kNumPluginParams; ++i)
+        p[i] = pluginParamTable ().info (i).def;
     return p;
 }
 
@@ -114,6 +122,18 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
         tail.setParam (smacheratr::kTailExt4First + f, p[kTailExt4Base + f]);
     if (meters)
         meters->sampleRate.store ((float)sr);
+    // the cinema stage
+    lanes.prepare (sr);
+    theatre.prepare (sr);
+    depth.prepare (sr);
+    for (int i = 0; i < 4; ++i)
+        beyondDecor[(size_t)i].prepare ((int)std::lround (kBeyondDecor[i] * sr / 48000.0), 0.6f);
+    cueDelay = std::max (1, (int)std::lround (0.00027 * sr));
+    cueLine.prepare (cueDelay + 2);
+    cueLpA = OnePole::coeff (2500.0, sr);
+    ringX.assign (kFft, 0.0f);
+    limAtt = (float)(1.0 - std::exp (-1.0 / (0.0005 * sr)));
+    limRel = (float)(1.0 - std::exp (-1.0 / (0.15 * sr)));
     xHz = airDb = beyondAmt = srcHpHz = srcLpHz = -1.0;
     reset ();
 }
@@ -158,11 +178,47 @@ void Engine::reset ()
     wetLevel = (float)levelGain (p[kWetLevel]);
     mirror = mix.mirror;
     bypassed = false;
+    cinemaReset ();
+    cinemaOn = p[kCinema] > 0.0;
+    cin = (float)std::clamp (p[kCinema], 0.0, 1.0);
+    theatreAmt = (float)(p[kTheatre] * cin);
+    depthAmt = (float)(p[kDepth] * cin);
+}
+
+void Engine::cinemaReset ()
+{
+    lanes.reset ();
+    theatre.reset ();
+    depth.reset ();
+    for (auto& a : beyondDecor)
+        a.reset ();
+    cueLine.reset ();
+    cueLp.reset ();
+    std::fill (ringX.begin (), ringX.end (), 0.0f);
+    eX.fill (0.0f);
+    extraGain = 1.0f;
+    limG = 1.0f;
+    cin = 0.0f;
 }
 
 void Engine::blockSetup ()
 {
-    const auto& c = kCharacters[std::clamp (idx (p[kCharacter]), 0, kNumCharacters - 1)];
+    const CharacterMix* character = &kCharacters[std::clamp (idx (p[kCharacter]), 0, kNumCharacters - 1)];
+    CharacterMix leaned;
+    if (p[kCinema] > 0.0)
+    {
+        // the cinema stage leans the Character towards its own blend
+        const float a = (float)(0.6 * std::clamp (p[kCinema], 0.0, 1.0));
+        const CharacterMix& b = *character;
+        const CharacterMix& k = kCinemaMix;
+        auto mixF = [a] (float x, float y) { return x + (y - x) * a; };
+        auto mixD = [a] (double x, double y) { return x + (y - x) * (double)a; };
+        leaned = {mixF (b.haas, k.haas), mixF (b.decor, k.decor), mixF (b.pitch, k.pitch), mixF (b.er, k.er),
+                  mixD (b.haasMs, k.haasMs), mixD (b.cents, k.cents), mixD (b.driftMs, k.driftMs), std::max (b.taps, k.taps),
+                  mixD (b.erSpacing, k.erSpacing), mixF (b.reverb, k.reverb), mixF (b.level, k.level), mixF (b.contrast, k.contrast)};
+        character = &leaned;
+    }
+    const auto& c = *character;
     const double size = std::clamp (p[kSize], 0.0, 1.0);
     const float norm = std::sqrt (c.haas * c.haas + c.decor * c.decor + c.pitch * c.pitch + c.er * c.er);
     const float gain = kVoiceScale * c.level / norm;
@@ -307,6 +363,24 @@ void Engine::analyse ()
         }
         flat &= std::fabs (bankDb[i]) < 0.05f;
     }
+    // the cinema stage's Beyond cues: pure side, so the mono fold never sees them; the guard holds the
+    // side (with them) under the mid by the same ratio as the voices, above Mono Below
+    if (cinemaOn)
+    {
+        bands (ringX, eX);
+        double sumM = 0.0, sumS = 0.0, sumX = 0.0;
+        for (int k = 0; k < kBands; ++k)
+            if (bandLowHz (k) >= p[kMonoBelow] && bandHz (k) < 0.45 * sr)
+            {
+                sumM += eM[(size_t)k];
+                sumS += (double)eS[(size_t)k] + pubSide[(size_t)k];
+                sumX += eX[(size_t)k];
+            }
+        double target = 1.0;
+        if (guard > 0.0 && sumX > 1e-14)
+            target = std::sqrt (std::clamp ((ratio * sumM - sumS) / sumX, 0.0, 1.0));
+        extraGain += ((float)target - extraGain) * ag;
+    }
     if (flat && !bankFlat)
         for (auto& v : voice)
             for (auto& b : v.bank)
@@ -322,6 +396,175 @@ void Engine::analyse ()
         }
 }
 
+namespace {
+constexpr float kLimit = 0.891f; // -1 dBFS
+// transparent below 0.9, then bends into 1.0
+inline float softClip (float x)
+{
+    const float a = std::fabs (x);
+    if (a <= 0.9f)
+        return x;
+    const float y = 0.9f + 0.1f * std::tanh ((a - 0.9f) / 0.1f);
+    return x < 0.0f ? -y : y;
+}
+} // namespace
+
+// The cinema stage's loop: the classic chain (processBlock's) fed by the element lanes.
+template <typename Finish, typename Capture>
+void Engine::processCinema (const float* inL, const float* inR, int n, float wetT, float widthT, float spaceT, float dryT,
+                            float wetLevelT, double driftA, int driftEvery, Finish& finish, Capture& capture)
+{
+    if (bypassed)
+    {
+        // coming back from the bypass: the voices start from silence
+        bypassed = false;
+        line.reset ();
+        for (auto& v : voice)
+            v.reset ();
+        reverb.reset ();
+        theatre.reset ();
+        for (auto* v : {&sideHp, &midLp, &midHp})
+            for (auto& b : *v)
+                b.reset ();
+    }
+    const float cinT = (float)std::clamp (p[kCinema], 0.0, 1.0);
+    const float theatreT = (float)std::clamp (p[kTheatre], 0.0, 1.0) * cinT, depthT = (float)std::clamp (p[kDepth], 0.0, 1.0) * cinT;
+    theatre.set (p[kTheatre]);
+    std::array<int, kNumLanes> pos {};
+    std::array<float, kNumLanes> wT {};
+    for (int j = 0; j < kNumLanes; ++j)
+    {
+        pos[(size_t)j] = std::clamp (idx (p[lanePosition (j)]), 0, kNumPositions - 1);
+        wT[(size_t)j] = (float)std::clamp (p[laneWidth (j)], 0.0, 1.0);
+    }
+    lanes.setLanes (pos, wT); // (per frame: the overlap-add makes the changes smooth)
+    for (int i = 0; i < n; ++i)
+    {
+        wet += (wetT - wet) * smooth;
+        width += (widthT - width) * smooth;
+        space += (spaceT - space) * smooth;
+        for (size_t g = 0; g < gen.size (); ++g)
+            gen[g] += (genT[g] - gen[g]) * smooth;
+        erScale += (erScaleT - erScale) * slow;
+        mirror += (mix.mirror - mirror) * slow;
+        dryLevel += (dryT - dryLevel) * smooth;
+        wetLevel += (wetLevelT - wetLevel) * smooth;
+        cin += (cinT - cin) * smooth;
+        theatreAmt += (theatreT - theatreAmt) * smooth;
+        depthAmt += (depthT - depthAmt) * smooth;
+
+        // the lanes (Lanes.h): the dry input, the Centre lanes narrowed by their Width; the Wide and
+        // Beyond lanes feed the voices and the hall, the Beyond ones the cues as well
+        LaneSample ls;
+        lanes.tick (inL[i], inR[i], ls);
+        const float m = 0.5f * (ls.inL + ls.inR);
+        const float s = 0.5f * (ls.inL - ls.inR) - cin * ls.sideCut;
+        // the voices' source moves from the whole mid to the Wide and Beyond lanes
+        const float mv = m + (kWideFeed * ls.feedWide + kBeyondFeed * ls.feedBeyond - m) * cin;
+        const float sRev = s;
+        const float feed = ls.feedWide + ls.feedBeyond;
+        const float bm = ls.feedBeyond, bs = ls.beyondSide;
+
+        const float src = (float)srcLp.tick (srcLpC, srcHp.tick (srcHpC, mv));
+        line.push (src);
+        float revL, revR;
+        reverb.tick ((float)revLp.tick (revLpC, revHp.tick (revHpC, 0.5f * mv + sRev)), revL, revR);
+        float hallL, hallR;
+        theatre.tick (feed * theatreAmt, hallL, hallR);
+
+        envFast += ((double)m * m - envFast) * envFastA;
+        envSlow += ((double)m * m - envSlow) * envSlowA;
+        if (++duckCount >= 16)
+        {
+            duckCount = 0;
+            duckT = 1.0f;
+            if (contrast > 0.0f && envSlow > 1e-12)
+            {
+                const double ratioDb = 10.0 * std::log10 (std::max (1e-6, envFast / envSlow));
+                duckT = (float)std::clamp (std::pow (10.0, -0.9 * contrast * ratioDb / 20.0), 0.18, 1.6);
+            }
+        }
+        duck += (duckT - duck) * (duckT < duck ? duckAtt : duckRel);
+
+        const float widthNow = width * (1.0f + 0.6f * cin);
+        std::array<float, 2> out {};
+        for (int v = 0; v < 2; ++v)
+        {
+            Voice& vc = voice[(size_t)v];
+            vc.delay += (vc.delayT - vc.delay) * slow;
+            if (++vc.driftCount >= driftEvery)
+            {
+                vc.driftCount = 0;
+                vc.seed = vc.seed * 1664525u + 1013904223u;
+                vc.driftT = (double)((vc.seed >> 8) & 0xFFFF) / 32768.0 - 1.0;
+            }
+            vc.drift += (vc.driftT - vc.drift) * driftA;
+            const float take = line.at (std::max (1.0, vc.delay + vc.drift * driftDepth));
+            float d = src;
+            for (auto& ap : vc.decor)
+                d = ap.tick (d);
+            const float pitched = vc.shift.tick (src);
+            float er = 0.0f;
+            for (int t = v; t < kErTaps; t += 2)
+                if (erGain[(size_t)t] > 0.0f)
+                    er += erGain[(size_t)t] * line.at (kErMs[t] * erScale);
+            er = vc.erDamp.lp (erDampA, er);
+            const float rev = v == 0 ? revL : revR;
+            out[(size_t)v] = (widthNow * (gen[0] * take + gen[1] * d + gen[2] * pitched + gen[3] * er) + space * reverbSend * level * rev) * duck +
+                             (v == 0 ? hallL : hallR);
+        }
+        const float a = 0.5f * (1.0f + mirror);
+        float vl = a * out[0] + (1.0f - a) * out[1], vr = a * out[1] + (1.0f - a) * out[0];
+
+        // the Beyond cues (pure side): a decorrelated copy of the Beyond lanes' mid, their crosstalk cue and their side lifted
+        float dec = bm;
+        for (auto& ap : beyondDecor)
+            dec = ap.tick (dec);
+        cueLine.push (bs);
+        const float cue = 0.7f * cueLp.lp (cueLpA, cueLine.tap (cueDelay));
+        const float extra = cin * (0.8f * dec + cue + 0.5f * bs); // (and their own side, lifted)
+        ringX[(size_t)ringPos] = extra;
+        capture (m, s, 0.5f * (vl + vr), 0.5f * (vl - vr));
+
+        if (!bankFlat)
+            for (int k = 0; k < kBands; ++k)
+            {
+                vl = (float)voice[0].bank[(size_t)k].tick (bankC[(size_t)k], vl);
+                vr = (float)voice[1].bank[(size_t)k].tick (bankC[(size_t)k], vr);
+            }
+        vl *= wetLevel;
+        vr *= wetLevel;
+        // Depth: on the Bass lane, into the mid
+        const float deep = depth.tick (ls.bassMid, depthAmt);
+        double mid = m * dryLevel + 0.5 * ((double)vl + vr) + deep * wetLevel;
+        double side = s * dryLevel + 0.5 * ((double)vl - vr) + extra * extraGain * wetLevel;
+        side = airZ.tick (airC, side);
+        side = beyondZ.tick (beyondC, side);
+
+        double lo = mid, hi = mid;
+        for (int j = 0; j < 4; ++j)
+        {
+            side = sideHp[(size_t)j].tick (xHp[(size_t)(j & 1)], side);
+            lo = midLp[(size_t)j].tick (xLp[(size_t)(j & 1)], lo);
+            hi = midHp[(size_t)j].tick (xHp[(size_t)(j & 1)], hi);
+        }
+        mid = lo + hi;
+        float L = (float)(mid + side), R = (float)(mid - side);
+        if (wet < 1.0f)
+        {
+            L = ls.inL * dryLevel + (L - ls.inL * dryLevel) * wet;
+            R = ls.inR * dryLevel + (R - ls.inR * dryLevel) * wet;
+        }
+        // headroom: a stereo-linked limiter at -1 dBFS, then a soft clip under 0 dBFS
+        const float pk = std::max (std::fabs (L), std::fabs (R));
+        const float target = pk > kLimit ? kLimit / pk : 1.0f;
+        limG += (target - limG) * (target < limG ? limAtt : limRel);
+        L = softClip (L * limG);
+        R = softClip (R * limG);
+        finish (i, L, R);
+    }
+}
+
 void Engine::process (const float* inL, const float* inR, float* outL, float* outR, int n)
 {
     NoDenormals noDenormals;
@@ -334,6 +577,13 @@ void Engine::process (const float* inL, const float* inR, float* outL, float* ou
 
 void Engine::processBlock (const float* inL, const float* inR, float* outL, float* outR, int n)
 {
+    // the cinema stage switches on and off with Cinema above 0 (its latency with it)
+    if ((p[kCinema] > 0.0) != cinemaOn)
+    {
+        cinemaOn = p[kCinema] > 0.0;
+        cinemaReset ();
+        theatreAmt = depthAmt = 0.0f;
+    }
     blockSetup ();
     lfoPhase = std::fmod (lfoPhase + n / sr, 1000.0);
     const float wetT = p[kWidth] > 1e-6 ? 1.0f : 0.0f;
@@ -380,11 +630,21 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
         for (int i = 0; i < n; ++i)
         {
             dryLevel += (dryT - dryLevel) * smooth;
-            const float l = inL[i], r = inR[i];
+            float l = inL[i], r = inR[i];
+            if (cinemaOn)
+            {
+                // (the lanes keep running, so the latency stays what was reported)
+                LaneSample ls;
+                lanes.tick (l, r, ls);
+                l = ls.inL;
+                r = ls.inR;
+            }
             capture (0.5f * (l + r), 0.5f * (l - r), 0.0f, 0.0f);
             finish (i, l * dryLevel, r * dryLevel); // exact at 0 dB
         }
     }
+    else if (cinemaOn)
+        processCinema (inL, inR, n, wetT, widthT, spaceT, dryT, wetLevelT, driftA, driftEvery, finish, capture);
     else
     {
         if (bypassed)
@@ -504,6 +764,10 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
             finish (i, L, R);
         }
     }
+    if (meters)
+        for (int j = 0; j < kNumLanes; ++j)
+            meters->lane[(size_t)j].store (cinemaOn ? 10.0f * std::log10 (std::max (1e-12f, lanes.levels ()[(size_t)j])) : -120.0f,
+                                           std::memory_order_relaxed);
     corr = sLL * sRR > 1e-14 ? (float)std::clamp (sLR / std::sqrt (sLL * sRR), -1.0, 1.0) : 1.0f;
     if (meters)
         meters->correlation.store (corr, std::memory_order_relaxed);

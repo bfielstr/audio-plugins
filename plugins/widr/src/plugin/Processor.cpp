@@ -20,7 +20,7 @@ Processor::Processor ()
     shared = new SharedMeters ();
     engine.setMeters (&shared->meters);
     engine.setTailMeters (&shared->tailMeters);
-    for (uint32_t id = 0; id < kNumParams; ++id)
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);
 }
@@ -75,7 +75,7 @@ tresult PLUGIN_API Processor::canProcessSampleSize (int32 s) { return s == kSamp
 tresult PLUGIN_API Processor::setupProcessing (ProcessSetup& setup)
 {
     engine.prepare (setup.sampleRate, setup.maxSamplesPerBlock);
-    for (uint32_t id = 0; id < kNumParams; ++id)
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
         engine.setParam (id, toPlain (id, normMirror[id].load ()));
     shared->latency.store (engine.latency ());
     return AudioEffect::setupProcessing (setup);
@@ -85,7 +85,7 @@ tresult PLUGIN_API Processor::setActive (TBool state)
 {
     if (state)
     {
-        for (uint32_t id = 0; id < kNumParams; ++id)
+        for (uint32_t id = 0; id < kNumPluginParams; ++id)
             engine.setParam (id, toPlain (id, normMirror[id].load ()));
         engine.reset ();
         mix.join (); // alone when the registry is full
@@ -102,13 +102,13 @@ tresult PLUGIN_API Processor::setActive (TBool state)
 tresult PLUGIN_API Processor::process (ProcessData& data)
 {
     if (reloadParams.exchange (false, std::memory_order_acq_rel))
-        for (uint32_t id = 0; id < kNumParams; ++id)
+        for (uint32_t id = 0; id < kNumPluginParams; ++id)
             engine.setParam (id, toPlain (id, normMirror[id].load (std::memory_order_relaxed)));
     if (auto* changes = data.inputParameterChanges)
         for (int32 i = 0; i < changes->getParameterCount (); ++i)
         {
             IParamValueQueue* q = changes->getParameterData (i);
-            if (!q || q->getParameterId () >= kNumParams || q->getPointCount () <= 0)
+            if (!q || q->getParameterId () >= kNumPluginParams || q->getPointCount () <= 0)
                 continue;
             int32 offset;
             ParamValue v;
@@ -125,6 +125,9 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     engine.process (data.inputs[0].channelBuffers32[0], data.inputs[0].channelBuffers32[1],
                     data.outputs[0].channelBuffers32[0], data.outputs[0].channelBuffers32[1], n);
     mix.update (engine, n); // publish, then read the group for the next block
+    // the latency moves with Cinema (its lanes' STFT) and the end saturator's Oversampling: the
+    // controller tells the host
+    shared->latency.store (engine.latency (), std::memory_order_relaxed);
     data.outputs[0].silenceFlags = 0;
     return kResultOk;
 }
@@ -136,7 +139,7 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     State st;
     if (!readState (stream, st))
         return kResultFalse;
-    for (uint32_t id = 0; id < kNumParams; ++id)
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
         normMirror[id].store (st.norm[id]);
     reloadParams.store (true, std::memory_order_release);
     return kResultOk;
@@ -147,7 +150,7 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
     if (!stream)
         return kInvalidArgument;
     State st;
-    for (uint32_t id = 0; id < kNumParams; ++id)
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
     {
         st.norm[id] = normMirror[id].load ();
         st.has[id] = true;

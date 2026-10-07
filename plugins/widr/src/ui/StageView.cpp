@@ -74,7 +74,63 @@ CPoint StageView::arcEnd (bool right) const
     return CPoint (c.x + (right ? 1.0 : -1.0) * r * std::sin (a), c.y - r * std::cos (a));
 }
 
+uint64_t StageView::sceneKey () const
+{
+    pk::LayerKey key;
+    key.params (host).add (drag);
+    for (const auto& m : shown)
+        key.add (m.id, m.self, m.role, m.width, m.space, m.number);
+    // (the bands' bars to a thousandth of their height, a small fraction of a pixel: the meters' noise
+    // floor jitters below that with the audio stopped)
+    for (int k = 0; k < kBands; ++k)
+        key.add (std::lround (1000.0f * std::clamp (gains[(size_t)k], 0.0f, 1.0f)), std::lround (1000.0f * std::clamp (yields[(size_t)k], 0.0f, 1.0f)));
+    return key.value ();
+}
+
 void StageView::draw (CDrawContext* ctx)
+{
+    scene.draw (ctx, getViewSize (), sceneKey (), [this] (CDrawContext* c) { drawScene (c); });
+    drawLanes (ctx);
+}
+
+void StageView::drawLanes (CDrawContext* ctx)
+{
+    if (host->plainValue (kCinema) <= 0.0)
+        return;
+    static const char* names[kNumLanes] = {"Voice", "Bass", "Hits", "Tones", "Ambience"};
+    float top = -120.0f;
+    for (float d : laneDb)
+        top = std::max (top, d);
+    const CPoint c = listener ();
+    ctx->saveGlobalState ();
+    ctx->setClipRect (field ());
+    for (int l = 0; l < kNumLanes; ++l)
+    {
+        const int position = (int)std::lround (host->plainValue (lanePosition (l)));
+        const double a = laneAngle (position, host->plainValue (laneWidth (l))), r = radiusFor (laneRing (l));
+        // lit by its level against the loudest lane (30 dB below it: unlit)
+        const float lit = top < -100.0f ? 0.0f : std::clamp ((laneDb[(size_t)l] - top + 30.0f) / 30.0f, 0.0f, 1.0f);
+        auto path = owned (ctx->createGraphicsPath ());
+        for (int i = 0; i <= 32; ++i)
+        {
+            const double t = (-a + 2.0 * a * i / 32.0) * kDeg;
+            const CPoint pt (c.x + r * std::sin (t), c.y - r * std::cos (t));
+            if (i == 0)
+                path->beginSubpath (pt);
+            else
+                path->addLine (pt);
+        }
+        ctx->setLineWidth (3.0);
+        ctx->setFrameColor (lit > 0.02f ? theme::withAlpha (theme::kEnergyLive, (uint8_t)std::lround (70.0f + 185.0f * lit)) : theme::kLineDim);
+        ctx->drawGraphicsPath (path, CDrawContext::kPathStroked);
+        const double t = -a * kDeg;
+        const CPoint e (c.x + r * std::sin (t), c.y - r * std::cos (t));
+        text (ctx, names[l], CRect (e.x - 64, e.y - 7, e.x - 6, e.y + 5), theme::kTextDim, 8.5, kRightText);
+    }
+    ctx->restoreGlobalState ();
+}
+
+void StageView::drawScene (CDrawContext* ctx)
 {
     const CRect all = getViewSize ();
     const CRect f = field ();
@@ -300,6 +356,8 @@ void StageView::idle ()
     if (auto* s = controller->getShared ())
     {
         selfSlot = s->meters.slot.load (std::memory_order_relaxed);
+        for (int l = 0; l < kNumLanes; ++l)
+            laneDb[(size_t)l] = s->meters.lane[(size_t)l].load (std::memory_order_relaxed);
         for (int k = 0; k < kBands; ++k)
         {
             gains[(size_t)k] = s->meters.bandGain[(size_t)k].load (std::memory_order_relaxed);
@@ -341,14 +399,12 @@ void StageView::idle ()
         shown[i].number = (int)i + 1;
     // repainted when what it shows changed: the group, the bands' meters, a setting (it used to repaint
     // on every tick, also with nothing moving)
+    // (and the lanes' levels, in steps of 1.5 dB: a lane's arc brightens or dims in 20 steps)
     pk::LayerKey key;
-    key.params (host).add (drag);
-    for (const auto& m : shown)
-        key.add (m.id, m.self, m.role, m.width, m.space, m.number);
-    // (the bands' bars to a thousandth of their height, a small fraction of a pixel: the meters' noise
-    // floor jitters below that with the audio stopped)
-    for (int k = 0; k < kBands; ++k)
-        key.add (std::lround (1000.0f * std::clamp (gains[(size_t)k], 0.0f, 1.0f)), std::lround (1000.0f * std::clamp (yields[(size_t)k], 0.0f, 1.0f)));
+    key.add (sceneKey ());
+    if (host->plainValue (kCinema) > 0.0)
+        for (float d : laneDb)
+            key.add (std::lround (d / 1.5f));
     if (key.value () != shownKey)
     {
         shownKey = key.value ();

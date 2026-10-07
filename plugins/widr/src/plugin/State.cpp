@@ -26,10 +26,10 @@ bool writeState (IBStream* stream, const State& st)
 {
     IBStreamer s (stream, kLittleEndian);
     int32 present = 0;
-    for (uint32 id = 0; id < kNumParams; ++id)
+    for (uint32 id = 0; id < kNumPluginParams; ++id)
         present += st.has[id] ? 1 : 0;
     bool ok = s.writeInt32 (kMagic) && s.writeInt32 (kVersion) && s.writeInt32 (present);
-    for (uint32 id = 0; ok && id < kNumParams; ++id)
+    for (uint32 id = 0; ok && id < kNumPluginParams; ++id)
         if (st.has[id])
             ok = s.writeInt32u (id) && s.writeDouble (st.norm[id]);
     return ok;
@@ -42,7 +42,7 @@ bool readState (IBStream* stream, State& st)
     if (!s.readInt32 (magic) || magic != kMagic || !s.readInt32 (version) || version < 1 || !s.readInt32 (count) ||
         count < 0 || count > 100000)
         return false;
-    for (uint32 id = 0; id < kNumParams; ++id)
+    for (uint32 id = 0; id < kNumPluginParams; ++id)
     {
         st.norm[id] = defaultNormalized (id);
         st.has[id] = false;
@@ -53,7 +53,7 @@ bool readState (IBStream* stream, State& st)
         double v = 0.0;
         if (!s.readInt32u (id) || !s.readDouble (v))
             return false;
-        if (id < kNumParams)
+        if (id < kNumPluginParams)
         {
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;

@@ -31,7 +31,7 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
     State st;
     if (!readState (stream, st))
         return kResultFalse;
-    for (uint32_t id = 0; id < kNumParams; ++id)
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
         setParamNormalized (id, st.norm[id]);
     return kResultOk;
 }
@@ -59,6 +59,7 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                     shared->release ();
                 shared = m;
                 watchLatency (&shared->tailMeters.latency); // (the end saturator's moves with its Oversampling)
+                watchLatency (&shared->latency);            // (and the whole, with Cinema's lanes)
             }
         }
         return kResultOk;

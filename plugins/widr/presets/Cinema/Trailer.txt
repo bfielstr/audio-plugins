@@ -1,0 +1,10 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cinema, trailer, epic, wide, deep
+comment: A trailer sound: voice and drums dead centre, everything else pushed past the speakers, a deep sub and a big dark hall.
+Character = Epic
+Width = 150 %
+Cinema = 100 %
+Depth = 75 %
+Theatre = 55 %
+Tones Position = Beyond
+Tones Width = 90 %

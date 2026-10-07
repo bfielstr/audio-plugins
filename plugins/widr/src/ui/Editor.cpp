@@ -104,8 +104,24 @@ void Editor::buildUI (CFrame* f)
     bind (mp, new Toggle (CRect (184, 72, 282, 90), this, kMonoCheck, "Mono Check"));
     bind (mp, new Knob (knobAt (298, 28), this, kOutput, nullptr, true));
 
+    // the cinema stage: the element lanes (a Position and a Width each), Cinema, Depth and Theatre
+    auto* lanesPanel = new Panel (CRect (kLanesLeft, kLanesTop, 512, kLanesTop + 140), "LANES");
+    root->addView (lanesPanel);
+    static const char* laneNames[kNumLanes] = {"Voice", "Bass", "Hits", "Tones", "Ambience"};
+    for (int l = 0; l < kNumLanes; ++l)
+    {
+        const double x = 6 + l * kLaneColumn;
+        bind (lanesPanel, new Choice (CRect (x, 26, x + 88, 60), this, lanePosition (l), laneNames[l]));
+        bind (lanesPanel, new Knob (knobAt (x + 16, 68), this, laneWidth (l)));
+    }
+    auto* cp = new Panel (CRect (kCinemaLeft, kLanesTop, 752, kLanesTop + 140), "CINEMA");
+    root->addView (cp);
+    bind (cp, new Knob (CRect (12, 24, 92, 124), this, kCinema));
+    bind (cp, new Knob (knobAt (100, 36), this, kDepth));
+    bind (cp, new Knob (knobAt (166, 36), this, kTheatre));
+
     // the parallel levels: the input and what Widr adds
-    auto* lp = new Panel (CRect (8, 556, 752, 596), "");
+    auto* lp = new Panel (CRect (8, kLevelsTop, 752, kLevelsTop + 40), "");
     root->addView (lp);
     bind (lp, new pk::HSlider (CRect (12, 8, 364, 32), this, kDryLevel, "Dry"));
     bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
@@ -114,7 +130,7 @@ void Editor::buildUI (CFrame* f)
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
                                                     [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-    tail->add (root, layoutRegion ("tail", CRect (8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight)));
+    tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
@@ -179,15 +195,18 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the stage, the goniometer, the width over the levels, the space over the mix; the end saturator under them
+    // the stage, the goniometer, the width over the levels, the space over the mix; the end saturator under
+    // them, beside the cinema stage (the lanes over Cinema)
     s.panels = {
         {"stage", "stage", {8, 40, 560, 300}, 0},
         {"gonio", "goniometer", {568, 40, 752, 300}, 0},
         {"width", "", {8, 308, 752, 432}, 0, 0},
-        {"levels", "levels", {8, 556, 752, 596}, 0, 0},
+        {"levels", "levels", {8, kLevelsTop, 752, kLevelsTop + 40}, 0, 0},
         {"space", "", {8, 440, 376, 548}, 0, 1},
         {"mix", "", {384, 440, 752, 548}, 0, 1},
-        {"tail", "end of the chain", {8, 604, 752, 604 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"tail", "end of the chain", {8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"lanes", "", {kLanesLeft, kLanesTop, 512, kLanesTop + 140}, 1, 2},
+        {"cinema", "", {kCinemaLeft, kLanesTop, 752, kLanesTop + 140}, 1, 2},
     };
     return s;
 }

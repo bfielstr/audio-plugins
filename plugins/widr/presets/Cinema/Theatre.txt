@@ -1,0 +1,8 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cinema, theatre, hall, space
+comment: In the theatre: a long, dark hall around everything but the voice, with a deep low end.
+Character = Surround
+Cinema = 100 %
+Depth = 50 %
+Theatre = 90 %
+Ambience Width = 100 %
