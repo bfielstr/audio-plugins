@@ -226,9 +226,52 @@ ctest --test-dir build -C Release           # DSP tests (+ plug-in host tests on
   a test signal through each plug-in and times its editor's repaints with and without the cached display
   layers, checks both give the same pixels, and counts the repaints still asked for once the audio stops.
 
-Every push is built and tested on all three platforms by GitHub Actions; pushing a `v*` tag
-publishes a release and then runs the installers against it. The screenshots in `docs/<plug-in>/`
-come from the macOS host tests.
+## Developing
+
+```sh
+# once: Ninja, the draw benchmarks (Linux), and ccache when it is installed
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPK_DRAW_BENCH=ON \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+cmake --build build                                      # everything
+cmake --build build --target orbitr_tests Orbitr         # one plug-in: its DSP tests and its bundle
+ctest --test-dir build -R '^orbitr_' --output-on-failure # one plug-in's tests
+ctest --test-dir build -j 4 --output-on-failure          # everything, before a pull request
+```
+
+- **Targets** per plug-in (`orbitr` here): `orbitr_tests` (DSP tests), `orbitr_state_tests` (saved
+  state; ciphr, dropr, gentlr, moistr, smacheratr and smemplr), `Orbitr` (the bundle, checked by the
+  VST3 validator as it builds), `orbitr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
+  `orbitr_hosttest` (macOS). The tests are named `orbitr_core`, `orbitr_state`,
+  `orbitr_drawbench`, `orbitr_drawbench_layouts` and `orbitr_hosttest`.
+- **Tests in parallel.** `ctest -j` is safe: the tests that time the DSP against a CPU budget are
+  marked `RUN_SERIAL` and labelled `cpu` (`pk_cpu_test` in `cmake/PluginKit.cmake`), so ctest runs
+  them on their own. `ctest -L cpu` runs only those, `ctest -LE cpu` everything else.
+- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="orbitr;ciphr"` configures only those plug-ins (and the
+  libraries of the plug-ins they use, without their tests or bundles); empty builds all of them. Pull
+  requests on GitHub build this way (below).
+- **ccache** across worktrees: set `CCACHE_BASEDIR` to the checkout's folder (for example
+  `export CCACHE_BASEDIR="$PWD"`) so separate checkouts of the same sources share cache hits.
+
+## Continuous integration and releases
+
+Every push to main and every pull request is built and tested on macOS, Linux and Windows by GitHub
+Actions (`.github/workflows/build.yml`). A pull request builds and tests only the plug-ins it changes,
+with the plug-ins that use them (`scripts/ci-changed-plugins.py`); a change outside `plugins/<name>/`
+(`shared/`, `cmake/`, the root `CMakeLists.txt`, `.github/`, `installer/`, `scripts/`, ...) builds all
+of them. Pushes to main and releases always build everything. The screenshots in `docs/<plug-in>/` come
+from the macOS host tests.
+
+To release a version:
+
+1. In a pull request, raise the version in the root `CMakeLists.txt` (`project(AudioPlugins VERSION
+   x.y.z)`), in every `plugins/*/CMakeLists.txt` (`VERSION x.y.z.0`) and in the line "The current
+   version is" at the top of this README.
+2. Merge it. `.github/workflows/release-tag.yml` sees the higher version on main, checks that every
+   plug-in has it, tags the merge commit `vX.Y.Z` and starts the release build on the tag: universal
+   Mac binaries, the installers, the release with its zips and installers, then the installers tested
+   against it. An existing tag is never moved, and running it again does nothing.
+
+Pushing a `v*` tag by hand still works the same way.
 
 ## Layout
 
