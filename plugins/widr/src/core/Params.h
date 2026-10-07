@@ -68,4 +68,8 @@ inline double toPlain (uint32_t id, double n) { return pluginParamTable ().toPla
 inline double toNormalized (uint32_t id, double p) { return pluginParamTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return pluginParamTable ().defaultNormalized (id); }
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+
 } // namespace widr

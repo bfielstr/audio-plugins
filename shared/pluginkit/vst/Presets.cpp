@@ -1,5 +1,7 @@
 #include "Presets.h"
 
+#include "pluginkit/GentlrDefaults.h"
+
 #include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "public.sdk/source/vst/vstpresetfile.h"
@@ -131,6 +133,20 @@ bool applyDefault (AudioEffect& fx, const FUID& classId, const char* pluginName)
         return false;
     MemoryStream state (component.data (), (TSize)component.size ());
     return fx.setState (&state) == kResultOk;
+}
+
+bool applyDefault (AudioEffect& fx, const FUID& classId, const char* pluginName, const GentlrIds& ids,
+                   const std::function<void (uint32_t, double)>& set)
+{
+    const bool applied = applyDefault (fx, classId, pluginName);
+    if (pluginName && *pluginName && set)
+    {
+        // (the folder the controller's presetFolder () is, read without making it)
+        const std::string folder = (fs::path (suiteFolder ()) / pluginName).string ();
+        for (const auto& [id, n] : gentlrDefaultValues (ids, readGentlrDefaults (folder)))
+            set (id, n);
+    }
+    return applied;
 }
 
 bool handleProcessorMessage (AudioEffect& fx, IMessage* message)

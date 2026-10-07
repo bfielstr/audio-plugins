@@ -143,4 +143,8 @@ void upgradeToPerBandDrive (const std::function<bool (uint32_t, double&)>& get, 
 // is off, and Fade (1 .. 36 semitones then) keeps its semitones (12, the default then, where none was saved).
 void upgradeToSeparateSlopes (const std::function<bool (uint32_t, double&)>& get, const std::function<void (uint32_t, double)>& set);
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+
 } // namespace para

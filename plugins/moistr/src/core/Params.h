@@ -64,6 +64,15 @@ enum ParamId : uint32_t
     kShiftOn,   // Off / On (off by default: moistr as without it)
     kShift,     // Hz: -500 .. +500, up or down
     kShiftMix,  // 0 .. 1: the shifted bands against the unshifted ones
+    // --- added in 0.22 (append only): a second seed to blend with, more extreme movement, and a Low band
+    // that may come forward (and dip back only a little) ---
+    kSeedB,     // 1 .. 128: the second movement pattern
+    kSeedBlend, // 0 .. 1: Seed only (0) .. both overlapping (0.5) .. Seed B only (1)
+    kDensity,   // x0.25 .. x8: how many rises and falls per cycle
+    kLowPush,   // dB 0 .. 12: how far the Low band may rise above its Level on its own events (0: locked)
+    kLowDip,    // dB 0 .. 6: how far the Low band may fall below its Level (0: never)
+    kDropOut,   // Off / On: a full Depth falls to silence
+    kSpeed,     // x1 .. x16: divides every rise and fall time (down to about 1 ms)
     kNumParams
 };
 
@@ -78,7 +87,8 @@ static_assert (kMovement == 12 && kRate == 13 && kSync == 14 && kSyncRate == 15 
 static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64,
                "saved IDs: the end saturator's blocks at 26 .. 68");
 static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLevel == 72 && kAirMove == 73 && kRise == 74 &&
-                   kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kNumParams == 80,
+                   kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kSeedB == 80 && kSeedBlend == 81 &&
+                   kDensity == 82 && kLowPush == 83 && kLowDip == 84 && kDropOut == 85 && kSpeed == 86 && kNumParams == 87,
                "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79");
 
 enum Slope { kSlope12 = 0, kSlope24 };
@@ -99,5 +109,9 @@ const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
 
 } // namespace moistr

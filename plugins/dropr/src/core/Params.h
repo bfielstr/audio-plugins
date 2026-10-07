@@ -65,4 +65,8 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // the Negative Ratio's text: "1 : -x", "1 : -inf" at the maximum
 std::string negRatioText (double x);
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+
 } // namespace dropr

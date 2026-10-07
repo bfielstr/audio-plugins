@@ -124,4 +124,8 @@ inline double toNormalized (uint32_t id, double p) { return paramTable ().toNorm
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 inline std::string toText (uint32_t id, double p) { return paramTable ().toText (id, p); }
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the built-in saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kSatOn, kSatExtBase, kSatExt2Base);
+
 } // namespace multidyn

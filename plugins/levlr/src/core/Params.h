@@ -131,4 +131,8 @@ void migrateState (int version, double norm[kNumParams], const bool has[kNumPara
 // Bands' default is 4 (normalized 1), not 0 (1 band); the drives' defaults are normalized 0.
 constexpr uint32_t kFirstAddedAfter060 = kBandCount, kEndAddedAfter060 = kNumParams;
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
+inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+
 } // namespace levlr

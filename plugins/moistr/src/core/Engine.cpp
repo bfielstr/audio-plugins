@@ -14,6 +14,10 @@ constexpr uint32_t kLevelIds[kMaxBands] = {kLowLevel, kMidLevel, kHighLevel, kAi
 constexpr uint32_t kMoveIds[kMaxBands] = {kLowMove, kMidMove, kHighMove, kAirMove}; // ([0] unused: Low is locked)
 // the closest two crossovers come (octaves): a band is never narrower than this
 constexpr double kMinSpanOct = 1.0 / 3.0;
+// Drop Out: from this fall (dB) the floor's gain curves down to silence at kDropToDb
+constexpr double kDropFromDb = 30.0, kDropToDb = 48.0;
+constexpr double kSilentDb = -120.0; // (Drop Out: at or under this a band is silent)
+constexpr double kPatternFadeSec = 0.1; // changing Seed, Seed B or Density crossfades over this
 // glides x towards t by c, landing on it once close (so a still setting is exactly its value)
 inline void glide (double& x, double t, double c)
 {
@@ -53,7 +57,7 @@ Engine::Engine ()
     drive.maxDb = 18.0;
     for (auto& s : state)
         s.grit.maxDb = 24.0;
-    applyPattern ();
+    applyPattern (false);
 }
 
 void Engine::prepare (double sampleRate, int maxBlock)
@@ -70,11 +74,78 @@ void Engine::prepare (double sampleRate, int maxBlock)
     reset ();
 }
 
-void Engine::applyPattern ()
+void Engine::applyPattern (bool fade)
 {
     const int seed = std::clamp ((int)std::lround (p[kSeed]), kMinSeed, kMaxSeed);
-    for (int k = 0; k < kMaxPasses; ++k)
-        patterns[k] = makePattern (seed, k);
+    const int seedB = std::clamp ((int)std::lround (p[kSeedB]), kMinSeed, kMaxSeed);
+    const double density = std::clamp (p[kDensity], 0.25, 8.0);
+    if (seed == cur.seed && seedB == cur.seedB && density == cur.density)
+        return;
+    if (fade && running)
+    {
+        // the patterns now fade out. Already crossfading: the side with the larger weight now fades out from
+        // that weight (the other is dropped: at most half a step, then the gains' smoothing)
+        if (xfade >= 1.0)
+        {
+            old = cur;
+            xfade = 0.0;
+        }
+        else if (xfade >= 0.5)
+        {
+            old = cur;
+            xfade = 1.0 - xfade;
+        }
+    }
+    else
+        xfade = 1.0;
+    if (seed != cur.seed || seedB != cur.seedB)
+        for (int k = 0; k < kMaxPasses; ++k)
+        {
+            cur.a[k] = makePattern (seed, k);
+            cur.b[k] = makePattern (seedB, k, seed); // (Seed's Low crossover: the low end stays put)
+        }
+    cur.seed = seed;
+    cur.seedB = seedB;
+    cur.density = density;
+}
+
+double Engine::setLift (const PatternSet& ps, int pass, int band, double th, bool dips) const
+{
+    auto one = [&] (const Pattern& pat) {
+        const BandMotion& m = pat.band[band];
+        return m.lift (th, secPerCycle, std::max (m.rise * riseScale, kMinRampSec), std::max (m.fall * fallScale, kMinRampSec),
+                       ps.density, dips ? pat.lowDipMask : m.mask);
+    };
+    if (blend <= 0.0)
+        return one (ps.a[pass]);
+    if (blend >= 1.0)
+        return one (ps.b[pass]);
+    return blendLifts (one (ps.a[pass]), one (ps.b[pass]), blend);
+}
+
+double Engine::liftAt (int pass, int band, double th, bool dips) const
+{
+    const double now = setLift (cur, pass, band, th, dips);
+    if (xfade >= 1.0)
+        return now;
+    const double was = setLift (old, pass, band, th, dips), w = 0.5 - 0.5 * std::cos (dsp::kPi * xfade);
+    return was + (now - was) * w;
+}
+
+double Engine::driftAt (int pass, int x, double th) const
+{
+    auto one = [&] (const PatternSet& ps) {
+        const double a = ps.a[pass].drift[x].value (th);
+        if (blend <= 0.0)
+            return a;
+        const double c = ps.b[pass].drift[x].value (th);
+        return blend >= 1.0 ? c : a + (c - a) * blend;
+    };
+    const double now = one (cur);
+    if (xfade >= 1.0)
+        return now;
+    const double was = one (old), w = 0.5 - 0.5 * std::cos (dsp::kPi * xfade);
+    return was + (now - was) * w;
 }
 
 double Engine::cycleSeconds () const
@@ -87,7 +158,7 @@ double Engine::cycleSeconds () const
 void Engine::reset ()
 {
     // every smoothed setting at its value
-    logX[0] = std::log2 (patterns[0].lowXover);
+    logX[0] = std::log2 (cur.a[0].lowXover);
     logX[1] = std::log2 (std::max (p[kXoverMid], 1.0));
     logX[2] = std::log2 (std::max (p[kXoverHigh], 1.0));
     for (int b = 0; b < kMaxBands; ++b)
@@ -99,6 +170,13 @@ void Engine::reset ()
     depth = std::max (0.0, p[kDepth]);
     logRise = std::log2 (std::clamp (p[kRise], 0.01, 100.0));
     logFall = std::log2 (std::clamp (p[kFall], 0.01, 100.0));
+    blend = std::clamp (p[kSeedBlend], 0.0, 1.0);
+    logSpeed = std::log2 (std::clamp (p[kSpeed], 1.0, 16.0));
+    lowPush = std::clamp (p[kLowPush], 0.0, 12.0);
+    lowDip = std::clamp (p[kLowDip], 0.0, 6.0);
+    dropOut = p[kDropOut] >= 0.5 ? 1.0 : 0.0;
+    xfade = 1.0;
+    running = false;
     airOwn = bandCount () == 4 ? 1.0 : 0.0;
     shiftHz = shiftHzPrev = std::clamp (p[kShift], -2000.0, 2000.0);
     shiftMix = shiftMixPrev = std::clamp (p[kShiftMix], 0.0, 1.0);
@@ -126,7 +204,11 @@ void Engine::setParam (uint32_t id, double plain)
 {
     if (id >= kNumParams)
         return;
+    if ((id == kDensity || id == kSpeed) && std::fabs (plain - 1.0) < 1e-6)
+        plain = 1.0; // (x1 exactly: the default from a normalized value, so the movement is 0.21's bit for bit)
     p[id] = plain;
+    if (id == kSeedB || id == kDensity)
+        applyPattern (true);
     if (id >= kBandCount)
         return; // (the split's: read where they are used)
     if (id >= kTailExt4Base)
@@ -151,7 +233,7 @@ void Engine::setParam (uint32_t id, double plain)
                 for (auto& s : state)
                     s.grit.setAmount (plain);
                 break;
-            case kSeed: applyPattern (); break;
+            case kSeed: applyPattern (true); break;
             default: break; // (the rest are read where they are used; the 0.18 filters' are not used)
         }
 }
@@ -166,14 +248,13 @@ void Engine::setTransport (double tempo, double ppq, bool isPlaying)
 
 void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
 {
-    const Pattern& pat = patterns[pass];
     PassState& s = state[pass];
     // the corners: Low X locked, the upper two drifting with Movement, each at least kMinSpanOct apart
     const double fMax = 0.45 * sr, span = std::exp2 (kMinSpanOct);
     double f[kMaxXovers];
     f[0] = std::min (std::exp2 (logX[0]), fMax / (span * span));
-    f[1] = std::exp2 (logX[1] + (move > 0.0 ? move * kXoverDriftOctaves * pat.drift[1].value (th) : 0.0));
-    f[2] = std::exp2 (logX[2] + (move > 0.0 ? move * kXoverDriftOctaves * pat.drift[2].value (th) : 0.0));
+    f[1] = std::exp2 (logX[1] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 1, th) : 0.0));
+    f[2] = std::exp2 (logX[2] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 2, th) : 0.0));
     f[1] = std::clamp (f[1], f[0] * span, fMax / span);
     f[2] = std::clamp (f[2], f[1] * span, fMax);
     for (int x = 0; x < kMaxXovers; ++x)
@@ -181,23 +262,43 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
         g[x] = std::tan (dsp::kPi * f[x] / sr);
         s.xoverHz[x] = f[x];
     }
-    // the bands: Low at its Level; the others between their floor and their Level
-    const double riseScale = std::exp2 (logRise), fallScale = std::exp2 (logFall);
+    // the bands: Low at its Level (pushed up and dipped by its own events with Low Push / Low Dip); the
+    // others between their floor and their Level
+    const double speed = std::exp2 (logSpeed);
+    riseScale = std::exp2 (logRise) / speed;
+    fallScale = std::exp2 (logFall) / speed;
     for (int b = 0; b < kMaxBands; ++b)
     {
         double db = levelDb[b], lift = 1.0;
-        const double drop = b == kBandLow ? 0.0 : depth * move * share[b];
-        if (drop > 0.0)
+        if (b == kBandLow)
         {
-            const BandMotion& m = pat.band[b];
-            lift = m.lift (th, secPerCycle, m.rise * riseScale, m.fall * fallScale);
-            db -= drop * (1.0 - lift);
+            const double up = move * lowPush, down = move * lowDip;
+            if (up > 0.0)
+                db += up * liftAt (pass, b, th, false);
+            if (down > 0.0)
+                db -= down * liftAt (pass, b, th, true);
+        }
+        else
+        {
+            const double drop = depth * move * share[b];
+            if (drop > 0.0)
+            {
+                lift = liftAt (pass, b, th, false);
+                db -= drop * (1.0 - lift);
+                if (dropOut > 0.0 && drop > kDropFromDb)
+                {
+                    // Drop Out: the floor's gain x (1 - cut), the cut rising smoothly to 1 at 48 dB
+                    const double t = std::min ((drop - kDropFromDb) / (kDropToDb - kDropFromDb), 1.0);
+                    const double keep = 1.0 - dropOut * t * t * (3.0 - 2.0 * t) * (1.0 - lift);
+                    db += keep > 1e-6 ? 20.0 * std::log10 (keep) : kSilentDb;
+                }
+            }
         }
         if (snap)
             s.dbNow[b] = db;
         else
             glide (s.dbNow[b], db, gainSmooth);
-        const bool off = p[kLevelIds[b]] <= kLevelOffDb && levelDb[b] <= kOffTarget + 1.0;
+        const bool off = (p[kLevelIds[b]] <= kLevelOffDb && levelDb[b] <= kOffTarget + 1.0) || (dropOut > 0.0 && s.dbNow[b] <= kSilentDb);
         gain[b] = off ? 0.0 : std::pow (10.0, s.dbNow[b] / 20.0);
         s.lift[b] = lift;
     }
@@ -285,6 +386,7 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
     const pk::NoDenormals guard;
+    running = true;
     const bool sync = p[kSync] >= 0.5;
     const double beats = kSyncBeats[std::clamp ((int)std::lround (p[kSyncRate]), 0, kNumSyncRates - 1)];
     const double rate = p[kRate];
@@ -308,7 +410,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const bool shiftOn = p[kShiftOn] >= 0.5;
     const double fadeStep = (double)kTick / (0.02 * sr);
     double targetLogX[kMaxXovers], targetDb[kMaxBands], targetShare[kMaxBands];
-    targetLogX[0] = std::log2 (patterns[0].lowXover);
+    targetLogX[0] = std::log2 (cur.a[0].lowXover);
     targetLogX[1] = std::log2 (std::max (p[kXoverMid], 1.0));
     targetLogX[2] = std::log2 (std::max (p[kXoverHigh], 1.0));
     for (int b = 0; b < kMaxBands; ++b)
@@ -346,6 +448,13 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (depth, std::max (0.0, p[kDepth]), tickSmooth);
         glide (logRise, targetRise, tickSmooth);
         glide (logFall, targetFall, tickSmooth);
+        glide (blend, std::clamp (p[kSeedBlend], 0.0, 1.0), tickSmooth);
+        glide (logSpeed, std::log2 (std::clamp (p[kSpeed], 1.0, 16.0)), tickSmooth);
+        glide (lowPush, std::clamp (p[kLowPush], 0.0, 12.0), tickSmooth);
+        glide (lowDip, std::clamp (p[kLowDip], 0.0, 6.0), tickSmooth);
+        dropOut = std::clamp (dropOut + (p[kDropOut] >= 0.5 ? fadeStep : -fadeStep), 0.0, 1.0);
+        if (xfade < 1.0)
+            xfade = std::min (1.0, xfade + (double)m / (kPatternFadeSec * sr));
         // switching Bands fades Air between following High and its own gain over 20 ms
         airOwn = std::clamp (airOwn + (fourBands ? fadeStep : -fadeStep), 0.0, 1.0);
         // the shifter: Shift and Shift Mix glide, switching it fades over 20 ms

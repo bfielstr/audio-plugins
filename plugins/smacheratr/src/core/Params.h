@@ -2,6 +2,7 @@
 #pragma once
 
 #include "pluginkit/ParamTable.h"
+#include "pluginkit/TailParams.h"
 
 #include <algorithm>
 #include <cmath>
@@ -214,5 +215,9 @@ inline double clarityFreqFromNarrowRange (double oldNorm)
 {
     return toNormalized (kClarityFreq, 20.0 * std::pow (25.0, std::clamp (oldNorm, 0.0, 1.0)));
 }
+
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: its own Gentlr and Advanced (no end saturator: Smacheratr is the saturator)
+inline constexpr pk::GentlrIds kGentlrIds = pk::GentlrIds {-1, (int32_t)kClarity, (int32_t)kClarityAdvanced};
 
 } // namespace smacheratr

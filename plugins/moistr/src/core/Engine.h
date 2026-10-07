@@ -15,11 +15,22 @@
 // it on or off fades over 20 ms; while off it is not run at all (the output is the engine's without it).
 //
 // The Low band's crossover is picked by the Seed (100 .. 500 Hz) and never moves; the Low band's level is
-// its Level, always. Mid, High and Air rise from (Level - Depth x Movement x their Move) to their Level and
+// its Level (with Low Push and Low Dip at 0, the default). Mid, High and Air rise from (Level - Depth x Movement x their Move) to their Level and
 // fall back at the seeded moments, with seeded rise and fall times (x Rise, x Fall); the upper crossovers
 // drift a little with Movement (Movement.h). At Movement 0 a pass is exactly the static split. The bands
 // sum flat when they are at the same gain (an all-pass of the input). Switching between 3 and 4 bands
 // fades the Air band from following High to its own gain over 20 ms (the split always has four bands).
+//
+// 0.22, all off by default (the engine is then 0.21's, bit for bit):
+//   Low Push / Low Dip  the Low band's own seeded events push it up to Low Push dB above its Level and dip it
+//                       at most Low Dip dB (6 dB at most) below, scaled by Movement. Its crossover stays put.
+//   Seed B / Seed Blend a second pattern (with Seed's Low crossover); Blend crossfades Seed's (0) and Seed B's
+//                       (1) lifts, overlapping in between (blendLifts: at 0.5 a band is up when either is up).
+//                       Changing Seed, Seed B or Density crossfades the old patterns into the new over 100 ms.
+//   Density             x0.25 .. x8 the steps per cycle (the events)
+//   Speed               divides every rise and fall time (down to 1 ms)
+//   Drop Out            the floor of a moving band falls to silence as its fall (Depth x Movement x Move)
+//                       nears 48 dB: from kDropFromDb a smooth curve takes the floor's gain to 0 at 48 dB.
 //
 // The second pass runs the first one's result through the split again with a movement of its own (the
 // same Low crossover), as if it were bounced and split once more. While the host plays, the movement
@@ -34,6 +45,7 @@
 
 #include "smacheratr/src/core/Tail.h"
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -96,12 +108,17 @@ public:
     double xoverHz (int pass, int i) const { return state[pass].xoverHz[i]; }      // Hz, with the drift
     double bandGainDb (int pass, int band) const { return state[pass].gainDb[band]; } // dB, with the movement
     double bandLift (int pass, int band) const { return state[pass].lift[band]; }    // 0 .. 1
-    // a moving band's rise and fall times (seconds): the seeded ones x Rise / Fall
-    double riseSeconds (int pass, int band) const { return patterns[pass].band[band].rise * p[kRise]; }
-    double fallSeconds (int pass, int band) const { return patterns[pass].band[band].fall * p[kFall]; }
+    // a band's rise and fall times (seconds): the seeded ones x Rise / Fall / Speed (at least kMinRampSec)
+    double riseSeconds (int pass, int band) const { return std::max (cur.a[pass].band[band].rise * p[kRise] / p[kSpeed], kMinRampSec); }
+    double fallSeconds (int pass, int band) const { return std::max (cur.a[pass].band[band].fall * p[kFall] / p[kSpeed], kMinRampSec); }
     double phase () const { return theta; }
     double glueReductionDb () const { return state[0].glue.gainReductionDb (); }
-    const Pattern& pattern (int pass) const { return patterns[pass]; }
+    const Pattern& pattern (int pass) const { return cur.a[pass]; }   // Seed's
+    const Pattern& patternB (int pass) const { return cur.b[pass]; }  // Seed B's (Seed's Low crossover)
+    bool crossfading () const { return xfade < 1.0; }                  // from the old Seed / Seed B / Density
+    // a band's lift (0 .. 1) at phase th as the engine has it now (Seed Blend, the crossfade, Density, Speed);
+    // dips: the Low band's dips instead of its pushes
+    double liftAt (int pass, int band, double th, bool dips = false) const;
     double shiftNow () const { return shiftHz; }       // Hz, gliding to Shift
     double shiftAmount () const { return shiftFade; } // 0 (off, not run) .. 1 (on)
 
@@ -121,7 +138,16 @@ private:
         void resetFilters ();
         void resetShifter ();
     };
-    void applyPattern ();
+    // the patterns of Seed and Seed B (both passes) at a Density
+    struct PatternSet
+    {
+        Pattern a[kMaxPasses], b[kMaxPasses];
+        int seed = 0, seedB = 0;
+        double density = 1.0;
+    };
+    void applyPattern (bool fade); // (fade: crossfade from the patterns now, while running)
+    double setLift (const PatternSet& ps, int pass, int band, double th, bool dips) const;
+    double driftAt (int pass, int x, double th) const;
     double cycleSeconds () const; // a movement cycle's length now (Rate, or Sync Rate at the tempo)
     // the targets at theta th for a pass: g per corner and gain per band (snap: no smoothing)
     void targets (int pass, double th, double* g, double* gain, bool snap);
@@ -129,12 +155,16 @@ private:
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
-    Pattern patterns[kMaxPasses];
+    PatternSet cur, old;  // old: fading out while xfade < 1
+    double xfade = 1.0;   // 0 .. 1 over 100 ms (the new patterns' weight: raised cosine)
+    bool running = false; // processed since the last reset (a pattern change crossfades)
     PassState state[kMaxPasses];
     dsp::Saturator drive;
     // smoothed settings (per tick)
     double logX[kMaxXovers] {}, levelDb[kMaxBands] {}, share[kMaxBands] {};
     double move = 0.0, depth = 0.0, logRise = 0.0, logFall = 0.0;
+    double blend = 0.0, logSpeed = 0.0, lowPush = 0.0, lowDip = 0.0, dropOut = 0.0; // (0.22; Drop Out fades over 20 ms)
+    double riseScale = 1.0, fallScale = 1.0; // this tick's Rise / Speed, Fall / Speed
     double airOwn = 0.0; // 0: Air follows High (3 bands) .. 1: Air at its own gain (4 bands)
     // the shifter: Shift (Hz) and Shift Mix gliding, and its fade in (0: off, not run) at the tick's start and end
     double shiftHz = 0.0, shiftHzPrev = 0.0, shiftMix = 1.0, shiftMixPrev = 1.0, shiftFade = 0.0, shiftFadePrev = 0.0;

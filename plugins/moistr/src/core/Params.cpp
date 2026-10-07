@@ -63,6 +63,14 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kShiftOn, "Shift On", "Shift", false));
         v.push_back (real (kShift, "Shift", "Shift", -500.0, 500.0, 0.0, Curve::Linear, Disp::Hz));
         v.push_back (percent (kShiftMix, "Shift Mix", "Shift Mix", 1.0));
+        // the second seed, more extreme movement, the Low band's push and dip (0.22)
+        v.push_back (integer (kSeedB, "Seed B", "Seed B", kMinSeed, kMaxSeed, 2, Disp::Plain));
+        v.push_back (percent (kSeedBlend, "Seed Blend", "Blend", 0.0));
+        v.push_back (real (kDensity, "Density", "Density", 0.25, 8.0, 1.0, Curve::Log, Disp::Plain));
+        v.push_back (real (kLowPush, "Low Push", "Push", 0.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kLowDip, "Low Dip", "Dip", 0.0, 6.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kDropOut, "Drop Out", "Drop Out", false));
+        v.push_back (real (kSpeed, "Speed", "Speed", 1.0, 16.0, 1.0, Curve::Log, Disp::Plain));
         return v;
     }());
     return t;

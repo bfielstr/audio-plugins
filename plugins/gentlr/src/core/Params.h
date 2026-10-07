@@ -171,4 +171,8 @@ static_assert (kTailExt3Base == 59 && kSlope == 65, "the end saturator's fourth 
 static_assert (kGlue12 == 66 && kGlue2High == 70 && kTailExt4Base == 71 && kNumParams == 76,
                "the glue switches 66 - 70, the end saturator's fifth block 71 - 75: 76 parameters");
 
+// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
+// Default set in a new instance: its own Advanced only (it is Gentlr: no Gentlr switch)
+inline constexpr pk::GentlrIds kGentlrIds = pk::GentlrIds {-1, -1, (int32_t)kAdvanced};
+
 } // namespace gentlr

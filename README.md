@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.21.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.22.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -64,6 +64,9 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.21.0**
 - **Presets** in the header of every plug-in: **Init** (every control at its default) always at the
   top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
   as Default** so a new instance starts the way you like it (see below).
+- **Defaults** in every plug-in's **Menu** (all but smemplr): **Gentlr On by Default** and **Advanced
+  On by Default** decide whether gentlr, and its Advanced mode, are on in a new instance (see
+  [Defaults for new instances](#defaults-for-new-instances)).
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr and locus was called lowfocus until 0.5.0. gentlr was called
@@ -121,7 +124,7 @@ installed versions. Copies that older installers put directly in the VST3 folder
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
-`SIMPLR_VERSION=v0.21.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
+`SIMPLR_VERSION=v0.22.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
 
@@ -166,6 +169,30 @@ They live in
 
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
+
+## Defaults for new instances
+
+Every plug-in except smemplr has a **Defaults** sub-menu in its **Menu**, after **Layout**, with two
+items you can check:
+
+- **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end. gentlr is
+  not heard while smacheratr at the end is off (as it is in a new instance of most plug-ins), so this
+  switches smacheratr at the end on too, with its other controls as they would be (by default Drive
+  0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %). Unchecked, a new instance starts with gentlr
+  off and smacheratr at the end as it would be.
+- **Advanced On by Default**: a new instance starts with gentlr's **Advanced** mode on (unchecked: off).
+
+In smacheratr they set its own **Gentlr** and **Advanced**. gentlr has only **Advanced On by
+Default**, for its own **Advanced**, which is already on in a new gentlr: uncheck it to have new
+instances start with Advanced off.
+
+Until you pick one, it shows the plug-in's factory default and changes nothing. A pick is saved at once
+in the hidden file `.defaults.txt` in the plug-in's preset folder (beside the saved default), so it
+lasts after you close the host and applies to every new instance of that plug-in. It applies only when
+you insert a new instance: the instance you pick it in keeps its settings, a project you open loads
+exactly as it was saved, and a preset, **Init** or **Load Default** loads exactly its own settings.
+With a saved default (**Save as Default**), a new instance starts from it and then gets these two on
+top, since you set them yourself. Delete `.defaults.txt` to go back to how the plug-in started before.
 
 ## Layouts
 

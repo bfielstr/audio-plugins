@@ -41,7 +41,8 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
     addAudioInput (STR16 ("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
     addEventInput (STR16 ("Event In"), 1); // the notes the filters track
-    pk::presets::applyDefault (*this, kProcessorUID, "Para"); // Save as Default (a project's setState comes after)
+    // Save as Default, then Menu > Defaults (a project's setState comes after)
+    pk::presets::applyDefault (*this, kProcessorUID, "Para", kGentlrIds, [this] (uint32_t id, double n) { normMirror[id].store (n); });
     return kResultOk;
 }
 

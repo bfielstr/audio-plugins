@@ -1,0 +1,11 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: neuro, full, movement
+comment: Two patterns at once (Seed 23 and Seed B 64, Blend 50 %): a band is up whenever either has it up, for a fuller, louder movement.
+Movement = 80 %
+Depth = 30 dB
+Mid Move = 70 %
+Seed = 23
+Seed B = 64
+Seed Blend = 50 %
+Glue = 50 %
+Grit = 25 %

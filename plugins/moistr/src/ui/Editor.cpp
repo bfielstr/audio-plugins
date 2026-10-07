@@ -154,6 +154,27 @@ void Editor::buildUI (CFrame* f)
         (i == 1 ? shiftKnob : shiftMixKnob) = k;
     }
 
+    // the second pattern: Seed B and how the two blend
+    auto* seedB = new Panel (CRect (kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH), "SEED B");
+    root->addView (seedB);
+    seedBKnob = knobs (seedB, kSeedBRight - kSeedBLeft, {{kSeedB}, {kSeedBlend}})[0];
+
+    // the Low band: how far it comes forward (Push) and dips back (Dip) on its own events
+    auto* low = new Panel (CRect (kLowLeft, kRow3, kLowRight, kRow3 + kRowH), "LOW");
+    root->addView (low);
+    knobs (low, kLowRight - kLowLeft, {{kLowPush}, {kLowDip}});
+
+    // more extreme movement: falls to silence, more events, faster ramps (a switch and two knobs, centred)
+    auto* extreme = new Panel (CRect (kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH), "EXTREME");
+    root->addView (extreme);
+    const double ex = centredSwitchLeft (kExtremeRight - kExtremeLeft, 2);
+    bind (extreme, new Toggle (CRect (ex, kSwitchTop, ex + kSwitchW, kSwitchTop + kSwitchH), this, kDropOut, "Drop Out"));
+    for (int i = 0; i < 2; ++i)
+    {
+        const double x = ex + kKnobBeside - kSwitchLeft + kKnobStep * i;
+        bind (extreme, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, i == 0 ? kDensity : kSpeed));
+    }
+
     // the output: Mix and Output
     auto* out = new Panel (CRect (kOutLeft, kRow2, kOutRight, kRow2 + kRowH), "OUTPUT");
     root->addView (out);
@@ -180,6 +201,8 @@ void Editor::updateLooks ()
     for (Knob* k : {shiftKnob, shiftMixKnob})
         if (k)
             k->setEnabledLook (shifting);
+    if (seedBKnob)
+        seedBKnob->setEnabledLook (plainValue (kSeedBlend) > 0.0);
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -187,7 +210,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id == kBandCount || id == kShiftOn)
+    if (id == kBandCount || id == kShiftOn || id == kSeedBlend)
         updateLooks ();
     if (display && BandView::shows (id))
     {
@@ -241,8 +264,9 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the display, then columns of two panels (split over movement, levels over band move, shift
-    // over rise / fall, glue over the output); the end saturator in a row of its own under them
+    // Wide: the display, then columns of two panels (split over movement, levels over band move, shift over
+    // rise / fall, glue over the output); a row of the 0.22 panels (seed b, low, extreme) under them, and the
+    // end saturator in a row of its own at the bottom
     s.panels = {
         {"display", "bands", {d.left, d.top, d.right, d.bottom}, 0},
         {"split", "", {kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH}, 0, 0},
@@ -253,7 +277,10 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"risefall", "", {kShapeLeft, kRow2, kShapeRight, kRow2 + kRowH}, 0, 2},
         {"glue", "", {kGlueLeft, kRow1, kGlueRight, kRow1 + kRowH}, 0, 3},
         {"output", "", {kOutLeft, kRow2, kOutRight, kRow2 + kRowH}, 0, 3},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"seedb", "", {kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH}, 1},
+        {"low", "", {kLowLeft, kRow3, kLowRight, kRow3 + kRowH}, 1},
+        {"extreme", "", {kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH}, 1},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 2, -1, true},
     };
     return s;
 }

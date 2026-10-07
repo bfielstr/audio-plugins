@@ -101,7 +101,10 @@ bool BandView::shows (uint32_t id)
         case kAirMove:
         case kSeed:
         case kShiftOn:
-        case kShift: return true;
+        case kShift:
+        case kLowPush:
+        case kLowDip:
+        case kDropOut: return true;
         default: return false;
     }
 }
@@ -115,7 +118,7 @@ BandSnapshot BandView::snapshot (const Meters* m, pk::ParamHost* host)
     BandSnapshot s;
     auto plain = [host] (uint32_t id) { return host->plainValue (id); };
     s.bands = std::lround (plain (kBandCount)) == kBands4 ? 4 : 3;
-    s.lowLocked = true; // (the Low band never moves)
+    s.lowLocked = plain (kLowPush) <= 0.0 && plain (kLowDip) <= 0.0; // (else its own events move it)
     s.xover[0] = estimatedLowXover ((int)std::lround (plain (kSeed)));
     s.lowKnown = false;
     s.xover[1] = plain (kXoverMid);
@@ -132,7 +135,7 @@ BandSnapshot BandView::snapshot (const Meters* m, pk::ParamHost* host)
         {
             for (int x = 1; x < 3; ++x)
                 s.xover[x] = std::round (m->xover[0][(size_t)x].load (rx));
-            for (int b = 1; b < BandSnapshot::kMax; ++b) // (the Low band is locked: its Level)
+            for (int b = s.lowLocked ? 1 : 0; b < BandSnapshot::kMax; ++b) // (a locked Low band: its Level)
             {
                 const float g = m->gainDb[0][(size_t)b].load (rx);
                 s.gainDb[b] = g <= -99.0f ? kLevelOffDb : std::round ((double)g * 10.0) / 10.0;
@@ -220,10 +223,11 @@ void BandView::paintBase (CDrawContext* ctx)
               8.5, kRightText);
     }
 
-    // the Low band: locked, a solid fill up to its Level
+    // the Low band: locked, a solid fill up to its Level; with Low Push / Low Dip its Level (a line) and how
+    // far it comes forward and dips back (dashed), the band itself drawn live (it moves). Low X never moves.
     const double xLow = xOf (snap.xover[0]);
     const double lowDb = host->plainValue (kLowLevel);
-    if (lowDb > kLevelOffDb)
+    if (lowDb > kLevelOffDb && snap.lowLocked)
     {
         ctx->setFillColor (theme::withAlpha (theme::kCopper, 110));
         ctx->drawRect (CRect (p.left, yOf (lowDb), xLow, p.bottom), kDrawFilled);
@@ -232,11 +236,28 @@ void BandView::paintBase (CDrawContext* ctx)
         ctx->drawLine (CPoint (p.left, yOf (lowDb)), CPoint (xLow, yOf (lowDb)));
         ctx->setLineWidth (1.0);
     }
+    else if (lowDb > kLevelOffDb)
+    {
+        const double mv = host->plainValue (kMovement);
+        ctx->setFrameColor (theme::kCopper);
+        ctx->drawLine (CPoint (p.left + 2.0, std::round (yOf (lowDb)) + 0.5), CPoint (xLow - 2.0, std::round (yOf (lowDb)) + 0.5));
+        ctx->setFrameColor (theme::kLineDim);
+        ctx->setLineStyle (theme::dashed ());
+        for (double edge : {lowDb + host->plainValue (kLowPush) * mv, lowDb - host->plainValue (kLowDip) * mv})
+            if (std::fabs (edge - lowDb) > 0.05)
+            {
+                const double y = std::round (yOf (edge)) + 0.5;
+                ctx->drawLine (CPoint (p.left + 2.0, y), CPoint (xLow - 2.0, y));
+            }
+        ctx->setLineStyle (kLineSolid);
+    }
     ctx->setFrameColor (theme::kCopperPale);
     ctx->drawLine (CPoint (std::round (xLow) + 0.5, p.top), CPoint (std::round (xLow) + 0.5, p.bottom));
-    lockGlyph (ctx, p.left + 6.0, p.top + 9.0, theme::kCopperPale);
+    const double lowTextX = snap.lowLocked ? p.left + 20.0 : p.left + 6.0;
+    if (snap.lowLocked)
+        lockGlyph (ctx, p.left + 6.0, p.top + 9.0, theme::kCopperPale);
     text (ctx, snap.lowKnown ? "LOW X " + hzText (snap.xover[0]) : "LOW X 100-500 Hz",
-          CRect (p.left + 20.0, p.top + 3.0, p.left + 160.0, p.top + 17.0), theme::kCopperPale, 9.5, kLeftText, true);
+          CRect (lowTextX, p.top + 3.0, lowTextX + 140.0, p.top + 17.0), theme::kCopperPale, 9.5, kLeftText, true);
 
     // the upper crossovers as set (dashed: the live ones are drawn over them)
     ctx->setFrameColor (theme::kLineDim);
@@ -252,6 +273,7 @@ void BandView::paintBase (CDrawContext* ctx)
     // Movement and its Move), between its set crossovers
     const double depth = host->plainValue (kDepth) * host->plainValue (kMovement);
     const bool shiftOn = host->plainValue (kShiftOn) >= 0.5;
+    const bool dropOut = host->plainValue (kDropOut) >= 0.5;
     char shiftText[32];
     std::snprintf (shiftText, sizeof (shiftText), "%+.0f Hz", host->plainValue (kShift));
     for (int b = 1; b < bands; ++b)
@@ -269,7 +291,14 @@ void BandView::paintBase (CDrawContext* ctx)
             {
                 ctx->setFrameColor (theme::kLineDim);
                 ctx->setLineStyle (theme::dashed ());
-                const double y = std::round (yOf (lvl - fall)) + 0.5;
+                // (Drop Out: from a 30 dB fall the floor curves down to silence at 48 dB, the display's bottom)
+                double floorDb = lvl - fall;
+                if (dropOut && fall > 30.0)
+                {
+                    const double t = std::min ((fall - 30.0) / 18.0, 1.0), keep = 1.0 - t * t * (3.0 - 2.0 * t);
+                    floorDb = keep > 1e-6 ? floorDb + 20.0 * std::log10 (keep) : kDbMin;
+                }
+                const double y = std::round (yOf (floorDb)) + 0.5;
                 ctx->drawLine (CPoint (x0, y), CPoint (x1, y));
                 ctx->setLineStyle (kLineSolid);
             }
@@ -292,13 +321,24 @@ void BandView::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     pk::LayerKey key;
     for (uint32_t id : {kBandCount, kXoverMid, kXoverHigh, kLowLevel, kMidLevel, kHighLevel, kAirLevel, kDepth, kMovement, kMidMove,
-                        kHighMove, kAirMove, kShiftOn, kShift})
+                        kHighMove, kAirMove, kShiftOn, kShift, kLowPush, kLowDip, kDropOut})
         key.add (host->plainValue (id));
     key.add (snap.xover[0], snap.lowKnown, snap.bands);
     baseLayer.draw (ctx, all, key, [this] (CDrawContext* c) { paintBase (c); });
 
     ctx->setClipRect (all);
     const CRect p = plot ();
+    // the Low band when it moves (Low Push / Low Dip): filled up to its level now
+    if (!snap.lowLocked && snap.gainDb[0] > kLevelOffDb)
+    {
+        const double x1 = xOf (snap.xover[0]) - 1.0, y = yOf (snap.gainDb[0]);
+        ctx->setFillColor (theme::withAlpha (theme::kCopper, snap.active ? 120 : 90));
+        ctx->drawRect (CRect (p.left, y, x1, p.bottom), kDrawFilled);
+        ctx->setFrameColor (snap.active ? theme::kEnergyLive : theme::kCopperPale);
+        ctx->setLineWidth (snap.active ? 2.0 : 1.5);
+        ctx->drawLine (CPoint (p.left, y), CPoint (x1, y));
+        ctx->setLineWidth (1.0);
+    }
     // the moving bands, each filled up to its level now
     for (int b = 1; b < snap.bands; ++b)
     {

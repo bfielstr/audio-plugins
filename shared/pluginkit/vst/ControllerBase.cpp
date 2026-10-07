@@ -581,6 +581,16 @@ void ControllerBase::applyStartupDefault ()
         if (!layout::templateName (uiLayout).empty ())
             uiLayoutName = layout::templateName (uiLayout);
     }
+    applyDefaultPreset ();
+    // then the Gentlr defaults (Menu > Defaults), over the default preset's values: the user asked for them
+    // explicitly. (No host is connected yet: the processor applies the same in its initialize.)
+    for (const auto& [id, n] : gentlrDefaultValues (gentlr, gentlrDefaults ()))
+        if (id < tableRef.size ())
+            setParamNormalized (id, n);
+}
+
+void ControllerBase::applyDefaultPreset ()
+{
     if (!presetClassId.isValid () || !hasDefault ())
         return;
     std::vector<char> component, controllerState;
@@ -601,6 +611,10 @@ void ControllerBase::applyStartupDefault ()
     currentPath.clear ();
     presetTitle = presets::kDefaultName;
 }
+
+GentlrDefaults ControllerBase::gentlrDefaults () const { return readGentlrDefaults (presetFolder ()); }
+
+bool ControllerBase::writeGentlrDefaults (const GentlrDefaults& d) const { return pk::writeGentlrDefaults (presetFolder (), d); }
 
 std::vector<presets::MenuEntry> ControllerBase::presetMenu (std::vector<presets::Item>* factoryOut,
                                                             std::vector<presets::Item>* userOut)

@@ -3,6 +3,7 @@
 // presets (.vstpreset files in the user's preset folder).
 #pragma once
 
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/Layout.h"
 #include "pluginkit/ParamTable.h"
 #include "pluginkit/PresetStore.h"
@@ -64,6 +65,14 @@ public:
     void setPresetInfo (const Steinberg::FUID& processorClassId, const char* pluginName, const char* formerName = nullptr);
     const std::string& pluginName () const { return presetPlugin; }
     std::string presetFolder () const;
+    // Menu > Defaults (GentlrDefaults.h): the parameters a plug-in's Gentlr defaults set (none unless
+    // it calls setGentlrIds in its constructor, as it calls setPresetInfo; its processor passes the same
+    // IDs to presets::applyDefault), and the user's switches in the file beside the presets. A new instance
+    // (applyStartupDefault) gets them after the saved default preset; the editor's menu writes the file.
+    void setGentlrIds (const GentlrIds& ids) { gentlr = ids; }
+    const GentlrIds& gentlrIds () const { return gentlr; }
+    GentlrDefaults gentlrDefaults () const;
+    bool writeGentlrDefaults (const GentlrDefaults& d) const;
     const std::string& presetName () const { return presetTitle; }
     presets::Kind presetKind () const { return currentKind; }
     const std::string& presetPath () const { return currentPath; } // user file, or factory source path
@@ -148,7 +157,8 @@ protected:
     // fresh instance does not have (smemplr's LFO mappings) clears it here.
     virtual void resetExtraState () {}
     // Called at the end of initialize(): the saved default, if there is one, as a new instance's
-    // settings. A host loading a project then calls setComponentState / setState, which win.
+    // settings, then the Gentlr defaults (Menu > Defaults) on top. A host loading a project then calls
+    // setComponentState / setState, which win.
     void applyStartupDefault ();
     // A table entry that is a setting (reset to its default, copied and pasted as settings): all of them
     // unless overridden (Smemplr's hidden MIDI parameters are not).
@@ -169,11 +179,14 @@ protected:
     std::vector<presets::FactoryPreset> factory;
     bool factoryParsed = false;
 
+    GentlrIds gentlr;
+
     std::vector<const std::atomic<int>*> latencySources;
     std::vector<int> latencySeen; // per source: the value the host knows (-1: none yet)
 
 private:
     void applyValues (const SettingValues& values); // every parameter: the default unless in `values`
+    void applyDefaultPreset ();                      // applyStartupDefault's saved default preset
 };
 
 } // namespace pk

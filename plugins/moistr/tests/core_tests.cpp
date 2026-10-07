@@ -1,8 +1,9 @@
 // Headless tests for the Moistr DSP. Run: ./moistr_tests [filter]
 // The split (flat sum, LR4 slopes at the set corners, the seeded Low crossover), the movement (Low locked,
 // the other bands rising and falling by Depth, the seeded rise and fall times x Rise / Fall, still at 0,
-// Seed, the host's transport), switching Bands, the Glue compressor, Grit, Mix, Passes, silence, and the
-// CPU budget.
+// Seed, the host's transport), switching Bands, the Glue compressor, Grit, Mix, Passes, silence, the 0.22
+// controls (Low Push / Dip, Seed B / Blend, Density, Speed, Drop Out; all at their defaults 0.21's sound bit
+// for bit) and the CPU budget.
 #include "Dsp.h"
 #include "Engine.h"
 #include "Movement.h"
@@ -17,6 +18,7 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace moistr;
@@ -1210,6 +1212,588 @@ TEST (shift_off_and_smooth)
     CHECK (finite (y), "finite");
 }
 
+// ---- 0.22: Low Push / Low Dip, Seed B / Seed Blend, Density, Speed, Drop Out ---------------------------------
+
+namespace {
+// 0.21's BandMotion::lift, verbatim (the reference the new one must match bit for bit at Density x1)
+double lift021 (const BandMotion& m, double theta, double secPerCycle, double riseSec, double fallSec)
+{
+    const double spc = std::max (secPerCycle, 1e-6), r = std::max (riseSec, 1e-6), f = std::max (fallSec, 1e-6);
+    const double stepSec = spc / m.steps;
+    const double upEnd = std::max (r, m.hold * stepSec);
+    const double end = upEnd + f;
+    const double u = theta * m.steps - m.offset;
+    int64_t j = (int64_t)std::floor (u);
+    double best = 0.0;
+    for (int guard = 0; guard < 8192; ++guard, --j)
+    {
+        const double dt = (u - (double)j) * stepSec;
+        if (dt > end)
+            break;
+        if (!m.risesOn (j))
+            continue;
+        const double v = dt < r ? dt / r : (dt < upEnd ? 1.0 : 1.0 - (dt - upEnd) / f);
+        if (v > best)
+        {
+            best = v;
+            if (best >= 1.0)
+                break;
+        }
+    }
+    best = std::clamp (best, 0.0, 1.0);
+    return 0.5 - 0.5 * std::cos (kPi * best);
+}
+
+// the new parameters at values other than their defaults
+void extreme (Engine& e)
+{
+    e.setParam (kSeedB, 40);
+    e.setParam (kSeedBlend, 0.5);
+    e.setParam (kDensity, 8.0);
+    e.setParam (kSpeed, 16.0);
+    e.setParam (kDropOut, 1.0);
+    e.setParam (kLowPush, 12.0);
+    e.setParam (kLowDip, 6.0);
+}
+
+// renders silence tick by tick (16 samples), calling `at (tick)` before each; returns the largest change of
+// a band's gain (dB) from one tick to the next (and every tick's gain in `gains`)
+double steepestTick (Engine& e, int pass, int band, int ticks, const std::function<void (int)>& at = {},
+                     std::vector<double>* gains = nullptr)
+{
+    const std::vector<float> z (16, 0.0f);
+    std::vector<float> l (16), r (16);
+    double prev = e.bandGainDb (pass, band), worst = 0.0;
+    for (int t = 0; t < ticks; ++t)
+    {
+        if (at)
+            at (t);
+        e.process (z.data (), z.data (), l.data (), r.data (), 16);
+        const double g = e.bandGainDb (pass, band);
+        worst = std::max (worst, std::fabs (g - prev));
+        prev = g;
+        if (gains)
+            gains->push_back (g);
+    }
+    return worst;
+}
+
+// the moving bands at full movement with slow seeded ramps (Rise and Fall x4), for the crossfade tests
+void slowFull (Engine& e, uint32_t which, int value, double blend)
+{
+    plain (e);
+    e.setParam (kBandCount, kBands4);
+    e.setParam (kMovement, 1.0);
+    e.setParam (kDepth, 48.0);
+    e.setParam (kRise, 4.0);
+    e.setParam (kFall, 4.0);
+    for (uint32_t id : {kMidMove, kHighMove, kAirMove})
+        e.setParam (id, 1.0);
+    e.setParam (kSeedBlend, blend);
+    e.setParam (kSeed, 3);
+    e.setParam (kSeedB, 4);
+    e.setParam (which, value);
+    e.reset ();
+}
+
+double maxStep (const std::vector<float>& y)
+{
+    double step = 0.0;
+    for (size_t i = 1000; i < y.size (); ++i)
+        step = std::max (step, (double)std::fabs (y[i] - y[i - 1]));
+    return step;
+}
+} // namespace
+
+TEST (new_params_default_is_021)
+{
+    // the lift at Density x1 is 0.21's, bit for bit, for every seed, pass and moving band, over a spread of
+    // phases, cycle lengths and Rise / Fall scales
+    int same = 0, tried = 0;
+    for (int s = kMinSeed; s <= kMaxSeed; ++s)
+        for (int k = 0; k < kMaxPasses; ++k)
+        {
+            const Pattern p = makePattern (s, k);
+            for (int b = kBandMid; b < kMaxBands; ++b)
+                for (double spc : {0.5, 3.3, 20.0})
+                    for (double sc : {0.25, 1.0, 4.0})
+                        for (int i = 0; i < 40; ++i)
+                        {
+                            const double th = 0.013 + i * 0.377 + s * 0.01;
+                            const BandMotion& m = p.band[b];
+                            ++tried;
+                            same += m.lift (th, spc, m.rise * sc, m.fall * sc) == lift021 (m, th, spc, m.rise * sc, m.fall * sc);
+                        }
+        }
+    CHECK (same == tried, "the lift is 0.21's bit for bit (%d of %d)", same, tried);
+    // Seed B's pattern: its moving bands are Seed B's own, with Seed's Low crossover
+    const Pattern b = makePattern (9, 0, 5), b0 = makePattern (9, 0);
+    CHECK (b.lowXover == lowXoverForSeed (5) && b.band[kBandHigh].mask == b0.band[kBandHigh].mask &&
+               b.band[kBandHigh].rise == b0.band[kBandHigh].rise,
+           "Seed B's pattern keeps Seed's Low crossover");
+    // the engine: the new parameters set to their defaults (or set elsewhere and back) render exactly as never
+    // set, with 3 and 4 bands, 2 passes and the shifter on
+    const auto x = reese (3.0);
+    for (int bands : {kBands3, kBands4})
+    {
+        auto render = [&] (int how) {
+            auto e = engine ();
+            e->setParam (kBandCount, bands);
+            e->setParam (kPasses, kPasses2);
+            e->setParam (kShiftOn, 1.0);
+            e->setParam (kShift, 80.0);
+            e->setParam (kMovement, 0.9);
+            e->setParam (kSeed, 12);
+            if (how >= 1)
+            {
+                if (how == 2)
+                    extreme (*e);
+                for (uint32_t id : {kSeedB, kSeedBlend, kDensity, kLowPush, kLowDip, kDropOut, kSpeed})
+                    e->setParam (id, toPlain (id, defaultNormalized (id)));
+            }
+            e->reset ();
+            std::vector<float> r;
+            auto l = run (*e, x, &r);
+            l.insert (l.end (), r.begin (), r.end ());
+            return l;
+        };
+        const auto never = render (0);
+        CHECK (never == render (1), "%d bands: the new parameters at their defaults change nothing (bit for bit)", bands + 3);
+        CHECK (never == render (2), "%d bands: set and back to the defaults: nothing left over", bands + 3);
+    }
+    // at Blend 0 Seed B is not heard, even changed while playing
+    auto a = engine (), c = engine ();
+    for (Engine* e : {a.get (), c.get ()})
+    {
+        e->setParam (kMovement, 1.0);
+        e->reset ();
+    }
+    const auto s1 = run (*a, x);
+    const auto s2 = run (*c, x, nullptr, 256, [&] (size_t at) {
+        if (at == 256 * 40)
+            c->setParam (kSeedB, 77);
+    });
+    CHECK (s1 == s2, "Seed B changed at Blend 0: nothing changes");
+}
+
+TEST (low_push_and_dip)
+{
+    // a 25 Hz sine (the Low band's): with Low Push it rises up to Push dB above its Level, with Low Dip it
+    // dips at most Dip dB below (both x Movement); Low X never moves
+    struct Case
+    {
+        double push, dip, movement;
+    };
+    for (const Case cs : {Case {12.0, 0.0, 1.0}, Case {6.0, 6.0, 1.0}, Case {0.0, 6.0, 1.0}, Case {12.0, 6.0, 0.5}})
+    {
+        int reachedTop = 0, reachedBottom = 0, seeds = 0;
+        for (int seed : {1, 5, 77, 128})
+        {
+            auto e = engine ();
+            plain (*e);
+            e->setParam (kSeed, seed);
+            e->setParam (kMovement, cs.movement);
+            e->setParam (kRate, 0.5);
+            e->setParam (kLowPush, cs.push);
+            e->setParam (kLowDip, cs.dip);
+            e->setParam (kPasses, kPasses2);
+            e->reset ();
+            const double lowX = e->lowXover ();
+            bool xStill = true, within = true;
+            double lo = 1e9, hi = -1e9;
+            const double up = cs.push * cs.movement, down = cs.dip * cs.movement;
+            const auto y = run (*e, sine (25.0, 0.25, 12.0), nullptr, 256, [&] (size_t) {
+                for (int k = 0; k < kMaxPasses; ++k)
+                {
+                    const double g = e->bandGainDb (k, kBandLow);
+                    xStill = xStill && e->xoverHz (k, 0) == lowX;
+                    within = within && g <= up + 1e-9 && g >= -down - 1e-9;
+                }
+                lo = std::min (lo, e->bandGainDb (0, kBandLow));
+                hi = std::max (hi, e->bandGainDb (0, kBandLow));
+            });
+            const auto env = envelope (y, (size_t)(0.5 * kSr), 1920); // (40 ms: a cycle of 25 Hz)
+            const double eHi = *std::max_element (env.begin (), env.end ()) - db (0.25);
+            const double eLo = *std::min_element (env.begin (), env.end ()) - db (0.25);
+            std::printf ("    Push %.0f, Dip %.0f, Movement %.0f %%, seed %3d: Low's gain %.2f .. %.2f dB, the tone %.2f .. %.2f "
+                         "dB (2 passes)\n",
+                         cs.push, cs.dip, 100.0 * cs.movement, seed, lo, hi, eLo, eHi);
+            CHECK (xStill, "seed %d: Low X never moves", seed);
+            CHECK (within, "seed %d: Low's gain within Level - Dip .. Level + Push (x Movement)", seed);
+            // (two passes: the tone goes through both, so up to twice each)
+            CHECK (eHi < 2.0 * up + 0.5 && eLo > -2.0 * down - 0.5, "seed %d: the tone within (%.2f .. %.2f)", seed, eLo, eHi);
+            ++seeds;
+            reachedTop += up <= 0.0 || hi > up - 0.3;
+            reachedBottom += down <= 0.0 || lo < -down + 0.3;
+        }
+        CHECK (reachedTop == seeds && reachedBottom >= seeds - 1, "Push %.0f / Dip %.0f: reached (%d / %d of %d)", cs.push, cs.dip,
+               reachedTop, reachedBottom, seeds);
+    }
+}
+
+TEST (seed_blend)
+{
+    // Blend 1: the moving bands move as Seed B's pattern (Low X stays Seed's); Blend 0.5: both patterns overlap,
+    // so the bands are up more of the time (higher on average than either alone)
+    auto lifts = [] (int seed, int seedB, double blend, std::vector<double>* gains = nullptr, double* lowX = nullptr) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kPasses, kPasses2);
+        e->setParam (kMovement, 1.0);
+        for (uint32_t id : {kMidMove, kHighMove, kAirMove})
+            e->setParam (id, 1.0);
+        e->setParam (kSeed, seed);
+        e->setParam (kSeedB, seedB);
+        e->setParam (kSeedBlend, blend);
+        e->reset ();
+        std::vector<double> v;
+        run (*e, std::vector<float> ((size_t)(40.0 * kSr), 0.0f), nullptr, 256, [&] (size_t) {
+            for (int k = 0; k < kMaxPasses; ++k)
+                for (int b = kBandMid; b < kMaxBands; ++b)
+                {
+                    v.push_back (e->bandLift (k, b));
+                    if (gains)
+                        gains->push_back (e->bandGainDb (k, b));
+                }
+        });
+        if (lowX)
+            *lowX = e->lowXover ();
+        return v;
+    };
+    double xA = 0, xB = 0;
+    std::vector<double> gOne, gPlainB;
+    lifts (5, 9, 1.0, &gOne, &xA);
+    lifts (9, 1, 0.0, &gPlainB, &xB);
+    CHECK (gOne == gPlainB, "Blend 1: the moving bands exactly as Seed B's pattern");
+    CHECK (std::fabs (xA / lowXoverForSeed (5) - 1.0) < 1e-9 && std::fabs (xB / lowXoverForSeed (9) - 1.0) < 1e-9, "with Seed's Low X (%.1f Hz; Seed B's own would be %.1f Hz)", xA, xB);
+    int more = 0, pairs = 0;
+    for (auto [s, sb] : {std::pair {5, 9}, std::pair {1, 2}, std::pair {23, 64}, std::pair {100, 7}})
+    {
+        const auto la = lifts (s, sb, 0.0), lb = lifts (s, sb, 1.0), lm = lifts (s, sb, 0.5);
+        double ma = 0, mb = 0, mm = 0;
+        bool atLeast = true;
+        for (size_t i = 0; i < la.size (); ++i)
+        {
+            ma += la[i];
+            mb += lb[i];
+            mm += lm[i];
+            atLeast = atLeast && lm[i] >= std::max (la[i], lb[i]) - 1e-9;
+        }
+        ma /= (double)la.size ();
+        mb /= (double)lb.size ();
+        mm /= (double)lm.size ();
+        std::printf ("    seeds %d / %d: average lift %.3f (Seed), %.3f (Seed B), %.3f (Blend 0.5)\n", s, sb, ma, mb, mm);
+        CHECK (atLeast, "seeds %d / %d: at 0.5 a band is up whenever either pattern has it up", s, sb);
+        ++pairs;
+        more += mm > std::max (ma, mb) + 0.02;
+    }
+    CHECK (more == pairs, "Blend 0.5 is up more than either pattern alone (%d of %d)", more, pairs);
+    // and louder: noise (the split alone) at Blend 0.5 against each pattern alone
+    auto level = [] (double blend) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kMidMove, 1.0);
+        e->setParam (kSeed, 23);
+        e->setParam (kSeedB, 64);
+        e->setParam (kSeedBlend, blend);
+        e->reset ();
+        const auto y = run (*e, noise (0.25, 20.0));
+        return db (rms (y, 0, y.size ()));
+    };
+    const double l0 = level (0.0), l1 = level (1.0), lh = level (0.5);
+    std::printf ("    noise: %.2f dB (Seed), %.2f dB (Seed B), %.2f dB (Blend 0.5)\n", l0, l1, lh);
+    CHECK (lh > std::max (l0, l1) + 1.0, "Blend 0.5 louder than either alone");
+}
+
+TEST (seed_change_crossfades)
+{
+    // changing Seed or Seed B while playing crossfades over 100 ms: no band's gain jumps. Slow seeded ramps
+    // (Rise and Fall x4) so the movement's own steps are small; without the crossfade a band would jump by up
+    // to Depth (48 dB) within a tick or two.
+    int jumps = 0, tried = 0;
+    double worstAll = 0.0;
+    for (auto [which, from, to, blend] : {std::tuple {kSeed, 1, 2, 0.0}, std::tuple {kSeed, 5, 90, 0.0},
+                                          std::tuple {kSeedB, 7, 33, 0.5}, std::tuple {kSeedB, 12, 3, 1.0}})
+        for (int when : {3000, 9000, 20000})
+            for (int b = kBandMid; b < kMaxBands; ++b)
+            {
+                // how far the band has to go: the gains either side of the change, from engines that never change
+                auto f = engine (16), g = engine (16), e = engine (16);
+                slowFull (*f, which, from, blend);
+                slowFull (*g, which, to, blend);
+                std::vector<double> gf, gg;
+                steepestTick (*f, 0, b, when + 1, {}, &gf);
+                steepestTick (*g, 0, b, when + 1, {}, &gg);
+                jumps += std::fabs (gf.back () - gg.back ()) > 12.0;
+                slowFull (*e, which, from, blend);
+                const double worst = steepestTick (*e, 0, b, when + 6000, [&] (int t) {
+                    if (t == when)
+                        e->setParam (which, to);
+                });
+                ++tried;
+                worstAll = std::max (worstAll, worst);
+            }
+    std::printf ("    %d changes (%d of them moving a band by over 12 dB): the steepest tick %.2f dB\n", tried, jumps, worstAll);
+    CHECK (jumps >= 3, "(changes that move bands a long way: %d)", jumps);
+    CHECK (worstAll < 2.0, "no jumps: at most %.2f dB a tick", worstAll);
+    // and no click in the sound: a 1.5 kHz tone in the Mid band, Seed changed every 250 ms
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kXoverMid, 6000.0);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kMidMove, 1.0);
+    e->setParam (kDepth, 48.0);
+    e->reset ();
+    const auto y = run (*e, sine (1500.0, 0.25, 4.0), nullptr, 128, [&] (size_t a) {
+        if (a % 12032 == 0 && a > 0)
+            e->setParam (kSeed, 1 + (int)(a / 128) % 100);
+    });
+    const double step = maxStep (y), bound = 0.25 * 2.0 * kPi * 1500.0 / kSr;
+    std::printf ("    a Seed change every 250 ms: largest step %.4f (the tone's own %.4f)\n", step, bound);
+    CHECK (step < 1.1 * bound, "no clicks (%.4f)", step);
+}
+
+TEST (drop_out)
+{
+    // Drop Out at a full Depth (Movement and High Move 100 %): a fallen band goes silent (under -90 dB); off,
+    // it falls 48 dB; with a shallower fall (under 30 dB) Drop Out changes nothing
+    auto render = [] (bool dropOut, double depth, double* lowest, double* highest) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kXoverMid, 1000.0);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kHighMove, 1.0);
+        e->setParam (kDepth, depth);
+        e->setParam (kDropOut, dropOut ? 1.0 : 0.0);
+        e->setParam (kRate, 0.3);
+        solo (*e, kBandHigh);
+        const auto x = sine (6000.0, 0.25, 12.0);
+        double gLo = 1e9;
+        const auto y = run (*e, x, nullptr, 256, [&] (size_t) { gLo = std::min (gLo, e->bandGainDb (0, kBandHigh)); });
+        const auto env = envelope (y, (size_t)(0.5 * kSr), 480);
+        *lowest = *std::min_element (env.begin (), env.end ()) - db (0.25);
+        *highest = *std::max_element (env.begin (), env.end ()) - db (0.25);
+        std::printf ("    Drop Out %s, Depth %.0f dB: the tone %.1f .. %.1f dB (the band's gain down to %.1f dB)\n", dropOut ? "on" : "off",
+                     depth, *lowest, *highest, gLo);
+        return y;
+    };
+    double lo, hi;
+    render (true, 48.0, &lo, &hi);
+    CHECK (lo < -90.0 && hi > -1.0, "on, Depth 48: silent when fallen (%.1f dB), back up to its Level (%.1f dB)", lo, hi);
+    render (false, 48.0, &lo, &hi);
+    CHECK (lo > -50.0 && lo < -46.0, "off, Depth 48: down 48 dB (%.1f dB)", lo);
+    double lo2, hi2;
+    const auto a = render (true, 24.0, &lo, &hi), b = render (false, 24.0, &lo2, &hi2);
+    CHECK (a == b, "Depth 24: Drop Out changes nothing (bit for bit)");
+    // fast drop outs (Speed x16, Density x4), Drop Out switched off and on again: no clicks (no step larger
+    // than the tone's own)
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kXoverMid, 6000.0);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kMidMove, 1.0);
+    e->setParam (kDepth, 48.0);
+    e->setParam (kDropOut, 1.0);
+    e->setParam (kSpeed, 16.0);
+    e->setParam (kRise, 0.25);
+    e->setParam (kFall, 0.25);
+    e->setParam (kDensity, 4.0);
+    solo (*e, kBandMid);
+    const auto y = run (*e, sine (1500.0, 0.25, 6.0), nullptr, 256, [&] (size_t at) {
+        if (at == 256 * 560)
+            e->setParam (kDropOut, 0.0);
+        if (at == 256 * 840)
+            e->setParam (kDropOut, 1.0);
+    });
+    const double step = maxStep (y), bound = 0.25 * 2.0 * kPi * 1500.0 / kSr;
+    std::printf ("    fast drop outs, switched off and on: largest step %.4f (the tone's own %.4f)\n", step, bound);
+    CHECK (step < 1.25 * bound, "no clicks (%.4f)", step);
+}
+
+TEST (speed_fast_ramps)
+{
+    // Speed x16 with Rise and Fall x0.25: every rise and fall a few ms (at least 1 ms), timed on the gain;
+    // the gain still moves in smooth ramps (a tone's samples step no further than its own slope allows)
+    auto e = engine (16);
+    plain (*e);
+    e->setParam (kBandCount, kBands4);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kSpeed, 16.0);
+    e->setParam (kRise, 0.25);
+    e->setParam (kFall, 0.25);
+    for (uint32_t id : {kMidMove, kHighMove, kAirMove})
+        e->setParam (id, 1.0);
+    e->reset ();
+    double longest = 0.0, shortest = 1e9;
+    for (int k = 0; k < kMaxPasses; ++k)
+        for (int b = kBandLow; b < kMaxBands; ++b)
+            for (double t : {e->riseSeconds (k, b), e->fallSeconds (k, b)})
+            {
+                longest = std::max (longest, t);
+                shortest = std::min (shortest, t);
+            }
+    std::printf ("    Speed x16, Rise / Fall x0.25: ramps of %.2f .. %.2f ms\n", 1000.0 * shortest, 1000.0 * longest);
+    CHECK (shortest >= kMinRampSec && longest <= kFallMax * 0.25 / 16.0 + 1e-9, "every ramp 1 .. 47 ms");
+    // clean falls from the top to the floor take Fall's time, timed between 10 % and 90 % of the way (59 % of
+    // a cosine ramp; within 10 % + 2 ms: the ticks and the gain's 1 ms smoothing)
+    int clean = 0;
+    double worst = 0.0;
+    for (int b = kBandMid; b < kMaxBands; ++b)
+    {
+        auto f = engine (16);
+        plain (*f);
+        for (uint32_t id : {kBandCount, kMovement, kSpeed, kRise, kFall, kMidMove, kHighMove, kAirMove})
+            f->setParam (id, e->param (id));
+        f->reset ();
+        std::vector<double> g;
+        steepestTick (*f, 0, b, (int)(30.0 * kSr / 16), {}, &g);
+        const double want = (1.0 - 2.0 * std::acos (0.8) / kPi) * f->fallSeconds (0, b);
+        int n = 0;
+        for (size_t i = 1; i < g.size (); ++i)
+            if (g[i - 1] >= -0.05 && g[i] < -0.05)
+            {
+                size_t j = i;
+                while (j + 1 < g.size () && g[j] > -23.95 && g[j + 1] <= g[j] + 1e-9)
+                    ++j;
+                if (g[j] > -23.95)
+                    continue;
+                auto cross = [&] (double level) {
+                    for (size_t k = i; k <= j; ++k)
+                        if (g[k] <= level)
+                            return (double)(k - 1) + (level - g[k - 1]) / (g[k] - g[k - 1]);
+                    return (double)j;
+                };
+                const double took = (cross (-21.6) - cross (-2.4)) * 16.0 / kSr;
+                worst = std::max (worst, std::fabs (took - want) - (0.1 * want + 0.002));
+                ++n;
+            }
+        clean += n;
+        std::printf ("    %s: %d clean falls of %.2f ms\n", kBandNames[b], n, 1000.0 * f->fallSeconds (0, b));
+    }
+    CHECK (clean >= 4 && worst <= 0.0, "clean falls take Fall's time (%d; %.4f s past the slack)", clean, worst);
+    // the sound: a 1.5 kHz tone in the Mid band, every ramp 1 .. 10 ms, the densest events
+    auto f = engine ();
+    plain (*f);
+    f->setParam (kXoverMid, 6000.0);
+    f->setParam (kMovement, 1.0);
+    f->setParam (kMidMove, 1.0);
+    f->setParam (kDepth, 48.0);
+    f->setParam (kSpeed, 16.0);
+    f->setParam (kRise, 0.25);
+    f->setParam (kFall, 0.25);
+    f->setParam (kDensity, 8.0);
+    solo (*f, kBandMid);
+    const auto y = run (*f, sine (1500.0, 0.25, 6.0));
+    const auto env = envelope (y, 4800, 240);
+    const double step = maxStep (y), bound = 0.25 * 2.0 * kPi * 1500.0 / kSr;
+    const double range = *std::max_element (env.begin (), env.end ()) - *std::min_element (env.begin (), env.end ());
+    std::printf ("    1.5 kHz tone: moves %.1f dB in 5 ms windows, largest step %.4f (the tone's own %.4f)\n", range, step, bound);
+    CHECK (range > 40.0, "it still moves the whole Depth (%.1f dB)", range);
+    CHECK (step < 1.25 * bound, "no clicks (%.4f)", step);
+    CHECK (finite (y), "finite");
+}
+
+TEST (density_events)
+{
+    // Density x8: about 8 times the rises per cycle (counted on each band's lift, with short ramps so the rises
+    // stay apart), x0.25 fewer; the same events every time for the same Seed
+    auto rises = [] (double density, int seed, int band) {
+        auto e = engine ();
+        e->setParam (kMovement, 1.0);
+        e->setParam (kRate, 0.05);
+        e->setParam (kSpeed, 16.0);
+        e->setParam (kRise, 0.25);
+        e->setParam (kFall, 0.25);
+        e->setParam (kSeed, seed);
+        e->setParam (kDensity, density);
+        e->reset ();
+        int n = 0;
+        double prev = 0.0;
+        const int perCycle = 40000; // (0.5 ms steps of a 20 s cycle)
+        for (int i = 0; i < 4 * perCycle; ++i)
+        {
+            const double v = e->liftAt (0, band, (double)i / perCycle);
+            n += prev < 0.5 && v >= 0.5;
+            prev = v;
+        }
+        return n;
+    };
+    int ok = 0, tried = 0;
+    for (int seed : {1, 2, 3, 4, 5, 6})
+        for (int band : {kBandLow, kBandMid, kBandHigh})
+        {
+            const int r1 = rises (1.0, seed, band), r8 = rises (8.0, seed, band), rq = rises (0.25, seed, band);
+            const double ratio = (double)r8 / std::max (r1, 1);
+            std::printf ("    seed %d, %s: %d rises in 4 cycles at x1, %d at x8 (x%.2f), %d at x0.25\n", seed, kBandNames[band], r1, r8,
+                         ratio, rq);
+            ++tried;
+            ok += ratio > 6.5 && ratio < 8.5 && rq <= r1;
+            CHECK (r8 == rises (8.0, seed, band), "deterministic");
+        }
+    CHECK (ok >= tried - 1, "Density x8: about 8 times the rises (%d of %d)", ok, tried);
+}
+
+TEST (extremes_deterministic_and_clean)
+{
+    // every new control at its most extreme, 4 bands, 2 passes, the shifter on: the same render twice, another
+    // Seed B renders differently, and the hottest input leaves no NaNs or denormals
+    const auto x = reese (3.0);
+    auto render = [&] (int seedB) {
+        auto e = engine ();
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kPasses, kPasses2);
+        e->setParam (kShiftOn, 1.0);
+        e->setParam (kShift, -60.0);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kDepth, 48.0);
+        extreme (*e);
+        e->setParam (kSeedB, seedB);
+        e->reset ();
+        std::vector<float> r;
+        auto l = run (*e, x, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    const auto a = render (40);
+    CHECK (a == render (40), "the same settings render bit for bit the same");
+    CHECK (a != render (41), "another Seed B renders differently");
+    CHECK (finite (a), "finite");
+    auto e = engine ();
+    e->setParam (kBandCount, kBands4);
+    e->setParam (kPasses, kPasses2);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kDepth, 48.0);
+    e->setParam (kRate, 2.0);
+    e->setParam (kDrive, 1.0);
+    e->setParam (kGrit, 1.0);
+    e->setParam (kGlue, 1.0);
+    for (uint32_t id : kLevelIds)
+        e->setParam (id, 12.0);
+    extreme (*e);
+    e->reset ();
+    std::vector<float> in ((size_t)(4.0 * kSr), 0.0f);
+    in[100] = 1.0f;
+    const auto loud = noise (1.0, 1.0, 9);
+    std::copy (loud.begin (), loud.end (), in.begin () + 1000);
+    std::vector<float> r;
+    const auto l = run (*e, in, &r, 256, [&] (size_t at) {
+        if (at == 256 * 100)
+            e->setParam (kSeed, 99); // (a crossfade on the way)
+    });
+    int denormals = 0;
+    for (size_t i = 0; i < l.size (); ++i)
+    {
+        const float tiny = std::numeric_limits<float>::min ();
+        denormals += (l[i] != 0.0f && std::fabs (l[i]) < tiny) || (r[i] != 0.0f && std::fabs (r[i]) < tiny);
+    }
+    const double top = std::max (peak (l, 0, l.size ()), peak (r, 0, r.size ()));
+    CHECK (finite (l) && finite (r), "finite");
+    CHECK (denormals == 0, "no denormals (%d)", denormals);
+    CHECK (top < 4.0, "bounded: %.2f", top);
+}
+
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
@@ -1238,6 +1822,13 @@ TEST (cpu_budget)
                 e->setParam (kShiftOn, 1.0);
                 e->setParam (kShift, 120.0);
                 e->setParam (kTailBase + pk::kTailOn, 1.0);
+                // and the 0.22 controls: both patterns overlapping, the densest, fastest movement, the Low band moving
+                e->setParam (kSeedBlend, 0.5);
+                e->setParam (kDensity, 8.0);
+                e->setParam (kSpeed, 16.0);
+                e->setParam (kDropOut, 1.0);
+                e->setParam (kLowPush, 12.0);
+                e->setParam (kLowDip, 6.0);
             }
             e->reset ();
             const std::clock_t t0 = std::clock ();
@@ -1246,7 +1837,7 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "4 bands, 2 passes, full movement, Shift on, the end saturator on" : "the defaults");
+                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, the end saturator on" : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }

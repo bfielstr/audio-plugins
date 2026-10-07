@@ -13,7 +13,7 @@ namespace para {
 class Controller : public pk::ControllerBase, public Steinberg::Vst::IMidiMapping
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Para"); }
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Para"); setGentlrIds (kGentlrIds); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) override;

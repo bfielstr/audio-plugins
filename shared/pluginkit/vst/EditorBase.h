@@ -102,8 +102,12 @@ public:
     void setLayout (const std::string& text, const std::string& name, bool now = false);
     // The Layout sub-menu at the end of a menu (after a separator): Wide, Classic, the saved layouts, Save
     // Layout As..., Use as Default Layout, Delete Layout. Its entries act by themselves: a menu's callback
-    // must ignore picks from sub-menus (pickedInSubMenu).
+    // must ignore picks from sub-menus (pickedInSubMenu). The Defaults sub-menu (addDefaultsMenu) follows it.
     void addLayoutMenu (VSTGUI::COptionMenu* menu);
+    // The Defaults sub-menu (GentlrDefaults.h): Gentlr On by Default (where the plug-in has an end saturator
+    // or a Gentlr switch) and Advanced On by Default, checked as the file beside the presets says; a pick
+    // writes the file at once and applies to new instances only. None for a plug-in without GentlrIds.
+    void addDefaultsMenu (VSTGUI::COptionMenu* menu);
     static bool pickedInSubMenu (VSTGUI::COptionMenu* menu);
     // Where the control bound to a parameter is shown, in window pixels (the zoom and the margins
     // applied): false when none is visible. (Host tests find controls this way, whatever the layout.)

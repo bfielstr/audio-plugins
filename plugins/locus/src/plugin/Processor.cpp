@@ -38,7 +38,8 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
         return r;
     addAudioInput (STR16 ("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
-    pk::presets::applyDefault (*this, kProcessorUID, "Locus"); // Save as Default (a project's setState comes after)
+    // Save as Default, then Menu > Defaults (a project's setState comes after)
+    pk::presets::applyDefault (*this, kProcessorUID, "Locus", kGentlrIds, [this] (uint32_t id, double n) { normMirror[id].store (n); });
     return kResultOk;
 }
 

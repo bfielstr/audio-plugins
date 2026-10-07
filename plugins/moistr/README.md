@@ -2,9 +2,12 @@
 
 moistr turns a bass, typically a detuned Reese, into the wet, moving texture of neuro bass. It splits
 the sound into bands with crossovers: 3 bands by default (Low, Mid and High) or 4 (with an Air band on
-top). The Low band is locked: it never moves, so the low end stays solid. The other bands rise and fall
+top). The Low band is locked by default: it never moves, so the low end stays solid (with **Push** it
+can come forward on its own moments, and dip back a little with **Dip**). The other bands rise and fall
 on their own, on a pattern that comes from a **Seed** number, so the sound keeps shifting without
-anything being automated by hand, and a movement you like is always there again. A compressor and a
+anything being automated by hand, and a movement you like is always there again. A second pattern
+(**Seed B**) can be blended in for a fuller, louder movement, and **EXTREME** makes the movement chop:
+falls to silence, more rises and falls, and ramps of a few ms. A compressor and a
 little soft clipping glue the bands back together, and a second pass can run the result through the
 bands again. An optional frequency shifter can move the bands above the Low band up or down, for a
 metallic edge, without ever touching the sub. Install instructions are in the [top-level README](../../README.md).
@@ -22,9 +25,12 @@ metallic edge, without ever touching the sub. Install instructions are in the [t
    the rises and falls quicker or slower.
 4. Try other **Seed** numbers for other patterns. Each number picks when each band rises and falls, how
    quickly, and where the Low band ends. The same number always moves the same way.
-5. For a metallic, clashing top end, switch on **SHIFT** and turn **Shift** a little either way. The Low
+5. For more, blend in a second pattern with **Seed B** and **Blend** (at 50 % a band is up whenever
+   either pattern has it up), let the low end come forward with **Push** in **LOW**, or make it chop
+   with **Drop Out**, **Density** and **Speed** in **EXTREME**.
+6. For a metallic, clashing top end, switch on **SHIFT** and turn **Shift** a little either way. The Low
    band is never shifted, so the sub stays clean.
-6. Use **Glue** and **Grit** to glue the bands back together. For an even denser, more processed sound,
+7. Use **Glue** and **Grit** to glue the bands back together. For an even denser, more processed sound,
    pick **2 Passes**.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -43,6 +49,8 @@ that in one plug-in, and the movement repeats exactly every time you play the so
 input -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
          -> [Shift: the bands above Low only] -> Low + the others -> Glue -> Grit
+movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls (Density, Rise / Fall,
+          Speed, Depth [-> Drop Out]); the Low band's own pushes and dips (Push, Dip)
 ```
 
 ## Controls
@@ -59,10 +67,11 @@ pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others ri
   used with **4 Bands** (dimmed with 3).
 
 The Low band's crossover has no control of its own: **Seed** picks it, between 100 and 500 Hz. It never
-moves. **Mid X** and **High X** may drift a little with the movement.
+moves (not even with **Seed B**, **Push** or **Dip**). **Mid X** and **High X** may drift a little with
+the movement.
 
 **LEVELS**: **Low**, **Mid**, **High** and **Air** (-48 to +12 dB, 0 by default): each band's level.
-The Low band stays at its level. For the other bands it is the level they rise to; they fall from it by
+The Low band stays at its level (unless **Push** or **Dip** in **LOW** move it). For the other bands it is the level they rise to; they fall from it by
 up to **Depth**. All the way down (-48 dB) switches a band off. **Air** is only used with **4 Bands**
 (dimmed with 3).
 
@@ -72,7 +81,7 @@ up to **Depth**. All the way down (-48 dB) switches a band off. **Air** is only 
   rise times; below 1 they are quicker, above 1 slower (from a quarter to four times as long).
 - **Fall** (0.25 to 4, 1 by default): the same for the falls.
 - **Depth** (0 to 48 dB, 24 dB by default): how far a moving band falls below its level with
-  **Movement** and its Move at 100 %.
+  **Movement** and its Move at 100 %. With **Drop Out** on, the deepest falls go to silence.
 
 **MOVEMENT**
 
@@ -84,11 +93,47 @@ up to **Depth**. All the way down (-48 dB) switches a band off. **Air** is only 
   of following **Rate**.
 - **Seed** (1 to 128, 1 by default): the pattern. Each number picks, for every moving band, when it
   rises and falls and how quickly, and where the Low band's crossover is. The same Seed always gives the
-  same movement.
+  same movement. Changing it while playing crossfades to the new pattern over 100 ms.
 
 **BAND MOVE**: **Mid Move** (50 %), **High Move** (100 %) and **Air Move** (100 %): how much each moving
 band rises and falls, as a share of **Movement**. By default the High band moves the most. **Air Move**
-is only used with **4 Bands** (dimmed with 3). The Low band has no Move: it is locked.
+is only used with **4 Bands** (dimmed with 3). The Low band has no Move: it moves only with **Push** and
+**Dip** in **LOW**.
+
+**SEED B**: a second pattern, blended with Seed's.
+
+- **Seed B** (1 to 128, 2 by default): the second pattern, its own rises and falls and their times for
+  every band. The Low band's crossover stays where **Seed** puts it, so the low end does not move.
+  Dimmed while **Blend** is 0.
+- **Blend** (0 to 100 %, 0 by default): at 0 only Seed's pattern plays (moistr as without Seed B), at
+  100 % only Seed B's. In between both play and overlap: each band follows a soft maximum of the two
+  (at 50 % a band is up whenever either pattern has it up), so the sound is fuller and louder. Changing
+  **Seed B** while playing crossfades over 100 ms.
+
+**LOW**: the Low band's own movement. Its crossover never moves and the shifter never touches it.
+
+- **Push** (0 to 12 dB, 0 by default): on its own seeded moments (from **Seed**, apart from the other
+  bands' pattern, and blended with **Seed B**'s like the rest) the Low band comes forward, up to this far
+  above its level (x **Movement**). **Density**, **Rise**, **Fall** and **Speed** apply to it too.
+- **Dip** (0 to 6 dB, 0 by default): on other moments it dips back, at most this far under its level (x
+  **Movement**): never more than 6 dB, so the low end does not go far.
+
+With both at 0 the Low band is locked, exactly as before.
+
+**EXTREME**: more extreme movement.
+
+- **Drop Out** (off by default): lets the deepest falls go all the way to silence. As a band's fall
+  (**Depth** x **Movement** x its Move) goes past 30 dB its floor curves smoothly down, to nothing at
+  48 dB. Falls of 30 dB or less are not changed. Switching it fades over 20 ms.
+- **Density** (0.25 to 8, 1 by default): how many rises and falls. **Seed**'s pattern comes round
+  this many times as often: 8 has eight times as many in the same time, 0.25 a quarter as many. Rises
+  never overlap badly: a new rise during a fall takes over smoothly where it meets it. Changing it
+  crossfades over 100 ms.
+- **Speed** (1 to 16, 1 by default): divides every rise and fall time (after **Rise** and **Fall**),
+  down to 1 ms. The ramps stay smooth raised-cosine curves, so even the fastest chops do not click.
+
+At their defaults (Blend 0, Push and Dip 0, Drop Out off, Density and Speed 1) moistr sounds exactly
+as it did before these controls.
 
 **SHIFT**: a frequency shifter on the bands above Low, after they rise and fall and before **Glue**.
 The Low band (everything under the Low crossover, so the sub) is never shifted.
@@ -127,10 +172,12 @@ it is off it folds to its header strips; click a strip (or switch it on) to open
 
 The display shows the bands against frequency (20 Hz to 20 kHz), each band's level from -48 dB (off) at
 the bottom to +12 dB at the top. The Low band is drawn solid, with a lock and its crossover in Hz at the
-top left. Each moving band is a region between its crossovers, filled up to its level now: while sound
+top left; with **Push** or **Dip** it has no lock and moves like the others, between dashed lines for
+how far it can come forward and dip back. Each moving band is a region between its crossovers, filled up to its level now: while sound
 plays you see Mid, High and (with **4 Bands**) Air rise and fall. With the shifter on, the shift (for
 example +120 Hz) is shown at the top of each upper band. A line marks each moving band's level
-and a dashed line how far it can fall (its level minus **Depth**, scaled by **Movement** and its Move).
+and a dashed line how far it can fall (its level minus **Depth**, scaled by **Movement** and its Move;
+with **Drop Out**, lower, down to the bottom for a full fall).
 The first pass's gain reduction is shown at the top right. Half a second after the input goes quiet the
 display stops following the movement and shows the bands at their levels.
 
@@ -149,8 +196,8 @@ The movement is worked out from its phase alone, so it repeats exactly when the 
 ## Presets
 
 The **Presets** menu in the header starts with **Init** (every control at its default) and has these
-factory presets: *Moist*: Bar Pulse, Classic Moist, Double Pass, Fast Flicker, Four Band, Shifted
-Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift. Save your own with **Save As...** (a category and tags are
+factory presets: *Moist*: Bar Pulse, Chop, Classic Moist, Double Pass, Fast Flicker, Four Band, Low
+Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift. Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 
