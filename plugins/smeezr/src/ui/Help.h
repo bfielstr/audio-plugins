@@ -11,7 +11,7 @@ inline const char* forParam (uint32_t id)
         case kSqueeze:
             return "The one knob. 0 leaves the sound untouched. Up to 50 % it squeezes the spectrum towards the balance "
                    "of pink noise (every octave as loud as the next, loudness kept); past 50 % it adds an OTT-style "
-                   "boost on top (quiet details up, peaks down), loudest and most squashed at 100 %.";
+                   "boost on top (quiet details up, peaks down), most squashed at 100 % (quiet material gets much louder, loud material is held level).";
         case kSpeed:
             return "How quickly the pink stage follows the music. Fast rides each band like a compressor; Slow (four "
                    "times as long) acts more like a moving EQ. The OTT boost keeps its own timing.";

@@ -4,7 +4,8 @@ smeezr is a one-knob compressor. Turn up **Squeeze** and the sound is first sque
 balance of pink noise: every octave is pulled towards the same loudness, so a dull sound gets brighter, a
 harsh one darker and a boomy one tighter, while the overall loudness stays where it was. Past the middle
 of the knob an OTT-style boost comes in on top: quiet details come up, peaks go down, and at 100 % the
-sound is at its loudest and most squashed. At 0 it does nothing at all. Install instructions are in the
+sound is at its most squashed. Material at a normal level gets much louder; material that is already very
+loud is held at about the same level, since the boost pulls everything towards the same loudness. At 0 it does nothing at all. Install instructions are in the
 [top-level README](../../README.md).
 
 ![smeezr](../../docs/smeezr/ui_smeezr.png)
@@ -15,8 +16,8 @@ sound is at its loudest and most squashed. At 0 it does nothing at all. Install 
    pink balance, no OTT boost yet.
 2. Turn **Squeeze** down for a gentler pull or up to 50 % for the full pink balance. Watch the display:
    the copper bars are the level of each octave, the cinnabar line the pink target they are pulled to.
-3. Go past 50 % for the OTT boost on top. It gets louder as you turn, so use **Output** to match levels
-   when you compare.
+3. Go past 50 % for the OTT boost on top. Quieter material gets louder as you turn (already loud material
+   stays about as loud), so use **Output** to match levels when you compare.
 4. Use **Mix** to blend in the untouched sound (parallel compression), and **Speed** (Fast or Slow) to
    choose how quickly the pink stage follows the music.
 

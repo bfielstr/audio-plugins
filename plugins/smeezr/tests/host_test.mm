@@ -41,9 +41,10 @@ static InputFn tone ()
 }
 
 // a bright, dense test signal: a detuned saw pair at 110 Hz with noise, the same on both channels
-static InputFn music ()
+// (gain 1: hot, about -14 dBFS RMS; 0.5: a typical level, about -20 dBFS)
+static InputFn music (double gain = 1.0)
 {
-    return [] (int, int, float* buf, int n, long long pos) {
+    return [gain] (int, int, float* buf, int n, long long pos) {
         for (int i = 0; i < n; ++i)
         {
             const long long k = pos + i;
@@ -51,8 +52,8 @@ static InputFn music ()
             const double a = 110.0 * t, b = 110.0 * 1.01 * t + 0.3;
             uint32_t s = (uint32_t)k * 2654435761u;
             s ^= s >> 13;
-            buf[i] = (float)(0.15 * ((2.0 * (a - std::floor (a)) - 1.0) + (2.0 * (b - std::floor (b)) - 1.0)) +
-                             0.02 * ((double)(s & 0xffff) / 32768.0 - 1.0));
+            buf[i] = (float)(gain * (0.15 * ((2.0 * (a - std::floor (a)) - 1.0) + (2.0 * (b - std::floor (b)) - 1.0)) +
+                                     0.02 * ((double)(s & 0xffff) / 32768.0 - 1.0)));
         }
     };
 }
@@ -89,18 +90,22 @@ int main (int argc, char** argv)
         CHECK (differ == 0, "Squeeze 0: the input bit for bit (%zu samples differ)", differ);
         CHECK (allFinite (out), "finite");
 
-        // 50 % and 100 % on a bright signal: finite, about as loud at 50 %, louder at 100 % (OTT's makeup)
-        rig.param (kSqueeze, 0.5);
-        out.clear ();
-        rig.render (3.0, out, nullptr, music ());
-        const double half = dbfs (rms (out, 96000, out.size ()));
-        rig.param (kSqueeze, 1.0);
-        out.clear ();
-        rig.render (3.0, out, &outR, music ());
-        const double full = dbfs (rms (out, 96000, out.size ()));
-        CHECK (half > -30.0 && half < -6.0, "50 %%: %.1f dBFS", half);
-        CHECK (full > half, "100 %% louder than 50 %%: %.1f against %.1f dBFS", full, half);
-        CHECK (allFinite (out) && allFinite (outR), "finite");
+        // 50 % and 100 % on a bright signal at a typical level: about as loud at 50 %, louder at 100 % (OTT's
+        // makeup lifts it). On a hot signal OTT holds the level instead (it pulls everything towards the same
+        // loudness), so there 100 % only has to stay within a few dB of 50 %.
+        auto levelAt = [&] (double squeeze, double gain) {
+            rig.param (kSqueeze, squeeze);
+            out.clear ();
+            outR.clear ();
+            rig.render (3.0, out, &outR, music (gain));
+            CHECK (allFinite (out) && allFinite (outR), "finite (Squeeze %.0f %%, gain %.2f)", 100.0 * squeeze, gain);
+            return dbfs (rms (out, 96000, out.size ()));
+        };
+        const double half = levelAt (0.5, 0.5), full = levelAt (1.0, 0.5);
+        CHECK (half > -36.0 && half < -12.0, "50 %%: %.1f dBFS", half);
+        CHECK (full > half + 2.0, "100 %% louder than 50 %%: %.1f against %.1f dBFS", full, half);
+        const double hotHalf = levelAt (0.5, 1.0), hotFull = levelAt (1.0, 1.0);
+        CHECK (std::fabs (hotFull - hotHalf) < 3.0, "hot input: 100 %% %.1f against 50 %% %.1f dBFS", hotFull, hotHalf);
 
         // state round trip
         rig.param (kSqueeze, 0.85);
