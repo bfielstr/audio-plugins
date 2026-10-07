@@ -4,7 +4,8 @@
 // (a new instance starts from it, a project's state still wins), Reset Default, rename / delete and
 // the menu message the macOS host tests use; the editor's layout in the controller's state (Wide for a new
 // instance and for older states without it, an explicit Classic kept, presets keeping the layout, the
-// user's default layout winning over Wide). Run: ./pluginkit_preset_tests
+// user's default layout winning over Wide); the Gentlr defaults for new instances (Menu > Defaults: on top
+// of the saved default preset, never over a project or a loaded preset). Run: ./pluginkit_preset_tests
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/Presets.h"
 
@@ -48,7 +49,9 @@ namespace {
 const FUID kProcId (0x11111111, 0x22222222, 0x33333333, 0x44444444);
 const FUID kOtherId (0x55555555, 0x22222222, 0x33333333, 0x44444444);
 constexpr const char* kName = "PresetTestPlug";
-constexpr uint32_t kN = 4;
+constexpr uint32_t kN = 7;
+// the parameters Menu > Defaults switches on (an end saturator's on switch, its Gentlr and Advanced)
+constexpr pk::GentlrIds kIds {4, 5, 6};
 
 const pk::ParamTable& testTable ()
 {
@@ -57,6 +60,9 @@ const pk::ParamTable& testTable ()
         pk::make::real (1, "Range", "Range", 0.0, 24.0, 8.0, pk::Curve::Linear, pk::Disp::Db),
         pk::make::choice (2, "Mode", "Mode", {"Soft", "Hard"}, 0),
         pk::make::percent (3, "Mix", "Mix", 1.0),
+        pk::make::toggle (4, "Saturator", "Saturator", false),
+        pk::make::toggle (5, "Saturator Gentlr", "Gentlr", false),
+        pk::make::toggle (6, "Saturator Gentlr Advanced", "Advanced", false),
     });
     return t;
 }
@@ -97,7 +103,7 @@ public:
     {
         const tresult r = AudioEffect::initialize (context);
         if (r == kResultOk)
-            pk::presets::applyDefault (*this, kProcId, kName);
+            pk::presets::applyDefault (*this, kProcId, kName, kIds, [this] (uint32_t id, double n) { v[id] = n; });
         return r;
     }
     tresult PLUGIN_API setState (IBStream* s) override { return readValues (s, v) ? kResultOk : kResultFalse; }
@@ -111,7 +117,11 @@ public:
 class Ctrl : public pk::ControllerBase
 {
 public:
-    Ctrl () : pk::ControllerBase (testTable ()) { setPresetInfo (kProcId, kName); }
+    Ctrl () : pk::ControllerBase (testTable ())
+    {
+        setPresetInfo (kProcId, kName);
+        setGentlrIds (kIds);
+    }
     int extraResets = 0;
     tresult PLUGIN_API setComponentState (IBStream* s) override
     {
@@ -559,6 +569,119 @@ int main ()
         fs::remove (folder / ".layouts.txt");
         Instance m (host);
         CHECK (m.ctrl->uiLayout == "wide" && m.ctrl->uiLayoutName == "Wide", "no file: Wide (%s)", m.ctrl->uiLayout.c_str ());
+    }
+
+    std::printf ("gentlrDefaultsForNewInstances\n");
+    {
+        // Menu > Defaults: the file beside the presets; a new instance gets the switches on (both halves),
+        // after the saved default preset; a project or a preset being loaded keeps its own values
+        const fs::path file = folder / ".defaults.txt";
+        auto on = [] (Instance& i, uint32_t id) { return near (i.ctl (id), 1.0) && near (i.proc->v[id], 1.0); };
+        auto off = [] (Instance& i, uint32_t id) { return near (i.ctl (id), 0.0) && near (i.proc->v[id], 0.0); };
+        Instance a (host);
+        CHECK (!a.ctrl->gentlrDefaults ().gentlrOn.has_value () && !a.ctrl->gentlrDefaults ().advancedOn.has_value (), "no file: not set");
+        CHECK (off (a, 4) && off (a, 5) && off (a, 6), "a new instance without them");
+        pk::GentlrDefaults d;
+        d.gentlrOn = true;
+        CHECK (a.ctrl->writeGentlrDefaults (d) && fs::exists (file), "written beside the presets");
+        CHECK (a.ctrl->gentlrDefaults ().gentlrOn == true && !a.ctrl->gentlrDefaults ().advancedOn.has_value (), "read back");
+        CHECK (off (a, 5), "the instance it was set in keeps its values");
+        {
+            Instance b (host);
+            CHECK (on (b, 4) && on (b, 5) && off (b, 6), "Gentlr On: the saturator and its Gentlr (%g %g %g)", b.ctl (4), b.ctl (5), b.ctl (6));
+            CHECK (b.ctrl->presetName ().empty () && near (b.ctl (0), testTable ().defaultNormalized (0)), "the rest as a new instance has it");
+            // the host syncs the controller from the processor: the same
+            MemoryStream st;
+            b.proc->getState (&st);
+            st.seek (0, IBStream::kIBSeekSet, nullptr);
+            b.ctrl->setComponentState (&st);
+            CHECK (on (b, 4) && on (b, 5), "the same either way");
+            // Init is still the factory defaults
+            CHECK (b.ctrl->loadInit () && near (b.ctl (5), 0.0), "Init leaves them out");
+        }
+        d.advancedOn = true;
+        CHECK (a.ctrl->writeGentlrDefaults (d), "write");
+        {
+            Instance c (host);
+            CHECK (on (c, 4) && on (c, 5) && on (c, 6), "and Advanced");
+        }
+        d.gentlrOn = false;
+        CHECK (a.ctrl->writeGentlrDefaults (d), "write");
+        {
+            Instance c (host);
+            CHECK (off (c, 4) && off (c, 5) && on (c, 6), "Gentlr off, Advanced on");
+        }
+        d.gentlrOn = true;
+        CHECK (a.ctrl->writeGentlrDefaults (d), "write");
+        {
+            // a project: the host restores its state after creating the instance, which wins
+            Instance p (host);
+            const auto project = stateOf ({0.05, 0.15, 0.0, 0.25, 0.0, 0.0, 0.0});
+            MemoryStream ps (const_cast<char*> (project.data ()), (TSize)project.size ());
+            CHECK (p.proc->setState (&ps) == kResultOk, "processor project state");
+            ps.seek (0, IBStream::kIBSeekSet, nullptr);
+            CHECK (p.ctrl->setComponentState (&ps) == kResultOk, "controller project state");
+            CHECK (off (p, 4) && off (p, 5) && off (p, 6) && near (p.ctl (0), 0.05), "the project's values");
+        }
+        {
+            // a preset being loaded: its values
+            const std::string path = (folder / "Plain.vstpreset").string ();
+            CHECK (pk::presets::write (path, kProcId, stateOf ({0.3, 0.3, 0.0, 0.3, 0.0, 0.0, 0.0}), {}, nullptr), "a preset");
+            Instance l (host);
+            CHECK (on (l, 5), "(a new instance)");
+            CHECK (l.ctrl->loadPreset (path), "load");
+            CHECK (near (l.ctl (5), 0.0) && near (l.ctl (6), 0.0) && near (l.ctl (0), 0.3), "the preset's values");
+            fs::remove (path);
+        }
+        {
+            // with a saved default preset: it first, then the switches over it
+            {
+                Instance s (host);
+                s.set (0, 0.61);
+                s.set (4, 0.0);
+                s.set (5, 0.0);
+                s.set (6, 0.0);
+                CHECK (s.ctrl->saveAsDefault (), "save as default");
+            }
+            Instance n (host);
+            CHECK (near (n.ctl (0), 0.61) && near (n.proc->v[0], 0.61), "the default preset's values");
+            CHECK (on (n, 4) && on (n, 5) && on (n, 6), "the switches over them");
+            CHECK (n.ctrl->presetKind () == pk::presets::Kind::Default, "started from the default");
+            CHECK (n.ctrl->loadDefault () && near (n.ctl (5), 0.0) && near (n.proc->v[5], 0.0), "Load Default: the preset as saved");
+            // not set: the default preset decides; set off: off over it (the saturator as the preset has it)
+            {
+                Instance s (host);
+                s.set (4, 1.0);
+                s.set (5, 1.0);
+                s.set (6, 1.0);
+                CHECK (s.ctrl->saveAsDefault (), "save as default 2");
+            }
+            CHECK (a.ctrl->writeGentlrDefaults ({}), "neither set");
+            {
+                Instance m (host);
+                CHECK (on (m, 4) && on (m, 5) && on (m, 6) && near (m.ctl (0), 0.61), "the default preset's");
+            }
+            pk::GentlrDefaults offs;
+            offs.gentlrOn = false;
+            offs.advancedOn = false;
+            CHECK (a.ctrl->writeGentlrDefaults (offs), "both off");
+            Instance m (host);
+            CHECK (on (m, 4) && off (m, 5) && off (m, 6) && near (m.ctl (0), 0.61), "off over the default preset (%g %g %g)", m.ctl (4),
+                   m.ctl (5), m.ctl (6));
+            CHECK (m.ctrl->resetDefault (), "reset default");
+        }
+        // a corrupt file: off
+        {
+            std::FILE* f = std::fopen (file.string ().c_str (), "wb");
+            if (f)
+            {
+                std::fputs ("gentlr\n\x01 advanced == on? \n", f);
+                std::fclose (f);
+            }
+            Instance c (host);
+            CHECK (off (c, 4) && off (c, 5) && off (c, 6), "corrupt file: not set (the factory defaults)");
+        }
+        fs::remove (file);
     }
 
     std::printf ("menuMessage\n");

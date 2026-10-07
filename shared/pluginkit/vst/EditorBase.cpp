@@ -774,25 +774,81 @@ bool EditorBase::pickedInSubMenu (COptionMenu* menu)
     return menu && menu->getLastItemMenu (index) != menu;
 }
 
+namespace {
+// a command item that does its own work when picked
+void addCommand (COptionMenu* m, const std::string& title, std::function<void ()> fn, bool checked = false, bool enabled = true)
+{
+    auto* item = new CCommandMenuItem (CCommandMenuItem::Desc (title.c_str ()));
+    item->setActions ([fn] (CCommandMenuItem*) {
+        if (fn)
+            fn ();
+    });
+    item->setChecked (checked);
+    item->setEnabled (enabled);
+    m->addEntry (item);
+}
+} // namespace
+
+void EditorBase::addDefaultsMenu (COptionMenu* menu)
+{
+    const GentlrIds ids = controller->gentlrIds ();
+    if (!menu || (ids.gentlr < 0 && ids.advanced < 0))
+        return;
+    // Checked: what the file says, or (not set yet) the parameter's factory default (gentlr's own Advanced
+    // is on in a new gentlr). A pick sets the switch to the other state; it reads the file again and changes
+    // its own switch only (another instance may have changed the other one since this menu opened).
+    const GentlrDefaults d = controller->gentlrDefaults ();
+    const auto factoryOn = [this] (int32_t id) { return controller->table ().defaultNormalized ((uint32_t)id) >= 0.5; };
+    auto sub = makeOwned<COptionMenu> ();
+    if (ids.gentlr >= 0)
+    {
+        const bool checked = d.gentlrOn.value_or (factoryOn (ids.gentlr));
+        addCommand (
+            sub, "Gentlr On by Default",
+            [this, checked] {
+                GentlrDefaults now = controller->gentlrDefaults ();
+                now.gentlrOn = !checked;
+                controller->writeGentlrDefaults (now);
+            },
+            checked);
+    }
+    if (ids.advanced >= 0)
+    {
+        const bool checked = d.advancedOn.value_or (factoryOn (ids.advanced));
+        addCommand (
+            sub, "Advanced On by Default",
+            [this, checked] {
+                GentlrDefaults now = controller->gentlrDefaults ();
+                now.advancedOn = !checked;
+                controller->writeGentlrDefaults (now);
+            },
+            checked);
+    }
+    sub->addSeparator ();
+    if (ids.gentlr >= 0 && ids.saturator >= 0)
+        addCommand (sub, "(Gentlr On also switches on smacheratr at the end)", {}, false, false);
+    addCommand (sub, "(For new instances; projects and presets keep theirs)", {}, false, false);
+    menu->addEntry (sub, "Defaults");
+}
+
 void EditorBase::addLayoutMenu (COptionMenu* menu)
 {
-    if (!menu || layoutSpec (true).empty ())
+    if (!menu)
         return;
+    if (layoutSpec (true).empty ())
+    {
+        // (no Layout: the Defaults after a separator of their own)
+        const GentlrIds ids = controller->gentlrIds ();
+        if (ids.gentlr >= 0 || ids.advanced >= 0)
+            menu->addSeparator ();
+        addDefaultsMenu (menu);
+        return;
+    }
     // Wide and Classic, the saved layouts, then the commands. Each entry does its own work when picked
     // (a command item); the layout changes at the next tick (the menu's button is built again with it).
     const layout::Saved saved = controller->savedLayouts ();
     const std::string now = controller->uiLayout, name = controller->uiLayoutName;
     auto sub = makeOwned<COptionMenu> ();
-    auto add = [] (COptionMenu* m, const std::string& title, std::function<void ()> fn, bool checked = false, bool enabled = true) {
-        auto* item = new CCommandMenuItem (CCommandMenuItem::Desc (title.c_str ()));
-        item->setActions ([fn] (CCommandMenuItem*) {
-            if (fn)
-                fn ();
-        });
-        item->setChecked (checked);
-        item->setEnabled (enabled);
-        m->addEntry (item);
-    };
     const layout::Named* savedNow = nullptr;
     for (const auto& n : saved.layouts)
         if (n.name == name && n.layout == now)
@@ -800,21 +856,21 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
     // (Classic: the fixed layout every editor had before layouts, called Default then; written as
     // "default", which 0.14 reads as its Default too)
     const bool isClassic = !savedNow && layout::isClassic (now), isWide = !savedNow && lowerText (now) == "wide";
-    add (sub, "Wide", [this] { setLayout ("wide", "Wide"); }, isWide);
-    add (sub, "Classic", [this] { setLayout (layout::kClassicText, "Classic"); }, isClassic);
+    addCommand (sub, "Wide", [this] { setLayout ("wide", "Wide"); }, isWide);
+    addCommand (sub, "Classic", [this] { setLayout (layout::kClassicText, "Classic"); }, isClassic);
     if (!saved.layouts.empty ())
         sub->addSeparator ();
     for (const auto& n : saved.layouts)
-        add (sub, n.name, [this, n] { setLayout (n.layout, n.name); }, savedNow == &n);
+        addCommand (sub, n.name, [this, n] { setLayout (n.layout, n.name); }, savedNow == &n);
     if (!savedNow && !isClassic && !isWide)
-        add (sub, "Custom (not saved)", {}, true, false);
+        addCommand (sub, "Custom (not saved)", {}, true, false);
     sub->addSeparator ();
-    add (sub, "Save Layout As...", [this] { promptLayoutName (); });
+    addCommand (sub, "Save Layout As...", [this] { promptLayoutName (); });
     auto same = [] (const std::string& a, const std::string& b) {
         return a == b || (layout::isClassic (a) && layout::isClassic (b)) || (lowerText (a) == "wide" && lowerText (b) == "wide");
     };
     const bool isTheDefault = same (saved.hasDefault ? saved.defaultLayout : std::string (layout::kDefaultLayout), now);
-    add (sub, "Use as Default Layout", [this] {
+    addCommand (sub, "Use as Default Layout", [this] {
         layout::Saved s = controller->savedLayouts ();
         s.defaultLayout = layout::isClassic (controller->uiLayout) ? std::string (layout::kClassicText) : controller->uiLayout;
         s.hasDefault = true;
@@ -825,7 +881,7 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
     {
         auto del = makeOwned<COptionMenu> ();
         for (const auto& n : saved.layouts)
-            add (del, n.name, [this, n] {
+            addCommand (del, n.name, [this, n] {
                 layout::Saved s = controller->savedLayouts ();
                 s.remove (n.name);
                 controller->writeSavedLayouts (s);
@@ -836,6 +892,7 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
     }
     menu->addSeparator ();
     menu->addEntry (sub, "Layout");
+    addDefaultsMenu (menu);
 }
 
 void EditorBase::promptLayoutName ()

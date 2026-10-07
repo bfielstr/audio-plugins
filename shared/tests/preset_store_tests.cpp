@@ -1,9 +1,13 @@
 // The preset store without the SDK (pluginkit/PresetStore.h): tags, the metadata XML, factory preset
-// parsing, the tag filter and the Presets menu's layout.
+// parsing, the tag filter and the Presets menu's layout; the Gentlr defaults file beside the presets
+// (pluginkit/GentlrDefaults.h).
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/PresetStore.h"
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -224,6 +228,76 @@ static void menuFilteredByTag ()
     CHECK (note, "says nothing matches");
 }
 
+static void gentlrDefaultsFile ()
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path () /
+                         ("pk_gentlr_defaults_" + std::to_string ((long long)fs::file_time_type::clock::now ().time_since_epoch ().count ()));
+    const auto unset = [] (const GentlrDefaults& x) { return !x.gentlrOn.has_value () && !x.advancedOn.has_value (); };
+    // no folder, no file: neither switch set
+    CHECK (gentlrDefaultsPath ("").empty () && !writeGentlrDefaults ("", {}), "no folder");
+    GentlrDefaults d = readGentlrDefaults (dir.string ());
+    CHECK (unset (d), "no file yet: not set");
+    // round trip (the folder is made); a switch not set writes no line
+    d.gentlrOn = true;
+    CHECK (writeGentlrDefaults (dir.string (), d), "write");
+    CHECK (gentlrDefaultsPath (dir.string ()).find (".defaults.txt") != std::string::npos && fs::exists (dir / ".defaults.txt"),
+           "beside the presets");
+    CHECK (gentlrDefaultsText (d).find ("advanced") == std::string::npos, "no line for Advanced");
+    d = readGentlrDefaults (dir.string ());
+    CHECK (d.gentlrOn == true && !d.advancedOn.has_value (), "gentlr on, advanced not set");
+    d.advancedOn = true;
+    d.gentlrOn = false;
+    CHECK (writeGentlrDefaults (dir.string (), d), "write 2");
+    d = readGentlrDefaults (dir.string ());
+    CHECK (d.gentlrOn == false && d.advancedOn == true, "gentlr off, advanced on");
+    // a corrupt file: what it does not understand is not set
+    {
+        std::ofstream f (dir / ".defaults.txt", std::ios::binary | std::ios::trunc);
+        f << "\x01\xff garbage\n=on\ngentlr\nadvanced = maybe\n";
+    }
+    CHECK (unset (readGentlrDefaults (dir.string ())), "corrupt: not set");
+    // case, spaces and other spellings; comments; keys a later version may add are kept
+    d = parseGentlrDefaults ("# hi\r\n  Gentlr = ON \r\nADVANCED=0\nfuture = 3\n");
+    CHECK (d.gentlrOn == true && d.advancedOn == false && d.other.size () == 1, "parsed (%zu other)", d.other.size ());
+    CHECK (parseGentlrDefaults ("gentlr = yes\nadvanced = no").gentlrOn == true && parseGentlrDefaults ("advanced = false").advancedOn == false,
+           "yes / no, true / false");
+    CHECK (writeGentlrDefaults (dir.string (), d), "write 3");
+    const GentlrDefaults back = readGentlrDefaults (dir.string ());
+    CHECK (back.gentlrOn == true && back.advancedOn == false && back.other.size () == 1 && back.other[0].first == "future" &&
+               back.other[0].second == "3",
+           "kept");
+    // a folder in the file's place: reads as not set, a write fails
+    fs::remove (dir / ".defaults.txt");
+    fs::create_directories (dir / ".defaults.txt");
+    CHECK (unset (readGentlrDefaults (dir.string ())) && !writeGentlrDefaults (dir.string (), back), "unwritable");
+    std::error_code ec;
+    fs::remove_all (dir, ec);
+}
+
+static void gentlrDefaultValuesPerPlugin ()
+{
+    using V = std::vector<std::pair<uint32_t, double>>;
+    const GentlrIds tail = tailGentlrIds (10, 20, 40);
+    CHECK (tail.saturator == 10 + (int)kTailOn && tail.gentlr == 20 + (int)kTailExtClarity && tail.advanced == 40 + (int)kTailExt2Advanced,
+           "tail IDs");
+    GentlrDefaults d;
+    CHECK (gentlrDefaultValues (tail, d).empty (), "not set: nothing");
+    d.gentlrOn = true;
+    CHECK ((gentlrDefaultValues (tail, d) == V {{10u, 1.0}, {29u, 1.0}}), "Gentlr On: the saturator and its Gentlr");
+    d.advancedOn = true;
+    CHECK ((gentlrDefaultValues (tail, d) == V {{10u, 1.0}, {29u, 1.0}, {40u, 1.0}}), "and Advanced");
+    d.gentlrOn = false;
+    d.advancedOn = false;
+    CHECK ((gentlrDefaultValues (tail, d) == V {{29u, 0.0}, {40u, 0.0}}), "off: Gentlr and Advanced off, the saturator as it is");
+    // gentlr itself: only its Advanced
+    GentlrIds own;
+    own.advanced = 0;
+    d.gentlrOn = true;
+    CHECK ((gentlrDefaultValues (own, d) == V {{0u, 0.0}}), "gentlr: Advanced only");
+    CHECK (gentlrDefaultValues (GentlrIds {}, d).empty (), "no IDs (smemplr): nothing");
+}
+
 int main ()
 {
     struct T
@@ -235,6 +309,7 @@ int main ()
         {"factoryPresetParses", factoryPresetParses},       {"factoryPresetErrors", factoryPresetErrors},
         {"namesAreChecked", namesAreChecked},               {"tagFilter", tagFilter},
         {"menuLayout", menuLayout},                         {"menuFilteredByTag", menuFilteredByTag},
+        {"gentlrDefaultsFile", gentlrDefaultsFile},         {"gentlrDefaultValuesPerPlugin", gentlrDefaultValuesPerPlugin},
     };
     for (const auto& t : tests)
     {

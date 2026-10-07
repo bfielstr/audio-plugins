@@ -6,10 +6,13 @@
 #pragma once
 
 #include "pluginkit/PresetStore.h"
+#include "pluginkit/TailParams.h"
 
 #include "pluginterfaces/base/funknown.h"
 #include "pluginterfaces/vst/ivstmessage.h"
 
+#include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -37,6 +40,11 @@ const std::vector<FactoryFile>& factoryFiles ();
 // (Save as Default), the processor starts from it. A host loading a project calls setState after
 // initialize, so the project's state replaces it. True when a default was applied.
 bool applyDefault (Steinberg::Vst::AudioEffect& fx, const Steinberg::FUID& classId, const char* pluginName);
+// The same, then the user's Gentlr defaults for new instances on top (Menu > Defaults, GentlrDefaults.h):
+// set (id, normalized) for each parameter of ids they set (the processor stores it as it stores a
+// value from its state). True when a default preset was applied.
+bool applyDefault (Steinberg::Vst::AudioEffect& fx, const Steinberg::FUID& classId, const char* pluginName, const GentlrIds& ids,
+                   const std::function<void (uint32_t id, double normalized)>& set);
 
 // Messages between the two halves of a plug-in (and from a host test to the controller).
 constexpr const char* kMsgGetState = "pk.preset.getState"; // controller -> processor

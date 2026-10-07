@@ -100,4 +100,18 @@ enum TailExt4Field : uint32_t
     kTailExt4Fields
 };
 
+// The parameters Menu > Defaults sets in a new instance (GentlrDefaults.h): the end saturator's
+// on switch (kTailOn), its Gentlr (kTailExtClarity) and Gentlr's Advanced mode (kTailExt2Advanced); -1
+// where a plug-in has none (gentlr's own Advanced has no saturator or Gentlr switch to go with it,
+// smemplr has none of them: its menu shows no Defaults). ControllerBase::setGentlrIds and
+// presets::applyDefault take them.
+struct GentlrIds
+{
+    int32_t saturator = -1, gentlr = -1, advanced = -1;
+};
+constexpr GentlrIds tailGentlrIds (uint32_t base, uint32_t extBase, uint32_t ext2Base)
+{
+    return {(int32_t)(base + kTailOn), (int32_t)(extBase + kTailExtClarity), (int32_t)(ext2Base + kTailExt2Advanced)};
+}
+
 } // namespace pk
