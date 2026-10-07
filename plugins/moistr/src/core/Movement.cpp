@@ -89,6 +89,34 @@ double BandMotion::lift (double theta, double secPerCycle, double riseSec, doubl
     return 0.5 - 0.5 * std::cos (kPi * best);
 }
 
+LiquidPoint LiquidPath::point (int64_t i) const
+{
+    Rng r (key ^ ((uint64_t)i * 0x9FB21C651E98DF25ull));
+    LiquidPoint q;
+    // the vowels low in F1 (u, i) come up more often: the resonance spends most of its time low and jumps up
+    constexpr int kWeights[kNumVowels] = {3, 2, 2, 2, 3};
+    int pick = (int)(r.next () % 12), v = 0;
+    while (pick >= kWeights[v])
+        pick -= kWeights[v++];
+    const double lo = kVowelF1[4], hi = kVowelF1[2]; // (i .. a: the vowels' F1 range)
+    q.pos = std::clamp (std::log (kVowelF1[v] / lo) / std::log (hi / lo) + r.range (-0.12, 0.12), 0.0, 1.0);
+    q.ratio = kVowelF2[v] / kVowelF1[v];
+    q.glide = r.uniform () < 0.25 ? kLiquidJump : r.range (0.45, 1.0);
+    return q;
+}
+
+void LiquidPath::at (double theta, double density, double& pos, double& logRatio) const
+{
+    const double x = theta * (double)steps * density - offset;
+    const double f = std::floor (x);
+    const int64_t i = (int64_t)f;
+    const LiquidPoint a = point (i), b = point (i + 1);
+    const double t = std::min ((x - f) / a.glide, 1.0), s = t * t * (3.0 - 2.0 * t);
+    pos = a.pos + (b.pos - a.pos) * s;
+    const double la = std::log2 (a.ratio), lb = std::log2 (b.ratio);
+    logRatio = la + (lb - la) * s;
+}
+
 double lowXoverForSeed (int seed)
 {
     const int s = std::clamp (seed, kMinSeed, kMaxSeed);
@@ -174,6 +202,14 @@ Pattern makePattern (int seed, int pass, int lowXoverSeed)
         m.hold = low.range (0.15, 0.6);
         m.rise = logRange (low, kLowRiseMin, kLowRiseMax);
         m.fall = logRange (low, kLowFallMin, kLowFallMax);
+    }
+    // Liquid's path (0.23): a stream of its own again, so everything above is 0.22's
+    Rng liq (0x4C697175ull * (uint64_t)(uint32_t)seed + 0x6D0Bull * (uint64_t)(pass + 1) + 0x3Dull);
+    {
+        constexpr int kLiquidSteps[4] = {2, 3, 4, 6};
+        p.liquid.steps = kLiquidSteps[liq.next () % 4];
+        p.liquid.offset = 0.25 * (double)(liq.next () % 4);
+        p.liquid.key = liq.next ();
     }
     return p;
 }

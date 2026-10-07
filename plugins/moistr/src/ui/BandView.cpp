@@ -60,7 +60,8 @@ void lockGlyph (CDrawContext* ctx, double x, double y, const CColor& c)
 
 bool BandSnapshot::operator== (const BandSnapshot& o) const
 {
-    if (bands != o.bands || lowLocked != o.lowLocked || lowKnown != o.lowKnown || active != o.active || glueDb != o.glueDb)
+    if (bands != o.bands || lowLocked != o.lowLocked || lowKnown != o.lowKnown || active != o.active || glueDb != o.glueDb ||
+        liquidHz != o.liquidHz || liquidF2Hz != o.liquidF2Hz)
         return false;
     for (int i = 0; i < 3; ++i)
         if (xover[i] != o.xover[i])
@@ -104,7 +105,10 @@ bool BandView::shows (uint32_t id)
         case kShift:
         case kLowPush:
         case kLowDip:
-        case kDropOut: return true;
+        case kDropOut:
+        case kLiquid:
+        case kLiquidLow:
+        case kLiquidHigh: return true;
         default: return false;
     }
 }
@@ -141,6 +145,8 @@ BandSnapshot BandView::snapshot (const Meters* m, pk::ParamHost* host)
                 s.gainDb[b] = g <= -99.0f ? kLevelOffDb : std::round ((double)g * 10.0) / 10.0;
             }
             s.glueDb = std::round (m->glueDb.load (rx) * 10.0f) / 10.0;
+            s.liquidHz = std::round (m->liquidHz.load (rx));
+            s.liquidF2Hz = std::round (m->liquidF2Hz.load (rx));
         }
     }
     // (the display keeps the crossovers in order, a little apart)
@@ -312,6 +318,16 @@ void BandView::paintBase (CDrawContext* ctx)
     text (ctx, kNames[0], CRect (p.left, p.bottom - 13.0, std::max (xLow, p.left + 30.0), p.bottom - 1.0), theme::kText, 9.0,
           kCenterText, true);
 
+    // Liquid: where its resonance may go (a bar at the top over the upper bands)
+    if (host->plainValue (kLiquid) > 0.0)
+    {
+        const double a = host->plainValue (kLiquidLow), b = host->plainValue (kLiquidHigh);
+        const double x0 = xOf (std::min (a, b)), x1 = xOf (std::max (a, b));
+        ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 70));
+        ctx->drawRect (CRect (x0, p.top + 17.0, std::max (x1, x0 + 2.0), p.top + 21.0), kDrawFilled);
+        text (ctx, "LIQUID", CRect (x1 + 4.0, p.top + 13.0, x1 + 60.0, p.top + 25.0), theme::kEnergyLive, 8.5, kLeftText, true);
+    }
+
     text (ctx, bands == 4 ? "4 BANDS" : "3 BANDS", CRect (all.left + kPad, all.top + 3.0, all.left + 200.0, all.top + 17.0),
           theme::kCopperPale, 10.0, kLeftText, true);
 }
@@ -321,7 +337,7 @@ void BandView::draw (CDrawContext* ctx)
     const CRect all = getViewSize ();
     pk::LayerKey key;
     for (uint32_t id : {kBandCount, kXoverMid, kXoverHigh, kLowLevel, kMidLevel, kHighLevel, kAirLevel, kDepth, kMovement, kMidMove,
-                        kHighMove, kAirMove, kShiftOn, kShift, kLowPush, kLowDip, kDropOut})
+                        kHighMove, kAirMove, kShiftOn, kShift, kLowPush, kLowDip, kDropOut, kLiquid, kLiquidLow, kLiquidHigh})
         key.add (host->plainValue (id));
     key.add (snap.xover[0], snap.lowKnown, snap.bands);
     baseLayer.draw (ctx, all, key, [this] (CDrawContext* c) { paintBase (c); });
@@ -362,6 +378,32 @@ void BandView::draw (CDrawContext* ctx)
     {
         const double x = std::round (xOf (snap.xover[k])) + 0.5;
         ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
+    }
+    // Liquid's two peaks now: a marker for each (the first the larger) over the upper bands
+    if (snap.active && snap.liquidHz > 0.0)
+    {
+        ctx->setFrameColor (theme::withAlpha (theme::kEnergyLive, 150));
+        ctx->setFillColor (theme::kEnergyLive);
+        const double xLow = xOf (snap.xover[0]);
+        int i = 0;
+        for (double hz : {snap.liquidHz, snap.liquidF2Hz})
+        {
+            const double x = std::round (xOf (hz)) + 0.5, r = i++ == 0 ? 5.0 : 3.5;
+            if (hz <= 0.0 || x <= xLow)
+                continue;
+            ctx->setLineStyle (theme::dashed ());
+            ctx->drawLine (CPoint (x, p.top + 22.0 + r), CPoint (x, p.bottom));
+            ctx->setLineStyle (kLineSolid);
+            auto tri = owned (ctx->createGraphicsPath ());
+            if (tri)
+            {
+                tri->beginSubpath (CPoint (x - r, p.top + 22.0));
+                tri->addLine (CPoint (x + r, p.top + 22.0));
+                tri->addLine (CPoint (x, p.top + 22.0 + 1.6 * r));
+                tri->closeSubpath ();
+                ctx->drawGraphicsPath (tri, CDrawContext::kPathFilled);
+            }
+        }
     }
     if (snap.active)
     {

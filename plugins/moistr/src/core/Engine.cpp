@@ -40,6 +40,16 @@ void Engine::PassState::resetFilters ()
     split[0].reset ();
     split[1].reset ();
     resetShifter ();
+    resetLiquid ();
+}
+
+void Engine::PassState::resetLiquid ()
+{
+    for (int c = 0; c < 2; ++c)
+    {
+        liq1[c].reset ();
+        liq2[c].reset ();
+    }
 }
 
 void Engine::PassState::resetShifter ()
@@ -148,6 +158,70 @@ double Engine::driftAt (int pass, int x, double th) const
     return was + (now - was) * w;
 }
 
+void Engine::liquidAt (double th, double& pos, double& logRatio) const
+{
+    // (one path for both passes: pass 0's)
+    auto one = [&] (const PatternSet& ps, double& q, double& lr) {
+        ps.a[0].liquid.at (th, ps.density, q, lr);
+        if (blend <= 0.0)
+            return;
+        double qb, lrb;
+        ps.b[0].liquid.at (th, ps.density, qb, lrb);
+        if (blend >= 1.0)
+        {
+            q = qb;
+            lr = lrb;
+            return;
+        }
+        q += (qb - q) * blend;
+        lr += (lrb - lr) * blend;
+    };
+    one (cur, pos, logRatio);
+    if (xfade >= 1.0)
+        return;
+    double q, lr;
+    one (old, q, lr);
+    const double w = 0.5 - 0.5 * std::cos (dsp::kPi * xfade);
+    pos = q + (pos - q) * w;
+    logRatio = lr + (logRatio - lr) * w;
+}
+
+void Engine::liquidTargets (double th, bool snap)
+{
+    liqPrev = liqNow;
+    if (liquid <= 0.0)
+        liqNow.a1 = liqNow.a2 = 0.0; // (off: not run; the frequencies stay where they were)
+    else
+    {
+        double pos, logRatio;
+        liquidAt (th, pos, logRatio);
+        if (link > 0.0) // (with Link F1 rises as the bands open)
+            pos += link * kLinkFollow * (state[0].sharedLift - pos);
+        double lo = std::exp2 (logLiqLo), hi = std::exp2 (logLiqHi);
+        if (lo > hi)
+            std::swap (lo, hi);
+        const double fMax = std::min (0.45 * sr, 12000.0);
+        liqF1 = std::min (lo * std::pow (hi / lo, std::clamp (pos, 0.0, 1.0)), fMax);
+        liqF2 = std::min (liqF1 * std::exp2 (logRatio), fMax);
+        liqNow.g1 = std::tan (dsp::kPi * liqF1 / sr);
+        liqNow.g2 = std::tan (dsp::kPi * liqF2 / sr);
+        liqNow.k = 1.0 / (kLiquidQMin * std::pow (kLiquidQMax / kLiquidQMin, liqRes));
+        liqNow.a1 = std::pow (10.0, liquid * kLiquidMaxDb / 20.0) - 1.0;
+        liqNow.a2 = std::pow (10.0, liquid * kLiquidF2Db / 20.0) - 1.0;
+    }
+    if (snap || liqPrev.a1 <= 0.0)
+    {
+        // (from off: the filters start where they are now, fading in by their gains alone)
+        const double a1 = liqPrev.a1, a2 = liqPrev.a2;
+        liqPrev = liqNow;
+        if (!snap)
+        {
+            liqPrev.a1 = a1;
+            liqPrev.a2 = a2;
+        }
+    }
+}
+
 double Engine::cycleSeconds () const
 {
     const bool sync = p[kSync] >= 0.5;
@@ -181,6 +255,11 @@ void Engine::reset ()
     shiftHz = shiftHzPrev = std::clamp (p[kShift], -2000.0, 2000.0);
     shiftMix = shiftMixPrev = std::clamp (p[kShiftMix], 0.0, 1.0);
     shiftFade = shiftFadePrev = p[kShiftOn] >= 0.5 ? 1.0 : 0.0;
+    link = std::clamp (p[kLink], 0.0, 1.0);
+    liquid = std::clamp (p[kLiquid], 0.0, 1.0);
+    liqRes = std::clamp (p[kLiquidRes], 0.0, 1.0);
+    logLiqLo = std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0));
+    logLiqHi = std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0));
     secPerCycle = cycleSeconds ();
     theta = 0.0;
     wasPlaying = false;
@@ -193,6 +272,8 @@ void Engine::reset ()
         s.grit.reset ();
         targets (k, theta, s.gNow, s.gainNow, true);
     }
+    liqNow = {};
+    liquidTargets (theta, true);
     pass2 = std::lround (p[kPasses]) == kPasses2 ? 1.0 : 0.0;
     mix = (float)std::clamp (p[kMix], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
@@ -267,6 +348,8 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
     const double speed = std::exp2 (logSpeed);
     riseScale = std::exp2 (logRise) / speed;
     fallScale = std::exp2 (logFall) / speed;
+    // Link: the moving bands' lifts pulled towards the lead's (the Mid band's)
+    s.sharedLift = link > 0.0 ? liftAt (pass, kBandMid, th, false) : 0.0;
     for (int b = 0; b < kMaxBands; ++b)
     {
         double db = levelDb[b], lift = 1.0;
@@ -283,7 +366,13 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
             const double drop = depth * move * share[b];
             if (drop > 0.0)
             {
-                lift = liftAt (pass, b, th, false);
+                if (link <= 0.0)
+                    lift = liftAt (pass, b, th, false);
+                else
+                {
+                    const double own = b == kBandMid ? s.sharedLift : liftAt (pass, b, th, false);
+                    lift = own + link * (s.sharedLift - own);
+                }
                 db -= drop * (1.0 - lift);
                 if (dropOut > 0.0 && drop > kDropFromDb)
                 {
@@ -318,14 +407,20 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
     PassState& s = state[pass];
     double g1[kMaxXovers], gain1[kMaxBands];
     targets (pass, thetaEnd, g1, gain1, false);
+    if (pass == 0)
+        liquidTargets (thetaEnd, false); // (one resonance for both passes)
     const bool still = g1[0] == s.gNow[0] && g1[1] == s.gNow[1] && g1[2] == s.gNow[2];
     dsp::SvfCoefs c[kMaxXovers];
     if (still)
         for (int x = 0; x < kMaxXovers; ++x)
             c[x].set (g1[x], dsp::kSqrt2);
-    if (shiftFade > 0.0 || shiftFadePrev > 0.0)
+    const bool shifting = shiftFade > 0.0 || shiftFadePrev > 0.0;
+    const bool liquidOn = liqNow.a1 > 0.0 || liqPrev.a1 > 0.0;
+    if (shifting || liquidOn)
     {
-        // the shifter on the bands above Low (the Low band, and so everything below Low X, untouched)
+        // Liquid and the shifter on the bands above Low (the Low band, and so everything below Low X, untouched)
+        const LiquidCoefs& la = liqPrev;
+        const LiquidCoefs& lb = liqNow;
         const double w0 = 2.0 * dsp::kPi * shiftHzPrev / sr, w1 = 2.0 * dsp::kPi * shiftHz / sr;
         for (int i = 0; i < m; ++i)
         {
@@ -336,20 +431,46 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
             double gain[kMaxBands];
             for (int b = 0; b < kMaxBands; ++b)
                 gain[b] = s.gainNow[b] + (gain1[b] - s.gainNow[b]) * t;
-            const double fade = shiftFadePrev + (shiftFade - shiftFadePrev) * t;
-            const double wet = shiftMixPrev + (shiftMix - shiftMixPrev) * t;
-            const double cs = std::cos (s.shiftPhase), sn = std::sin (s.shiftPhase);
-            s.shiftPhase += w0 + (w1 - w0) * t;
-            if (s.shiftPhase > dsp::kPi)
-                s.shiftPhase -= 2.0 * dsp::kPi;
-            else if (s.shiftPhase < -dsp::kPi)
-                s.shiftPhase += 2.0 * dsp::kPi;
+            double fade = 0.0, wet = 0.0, cs = 1.0, sn = 0.0;
+            if (shifting)
+            {
+                fade = shiftFadePrev + (shiftFade - shiftFadePrev) * t;
+                wet = shiftMixPrev + (shiftMix - shiftMixPrev) * t;
+                cs = std::cos (s.shiftPhase);
+                sn = std::sin (s.shiftPhase);
+                s.shiftPhase += w0 + (w1 - w0) * t;
+                if (s.shiftPhase > dsp::kPi)
+                    s.shiftPhase -= 2.0 * dsp::kPi;
+                else if (s.shiftPhase < -dsp::kPi)
+                    s.shiftPhase += 2.0 * dsp::kPi;
+            }
+            dsp::SvfCoefs lc1, lc2;
+            double a1 = 0.0, a2 = 0.0;
+            if (liquidOn)
+            {
+                const double k = la.k + (lb.k - la.k) * t;
+                lc1.set (la.g1 + (lb.g1 - la.g1) * t, k);
+                lc2.set (la.g2 + (lb.g2 - la.g2) * t, k);
+                // (k x the band-pass: unity at the peak, so the peak is 1 + a)
+                a1 = (la.a1 + (lb.a1 - la.a1) * t) * k;
+                a2 = (la.a2 + (lb.a2 - la.a2) * t) * k;
+            }
             double* io[2] = {l + i, r + i};
             for (int ch = 0; ch < 2; ++ch)
             {
                 double band[kMaxBands];
                 s.split[ch].tick (*io[ch], c, band);
-                const double up = gain[1] * band[1] + gain[2] * band[2] + gain[3] * band[3];
+                double up = gain[1] * band[1] + gain[2] * band[2] + gain[3] * band[3];
+                if (liquidOn)
+                {
+                    up += a1 * s.liq1[ch].tick (up, lc1).bp;
+                    up += a2 * s.liq2[ch].tick (up, lc2).bp;
+                }
+                if (!shifting)
+                {
+                    *io[ch] = gain[0] * band[0] + up;
+                    continue;
+                }
                 double hi, hq;
                 s.hilbert[ch].tick (up, hi, hq);
                 // the single sideband, kept out of the sub region (and away from DC)
@@ -464,6 +585,11 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (shiftHz, std::clamp (p[kShift], -2000.0, 2000.0), tickSmooth);
         glide (shiftMix, std::clamp (p[kShiftMix], 0.0, 1.0), tickSmooth);
         shiftFade = std::clamp (shiftFade + (shiftOn ? fadeStep : -fadeStep), 0.0, 1.0);
+        glide (link, std::clamp (p[kLink], 0.0, 1.0), tickSmooth);
+        glide (liquid, std::clamp (p[kLiquid], 0.0, 1.0), tickSmooth);
+        glide (liqRes, std::clamp (p[kLiquidRes], 0.0, 1.0), tickSmooth);
+        glide (logLiqLo, std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0)), tickSmooth);
+        glide (logLiqHi, std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0)), tickSmooth);
 
         drive.process (wl, wr, m);
         const double thetaEnd = theta + dTheta * m;
@@ -494,6 +620,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         if (shiftFade <= 0.0 && shiftFadePrev > 0.0)
             for (auto& s : state)
                 s.resetShifter (); // (faded out: off, and ready to start clean)
+        if (liqNow.a1 <= 0.0 && liqPrev.a1 > 0.0)
+            for (auto& s : state)
+                s.resetLiquid ();
 
         for (int i = 0; i < m; ++i)
         {
@@ -537,6 +666,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         meters->shiftHz.store (shiftFade > 0.0 ? (float)shiftHz : 0.0f, rx);
         meters->shiftAmount.store ((float)shiftFade, rx);
+        const bool liq = liqNow.a1 > 0.0;
+        meters->liquidHz.store (liq ? (float)liqF1 : 0.0f, rx);
+        meters->liquidF2Hz.store (liq ? (float)liqF2 : 0.0f, rx);
+        meters->liquidAmount.store ((float)liquid, rx);
         meters->glueDb.store ((float)state[0].glue.gainReductionDb (), rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }

@@ -32,6 +32,18 @@
 //   Drop Out            the floor of a moving band falls to silence as its fall (Depth x Movement x Move)
 //                       nears 48 dB: from kDropFromDb a smooth curve takes the floor's gain to 0 at 48 dB.
 //
+// 0.23, both off by default (the engine is then 0.22's, bit for bit):
+//   Link    how much Mid, High and Air share one stream of events: each band's lift moves towards the Mid band's
+//           (the lead) by Link, so at 100 % they open and close together. Each keeps its own Level, Move and
+//           Depth (only when it rises and falls is shared). The Low band is not linked.
+//   Liquid  a moving resonance on the bands above Low (after their rise and fall, before the shifter): two
+//           peaking TPT state-variable filters in series, F1 and F2 of a vowel (Movement.h: LiquidPath), F1
+//           gliding between Liquid Low and Liquid High on the movement's clock (Rate or Sync, x Density),
+//           with now and then a quick jump. Liquid sets the peaks' height (F1 up to kLiquidMaxDb, F2 to
+//           kLiquidF2Db), Liquid Res their Q. With Link, F1 also rises as the bands open (kLinkFollow of its
+//           place follows the lead's lift). One path for both passes (Seed's, blended with Seed B's). The
+//           Low band never goes through it. At Liquid 0 it is not run.
+//
 // The second pass runs the first one's result through the split again with a movement of its own (the
 // same Low crossover), as if it were bounced and split once more. While the host plays, the movement
 // follows the song position (setTransport), so a render is the same every time.
@@ -79,7 +91,13 @@ struct Meters
     std::array<std::array<std::atomic<float>, kMaxBands>, kMaxPasses> lift {};
     // the frequency shifter: its shift now (Hz, gliding; 0 while off) and how far it is faded in (0 .. 1)
     std::atomic<float> shiftHz {0.0f}, shiftAmount {0.0f};
+    // Liquid (0.23): its two formants now (Hz; 0 while it is off) and how strong (0 .. 1, as Liquid, gliding)
+    std::atomic<float> liquidHz {0.0f}, liquidF2Hz {0.0f}, liquidAmount {0.0f};
 };
+
+// Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
+// place that follows the bands' opening
+constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
 
 class Engine
 {
@@ -121,6 +139,13 @@ public:
     double liftAt (int pass, int band, double th, bool dips = false) const;
     double shiftNow () const { return shiftHz; }       // Hz, gliding to Shift
     double shiftAmount () const { return shiftFade; } // 0 (off, not run) .. 1 (on)
+    // Liquid: its formants now (Hz, F1 within Liquid Low .. Liquid High), its strength (0: off, not run) and
+    // the lead's lift that Link pulls the moving bands towards (pass 0)
+    double liquidHz () const { return liqF1; }
+    double liquidF2Hz () const { return liqF2; }
+    double liquidAmount () const { return liquid; }
+    // F1's place (0 .. 1) and log2 (F2 / F1) at phase th, as the engine has them now (Seed Blend, the crossfade)
+    void liquidAt (double th, double& pos, double& logRatio) const;
 
 private:
     struct PassState
@@ -135,8 +160,17 @@ private:
         dsp::Hilbert hilbert[2];
         dsp::Svf shiftHp[2];
         double shiftPhase = 0.0;
+        // Liquid's two peaks (per channel), and the lead's lift Link pulls towards (this tick)
+        dsp::Svf liq1[2], liq2[2];
+        double sharedLift = 0.0;
         void resetFilters ();
         void resetShifter ();
+        void resetLiquid ();
+    };
+    // Liquid's filters at a tick's start and end: g of F1 and F2, k (1 / Q) and the peaks' gains - 1
+    struct LiquidCoefs
+    {
+        double g1 = 0.0, g2 = 0.0, k = 1.0, a1 = 0.0, a2 = 0.0;
     };
     // the patterns of Seed and Seed B (both passes) at a Density
     struct PatternSet
@@ -152,6 +186,7 @@ private:
     // the targets at theta th for a pass: g per corner and gain per band (snap: no smoothing)
     void targets (int pass, double th, double* g, double* gain, bool snap);
     void runPass (int pass, double* l, double* r, int m, double thetaEnd);
+    void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -168,6 +203,10 @@ private:
     double airOwn = 0.0; // 0: Air follows High (3 bands) .. 1: Air at its own gain (4 bands)
     // the shifter: Shift (Hz) and Shift Mix gliding, and its fade in (0: off, not run) at the tick's start and end
     double shiftHz = 0.0, shiftHzPrev = 0.0, shiftMix = 1.0, shiftMixPrev = 1.0, shiftFade = 0.0, shiftFadePrev = 0.0;
+    // Link and Liquid (0.23): gliding settings, and Liquid's filters at the tick's start and end
+    double link = 0.0, liquid = 0.0, liqRes = 0.5, logLiqLo = 0.0, logLiqHi = 0.0;
+    LiquidCoefs liqPrev, liqNow;
+    double liqF1 = 0.0, liqF2 = 0.0;
     double secPerCycle = 1.0;
     double tickSmooth = 0.1, gainSmooth = 0.3;
     // the movement's phase (cycles of Rate) and the transport

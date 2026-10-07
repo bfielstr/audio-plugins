@@ -10,7 +10,9 @@ anything being automated by hand, and a movement you like is always there again.
 falls to silence, more rises and falls, and ramps of a few ms. A compressor and a
 little soft clipping glue the bands back together, and a second pass can run the result through the
 bands again. An optional frequency shifter can move the bands above the Low band up or down, for a
-metallic edge, without ever touching the sub. Install instructions are in the [top-level README](../../README.md).
+metallic edge, without ever touching the sub. **Link** makes the moving bands open and close together,
+and **Liquid** sweeps a vowel-like resonance through them, for a wet, coagulating sound over a sub that
+stays put. Install instructions are in the [top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
 
@@ -28,9 +30,11 @@ metallic edge, without ever touching the sub. Install instructions are in the [t
 5. For more, blend in a second pattern with **Seed B** and **Blend** (at 50 % a band is up whenever
    either pattern has it up), let the low end come forward with **Push** in **LOW**, or make it chop
    with **Drop Out**, **Density** and **Speed** in **EXTREME**.
-6. For a metallic, clashing top end, switch on **SHIFT** and turn **Shift** a little either way. The Low
+6. For a liquid, coagulating sound, turn up **Link** (the bands above Low open and close together) and
+   **Liquid** (a resonance glides through them like a vowel), or start from the *Moist/Liquid* preset.
+7. For a metallic, clashing top end, switch on **SHIFT** and turn **Shift** a little either way. The Low
    band is never shifted, so the sub stays clean.
-7. Use **Glue** and **Grit** to glue the bands back together. For an even denser, more processed sound,
+8. Use **Glue** and **Grit** to glue the bands back together. For an even denser, more processed sound,
    pick **2 Passes**.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -48,9 +52,11 @@ that in one plug-in, and the movement repeats exactly every time you play the so
 ```
 input -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
-         -> [Shift: the bands above Low only] -> Low + the others -> Glue -> Grit
+         -> [Liquid: the bands above Low only] -> [Shift: the bands above Low only] -> Low + the others
+         -> Glue -> Grit
 movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls (Density, Rise / Fall,
-          Speed, Depth [-> Drop Out]); the Low band's own pushes and dips (Push, Dip)
+          Speed, Depth [-> Drop Out]) [pulled together by Link]; the Low band's own pushes and dips (Push,
+          Dip); Liquid's gliding resonance (Liquid Low .. Liquid High, raised by Link as the bands open)
 ```
 
 ## Controls
@@ -100,7 +106,7 @@ band rises and falls, as a share of **Movement**. By default the High band moves
 is only used with **4 Bands** (dimmed with 3). The Low band has no Move: it moves only with **Push** and
 **Dip** in **LOW**.
 
-**SEED B**: a second pattern, blended with Seed's.
+**SEED B / LINK**: a second pattern, blended with Seed's, and how much the moving bands share one.
 
 - **Seed B** (1 to 128, 2 by default): the second pattern, its own rises and falls and their times for
   every band. The Low band's crossover stays where **Seed** puts it, so the low end does not move.
@@ -109,6 +115,12 @@ is only used with **4 Bands** (dimmed with 3). The Low band has no Move: it move
   100 % only Seed B's. In between both play and overlap: each band follows a soft maximum of the two
   (at 50 % a band is up whenever either pattern has it up), so the sound is fuller and louder. Changing
   **Seed B** while playing crossfades over 100 ms.
+- **Link** (0 to 100 %, 0 by default): how much the moving bands (Mid, High and Air) rise and fall
+  together. At 0 each follows its own moments, as before. At 100 % they all follow the Mid band's, so
+  the whole top opens and closes as one, the way a filtered bass sweeps open; each band still keeps its
+  own **Level**, its Move and so how far it falls. In between, each band's movement is pulled that far
+  towards the Mid band's. With **Liquid** on, **Link** also lifts the resonance as the bands open. The
+  Low band is never linked.
 
 **LOW**: the Low band's own movement. Its crossover never moves and the shifter never touches it.
 
@@ -134,6 +146,23 @@ With both at 0 the Low band is locked, exactly as before.
 
 At their defaults (Blend 0, Push and Dip 0, Drop Out off, Density and Speed 1) moistr sounds exactly
 as it did before these controls.
+
+**LIQUID**: a moving resonance on the bands above Low, the wet, liquid part of the sound. Two peaks, like
+the two lowest resonances of a voice saying a vowel, glide from vowel to vowel through the upper bands
+(after they rise and fall, before the shifter and **Glue**). Where they go comes from **Seed** (blended
+with **Seed B** like the rest) and runs on the movement's clock (**Rate**, or **Sync**, times
+**Density**): mostly slow glides, now and then a quick jump. The Low band never goes through it, so the
+sub stays clean and mono.
+
+- **Liquid** (0 to 100 %, 0 by default): how strong the peaks are (the first up to 18 dB, the second up
+  to 12 dB). At 0 it is off and moistr sounds exactly as without it; **Res**, **Low** and **High** are
+  then dimmed. It fades in and out smoothly.
+- **Res** (0 to 100 %, 50 % by default): how sharp the peaks are, from a broad wash to a narrow,
+  whistling vowel.
+- **Low** (150 to 800 Hz, 250 Hz by default) and **High** (600 Hz to 4 kHz, 1.6 kHz by default): the
+  range the first peak moves in. The second sits above it, as in a vowel.
+
+At their defaults (**Link** and **Liquid** 0) moistr sounds exactly as it did before them.
 
 **SHIFT**: a frequency shifter on the bands above Low, after they rise and fall and before **Glue**.
 The Low band (everything under the Low crossover, so the sub) is never shifted.
@@ -178,6 +207,8 @@ plays you see Mid, High and (with **4 Bands**) Air rise and fall. With the shift
 example +120 Hz) is shown at the top of each upper band. A line marks each moving band's level
 and a dashed line how far it can fall (its level minus **Depth**, scaled by **Movement** and its Move;
 with **Drop Out**, lower, down to the bottom for a full fall).
+With **Liquid** on, a bar at the top shows the range its resonance moves in, and while sound plays two
+markers show where its peaks are now.
 The first pass's gain reduction is shown at the top right. Half a second after the input goes quiet the
 display stops following the movement and shows the bands at their levels.
 
@@ -196,8 +227,8 @@ The movement is worked out from its phase alone, so it repeats exactly when the 
 ## Presets
 
 The **Presets** menu in the header starts with **Init** (every control at its default) and has these
-factory presets: *Moist*: Bar Pulse, Chop, Classic Moist, Double Pass, Fast Flicker, Four Band, Low
-Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift. Save your own with **Save As...** (a category and tags are
+factory presets: *Moist*: Bar Pulse, Chop, Classic Moist, Coagulate, Double Pass, Fast Flicker, Four
+Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift. Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 

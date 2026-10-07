@@ -3,13 +3,19 @@
 // the other bands rising and falling by Depth, the seeded rise and fall times x Rise / Fall, still at 0,
 // Seed, the host's transport), switching Bands, the Glue compressor, Grit, Mix, Passes, silence, the 0.22
 // controls (Low Push / Dip, Seed B / Blend, Density, Speed, Drop Out; all at their defaults 0.21's sound bit
-// for bit) and the CPU budget.
+// for bit), Link and Liquid (0.23: off, 0.22's sound bit for bit; the Liquid preset's statistics on a detuned
+// bass, pinned) and the CPU budget.
 #include "Dsp.h"
 #include "Engine.h"
 #include "Movement.h"
 #include "Params.h"
 
+#include "pluginkit/PresetStore.h"
+
 #include <algorithm>
+#include <complex>
+#include <fstream>
+#include <sstream>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1794,6 +1800,508 @@ TEST (extremes_deterministic_and_clean)
     CHECK (top < 4.0, "bounded: %.2f", top);
 }
 
+// ---- Link and Liquid (0.23) ------------------------------------------------------------------------------
+namespace {
+// the Liquid preset's test input: two detuned saws (F1, a little flat, and 0.4 Hz above it at half the level), mono
+std::vector<float> detunedBass (double seconds)
+{
+    std::vector<float> x ((size_t)(seconds * kSr));
+    double p1 = 0.0, p2 = 0.3;
+    for (auto& v : x)
+    {
+        p1 += 43.2 / kSr;
+        p2 += 43.6 / kSr;
+        p1 -= std::floor (p1);
+        p2 -= std::floor (p2);
+        v = (float)(0.25 * ((2.0 * p1 - 1.0) + 0.5 * (2.0 * p2 - 1.0)));
+    }
+    return x;
+}
+
+// x through a band-pass: a 4th-order Butterworth high-pass at lo and low-pass at hi (TPT sections), forwards
+// and then backwards (zero phase, as scipy's sosfiltfilt)
+std::vector<double> bandPass (const std::vector<float>& x, double lo, double hi)
+{
+    constexpr double kQ[2] = {0.54119610014619698, 1.3065629648763766};
+    dsp::SvfCoefs ch[2], cl[2];
+    dsp::Svf sh[2], sl[2];
+    for (int i = 0; i < 2; ++i)
+    {
+        ch[i].set (std::tan (kPi * lo / kSr), 1.0 / kQ[i]);
+        cl[i].set (std::tan (kPi * hi / kSr), 1.0 / kQ[i]);
+    }
+    std::vector<double> y (x.begin (), x.end ());
+    for (int dir = 0; dir < 2; ++dir)
+    {
+        for (int i = 0; i < 2; ++i)
+        {
+            sh[i].reset ();
+            sl[i].reset ();
+        }
+        for (double& v : y)
+        {
+            for (int i = 0; i < 2; ++i)
+                v = sh[i].tick (v, ch[i]).hp;
+            for (int i = 0; i < 2; ++i)
+                v = sl[i].tick (v, cl[i]).lp;
+        }
+        std::reverse (y.begin (), y.end ());
+    }
+    return y;
+}
+
+// the 50 ms RMS envelope (dB) of a band of x, from `from`
+std::vector<double> bandEnvelope (const std::vector<float>& x, double lo, double hi, size_t from)
+{
+    const auto y = bandPass (x, lo, hi);
+    const size_t win = (size_t)(0.05 * kSr);
+    std::vector<double> e;
+    for (size_t a = from; a + win <= y.size (); a += win)
+    {
+        double s = 0.0;
+        for (size_t i = a; i < a + win; ++i)
+            s += y[i] * y[i];
+        e.push_back (db (std::sqrt (s / (double)win)));
+    }
+    return e;
+}
+
+double percentile (std::vector<double> v, double q)
+{
+    std::sort (v.begin (), v.end ());
+    const double at = q / 100.0 * (double)(v.size () - 1);
+    const size_t i = (size_t)at;
+    return i + 1 < v.size () ? v[i] + (v[i + 1] - v[i]) * (at - (double)i) : v.back ();
+}
+double stdDev (const std::vector<double>& v)
+{
+    double m = 0.0, s = 0.0;
+    for (double a : v)
+        m += a;
+    m /= (double)v.size ();
+    for (double a : v)
+        s += (a - m) * (a - m);
+    return std::sqrt (s / (double)v.size ());
+}
+double correlation (const std::vector<double>& a, const std::vector<double>& b)
+{
+    const size_t n = std::min (a.size (), b.size ());
+    double ma = 0, mb = 0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        ma += a[i];
+        mb += b[i];
+    }
+    ma /= (double)n;
+    mb /= (double)n;
+    double sab = 0, saa = 0, sbb = 0;
+    for (size_t i = 0; i < n; ++i)
+    {
+        sab += (a[i] - ma) * (b[i] - mb);
+        saa += (a[i] - ma) * (a[i] - ma);
+        sbb += (b[i] - mb) * (b[i] - mb);
+    }
+    return sab / std::sqrt (std::max (saa * sbb, 1e-30));
+}
+
+// an in-place radix-2 FFT (the size a power of two)
+void fft (std::vector<std::complex<double>>& a)
+{
+    const size_t n = a.size ();
+    for (size_t i = 1, j = 0; i < n; ++i)
+    {
+        size_t bit = n >> 1;
+        for (; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if (i < j)
+            std::swap (a[i], a[j]);
+    }
+    for (size_t len = 2; len <= n; len <<= 1)
+    {
+        const std::complex<double> w (std::cos (-2.0 * kPi / (double)len), std::sin (-2.0 * kPi / (double)len));
+        for (size_t i = 0; i < n; i += len)
+        {
+            std::complex<double> wn (1.0, 0.0);
+            for (size_t k = 0; k < len / 2; ++k, wn *= w)
+            {
+                const auto u = a[i + k], v = a[i + k + len / 2] * wn;
+                a[i + k] = u + v;
+                a[i + k + len / 2] = u - v;
+            }
+        }
+    }
+}
+
+// the resonance: every 0.25 s, where a 0.1 s frame's spectrum (Hann, smoothed over a third of an octave in dB)
+// is highest between 250 Hz and 4 kHz
+std::vector<double> resonancePeaks (const std::vector<float>& x, size_t from)
+{
+    const size_t frame = (size_t)(0.1 * kSr), nfft = 16384, hop = (size_t)(0.25 * kSr);
+    const double binHz = kSr / (double)nfft;
+    std::vector<double> peaks;
+    for (size_t a = from; a + frame <= x.size (); a += hop)
+    {
+        std::vector<std::complex<double>> buf (nfft);
+        for (size_t i = 0; i < frame; ++i)
+            buf[i] = x[a + i] * (0.5 - 0.5 * std::cos (2.0 * kPi * (double)i / (double)(frame - 1)));
+        fft (buf);
+        std::vector<double> cum (nfft / 2 + 1, 0.0);
+        for (size_t k = 0; k < nfft / 2; ++k)
+            cum[k + 1] = cum[k] + 20.0 * std::log10 (std::abs (buf[k]) + 1e-12);
+        double best = -1e30, bestHz = 0.0;
+        for (size_t k = (size_t)std::ceil (250.0 / binHz); (double)k * binHz <= 4000.0; ++k)
+        {
+            const double f = (double)k * binHz;
+            const size_t lo = (size_t)std::ceil (f * std::exp2 (-1.0 / 6.0) / binHz);
+            const size_t hi = (size_t)std::floor (f * std::exp2 (1.0 / 6.0) / binHz);
+            const double v = (cum[hi + 1] - cum[lo]) / (double)(hi + 1 - lo);
+            if (v > best)
+            {
+                best = v;
+                bestHz = f;
+            }
+        }
+        peaks.push_back (bestHz);
+    }
+    return peaks;
+}
+
+// a factory preset's values, set on the engine
+bool loadPreset (Engine& e, const char* rel)
+{
+    std::ifstream in (std::string (MOISTR_PRESETS_DIR) + "/" + rel);
+    std::stringstream ss;
+    ss << in.rdbuf ();
+    pk::presets::FactoryPreset fp;
+    std::string err;
+    if (!pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err))
+    {
+        std::printf ("    %s: %s\n", rel, err.c_str ());
+        return false;
+    }
+    for (auto& [id, n] : fp.values)
+        e.setParam (id, toPlain (id, n));
+    return true;
+}
+
+// renders silence tick by tick (16 samples), calling `each` after every tick
+void ticks (Engine& e, int n, const std::function<void (int)>& each)
+{
+    const std::vector<float> z (16, 0.0f);
+    std::vector<float> l (16), r (16);
+    for (int t = 0; t < n; ++t)
+    {
+        e.process (z.data (), z.data (), l.data (), r.data (), 16);
+        each (t);
+    }
+}
+} // namespace
+
+TEST (link_liquid_default_is_022)
+{
+    // Link and Liquid at their defaults (never set, set, or set elsewhere and back) render bit for bit the same,
+    // with 3 and 4 bands, 2 passes, the shifter on and Seed Blend. (That path is 0.22's: renders like these
+    // were compared bit for bit with 0.22.0's when Link and Liquid were added.)
+    const auto x = reese (3.0);
+    for (int bands : {kBands3, kBands4})
+    {
+        auto render = [&] (int how) {
+            auto e = engine ();
+            e->setParam (kBandCount, bands);
+            e->setParam (kPasses, kPasses2);
+            e->setParam (kShiftOn, 1.0);
+            e->setParam (kShift, 80.0);
+            e->setParam (kMovement, 0.9);
+            e->setParam (kSeedBlend, 0.5);
+            e->setParam (kSeed, 21);
+            if (how == 2)
+            {
+                e->setParam (kLink, 0.8);
+                e->setParam (kLiquid, 1.0);
+                e->setParam (kLiquidRes, 0.9);
+                e->setParam (kLiquidLow, 600.0);
+                e->setParam (kLiquidHigh, 3000.0);
+            }
+            if (how >= 1)
+                for (uint32_t id : {kLink, kLiquid, kLiquidRes, kLiquidLow, kLiquidHigh})
+                    e->setParam (id, toPlain (id, defaultNormalized (id)));
+            e->reset ();
+            std::vector<float> r;
+            auto l = run (*e, x, &r);
+            l.insert (l.end (), r.begin (), r.end ());
+            return l;
+        };
+        const auto never = render (0);
+        CHECK (never == render (1), "%d bands: Link and Liquid at their defaults change nothing (bit for bit)", bands + 3);
+        CHECK (never == render (2), "%d bands: set and back to the defaults: nothing left over", bands + 3);
+    }
+    const Pattern a = makePattern (17, 1);
+    CHECK (a.liquid.steps >= 2 && a.liquid.steps <= 6, "Liquid's path is dealt (%d steps)", a.liquid.steps);
+}
+
+TEST (link_moves_bands_together)
+{
+    // 4 bands at full movement, 2 passes: at Link 100 % Mid, High and Air rise and fall together (the same lift
+    // every tick, each at its own Level and Move); at 0 each has its own; at 50 % each is half way to the Mid
+    // band's. The Low band is never linked.
+    for (int seed : {3, 40, 101})
+    {
+        auto setup = [&] (Engine& e, double link) {
+            plain (e);
+            e.setParam (kBandCount, kBands4);
+            e.setParam (kMovement, 1.0);
+            e.setParam (kDepth, 48.0);
+            e.setParam (kRate, 1.0);
+            for (uint32_t id : {kMidMove, kHighMove, kAirMove})
+                e.setParam (id, 1.0);
+            e.setParam (kPasses, kPasses2);
+            e.setParam (kSeed, seed);
+            e.setParam (kLink, link);
+            e.reset ();
+        };
+        auto f0 = engine (), f1 = engine (), fh = engine ();
+        setup (*f0, 0.0);
+        setup (*f1, 1.0);
+        setup (*fh, 0.5);
+        bool together = true, half = true;
+        std::vector<double> mid0, high0, mid1, high1;
+        const std::vector<float> z (16, 0.0f);
+        std::vector<float> l (16), r (16);
+        for (int t = 0; t < 9000; ++t) // (3 s)
+        {
+            for (Engine* e : {f0.get (), f1.get (), fh.get ()})
+                e->process (z.data (), z.data (), l.data (), r.data (), 16);
+            for (int k = 0; k < kMaxPasses; ++k)
+            {
+                const double m1 = f1->bandLift (k, kBandMid);
+                together = together && std::fabs (f1->bandLift (k, kBandHigh) - m1) < 1e-12 && std::fabs (f1->bandLift (k, kBandAir) - m1) < 1e-12;
+                for (int b : {kBandHigh, kBandAir})
+                {
+                    const double want = 0.5 * (f0->bandLift (k, b) + f0->bandLift (k, kBandMid));
+                    half = half && std::fabs (fh->bandLift (k, b) - want) < 1e-9;
+                }
+            }
+            mid0.push_back (f0->bandGainDb (0, kBandMid));
+            high0.push_back (f0->bandGainDb (0, kBandHigh));
+            mid1.push_back (f1->bandGainDb (0, kBandMid));
+            high1.push_back (f1->bandGainDb (0, kBandHigh));
+        }
+        const double c0 = correlation (mid0, high0), c1 = correlation (mid1, high1);
+        std::printf ("    seed %3d: Mid / High gain correlation %.2f at Link 0, %.2f at 100 %%\n", seed, c0, c1);
+        CHECK (together, "seed %d: Link 100 %%: the moving bands' lifts are the same", seed);
+        CHECK (half, "seed %d: Link 50 %%: half way to the Mid band's", seed);
+        CHECK (c1 > 0.999, "seed %d: Link 100 %%: Mid and High move together (%.3f)", seed, c1);
+        CHECK (c0 < 0.9, "seed %d: Link 0: they move on their own (%.3f)", seed, c0);
+        CHECK (f1->bandGainDb (0, kBandLow) == 0.0, "seed %d: the Low band is not linked (locked)", seed);
+    }
+}
+
+TEST (liquid_never_touches_low)
+{
+    // the Low band alone (the others off): Liquid on or off renders bit for bit the same; with every band on a
+    // sine well under Low X keeps its level, and the output stays mono
+    const auto x = sine (40.0, 0.4, 2.0);
+    auto render = [&] (double liquid, bool soloLow, std::vector<float>* right) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kSeed, 70); // (Low X 153 Hz: near Liquid's lowest)
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kPasses, kPasses2);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kLink, 1.0);
+        e->setParam (kLiquid, liquid);
+        e->setParam (kLiquidRes, 1.0);
+        e->setParam (kLiquidLow, kLiquidLowMin);
+        if (soloLow)
+            solo (*e, kBandLow);
+        e->reset ();
+        return run (*e, x, right);
+    };
+    CHECK (render (0.0, true, nullptr) == render (1.0, true, nullptr), "the Low band alone: Liquid changes nothing (bit for bit)");
+    std::vector<float> r;
+    const auto off = render (0.0, false, nullptr), on = render (1.0, false, &r);
+    const size_t a = (size_t)(0.5 * kSr), b = x.size ();
+    const double change = db (toneAt (on, 40.0, a, b) / toneAt (off, 40.0, a, b));
+    std::printf ("    a 40 Hz sine with every band on: %.4f dB with Liquid 100 %%\n", change);
+    CHECK (std::fabs (change) < 0.05, "a sine under Low X keeps its level (%.4f dB)", change);
+    CHECK (on == r, "mono in, mono out");
+}
+
+TEST (liquid_stays_in_range)
+{
+    // the resonance's F1 stays within Liquid Low .. Liquid High (either way round), with Link and Seed Blend; it
+    // covers most of a wide range, glides (under a third of an octave from one tick to the next at Rate 1 Hz)
+    // and F2 sits above it
+    struct Range
+    {
+        double lo, hi;
+        bool wide;
+    };
+    for (const Range& rg : {Range {250.0, 1600.0, true}, Range {150.0, 4000.0, true}, Range {800.0, 600.0, false}, Range {400.0, 700.0, false}})
+        for (double link : {0.0, 1.0})
+            for (double blend : {0.0, 0.5})
+            {
+                auto e = engine ();
+                e->setParam (kMovement, 1.0);
+                e->setParam (kRate, 1.0);
+                e->setParam (kLiquid, 1.0);
+                e->setParam (kLiquidLow, rg.lo);
+                e->setParam (kLiquidHigh, rg.hi);
+                e->setParam (kLink, link);
+                e->setParam (kSeedBlend, blend);
+                e->setParam (kSeed, 9);
+                e->reset ();
+                const double lo = std::min (rg.lo, rg.hi), hi = std::max (rg.lo, rg.hi);
+                double fmin = 1e9, fmax = 0.0, step = 0.0, prev = std::log2 (e->liquidHz ());
+                bool inside = true, above = true;
+                ticks (*e, 3000 * 20, [&] (int) { // (20 s)
+                    const double f = e->liquidHz ();
+                    inside = inside && f >= lo * (1.0 - 1e-9) && f <= hi * (1.0 + 1e-9);
+                    above = above && e->liquidF2Hz () > f;
+                    fmin = std::min (fmin, f);
+                    fmax = std::max (fmax, f);
+                    step = std::max (step, std::fabs (std::log2 (f) - prev));
+                    prev = std::log2 (f);
+                });
+                const double covered = std::log2 (fmax / fmin) / std::log2 (hi / lo);
+                CHECK (inside, "%.0f .. %.0f Hz (Link %.0f %%, Blend %.0f %%): F1 within the range (%.0f .. %.0f)", rg.lo, rg.hi,
+                       link * 100, blend * 100, fmin, fmax);
+                CHECK (above, "F2 above F1");
+                CHECK (step < 1.0 / 3.0, "glides: at most %.3f octaves a tick", step);
+                if (rg.wide)
+                    CHECK (covered > 0.6, "%.0f .. %.0f Hz: covers most of the range (%.0f %%)", lo, hi, covered * 100);
+            }
+    // the same Seed: the same path (Density x8)
+    auto a = engine (), b = engine ();
+    for (Engine* e : {a.get (), b.get ()})
+    {
+        e->setParam (kLiquid, 1.0);
+        e->setParam (kDensity, 8.0);
+        e->reset ();
+    }
+    bool same = true;
+    const std::vector<float> z (512, 0.0f);
+    std::vector<float> l (512), r (512);
+    for (int i = 0; i < 200; ++i)
+    {
+        a->process (z.data (), z.data (), l.data (), r.data (), 512);
+        b->process (z.data (), z.data (), l.data (), r.data (), 512);
+        same = same && a->liquidHz () == b->liquidHz ();
+    }
+    CHECK (same, "the same Seed: the same path");
+}
+
+TEST (liquid_clean)
+{
+    // Liquid at its most (the highest resonance, the widest range) with every other extreme and the hottest
+    // input: no NaNs or denormals, bounded. Switching it on and off while a tone plays does not click.
+    auto e = engine ();
+    e->setParam (kBandCount, kBands4);
+    e->setParam (kPasses, kPasses2);
+    e->setParam (kShiftOn, 1.0);
+    e->setParam (kShift, 40.0);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kDepth, 48.0);
+    e->setParam (kRate, 2.0);
+    e->setParam (kDrive, 1.0);
+    e->setParam (kGrit, 1.0);
+    e->setParam (kGlue, 1.0);
+    for (uint32_t id : kLevelIds)
+        e->setParam (id, 12.0);
+    extreme (*e);
+    e->setParam (kLink, 1.0);
+    e->setParam (kLiquid, 1.0);
+    e->setParam (kLiquidRes, 1.0);
+    e->setParam (kLiquidLow, kLiquidLowMin);
+    e->setParam (kLiquidHigh, kLiquidHighMax);
+    e->reset ();
+    std::vector<float> in ((size_t)(4.0 * kSr), 0.0f);
+    in[100] = 1.0f;
+    const auto loud = noise (1.0, 1.0, 5);
+    std::copy (loud.begin (), loud.end (), in.begin () + 1000);
+    std::vector<float> r;
+    const auto l = run (*e, in, &r);
+    int denormals = 0;
+    for (size_t i = 0; i < l.size (); ++i)
+    {
+        const float tiny = std::numeric_limits<float>::min ();
+        denormals += (l[i] != 0.0f && std::fabs (l[i]) < tiny) || (r[i] != 0.0f && std::fabs (r[i]) < tiny);
+    }
+    const double top = std::max (peak (l, 0, l.size ()), peak (r, 0, r.size ()));
+    CHECK (finite (l) && finite (r), "finite");
+    CHECK (denormals == 0, "no denormals (%d)", denormals);
+    CHECK (top < 4.0, "bounded: %.2f", top);
+    // on and off every 0.3 s on a steady tone (no movement): no step larger than the tone's own
+    const auto x = sine (700.0, 0.25, 3.0);
+    auto toggled = [&] (bool toggle, double liquid) {
+        auto f = engine ();
+        plain (*f);
+        f->setParam (kLiquid, liquid);
+        f->reset ();
+        return run (*f, x, nullptr, 256, [&] (size_t at) {
+            if (toggle)
+                f->setParam (kLiquid, (at / (size_t)(0.3 * kSr)) % 2 ? 0.0 : 1.0);
+        });
+    };
+    const double still = std::max (maxStep (toggled (false, 0.0)), maxStep (toggled (false, 1.0)));
+    const double moving = maxStep (toggled (true, 0.0));
+    std::printf ("    the largest step: %.4f switching Liquid, %.4f still\n", moving, still);
+    CHECK (moving < 1.3 * still, "switching Liquid on and off does not click (%.4f against %.4f)", moving, still);
+}
+
+TEST (liquid_preset_statistics)
+{
+    // Moist/Liquid on a detuned bass (two saws at 43.2 and 43.6 Hz, mono), measured as the reference it was
+    // tuned to was (a low detuned bass whose sub stays steady while its mids and highs open and close together
+    // by 40 dB or more under a resonance wandering from 250 Hz to over 1.2 kHz): the sub steady, the upper bands
+    // swinging far and together, the resonance wandering, the low end mono. Without Liquid the peak stays low.
+    const auto x = detunedBass (20.0);
+    const size_t from = (size_t)(0.5 * kSr);
+    struct Stats
+    {
+        double subStd, upperRange, corr, peakMin, peakMax, peakP90, sideDb;
+    };
+    auto measure = [&] (double liquidOverride) {
+        auto e = engine ();
+        CHECK (loadPreset (*e, "Moist/Liquid.txt"), "the preset loads");
+        if (liquidOverride >= 0.0)
+            e->setParam (kLiquid, liquidOverride);
+        e->reset ();
+        std::vector<float> r;
+        const auto l = run (*e, x, &r, 512);
+        std::vector<float> mono (l.size ()), side (l.size ());
+        for (size_t i = 0; i < l.size (); ++i)
+        {
+            mono[i] = 0.5f * (l[i] + r[i]);
+            side[i] = 0.5f * (l[i] - r[i]);
+        }
+        Stats s {};
+        s.subStd = stdDev (bandEnvelope (mono, 30.0, 70.0, from));
+        const auto upper = bandEnvelope (mono, 400.0, 6000.0, from);
+        s.upperRange = percentile (upper, 95) - percentile (upper, 5);
+        s.corr = correlation (bandEnvelope (mono, 400.0, 1500.0, from), bandEnvelope (mono, 1500.0, 6000.0, from));
+        const auto peaks = resonancePeaks (mono, from);
+        s.peakMin = *std::min_element (peaks.begin (), peaks.end ());
+        s.peakMax = *std::max_element (peaks.begin (), peaks.end ());
+        s.peakP90 = percentile (peaks, 90);
+        s.sideDb = db (rms (side, from, side.size ())) - db (rms (mono, from, mono.size ()));
+        std::printf ("    %s: sub (30 .. 70 Hz) std %.2f dB, 400 .. 6000 Hz range (p5 .. p95) %.1f dB, 400 .. 1500 / 1500 .. 6000 "
+                     "correlation %.2f, resonance %.0f .. %.0f Hz (p90 %.0f), side %.0f dB\n",
+                     liquidOverride >= 0.0 ? "Liquid 0" : "Moist/Liquid", s.subStd, s.upperRange, s.corr, s.peakMin, s.peakMax,
+                     s.peakP90, s.sideDb);
+        return s;
+    };
+    const Stats s = measure (-1.0);
+    CHECK (s.subStd <= 4.0, "the sub stays steady (std %.2f dB)", s.subStd);
+    CHECK (s.upperRange >= 30.0, "the upper bands swing far (%.1f dB)", s.upperRange);
+    CHECK (s.corr >= 0.7, "the upper bands move together (%.2f)", s.corr);
+    CHECK (s.peakMin <= 320.0 && s.peakMax >= 1000.0, "the resonance wanders (%.0f .. %.0f Hz)", s.peakMin, s.peakMax);
+    CHECK (s.sideDb < -60.0, "mono in, mono out (%.0f dB)", s.sideDb);
+    const Stats dry = measure (0.0);
+    CHECK (dry.peakMax < 700.0, "without Liquid the peak stays low (%.0f Hz)", dry.peakMax);
+}
+
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
@@ -1829,6 +2337,10 @@ TEST (cpu_budget)
                 e->setParam (kDropOut, 1.0);
                 e->setParam (kLowPush, 12.0);
                 e->setParam (kLowDip, 6.0);
+                // and 0.23's: the bands linked, Liquid's two resonances in both passes
+                e->setParam (kLink, 1.0);
+                e->setParam (kLiquid, 1.0);
+                e->setParam (kLiquidRes, 0.8);
             }
             e->reset ();
             const std::clock_t t0 = std::clock ();
@@ -1837,7 +2349,7 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, the end saturator on" : "the defaults");
+                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on" : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }

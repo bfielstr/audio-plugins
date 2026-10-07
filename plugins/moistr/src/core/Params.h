@@ -73,6 +73,13 @@ enum ParamId : uint32_t
     kLowDip,    // dB 0 .. 6: how far the Low band may fall below its Level (0: never)
     kDropOut,   // Off / On: a full Depth falls to silence
     kSpeed,     // x1 .. x16: divides every rise and fall time (down to about 1 ms)
+    // --- added in 0.23 (append only): the moving bands rising and falling together, and a moving resonance
+    // on the bands above Low (both off by default: moistr as 0.22, bit for bit) ---
+    kLink,       // 0 .. 1: how much Mid, High and Air share one stream of events (the Mid band's): 1, all together
+    kLiquid,     // 0 .. 1: a moving resonance (two formants, a gliding vowel) on the bands above Low (0: off)
+    kLiquidRes,  // 0 .. 1: its resonance (Q 1.5 .. 12)
+    kLiquidLow,  // Hz: the lowest the resonance goes
+    kLiquidHigh, // Hz: the highest
     kNumParams
 };
 
@@ -88,8 +95,10 @@ static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 
                "saved IDs: the end saturator's blocks at 26 .. 68");
 static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLevel == 72 && kAirMove == 73 && kRise == 74 &&
                    kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kSeedB == 80 && kSeedBlend == 81 &&
-                   kDensity == 82 && kLowPush == 83 && kLowDip == 84 && kDropOut == 85 && kSpeed == 86 && kNumParams == 87,
-               "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79");
+                   kDensity == 82 && kLowPush == 83 && kLowDip == 84 && kDropOut == 85 && kSpeed == 86,
+               "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79, the 0.22 controls at 80 .. 86");
+static_assert (kLink == 87 && kLiquid == 88 && kLiquidRes == 89 && kLiquidLow == 90 && kLiquidHigh == 91 && kNumParams == 92,
+               "saved IDs: Link and Liquid at 87 .. 91");
 
 enum Slope { kSlope12 = 0, kSlope24 };
 enum Passes { kPasses1 = 0, kPasses2 };
@@ -103,6 +112,8 @@ constexpr int kNumSyncRates = 6;
 constexpr double kSyncBeats[kNumSyncRates] = {16.0, 8.0, 4.0, 2.0, 1.0, 0.5};
 
 constexpr int kMinSeed = 1, kMaxSeed = 128;
+// Liquid Low and Liquid High's ranges (Hz)
+constexpr double kLiquidLowMin = 150.0, kLiquidLowMax = 800.0, kLiquidHighMin = 600.0, kLiquidHighMax = 4000.0;
 constexpr double kLevelOffDb = -48.0; // a band's Level at its minimum: off
 
 const pk::ParamTable& paramTable ();

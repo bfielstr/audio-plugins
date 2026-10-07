@@ -1,0 +1,19 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: reese, neuro, liquid, movement
+comment: Coagulating and liquid: the bands above Low open and close together (Link) while a gliding vowel resonance (Liquid) rises as they open; the sub stays steady and mono.
+Bands = 4 Bands
+Drive = 20 %
+Movement = 100 %
+Rate = 0.6 Hz
+Depth = 48 dB
+Mid Move = 100 %
+High Move = 100 %
+Air Move = 100 %
+Density = 2
+Speed = 3
+Link = 100 %
+Liquid = 100 %
+Liquid Res = 55 %
+Seed = 80
+Glue = 25 %
+Grit = 20 %

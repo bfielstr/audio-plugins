@@ -3,6 +3,7 @@
 #include "smacheratr/src/ui/TailPanel.h"
 
 #include <memory>
+#include <vector>
 
 #include "pluginkit/vst/EditorBase.h"
 
@@ -15,7 +16,8 @@ class Editor : public pk::EditorBase
 {
 public:
     // Classic: the display across the top, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
-    // BAND MOVE, RISE / FALL, OUTPUT over SEED B, LOW, EXTREME), the end saturator's section at the bottom
+    // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), the end saturator's section at
+    // the bottom
     static constexpr double kWidth = 1132.0;
     static constexpr double kRow1 = 238.0, kRow2 = 362.0, kRow3 = 486.0, kRowH = 116.0;
     static constexpr double kTailTop = kRow3 + kRowH + 8.0;
@@ -29,9 +31,10 @@ public:
     static constexpr double kBandMoveLeft = 350.0, kBandMoveRight = 626.0;  // row 2: Mid Move, High Move, Air Move
     static constexpr double kShapeLeft = 634.0, kShapeRight = 846.0;        // row 2: Rise, Fall, Depth
     static constexpr double kOutLeft = 854.0, kOutRight = 1124.0;           // row 2: Mix, Output
-    static constexpr double kSeedBLeft = 8.0, kSeedBRight = 342.0;          // row 3: Seed B, Blend
-    static constexpr double kLowLeft = 350.0, kLowRight = 626.0;            // row 3: Push, Dip (the Low band's)
-    static constexpr double kExtremeLeft = 634.0, kExtremeRight = 1124.0;   // row 3: Drop Out, Density, Speed (centred)
+    static constexpr double kSeedBLeft = 8.0, kSeedBRight = 290.0;          // row 3: Seed B, Blend, Link
+    static constexpr double kLowLeft = 298.0, kLowRight = 470.0;            // row 3: Push, Dip (the Low band's)
+    static constexpr double kExtremeLeft = 478.0, kExtremeRight = 770.0;    // row 3: Drop Out, Density, Speed (centred)
+    static constexpr double kLiquidLeft = 778.0, kLiquidRight = 1124.0;     // row 3: Liquid, Res, Low, High
     // a switch at the top left of its panel (Bands in SPLIT, Sync in MOVEMENT, Passes in GLUE; panel coordinates)
     static constexpr double kSwitchLeft = 14.0, kSwitchTop = 30.0, kSwitchW = 110.0, kSwitchH = 20.0;
     // SHIFT's On switch: a knob wide, in the first knob's place (its knobs follow it from kKnobLeft + kKnobStep)
@@ -61,7 +64,8 @@ private:
     std::unique_ptr<smacheratr::TailPanel> tail;
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
-    // High X, Air Level and Air Move dimmed with 3 Bands; Shift and Shift Mix while it is off; Seed B at Blend 0
+    // High X, Air Level and Air Move dimmed with 3 Bands; Shift and Shift Mix while it is off; Seed B at Blend 0;
+    // Liquid's Res, Low and High at Liquid 0
     void updateLooks ();
     VSTGUI::CRect displayRect (bool arranged) const;
 
@@ -70,6 +74,7 @@ private:
     pk::Label* latencyLabel = nullptr;
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;
+    std::vector<pk::Knob*> liquidKnobs; // Res, Low, High
 };
 
 } // namespace moistr
