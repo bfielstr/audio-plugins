@@ -20,6 +20,7 @@ add_executable(ciphr_tests tests/core_tests.cpp)
 target_link_libraries(ciphr_tests PRIVATE ciphr_core)
 target_compile_definitions(ciphr_tests PRIVATE CIPHR_PRESETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/presets")
 add_test(NAME ciphr_core COMMAND ciphr_tests)
+pk_cpu_test(ciphr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

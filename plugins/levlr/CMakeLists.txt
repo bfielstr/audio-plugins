@@ -17,6 +17,7 @@ pk_dsp_settings(levlr_core)
 add_executable(levlr_tests tests/core_tests.cpp)
 target_link_libraries(levlr_tests PRIVATE levlr_core)
 add_test(NAME levlr_core COMMAND levlr_tests)
+pk_cpu_test(levlr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

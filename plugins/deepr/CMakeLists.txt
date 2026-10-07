@@ -12,6 +12,7 @@ pk_dsp_settings(deepr_core)
 add_executable(deepr_tests tests/core_tests.cpp)
 target_link_libraries(deepr_tests PRIVATE deepr_core)
 add_test(NAME deepr_core COMMAND deepr_tests)
+pk_cpu_test(deepr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

@@ -12,6 +12,7 @@ pk_dsp_settings(locus_core)
 add_executable(locus_tests tests/core_tests.cpp)
 target_link_libraries(locus_tests PRIVATE locus_core)
 add_test(NAME locus_core COMMAND locus_tests)
+pk_cpu_test(locus_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()
