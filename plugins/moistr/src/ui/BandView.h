@@ -1,11 +1,12 @@
 // Moistr's display: the multiband split against frequency (20 Hz .. 20 kHz, the bands' levels from
 // -48 dB (off) at the bottom to +12 dB at the top).
 //
-//   base   the grid, the Low band (locked: a solid fill up to its Level, a lock and its crossover in Hz),
+//   base   the grid, the Low band (locked: a solid fill up to its Level, a lock and its crossover in Hz; with
+//          Low Push / Low Dip no lock: its Level and how far it comes forward and dips back, dashed),
 //          the upper crossovers where they are set (dim, dashed), each moving band's Level (a dim copper
 //          line) and how far it falls (Level - Depth, dashed), the band names and, with the shifter on,
 //          how far the upper bands are shifted (over each of them; the Low band is never shifted)
-//   live   each moving band (Mid, High and, with 4 Bands, Air) as a region from its crossover to the next,
+//   live   the Low band when it moves (filled up to its level now), each moving band (Mid, High and, with 4 Bands, Air) as a region from its crossover to the next,
 //          filled up to its level now (it rises and falls with the movement), the crossovers where they
 //          are now, and the Glue's gain reduction
 //
@@ -38,7 +39,7 @@ struct BandSnapshot
     int bands = 3;                  // 3 or 4
     double xover[3] {};             // Hz: Low | Mid, Mid | High, High | Air (4 bands)
     double gainDb[kMax] {};         // each band's level now (dB, with the movement; kLevelOffDb: off)
-    bool lowLocked = true;          // the Low band and its crossover never move
+    bool lowLocked = true;          // the Low band's level never moves (Low Push and Low Dip at 0; Low X never does)
     bool lowKnown = false;          // xover[0] is the engine's (Seed's) pick, not an estimate
     bool active = false;            // input heard in the last half second (the bands are moving)
     double glueDb = 0.0;            // the Glue's gain reduction (dB, 0.1 dB steps)

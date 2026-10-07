@@ -173,6 +173,16 @@ int main (int argc, char** argv)
             win.click (Editor::kMoveLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, py);
             pump (0.05);
             CHECK (plainOf (rig, kSync) < 0.5, "Sync clicked off");
+            // the Drop Out switch in EXTREME (row 3, centred with its two knobs)
+            const double ex = Editor::kExtremeLeft + Editor::centredSwitchLeft (Editor::kExtremeRight - Editor::kExtremeLeft, 2) +
+                              Editor::kSwitchW / 2;
+            const double ey = Editor::kRow3 + Editor::kSwitchTop + Editor::kSwitchH / 2;
+            win.click (ex, ey);
+            pump (0.05);
+            CHECK (plainOf (rig, kDropOut) >= 0.5, "Drop Out clicked on");
+            win.click (ex, ey);
+            pump (0.05);
+            CHECK (plainOf (rig, kDropOut) < 0.5, "Drop Out clicked off");
             // Mid X's knob (the second beside SPLIT's switch): a double-click puts it back to its default
             const double midXDefault = toPlain (kXoverMid, defaultNormalized (kXoverMid));
             rig.param (kXoverMid, toNormalized (kXoverMid, 3000.0));
