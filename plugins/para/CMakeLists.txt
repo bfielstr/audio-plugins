@@ -12,6 +12,7 @@ pk_dsp_settings(para_core)
 add_executable(para_tests tests/core_tests.cpp)
 target_link_libraries(para_tests PRIVATE para_core)
 add_test(NAME para_core COMMAND para_tests)
+pk_cpu_test(para_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

@@ -13,6 +13,7 @@ pk_dsp_settings(smacheratr_core)
 add_executable(smacheratr_tests tests/core_tests.cpp)
 target_link_libraries(smacheratr_tests PRIVATE smacheratr_core)
 add_test(NAME smacheratr_core COMMAND smacheratr_tests)
+pk_cpu_test(smacheratr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

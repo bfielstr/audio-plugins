@@ -12,6 +12,7 @@ pk_dsp_settings(dropr_core)
 add_executable(dropr_tests tests/core_tests.cpp)
 target_link_libraries(dropr_tests PRIVATE dropr_core)
 add_test(NAME dropr_core COMMAND dropr_tests)
+pk_cpu_test(dropr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

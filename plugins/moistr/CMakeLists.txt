@@ -15,6 +15,7 @@ pk_dsp_settings(moistr_core)
 add_executable(moistr_tests tests/core_tests.cpp)
 target_link_libraries(moistr_tests PRIVATE moistr_core)
 add_test(NAME moistr_core COMMAND moistr_tests)
+pk_cpu_test(moistr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

@@ -17,6 +17,7 @@ pk_dsp_settings(stretchr_core)
 add_executable(stretchr_tests tests/core_tests.cpp)
 target_link_libraries(stretchr_tests PRIVATE stretchr_core)
 add_test(NAME stretchr_core COMMAND stretchr_tests)
+pk_cpu_test(stretchr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

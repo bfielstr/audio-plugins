@@ -13,6 +13,7 @@ pk_dsp_settings(widr_core)
 add_executable(widr_tests tests/core_tests.cpp)
 target_link_libraries(widr_tests PRIVATE widr_core)
 add_test(NAME widr_core COMMAND widr_tests)
+pk_cpu_test(widr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

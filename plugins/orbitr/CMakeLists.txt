@@ -14,6 +14,7 @@ pk_dsp_settings(orbitr_core)
 add_executable(orbitr_tests tests/core_tests.cpp)
 target_link_libraries(orbitr_tests PRIVATE orbitr_core)
 add_test(NAME orbitr_core COMMAND orbitr_tests)
+pk_cpu_test(orbitr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()

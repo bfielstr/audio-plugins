@@ -29,8 +29,34 @@ permissions:
   contents: write # needed to publish releases on tags
 
 jobs:
+  # A pull request builds and tests only the plug-ins it changes, with the plug-ins that use them
+  # (scripts/ci-changed-plugins.py; anything outside plugins/<name>/ builds everything). Pushes to
+  # main, tags and manual runs always build everything.
+  changes:
+    name: Changed plug-ins
+    runs-on: ubuntu-latest
+    outputs:
+      plugins: ${{ steps.pick.outputs.plugins }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0 # back to the merge base
+          filter: blob:none # (the file names are enough)
+      - name: Pick the plug-ins
+        id: pick
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # (the script writes plugins=... to $GITHUB_OUTPUT itself)
+          plugins=$(scripts/ci-changed-plugins.py "$BASE" "$HEAD" | cut -d= -f2-)
+          echo "Building: ${plugins:-every plug-in}" >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: ${{ matrix.name }}
+    needs: changes
     strategy:
       fail-fast: false
       matrix:
@@ -56,6 +82,8 @@ jobs:
       # then everything is published unsigned (the Mac bundles keep their ad-hoc signature).
       HAVE_APPLE_SIGNING: ${{ secrets.APPLE_DEVELOPER_ID_P12 != '' }}
       HAVE_WINDOWS_SIGNING: ${{ secrets.WINDOWS_CERT_PFX != '' }}
+      # empty: every plug-in (always, except on a pull request that changes only some plug-ins)
+      PK_ONLY_PLUGINS: ${{ github.event_name == 'pull_request' && needs.changes.outputs.plugins || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -95,8 +123,13 @@ jobs:
         run: |
           # every compiler goes through ccache on macOS and Linux (C, C++ and the Objective-C++ files)
           CCACHE_ARGS=(-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache)
+          # a pull request that changes only some plug-ins builds only those (CMakeLists.txt)
+          ONLY_ARGS=()
+          if [ -n "$PK_ONLY_PLUGINS" ]; then
+            ONLY_ARGS=(-DPK_ONLY_PLUGINS="$PK_ONLY_PLUGINS")
+          fi
           if [ "$RUNNER_OS" = "Windows" ]; then
-            cmake -B build -A x64
+            cmake -B build -A x64 "${ONLY_ARGS[@]}"
           elif [ "$RUNNER_OS" = "macOS" ]; then
             # Ninja keeps every core busy (Makefiles left the Mac build at about 27 minutes). Release tags
             # build universal binaries (arm64 and x86_64, CMakeLists.txt); everything else builds only
@@ -107,9 +140,9 @@ jobs:
             if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
               ARCH_ARGS=(-DCMAKE_OSX_ARCHITECTURES="$(uname -m)")
             fi
-            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${ARCH_ARGS[@]}" "${CCACHE_ARGS[@]}"
+            cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "${ARCH_ARGS[@]}" "${CCACHE_ARGS[@]}" "${ONLY_ARGS[@]}"
           else
-            cmake -B build -DCMAKE_BUILD_TYPE=Release "${CCACHE_ARGS[@]}"
+            cmake -B build -DCMAKE_BUILD_TYPE=Release "${CCACHE_ARGS[@]}" "${ONLY_ARGS[@]}"
           fi
 
       # Building also runs Steinberg's VST3 validator against the plug-in.
@@ -124,10 +157,11 @@ jobs:
 
       - name: Test
         # (a hung test fails after 10 minutes with its output, instead of holding the job for hours)
-        # One at a time: several core tests check a CPU budget, and run side by side they starve each
-        # other (four failed "too slow" on Linux's 4 shared vCPUs), and the host tests drive real editor
-        # windows.
-        run: ctest --test-dir build -C Release --output-on-failure --timeout 600
+        # Side by side, except the tests that check a CPU budget: they run alone (RUN_SERIAL, label
+        # "cpu", pk_cpu_test in cmake/PluginKit.cmake), since next to other tests they starve (four
+        # failed "too slow" on Linux's 4 shared vCPUs when everything ran at once). The host tests draw
+        # into off-screen windows of their own process, so they do not get in each other's way.
+        run: ctest --test-dir build -C Release --output-on-failure --timeout 600 -j 4
 
       # Run by hand (Run workflow, screenshots ticked) on a branch: the editors the macOS host tests just
       # drew replace the images in docs/<plug-in>/, committed back to that branch (never on main or a tag).
@@ -202,11 +236,23 @@ jobs:
         run: |
           mkdir -p dist
           cd build/VST3/Release
-          ls -d *.vst3
-          test -d Smemplr.vst3 && test -d Multidyn.vst3 && test -d Locus.vst3 && test -d Stretchr.vst3 && test -d Smacheratr.vst3 && test -d Para.vst3 && test -d Widr.vst3 && test -d Wubr.vst3 && test -d Levlr.vst3 && test -d Deepr.vst3 && test -d Smoothr.vst3 && test -d Gentlr.vst3 && test -d Dropr.vst3 && test -d Orbitr.vst3 && test -d Ciphr.vst3 && test -d Moistr.vst3
+          # (a filtered build also leaves empty folders for the plug-ins it only takes libraries from)
+          ls -d -- *.vst3
+          BUNDLES=(Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gentlr.vst3 Dropr.vst3 Orbitr.vst3 Ciphr.vst3 Moistr.vst3)
+          if [ -n "$PK_ONLY_PLUGINS" ]; then
+            # a pull request that built only these (orbitr: Orbitr.vst3)
+            BUNDLES=()
+            IFS=';' read -r -a only <<< "$PK_ONLY_PLUGINS"
+            for p in "${only[@]}"; do
+              BUNDLES+=("$(echo "${p:0:1}" | tr '[:lower:]' '[:upper:]')${p:1}.vst3")
+            done
+          fi
+          for b in "${BUNDLES[@]}"; do
+            test -d "$b" || { echo "$b is missing"; exit 1; }
+          done
           # a release's Mac plug-ins must run on Apple Silicon and Intel (pull requests build one architecture)
           if [ "$RUNNER_OS" = "macOS" ] && [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            for p in *.vst3; do
+            for p in "${BUNDLES[@]}"; do
               archs=$(lipo -archs "$p/Contents/MacOS/${p%.vst3}")
               echo "$p: $archs"
               [[ "$archs" == *arm64* && "$archs" == *x86_64* ]] || { echo "$p is not universal"; exit 1; }
@@ -215,9 +261,9 @@ jobs:
           # the licence and the third-party notices travel with every copy
           cp "$GITHUB_WORKSPACE/LICENSE" LICENSE.txt && cp "$GITHUB_WORKSPACE/THIRD_PARTY_NOTICES.md" .
           case "$RUNNER_OS" in
-            macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gentlr.vst3 Dropr.vst3 Orbitr.vst3 Ciphr.vst3 Moistr.vst3 LICENSE.txt THIRD_PARTY_NOTICES.md ;;
-            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gentlr.vst3 Dropr.vst3 Orbitr.vst3 Ciphr.vst3 Moistr.vst3 LICENSE.txt THIRD_PARTY_NOTICES.md ;;
-            Windows) pwsh -Command "Compress-Archive -Path Smemplr.vst3,Multidyn.vst3,Locus.vst3,Stretchr.vst3,Smacheratr.vst3,Para.vst3,Widr.vst3,Wubr.vst3,Levlr.vst3,Deepr.vst3,Smoothr.vst3,Gentlr.vst3,Dropr.vst3,Orbitr.vst3,Ciphr.vst3,Moistr.vst3,LICENSE.txt,THIRD_PARTY_NOTICES.md -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
+            macOS)   zip -qry "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" "${BUNDLES[@]}" LICENSE.txt THIRD_PARTY_NOTICES.md ;;
+            Linux)   zip -qr "$GITHUB_WORKSPACE/dist/${{ matrix.asset }}" "${BUNDLES[@]}" LICENSE.txt THIRD_PARTY_NOTICES.md ;;
+            Windows) pwsh -Command "Compress-Archive -Path $(IFS=,; echo "${BUNDLES[*]}"),LICENSE.txt,THIRD_PARTY_NOTICES.md -DestinationPath '$GITHUB_WORKSPACE/dist/${{ matrix.asset }}'" ;;
           esac
 
       - uses: actions/upload-artifact@v4

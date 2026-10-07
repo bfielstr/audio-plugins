@@ -133,10 +133,19 @@ function(pk_add_draw_bench target)
     add_test(NAME ${bench}_layouts COMMAND ${bench} --check-layouts)
 endfunction()
 
-# pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...> INCLUDES <dirs...>)
+# pk_cpu_test(<test>...)
+# Tests that time the DSP against a CPU budget (a "too slow" check) run alone, never next to other tests
+# under `ctest -j` (they would compete for the cores and fail), and carry the label "cpu"
+# (`ctest -L cpu` runs only them, `ctest -LE cpu` everything else). Every other test may run in parallel.
+function(pk_cpu_test)
+    set_tests_properties(${ARGN} PROPERTIES RUN_SERIAL TRUE LABELS cpu)
+endfunction()
+
+# pk_add_host_test(<name> PLUGIN <target> SOURCES <files...> LIBS <libs...> INCLUDES <dirs...> [CPU_BUDGET])
 # macOS: loads the built bundle through the VST3 hosting API (see shared/pluginkit/testing).
+# CPU_BUDGET: the test checks a CPU budget (pk_cpu_test).
 function(pk_add_host_test name)
-    cmake_parse_arguments(ARG "" "PLUGIN" "SOURCES;LIBS;INCLUDES" ${ARGN})
+    cmake_parse_arguments(ARG "CPU_BUDGET" "PLUGIN" "SOURCES;LIBS;INCLUDES" ${ARGN})
     if(NOT APPLE)
         return()
     endif()
@@ -154,4 +163,7 @@ function(pk_add_host_test name)
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/test-output/${ARG_PLUGIN})
     add_test(NAME ${name}
              COMMAND ${name} ${CMAKE_BINARY_DIR}/VST3/$<CONFIG>/${ARG_PLUGIN}.vst3 ${CMAKE_BINARY_DIR}/test-output/${ARG_PLUGIN})
+    if(ARG_CPU_BUDGET)
+        pk_cpu_test(${name})
+    endif()
 endfunction()

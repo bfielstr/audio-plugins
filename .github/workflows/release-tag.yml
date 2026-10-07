@@ -1,0 +1,53 @@
+name: Release tag
+
+# A push to main that raises the version in the root CMakeLists.txt (project(... VERSION x.y.z)) tags
+# that commit vX.Y.Z and starts the release build on the tag (build.yml: universal Mac binaries,
+# installers, "Publish release"). A tag pushed with the workflow's own token starts no workflow by
+# itself, so the build is started with workflow_dispatch on the tag, which runs exactly as a tag push.
+# Re-running does nothing once the tag exists; an existing tag is never moved. Pushing a v* tag by hand
+# still works as before.
+on:
+  push:
+    branches: [main]
+    paths: ["CMakeLists.txt"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the tag
+  actions: write # start build.yml on it
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # the pushed commit and its first parent
+
+      - name: Compare the versions
+        id: version
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: scripts/release-version.sh "${BEFORE:-HEAD~1}" HEAD
+
+      - name: Tag and start the release build
+        if: steps.version.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # (another run may have tagged it meanwhile)
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists on the remote; nothing to do"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Plug-ins $TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+          echo "Tagged $GITHUB_SHA as $TAG and started the release build: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/workflows/build.yml" >> "$GITHUB_STEP_SUMMARY"

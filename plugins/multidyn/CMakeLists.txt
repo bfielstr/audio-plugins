@@ -12,6 +12,7 @@ pk_dsp_settings(multidyn_core)
 add_executable(multidyn_tests tests/core_tests.cpp)
 target_link_libraries(multidyn_tests PRIVATE multidyn_core)
 add_test(NAME multidyn_core COMMAND multidyn_tests)
+pk_cpu_test(multidyn_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()
@@ -41,6 +42,7 @@ target_link_libraries(Multidyn PRIVATE multidyn_core smacheratr_ui)
 
 pk_add_host_test(multidyn_hosttest
     PLUGIN Multidyn
+    CPU_BUDGET # times the processing against a CPU budget
     SOURCES tests/host_test.mm src/plugin/State.cpp
     LIBS multidyn_core
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src)

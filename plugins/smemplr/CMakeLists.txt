@@ -19,6 +19,7 @@ add_executable(smemplr_tests tests/core_tests.cpp)
 target_include_directories(smemplr_tests PRIVATE src/core)
 target_link_libraries(smemplr_tests PRIVATE smemplr_core)
 add_test(NAME smemplr_core COMMAND smemplr_tests)
+pk_cpu_test(smemplr_core) # times the DSP against a CPU budget
 
 if(NOT PK_BUILD_PLUGINS)
     return()
@@ -75,6 +76,7 @@ target_link_libraries(Smemplr PRIVATE smemplr_core smacheratr_ui)
 
 pk_add_host_test(smemplr_hosttest
     PLUGIN Smemplr
+    CPU_BUDGET # times the processing against a CPU budget
     SOURCES tests/host_test.mm src/plugin/StateIO.cpp
     LIBS smemplr_core
     INCLUDES ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR}/src/core)
