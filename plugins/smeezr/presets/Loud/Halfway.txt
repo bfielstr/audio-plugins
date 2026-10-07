@@ -1,0 +1,5 @@
+# smeezr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: ott, loud, pink
+comment: Full pink with half of the OTT boost: denser and louder without the full squash.
+Squeeze = 75 %
+Output = -3.0 dB

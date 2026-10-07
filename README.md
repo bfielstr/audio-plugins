@@ -1,7 +1,7 @@
-# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr
+# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.19.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.20.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -21,6 +21,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.19.0**
 | [**orbitr**](plugins/orbitr/README.md) | Turns a sound into a swarm: 1 to 16 copies fly around you, each one bending in pitch as it moves towards or away from you. |
 | [**ciphr**](plugins/ciphr/README.md) | An 8-voice synthesizer: clusters of wavetable oscillators you sweep with one knob, FM and ring modulation between them, and echoes that turn into reverb, with a frequency shifter in the feedback for endlessly climbing repeats. Metallic, screeching and vocal waves for alien textures, and Disperse, a dial that brings the sound back band by band. Can also play a track through its side-chain input. |
 | [**moistr**](plugins/moistr/README.md) | Turns a bass (a detuned Reese, typically) into a wet, moving neuro texture: splits it into 3 or 4 bands, holds the low band steady and lets the bands above it rise and fall on their own, then glues them back with a compressor and a little grit; an optional frequency shifter moves the upper bands but never the sub. The Seed picks the timing, how quickly the bands rise and fall, and where the low band ends; the same Seed always moves the same way. |
+| [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
 
 ## Gallery
 
@@ -34,6 +35,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.19.0**
 | [<img src="docs/smoothr/ui_smoothr.png" width="420" alt="smoothr">](plugins/smoothr/README.md)<br>smoothr | [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr |
 | [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/orbitr/ui_orbitr.png" width="420" alt="orbitr">](plugins/orbitr/README.md)<br>orbitr |
 | [<img src="docs/ciphr/ui_ciphr.png" width="420" alt="ciphr">](plugins/ciphr/README.md)<br>ciphr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
+| [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | |
 
 ## What every plug-in has
 
@@ -119,7 +121,7 @@ installed versions. Copies that older installers put directly in the VST3 folder
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
-`SIMPLR_VERSION=v0.19.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
+`SIMPLR_VERSION=v0.20.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
 
@@ -292,6 +294,7 @@ plugins/dropr       multiband compressor     same structure
 plugins/orbitr      doppler swarm            same structure
 plugins/ciphr       wavetable synthesizer    same structure
 plugins/moistr      moving band split        same structure
+plugins/smeezr      one-knob pink / OTT      same structure
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

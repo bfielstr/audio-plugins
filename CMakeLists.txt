@@ -6,8 +6,8 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(AudioPlugins
-    VERSION 0.19.0
-    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr and Moistr VST3 plug-ins"
+    VERSION 0.20.0
+    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr, Moistr and Smeezr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -42,7 +42,7 @@ add_subdirectory(shared)
 
 # Every plug-in, in the order they are added.
 set(PK_ALL_PLUGINS smemplr multidyn locus stretchr smacheratr para widr wubr levlr deepr dropr gentlr smoothr
-    orbitr ciphr moistr)
+    orbitr ciphr moistr smeezr)
 
 # -DPK_ONLY_PLUGINS="orbitr;ciphr" builds and tests only those plug-ins (pull request CI uses it for the
 # plug-ins a change touches); empty (the default) builds all of them. The plug-ins a selected one links
@@ -102,6 +102,7 @@ if(PK_ONLY_PLUGINS)
     target_link_libraries(factory_presets_tests PRIVATE pluginkit_core)
 else()
     target_link_libraries(factory_presets_tests PRIVATE pluginkit_core ciphr_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
-        moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
+        moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core
+        smeezr_core)
 endif()
 add_test(NAME factory_presets COMMAND factory_presets_tests)

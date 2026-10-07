@@ -14,6 +14,7 @@
 #define PK_WITH_levlr
 #define PK_WITH_locus
 #define PK_WITH_moistr
+#define PK_WITH_smeezr
 #define PK_WITH_multidyn
 #define PK_WITH_orbitr
 #define PK_WITH_para
@@ -45,6 +46,9 @@
 #endif
 #ifdef PK_WITH_moistr
 #include "moistr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_smeezr
+#include "smeezr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
@@ -121,6 +125,9 @@ const Plugin kPlugins[] = {
 #endif
 #ifdef PK_WITH_moistr
     {"moistr", moistr::paramTable},
+#endif
+#ifdef PK_WITH_smeezr
+    {"smeezr", smeezr::paramTable},
 #endif
 #ifdef PK_WITH_orbitr
     {"orbitr", orbitr::paramTable},

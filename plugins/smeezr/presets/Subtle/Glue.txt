@@ -1,0 +1,6 @@
+# smeezr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: glue, bus, subtle
+comment: Some of the way towards pink, slow, blended half and half with the dry signal: glue for a bus.
+Squeeze = 30 %
+Speed = Slow
+Mix = 50 %
