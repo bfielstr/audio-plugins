@@ -2,6 +2,8 @@
 
 #include "../core/Params.h"
 
+#include <string>
+
 namespace widr::help {
 
 inline const char* forParam (uint32_t id)
@@ -43,14 +45,48 @@ inline const char* forParam (uint32_t id)
         case kGroup: return "Widrs listen to the others in the same group (1 to 8) only.";
         case kMonoCheck: return "Listen in mono (L + R), to check the fold.";
         case kOutput: return "Overall output level.";
-        default: return nullptr;
+        case kCinema:
+            return "The cinema stage. widr hears the mix as five lanes (Voice, Bass, Hits, Tones, Ambience) and places "
+                   "each by its Position: the Centre ones stay dry and mono in the middle, the Wide and Beyond ones are "
+                   "widened. Also scales Depth and Theatre. 0 %: off, widr as before (no added latency); above 0 it "
+                   "adds 21 ms of latency.";
+        case kDepth:
+            return "A deep, tight low end from the Bass lane: a sub an octave down and a slow low shelf that backs off "
+                   "when the lows are already loud. Mono. Scaled by Cinema.";
+        case kTheatre:
+            return "A large, dark hall with a theatre's early reflections, fed only by the Wide and Beyond lanes (never "
+                   "the Centre ones, so a voice in the Centre stays dry). Amount and size. Scaled by Cinema.";
+        default:
+            break;
     }
+    if (id >= kLaneBase && id < kNumPluginParams)
+    {
+        static const char* what[kNumLanes] = {
+            "Voice: speech and singing in the centre (harmonic, moving at a syllable rate).",
+            "Bass: everything below about 120 Hz.",
+            "Hits: drums and other onsets.",
+            "Tones: held notes, pads, leads, chords.",
+            "Ambience: room, reverb, noise, anything diffuse."};
+        static std::string texts[2 * kNumLanes];
+        const int lane = (int)(id - kLaneBase) / 2;
+        std::string& t = texts[id - kLaneBase];
+        if (t.empty ())
+            t = std::string (what[lane]) +
+                ((id - kLaneBase) % 2 == 0
+                     ? " Where it goes: Centre (dry, mono in the middle, no voices or hall), Wide (widr's voices), Beyond "
+                       "(stronger voices and cues that reach past the speakers)."
+                     : " Width: Centre: how much of its own stereo it keeps (0 %: mono). Wide and Beyond: how much width "
+                       "is added (0 %: as it is).");
+        return t.c_str ();
+    }
+    return nullptr;
 }
 
 constexpr const char* kStage =
     "The stage from above: you at the bottom, the speakers at the sides. Lit (cinnabar): this Widr (the angle is its width, "
-    "the distance its Space); dashed copper: the other Widrs in the group. Bottom strip: the width kept per band (outlined = given "
-    "to the group). Drag an end of the lit arc for Width, drag up/down for Space, double-click to reset. Shift: "
+    "the distance its Space); dashed copper: the other Widrs in the group. With Cinema on, five thin arcs are the "
+    "lanes (Voice, Bass, Hits, Tones, Ambience, inside out) where their Position puts them, lit by how much each holds. Bottom "
+    "strip: the width kept per band (outlined = given to the group). Drag an end of the lit arc for Width, drag up/down for Space, double-click to reset. Shift: "
     "fine.";
 
 constexpr const char* kGonio =

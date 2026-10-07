@@ -2,7 +2,9 @@
 // Widr of the group as an arc whose angle is its width and whose distance is its depth (Space):
 // this one lit in cinnabar, the others dashed copper ("Widr 2 · Wide"). Beyond 100 % the arc passes the
 // speakers. Under it, this instance's gain per band after the Mono Guard and the group (outlined where
-// it gives way to the others), dim below Mono Below.
+// it gives way to the others), dim below Mono Below. With Cinema on, the element lanes as thin arcs
+// (Voice innermost, Ambience outermost), each where its Position and Width put it and lit by its level;
+// the rest of the stage is a cached layer, so a lane's level changing repaints only those arcs.
 //   drag an end of the lit arc      Width
 //   drag up / down elsewhere        Space
 //   double-click                    reset Width and Space
@@ -33,6 +35,13 @@ public:
 
     StageView (const VSTGUI::CRect& r, pk::ParamHost* host, Controller* controller);
     void draw (VSTGUI::CDrawContext* ctx) override;
+    // a lane's arc: its half-angle in degrees (by Position and Width) and its ring (0 .. 1, as Space)
+    static double laneAngle (int position, double width)
+    {
+        width = width < 0.0 ? 0.0 : (width > 1.0 ? 1.0 : width);
+        return position == kPosCentre ? 4.0 + 10.0 * width : (position == kPosWide ? 20.0 + 15.0 * width : 45.0 + 20.0 * width);
+    }
+    static double laneRing (int lane) { return 0.2 + 0.19 * lane; }
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
@@ -73,6 +82,9 @@ private:
     Drag hit (const VSTGUI::CPoint& p) const;
     VSTGUI::CRect field () const;
     VSTGUI::CRect strip () const;
+    void drawScene (VSTGUI::CDrawContext* ctx);
+    void drawLanes (VSTGUI::CDrawContext* ctx);
+    uint64_t sceneKey () const;
 
     pk::ParamHost* host;
     Controller* controller;
@@ -81,6 +93,8 @@ private:
     double startWidth = 0.0, startSpaceN = 0.0, widthAtDown = 0.0;
     std::vector<Member> shown;
     std::array<float, kBands> gains {}, yields {};
+    std::array<float, kNumLanes> laneDb {}; // the lanes' levels (dB), from the meters
+    pk::CachedLayer scene;                  // everything but the lanes
     uint64_t shownKey = 0; // what the last repaint showed (idle repaints when it changes)
     // editor-side liveness of the registry slots (heartbeat changes, in idle calls)
     std::array<uint32_t, Registry::kSlots> beats {};

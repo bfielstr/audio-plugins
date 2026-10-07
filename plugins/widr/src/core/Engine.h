@@ -25,12 +25,33 @@
 //      is mono and mid and side stay in phase above it.
 //   8. Output, then the Smacheratr tail.
 // Width 0 bypasses everything but Output and Mono Check: bit-exact at 0 dB (the tail only delays).
+//
+// The cinema stage (Cinema above 0; at 0 none of it runs and Widr is what it was, bit for bit):
+//   a. The input is separated into five element lanes that sum back to it (Lanes.h): Voice, Bass,
+//      Hits, Tones and Ambience. This adds the STFT's latency (1023 samples at 48 kHz).
+//   b. Each lane has a Position and a Width. A Centre lane goes to the output dry, its side kept by
+//      its Width (0 %: mono in the centre): no voices, no reverb. A Wide lane feeds the voices (steps
+//      1-3; its mid, up to 1.25x at Width 100 %). A Beyond lane feeds them harder (1.6x) and gets Beyond
+//      cues on top: a decorrelated copy of its mid, a crosstalk cue (its side plus a 0.27 ms late,
+//      low-passed copy of itself, the way a crosstalk canceller widens) and its own side lifted, all
+//      pure side, so the mono fold never sees them; the Mono Guard caps them with the side-to-mid limit.
+//      The feeds give way where the separation found the voice or a hit (Lanes.h: the guards).
+//   c. Theatre (Theatre.h), a large dark hall fed by the Wide and Beyond lanes only, into the voices
+//      (so the Mono Guard and the group's gains act on it). Depth (Depth.h) on the Bass lane, into the
+//      mid only.
+//   d. Cinema blends the stage in: the voices move from the whole mid to the Wide and Beyond lanes,
+//      the Centre lanes narrow by their Width, the voices get louder (up to 1.6x) and lean towards a
+//      cinema blend of the generators, and Depth and Theatre scale with it. A soft limiter (-1 dBFS,
+//      then a soft clip under 0 dBFS) keeps the headroom while the stage is on.
 #pragma once
 
 #include "Bands.h"
 #include "Dsp.h"
 #include "Params.h"
+#include "Depth.h"
+#include "Lanes.h"
 #include "Reverb.h"
+#include "Theatre.h"
 
 #include "locus/src/core/Fft.h"
 #include "pluginkit/ScopeBuffer.h"
@@ -42,7 +63,7 @@
 
 namespace widr {
 
-using ParamArray = std::array<double, kNumParams>;
+using ParamArray = std::array<double, kNumPluginParams>;
 ParamArray defaultParams ();
 
 // For the editor (written by the audio thread).
@@ -55,6 +76,7 @@ struct Meters
     std::atomic<int> peers {0};                             // other live Widrs in this group
     std::atomic<int> slot {-1};                             // this instance's registry slot
     std::atomic<float> sampleRate {48000.0f};
+    std::array<std::atomic<float>, kNumLanes> lane {};      // each element lane's level (dB; -120 while Cinema is off)
     pk::ScopeBuffer<2048> scope;                            // output L / R, for the goniometer
     Meters ()
     {
@@ -63,6 +85,8 @@ struct Meters
         for (auto& g : bandYield)
             g.store (1.0f);
         for (auto& g : bandSide)
+            g.store (-120.0f);
+        for (auto& g : lane)
             g.store (-120.0f);
     }
 };
@@ -86,11 +110,13 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain)
     {
-        if (id >= kNumParams)
+        if (id >= kNumPluginParams)
             return;
         p[id] = plain;
         if (id >= kTailBase && id < kTailBase + pk::kTailFields)
             tail.setParam (id - kTailBase, plain);
+        else if (id >= kNumParams)
+            return; // (the cinema stage's: read from p[])
         else if (id >= kTailExt4Base)
             tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
         else if (id >= kTailExt3Base)
@@ -101,7 +127,9 @@ public:
             tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
     }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return hasTail ? tail.latency () : 0; }
+    // the end saturator's, and the lanes' STFT while Cinema is above 0
+    int latency () const { return (hasTail ? tail.latency () : 0) + (p[kCinema] > 0.0 ? lanes.latency () : 0); }
+    int cinemaLatency () const { return lanes.latency (); }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In-place capable.
@@ -133,6 +161,10 @@ public:
     double sampleRate () const { return sr; }
     float correlation () const { return corr; }
     float bandGain (int k) const { return gCur[(size_t)k]; }
+    // the cinema stage, for the tests
+    const LaneSplitter& laneSplitter () const { return lanes; }
+    LaneSplitter& laneSplitter () { return lanes; }
+    float beyondGain () const { return extraGain; }
 
 private:
     // one of the two voices (left or right): its own delay, decorrelator, pitch shift and reflections
@@ -152,6 +184,9 @@ private:
     void blockSetup ();
     void analyse ();
     void processBlock (const float* inL, const float* inR, float* outL, float* outR, int n);
+    template <typename Finish, typename Capture>
+    void processCinema (const float* inL, const float* inR, int n, float wetT, float widthT, float spaceT, float dryT,
+                        float wetLevelT, double driftA, int driftEvery, Finish& finish, Capture& capture);
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -212,6 +247,23 @@ private:
 
     smacheratr::Tail tail;
     bool hasTail = true;
+
+    // the cinema stage (Lanes.h, Theatre.h, Depth.h): runs only while Cinema is above 0
+    void cinemaReset ();
+    LaneSplitter lanes;
+    Theatre theatre;
+    Depth depth;
+    bool cinemaOn = false;
+    float cin = 0.0f, theatreAmt = 0.0f, depthAmt = 0.0f;
+    std::array<Allpass, 4> beyondDecor;    // the Beyond lanes' decorrelated side
+    DelayLine cueLine;                     // their crosstalk cue
+    OnePole cueLp;
+    float cueLpA = 0.3f;
+    int cueDelay = 13;
+    std::vector<float> ringX;              // the Beyond cues (before their guard gain), for the analysis
+    std::array<float, kBands> eX {};
+    float extraGain = 1.0f;                // the Mono Guard on the Beyond cues
+    float limG = 1.0f, limAtt = 0.0f, limRel = 0.0f;
 };
 
 } // namespace widr

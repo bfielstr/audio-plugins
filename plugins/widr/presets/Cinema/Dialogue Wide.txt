@@ -1,0 +1,8 @@
+# widr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cinema, dialogue, wide, film
+comment: Dialogue straight down the middle, dry; music, effects and ambience spread wide around it.
+Cinema = 100 %
+Depth = 30 %
+Theatre = 20 %
+Hits Width = 50 %
+Tones Width = 100 %

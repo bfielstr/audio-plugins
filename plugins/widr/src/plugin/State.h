@@ -10,8 +10,8 @@ namespace widr {
 
 struct State
 {
-    std::array<double, kNumParams> norm {};
-    std::array<bool, kNumParams> has {};
+    std::array<double, kNumPluginParams> norm {};
+    std::array<bool, kNumPluginParams> has {};
 };
 
 bool writeState (Steinberg::IBStream* stream, const State& s);

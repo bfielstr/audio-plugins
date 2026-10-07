@@ -37,7 +37,34 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
-        static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last");
+        static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last of 0.19's");
+        return v;
+    }());
+    return t;
+}
+
+const ParamTable& pluginParamTable ()
+{
+    static const ParamTable t ([] {
+        std::vector<ParamInfo> v;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            v.push_back (paramTable ().info (id));
+        // the cinema stage (0.20)
+        v.push_back (percent (kCinema, "Cinema", "Cinema", 0.0));
+        v.push_back (percent (kDepth, "Depth", "Depth", 0.5));
+        v.push_back (percent (kTheatre, "Theatre", "Theatre", 0.4));
+        static const char* laneNames[kNumLanes][2] = {{"Voice Position", "Voice Width"}, {"Bass Position", "Bass Width"},
+                                                      {"Hits Position", "Hits Width"}, {"Tones Position", "Tones Width"},
+                                                      {"Ambience Position", "Ambience Width"}};
+        static const char* laneShort[kNumLanes] = {"Voice", "Bass", "Hits", "Tones", "Ambience"};
+        static constexpr int defPos[kNumLanes] = {kPosCentre, kPosCentre, kPosCentre, kPosWide, kPosBeyond};
+        static constexpr double defWidth[kNumLanes] = {0.0, 0.0, 0.25, 0.8, 1.0};
+        for (int l = 0; l < kNumLanes; ++l)
+        {
+            v.push_back (choice (lanePosition (l), laneNames[l][0], laneShort[l], {"Centre", "Wide", "Beyond"}, defPos[l]));
+            v.push_back (percent (laneWidth (l), laneNames[l][1], "Width", defWidth[l]));
+        }
+        static_assert (kNumPluginParams == kLaneBase + 2 * kNumLanes, "the lanes are the last block");
         return v;
     }());
     return t;

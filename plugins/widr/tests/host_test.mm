@@ -91,7 +91,7 @@ int main (int argc, char** argv)
         CHECK (a.load (argv[1]) && b.load (argv[1]), "load two instances");
         if (gFail)
             return finish ("widr host test");
-        CHECK (a.controller->getParameterCount () == (int32)kNumParams, "param count");
+        CHECK (a.controller->getParameterCount () == (int32)kNumPluginParams, "param count");
         CHECK (countNonAutomatable (a.controller) == 0, "non-automatable parameters");
         checkPresetMenu (a.controller); // Init first, Save as Default, factory presets
         CHECK (a.start () && b.start (), "start");
@@ -136,9 +136,11 @@ int main (int argc, char** argv)
         CHECK (bSide4 < bSide3 - 3.0, "B gives way once A is the Anchor: %.1f -> %.1f dB", bSide3, bSide4);
         na.gain = 1.0;
 
-        // state round trip into a fresh instance
+        // state round trip into a fresh instance (the cinema stage's parameters with it)
         setPlain (a, kWidth, 1.7);
         setPlain (a, kCharacter, kEpic);
+        setPlain (a, lanePosition (kLaneTones), kPosBeyond);
+        setPlain (a, kTheatre, 0.7);
         a.render (0.05, al, &ar, na.fn ());
         MemoryStream saved;
         CHECK (a.component->getState (&saved) == kResultOk, "getState");
@@ -155,6 +157,8 @@ int main (int argc, char** argv)
             saved.seek (0, IBStream::kIBSeekSet, nullptr);
             CHECK (c.controller->setComponentState (&saved) == kResultOk, "setComponentState");
             CHECK (std::fabs (plainOf (c, kWidth) - 1.7) < 1e-6, "controller restored: %f", plainOf (c, kWidth));
+            CHECK (std::lround (plainOf (c, lanePosition (kLaneTones))) == kPosBeyond && std::fabs (plainOf (c, kTheatre) - 0.7) < 1e-6,
+                   "the cinema stage restored");
         }
 
         // editor: screenshot with both instances playing, then gestures on the stage
@@ -201,6 +205,24 @@ int main (int argc, char** argv)
                 pump (0.03);
             }
             CHECK (win.savePng (outDir + "/ui_widr_reset.png"), "screenshot 2");
+
+            // the cinema stage: drag the Cinema knob up (in the CINEMA panel, right of the LANES), then
+            // double-click it back to 0 (off)
+            const double kx = Editor::kCinemaLeft + 12 + 40, ky = Editor::kLanesTop + 24 + 50;
+            win.drag (kx, ky, kx, ky - 80);
+            CHECK (plainOf (a, kCinema) > 0.2, "dragging Cinema up turns the cinema stage on: %.2f", plainOf (a, kCinema));
+            for (int i = 0; i < 5; ++i)
+            {
+                a.render (0.03, al, &ar, na.fn ());
+                pump (0.03);
+            }
+            CHECK (a.processor->getLatencySamples () == latency + 1023, "Cinema on: the lanes' latency reported (%u)",
+                   a.processor->getLatencySamples ());
+            CHECK (win.savePng (outDir + "/ui_widr_cinema.png"), "screenshot 3");
+            win.click (kx, ky, 2);
+            CHECK (plainOf (a, kCinema) == 0.0, "double-click: Cinema back to 0 (%.2f)", plainOf (a, kCinema));
+            a.render (0.03, al, &ar, na.fn ());
+            CHECK (a.processor->getLatencySamples () == latency, "Cinema off: the latency as before (%u)", a.processor->getLatencySamples ());
         }
         a.stop ();
         b.stop ();

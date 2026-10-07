@@ -16,8 +16,12 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 604, 8 px clear under it
-    static constexpr double kHeight = 604.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
+    // the cinema stage's row (LANES, CINEMA) from y 556, the levels from 704, the end saturator's section
+    // (smacheratr::TailPanel, both parts open) at the bottom, from y 752, 8 px clear under it
+    static constexpr double kLanesTop = 556.0, kLevelsTop = 704.0, kTailTop = 752.0;
+    static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
+    // the LANES panel's columns (one per lane, kLaneColumn wide from kLanesLeft), the CINEMA panel, for the tests
+    static constexpr double kLanesLeft = 8.0, kLaneColumn = 100.0, kCinemaLeft = 520.0;
     // the stage display, for the tests
     static constexpr double kStageLeft = 8.0, kStageTop = 40.0, kStageRight = 560.0, kStageBottom = 300.0;
 

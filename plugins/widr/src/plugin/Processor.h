@@ -37,7 +37,7 @@ private:
     Engine engine;
     MixMember mix; // this instance in the process-wide registry, while active
     SharedMeters* shared = nullptr;
-    std::array<std::atomic<double>, kNumParams> normMirror;
+    std::array<std::atomic<double>, kNumPluginParams> normMirror;
     std::atomic<bool> reloadParams {false};
 };
 
