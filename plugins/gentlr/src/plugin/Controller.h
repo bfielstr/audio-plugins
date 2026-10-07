@@ -11,7 +11,7 @@ namespace gentlr {
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Gentlr", "Gently"); /* renamed: its presets and settings come along */ }
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Gentlr", "Gently"); /* renamed: its presets and settings come along */ setGentlrIds (kGentlrIds); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;

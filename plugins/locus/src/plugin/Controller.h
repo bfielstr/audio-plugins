@@ -11,7 +11,7 @@ namespace locus {
 class Controller : public pk::ControllerBase
 {
 public:
-    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Locus"); }
+    Controller () : pk::ControllerBase (paramTable ()) { setPresetInfo (kProcessorUID, "Locus"); setGentlrIds (kGentlrIds); }
     static Steinberg::FUnknown* createInstance (void*) { return (Steinberg::Vst::IEditController*)new Controller (); }
 
     Steinberg::tresult PLUGIN_API terminate () override;

@@ -122,7 +122,10 @@ band (Band 1, Band 2, Sub, High) at the right edge of the display, with the band
 it, bright where it is over the threshold (there the band is being cut). The law over the threshold
 stays the same. Drag a slider (Shift: fine); a double-click or right click puts it back to -18 dB.
 Advanced is on in a new gentlr (the Thresholds at -18 dB sound the same as Advanced off, so the sliders
-are there to move). With Advanced off, the Thresholds are kept but not used.
+are there to move). With Advanced off, the Thresholds are kept but not used. To have every new gentlr
+start with Advanced off, uncheck **Menu > Defaults > Advanced On by Default** (it applies to new
+instances only, on top of a saved default; see the
+[top-level README](../../README.md#defaults-for-new-instances)).
 
 Advanced also has the region **Drive** (and its **Amount**, 0 to 36 dB, 12 dB by default): the bands as
 they leave, after their cuts, go through smacheratr's Analog curve on their own, level-matched and added
