@@ -39,27 +39,69 @@ if(PK_BUILD_PLUGINS)
 endif()
 
 add_subdirectory(shared)
-add_subdirectory(plugins/smemplr)
-add_subdirectory(plugins/multidyn)
-add_subdirectory(plugins/locus)
-add_subdirectory(plugins/stretchr)
-add_subdirectory(plugins/smacheratr)
-add_subdirectory(plugins/para)
-add_subdirectory(plugins/widr)
-add_subdirectory(plugins/wubr)
-add_subdirectory(plugins/levlr)
-add_subdirectory(plugins/deepr)
-add_subdirectory(plugins/dropr)
-add_subdirectory(plugins/gentlr)
-add_subdirectory(plugins/smoothr)
-add_subdirectory(plugins/orbitr)
-add_subdirectory(plugins/ciphr)
-add_subdirectory(plugins/moistr)
+
+# Every plug-in, in the order they are added.
+set(PK_ALL_PLUGINS smemplr multidyn locus stretchr smacheratr para widr wubr levlr deepr dropr gentlr smoothr
+    orbitr ciphr moistr)
+
+# -DPK_ONLY_PLUGINS="orbitr;ciphr" builds and tests only those plug-ins (pull request CI uses it for the
+# plug-ins a change touches); empty (the default) builds all of them. The plug-ins a selected one links
+# (smacheratr_core, smacheratr_ui, ...) are added too, but only their libraries are built and their
+# tests are disabled. The shared tests always run; factory_presets checks only the selected plug-ins.
+set(PK_ONLY_PLUGINS "" CACHE STRING "Build only these plug-ins (a list of folder names under plugins/); empty builds all")
+if(PK_ONLY_PLUGINS)
+    if(CMAKE_VERSION VERSION_LESS 3.28)
+        message(FATAL_ERROR "PK_ONLY_PLUGINS needs CMake 3.28 or newer (set_property(TEST ... DIRECTORY))")
+    endif()
+    foreach(p IN LISTS PK_ONLY_PLUGINS)
+        if(NOT p IN_LIST PK_ALL_PLUGINS)
+            message(FATAL_ERROR "PK_ONLY_PLUGINS: no plug-in called '${p}' (known: ${PK_ALL_PLUGINS})")
+        endif()
+    endforeach()
+    # the plug-ins whose <name>_core or <name>_ui targets a needed plug-in's CMakeLists.txt names, until
+    # nothing new turns up
+    set(_pk_needed ${PK_ONLY_PLUGINS})
+    set(_pk_todo ${PK_ONLY_PLUGINS})
+    while(_pk_todo)
+        list(POP_FRONT _pk_todo p)
+        file(READ "${CMAKE_CURRENT_SOURCE_DIR}/plugins/${p}/CMakeLists.txt" _pk_text)
+        foreach(q IN LISTS PK_ALL_PLUGINS)
+            if(NOT q IN_LIST _pk_needed AND _pk_text MATCHES "(^|[^a-z_])${q}_(core|ui)([^a-z_]|$)")
+                list(APPEND _pk_needed ${q})
+                list(APPEND _pk_todo ${q})
+            endif()
+        endforeach()
+    endwhile()
+    message(STATUS "pluginkit: building only ${PK_ONLY_PLUGINS} (libraries of: ${_pk_needed})")
+endif()
+
+foreach(p IN LISTS PK_ALL_PLUGINS)
+    if(NOT PK_ONLY_PLUGINS OR p IN_LIST PK_ONLY_PLUGINS)
+        add_subdirectory(plugins/${p})
+    elseif(p IN_LIST _pk_needed)
+        # only what a selected plug-in links gets built; its own tests are not built, so not run
+        add_subdirectory(plugins/${p} EXCLUDE_FROM_ALL)
+        get_property(_pk_tests DIRECTORY plugins/${p} PROPERTY TESTS)
+        if(_pk_tests)
+            set_property(TEST ${_pk_tests} DIRECTORY plugins/${p} PROPERTY DISABLED TRUE)
+        endif()
+    endif()
+endforeach()
 
 # Every plug-in's factory presets (plugins/<plugin>/presets) parse against its parameters.
 add_executable(factory_presets_tests shared/tests/factory_presets_tests.cpp)
 target_compile_definitions(factory_presets_tests PRIVATE PK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(factory_presets_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/plugins)
-target_link_libraries(factory_presets_tests PRIVATE pluginkit_core ciphr_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
-    moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
+if(PK_ONLY_PLUGINS)
+    # only the selected plug-ins' presets (PK_WITH_<name> in the test)
+    target_compile_definitions(factory_presets_tests PRIVATE PK_PRESET_SUBSET)
+    foreach(p IN LISTS PK_ONLY_PLUGINS)
+        target_compile_definitions(factory_presets_tests PRIVATE PK_WITH_${p})
+        target_link_libraries(factory_presets_tests PRIVATE ${p}_core)
+    endforeach()
+    target_link_libraries(factory_presets_tests PRIVATE pluginkit_core)
+else()
+    target_link_libraries(factory_presets_tests PRIVATE pluginkit_core ciphr_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
+        moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core)
+endif()
 add_test(NAME factory_presets COMMAND factory_presets_tests)

@@ -4,22 +4,75 @@
 // choices) for writing presets.
 #include "pluginkit/PresetStore.h"
 
+// Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
+// with a PK_WITH_<name> are linked and checked.
+#if !defined(PK_PRESET_SUBSET)
+#define PK_WITH_ciphr
+#define PK_WITH_deepr
+#define PK_WITH_dropr
+#define PK_WITH_gentlr
+#define PK_WITH_levlr
+#define PK_WITH_locus
+#define PK_WITH_moistr
+#define PK_WITH_multidyn
+#define PK_WITH_orbitr
+#define PK_WITH_para
+#define PK_WITH_smacheratr
+#define PK_WITH_smemplr
+#define PK_WITH_smoothr
+#define PK_WITH_stretchr
+#define PK_WITH_widr
+#define PK_WITH_wubr
+#endif
+
+#ifdef PK_WITH_ciphr
 #include "ciphr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_deepr
 #include "deepr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_dropr
 #include "dropr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_gentlr
 #include "gentlr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_levlr
 #include "levlr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_locus
 #include "locus/src/core/Params.h"
+#endif
+#ifdef PK_WITH_moistr
 #include "moistr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
+#endif
+#ifdef PK_WITH_orbitr
 #include "orbitr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_para
 #include "para/src/core/Params.h"
+#endif
+#ifdef PK_WITH_smacheratr
 #include "smacheratr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_smemplr
 #include "smemplr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_smoothr
 #include "smoothr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_stretchr
 #include "stretchr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_widr
 #include "widr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_wubr
 #include "wubr/src/core/Params.h"
+#endif
 
 #include <algorithm>
 #include <cstdio>
@@ -45,13 +98,54 @@ struct Plugin
 };
 
 const Plugin kPlugins[] = {
-    {"ciphr", ciphr::paramTable},       {"deepr", deepr::paramTable},   {"dropr", dropr::paramTable},
+#ifdef PK_WITH_ciphr
+    {"ciphr", ciphr::paramTable},
+#endif
+#ifdef PK_WITH_deepr
+    {"deepr", deepr::paramTable},
+#endif
+#ifdef PK_WITH_dropr
+    {"dropr", dropr::paramTable},
+#endif
+#ifdef PK_WITH_gentlr
     {"gentlr", gentlr::paramTable},
-    {"levlr", levlr::paramTable},       {"locus", locus::paramTable},   {"multidyn", multidyn::paramTable},
+#endif
+#ifdef PK_WITH_levlr
+    {"levlr", levlr::paramTable},
+#endif
+#ifdef PK_WITH_locus
+    {"locus", locus::paramTable},
+#endif
+#ifdef PK_WITH_multidyn
+    {"multidyn", multidyn::paramTable},
+#endif
+#ifdef PK_WITH_moistr
     {"moistr", moistr::paramTable},
-    {"orbitr", orbitr::paramTable},     {"para", para::paramTable},     {"smacheratr", smacheratr::paramTable},
-    {"smemplr", smemplr::paramTable},   {"smoothr", smoothr::paramTable}, {"stretchr", stretchr::paramTable},
-    {"widr", widr::paramTable},         {"wubr", wubr::paramTable},
+#endif
+#ifdef PK_WITH_orbitr
+    {"orbitr", orbitr::paramTable},
+#endif
+#ifdef PK_WITH_para
+    {"para", para::paramTable},
+#endif
+#ifdef PK_WITH_smacheratr
+    {"smacheratr", smacheratr::paramTable},
+#endif
+#ifdef PK_WITH_smemplr
+    {"smemplr", smemplr::paramTable},
+#endif
+#ifdef PK_WITH_smoothr
+    {"smoothr", smoothr::paramTable},
+#endif
+#ifdef PK_WITH_stretchr
+    {"stretchr", stretchr::paramTable},
+#endif
+#ifdef PK_WITH_widr
+    {"widr", widr::paramTable},
+#endif
+#ifdef PK_WITH_wubr
+    {"wubr", wubr::paramTable},
+#endif
 };
 
 int fails = 0, checks = 0;
