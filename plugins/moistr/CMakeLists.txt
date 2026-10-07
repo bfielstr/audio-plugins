@@ -1,7 +1,7 @@
 # Moistr: splits a sound into a low-pass, a band-pass and a high-pass band with a gap between the low
 # mids and the high end, moves each band's frequency and level slowly (seeded, repeatable), then glues
 # them back together with a compressor and soft clipping; optionally a second pass through the bands.
-project(Moistr VERSION 0.21.0.0)
+project(Moistr VERSION 0.22.0.0)
 
 add_library(moistr_core STATIC
     src/core/Params.cpp

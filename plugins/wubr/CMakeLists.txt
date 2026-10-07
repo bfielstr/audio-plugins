@@ -1,5 +1,5 @@
 # Wubr: two bands whose gain and centre drawn LFOs (or envelopes) move, into Smacheratr.
-project(Wubr VERSION 0.21.0.0)
+project(Wubr VERSION 0.22.0.0)
 
 add_library(wubr_core STATIC
     src/core/Params.h
