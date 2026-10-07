@@ -1,5 +1,5 @@
-// Moistr's DSP pieces: the band filters (TPT state-variable filters), the anti-aliased soft clipper
-// used by Drive and Grit, and the Glue compressor.
+// Moistr's DSP pieces: the crossover split (Linkwitz-Riley 4th order, from TPT state-variable filters), the
+// anti-aliased soft clipper used by Drive and Grit, and the Glue compressor.
 #pragma once
 
 #include <algorithm>
@@ -10,7 +10,7 @@ namespace moistr::dsp {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// Resonance (0 .. 1) to Q: 0.5 .. 12 on a log scale (0.15: about 0.8, 0.35: about 1.5).
+// (0.18's band filters) Resonance (0 .. 1) to Q: 0.5 .. 12 on a log scale (0.15: about 0.8, 0.35: about 1.5).
 inline double qOf (double res) { return 0.5 * std::pow (24.0, std::clamp (res, 0.0, 1.0)); }
 
 // A filter's coefficients from g = tan (pi f / sr) and k = 1 / Q (the topology-preserving transform
@@ -44,6 +44,118 @@ struct Svf
         ic1 = 2.0 * v1 - ic1;
         ic2 = 2.0 * v2 - ic2;
         return {v2, v1, x - c.k * v1 - v2};
+    }
+};
+
+// ---- the crossover split ------------------------------------------------------------------------------
+// A Linkwitz-Riley 4th-order split (24 dB/oct) at one corner: each side is a 2nd-order Butterworth squared,
+// low = 1 / (s^2 + sqrt2 s + 1)^2, high = s^4 / (...)^2. Both are -6 dB at the corner, and low + high is the
+// 2nd-order all-pass (s^2 - sqrt2 s + 1) / (s^2 + sqrt2 s + 1): flat in level. The first SVF section is
+// shared (one state gives both its low- and high-pass); every section of a corner, and its all-pass, use
+// the same coefficients (k = sqrt2), so a corner needs one SvfCoefs.
+constexpr double kSqrt2 = 1.41421356237309504880;
+
+struct Lr4Split
+{
+    Svf first, lo, hi;
+    void reset ()
+    {
+        first.reset ();
+        lo.reset ();
+        hi.reset ();
+    }
+    inline void tick (double x, const SvfCoefs& c, double& low, double& high)
+    {
+        const Svf::Out o = first.tick (x, c);
+        low = lo.tick (o.lp, c).lp;
+        high = hi.tick (o.hp, c).hp;
+    }
+};
+
+// The all-pass an Lr4Split's two sides add up to: x - 2 k (band-pass).
+struct Lr4Allpass
+{
+    Svf s;
+    void reset () { s.reset (); }
+    inline double tick (double x, const SvfCoefs& c) { return x - 2.0 * c.k * s.tick (x, c).bp; }
+};
+
+// The four-band split tree (one channel), corners c[0] < c[1] < c[2]:
+//   x -> split 0 -> Low  -> all-pass 1 -> all-pass 2
+//                -> rest -> split 1 -> Mid  -> all-pass 2
+//                                   -> rest -> split 2 -> High, Air
+// Every band goes through every corner once (as a split or as its all-pass), so the four add up to
+// AP0 AP1 AP2 x: an all-pass of the input, flat in level. Three bands are the same tree with High and
+// Air at the same gain (High + Air = AP2 of the rest).
+struct Split4
+{
+    Lr4Split split[3];
+    Lr4Allpass lowAp1, lowAp2, midAp2;
+    void reset ()
+    {
+        for (auto& s : split)
+            s.reset ();
+        lowAp1.reset ();
+        lowAp2.reset ();
+        midAp2.reset ();
+    }
+    inline void tick (double x, const SvfCoefs* c, double* band)
+    {
+        double low, rest, mid, rest2;
+        split[0].tick (x, c[0], low, rest);
+        split[1].tick (rest, c[1], mid, rest2);
+        split[2].tick (rest2, c[2], band[2], band[3]);
+        band[0] = lowAp2.tick (lowAp1.tick (low, c[1]), c[2]);
+        band[1] = midAp2.tick (mid, c[2]);
+    }
+};
+
+// ---- the frequency shifter's Hilbert transformer ---------------------------------------------------------
+// Two chains of four second-order allpasses whose outputs stay a quarter cycle apart over most of the band
+// (Olli Niemitalo's coefficients; the same transformer as Ciphr's FreqShifter, ciphr/src/core/Dsp.h). With
+// a complex oscillator, i cos (phase) + q sin (phase) is the single sideband: every frequency moved up by
+// the oscillator's frequency (down for a negative one). `i` alone is the unshifted signal with the same
+// phase response as the shifted one (so the two blend without comb filtering).
+struct Hilbert
+{
+    // y[n] = c (x[n] + y[n-2]) - x[n-2]
+    struct Stage
+    {
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        inline double tick (double x, double c)
+        {
+            const double y = c * (x + y2) - x2;
+            x2 = x1;
+            x1 = x;
+            y2 = y1;
+            y1 = y;
+            return y;
+        }
+    };
+    Stage a[4], b[4];
+    double aDelay = 0.0;
+    void reset ()
+    {
+        for (auto& s : a)
+            s = {};
+        for (auto& s : b)
+            s = {};
+        aDelay = 0.0;
+    }
+    inline void tick (double x, double& i, double& q)
+    {
+        static constexpr double ca[4] = {0.6923878 * 0.6923878, 0.9360654322959 * 0.9360654322959,
+                                         0.9882295226860 * 0.9882295226860, 0.9987488452737 * 0.9987488452737};
+        static constexpr double cb[4] = {0.4021921162426 * 0.4021921162426, 0.8561710882420 * 0.8561710882420,
+                                         0.9722909545651 * 0.9722909545651, 0.9952884791278 * 0.9952884791278};
+        double u = x, v = x;
+        for (int s = 0; s < 4; ++s)
+            u = a[s].tick (u, ca[s]);
+        for (int s = 0; s < 4; ++s)
+            v = b[s].tick (v, cb[s]);
+        i = aDelay; // (the first chain one sample later)
+        aDelay = u;
+        q = v;
     }
 };
 

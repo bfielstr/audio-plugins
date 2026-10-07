@@ -1,6 +1,6 @@
 // Moistr's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a partial state, a
-// state from a newer build (parameters this one does not know), a stream that is not Moistr's, and the
-// parameter table's fixed points. Run: ./moistr_state_tests
+// state from a newer build (parameters this one does not know), a 0.18 state (version 1), a stream that is
+// not Moistr's, and the parameter table's fixed points. Run: ./moistr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
 
@@ -80,6 +80,46 @@ int main ()
         CHECK (readState (&s, back), "a newer version reads");
         CHECK (back.norm[kMix] == 0.9 && back.has[kMix], "its known values kept");
     }
+    // a 0.18 state (version 1, IDs 0 .. 68): every stored value kept, the split's and the shifter's
+    // parameters (69 ..) at their defaults
+    {
+        MemoryStream s;
+        const uint32_t old = kBandCount; // (0.18's parameters: 0 .. 68)
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x5453494D);
+            w.writeInt32 (1);
+            w.writeInt32 ((int32)old);
+            for (uint32_t id = 0; id < old; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.311 * (id + 1), 1.0));
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a 0.18 state reads");
+        int kept = 0, defaults = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (id < old)
+                kept += back.has[id] && back.norm[id] == std::fmod (0.311 * (id + 1), 1.0);
+            else
+                defaults += !back.has[id] && back.norm[id] == defaultNormalized (id);
+        CHECK (kept == (int)old, "every stored value kept (%d of %u)", kept, old);
+        CHECK (defaults == (int)(kNumParams - old), "the new parameters at their defaults (%d of %u)", defaults, kNumParams - old);
+        // and saved again it is the current version, with everything
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            back.has[id] = true;
+        MemoryStream t;
+        CHECK (writeState (&t, back), "write");
+        t.seek (0, IBStream::kIBSeekSet, nullptr);
+        IBStreamer r (&t, kLittleEndian);
+        int32 magic = 0, version = 0, count = 0;
+        r.readInt32 (magic);
+        r.readInt32 (version);
+        r.readInt32 (count);
+        CHECK (version == 2 && count == (int32)kNumParams, "saved as version 2 (%d) with %d values", version, count);
+    }
     // not Moistr's
     {
         MemoryStream s;
@@ -101,8 +141,11 @@ int main ()
                    t.info (kHighFreq).def == 3000.0 && t.info (kGap).def == 0.0 && std::lround (t.info (kPasses).def) == kPasses1 &&
                    t.info (kMix).def == 1.0,
                "Seed 1, Low 180 Hz, Mid 450 Hz, High 3 kHz, no Gap, 1 pass, Mix 100 %%");
-        CHECK (t.info (kLowMove).def < t.info (kMidMove).def && t.info (kMidMove).def < t.info (kHighMove).def,
-               "High moves the most by default, then Mid, then Low");
+        CHECK (t.info (kMidMove).def < t.info (kHighMove).def, "High moves more than Mid by default");
+        CHECK (std::lround (t.info (kBandCount).def) == kBands3 && t.info (kDepth).def == 24.0 && t.info (kRise).def == 1.0 &&
+                   t.info (kFall).def == 1.0 && t.info (kShiftOn).def == 0.0 && t.info (kShift).def == 0.0 &&
+                   t.info (kShiftMix).def == 1.0,
+               "3 bands, Depth 24 dB, Rise and Fall x1, the shifter off (0 Hz, Mix 100 %%)");
         for (uint32_t a = 0; a < kNumParams; ++a)
         {
             CHECK (t.info (a).id == a, "entry %u has its own ID", a);

@@ -10,9 +10,13 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x5453494D; // 'MIST'
-// 1: the first. A later version that changes what a saved value means converts older states in
-// readState (as the other plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 1;
+// 1: the first (0.18: three moving filters).
+// 2: 0.19, the multiband split and the frequency shifter (IDs 69 .. 79 appended). A version-1 state keeps every value it stored
+//    (the filters' parameters are kept, though the split no longer uses them) and reads the new
+//    parameters at their defaults: nothing to convert.
+// A later version that changes what a saved value means converts older states in readState (as the other
+// plug-ins do), so projects keep sounding the same.
+constexpr int32 kVersion = 2;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)

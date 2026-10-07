@@ -1,6 +1,8 @@
 // Headless tests for the Moistr DSP. Run: ./moistr_tests [filter]
-// The band filters and Gap, the movement (still at 0, High moving the most, Seed, the host's transport),
-// the Glue compressor, Grit, Mix, Passes, silence and resonance, and the CPU budget.
+// The split (flat sum, LR4 slopes at the set corners, the seeded Low crossover), the movement (Low locked,
+// the other bands rising and falling by Depth, the seeded rise and fall times x Rise / Fall, still at 0,
+// Seed, the host's transport), switching Bands, the Glue compressor, Grit, Mix, Passes, silence, and the
+// CPU budget.
 #include "Dsp.h"
 #include "Engine.h"
 #include "Movement.h"
@@ -56,6 +58,9 @@ namespace {
 
 constexpr double kSr = 48000.0;
 constexpr double kPi = 3.14159265358979323846;
+constexpr uint32_t kLevelIds[kMaxBands] = {kLowLevel, kMidLevel, kHighLevel, kAirLevel};
+constexpr uint32_t kMoveIds[kMaxBands] = {kLowMove, kMidMove, kHighMove, kAirMove};
+const char* const kBandNames[kMaxBands] = {"Low", "Mid", "High", "Air"};
 
 double rms (const std::vector<float>& x, size_t a, size_t b)
 {
@@ -92,6 +97,17 @@ double toneAt (const std::vector<float>& x, double hz, size_t a, size_t b)
         wsum += w;
     }
     return 2.0 * std::sqrt (s * s + c * c) / wsum;
+}
+// the magnitude (dB) of a response h (an impulse response) at hz (a plain DFT bin, no window)
+double responseDb (const std::vector<float>& h, size_t from, double hz)
+{
+    double s = 0, c = 0;
+    for (size_t i = from; i < h.size (); ++i)
+    {
+        s += h[i] * std::sin (2.0 * kPi * hz * (double)(i - from) / kSr);
+        c += h[i] * std::cos (2.0 * kPi * hz * (double)(i - from) / kSr);
+    }
+    return db (std::sqrt (s * s + c * c));
 }
 std::vector<float> sine (double hz, double amp, double seconds)
 {
@@ -133,7 +149,7 @@ std::unique_ptr<Engine> engine (int block = 512)
     return e;
 }
 
-// the bands alone: no Drive, Glue, Grit or movement
+// the split alone: no Drive, Glue, Grit or movement
 void plain (Engine& e)
 {
     e.setParam (kDrive, 0.0);
@@ -145,9 +161,8 @@ void plain (Engine& e)
 // only one band sounding
 void solo (Engine& e, int band)
 {
-    const uint32_t lv[kBands] = {kLowLevel, kMidLevel, kHighLevel};
-    for (int b = 0; b < kBands; ++b)
-        e.setParam (lv[b], b == band ? 0.0 : kLevelOffDb);
+    for (int b = 0; b < kMaxBands; ++b)
+        e.setParam (kLevelIds[b], b == band ? 0.0 : kLevelOffDb);
     e.reset ();
 }
 
@@ -173,152 +188,478 @@ double bandGainDb (int band, double hz, const std::function<void (Engine&)>& set
 {
     auto e = engine ();
     plain (*e);
-    solo (*e, band);
     if (setup)
         setup (*e);
-    e->reset ();
+    solo (*e, band);
     const auto x = sine (hz, 0.25, 0.4);
     const auto y = run (*e, x);
     const size_t a = (size_t)(0.2 * kSr), b = x.size ();
     return db (toneAt (y, hz, a, b) / toneAt (x, hz, a, b));
 }
 
-// the frequency (Hz) where a band's response crosses -3 dB, searched from `from` towards `to`
-double edgeHz (int band, double from, double to, const std::function<void (Engine&)>& setup)
+// a Linkwitz-Riley 4 side's magnitude (dB) at f for a corner at fc (the bilinear transform's warped frequency)
+double lr4Db (double fc, double f, bool low)
 {
-    const int steps = 48;
-    double last = from;
-    for (int i = 0; i <= steps; ++i)
-    {
-        const double f = from * std::pow (to / from, (double)i / steps);
-        if ((band == 1 && bandGainDb (band, f, setup) < -3.0) || (band == 2 && bandGainDb (band, f, setup) < -3.0))
-            return std::sqrt (f * last);
-        last = f;
-    }
-    return to;
+    const double w = std::tan (kPi * f / kSr) / std::tan (kPi * fc / kSr), w4 = w * w * w * w;
+    return db ((low ? 1.0 : w4) / (1.0 + w4));
+}
+
+// the gain envelope (dB) of x in windows of `win` samples
+std::vector<double> envelope (const std::vector<float>& y, size_t from, size_t win)
+{
+    std::vector<double> env;
+    for (size_t a = from; a + win <= y.size (); a += win)
+        env.push_back (db (rms (y, a, a + win) * std::sqrt (2.0)));
+    return env;
+}
+
+// a moving band set up to be heard alone in its own region: (band, its test tone, the settings)
+struct BandSetup
+{
+    int band;
+    double hz;
+    std::function<void (Engine&)> set;
+};
+std::vector<BandSetup> bandSetups ()
+{
+    return {
+        {kBandMid, 1500.0, [] (Engine& e) { e.setParam (kXoverMid, 6000.0); }},
+        {kBandHigh, 6000.0, [] (Engine& e) { e.setParam (kXoverMid, 1000.0); }},
+        {kBandAir, 10000.0, [] (Engine& e) {
+             e.setParam (kBandCount, kBands4);
+             e.setParam (kXoverMid, 400.0);
+             e.setParam (kXoverHigh, 1500.0);
+         }},
+    };
 }
 
 } // namespace
 
-TEST (band_filters)
+TEST (split_sums_flat)
 {
-    // Low: a low-pass at 180 Hz (flat below, Q 0.8 at its frequency, steep above)
-    const double q = dsp::qOf (0.15);
-    double lowPass = bandGainDb (0, 40.0), lowAt = bandGainDb (0, 180.0), lowAbove = bandGainDb (0, 1440.0);
-    std::printf ("    Low: %.2f dB at 40 Hz, %.2f at 180 (Q %.2f: %.2f), %.1f at 1440\n", lowPass, lowAt, q, db (q), lowAbove);
-    CHECK (std::fabs (lowPass) < 0.5, "Low passes 40 Hz: %.2f dB", lowPass);
-    CHECK (std::fabs (lowAt - db (q)) < 0.5, "Low at its frequency: %.2f dB (Q says %.2f)", lowAt, db (q));
-    CHECK (lowAbove < -30.0, "Low cuts 3 octaves up: %.1f dB", lowAbove);
-    // Mid: a band-pass at 450 Hz, 0 dB at its centre
-    const double midAt = bandGainDb (1, 450.0), midBelow = bandGainDb (1, 450.0 / 8.0), midAbove = bandGainDb (1, 450.0 * 8.0);
-    std::printf ("    Mid: %.2f dB at 450 Hz, %.1f at 56, %.1f at 3600\n", midAt, midBelow, midAbove);
-    CHECK (std::fabs (midAt) < 0.5, "Mid passes its centre: %.2f dB", midAt);
-    CHECK (midBelow < -15.0 && midAbove < -15.0, "Mid cuts 3 octaves either side: %.1f / %.1f dB", midBelow, midAbove);
-    // High: a high-pass at 3 kHz
-    const double highPass = bandGainDb (2, 15000.0), highAt = bandGainDb (2, 3000.0), highBelow = bandGainDb (2, 375.0);
-    std::printf ("    High: %.2f dB at 15 kHz, %.2f at 3 kHz, %.1f at 375 Hz\n", highPass, highAt, highBelow);
-    CHECK (std::fabs (highPass) < 0.7, "High passes 15 kHz: %.2f dB", highPass);
-    CHECK (std::fabs (highAt - db (q)) < 0.5, "High at its frequency: %.2f dB", highAt);
-    CHECK (highBelow < -30.0, "High cuts 3 octaves down: %.1f dB", highBelow);
-    // 24 dB: steeper
-    auto steep = [] (Engine& e) { e.setParam (kSlope, kSlope24); };
-    const double low24 = bandGainDb (0, 720.0, steep), low12 = bandGainDb (0, 720.0);
-    const double high24 = bandGainDb (2, 750.0, steep), high12 = bandGainDb (2, 750.0);
-    std::printf ("    two octaves out: Low %.1f (12 dB) / %.1f dB (24 dB), High %.1f / %.1f dB\n", low12, low24, high12, high24);
-    CHECK (low24 < low12 - 10.0 && high24 < high12 - 10.0, "24 dB cuts more");
-    // a band's Level moves it
-    const double lifted = bandGainDb (1, 450.0, [] (Engine& e) { e.setParam (kMidLevel, 6.0); });
-    CHECK (std::fabs (lifted - 6.0) < 0.5, "Mid Level +6 dB: %.2f dB", lifted);
-}
-
-TEST (gap_widens)
-{
-    // the hollow between Mid's upper -3 dB point and High's lower one, in octaves, at Gap -50, 0, +50 %
-    double width[3];
-    const double gaps[3] = {-0.5, 0.0, 0.5};
-    for (int i = 0; i < 3; ++i)
-    {
-        auto setup = [g = gaps[i]] (Engine& e) { e.setParam (kGap, g); };
-        const double midTop = edgeHz (1, Engine::setFrequency (defaultParams (), 1) * std::exp2 (-gaps[i]), 20000.0, setup);
-        const double highBottom = edgeHz (2, 20000.0, 50.0, setup);
-        width[i] = std::log2 (highBottom / midTop);
-        // and the middle of the hollow drops further as it widens
-        std::printf ("    Gap %+.0f %%: Mid -3 dB at %.0f Hz, High -3 dB at %.0f Hz: %.2f octaves\n", gaps[i] * 100.0, midTop,
-                     highBottom, width[i]);
-    }
-    CHECK (width[2] > width[1] + 0.8 && width[1] > width[0] + 0.8, "Gap widens the hollow: %.2f, %.2f, %.2f octaves", width[0],
-           width[1], width[2]);
-    CHECK (width[1] > 1.5, "the defaults leave a clear gap between Mid and High: %.2f octaves", width[1]);
-    // the set frequencies: Mid down and High up by the same ratio
-    ParamArray p = defaultParams ();
-    p[kGap] = 1.0;
-    CHECK (std::fabs (Engine::setFrequency (p, 1) - 225.0) < 1e-9 && std::fabs (Engine::setFrequency (p, 2) - 6000.0) < 1e-9 &&
-               Engine::setFrequency (p, 0) == 180.0,
-           "Gap 100 %%: Mid 225 Hz, High 6 kHz, Low unmoved");
-}
-
-TEST (movement_zero_is_still)
-{
-    auto e = engine ();
-    e->setParam (kMovement, 0.0);
-    e->reset ();
-    const auto x = reese (3.0);
-    bool still = true, atSet = true;
-    const ParamArray p = defaultParams ();
-    double first[kBands];
-    for (int b = 0; b < kBands; ++b)
-        first[b] = e->bandFreq (0, b);
-    run (*e, x, nullptr, 256, [&] (size_t) {
-        for (int b = 0; b < kBands; ++b)
+    // every band at the same level and still: the bands add up to an all-pass of the input, flat in level
+    for (int bands : {3, 4})
+        for (int seed : {1, 2, 50, 128})
         {
-            still = still && e->bandFreq (0, b) == first[b] && e->bandLevelDb (0, b) == 0.0;
-            atSet = atSet && std::fabs (e->bandFreq (0, b) / Engine::setFrequency (p, b) - 1.0) < 1e-12;
+            auto e = engine ();
+            plain (*e);
+            e->setParam (kSeed, seed);
+            e->setParam (kBandCount, bands == 4 ? kBands4 : kBands3);
+            e->setParam (kXoverMid, 1200.0);
+            e->setParam (kXoverHigh, 6000.0);
+            e->reset ();
+            const int lat = e->latency ();
+            std::vector<float> x (32768, 0.0f);
+            x[0] = 1.0f;
+            const auto y = run (*e, x);
+            double lo = 1e9, hi = -1e9;
+            for (int i = 0; i <= 80; ++i)
+            {
+                const double f = 20.0 * std::pow (1000.0, i / 80.0); // 20 Hz .. 20 kHz
+                const double r = responseDb (y, (size_t)lat, f);
+                lo = std::min (lo, r);
+                hi = std::max (hi, r);
+            }
+            // and the sum is the all-pass of the three corners (the same filters, run by hand)
+            dsp::SvfCoefs c[kMaxXovers];
+            for (int k = 0; k < kMaxXovers; ++k)
+                c[k].set (std::tan (dsp::kPi * e->xoverHz (0, k) / kSr), dsp::kSqrt2);
+            dsp::Lr4Allpass ap[kMaxXovers];
+            double worst = 0.0;
+            for (size_t i = 0; i + (size_t)lat < y.size (); ++i)
+            {
+                double v = x[i];
+                for (int k = 0; k < kMaxXovers; ++k)
+                    v = ap[k].tick (v, c[k]);
+                worst = std::max (worst, std::fabs (v - (double)y[i + (size_t)lat]));
+            }
+            std::printf ("    %d bands, seed %3d (Low X %.0f Hz): %.3f .. %.3f dB, off the all-pass by %.1e\n", bands, seed,
+                         e->lowXover (), lo, hi, worst);
+            CHECK (lo > -0.1 && hi < 0.1, "%d bands, seed %d: flat within 0.1 dB (%.3f .. %.3f)", bands, seed, lo, hi);
+            CHECK (worst < 1e-5, "%d bands, seed %d: the sum is the all-pass of the corners (%.1e)", bands, seed, worst);
         }
-    });
-    CHECK (still, "Movement 0: every band's frequency and level stay exactly as they are the whole time");
-    CHECK (atSet, "at their set frequencies");
+    // every band 6 dB up: flat at +6 dB
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kBandCount, kBands4);
+    for (uint32_t id : kLevelIds)
+        e->setParam (id, 6.0);
+    e->reset ();
+    std::vector<float> x (32768, 0.0f);
+    x[0] = 1.0f;
+    const auto y = run (*e, x);
+    double worst = 0.0;
+    for (double f : {40.0, 270.0, 900.0, 1500.0, 3000.0, 5000.0, 12000.0})
+        worst = std::max (worst, std::fabs (responseDb (y, (size_t)e->latency (), f) - 6.0));
+    CHECK (worst < 0.1, "every Level +6 dB: flat at +6 dB (%.3f off)", worst);
 }
 
-TEST (high_moves_most)
+TEST (crossover_slopes_lr4)
 {
-    // the default Moves (Low 20 %, Mid 50 %, High 100 %) at Movement 100 %: the spread of each band's
-    // frequency (octaves) and level (dB) over a minute, for several seeds
-    for (int seed : {1, 2, 3, 17, 64, 128})
+    // each corner: the bands either side are -6 dB there and fall as a Linkwitz-Riley 4 (24 dB/oct) away
+    struct Corner
+    {
+        const char* name;
+        int below, above;
+        std::function<void (Engine&)> set;
+        std::function<double (Engine&)> fc;
+    };
+    const std::vector<Corner> corners = {
+        {"Low X (seed 1)", kBandLow, kBandMid, [] (Engine& e) { e.setParam (kXoverMid, 3000.0); },
+         [] (Engine& e) { return e.xoverHz (0, 0); }},
+        {"Low X (seed 9)", kBandLow, kBandMid,
+         [] (Engine& e) {
+             e.setParam (kSeed, 9);
+             e.setParam (kXoverMid, 3000.0);
+         },
+         [] (Engine& e) { return e.xoverHz (0, 0); }},
+        {"Mid X", kBandMid, kBandHigh, [] (Engine& e) { e.setParam (kXoverMid, 3000.0); },
+         [] (Engine& e) { return e.xoverHz (0, 1); }},
+        {"High X", kBandHigh, kBandAir,
+         [] (Engine& e) {
+             e.setParam (kBandCount, kBands4);
+             e.setParam (kXoverMid, 1000.0);
+             e.setParam (kXoverHigh, 8000.0);
+         },
+         [] (Engine& e) { return e.xoverHz (0, 2); }},
+    };
+    for (const auto& c : corners)
     {
         auto e = engine ();
-        e->setParam (kMovement, 1.0);
-        e->setParam (kSeed, seed);
+        plain (*e);
+        c.set (*e);
         e->reset ();
-        double sf[kBands] {}, sf2[kBands] {}, sl[kBands] {}, sl2[kBands] {};
-        int count = 0;
-        const ParamArray p = defaultParams ();
-        const std::vector<float> silence (512, 0.0f);
-        std::vector<float> l (512), r (512);
-        for (int blk = 0; blk < (int)(60.0 * kSr / 512); ++blk)
-        {
-            e->process (silence.data (), silence.data (), l.data (), r.data (), 512);
-            for (int b = 0; b < kBands; ++b)
-            {
-                const double o = std::log2 (e->bandFreq (0, b) / Engine::setFrequency (p, b)), d = e->bandLevelDb (0, b);
-                sf[b] += o;
-                sf2[b] += o * o;
-                sl[b] += d;
-                sl2[b] += d * d;
-            }
-            ++count;
-        }
-        double fsd[kBands], lsd[kBands];
-        for (int b = 0; b < kBands; ++b)
-        {
-            fsd[b] = std::sqrt (std::max (0.0, sf2[b] / count - (sf[b] / count) * (sf[b] / count)));
-            lsd[b] = std::sqrt (std::max (0.0, sl2[b] / count - (sl[b] / count) * (sl[b] / count)));
-        }
-        std::printf ("    seed %3d: frequency spread %.3f / %.3f / %.3f oct, level spread %.2f / %.2f / %.2f dB\n", seed, fsd[0],
-                     fsd[1], fsd[2], lsd[0], lsd[1], lsd[2]);
-        CHECK (fsd[2] > fsd[1] && fsd[1] > fsd[0] && fsd[0] > 0.0, "seed %d: High's frequency moves most, then Mid, then Low", seed);
-        CHECK (lsd[2] > lsd[1] && lsd[1] > lsd[0] && lsd[0] > 0.0, "seed %d: High's level moves most, then Mid, then Low", seed);
-        CHECK (fsd[2] > 0.15 && fsd[2] < 1.0, "seed %d: High swings a sensible amount: %.3f oct", seed, fsd[2]);
+        const double fc = c.fc (*e);
+        const double belowAt = bandGainDb (c.below, fc, c.set), aboveAt = bandGainDb (c.above, fc, c.set);
+        const double belowOut = bandGainDb (c.below, 2.0 * fc, c.set), aboveOut = bandGainDb (c.above, 0.5 * fc, c.set);
+        const double belowIn = bandGainDb (c.below, 0.5 * fc, c.set), aboveIn = bandGainDb (c.above, std::min (2.0 * fc, 20000.0), c.set);
+        std::printf ("    %s at %.0f Hz: %s %.2f / %s %.2f dB there; an octave out %.1f / %.1f dB (LR4 %.1f / %.1f), "
+                     "an octave in %.2f / %.2f dB\n",
+                     c.name, fc, kBandNames[c.below], belowAt, kBandNames[c.above], aboveAt, belowOut, aboveOut,
+                     lr4Db (fc, 2.0 * fc, true), lr4Db (fc, 0.5 * fc, false), belowIn, aboveIn);
+        CHECK (std::fabs (belowAt + 6.02) < 0.3 && std::fabs (aboveAt + 6.02) < 0.3, "%s: both sides -6 dB at the corner", c.name);
+        CHECK (std::fabs (belowOut - lr4Db (fc, 2.0 * fc, true)) < 0.5, "%s: the lower band falls as LR4 (%.1f)", c.name, belowOut);
+        CHECK (std::fabs (aboveOut - lr4Db (fc, 0.5 * fc, false)) < 0.5, "%s: the upper band falls as LR4 (%.1f)", c.name, aboveOut);
+        CHECK (belowOut < -20.0 && aboveOut < -20.0, "%s: 24 dB/oct", c.name);
     }
+}
+
+TEST (low_x_seeded)
+{
+    // the Low crossover for every Seed: in 100 .. 500 Hz, spread over the range, the same every time
+    int quarter[4] = {};
+    double lo = 1e9, hi = 0.0;
+    bool same = true, inRange = true;
+    for (int s = kMinSeed; s <= kMaxSeed; ++s)
+    {
+        const double f = lowXoverForSeed (s);
+        same = same && f == lowXoverForSeed (s) && f == makePattern (s, 0).lowXover && f == makePattern (s, 1).lowXover;
+        inRange = inRange && f >= kLowXoverMin && f <= kLowXoverMax;
+        lo = std::min (lo, f);
+        hi = std::max (hi, f);
+        ++quarter[std::clamp ((int)(4.0 * std::log (f / kLowXoverMin) / std::log (kLowXoverMax / kLowXoverMin)), 0, 3)];
+    }
+    std::printf ("    seeds 1 .. 128: %.1f .. %.1f Hz; per quarter of the range (log) %d / %d / %d / %d; seed 1: %.1f Hz\n", lo,
+                 hi, quarter[0], quarter[1], quarter[2], quarter[3], lowXoverForSeed (1));
+    CHECK (inRange, "every Low X within 100 .. 500 Hz");
+    CHECK (same, "deterministic, and the same in both passes");
+    CHECK (lo < 110.0 && hi > 450.0, "the range used: %.1f .. %.1f Hz", lo, hi);
+    CHECK (*std::min_element (quarter, quarter + 4) >= 28, "spread evenly over the range");
+    int distinct = 0;
+    for (int s = kMinSeed + 1; s <= kMaxSeed; ++s)
+        distinct += lowXoverForSeed (s) != lowXoverForSeed (s - 1);
+    CHECK (distinct == kMaxSeed - kMinSeed, "each Seed its own");
+    // the engine uses it
+    for (int s : {1, 33, 100})
+    {
+        auto e = engine ();
+        e->setParam (kSeed, s);
+        e->reset ();
+        CHECK (std::fabs (e->lowXover () / lowXoverForSeed (s) - 1.0) < 1e-12, "seed %d: the engine's Low X is the Seed's", s);
+    }
+}
+
+TEST (low_band_locked)
+{
+    // a 25 Hz sine (the Low band's) at full movement, the deepest Depth, fast, both passes: its level never
+    // moves, and neither does Low X
+    for (int seed : {1, 5, 77, 128})
+        for (int passes : {kPasses1, kPasses2})
+        {
+            auto e = engine ();
+            plain (*e);
+            e->setParam (kSeed, seed);
+            e->setParam (kBandCount, kBands4);
+            e->setParam (kMovement, 1.0);
+            e->setParam (kDepth, 48.0);
+            e->setParam (kRate, 2.0);
+            e->setParam (kRise, 0.25);
+            e->setParam (kPasses, passes);
+            for (uint32_t id : {kLowMove, kMidMove, kHighMove, kAirMove})
+                e->setParam (id, 1.0);
+            e->reset ();
+            const double lowX = e->lowXover ();
+            bool still = true;
+            double otherSpread = 0.0, otherMin[kMaxBands], otherMax[kMaxBands];
+            std::fill (otherMin, otherMin + kMaxBands, 1e9);
+            std::fill (otherMax, otherMax + kMaxBands, -1e9);
+            const auto x = sine (25.0, 0.25, 8.0);
+            const auto y = run (*e, x, nullptr, 256, [&] (size_t) {
+                for (int k = 0; k < kMaxPasses; ++k)
+                    still = still && e->bandGainDb (k, kBandLow) == 0.0 && e->xoverHz (k, 0) == lowX;
+                for (int b = kBandMid; b < kMaxBands; ++b)
+                {
+                    otherMin[b] = std::min (otherMin[b], e->bandGainDb (0, b));
+                    otherMax[b] = std::max (otherMax[b], e->bandGainDb (0, b));
+                }
+            });
+            for (int b = kBandMid; b < kMaxBands; ++b)
+                otherSpread = std::max (otherSpread, otherMax[b] - otherMin[b]);
+            const auto env = envelope (y, (size_t)(0.5 * kSr), 3840); // (80 ms: two cycles)
+            const double spread = *std::max_element (env.begin (), env.end ()) - *std::min_element (env.begin (), env.end ());
+            std::printf ("    seed %3d, %d pass%s: Low's level spread %.3f dB (the other bands moved up to %.1f dB)\n", seed, passes + 1,
+                         passes ? "es" : "", spread, otherSpread);
+            CHECK (still, "seed %d: Low's gain and Low X never move", seed);
+            CHECK (spread < 0.1, "seed %d: a low sine's level stays put (%.3f dB)", seed, spread);
+            CHECK (otherSpread > 20.0, "seed %d: (while the others move: %.1f dB)", seed, otherSpread);
+        }
+}
+
+TEST (bands_rise_and_fall)
+{
+    // a sine in each moving band (alone in its region) at Movement 100 %, its Move 100 %, Depth 24 dB: its
+    // level rises and falls by about Depth, following the band's gain
+    for (const auto& bs : bandSetups ())
+    {
+        int full = 0, tried = 0;
+        for (int seed : {1, 2, 3, 4, 5, 6, 7, 8})
+        {
+            auto e = engine ();
+            plain (*e);
+            bs.set (*e);
+            e->setParam (kSeed, seed);
+            e->setParam (kMovement, 1.0);
+            e->setParam (kDepth, 24.0);
+            e->setParam (kRate, 0.3);
+            e->setParam (kMoveIds[bs.band], 1.0);
+            e->reset ();
+            const size_t win = 480; // 10 ms
+            std::vector<double> reported;
+            const auto x = sine (bs.hz, 0.25, 30.0);
+            const auto y = run (*e, x, nullptr, (int)win, [&] (size_t) { reported.push_back (e->bandGainDb (0, bs.band)); });
+            const auto env = envelope (y, 0, win);
+            // the tone's envelope against the band's gain (the window's start and end averaged)
+            int off = 0, rises = 0, falls = 0;
+            double lo = 1e9, hi = -1e9;
+            for (size_t i = 50; i + 1 < env.size () && i + 1 < reported.size (); ++i)
+            {
+                const double g = 0.5 * (reported[i] + reported[i + 1]), level = env[i] - db (0.25);
+                off += std::fabs (level - g) > 1.5;
+                lo = std::min (lo, level);
+                hi = std::max (hi, level);
+                rises += reported[i] < -12.0 && reported[i + 1] >= -12.0;
+                falls += reported[i] >= -12.0 && reported[i + 1] < -12.0;
+            }
+            const double range = hi - lo;
+            ++tried;
+            full += range > 22.0 && rises >= 2 && falls >= 2;
+            std::printf ("    %s (%.0f Hz), seed %d: %.1f .. %.1f dB (%.1f dB), %d rises, %d falls; %d of %zu windows off "
+                         "the gain\n",
+                         kBandNames[bs.band], bs.hz, seed, lo, hi, range, rises, falls, off, env.size ());
+            CHECK (range < 25.0 && hi < 0.6 && lo > -25.0, "%s, seed %d: within Level - Depth .. Level", kBandNames[bs.band], seed);
+            CHECK (off < (int)env.size () / 50, "%s, seed %d: the tone follows the band's gain", kBandNames[bs.band], seed);
+        }
+        CHECK (full >= tried * 3 / 4, "%s: most seeds rise and fall the whole Depth, more than once (%d of %d)", kBandNames[bs.band],
+               full, tried);
+    }
+    // Depth sets how far: 12 dB
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kMovement, 1.0);
+    e->setParam (kDepth, 12.0);
+    e->setParam (kMidMove, 1.0);
+    e->reset ();
+    double lo = 1e9, hi = -1e9;
+    run (*e, std::vector<float> ((size_t)(30.0 * kSr), 0.0f), nullptr, 256, [&] (size_t) {
+        lo = std::min (lo, e->bandGainDb (0, kBandMid));
+        hi = std::max (hi, e->bandGainDb (0, kBandMid));
+    });
+    CHECK (std::fabs (lo + 12.0) < 0.2 && std::fabs (hi) < 0.2, "Depth 12 dB: Mid between -12 and 0 dB (%.2f .. %.2f)", lo, hi);
+    // and the Move shares scale it: Movement 50 %, Mid Move 50 %: a quarter of Depth
+    auto f = engine ();
+    plain (*f);
+    f->setParam (kMovement, 0.5);
+    f->setParam (kMidMove, 0.5);
+    f->reset ();
+    lo = 1e9;
+    run (*f, std::vector<float> ((size_t)(30.0 * kSr), 0.0f), nullptr, 256,
+         [&] (size_t) { lo = std::min (lo, f->bandGainDb (0, kBandMid)); });
+    CHECK (std::fabs (lo + 6.0) < 0.2, "Movement 50 %%, Mid Move 50 %%, Depth 24: Mid's floor at -6 dB (%.2f)", lo);
+}
+
+TEST (rise_fall_times)
+{
+    // clean rises (from the floor all the way up) and falls (from the top all the way down) of each moving
+    // band, timed on its gain: they take the seeded times x Rise / Fall (within 10 % + 1.5 ms: the gain's
+    // 1 ms smoothing and the 16-sample ticks)
+    struct Stats
+    {
+        int count = 0;
+        double worst = 0.0;
+    };
+    for (bool fall : {false, true})
+        for (double scale : {0.25, 1.0, 4.0})
+        {
+            Stats st;
+            double ratioSum = 0.0;
+            for (int seed = 1; seed <= 6; ++seed)
+            {
+                auto e = engine (16);
+                plain (*e);
+                e->setParam (kSeed, seed);
+                e->setParam (kBandCount, kBands4);
+                e->setParam (kMovement, 1.0);
+                e->setParam (kRate, 0.05); // (20 s cycles: room for the long ones)
+                for (uint32_t id : {kMidMove, kHighMove, kAirMove})
+                    e->setParam (id, 1.0);
+                e->setParam (fall ? kFall : kRise, scale);
+                e->reset ();
+                const int ticks = (int)(80.0 * kSr / 16);
+                std::vector<double> g[kMaxBands];
+                const std::vector<float> z (16, 0.0f);
+                std::vector<float> l (16), r (16);
+                for (int t = 0; t < ticks; ++t)
+                {
+                    e->process (z.data (), z.data (), l.data (), r.data (), 16);
+                    for (int b = kBandMid; b < kMaxBands; ++b)
+                        g[b].push_back (e->bandGainDb (0, b));
+                }
+                for (int b = kBandMid; b < kMaxBands; ++b)
+                {
+                    const double expected = fall ? e->fallSeconds (0, b) : e->riseSeconds (0, b);
+                    const double bottom = -24.0 + 0.05, top = -0.05;
+                    const auto& v = g[b];
+                    for (size_t i = 1; i < v.size (); ++i)
+                    {
+                        // a ramp's start: leaving the floor (rise) or the top (fall)
+                        const bool start = fall ? (v[i - 1] >= top && v[i] < top) : (v[i - 1] <= bottom && v[i] > bottom);
+                        if (!start)
+                            continue;
+                        size_t j = i;
+                        bool clean = true;
+                        while (j + 1 < v.size () && (fall ? v[j] > bottom : v[j] < top))
+                        {
+                            clean = clean && (fall ? v[j + 1] <= v[j] + 1e-9 : v[j + 1] >= v[j] - 1e-9);
+                            ++j;
+                        }
+                        if (!clean || j + 1 >= v.size ())
+                            continue;
+                        // timed between 10 % and 90 % of the way (linearly between the ticks): 59 % of a
+                        // cosine ramp (acos (0.8) / pi of it is under 10 %, as much over 90 %)
+                        auto cross = [&] (double level) {
+                            for (size_t k = i; k <= j; ++k)
+                                if (fall ? v[k] <= level : v[k] >= level)
+                                    return (double)(k - 1) + (level - v[k - 1]) / (v[k] - v[k - 1]);
+                            return (double)j;
+                        };
+                        const double t10 = cross (fall ? -2.4 : -21.6), t90 = cross (fall ? -21.6 : -2.4);
+                        const double took = (t90 - t10) * 16.0 / kSr, want = (1.0 - 2.0 * std::acos (0.8) / kPi) * expected;
+                        const double slack = 0.1 * want + 0.0015;
+                        if (std::fabs (took - want) > slack)
+                            std::printf ("      seed %d %s: took %.4f s, want %.4f s\n", seed, kBandNames[b], took, want);
+                        st.worst = std::max (st.worst, std::fabs (took - want) - slack);
+                        ratioSum += took / want;
+                        ++st.count;
+                    }
+                }
+            }
+            std::printf ("    %s x%.2f: %d clean %s timed, on average %.3f of the seeded time\n", fall ? "Fall" : "Rise", scale,
+                         st.count, fall ? "falls" : "rises", st.count ? ratioSum / st.count : 0.0);
+            CHECK (st.count >= 8, "%s x%.2f: enough clean ramps (%d)", fall ? "Fall" : "Rise", scale, st.count);
+            CHECK (st.worst <= 0.0, "%s x%.2f: every ramp takes the seeded time x %.2f (within 10 %% + 1.5 ms)", fall ? "Fall" : "Rise",
+                   scale, scale);
+        }
+    // the seeded times themselves: within their ranges, and Rise / Fall scale them
+    bool inRange = true;
+    for (int s = kMinSeed; s <= kMaxSeed; ++s)
+        for (int k = 0; k < kMaxPasses; ++k)
+        {
+            const Pattern p = makePattern (s, k);
+            for (int b = kBandMid; b < kMaxBands; ++b)
+                inRange = inRange && p.band[b].rise >= kRiseMin && p.band[b].rise <= kRiseMax && p.band[b].fall >= kFallMin &&
+                          p.band[b].fall <= kFallMax && p.band[b].mask != 0;
+        }
+    CHECK (inRange, "every seeded rise in 10 ms .. 1.5 s, every fall in 30 ms .. 3 s, every band rising somewhere");
+    auto e = engine ();
+    e->setParam (kRise, 4.0);
+    e->setParam (kFall, 0.25);
+    CHECK (e->riseSeconds (0, kBandMid) == 4.0 * e->pattern (0).band[kBandMid].rise &&
+               e->fallSeconds (0, kBandMid) == 0.25 * e->pattern (0).band[kBandMid].fall,
+           "Rise x4, Fall x0.25");
+}
+
+TEST (movement_zero_is_static)
+{
+    // Movement 0: every band at its Level, every corner where it is set, the whole time; the output is the
+    // static split exactly, whatever the movement's other settings
+    const auto x = reese (3.0);
+    auto render = [&] (const std::function<void (Engine&)>& set, bool* still) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kSeed, 21);
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kMidLevel, -3.0);
+        e->setParam (kAirLevel, 4.0);
+        if (set)
+            set (*e);
+        e->setParam (kMovement, 0.0);
+        e->reset ();
+        const double lowX = lowXoverForSeed (21);
+        auto y = run (*e, x, nullptr, 256, [&] (size_t) {
+            const double lv[kMaxBands] = {0.0, -3.0, 0.0, 4.0};
+            for (int b = 0; b < kMaxBands; ++b)
+                *still = *still && std::fabs (e->bandGainDb (0, b) - lv[b]) < 1e-9;
+            *still = *still && std::fabs (e->xoverHz (0, 0) / lowX - 1.0) < 1e-12 &&
+                     std::fabs (e->xoverHz (0, 1) / e->param (kXoverMid) - 1.0) < 1e-12 &&
+                     std::fabs (e->xoverHz (0, 2) / e->param (kXoverHigh) - 1.0) < 1e-12;
+        });
+        return y;
+    };
+    bool still = true;
+    const auto a = render ({}, &still);
+    const auto b = render (
+        [] (Engine& e) {
+            e.setParam (kRise, 0.25);
+            e.setParam (kFall, 4.0);
+            e.setParam (kDepth, 48.0);
+            e.setParam (kRate, 2.0);
+            e.setParam (kMidMove, 0.1);
+            e.setParam (kAirMove, 0.3);
+        },
+        &still);
+    CHECK (still, "every band at its Level, every corner at its setting, the whole time");
+    CHECK (a == b, "the movement's settings change nothing at Movement 0 (bit for bit)");
+    // the static split by hand: the same corners, the same gains
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kSeed, 21);
+    e->setParam (kBandCount, kBands4);
+    e->reset ();
+    dsp::SvfCoefs c[kMaxXovers];
+    for (int k = 0; k < kMaxXovers; ++k)
+        c[k].set (std::tan (dsp::kPi * e->xoverHz (0, k) / kSr), dsp::kSqrt2);
+    const double gain[kMaxBands] = {1.0, std::pow (10.0, -3.0 / 20.0), 1.0, std::pow (10.0, 4.0 / 20.0)};
+    dsp::Split4 split;
+    const int lat = e->latency ();
+    double worst = 0.0;
+    for (size_t i = 0; i + (size_t)lat < x.size (); ++i)
+    {
+        double band[kMaxBands];
+        split.tick (x[i], c, band);
+        const double want = gain[0] * band[0] + gain[1] * band[1] + gain[2] * band[2] + gain[3] * band[3];
+        worst = std::max (worst, std::fabs (want - (double)a[i + (size_t)lat]));
+    }
+    CHECK (worst < 1e-6, "the output is the static split (%.1e off)", worst);
 }
 
 TEST (seed_is_repeatable)
@@ -329,6 +670,7 @@ TEST (seed_is_repeatable)
         e->setParam (kSeed, seed);
         e->setParam (kMovement, 1.0);
         e->setParam (kPasses, passes);
+        e->setParam (kBandCount, kBands4);
         e->reset ();
         std::vector<float> r;
         auto l = run (*e, x, &r);
@@ -344,10 +686,26 @@ TEST (seed_is_repeatable)
     CHECK (diff > 0.01, "and audibly: %.3f", diff);
     CHECK (render (9, 1) == render (9, 1), "two passes too");
     // the patterns themselves: the same for the same Seed, a different stream for the second pass
+    auto same = [] (const Pattern& p, const Pattern& q) {
+        bool s = p.lowXover == q.lowXover;
+        for (int b = kBandMid; b < kMaxBands; ++b)
+            s = s && p.band[b].steps == q.band[b].steps && p.band[b].loop == q.band[b].loop && p.band[b].mask == q.band[b].mask &&
+                p.band[b].offset == q.band[b].offset && p.band[b].hold == q.band[b].hold && p.band[b].rise == q.band[b].rise &&
+                p.band[b].fall == q.band[b].fall;
+        for (int k = 1; k < kMaxXovers; ++k)
+            s = s && p.drift[k].rate == q.drift[k].rate && p.drift[k].key == q.drift[k].key;
+        return s;
+    };
     const Pattern p1 = makePattern (77, 0), p2 = makePattern (77, 0), q = makePattern (77, 1);
-    CHECK (std::memcmp (&p1.band, &p2.band, sizeof (p1.band)) == 0, "makePattern is deterministic");
-    CHECK (p1.band[2].freq.rate != q.band[2].freq.rate && p1.band[0].freq.key != q.band[0].freq.key,
+    CHECK (same (p1, p2), "makePattern is deterministic");
+    CHECK (!same (p1, q) && p1.band[kBandHigh].rise != q.band[kBandHigh].rise && p1.drift[1].key != q.drift[1].key,
            "the second pass moves on its own");
+    CHECK (p1.lowXover == q.lowXover, "with the same Low X");
+    // different seeds deal out different patterns
+    int differ = 0;
+    for (int s = kMinSeed + 1; s <= kMaxSeed; ++s)
+        differ += !same (makePattern (s, 0), makePattern (s - 1, 0));
+    CHECK (differ == kMaxSeed - kMinSeed, "every Seed its own pattern");
 }
 
 TEST (transport_follows_song)
@@ -365,6 +723,37 @@ TEST (transport_follows_song)
     e->process (in.data (), in.data (), l.data (), r.data (), 256);
     const double expected = 10.0 / 4.0 + 256.0 * 140.0 / 60.0 / 4.0 / kSr;
     CHECK (std::fabs (e->phase () - expected) < 1e-9, "synced: the phase follows the song (%.6f, expected %.6f)", e->phase (), expected);
+
+    // the bands' gains are a function of the song position: synced, two instances that ran differently
+    // before agree from the moment the host plays
+    auto synced = [&] (int warm) {
+        auto f = engine ();
+        f->setParam (kSync, 1.0);
+        f->setParam (kSyncRate, 3); // 1/2: 2 beats
+        f->setParam (kMovement, 1.0);
+        f->reset ();
+        std::vector<float> ll (256), rr (256);
+        f->setTransport (128.0, 0.0, false);
+        for (int i = 0; i < warm; ++i)
+            f->process (in.data (), in.data (), ll.data (), rr.data (), 256);
+        std::vector<double> gains;
+        double ppq = 16.0;
+        for (int i = 0; i < 400; ++i)
+        {
+            f->setTransport (128.0, ppq, true);
+            f->process (in.data (), in.data (), ll.data (), rr.data (), 256);
+            if (i >= 4) // (past the 1 ms glide from wherever it was)
+                for (int b = kBandMid; b <= kBandHigh; ++b)
+                    gains.push_back (f->bandGainDb (0, b));
+            ppq += 256.0 * 128.0 / 60.0 / kSr;
+        }
+        return gains;
+    };
+    const auto sa = synced (0), sb = synced (333);
+    double gap = 0.0;
+    for (size_t i = 0; i < sa.size (); ++i)
+        gap = std::max (gap, std::fabs (sa[i] - sb[i]));
+    CHECK (gap < 1e-6, "synced: the bands rise and fall with the song position (%.1e dB apart)", gap);
 
     // free: two renders from the same song position give the same output, however long the first
     // instance ran before
@@ -400,6 +789,110 @@ TEST (transport_follows_song)
     g->process (in.data (), in.data (), l.data (), r.data (), 256);
     const double rate = toPlain (kRate, defaultNormalized (kRate));
     CHECK (std::fabs (g->phase () - (32.0 * rate + 256.0 * rate / kSr)) < 1e-9, "a jump: the phase follows (%.4f)", g->phase ());
+    // host stopped: running on its own at Rate
+    auto h = engine ();
+    h->setTransport (120.0, 50.0, false);
+    for (int i = 0; i < 10; ++i)
+        h->process (in.data (), in.data (), l.data (), r.data (), 256);
+    CHECK (std::fabs (h->phase () - 2560.0 * rate / kSr) < 1e-9, "stopped: free-running from where it was (%.5f)", h->phase ());
+}
+
+TEST (band_count_switch)
+{
+    // a tone in the Air band's region; Air off. Switching to 4 bands fades the tone out over 20 ms (Air at its
+    // own Level instead of following High), without a click; and back
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kAirLevel, kLevelOffDb);
+    e->setParam (kXoverHigh, 2000.0); // (9 kHz well inside Air)
+    e->reset ();
+    CHECK (e->bandCount () == 3, "3 bands by default");
+    const auto x = sine (9000.0, 0.25, 3.0);
+    const size_t at = 256 * 192, back = 256 * 384; // (block starts)
+    const auto y = run (*e, x, nullptr, 256, [&] (size_t a) {
+        if (a == at)
+            e->setParam (kBandCount, kBands4);
+        if (a == back)
+            e->setParam (kBandCount, kBands3);
+    });
+    const int lat = e->latency ();
+    double steadyStep = 0.0, switchStep = 0.0;
+    for (size_t i = (size_t)(0.5 * kSr); i < at; ++i)
+        steadyStep = std::max (steadyStep, (double)std::fabs (y[i] - y[i - 1]));
+    for (size_t i = at; i < y.size (); ++i)
+        switchStep = std::max (switchStep, (double)std::fabs (y[i] - y[i - 1]));
+    const size_t s = at + (size_t)lat;
+    const double before = rms (y, s - 4800, s), during = rms (y, s + 240, s + 480), after = rms (y, s + 1440, s + 4800);
+    const double restored = rms (y, back + lat + 2400, back + lat + 7200);
+    std::printf ("    3 -> 4 bands: %.1f dBFS before, %.1f dBFS 5 .. 10 ms in, %.1f dBFS after 30 ms; back: %.1f dBFS; "
+                 "largest step %.4f (steady %.4f)\n",
+                 db (before), db (during), db (after), db (restored), switchStep, steadyStep);
+    CHECK (switchStep <= steadyStep * 1.01, "no click: no step larger than the tone's own (%.4f / %.4f)", switchStep, steadyStep);
+    CHECK (during < before * 0.9 && during > before * 0.2, "it fades (%.2f of the level 5 .. 10 ms in)", during / before);
+    CHECK (after < before * 1e-2, "Air off with 4 bands: the tone is gone (%.1f dB)", db (after / before));
+    CHECK (std::fabs (db (restored / before)) < 0.1, "back to 3 bands: Air follows High again");
+    // the meters' band count follows
+    Meters m;
+    auto f = engine ();
+    f->setMeters (&m);
+    f->setParam (kBandCount, kBands4);
+    std::vector<float> z (256, 0.0f), l (256), r (256);
+    f->process (z.data (), z.data (), l.data (), r.data (), 256);
+    CHECK (m.bands.load () == 4 && f->bandCount () == 4, "4 bands reported");
+}
+
+TEST (passes)
+{
+    const auto x = reese (4.0);
+    auto render = [&] (int passes) {
+        auto e = engine ();
+        e->setParam (kPasses, passes);
+        e->reset ();
+        return run (*e, x);
+    };
+    const auto one = render (kPasses1), two = render (kPasses2);
+    const size_t a = (size_t)(0.5 * kSr);
+    double diff = 0.0;
+    for (size_t i = a; i < x.size (); ++i)
+        diff = std::max (diff, (double)std::fabs (one[i] - two[i]));
+    const double l1 = db (rms (one, a, x.size ())), l2 = db (rms (two, a, x.size ()));
+    std::printf ("    level: 1 pass %.1f dBFS, 2 passes %.1f dBFS (input %.1f)\n", l1, l2, db (rms (x, a, x.size ())));
+    CHECK (diff > 0.01, "2 passes differ from 1: %.3f", diff);
+    CHECK (finite (two) && peak (two, 0, two.size ()) < 2.0, "2 passes stay finite and bounded");
+    CHECK (l2 > -40.0 && l2 < 0.0, "and at a sensible level: %.1f dBFS", l2);
+    // the second pass keeps the Low crossover (the low end locked in both) but moves on its own
+    for (int seed : {1, 64, 100})
+    {
+        auto e = engine ();
+        e->setParam (kSeed, seed);
+        e->setParam (kPasses, kPasses2);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kBandCount, kBands4);
+        e->reset ();
+        bool lowSame = true;
+        double apart = 0.0;
+        run (*e, x, nullptr, 256, [&] (size_t) {
+            lowSame = lowSame && e->xoverHz (1, 0) == e->xoverHz (0, 0) && e->bandGainDb (1, kBandLow) == e->bandGainDb (0, kBandLow);
+            for (int b = kBandMid; b < kMaxBands; ++b)
+                apart = std::max (apart, std::fabs (e->bandGainDb (1, b) - e->bandGainDb (0, b)));
+        });
+        CHECK (lowSame && e->xoverHz (1, 0) == e->lowXover (), "seed %d: the second pass keeps Low X and Low's level", seed);
+        CHECK (apart > 6.0, "seed %d: its other bands move on their own (%.1f dB apart)", seed, apart);
+    }
+    // switching Passes crossfades: no jump bigger than the signal's own steps
+    auto e = engine ();
+    e->reset ();
+    std::vector<float> l (x.size ()), r (x.size ());
+    double maxStep = 0.0;
+    for (size_t b = 0; b < x.size (); b += 256)
+    {
+        if (b == (size_t)(2.0 * kSr))
+            e->setParam (kPasses, kPasses2);
+        e->process (x.data () + b, x.data () + b, l.data () + b, r.data () + b, 256);
+    }
+    for (size_t i = (size_t)(1.0 * kSr); i < x.size (); ++i)
+        maxStep = std::max (maxStep, (double)std::fabs (l[i] - l[i - 1]));
+    CHECK (maxStep < 0.5, "switching Passes does not click: largest step %.3f", maxStep);
 }
 
 TEST (glue_reduces_crest)
@@ -431,18 +924,17 @@ TEST (glue_reduces_crest)
 
 TEST (grit_adds_harmonics)
 {
-    // a 110 Hz sine through the Low band opened up (1 kHz): its third harmonic with Grit 0 and 100 %
+    // a 50 Hz sine through the Low band alone: its third harmonic with Grit 0 and 100 %
     auto third = [] (double grit) {
         auto e = engine ();
         plain (*e);
-        e->setParam (kLowFreq, 1000.0);
         e->setParam (kGrit, grit);
         e->reset ();
-        solo (*e, 0);
-        const auto x = sine (110.0, 0.5, 0.5);
+        solo (*e, kBandLow);
+        const auto x = sine (50.0, 0.5, 0.5);
         const auto y = run (*e, x);
         const size_t a = (size_t)(0.25 * kSr);
-        return db (toneAt (y, 330.0, a, y.size ()) / toneAt (y, 110.0, a, y.size ()));
+        return db (toneAt (y, 150.0, a, y.size ()) / toneAt (y, 50.0, a, y.size ()));
     };
     const double clean = third (0.0), dirty = third (1.0);
     std::printf ("    3rd harmonic: %.1f dB (Grit 0), %.1f dB (Grit 100 %%)\n", clean, dirty);
@@ -484,77 +976,50 @@ TEST (mix_zero_is_dry)
     CHECK (lat == t.latency (), "the latency is the end saturator's alone: %d", lat);
 }
 
-TEST (passes)
-{
-    const auto x = reese (4.0);
-    auto render = [&] (int passes) {
-        auto e = engine ();
-        e->setParam (kPasses, passes);
-        e->reset ();
-        return run (*e, x);
-    };
-    const auto one = render (kPasses1), two = render (kPasses2);
-    const size_t a = (size_t)(0.5 * kSr);
-    double diff = 0.0;
-    for (size_t i = a; i < x.size (); ++i)
-        diff = std::max (diff, (double)std::fabs (one[i] - two[i]));
-    const double l1 = db (rms (one, a, x.size ())), l2 = db (rms (two, a, x.size ()));
-    std::printf ("    level: 1 pass %.1f dBFS, 2 passes %.1f dBFS (input %.1f)\n", l1, l2, db (rms (x, a, x.size ())));
-    CHECK (diff > 0.01, "2 passes differ from 1: %.3f", diff);
-    CHECK (finite (two) && peak (two, 0, two.size ()) < 2.0, "2 passes stay finite and bounded");
-    CHECK (l2 > -40.0 && l2 < 0.0, "and at a sensible level: %.1f dBFS", l2);
-    // switching Passes crossfades: no jump bigger than the signal's own steps
-    auto e = engine ();
-    e->reset ();
-    std::vector<float> l (x.size ()), r (x.size ());
-    double maxStep = 0.0;
-    for (size_t b = 0; b < x.size (); b += 256)
-    {
-        if (b == (size_t)(2.0 * kSr))
-            e->setParam (kPasses, kPasses2);
-        e->process (x.data () + b, x.data () + b, l.data () + b, r.data () + b, 256);
-    }
-    for (size_t i = (size_t)(1.0 * kSr); i < x.size (); ++i)
-        maxStep = std::max (maxStep, (double)std::fabs (l[i] - l[i - 1]));
-    CHECK (maxStep < 0.5, "switching Passes does not click: largest step %.3f", maxStep);
-}
-
-TEST (silence_and_resonance)
+TEST (silence_and_extremes)
 {
     // silence in, silence out (exactly)
     {
         auto e = engine ();
         e->setParam (kPasses, kPasses2);
         e->setParam (kMovement, 1.0);
+        e->setParam (kBandCount, kBands4);
         e->reset ();
         const std::vector<float> x (48000, 0.0f);
         std::vector<float> r;
         const auto l = run (*e, x, &r);
         CHECK (peak (l, 0, l.size ()) == 0.0 && peak (r, 0, r.size ()) == 0.0, "silence in, silence out");
     }
-    // every Res at the maximum, moving fast, two passes, the hottest settings: an impulse rings out and
-    // dies away (no self-oscillation), never past a bound, and leaves no denormals or NaNs
+    // the hottest settings, moving fast with the shortest ramps, two passes, four bands: an impulse and a
+    // burst of loud noise ring out, never past a bound, and leave no denormals or NaNs
     {
         auto e = engine ();
-        for (uint32_t id : {kLowRes, kMidRes, kHighRes})
-            e->setParam (id, 1.0);
+        e->setParam (kBandCount, kBands4);
         e->setParam (kMovement, 1.0);
         e->setParam (kRate, 2.0);
+        e->setParam (kRise, 0.25);
+        e->setParam (kFall, 0.25);
+        e->setParam (kDepth, 48.0);
         e->setParam (kPasses, kPasses2);
-        e->setParam (kSlope, kSlope24);
         e->setParam (kDrive, 1.0);
         e->setParam (kGrit, 1.0);
         e->setParam (kGlue, 1.0);
-        e->setParam (kLowLevel, 12.0);
-        e->setParam (kMidLevel, 12.0);
-        e->setParam (kHighLevel, 12.0);
+        e->setParam (kXoverMid, 400.0);  // (below Low X for some seeds: kept apart)
+        e->setParam (kXoverHigh, 16000.0);
+        for (uint32_t id : kLevelIds)
+            e->setParam (id, 12.0);
         e->reset ();
         std::vector<float> x ((size_t)(6.0 * kSr), 0.0f);
         x[100] = 1.0f;
         const auto loud = noise (1.0, 1.0, 5);
         std::copy (loud.begin (), loud.end (), x.begin () + 1000);
         std::vector<float> r;
-        const auto l = run (*e, x, &r);
+        bool ordered = true;
+        const auto l = run (*e, x, &r, 256, [&] (size_t) {
+            for (int k = 0; k < kMaxPasses; ++k)
+                ordered = ordered && e->xoverHz (k, 0) < e->xoverHz (k, 1) && e->xoverHz (k, 1) < e->xoverHz (k, 2) &&
+                          e->xoverHz (k, 2) < 0.5 * kSr;
+        });
         const double top = std::max (peak (l, 0, l.size ()), peak (r, 0, r.size ()));
         const double tailLevel = std::max (peak (l, l.size () - 4800, l.size ()), peak (r, r.size () - 4800, r.size ()));
         int denormals = 0;
@@ -563,18 +1028,192 @@ TEST (silence_and_resonance)
             const float tiny = std::numeric_limits<float>::min ();
             denormals += (l[i] != 0.0f && std::fabs (l[i]) < tiny) || (r[i] != 0.0f && std::fabs (r[i]) < tiny);
         }
-        std::printf ("    max resonance: peak %.2f, the last 0.1 s at %.1f dBFS\n", top, db (tailLevel));
+        std::printf ("    hottest: peak %.2f, the last 0.1 s at %.1f dBFS\n", top, db (tailLevel));
+        CHECK (ordered, "the corners stay in order, below Nyquist");
         CHECK (finite (l) && finite (r), "finite");
         CHECK (top < 4.0, "bounded: %.2f", top);
-        CHECK (tailLevel < 1e-5, "rings out (no self-oscillation): %.2e", tailLevel);
+        CHECK (tailLevel < 1e-5, "rings out: %.2e", tailLevel);
         CHECK (denormals == 0, "no denormals (%d)", denormals);
     }
 }
 
+TEST (shift_moves_upper_bands)
+{
+    // a sine in the Mid band (alone in its region), Shift on: it moves by Shift (one sideband, the other well
+    // down), Mix blends it with the unshifted one
+    auto shifted = [] (double hz, double shift, double mix, double probe) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kXoverMid, 6000.0);
+        e->setParam (kShiftOn, 1.0);
+        e->setParam (kShift, shift);
+        e->setParam (kShiftMix, mix);
+        e->reset ();
+        const auto x = sine (hz, 0.25, 1.0);
+        const auto y = run (*e, x);
+        return db (toneAt (y, probe, (size_t)(0.3 * kSr), y.size ()) / 0.25);
+    };
+    for (double shift : {200.0, -300.0, 450.0})
+    {
+        const double moved = shifted (1500.0, shift, 1.0, 1500.0 + shift), mirror = shifted (1500.0, shift, 1.0, 1500.0 - shift),
+                     left = shifted (1500.0, shift, 1.0, 1500.0);
+        std::printf ("    1500 Hz, Shift %+.0f Hz: %.2f dB at %.0f Hz, the other sideband %.1f dB, the original %.1f dB\n", shift,
+                     moved, 1500.0 + shift, mirror, left);
+        CHECK (std::fabs (moved) < 0.5, "Shift %+.0f: the tone moved, at its level (%.2f dB)", shift, moved);
+        CHECK (mirror < -30.0 && left < -30.0, "Shift %+.0f: a single sideband (%.1f / %.1f dB)", shift, mirror, left);
+    }
+    const double half = shifted (1500.0, 200.0, 0.5, 1700.0), halfDry = shifted (1500.0, 200.0, 0.5, 1500.0);
+    CHECK (std::fabs (half + 6.02) < 0.5 && std::fabs (halfDry + 6.02) < 0.5, "Shift Mix 50 %%: half shifted, half not (%.2f / %.2f dB)",
+           half, halfDry);
+    // Shift 0 (and Shift Mix 0): the bands' levels as without the shifter (only its all-pass phase)
+    for (double probe : {1500.0, 3000.0, 7000.0})
+    {
+        auto level = [&] (bool on, double shift, double mix) {
+            auto e = engine ();
+            plain (*e);
+            e->setParam (kShiftOn, on ? 1.0 : 0.0);
+            e->setParam (kShift, shift);
+            e->setParam (kShiftMix, mix);
+            e->reset ();
+            const auto x = sine (probe, 0.25, 0.6);
+            const auto y = run (*e, x);
+            return db (toneAt (y, probe, (size_t)(0.3 * kSr), y.size ()) / 0.25);
+        };
+        const double off = level (false, 0.0, 1.0), zero = level (true, 0.0, 1.0), dry = level (true, 250.0, 0.0);
+        CHECK (std::fabs (zero - off) < 0.1 && std::fabs (dry - off) < 0.1, "%.0f Hz: Shift 0 / Mix 0 leave its level (%.3f / %.3f dB)",
+               probe, zero - off, dry - off);
+    }
+}
+
+TEST (shift_leaves_the_low_end)
+{
+    // the Low band never goes through the shifter: a sine below Low X with only Low sounding is bit for bit
+    // the same with the shifter on and off; with every band on its level stays
+    for (bool soloLow : {true, false})
+    {
+        auto render = [&] (bool on) {
+            auto e = engine ();
+            e->setParam (kShiftOn, on ? 1.0 : 0.0);
+            e->setParam (kShift, -350.0);
+            e->setParam (kMovement, 1.0);
+            e->setParam (kPasses, kPasses2);
+            if (soloLow)
+                solo (*e, kBandLow);
+            e->reset ();
+            return run (*e, sine (40.0, 0.4, 2.0));
+        };
+        const auto off = render (false), on = render (true);
+        if (soloLow)
+            CHECK (on == off, "Low alone: the shifter changes nothing (bit for bit)");
+        else
+        {
+            const size_t a = (size_t)(0.5 * kSr);
+            const double d = db (toneAt (on, 40.0, a, on.size ()) / toneAt (off, 40.0, a, off.size ()));
+            CHECK (std::fabs (d) < 0.1, "every band on: the 40 Hz sine's level stays (%.3f dB)", d);
+        }
+    }
+    // a shift down never reaches the sub region or DC: 700 Hz shifted down by 500 Hz (to 200 Hz, under Low X)
+    int lowSeed = 1;
+    for (int s = kMinSeed; s <= kMaxSeed; ++s)
+        if (lowXoverForSeed (s) < lowXoverForSeed (lowSeed))
+            lowSeed = s;
+    for (int seed : {lowSeed, 1})
+    {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kSeed, seed);
+        e->setParam (kShiftOn, 1.0);
+        e->setParam (kShift, -500.0);
+        e->reset ();
+        const auto x = sine (700.0, 0.25, 2.0);
+        const auto y = run (*e, x);
+        double mean = 0.0;
+        for (size_t i = (size_t)kSr; i < y.size (); ++i)
+            mean += y[i];
+        mean /= (double)(y.size () - (size_t)kSr);
+        const double at200 = db (toneAt (y, 200.0, (size_t)kSr, y.size ()) / 0.25);
+        std::printf ("    seed %d (Low X %.0f Hz): 700 Hz shifted to 200 Hz at %.1f dB, DC %.1e\n", seed, lowXoverForSeed (seed), at200,
+                     mean);
+        CHECK (finite (y) && std::fabs (mean) < 1e-4, "seed %d: no DC", seed);
+        const double expect = lr4Db (lowXoverForSeed (seed), 700.0, false) +
+                              db (1.0 / std::sqrt (1.0 + std::pow (std::tan (kPi * lowXoverForSeed (seed) / kSr) / std::tan (kPi * 200.0 / kSr), 4.0)));
+        CHECK (std::fabs (at200 - expect) < 1.0, "seed %d: high-passed at Low X (%.1f dB, expected %.1f)", seed, at200, expect);
+    }
+}
+
+TEST (shift_off_and_smooth)
+{
+    // off: the engine without it, bit for bit, whatever Shift and Shift Mix say
+    const auto x = reese (2.0);
+    auto render = [&] (const std::function<void (Engine&)>& set) {
+        auto e = engine ();
+        e->setParam (kMovement, 1.0);
+        e->setParam (kPasses, kPasses2);
+        e->setParam (kBandCount, kBands4);
+        if (set)
+            set (*e);
+        e->reset ();
+        return run (*e, x);
+    };
+    const auto plainRender = render ({});
+    CHECK (plainRender == render ([] (Engine& e) {
+               e.setParam (kShift, 321.0);
+               e.setParam (kShiftMix, 0.3);
+           }),
+           "Shift off: bit for bit the engine without it");
+    // on, then off again: back to the same output once faded out (the shifter not run; the split alone,
+    // so no compressor remembers the shifted signal)
+    {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kShiftOn, 1.0);
+        e->setParam (kShift, 100.0);
+        e->reset ();
+        auto f = engine ();
+        plain (*f);
+        const auto s = sine (2000.0, 0.25, 1.0);
+        std::vector<float> l (256), r (256), l2 (256), r2 (256);
+        bool same = true;
+        for (size_t a = 0; a + 256 <= s.size (); a += 256)
+        {
+            if (a == 256 * 20)
+                e->setParam (kShiftOn, 0.0);
+            e->process (s.data () + a, s.data () + a, l.data (), r.data (), 256);
+            f->process (s.data () + a, s.data () + a, l2.data (), r2.data (), 256);
+            if (a > 256 * 40)
+                same = same && std::fabs (l[0] - l2[0]) < 1e-6 && e->shiftAmount () == 0.0;
+        }
+        CHECK (same, "switched off: faded out and off");
+    }
+    // moving Shift and switching it: no clicks (no step larger than the fastest tone's own)
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kXoverMid, 6000.0);
+    e->reset ();
+    const auto s = sine (1500.0, 0.25, 3.0);
+    const auto y = run (*e, s, nullptr, 128, [&] (size_t a) {
+        if (a == (size_t)(0.5 * kSr))
+            e->setParam (kShiftOn, 1.0);
+        if (a == (size_t)(0.5 * kSr))
+            e->setParam (kShift, 300.0);
+        if (a == (size_t)(1.5 * kSr))
+            e->setParam (kShift, -300.0);
+        if (a == (size_t)(2.5 * kSr))
+            e->setParam (kShiftOn, 0.0);
+    });
+    double worst = 0.0;
+    for (size_t i = 1000; i < y.size (); ++i)
+        worst = std::max (worst, (double)std::fabs (y[i] - y[i - 1]));
+    const double bound = 0.25 * 2.0 * kPi * 1800.0 / kSr;
+    std::printf ("    switching and moving Shift: largest step %.4f (a 1800 Hz tone's own %.4f)\n", worst, bound);
+    CHECK (worst < 1.1 * bound, "no clicks (%.4f)", worst);
+    CHECK (finite (y), "finite");
+}
+
 TEST (cpu_budget)
 {
-    // 10 s of a stereo Reese, the defaults and the heaviest settings (2 passes, 24 dB, full movement, the end
-    // saturator on): CPU time, the best of three renders
+    // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
+    // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
     for (bool heavy : {false, true})
     {
@@ -585,13 +1224,19 @@ TEST (cpu_budget)
             auto e = engine ();
             if (heavy)
             {
+                e->setParam (kBandCount, kBands4);
                 e->setParam (kPasses, kPasses2);
-                e->setParam (kSlope, kSlope24);
                 e->setParam (kMovement, 1.0);
                 e->setParam (kRate, 2.0);
+                e->setParam (kRise, 4.0);
+                e->setParam (kFall, 4.0);
+                e->setParam (kAirMove, 1.0);
+                e->setParam (kMidMove, 1.0);
                 e->setParam (kDrive, 0.5);
                 e->setParam (kGlue, 1.0);
                 e->setParam (kGrit, 1.0);
+                e->setParam (kShiftOn, 1.0);
+                e->setParam (kShift, 120.0);
                 e->setParam (kTailBase + pk::kTailOn, 1.0);
             }
             e->reset ();
@@ -601,7 +1246,7 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "2 passes, 24 dB, full movement, the end saturator on" : "the defaults");
+                     heavy ? "4 bands, 2 passes, full movement, Shift on, the end saturator on" : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }
