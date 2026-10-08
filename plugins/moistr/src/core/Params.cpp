@@ -4,6 +4,7 @@
 #include "Gesture.h"
 
 #include "smacheratr/src/core/TailExt.h"
+#include "smemplr/src/core/FxSlot.h"
 
 #include <string>
 #include <vector>
@@ -168,9 +169,61 @@ const ParamTable& paramTable ()
         v.push_back (percent (kScenePosition, "Gesture Position", "Position", 0.0));
         v.push_back (percent (kSceneSmooth, "Gesture Smooth", "Smooth", 0.0));
         v.push_back (percent (kSceneAmount, "Gesture Amount", "Amount", 1.0));
+        // 0.29: the LAB. Every chain at 0 dB and every slot Empty: moistr as 0.28 (a new instance gets the Neuro
+        // recipe instead: newInstanceValues). A slot's block is stored normalized (its kind reads it through its own
+        // table, as in a smemplr rack slot); its defaults are those of the kind the slot is meant for (labSlotKind),
+        // so loading that kind into it starts from the kind's defaults.
+        for (int c = 0; c < kNumChains; ++c)
+        {
+            auto name = [&] (const char* what) { return keep (std::string (kChainNames[c]) + " Chain " + what); };
+            v.push_back (real (chainId (c, kChainLevel), name ("Level"), "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+            v.push_back (toggle (chainId (c, kChainMute), name ("Mute"), "Mute", false));
+            v.push_back (toggle (chainId (c, kChainSolo), name ("Solo"), "Solo", false));
+            v.push_back (toggle (chainId (c, kChainMono), name ("Mono"), "Mono", false));
+            v.push_back (toggle (chainId (c, kChainSource), name ("Source"), "Source", false)); // (kept for later)
+            for (int k = 1; k <= 3; ++k)
+                v.push_back (toggle (chainId (c, (ChainField)(kChainSource + k)), name (keep ("Spare " + std::to_string (k))), "Spare", false));
+        }
+        std::vector<const char*> kinds;
+        for (int t = 0; t < kLabKinds; ++t)
+            kinds.push_back (t == 0 ? "Empty" : t < smemplr::kNumFxTypes ? smemplr::fxName (t) : keep ("Kind " + std::to_string (t)));
+        for (int s = 0; s < kNumLabSlots; ++s)
+        {
+            const std::string fx = labSlotName (s);
+            v.push_back (choice (labSlotParam (s, kLabType), keep (fx + " Type"), keep (fx), kinds, smemplr::kFxEmpty));
+            v.push_back (toggle (labSlotParam (s, kLabOn), keep (fx + " On"), keep (fx + " On"), true));
+            const auto& t = smemplr::fxBlockTable (labSlotKind (s));
+            for (uint32_t j = 0; j < smemplr::kSlotBlockAll; ++j)
+            {
+                const std::string n = fx + " " + std::to_string (j + 1);
+                v.push_back (real (labBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, j < t.size () ? t.defaultNormalized (j) : 0.0,
+                                   Curve::Linear, Disp::Percent));
+            }
+        }
         return v;
     }());
     return t;
+}
+
+static_assert (kLabType == smemplr::kSlotType && kLabOn == smemplr::kSlotOn && kLabBlock == smemplr::kSlotParams &&
+                   kLabSlotFields == smemplr::kSlotFields && smemplr::kNumFxTypes <= kLabKinds,
+               "a lab slot is a smemplr rack slot: a Type, an On and its block");
+
+std::string labSlotName (int slot)
+{
+    if (slot >= postSlot (0))
+        return "Post FX " + std::to_string (slot - postSlot (0) + 1);
+    return std::string (kChainNames[slot / kChainSlots]) + " FX " + std::to_string (slot % kChainSlots + 1);
+}
+
+int labSlotKind (int slot)
+{
+    if (slot == postSlot (0))
+        return smemplr::kFxMultidyn;
+    if (slot >= postSlot (0))
+        return smemplr::kFxEmpty;
+    const int k = slot % kChainSlots;
+    return k == 0 ? smemplr::kFxSmacheratr : k == 1 ? smemplr::kFxMultidyn : smemplr::kFxEmpty;
 }
 
 double defaultNormalized025 (uint32_t id)
@@ -208,6 +261,8 @@ double gestureOffNormalized (uint32_t id)
 
 double defaultNormalizedForVersion (uint32_t id, int version)
 {
+    if (isLabParam (id))
+        return defaultNormalized (id); // (before 0.29 there was no LAB: every slot Empty, every chain at 0 dB)
     if (isGestureParam (id))
         return version < 6 ? gestureOffNormalized (id) : defaultNormalized (id);
     return version < 3 ? legacyDefaultNormalized (id) : version < 5 ? defaultNormalized025 (id) : defaultNormalized (id);

@@ -4,7 +4,10 @@
 #include "State.h"
 #include "ui/Editor.h"
 
+#include "smemplr/src/core/FxSlot.h"
+
 #include "pluginterfaces/vst/ivstmessage.h"
+#include "public.sdk/source/vst/utility/stringconvert.h"
 
 #include <algorithm>
 #include <cstring>
@@ -191,6 +194,57 @@ void Controller::resetExtraState ()
     for (int g = 0; g < kNumGestureSlots; ++g)
         if (!user[(size_t)g].empty ())
             clearUserGesture (g);
+}
+
+namespace {
+// A value in a LAB slot's block: shown and typed in the units of the slot's kind (as smemplr's rack slots).
+class LabSlotParameter : public pk::TableParameter
+{
+public:
+    LabSlotParameter (const pk::ParamTable& t, uint32_t id, Controller* c, int s, uint32_t j) : pk::TableParameter (t, id), ctl (c), slot (s), index (j) {}
+    void toString (ParamValue n, String128 string) const override
+    {
+        const auto& t = smemplr::fxBlockTable (ctl->labKind (slot));
+        if (index >= t.size ())
+        {
+            pk::TableParameter::toString (n, string);
+            return;
+        }
+        Steinberg::Vst::StringConvert::convert (t.toText (index, t.toPlain (index, n)), string);
+    }
+    bool fromString (const TChar* string, ParamValue& n) const override
+    {
+        const auto& t = smemplr::fxBlockTable (ctl->labKind (slot));
+        if (index >= t.size ())
+            return pk::TableParameter::fromString (string, n);
+        double v;
+        if (!t.fromText (index, Steinberg::Vst::StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (string))), v))
+            return false;
+        n = t.toNormalized (index, v);
+        return true;
+    }
+
+private:
+    Controller* ctl;
+    int slot;
+    uint32_t index;
+};
+} // namespace
+
+int Controller::labKind (int slot)
+{
+    const int t = (int)std::lround (plain (labSlotParam (slot, kLabType)));
+    return t > 0 && t < smemplr::kNumFxTypes ? t : smemplr::kFxEmpty;
+}
+
+Parameter* Controller::makeParameter (uint32_t id)
+{
+    if (isLabSlotParam (id) && labFieldOf (id) >= kLabBlock)
+        return new LabSlotParameter (tableRef, id, this, labSlotOf (id), labFieldOf (id) - kLabBlock);
+    Parameter* p = pk::ControllerBase::makeParameter (id);
+    if (isChainSpare (id))
+        p->getInfo ().flags = ParameterInfo::kCanAutomate | ParameterInfo::kIsHidden; // (kept for later: not shown)
+    return p;
 }
 
 IPlugView* PLUGIN_API Controller::createView (FIDString name)

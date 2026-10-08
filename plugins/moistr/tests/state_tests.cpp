@@ -2,8 +2,9 @@
 // state from a newer build (parameters this one does not know), a 0.18 state (version 1), 0.23 to 0.25 states
 // (versions 2 to 4: the 0.26 parameters as they keep the old sound), a 0.26 state (version 5: the gestures off),
 // the user gestures (version 6: there and back, missing, damaged), a 0.27 state (version 6: its slots kept, the
-// one gesture None), the one gesture's user gesture (version 7: there and back, cut, damaged), a stream that is not
-// Moistr's, and the parameter table's fixed points. Run: ./moistr_state_tests
+// one gesture None), the one gesture's user gesture (version 7: there and back, cut, damaged), a 0.28 state (version 7:
+// the LAB empty, every chain at 0 dB), a stream that is not Moistr's, and the parameter table's fixed points. Run:
+// ./moistr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
 
@@ -123,7 +124,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 7 && count == (int32)kNumParams, "saved as version 7 (%d) with %d values", version, count);
+        CHECK (version == 8 && count == (int32)kNumParams, "saved as version 8 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
@@ -386,6 +387,53 @@ int main ()
         State dd;
         CHECK (readState (&d, dd) && dd.scene.empty () && dd.has[kSceneAmount], "a damaged gesture: none, the parameters read");
     }
+    // a 0.28 state (version 7, IDs 0 .. 226, the slots' and the one gesture's blocks): every value kept, the LAB's
+    // parameters at their defaults (every slot Empty and on, every chain at 0 dB, not muted, soloed or mono): the
+    // engine then runs as 0.28, bit for bit (core tests: lab_empty_is_028)
+    {
+        MemoryStream s;
+        const uint32_t old = kChainBase; // (0.28's parameters: 0 .. 226)
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x5453494D);
+            w.writeInt32 (7);
+            w.writeInt32 ((int32)old);
+            for (uint32_t id = 0; id < old; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.173 * (id + 1), 1.0));
+            }
+            w.writeInt32 (0x54534547); // 'GEST': no user gestures
+            w.writeInt32 (kNumGestureSlots);
+            for (int g = 0; g < kNumGestureSlots; ++g)
+                w.writeInt32 (0);
+            w.writeInt32 (0x454E4353); // 'SCNE': none
+            w.writeInt32 (0);
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a 0.28 state reads");
+        int kept = 0, lab = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (id < old)
+                kept += back.has[id] && back.norm[id] == std::fmod (0.173 * (id + 1), 1.0);
+            else
+                lab += !back.has[id] && back.norm[id] == defaultNormalized (id);
+        CHECK (kept == (int)old, "every stored value kept (%d of %u)", kept, old);
+        CHECK (lab == (int)(kNumParams - old), "the LAB at its defaults (%d of %u)", lab, kNumParams - old);
+        int empty = 0, neutral = 0;
+        for (int sl = 0; sl < kNumLabSlots; ++sl)
+            empty += std::lround (toPlain (labSlotParam (sl, kLabType), back.norm[labSlotParam (sl, kLabType)])) == 0 &&
+                     back.norm[labSlotParam (sl, kLabOn)] == 1.0;
+        for (int c = 0; c < kNumChains; ++c)
+            neutral += toPlain (chainId (c, kChainLevel), back.norm[chainId (c, kChainLevel)]) == 0.0 && back.norm[chainId (c, kChainMute)] == 0.0 &&
+                       back.norm[chainId (c, kChainSolo)] == 0.0 && back.norm[chainId (c, kChainMono)] == 0.0;
+        CHECK (empty == kNumLabSlots && neutral == kNumChains, "every slot Empty (%d), every chain at 0 dB, not muted, soloed or mono (%d)", empty,
+               neutral);
+        for (int v = 1; v <= 7; ++v)
+            for (uint32_t id : {labSlotParam (0, kLabType), labSlotParam (postSlot (0), kLabType), chainId (1, kChainLevel)})
+                CHECK (back.norm[id] == defaultNormalizedForVersion (id, v), "version %d: the LAB's default (%u)", v, id);
+    }
     // not Moistr's
     {
         MemoryStream s;
@@ -434,6 +482,23 @@ int main ()
                "0.28: Gesture None (then the factory gestures and User), Amount 100 %%, Loop at its own length, Speed x1");
         for (int v = 1; v <= 6; ++v)
             CHECK (std::lround (toPlain (kScene, defaultNormalizedForVersion (kScene, v))) == kSceneNone, "version %d: Gesture None", v);
+        // 0.29: the LAB, every slot Empty (its Type over kLabKinds kinds: Empty, smemplr's, then room) and on, every chain at
+        // 0 dB; a slot's block at the defaults of the kind it is meant for
+        const auto& type0 = t.info (labSlotParam (0, kLabType));
+        CHECK ((int)type0.choices.size () == kLabKinds && std::string (type0.choices[1]) == "para" && std::string (type0.choices[4]) == "smacheratr" &&
+                   std::string (type0.choices[9]) == "smoothr",
+               "0.29: a slot's Type: Empty, para .. smoothr in smemplr's order, then room");
+        int labDefaults = 0;
+        for (int sl = 0; sl < kNumLabSlots; ++sl)
+            labDefaults += t.info (labSlotParam (sl, kLabType)).def == 0.0 && t.info (labSlotParam (sl, kLabOn)).def == 1.0;
+        for (int c = 0; c < kNumChains; ++c)
+            labDefaults += t.info (chainId (c, kChainLevel)).def == 0.0 && t.info (chainId (c, kChainMute)).def == 0.0 &&
+                           t.info (chainId (c, kChainSolo)).def == 0.0 && t.info (chainId (c, kChainMono)).def == 0.0;
+        CHECK (labDefaults == kNumLabSlots + kNumChains, "0.29: every slot Empty and on, every chain at 0 dB (%d)", labDefaults);
+        CHECK (std::string (t.info (chainId (0, kChainLevel)).name) == "Mid Chain Level" &&
+                   std::string (t.info (labSlotParam (postSlot (0), kLabType)).name) == "Post FX 1 Type" &&
+                   std::string (t.info (labBlockParam (chainSlot (2, 1), 0)).name) == "Air FX 2 1",
+               "the LAB's names");
         for (uint32_t a = 0; a < kNumParams; ++a)
         {
             CHECK (t.info (a).id == a, "entry %u has its own ID", a);

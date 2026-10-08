@@ -51,8 +51,13 @@ public:
     // the Gestures folder, made when it is missing ("" when there is no preset folder)
     std::string makeGestureFolder () const;
 
+    // a LAB slot's kind now (smemplr::FxType; Empty for a kind this build does not run)
+    int labKind (int slot);
+
 protected:
     void resetExtraState () override; // (Init and factory presets: no user gestures)
+    // the LAB's slots' values shown in their kinds' units; the chains' kept-for-later parameters hidden
+    Steinberg::Vst::Parameter* makeParameter (uint32_t id) override;
 
 private:
     void sendUserGesture (int slot);

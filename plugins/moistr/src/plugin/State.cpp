@@ -39,7 +39,11 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    (GestureFile.h: sceneJson; 0 bytes: none). An older state reads Gesture None (its default) and keeps its
 //    slots, which still play, so a 0.27 project sounds as it did. (A 0.27 build reads a version 7 state's
 //    parameters and slots and stops before the new block.)
-constexpr int32 kVersion = 7;
+// 8: 0.29, the LAB (IDs 227 .. 1930 appended: four chains' Level, Mute, Solo, Mono and four kept for later, then 19
+//    effects slots of 88: Type, On and a block). An older state reads every slot Empty and every chain at 0 dB (their
+//    defaults: defaultNormalizedForVersion), so a 0.28 project sounds as it did, bit for bit. (A 0.28 build reads a
+//    version 8 state's first 227 parameters and skips the LAB's.)
+constexpr int32 kVersion = 8;
 constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
 constexpr int32 kSceneMagic = 0x454E4353;   // 'SCNE'
 constexpr int32 kMaxSceneBytes = 4 << 20;

@@ -5,6 +5,7 @@
 #include "pluginkit/TailParams.h"
 
 #include <cstdint>
+#include <string>
 
 namespace moistr {
 
@@ -165,7 +166,15 @@ enum ParamId : uint32_t
     kScenePosition,             // 0 .. 1: where the loop starts (Loop), or where Walk holds
     kSceneSmooth,               // 0 .. 1: 2 ms .. 1/16 beat glides
     kSceneAmount,               // 0 .. 1: scales every lane (0: no gesture)
-    kNumParams
+    // --- added in 0.29 (append only): the LAB (Lab.h). Four chains, each kChainFields IDs (Level, Mute, Solo, Mono,
+    // Source and three kept for later): chains 1 .. 3 on the Mid, High and Air bands, chain 4 (in parallel on them
+    // all) for later. Then kNumLabSlots effects slots of kLabSlotFields IDs each (a Type, an On and a block, as a
+    // smemplr rack slot: smemplr/src/core/FxSlot.h): kChainSlots per chain, chain by chain, then kPostSlots after
+    // the bands' sum (POST). Every slot Empty and every chain at 0 dB in an older state and in Init (moistr as
+    // 0.28, bit for bit); a new instance starts from the Neuro recipe (newInstanceValues) ---
+    kChainBase = kSceneAmount + 1,
+    kLabSlotBase = kChainBase + 4 * 8,
+    kNumParams = kLabSlotBase + 19 * 88
 };
 
 // pinned: these numbers are in saved projects
@@ -199,8 +208,47 @@ static_assert (kG1Gesture == 185 && kG2Gesture == 193 && kG3Gesture == 201 && kG
                    kWobbleRate == 218 && kWobbleAmount == 219,
                "saved IDs: the gestures at 185 .. 219");
 static_assert (kScene == 220 && kSceneMode == 221 && kSceneLength == 222 && kSceneSpeed == 223 && kScenePosition == 224 &&
-                   kSceneSmooth == 225 && kSceneAmount == 226 && kNumParams == 227,
+                   kSceneSmooth == 225 && kSceneAmount == 226,
                "saved IDs: the one gesture (0.28) at 220 .. 226");
+
+// the LAB (0.29): its chains and its effects slots
+constexpr int kNumChains = 4;      // chains 1 .. 3 on Mid, High and Air; chain 4 kept for later (parallel)
+constexpr int kNumBandChains = 3;  // the chains that run now (on the Mid, High and Air bands)
+constexpr int kChainSlots = 4;     // effects slots per chain
+constexpr int kPostSlots = 3;      // effects slots after the bands' sum (POST)
+constexpr int kNumLabSlots = kNumChains * kChainSlots + kPostSlots;
+// a chain's parameters by field (offsets from its first): Level, Mute, Solo, Mono; Source and the spares are kept
+// for later (not shown, not used)
+enum ChainField : uint32_t { kChainLevel = 0, kChainMute, kChainSolo, kChainMono, kChainSource, kChainSpare1, kChainSpare2, kChainSpare3,
+                             kChainFields };
+// a lab slot's parameters by field: its Type, its On, then its block (kLabBlock + block position; smemplr's SlotField)
+constexpr uint32_t kLabType = 0, kLabOn = 1, kLabBlock = 2;
+constexpr uint32_t kLabSlotFields = 88; // (smemplr::kSlotFields: Params.cpp checks)
+constexpr uint32_t chainId (int chain, ChainField f) { return kChainBase + kChainFields * (uint32_t)chain + (uint32_t)f; }
+constexpr int chainSlot (int chain, int k) { return chain * kChainSlots + k; } // a chain's k-th slot
+constexpr int postSlot (int k) { return kNumChains * kChainSlots + k; }        // POST's k-th slot
+constexpr uint32_t labSlotParam (int slot, uint32_t field) { return kLabSlotBase + kLabSlotFields * (uint32_t)slot + field; }
+constexpr uint32_t labBlockParam (int slot, uint32_t j) { return labSlotParam (slot, kLabBlock + j); }
+constexpr bool isChainParam (uint32_t id) { return id >= kChainBase && id < kLabSlotBase; }
+constexpr bool isLabSlotParam (uint32_t id) { return id >= kLabSlotBase && id < kNumParams; }
+constexpr bool isLabParam (uint32_t id) { return id >= kChainBase && id < kNumParams; }
+constexpr int labSlotOf (uint32_t id) { return (int)((id - kLabSlotBase) / kLabSlotFields); }   // (a lab slot parameter)
+constexpr uint32_t labFieldOf (uint32_t id) { return (id - kLabSlotBase) % kLabSlotFields; }   // (a lab slot parameter)
+constexpr bool isChainSpare (uint32_t id) { return isChainParam (id) && (id - kChainBase) % kChainFields >= kChainSource; }
+static_assert (kChainBase == 227 && kChainFields == 8 && kLabSlotBase == 259 && kNumLabSlots == 19 && kNumParams == 1931,
+               "saved IDs: the LAB's chains at 227 .. 258, its slots at 259 .. 1930");
+static_assert (chainId (0, kChainLevel) == 227 && chainId (0, kChainMono) == 230 && chainId (1, kChainLevel) == 235 &&
+                   chainId (2, kChainLevel) == 243 && chainId (3, kChainSpare3) == 258,
+               "saved IDs: a chain's Level, Mute, Solo, Mono, Source and three spares");
+static_assert (labSlotParam (chainSlot (0, 0), kLabType) == 259 && labSlotParam (chainSlot (0, 1), kLabType) == 347 &&
+                   labSlotParam (chainSlot (1, 0), kLabType) == 611 && labSlotParam (chainSlot (2, 0), kLabType) == 963 &&
+                   labSlotParam (postSlot (0), kLabType) == 1667 && labBlockParam (postSlot (2), 85) == 1930,
+               "saved IDs: the slots, kLabSlotFields each (Type, On, 86 block positions), chain by chain, then POST");
+// a slot's Type: Empty, then smemplr's kinds (smemplr::FxType, in its order), with room for kinds still to come (their
+// names "Kind 10" .. are placeholders; the engine runs them as Empty). The choice's length is saved: never change it.
+constexpr int kLabKinds = 32;
+// the chains' names (their parameters' and the LAB's)
+constexpr const char* kChainNames[kNumChains] = {"Mid", "High", "Air", "Chain 4"};
 
 // the SWEEP stage's eight bells (A .. H, in series in that order). A and B keep their IDs from 0.24 (Rate ..
 // Phase at kARate / kBRate, their switches at kAOn / kBOn); C .. H are On, Rate .. Phase from kCOn.
@@ -219,7 +267,7 @@ enum GestureField { kGestureChoice = 0, kGestureTarget, kGestureMode, kGestureLe
                     kGestureDepth, kGestureFields };
 constexpr uint32_t gestureId (int slot, GestureField f) { return kG1Gesture + (uint32_t)kGestureFields * (uint32_t)slot + (uint32_t)f; }
 static_assert (gestureId (3, kGestureDepth) == kIntensity - 1, "the gesture slots' IDs");
-constexpr bool isGestureParam (uint32_t id) { return id >= kG1Gesture && id < kNumParams; }
+constexpr bool isGestureParam (uint32_t id) { return id >= kG1Gesture && id <= kSceneAmount; }
 constexpr bool isSlotParam (uint32_t id) { return id >= kG1Gesture && id <= kIntensity; } // (the 0.27 slots and Intensity)
 constexpr bool isSceneParam (uint32_t id) { return id >= kScene && id <= kSceneAmount; }
 // what a slot pulls (Target). The Low band is never a target: the sub stays steady.
@@ -302,17 +350,22 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // The default a parameter had before 0.24, for a state saved before then that lacks it (State.cpp): 0.24 made
 // the SWEEP stage the default sound (Sweep on) and the rest neutral (Drive, Movement, Glue and Grit at 0).
 double legacyDefaultNormalized (uint32_t id);
-// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26; 6 0.27; 7 0.28) reads for a
+// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26; 6 0.27; 7 0.28; 8 0.29) reads for a
 // parameter it lacks: before 0.24 legacyDefaultNormalized; 0.24 and 0.25 their defaults (Sweep Drive 18 dB,
 // High Shelf on, A and B at Width 0.71 and Phase 0, so before the Ocean recipe) with the 0.26 parameters at the
 // values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
 // from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized); before 0.28 the one gesture None (its
-// default).
+// default); before 0.29 the LAB's defaults (every slot Empty, every chain at 0 dB: the sound before it).
 double defaultNormalizedForVersion (uint32_t id, int version);
 // The gestures as a state saved before 0.27 reads them: every Target Off, Wobble Amount 0 (the rest at the defaults)
 double gestureOffNormalized (uint32_t id);
 // the defaults from 0.24 to 0.25 (the SWEEP stage before the Ocean recipe; the 0.26 parameters as above)
 double defaultNormalized025 (uint32_t id);
+
+// A lab slot's name ("Mid FX 1", "Post FX 2") and the kind it is meant for (smemplr::FxType: a chain's first slot
+// Smacheratr, its second Multidyn, POST's first Multidyn, the others Empty): its block's defaults are that kind's.
+std::string labSlotName (int slot);
+int labSlotKind (int slot);
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
