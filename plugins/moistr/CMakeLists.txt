@@ -8,6 +8,8 @@ add_library(moistr_core STATIC
     src/core/Movement.cpp
     src/core/Engine.cpp
     src/core/Sweep.cpp
+    src/core/Gesture.cpp
+    src/core/GestureFile.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core)
@@ -42,6 +44,8 @@ pk_add_plugin(Moistr
         src/ui/BandView.cpp
         src/ui/SweepView.h
         src/ui/SweepView.cpp
+        src/ui/GestureView.h
+        src/ui/GestureView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )

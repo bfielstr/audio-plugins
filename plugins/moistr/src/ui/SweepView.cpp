@@ -62,7 +62,7 @@ double SweepView::shelfDb (double hz, double corner, double gainDb, double q)
 
 bool SweepView::shows (uint32_t id)
 {
-    return (id >= kSweep && id <= kShelfTilt) || (id >= kSweepCurve && id < kNumParams) || id == kSeed;
+    return (id >= kSweep && id <= kShelfTilt) || (id >= kSweepCurve && id < kG1Gesture) || id == kSeed;
 }
 
 SweepSnapshot SweepView::snapshot (const Meters* m, pk::ParamHost* host, const SweepSnapshot* held)

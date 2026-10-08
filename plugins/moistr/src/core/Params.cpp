@@ -1,6 +1,7 @@
 #include "Params.h"
 
 #include "Dsp.h"
+#include "Gesture.h"
 
 #include "smacheratr/src/core/TailExt.h"
 
@@ -132,6 +133,30 @@ const ParamTable& paramTable ()
             v.push_back (toggle (bellOnId (b), onNames[b], "On", true));
             bell (b);
         }
+        // 0.27: the gestures (four slots), Intensity and Wobble. Every Target Off and Wobble Amount 0: off.
+        std::vector<const char*> gestures;
+        for (int g = 0; g < kNumFactoryGestures; ++g)
+            gestures.push_back (factoryGestureName (g));
+        gestures.push_back ("User");
+        const std::vector<const char*> targets {"Off", "Mid Level", "High Level", "Air Level", "Wobble Rate", "Wobble Amount", "Close",
+                                                "Liquid Pos", "Dirt", "Bells", "Mid X", "High X", "Seed Blend", "Shift"};
+        // (a different gesture in each slot to start from)
+        static const int firstGesture[kNumGestureSlots] = {kGestureCellFade, kGestureStutter16, kGestureRateRise, kGestureResonantClose};
+        for (int g = 0; g < kNumGestureSlots; ++g)
+        {
+            auto name = [&] (const char* what) { return keep ("G" + std::to_string (g + 1) + " " + what); };
+            v.push_back (choice (gestureId (g, kGestureChoice), name ("Gesture"), "Gesture", gestures, firstGesture[g]));
+            v.push_back (choice (gestureId (g, kGestureTarget), name ("Target"), "Target", targets, kTargetOff));
+            v.push_back (choice (gestureId (g, kGestureMode), name ("Mode"), "Mode", {"Loop", "Walk"}, kModeLoop));
+            v.push_back (choice (gestureId (g, kGestureLength), name ("Length"), "Length", {"Own", "1/2", "1", "2", "4", "8", "16", "32"}, 0));
+            v.push_back (choice (gestureId (g, kGestureSpeed), name ("Speed"), "Speed", {"Hold", "x1/8", "x1/4", "x1/2", "x1", "x2", "x4"}, 4));
+            v.push_back (percent (gestureId (g, kGesturePosition), name ("Position"), "Position", 0.0));
+            v.push_back (percent (gestureId (g, kGestureSmooth), name ("Smooth"), "Smooth", 0.0));
+            v.push_back (real (gestureId (g, kGestureDepth), name ("Depth"), "Depth", -1.0, 1.0, 1.0, Curve::Linear, Disp::Percent));
+        }
+        v.push_back (percent (kIntensity, "Intensity", "Intensity", 1.0));
+        v.push_back (real (kWobbleRate, "Wobble Rate", "Rate", kWobbleRateMin, kWobbleRateMax, 2.0, Curve::Log, Disp::Number));
+        v.push_back (percent (kWobbleAmount, "Wobble Amount", "Amount", 0.0));
         return v;
     }());
     return t;
@@ -162,8 +187,18 @@ double defaultNormalized025 (uint32_t id)
     return defaultNormalized (id);
 }
 
+double gestureOffNormalized (uint32_t id)
+{
+    for (int g = 0; g < kNumGestureSlots; ++g)
+        if (id == gestureId (g, kGestureTarget))
+            return toNormalized (id, kTargetOff);
+    return id == kWobbleAmount ? 0.0 : defaultNormalized (id);
+}
+
 double defaultNormalizedForVersion (uint32_t id, int version)
 {
+    if (isGestureParam (id))
+        return version < 6 ? gestureOffNormalized (id) : defaultNormalized (id);
     return version < 3 ? legacyDefaultNormalized (id) : version < 5 ? defaultNormalized025 (id) : defaultNormalized (id);
 }
 

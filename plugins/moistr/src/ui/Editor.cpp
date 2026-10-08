@@ -1,6 +1,7 @@
 #include "Editor.h"
 
 #include "BandView.h"
+#include "GestureView.h"
 #include "Help.h"
 #include "SweepView.h"
 #include "plugin/Controller.h"
@@ -65,6 +66,14 @@ void Editor::onClose ()
         bellKnobs[b].clear ();
     }
     liquidKnobs.clear ();
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        slotViews[g].clear ();
+        slotControls[g].clear ();
+        speedViews[g] = nullptr;
+    }
+    wobbleKnobs.clear ();
+    gestureView = nullptr;
     latencyLabel = nullptr;
     tail.reset ();
 }
@@ -291,6 +300,73 @@ void Editor::buildUI (CFrame* f)
     root->addView (out);
     knobs (out, kOutRight - kOutLeft, {{kMix}, {kOutput, true}});
 
+    // the gestures: a slot picker (1 .. 4) and File (a user gesture for the picked slot); the picked slot's
+    // Gesture and Target, Mode, Length and Speed, Position, Smooth and Depth; Intensity for all of them
+    auto* gestures = new Panel (CRect (kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH), "GESTURES");
+    root->addView (gestures);
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        static const char* const numbers[kNumGestureSlots] = {"1", "2", "3", "4"};
+        const double x = kSwitchLeft + kSlotCellW * g, xr = x + kSlotCellW - 2.0;
+        auto* pick = new ActionButton (CRect (x, kSlotTop, xr, kSlotTop + kSlotRowH), numbers[g], [this, g] { pickSlot (g); },
+                                       [this, g] { return pickedSlot == g; });
+        pk::setHelp (pick, "Slot", help::kGestureSlots);
+        gestures->addView (pick);
+        auto keep = [&] (pk::ParamView* v, bool dims = true) {
+            slotViews[g].push_back (v);
+            if (dims)
+                slotControls[g].push_back (v);
+            return v;
+        };
+        auto label = [&] (double x0, double y, double w, const char* t) {
+            auto* l = new Label (CRect (x0, y + 3.0, x0 + w, y + 3.0 + 14.0), t, 9.5);
+            gestures->addView (l);
+            slotViews[g].push_back (l);
+        };
+        label (kSwitchLeft, kGestureMenuTop, kGestureLabelW, "Gesture");
+        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureMenuTop, kGestureMenuRight, kGestureMenuTop + kSwitchH),
+                                              this, gestureId (g, kGestureChoice))));
+        label (kSwitchLeft, kGestureTargetTop, kGestureLabelW, "Target");
+        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureTargetTop, kGestureMenuRight, kGestureTargetTop + kSwitchH),
+                                              this, gestureId (g, kGestureTarget))),
+              false);
+        keep (bind (gestures, new Segmented (CRect (kGestureColLeft, kSlotTop, kGestureColRight, kSlotTop + kSlotRowH), this, gestureId (g, kGestureMode),
+                                             {"Loop", "Walk"})));
+        label (kGestureColLeft, kGestureMenuTop, kGestureColLabelW, "Length");
+        keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureMenuTop, kGestureColRight, kGestureMenuTop + kSwitchH),
+                                              this, gestureId (g, kGestureLength))));
+        label (kGestureColLeft, kGestureTargetTop, kGestureColLabelW, "Speed");
+        speedViews[g] = keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureTargetTop, kGestureColRight,
+                                                                     kGestureTargetTop + kSwitchH),
+                                                              this, gestureId (g, kGestureSpeed))));
+        int i = 0;
+        for (GestureField f : {kGesturePosition, kGestureSmooth, kGestureDepth})
+        {
+            const double kx = kGestureKnobLeft + kKnobStep * i++;
+            keep (bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, gestureId (g, f), nullptr, f == kGestureDepth)));
+        }
+    }
+    auto* file = new ActionButton (CRect (kGestureFileLeft, kSlotTop, kGestureMenuRight, kSlotTop + kSlotRowH), "File",
+                                   [this] { showGestureFiles (layoutPoint (CPoint (kGesturesLeft + kGestureFileLeft, kRow4 + kSlotTop + kSlotRowH))); });
+    pk::setHelp (file, "File", help::kGestureFile);
+    gestures->addView (file);
+    {
+        const double kx = kGestureKnobLeft + kKnobStep * 3;
+        bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, kIntensity));
+    }
+
+    // Wobble: the tremolo on the bands above Low (its rate in cycles per beat, how deep)
+    auto* wobble = new Panel (CRect (kWobbleLeft, kRow4, kWobbleRight, kRow4 + kRowH), "WOBBLE");
+    root->addView (wobble);
+    wobbleKnobs = knobs (wobble, kWobbleRight - kWobbleLeft, {{kWobbleRate}, {kWobbleAmount}});
+
+    gestureView = new GestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH)), this,
+                                   [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
+                                   [this] { return pickedSlot; },
+                                   [c = ctl] (int g) -> const GestureData* { return &c->userGesture (g); });
+    pk::setHelp (gestureView, "Gesture", help::kGestureView);
+    root->addView (gestureView);
+
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
@@ -299,6 +375,7 @@ void Editor::buildUI (CFrame* f)
 
     applyParamTooltips (&help::forParam);
     pickBell (pickedBell);
+    pickSlot (pickedSlot);
     updateLooks ();
     idle ();
 }
@@ -313,8 +390,51 @@ void Editor::pickBell (int b)
         frame->invalid ();
 }
 
+void Editor::pickSlot (int g)
+{
+    pickedSlot = std::clamp (g, 0, kNumGestureSlots - 1);
+    for (int i = 0; i < kNumGestureSlots; ++i)
+        for (CView* v : slotViews[i])
+            v->setVisible (i == pickedSlot);
+    if (gestureView)
+        gestureView->invalid ();
+    if (frame)
+        frame->invalid ();
+}
+
+void Editor::showGestureFiles (CPoint where)
+{
+    if (!frame)
+        return;
+    auto menu = makeOwned<COptionMenu> ();
+    const auto files = ctl->gestureFiles ();
+    for (const auto& f : files)
+        menu->addEntry (f.name.c_str ());
+    if (files.empty ())
+        menu->addEntry ("No gesture files in the Gestures folder", -1, CMenuItem::kDisabled);
+    menu->addSeparator ();
+    const int slot = pickedSlot;
+    const bool loaded = !ctl->userGesture (slot).empty ();
+    menu->addEntry ("Clear the User Gesture", -1, loaded ? CMenuItem::kNoFlags : CMenuItem::kDisabled);
+    menu->popup (frame, where, [this, files, slot] (COptionMenu* m) {
+        const int32_t r = m->getLastResult ();
+        if (r >= 0 && r < (int32_t)files.size ())
+        {
+            std::string error;
+            if (!ctl->loadUserGesture (slot, files[(size_t)r].path, error) && gestureView)
+                gestureView->setNote (files[(size_t)r].name + ": " + error);
+        }
+        else if (r == (int32_t)std::max<size_t> (files.size (), 1) + 1)
+            ctl->clearUserGesture (slot);
+        if (gestureView)
+            gestureView->invalid ();
+    });
+}
+
 bool Editor::affectsLooks (uint32_t id)
 {
+    if (isGestureParam (id))
+        return true;
     if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
         id == kCleanSub || id == kSubBoost)
         return true;
@@ -349,6 +469,19 @@ void Editor::updateLooks ()
         v->setEnabledLook (sweeping && plainValue (kCleanSub) >= 0.5);
     for (pk::ParamView* v : boostControls)
         v->setEnabledLook (sweeping && plainValue (kSubBoost) >= 0.5);
+    bool wobbleDriven = plainValue (kWobbleAmount) > 0.0;
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        const int target = (int)std::lround (plainValue (gestureId (g, kGestureTarget)));
+        const bool on = target != kTargetOff, walk = std::lround (plainValue (gestureId (g, kGestureMode))) == kModeWalk;
+        wobbleDriven = wobbleDriven || target == kTargetWobbleAmount;
+        for (pk::ParamView* v : slotControls[g])
+            v->setEnabledLook (on);
+        if (speedViews[g])
+            speedViews[g]->setEnabledLook (on && walk);
+    }
+    for (Knob* k : wobbleKnobs)
+        k->setEnabledLook (wobbleDriven);
     for (int b = 0; b < kNumBells; ++b)
     {
         const bool on = sweeping && plainValue (bellOnId (b)) >= 0.5, synced = plainValue (bellId (b, kBellSync)) >= 0.5;
@@ -373,6 +506,8 @@ void Editor::paramChanged (uint32_t id)
         sweepView->idle ();
         sweepView->invalid ();
     }
+    if (gestureView && isGestureParam (id))
+        gestureView->invalid ();
     if (display && BandView::shows (id))
     {
         display->idle (); // (the snapshot: levels, crossovers, bands)
@@ -388,6 +523,8 @@ void Editor::idle ()
         display->idle ();
     if (sweepView)
         sweepView->idle ();
+    if (gestureView)
+        gestureView->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
@@ -430,7 +567,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // and the end saturator in a row of its own at the bottom
+    // a row of the gestures (gestures, wobble, the gesture display) and the end saturator in a row of its own at the
+    // bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
         {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
@@ -450,7 +588,10 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"low", "", {kLowLeft, kRow3, kLowRight, kRow3 + kRowH}, 2},
         {"extreme", "", {kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH}, 2},
         {"liquid", "", {kLiquidLeft, kRow3, kLiquidRight, kRow3 + kRowH}, 2},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 3, -1, true},
+        {"gestures", "", {kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH}, 3},
+        {"wobble", "", {kWobbleLeft, kRow4, kWobbleRight, kRow4 + kRowH}, 3},
+        {"gestureview", "gesture", {kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH}, 3, -1, true},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 4, -1, true},
     };
     return s;
 }

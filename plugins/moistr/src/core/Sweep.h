@@ -50,6 +50,14 @@
 // every time. Switching Sweep, High Shelf, Clean Sub, Sub Boost or Tone fades over 20 ms. With Sweep off the
 // stage is not run at all (moistr is then 0.23's, bit for bit); with bells C .. H, Clean Sub, Sub Boost and
 // Tone off and Curve Hard it is 0.25's, bit for bit.
+//
+// Taps (0.27, for the gestures' Dirt and Bells targets; only worked out when asked for, so without them the
+// stage is exactly as before): two more versions of the stage's output, each level matched to it, from the same
+// filters' states and the same Tone corner (with filters of their own):
+//   clean  the bells and the High Shelf without the saturator, at the make-up the saturator's input would have
+//          (10^(-average bells' gain / 20): about as loud as the saturated sound)
+//   bare   the saturator (and Tone) without the bells and the shelf, at its make-up for flat bells
+// Clean Sub and Sub Boost (the lows) are left out of both: the taps are only used above the Low crossover.
 #pragma once
 
 #include "Dsp.h"
@@ -89,10 +97,17 @@ struct ShelfOrbit
     void at (double th, double wander, double& u, double& v) const;
 };
 
+// the taps' samples for one tick (both channels)
+struct SweepTaps
+{
+    double clean[2][16] {}, bare[2][16] {};
+};
+
 class Sweep
 {
 public:
     static constexpr int kTick = 16;
+    static_assert (kTick == 16, "SweepTaps holds a tick");
     static constexpr int kShelfIdx = kNumBells; // the shelf's place in the per-filter arrays (after the bells)
     static constexpr int kFilters = kNumBells + 1;
 
@@ -103,8 +118,8 @@ public:
     // where the clocks are for the next block: while the host plays, from the song position (relocate: playback
     // started or jumped, so the free clocks are set from it too); then they run on by n samples per block
     void beginBlock (const double* p, bool playing, bool relocate, double songPpq, double bpm);
-    // one tick of m <= kTick samples, in place
-    void tick (const double* p, double* l, double* r, int m);
+    // one tick of m <= kTick samples, in place (taps: also the clean and bare versions, else nullptr)
+    void tick (const double* p, double* l, double* r, int m, SweepTaps* taps = nullptr);
     // run at all (on, or fading out): when false, tick does nothing
     bool running (const double* p) const { return p[kSweep] >= 0.5 || fade > 0.0; }
 
@@ -155,6 +170,8 @@ private:
     double hz[kFilters] {};
     Coefs prev[kFilters], now[kFilters];
     double gPrev = 1.0, gNow = 1.0, compPrev = 1.0, compNow = 1.0, avgNow = 0.0;
+    // the taps' gains: clean's make-up (10^(-avgNow / 20)) and bare's (the saturator's for flat bells)
+    double cleanPrev = 1.0, cleanNow = 1.0, barePrev = 1.0, bareNow = 1.0;
     static constexpr int kKeySize = 4 * kNumBells + 3;
     double compKey[kKeySize] {}; // (the settings the make-up was worked out for)
     double levelMs = kSweepRefRms * kSweepRefRms, levelCoef = 0.0;
@@ -171,6 +188,8 @@ private:
     dsp::Svf filt[kFilters][2], tone[2], boostLp[2][2];
     dsp::Lr4Split split[2];
     dsp::AdaaTanh sat[2], satHigh[2], splitSat[2]; // (sat: all of it; satHigh: above Clean Sub's split; splitSat: below)
+    dsp::AdaaTanh satBare[2]; // (the taps: bare's saturator, and Tone for clean and bare)
+    dsp::Svf toneClean[2], toneBare[2];
     ShelfOrbit orbit, oldOrbit; // (oldOrbit: fading out after a Seed change while orbitFade < 1)
     double orbitFade = 1.0, lastBpm = 120.0;
 };

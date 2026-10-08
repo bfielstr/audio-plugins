@@ -6,7 +6,11 @@
 
 #include "pluginterfaces/vst/ivstmessage.h"
 
+#include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 namespace moistr {
 
@@ -33,7 +37,91 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
         return kResultFalse;
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParamNormalized (id, st.norm[id]);
+    user = st.user; // (the processor has them from its own state)
+    refreshEditor ();
     return kResultOk;
+}
+
+std::string Controller::gestureFolder () const
+{
+    const std::string base = presetFolder ();
+    return base.empty () ? std::string () : (std::filesystem::path (base) / "Gestures").string ();
+}
+
+std::vector<Controller::GestureFileItem> Controller::gestureFiles () const
+{
+    namespace fs = std::filesystem;
+    std::vector<GestureFileItem> out;
+    std::error_code ec;
+    const std::string folder = gestureFolder ();
+    if (folder.empty () || !fs::is_directory (folder, ec))
+        return out;
+    for (const auto& e : fs::directory_iterator (folder, ec))
+    {
+        const fs::path& p = e.path ();
+        std::string ext = p.extension ().string ();
+        std::transform (ext.begin (), ext.end (), ext.begin (), [] (unsigned char c) { return (char)std::tolower (c); });
+        if (ext == ".json" && e.is_regular_file (ec) && !p.filename ().string ().empty () && p.filename ().string ()[0] != '.')
+            out.push_back ({p.stem ().string (), p.string ()});
+    }
+    std::sort (out.begin (), out.end (), [] (const GestureFileItem& a, const GestureFileItem& b) { return a.name < b.name; });
+    return out;
+}
+
+bool Controller::loadUserGesture (int slot, const std::string& path, std::string& error)
+{
+    if (slot < 0 || slot >= kNumGestureSlots)
+        return false;
+    std::ifstream f (std::filesystem::path (path), std::ios::binary);
+    if (!f)
+    {
+        error = "cannot open the file";
+        return false;
+    }
+    std::stringstream text;
+    text << f.rdbuf ();
+    GestureData g;
+    Gesture check;
+    if (!parseGestureJson (text.str (), std::filesystem::path (path).stem ().string (), g, error))
+        return false;
+    if (!toGesture (g, check))
+    {
+        error = "not a curve moistr can play";
+        return false;
+    }
+    user[(size_t)slot] = std::move (g);
+    sendUserGesture (slot);
+    setPlainFromUI (gestureId (slot, kGestureChoice), kUserGesture);
+    markDirty ();
+    refreshEditor ();
+    return true;
+}
+
+void Controller::clearUserGesture (int slot)
+{
+    if (slot < 0 || slot >= kNumGestureSlots)
+        return;
+    user[(size_t)slot] = {};
+    sendUserGesture (slot);
+}
+
+void Controller::sendUserGesture (int slot)
+{
+    if (auto msg = owned (allocateMessage ()))
+    {
+        msg->setMessageID (kGestureMessageId);
+        msg->getAttributes ()->setInt (kGestureSlotAttr, slot);
+        const std::string json = user[(size_t)slot].empty () ? std::string () : gestureJson (user[(size_t)slot]);
+        msg->getAttributes ()->setBinary (kGestureJsonAttr, json.data (), (uint32)json.size ());
+        sendMessage (msg);
+    }
+}
+
+void Controller::resetExtraState ()
+{
+    for (int g = 0; g < kNumGestureSlots; ++g)
+        if (!user[(size_t)g].empty ())
+            clearUserGesture (g);
 }
 
 IPlugView* PLUGIN_API Controller::createView (FIDString name)

@@ -64,6 +64,7 @@ void Engine::PassState::resetShifter ()
 
 Engine::Engine ()
 {
+    flatGesture.flat (1.0);
     drive.maxDb = 18.0;
     for (auto& s : state)
         s.grit.maxDb = 24.0;
@@ -198,6 +199,8 @@ void Engine::liquidTargets (double th, bool snap)
         liquidAt (th, pos, logRatio);
         if (link > 0.0) // (with Link F1 rises as the bands open)
             pos += link * kLinkFollow * (state[0].sharedLift - pos);
+        if (gestActive && targeted (kTargetLiquid)) // (a gesture moving it)
+            pos = pulled (kTargetLiquid, std::clamp (pos, 0.0, 1.0));
         double lo = std::exp2 (logLiqLo), hi = std::exp2 (logLiqHi);
         if (lo > hi)
             std::swap (lo, hi);
@@ -245,7 +248,7 @@ void Engine::reset ()
     depth = std::max (0.0, p[kDepth]);
     logRise = std::log2 (std::clamp (p[kRise], 0.01, 100.0));
     logFall = std::log2 (std::clamp (p[kFall], 0.01, 100.0));
-    blend = std::clamp (p[kSeedBlend], 0.0, 1.0);
+    blend = blendBase = std::clamp (p[kSeedBlend], 0.0, 1.0);
     logSpeed = std::log2 (std::clamp (p[kSpeed], 1.0, 16.0));
     lowPush = std::clamp (p[kLowPush], 0.0, 12.0);
     lowDip = std::clamp (p[kLowDip], 0.0, 6.0);
@@ -253,7 +256,7 @@ void Engine::reset ()
     xfade = 1.0;
     running = false;
     airOwn = bandCount () == 4 ? 1.0 : 0.0;
-    shiftHz = shiftHzPrev = std::clamp (p[kShift], -2000.0, 2000.0);
+    shiftHz = shiftHzPrev = shiftBase = std::clamp (p[kShift], -2000.0, 2000.0);
     shiftMix = shiftMixPrev = std::clamp (p[kShiftMix], 0.0, 1.0);
     shiftFade = shiftFadePrev = p[kShiftOn] >= 0.5 ? 1.0 : 0.0;
     link = std::clamp (p[kLink], 0.0, 1.0);
@@ -264,6 +267,19 @@ void Engine::reset ()
     secPerCycle = cycleSeconds ();
     theta = 0.0;
     wasPlaying = false;
+    // the gestures at the start, every one at its value
+    gBeats = gBeatsNow = 0.0;
+    logWobRate = std::log2 (std::clamp (p[kWobbleRate], kWobbleRateMin, kWobbleRateMax));
+    wobBase = std::clamp (p[kWobbleAmount], 0.0, 1.0);
+    wobPhase = wobPhasePrev = 0.0;
+    closeNow = closePrev = {};
+    pullDirt = pullDirtPrev = pullBells = pullBellsPrev = 0.0;
+    for (int c = 0; c < 2; ++c)
+    {
+        closeLp[c].reset ();
+        auxSplit[c].reset ();
+    }
+    gestureTick (0, 0.0, true);
     sweep.reset (p.data ());
     drive.reset ();
     for (int k = 0; k < kMaxPasses; ++k)
@@ -324,6 +340,8 @@ void Engine::setParam (uint32_t id, double plain)
 void Engine::setTransport (double tempo, double ppq, bool isPlaying)
 {
     bpm = tempo > 1.0 ? tempo : 120.0;
+    if (tempo > 1.0)
+        gBpm = tempo; // (the gestures run on at the last tempo the host gave)
     songPpq = ppq;
     playing = isPlaying;
     transportSet = true;
@@ -336,8 +354,8 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
     const double fMax = 0.45 * sr, span = std::exp2 (kMinSpanOct);
     double f[kMaxXovers];
     f[0] = std::min (std::exp2 (logX[0]), fMax / (span * span));
-    f[1] = std::exp2 (logX[1] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 1, th) : 0.0));
-    f[2] = std::exp2 (logX[2] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 2, th) : 0.0));
+    f[1] = std::exp2 (logX[1] + gestX[1] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 1, th) : 0.0));
+    f[2] = std::exp2 (logX[2] + gestX[2] + (move > 0.0 ? move * kXoverDriftOctaves * driftAt (pass, 2, th) : 0.0));
     f[1] = std::clamp (f[1], f[0] * span, fMax / span);
     f[2] = std::clamp (f[2], f[1] * span, fMax);
     for (int x = 0; x < kMaxXovers; ++x)
@@ -358,10 +376,14 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
         if (b == kBandLow)
         {
             const double up = move * lowPush, down = move * lowDip;
+            // (the Low band's events with Seed Blend's own value: a gesture on it moves the other bands only)
+            const double keep = blend;
+            blend = blendBase;
             if (up > 0.0)
                 db += up * liftAt (pass, b, th, false);
             if (down > 0.0)
                 db -= down * liftAt (pass, b, th, true);
+            blend = keep;
         }
         else
         {
@@ -391,6 +413,8 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
             glide (s.dbNow[b], db, gainSmooth);
         const bool off = (p[kLevelIds[b]] <= kLevelOffDb && levelDb[b] <= kOffTarget + 1.0) || (dropOut > 0.0 && s.dbNow[b] <= kSilentDb);
         gain[b] = off ? 0.0 : std::pow (10.0, s.dbNow[b] / 20.0);
+        if (pass == 0 && gLevel[b] != 1.0)
+            gain[b] *= gLevel[b]; // (a gesture on the band's level)
         s.lift[b] = lift;
     }
     // with 3 bands Air follows High (High + Air: the whole band above Mid X)
@@ -402,6 +426,195 @@ void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
     }
     for (int b = 0; b < kMaxBands; ++b)
         s.gainDb[b] = gain[b] > 0.0 ? 20.0 * std::log10 (gain[b]) : kOffTarget;
+}
+
+const Gesture& Engine::gestureOf (int g) const
+{
+    const int choice = std::clamp ((int)std::lround (p[gestureId (g, kGestureChoice)]), 0, kUserGesture);
+    if (choice == kUserGesture)
+        return user[g] ? *user[g] : flatGesture;
+    return factoryGesture (choice);
+}
+
+double Engine::pulled (int target, double base) const
+{
+    for (const SlotRun& r : slot)
+        if (r.target == target && r.k > 0.0)
+            base += (r.shaped - base) * r.k;
+    return base;
+}
+
+bool Engine::targeted (int target) const
+{
+    for (const SlotRun& r : slot)
+        if (r.target == target && r.k > 0.0)
+            return true;
+    return false;
+}
+
+void Engine::gestureTick (int m, double beats, bool snap)
+{
+    // the slots: each at its place in its gesture, its value smoothed; a change of Target fades it out first
+    gBeatsNow = beats;
+    const double intensity = std::clamp (p[kIntensity], 0.0, 1.0), fadeStep = (double)std::max (m, 1) / (0.02 * sr);
+    bool pulling = false;
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        SlotRun& r = slot[g];
+        const int want = std::clamp ((int)std::lround (p[gestureId (g, kGestureTarget)]), 0, kNumTargets - 1);
+        const double depth = std::clamp (p[gestureId (g, kGestureDepth)], -1.0, 1.0);
+        const double k = want == kTargetOff ? 0.0 : std::fabs (depth) * intensity;
+        if (snap)
+        {
+            r.target = want;
+            r.k = k;
+            r.primed = false;
+        }
+        else if (want != r.target)
+        {
+            r.k = std::max (0.0, r.k - fadeStep);
+            if (r.k <= 0.0 || r.target == kTargetOff)
+            {
+                r.k = 0.0;
+                r.target = want;
+                r.primed = false;
+            }
+        }
+        else
+            glide (r.k, k, tickSmooth);
+        if (r.target == kTargetOff)
+        {
+            r.k = 0.0;
+            continue;
+        }
+        const Gesture& ge = gestureOf (g);
+        const int lengthChoice = std::clamp ((int)std::lround (p[gestureId (g, kGestureLength)]), 0, kNumGestureLengths - 1);
+        const double length = lengthChoice == 0 ? ge.length : kGestureLengthBeats[lengthChoice];
+        const int speedChoice = std::clamp ((int)std::lround (p[gestureId (g, kGestureSpeed)]), 0, kNumGestureSpeeds - 1);
+        const int mode = std::lround (p[gestureId (g, kGestureMode)]) == kModeWalk ? kModeWalk : kModeLoop;
+        r.pos = gesturePosition (mode, beats, length, kGestureSpeeds[speedChoice], std::clamp (p[gestureId (g, kGesturePosition)], 0.0, 1.0));
+        const double raw = ge.at (r.pos * ge.length);
+        if (!r.primed)
+        {
+            r.s = raw;
+            r.primed = true;
+        }
+        else
+        {
+            // Smooth: a one-pole from 2 ms (0) to a 1/16 beat (1)
+            const double smooth = std::clamp (p[gestureId (g, kGestureSmooth)], 0.0, 1.0);
+            const double longest = std::max (kSmoothMaxBeats * 60.0 / gBpm, kSmoothMinSec);
+            const double tau = kSmoothMinSec + (longest - kSmoothMinSec) * smooth;
+            r.s += (raw - r.s) * (1.0 - std::exp (-(double)m / (tau * sr)));
+        }
+        r.shaped = depth >= 0.0 ? r.s : 1.0 - r.s;
+        pulling = pulling || r.k > 0.0;
+    }
+    // Wobble's own settings glide; it runs while it or a gesture on it is up
+    if (snap)
+    {
+        logWobRate = std::log2 (std::clamp (p[kWobbleRate], kWobbleRateMin, kWobbleRateMax));
+        wobBase = std::clamp (p[kWobbleAmount], 0.0, 1.0);
+    }
+    else
+    {
+        glide (logWobRate, std::log2 (std::clamp (p[kWobbleRate], kWobbleRateMin, kWobbleRateMax)), tickSmooth);
+        glide (wobBase, std::clamp (p[kWobbleAmount], 0.0, 1.0), tickSmooth);
+    }
+    const bool wobbling = wobBase > 0.0 || wobAmt > 0.0;
+    gestActive = pulling || wobbling || closeNow.mix > 0.0 || pullDirt > 0.0 || pullBells > 0.0;
+    // what they do this tick (all at rest while none runs: the engine is then 0.26's, bit for bit)
+    for (int b = 0; b < kMaxBands; ++b)
+        gLevel[b] = 1.0;
+    gestX[1] = gestX[2] = 0.0;
+    if (!gestActive)
+    {
+        wobPhasePrev = wobPhase;
+        wobAmtPrev = wobAmt = 0.0;
+        wobGain = 1.0;
+        return;
+    }
+    static constexpr int kLevelTargets[kMaxBands] = {kTargetOff, kTargetMidLevel, kTargetHighLevel, kTargetAirLevel};
+    for (int b = kBandMid; b < kMaxBands; ++b)
+        if (targeted (kLevelTargets[b]))
+        {
+            // 1: at its Level; down a dB scale to -kGestureLevelDb, fading to silence over the last part
+            const double v = std::clamp (pulled (kLevelTargets[b], 1.0), 0.0, 1.0);
+            gLevel[b] = v >= 1.0 ? 1.0 : std::pow (10.0, -kGestureLevelDb * (1.0 - v) / 20.0) * std::min (1.0, v * kLevelFadeShare);
+        }
+    // the controls a gesture moves over their range
+    auto overRange = [this] (int target, uint32_t id, double plain) {
+        return paramTable ().toPlain (id, pulled (target, paramTable ().toNormalized (id, plain)));
+    };
+    if (targeted (kTargetMidX))
+        gestX[1] = std::log2 (overRange (kTargetMidX, kXoverMid, std::exp2 (logX[1]))) - logX[1];
+    if (targeted (kTargetHighX))
+        gestX[2] = std::log2 (overRange (kTargetHighX, kXoverHigh, std::exp2 (logX[2]))) - logX[2];
+    if (targeted (kTargetSeedBlend))
+        blend = std::clamp (pulled (kTargetSeedBlend, blendBase), 0.0, 1.0);
+    if (targeted (kTargetShift))
+        shiftHz = overRange (kTargetShift, kShift, shiftBase);
+    // Wobble: the phase runs on by the rate x the beats of this tick (the integral of the rate: no jumps)
+    {
+        const double lo = std::log2 (kWobbleRateMin), hi = std::log2 (kWobbleRateMax);
+        double n = (logWobRate - lo) / (hi - lo);
+        if (targeted (kTargetWobbleRate))
+            n = std::clamp (pulled (kTargetWobbleRate, n), 0.0, 1.0);
+        wobRate = std::exp2 (lo + (hi - lo) * n);
+        wobAmtPrev = wobAmt;
+        wobAmt = std::clamp (pulled (kTargetWobbleAmount, wobBase), 0.0, 1.0);
+        if (snap)
+            wobAmtPrev = wobAmt;
+        wobPhasePrev = wobPhase;
+        wobPhase += wobRate * (double)m * gBpm / 60.0 / sr;
+        if (wobPhase >= 1.0)
+        {
+            const double whole = std::floor (wobPhase);
+            wobPhase -= whole;
+            wobPhasePrev -= whole;
+        }
+        wobGain = 1.0 - wobAmt * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * wobPhase));
+    }
+    // Close: from Tone's corner (open) down kCloseOctaves, its Q rising with it
+    closePrev = closeNow;
+    {
+        const double c = 1.0 - std::clamp (pulled (kTargetClose, 1.0), 0.0, 1.0);
+        if (c > 0.0)
+        {
+            const double open = std::min (p[kToneOn] >= 0.5 ? std::clamp (p[kTone], kToneMin, kToneMax) : kCloseOpenHz, 0.45 * sr);
+            closeHzNow = std::max (open * std::exp2 (-kCloseOctaves * c), 30.0);
+            closeNow.g = std::tan (dsp::kPi * closeHzNow / sr);
+            const double q = dsp::kSqrt2 * 0.5 * std::pow (kCloseQ * dsp::kSqrt2, c); // (1 / sqrt 2 .. kCloseQ)
+            closeNow.k = 1.0 / q;
+            closeNow.mix = std::min (1.0, 20.0 * c);
+        }
+        else
+            closeNow.mix = 0.0;
+        if (snap || closePrev.mix <= 0.0)
+        {
+            // (from open: the filter starts where it is now, fading in by its mix alone)
+            const double mix = closePrev.mix;
+            closePrev = closeNow;
+            if (!snap)
+                closePrev.mix = mix;
+        }
+    }
+    // Dirt and Bells: how far the bands above Low go to the clean and bare taps (together at most all the way)
+    pullDirtPrev = pullDirt;
+    pullBellsPrev = pullBells;
+    pullDirt = 1.0 - std::clamp (pulled (kTargetDirt, 1.0), 0.0, 1.0);
+    pullBells = 1.0 - std::clamp (pulled (kTargetBells, 1.0), 0.0, 1.0);
+    if (pullDirt + pullBells > 1.0)
+    {
+        const double sum = pullDirt + pullBells;
+        pullDirt /= sum;
+        pullBells /= sum;
+    }
+    if (snap)
+    {
+        pullDirtPrev = pullDirt;
+        pullBellsPrev = pullBells;
+    }
 }
 
 void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
@@ -418,7 +631,12 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
             c[x].set (g1[x], dsp::kSqrt2);
     const bool shifting = shiftFade > 0.0 || shiftFadePrev > 0.0;
     const bool liquidOn = liqNow.a1 > 0.0 || liqPrev.a1 > 0.0;
-    if (shifting || liquidOn)
+    // the gestures' paths on the bands above Low (pass 1 only): the taps' second split, Close, Wobble
+    const bool first = pass == 0 && gestActive;
+    const bool auxOn = first && (pullDirt > 0.0 || pullDirtPrev > 0.0 || pullBells > 0.0 || pullBellsPrev > 0.0);
+    const bool closeOn = first && (closeNow.mix > 0.0 || closePrev.mix > 0.0);
+    const bool wobbleOn = first && (wobAmt > 0.0 || wobAmtPrev > 0.0);
+    if (shifting || liquidOn || auxOn || closeOn || wobbleOn)
     {
         // Liquid and the shifter on the bands above Low (the Low band, and so everything below Low X, untouched)
         const LiquidCoefs& la = liqPrev;
@@ -446,6 +664,18 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
                 else if (s.shiftPhase < -dsp::kPi)
                     s.shiftPhase += 2.0 * dsp::kPi;
             }
+            double wob = 1.0, closeMix = 0.0;
+            dsp::SvfCoefs cc;
+            if (wobbleOn)
+            {
+                const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
+                wob = 1.0 - a * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * ph));
+            }
+            if (closeOn)
+            {
+                cc.set (closePrev.g + (closeNow.g - closePrev.g) * t, closePrev.k + (closeNow.k - closePrev.k) * t);
+                closeMix = closePrev.mix + (closeNow.mix - closePrev.mix) * t;
+            }
             dsp::SvfCoefs lc1, lc2;
             double a1 = 0.0, a2 = 0.0;
             if (liquidOn)
@@ -462,12 +692,25 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
             {
                 double band[kMaxBands];
                 s.split[ch].tick (*io[ch], c, band);
+                if (auxOn)
+                {
+                    // (Dirt, Bells: the difference to the taps, split with the same corners, on the bands above Low)
+                    double z[kMaxBands];
+                    auxSplit[ch].tick (aux[ch][i], c, z);
+                    band[1] += z[1];
+                    band[2] += z[2];
+                    band[3] += z[3];
+                }
                 double up = gain[1] * band[1] + gain[2] * band[2] + gain[3] * band[3];
                 if (liquidOn)
                 {
                     up += a1 * s.liq1[ch].tick (up, lc1).bp;
                     up += a2 * s.liq2[ch].tick (up, lc2).bp;
                 }
+                if (closeOn)
+                    up += (closeLp[ch].tick (up, cc).lp - up) * closeMix;
+                if (wobbleOn)
+                    up *= wob;
                 if (!shifting)
                 {
                     *io[ch] = gain[0] * band[0] + up;
@@ -514,6 +757,18 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const double beats = kSyncBeats[std::clamp ((int)std::lround (p[kSyncRate]), 0, kNumSyncRates - 1)];
     const double rate = p[kRate];
     const bool relocate = playing && (!wasPlaying || std::fabs (songPpq - expectPpq) > 1e-3);
+    // the gestures' clock: the song position while the host plays, else running on at the last tempo; Wobble's
+    // phase set from it when playback starts (so a render from the same place is the same)
+    if (playing)
+    {
+        gBeats = songPpq;
+        if (!wasPlaying)
+        {
+            const double ph = songPpq * wobRate;
+            wobPhase = wobPhasePrev = ph - std::floor (ph);
+        }
+    }
+    const double beatsPerSample = gBpm / 60.0 / sr;
     sweep.beginBlock (p.data (), playing, relocate, songPpq, bpm);
     // where the movement is: on the song's timeline while the host plays (synced: locked to it; free: set
     // from it when playback starts or jumps, then running at Rate), else running on its own
@@ -573,7 +828,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (depth, std::max (0.0, p[kDepth]), tickSmooth);
         glide (logRise, targetRise, tickSmooth);
         glide (logFall, targetFall, tickSmooth);
-        glide (blend, std::clamp (p[kSeedBlend], 0.0, 1.0), tickSmooth);
+        glide (blendBase, std::clamp (p[kSeedBlend], 0.0, 1.0), tickSmooth);
+        blend = blendBase; // (a gesture may move it: gestureTick)
         glide (logSpeed, std::log2 (std::clamp (p[kSpeed], 1.0, 16.0)), tickSmooth);
         glide (lowPush, std::clamp (p[kLowPush], 0.0, 12.0), tickSmooth);
         glide (lowDip, std::clamp (p[kLowDip], 0.0, 6.0), tickSmooth);
@@ -586,7 +842,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         shiftHzPrev = shiftHz;
         shiftMixPrev = shiftMix;
         shiftFadePrev = shiftFade;
-        glide (shiftHz, std::clamp (p[kShift], -2000.0, 2000.0), tickSmooth);
+        glide (shiftBase, std::clamp (p[kShift], -2000.0, 2000.0), tickSmooth);
+        shiftHz = shiftBase; // (a gesture may move it: gestureTick)
         glide (shiftMix, std::clamp (p[kShiftMix], 0.0, 1.0), tickSmooth);
         shiftFade = std::clamp (shiftFade + (shiftOn ? fadeStep : -fadeStep), 0.0, 1.0);
         glide (link, std::clamp (p[kLink], 0.0, 1.0), tickSmooth);
@@ -595,7 +852,21 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (logLiqLo, std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0)), tickSmooth);
         glide (logLiqHi, std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0)), tickSmooth);
 
-        sweep.tick (p.data (), wl, wr, m); // (off: not run)
+        // the gestures at this tick's end
+        gestureTick (m, gBeats + (double)(a + m) * beatsPerSample, false);
+        const bool tapping = gestActive && (pullDirt > 0.0 || pullDirtPrev > 0.0 || pullBells > 0.0 || pullBellsPrev > 0.0);
+        sweep.tick (p.data (), wl, wr, m, tapping ? &taps : nullptr); // (off: not run)
+        if (tapping)
+        {
+            // Dirt and Bells: what takes the stage's output to the clean and bare taps (split in pass 1)
+            for (int i = 0; i < m; ++i)
+            {
+                const double t = (double)(i + 1) / m;
+                const double pd = pullDirtPrev + (pullDirt - pullDirtPrev) * t, pb = pullBellsPrev + (pullBells - pullBellsPrev) * t;
+                aux[0][i] = pd * (taps.clean[0][i] - wl[i]) + pb * (taps.bare[0][i] - wl[i]);
+                aux[1][i] = pd * (taps.clean[1][i] - wr[i]) + pb * (taps.bare[1][i] - wr[i]);
+            }
+        }
         drive.process (wl, wr, m);
         const double thetaEnd = theta + dTheta * m;
         const bool runSecond = twoPasses || pass2 > 0.0;
@@ -628,6 +899,19 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         if (liqNow.a1 <= 0.0 && liqPrev.a1 > 0.0)
             for (auto& s : state)
                 s.resetLiquid ();
+        // (the gestures' filters, once they are off: ready to start clean)
+        if (closeNow.mix <= 0.0 && closePrev.mix > 0.0)
+        {
+            closeLp[0].reset ();
+            closeLp[1].reset ();
+            closePrev.mix = 0.0;
+        }
+        if (tapping && pullDirt <= 0.0 && pullBells <= 0.0)
+        {
+            auxSplit[0].reset ();
+            auxSplit[1].reset ();
+            pullDirtPrev = pullBellsPrev = 0.0;
+        }
 
         for (int i = 0; i < m; ++i)
         {
@@ -643,9 +927,18 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
     }
 
+    gBeats += (double)n * beatsPerSample; // (while the host plays, the next block's song position replaces it)
+
     if (meters)
     {
         constexpr auto rx = std::memory_order_relaxed;
+        for (int g = 0; g < kNumGestureSlots; ++g)
+        {
+            meters->gesturePos[(size_t)g].store ((float)slot[g].pos, rx);
+            meters->gestureValue[(size_t)g].store ((float)slot[g].s, rx);
+            meters->gesturePull[(size_t)g].store ((float)slot[g].k, rx);
+        }
+        meters->wobbleGain.store ((float)wobGain, rx);
         meters->active.store (quiet < (int)(0.5 * sr), rx);
         meters->passes.store (twoPasses ? 2 : 1, rx);
         meters->bands.store (fourBands ? 4 : 3, rx);

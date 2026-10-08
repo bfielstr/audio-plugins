@@ -28,7 +28,14 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    the "Ocean" recipe as the new defaults. A version 3 or 4 state reads what it lacks at 0.25's defaults with
 //    the new parameters as they leave its sound (bells C .. H, Tone, Clean Sub and Sub Boost off, Curve Hard:
 //    defaultNormalizedForVersion), so a 0.24 or 0.25 project sounds as it did.
-constexpr int32 kVersion = 5;
+// 6: 0.27, the gestures (IDs 185 .. 219 appended) and, after the parameters, each slot's user gesture: 'GEST',
+//    the slot count, then per slot whether it has one and its name, length (beats) and points (beat, value).
+//    An older state reads the gestures off (every Target Off, Wobble Amount 0: defaultNormalizedForVersion) and
+//    no user gestures, so it sounds as it did. (An older build reads a version 6 state's parameters and stops
+//    before the gestures' block.)
+constexpr int32 kVersion = 6;
+constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
+constexpr int32 kMaxNameBytes = 1024;
 constexpr int32 kNewDefaults = 4;
 } // namespace
 
@@ -42,6 +49,20 @@ bool writeState (IBStream* stream, const State& st)
     for (uint32 id = 0; ok && id < kNumParams; ++id)
         if (st.has[id])
             ok = s.writeInt32u (id) && s.writeDouble (st.norm[id]);
+    // the user gestures
+    ok = ok && s.writeInt32 (kGestureMagic) && s.writeInt32 (kNumGestureSlots);
+    for (const GestureData& g : st.user)
+    {
+        const bool has = !g.points.empty () && (int)g.points.size () <= kMaxGesturePoints;
+        ok = ok && s.writeInt32 (has ? 1 : 0);
+        if (!ok || !has)
+            continue;
+        const std::string name = g.name.substr (0, (size_t)kMaxNameBytes);
+        ok = s.writeInt32 ((int32)name.size ()) && (name.empty () || s.writeRaw (name.data (), (int32)name.size ()) == (int32)name.size ()) &&
+             s.writeDouble (g.length) && s.writeInt32 ((int32)g.points.size ());
+        for (const auto& [beat, value] : g.points)
+            ok = ok && s.writeDouble (beat) && s.writeDouble (value);
+    }
     return ok;
 }
 
@@ -73,6 +94,44 @@ bool readState (IBStream* stream, State& st)
     // then keeps them where it lacks them
     if (version < kNewDefaults)
         smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
+    // the user gestures (version 6; a state without the block has none). A damaged block is left out whole.
+    for (GestureData& g : st.user)
+        g = {};
+    int32 magic2 = 0, slots = 0;
+    if (version < 6 || !s.readInt32 (magic2) || magic2 != kGestureMagic || !s.readInt32 (slots) || slots < 0 || slots > 64)
+        return true;
+    std::array<GestureData, kNumGestureSlots> user {};
+    for (int32 k = 0; k < slots; ++k)
+    {
+        int32 has = 0;
+        if (!s.readInt32 (has))
+            return true;
+        if (!has)
+            continue;
+        int32 nameBytes = 0, n = 0;
+        if (!s.readInt32 (nameBytes) || nameBytes < 0 || nameBytes > kMaxNameBytes)
+            return true;
+        std::string name ((size_t)nameBytes, '\0');
+        if (nameBytes > 0 && s.readRaw (name.data (), nameBytes) != nameBytes)
+            return true;
+        double length = 0.0;
+        if (!s.readDouble (length) || !s.readInt32 (n) || n < 1 || n > kMaxGesturePoints || !(length > 0.0))
+            return true;
+        GestureData g;
+        g.name = name;
+        g.length = length;
+        for (int32 i = 0; i < n; ++i)
+        {
+            double b = 0.0, v = 0.0;
+            if (!s.readDouble (b) || !s.readDouble (v))
+                return true;
+            g.points.emplace_back (b, v);
+        }
+        Gesture check;
+        if (k < kNumGestureSlots && toGesture (g, check)) // (one the engine cannot play is left out)
+            user[(size_t)k] = std::move (g);
+    }
+    st.user = std::move (user);
     return true;
 }
 
