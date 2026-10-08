@@ -12,8 +12,9 @@
 // Clicking a strip (anywhere but its controls) folds or opens its part; switching a part on opens it and
 // switching it off folds it. A new instance opens the saturator only while it is on (and Gentlr only
 // while both are on); what the user opens and folds is kept with the controller's state
-// (pk::ControllerBase::uiTailOpen), as is the layer in front (uiColorLayer). Folding shrinks the editor
-// (pk::EditorBase::setContentHeight); a host that keeps the window as it is leaves the space empty.
+// (pk::ControllerBase::uiTailOpen), as is the layer in front (uiColorLayer: Gentlr in a new instance).
+// Folding shrinks the editor (pk::EditorBase::setContentHeight); a host that keeps the window as it is
+// leaves the space empty.
 //   A Gentlr band is selected in one place for all: its handle in the display, its button (1, 2, S, H)
 // or its Threshold slider; the band's controls show in the layer row, its handle is lit and its
 // Threshold slider lit too (grabbing a slider brings Gentlr's layer to the front).

@@ -169,10 +169,14 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
             // Gentlr (called Clarity before): its band appears in the colour display, with Gentlr's layer in front
-            // (the Color | Gentlr switch above the display; Color, the default, has it faint behind)
+            // (the Color | Gentlr switch above the display: Gentlr by default; Color has it faint behind)
             const double layerY = Editor::kLayerTop + 9.0;
             const double colorLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.25, gentlrLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.75;
             const double gentlrX = Editor::kGentlrButtonX, gentlrY = Editor::kGentlrTop + 40;
+            {
+                auto* ctl = dynamic_cast<pk::ControllerBase*> (rig.controller.get ());
+                CHECK (ctl && ctl->uiColorLayer == 1, "a new instance: Gentlr's layer in front");
+            }
             win.click (gentlrX, gentlrY);
             CHECK (plainOf (rig, kClarity) >= 0.5, "Gentlr switched on from the editor");
             win.click (gentlrLayerX, layerY);

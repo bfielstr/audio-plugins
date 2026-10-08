@@ -53,7 +53,8 @@ The Colour EQ display also shows gentlr's bands. The **Color** | **Gentlr** swit
 layer in front: only that layer's handles can be dragged and are drawn at full strength, the other is
 drawn faint behind it. The knobs under the display follow the switch too: with Color in front they are
 **Amt Lo**, **Amt Hi**, **Freq** and **Width**, with Gentlr in front the selected gentlr band's **Freq**,
-**Width** and **Range**. Color is in front in a new instance; the choice is kept with the project.
+**Width** and **Range**. Gentlr is in front in a new instance; the choice is kept with the project (a
+project saved before the choice was kept opens with Color in front, as it did).
 
 ## gentlr
 
@@ -155,8 +156,8 @@ Each part folds away to its strip and opens on its own: click its strip, or swit
 off folds it). A new instance opens the saturator only while it is on (as it is by default: fold it to make the
 window compact); the
 window gets shorter while a part is folded and taller when it opens (a host that does not let plug-ins
-resize their window keeps the space). What you open and fold, and the layer in front, are kept with the
-project.
+resize their window keeps the space). What you open and fold, and the layer in front (Gentlr in a new
+instance), are kept with the project.
 
 ## Presets
 

@@ -152,11 +152,12 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
             }
         }
     }
-    // the view state after it, tagged (states from before it end here: the defaults stay)
+    // the view state after it, tagged (states from before it end here: the defaults stay, but the layer in
+    // front, Color then: a new instance shows Gentlr now)
     int32 tag = 0, count = 0;
     if (s.readInt32 (tag) && tag == kViewStateTag && s.readInt32 (count) && count >= 0 && count < 64)
     {
-        int32 values[2] = {-1, 0};
+        int32 values[2] = {-1, kLegacyColorLayer};
         for (int32 i = 0; i < count; ++i)
         {
             int32 v = 0;
@@ -168,6 +169,8 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
         uiTailOpen = values[0] < 0 ? -1 : values[0] & (kTailOpenSaturator | kTailOpenGentlr);
         uiColorLayer = values[1] == 1 ? 1 : 0;
     }
+    else
+        uiColorLayer = kLegacyColorLayer;
     // the layout after that, tagged. A state with it keeps the layout it saved, whatever it is ("" too:
     // 0.14 wrote that for its Default, the Classic layout now); a state from before layouts has none and
     // opens in the layout a new instance has (Wide; pluginkit/Layout.h)

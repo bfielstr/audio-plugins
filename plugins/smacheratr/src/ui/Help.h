@@ -127,8 +127,8 @@ constexpr const char* kShaperDisplay =
     "Drag up/down to set Drive, double-click to reset it. Shift: fine.";
 
 constexpr const char* kColorDisplay =
-    "Two layers, picked with the Color | Gentlr switch above it: the one in front has its handles to drag and its "
-    "controls under the display, the other is drawn faint behind. "
+    "Two layers, picked with the Color | Gentlr switch above it (Gentlr in a new instance): the one in front has its "
+    "handles to drag and its controls under the display, the other is drawn faint behind. "
     "Color: the colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "Gentlr (once it is on): its bands; the band selected (its handle grabbed, its button, or its Threshold slider with Advanced) "
