@@ -1,12 +1,13 @@
-# Moistr: splits a sound into a low-pass, a band-pass and a high-pass band with a gap between the low
-# mids and the high end, moves each band's frequency and level slowly (seeded, repeatable), then glues
-# them back together with a compressor and soft clipping; optionally a second pass through the bands.
+# Moistr: a SWEEP stage (two sweeping bell EQs, a High Shelf on a slow orbit, a level-matched saturator), then
+# a split into a low band held steady and upper bands that rise and fall slowly (seeded, repeatable), glued back
+# together with a compressor and soft clipping; optionally a second pass through the bands.
 project(Moistr VERSION 0.23.0.0)
 
 add_library(moistr_core STATIC
     src/core/Params.cpp
     src/core/Movement.cpp
     src/core/Engine.cpp
+    src/core/Sweep.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core)
@@ -39,6 +40,8 @@ pk_add_plugin(Moistr
         src/ui/Help.h
         src/ui/BandView.h
         src/ui/BandView.cpp
+        src/ui/SweepView.h
+        src/ui/SweepView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )

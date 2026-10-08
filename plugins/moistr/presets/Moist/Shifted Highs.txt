@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, metallic, shift
 comment: The upper bands shifted up 120 Hz for a metallic, clashing edge while they rise and fall; the sub is never shifted.
+Sweep = Off
+Drive = 10 %
 Shift On = On
 Shift = 120 Hz
 Shift Mix = 70 %

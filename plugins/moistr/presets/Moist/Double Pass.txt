@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, resample, dense
 comment: Two passes through the bands, each with its own movement, like bouncing the bass and splitting it again.
+Sweep = Off
+Drive = 10 %
 Passes = 2
 Movement = 60 %
 Rate = 0.35 Hz

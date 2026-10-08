@@ -1,0 +1,16 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, wide
+comment: Broader, wider sweeps: bell A boosts from 20 to 200 Hz, bell B cuts from 40 to 600 Hz, both broad and slow, starting half a sweep apart.
+Sweep = On
+A Rate = 0.5 Hz
+A Low = 20 Hz
+A High = 200 Hz
+A Gain = 15 dB
+A Width = 0.5
+B Rate = 0.56 Hz
+B Low = 40 Hz
+B High = 600 Hz
+B Gain = -15 dB
+B Width = 0.5
+B Phase = 180
+Sweep Drive = 18 dB

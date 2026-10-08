@@ -2,6 +2,7 @@
 
 #include "BandView.h"
 #include "Help.h"
+#include "SweepView.h"
 #include "plugin/Controller.h"
 
 #include "pluginkit/ui/Theme.h"
@@ -51,6 +52,11 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 void Editor::onClose ()
 {
     display = nullptr;
+    sweepView = nullptr;
+    sweepControls.clear ();
+    shelfControls.clear ();
+    for (int b = 0; b < 2; ++b)
+        rateViews[b] = syncRateViews[b] = nullptr;
     liquidKnobs.clear ();
     latencyLabel = nullptr;
     tail.reset ();
@@ -108,6 +114,54 @@ void Editor::buildUI (CFrame* f)
         }
         return made;
     };
+
+    // ---- the SWEEP stage (the default sound): its switch and the saturator's Drive, the two bells, the High
+    // Shelf and its display
+    auto* sweep = new Panel (CRect (kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH), "SWEEP");
+    root->addView (sweep);
+    bind (sweep, new Toggle (switchRect (), this, kSweep, "Sweep"));
+    for (Knob* k : besides (sweep, {{kSweepDrive}}))
+        sweepControls.push_back (k);
+
+    // each bell: Sync, its Sync Rate and Phase in a compact column, then Rate, Low, High, Gain and Width
+    for (int b = 0; b < 2; ++b)
+    {
+        const double left = b == 0 ? kBellALeft : kBellBLeft, right = b == 0 ? kBellARight : kBellBRight;
+        const uint32_t base = b == 0 ? kARate : kBRate;
+        auto* bell = new Panel (CRect (left, kSweepRow1, right, kSweepRow1 + kRowH), b == 0 ? "BELL A" : "BELL B");
+        root->addView (bell);
+        const double cx = kSwitchLeft, cr = kSwitchLeft + kBellColW;
+        sweepControls.push_back (bind (bell, new Toggle (CRect (cx, kSwitchTop, cr, kSwitchTop + kSwitchH), this, base + 1, "Sync")));
+        syncRateViews[b] = bind (bell, new pk::Choice (CRect (cx, 56, cr, 76), this, base + 2));
+        sweepControls.push_back (syncRateViews[b]);
+        bell->addView (new Label (CRect (cx, 84, cx + 38, 102), "Phase", 9.5));
+        sweepControls.push_back (bind (bell, new pk::NumberBox (CRect (cx + 40, 84, cr, 102), this, base + 7)));
+        int i = 0;
+        for (uint32_t id : {base + 0, base + 3, base + 4, base + 5, base + 6})
+        {
+            const double x = kBellKnobLeft + kKnobStep * i++;
+            auto* k = bind (bell, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id, nullptr, id == base + 5));
+            sweepControls.push_back (k);
+            if (id == base + 0)
+                rateViews[b] = k;
+        }
+    }
+
+    // the High Shelf: on, then its orbit's Rate, where its corner and gain go, its Q, Wander and Tilt
+    auto* shelf = new Panel (CRect (kShelfLeft, kSweepRow2, kShelfRight, kSweepRow2 + kRowH), "HIGH SHELF");
+    root->addView (shelf);
+    sweepControls.push_back (bind (shelf, new Toggle (switchRect (), this, kShelf, "High Shelf")));
+    for (Knob* k : besides (shelf, {{kShelfRate}, {kShelfLow}, {kShelfHigh}, {kShelfMin, true}, {kShelfMax, true}, {kShelfQ}, {kShelfWander},
+                                     {kShelfTilt}}))
+    {
+        sweepControls.push_back (k);
+        shelfControls.push_back (k);
+    }
+
+    sweepView = new SweepView (layoutRegion ("sweepview", CRect (kSweepViewLeft, kSweepRow2, kSweepViewRight, kSweepRow2 + kRowH)), this,
+                               [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; });
+    pk::setHelp (sweepView, "Sweep", help::kSweepView);
+    root->addView (sweepView);
 
     // the split: 3 or 4 bands, Drive before it, the upper crossovers (the Low one is Seed's)
     auto* split = new Panel (CRect (kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH), "SPLIT");
@@ -212,6 +266,19 @@ void Editor::updateLooks ()
         seedBKnob->setEnabledLook (plainValue (kSeedBlend) > 0.0);
     for (Knob* k : liquidKnobs)
         k->setEnabledLook (plainValue (kLiquid) > 0.0);
+    const bool sweeping = plainValue (kSweep) >= 0.5, shelving = plainValue (kShelf) >= 0.5;
+    for (pk::ParamView* v : sweepControls)
+        v->setEnabledLook (sweeping);
+    for (pk::ParamView* v : shelfControls)
+        v->setEnabledLook (sweeping && shelving);
+    for (int b = 0; b < 2; ++b)
+    {
+        const bool synced = plainValue (b == 0 ? kASync : kBSync) >= 0.5;
+        if (rateViews[b])
+            rateViews[b]->setEnabledLook (sweeping && !synced);
+        if (syncRateViews[b])
+            syncRateViews[b]->setEnabledLook (sweeping && synced);
+    }
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -219,8 +286,14 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid)
+    if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kASync ||
+        id == kBSync)
         updateLooks ();
+    if (sweepView && SweepView::shows (id))
+    {
+        sweepView->idle ();
+        sweepView->invalid ();
+    }
     if (display && BandView::shows (id))
     {
         display->idle (); // (the snapshot: levels, crossovers, bands)
@@ -234,6 +307,8 @@ void Editor::idle ()
         tail->idle ();
     if (display)
         display->idle ();
+    if (sweepView)
+        sweepView->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
@@ -273,24 +348,30 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the display, then columns of two panels (split over movement, levels over band move, shift over
-    // rise / fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid)
-    // under them, and the end saturator in a row of its own at the bottom
+    // Wide: the SWEEP stage's row first (sweep; bell a over bell b; the high shelf over its display), then the
+    // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
+    // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
+    // and the end saturator in a row of its own at the bottom
     s.panels = {
-        {"display", "bands", {d.left, d.top, d.right, d.bottom}, 0},
-        {"split", "", {kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH}, 0, 0},
-        {"movement", "", {kMoveLeft, kRow2, kMoveRight, kRow2 + kRowH}, 0, 0},
-        {"levels", "", {kLevelsLeft, kRow1, kLevelsRight, kRow1 + kRowH}, 0, 1},
-        {"bandmove", "", {kBandMoveLeft, kRow2, kBandMoveRight, kRow2 + kRowH}, 0, 1},
-        {"shift", "", {kShiftLeft, kRow1, kShiftRight, kRow1 + kRowH}, 0, 2},
-        {"risefall", "", {kShapeLeft, kRow2, kShapeRight, kRow2 + kRowH}, 0, 2},
-        {"glue", "", {kGlueLeft, kRow1, kGlueRight, kRow1 + kRowH}, 0, 3},
-        {"output", "", {kOutLeft, kRow2, kOutRight, kRow2 + kRowH}, 0, 3},
-        {"seedb", "", {kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH}, 1},
-        {"low", "", {kLowLeft, kRow3, kLowRight, kRow3 + kRowH}, 1},
-        {"extreme", "", {kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH}, 1},
-        {"liquid", "", {kLiquidLeft, kRow3, kLiquidRight, kRow3 + kRowH}, 1},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 2, -1, true},
+        {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
+        {"bell-a", "", {kBellALeft, kSweepRow1, kBellARight, kSweepRow1 + kRowH}, 0, 0},
+        {"bell-b", "", {kBellBLeft, kSweepRow1, kBellBRight, kSweepRow1 + kRowH}, 0, 0},
+        {"shelf", "", {kShelfLeft, kSweepRow2, kShelfRight, kSweepRow2 + kRowH}, 0, 1},
+        {"sweepview", "sweep", {kSweepViewLeft, kSweepRow2, kSweepViewRight, kSweepRow2 + kRowH}, 0, 1, true},
+        {"display", "bands", {d.left, d.top, d.right, d.bottom}, 1},
+        {"split", "", {kSplitLeft, kRow1, kSplitRight, kRow1 + kRowH}, 1, 0},
+        {"movement", "", {kMoveLeft, kRow2, kMoveRight, kRow2 + kRowH}, 1, 0},
+        {"levels", "", {kLevelsLeft, kRow1, kLevelsRight, kRow1 + kRowH}, 1, 1},
+        {"bandmove", "", {kBandMoveLeft, kRow2, kBandMoveRight, kRow2 + kRowH}, 1, 1},
+        {"shift", "", {kShiftLeft, kRow1, kShiftRight, kRow1 + kRowH}, 1, 2},
+        {"risefall", "", {kShapeLeft, kRow2, kShapeRight, kRow2 + kRowH}, 1, 2},
+        {"glue", "", {kGlueLeft, kRow1, kGlueRight, kRow1 + kRowH}, 1, 3},
+        {"output", "", {kOutLeft, kRow2, kOutRight, kRow2 + kRowH}, 1, 3},
+        {"seedb", "", {kSeedBLeft, kRow3, kSeedBRight, kRow3 + kRowH}, 2},
+        {"low", "", {kLowLeft, kRow3, kLowRight, kRow3 + kRowH}, 2},
+        {"extreme", "", {kExtremeLeft, kRow3, kExtremeRight, kRow3 + kRowH}, 2},
+        {"liquid", "", {kLiquidLeft, kRow3, kLiquidRight, kRow3 + kRowH}, 2},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 3, -1, true},
     };
     return s;
 }

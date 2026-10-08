@@ -1,0 +1,7 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, subtle
+comment: The default sweep with a lighter saturator (12 dB) and a looser shelf: the movement with less grit.
+Sweep = On
+Sweep Drive = 12 dB
+Shelf Q = 8
+Shelf Max = 3 dB

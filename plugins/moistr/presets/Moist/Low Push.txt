@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, low end, movement
 comment: The Low band comes forward on its own moments (up to 6 dB at Movement 80 %) and dips back only a little, under the moving upper bands.
+Sweep = Off
+Drive = 10 %
 Movement = 80 %
 Low Push = 7.5 dB
 Low Dip = 2 dB

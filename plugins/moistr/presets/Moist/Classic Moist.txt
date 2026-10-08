@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: reese, neuro, bass
 comment: The classic moist bass: three bands, the low end locked, Mid and High rising and falling on their own, the High band the most.
+Sweep = Off
+Drive = 10 %
 Movement = 50 %
 Rate = 0.3 Hz
 Depth = 18 dB

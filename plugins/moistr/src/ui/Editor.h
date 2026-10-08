@@ -11,18 +11,29 @@ namespace moistr {
 
 class Controller;
 class BandView;
+class SweepView;
 
 class Editor : public pk::EditorBase
 {
 public:
-    // Classic: the display across the top, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
+    // Classic: two rows of the SWEEP stage at the top (SWEEP, BELL A, BELL B over HIGH SHELF and the sweep
+    // display), the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
     // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), the end saturator's section at
     // the bottom
     static constexpr double kWidth = 1132.0;
-    static constexpr double kRow1 = 238.0, kRow2 = 362.0, kRow3 = 486.0, kRowH = 116.0;
+    static constexpr double kRowH = 116.0;
+    static constexpr double kSweepRow1 = 40.0, kSweepRow2 = kSweepRow1 + kRowH + 8.0;
+    static constexpr double kRow1 = kSweepRow2 + kRowH + 8.0 + 198.0, kRow2 = kRow1 + kRowH + 8.0, kRow3 = kRow2 + kRowH + 8.0;
     static constexpr double kTailTop = kRow3 + kRowH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
+    static constexpr double kSweepLeft = 8.0, kSweepRight = 214.0;          // sweep row 1: Sweep, Drive
+    static constexpr double kBellALeft = 222.0, kBellARight = 669.0;        // sweep row 1: Sync, Sync Rate, Phase; Rate, Low, High, Gain, Width
+    static constexpr double kBellBLeft = 677.0, kBellBRight = 1124.0;       // sweep row 1: as BELL A
+    static constexpr double kShelfLeft = 8.0, kShelfRight = 662.0;          // sweep row 2: High Shelf; Rate, Low, High, Min, Max, Q, Wander, Tilt
+    static constexpr double kSweepViewLeft = 670.0, kSweepViewRight = 1124.0; // sweep row 2: the sweep display
+    // a bell's compact column (Sync, Sync Rate, Phase; panel coordinates) and its first knob's left
+    static constexpr double kBellColW = 99.0, kBellKnobLeft = 121.0;
     static constexpr double kSplitLeft = 8.0, kSplitRight = 342.0;          // row 1: Bands, Drive, Mid X, High X
     static constexpr double kLevelsLeft = 350.0, kLevelsRight = 626.0;      // row 1: Low, Mid, High, Air (Level)
     static constexpr double kShiftLeft = 634.0, kShiftRight = 846.0;        // row 1: On, Shift, Shift Mix
@@ -51,7 +62,8 @@ public:
         return (width - (kKnobBeside - kSwitchLeft + (n - 1) * kKnobStep + kKnobW)) / 2.0;
     }
     // the display (Classic; an arranged layout builds it narrower: kArrangedDisplayW)
-    static constexpr double kDisplayTop = 40.0, kDisplayBottom = 230.0, kArrangedDisplayW = 400.0;
+    static constexpr double kDisplayTop = kSweepRow2 + kRowH + 8.0, kDisplayBottom = kDisplayTop + 190.0, kArrangedDisplayW = 400.0;
+    static_assert (kDisplayBottom + 8.0 == kRow1, "the bands' display ends a gap above row 1");
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
@@ -65,12 +77,16 @@ private:
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
     // High X, Air Level and Air Move dimmed with 3 Bands; Shift and Shift Mix while it is off; Seed B at Blend 0;
-    // Liquid's Res, Low and High at Liquid 0
+    // Liquid's Res, Low and High at Liquid 0; the SWEEP stage's controls while Sweep is off, the shelf's while High
+    // Shelf is off, a bell's Rate while its Sync is on and its Sync Rate while it is off
     void updateLooks ();
     VSTGUI::CRect displayRect (bool arranged) const;
 
     Controller* ctl;
     BandView* display = nullptr;
+    SweepView* sweepView = nullptr;
+    std::vector<pk::ParamView*> sweepControls, shelfControls; // (everything in the stage but the Sweep switch; the shelf's knobs)
+    pk::ParamView *rateViews[2] {}, *syncRateViews[2] {};
     pk::Label* latencyLabel = nullptr;
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;

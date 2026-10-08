@@ -14,7 +14,8 @@ const ParamTable& paramTable ()
     static const ParamTable t ([] {
         std::vector<ParamInfo> v;
         // INPUT
-        v.push_back (percent (kDrive, "Drive", "Drive", 0.1));
+        // (0.24: the SWEEP stage is the default sound, so these start neutral; legacyDefaultNormalized has the old ones)
+        v.push_back (percent (kDrive, "Drive", "Drive", 0.0));
         // BANDS: a clear gap between Mid (the low mids) and High by default, the hollow middle
         v.push_back (real (kLowFreq, "Low Freq", "Freq", 40.0, 1000.0, 180.0, Curve::Log, Disp::Hz));
         v.push_back (percent (kLowRes, "Low Res", "Res", 0.15));
@@ -28,7 +29,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kGap, "Gap", "Gap", -1.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
         v.push_back (choice (kSlope, "Slope", "Slope", {"12 dB", "24 dB"}, kSlope12));
         // MOVEMENT
-        v.push_back (percent (kMovement, "Movement", "Movement", 0.5));
+        v.push_back (percent (kMovement, "Movement", "Movement", 0.0));
         v.push_back (real (kRate, "Rate", "Rate", 0.05, 2.0, 0.3, Curve::Log, Disp::Hz));
         v.push_back (toggle (kSync, "Sync", "Sync", false));
         v.push_back (choice (kSyncRate, "Sync Rate", "Sync Rate", {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8"}, 2));
@@ -38,8 +39,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kLevelMove, "Level Move", "Levels", 0.0, 12.0, 4.0, Curve::Linear, Disp::Db));
         v.push_back (integer (kSeed, "Seed", "Seed", kMinSeed, kMaxSeed, kMinSeed, Disp::Plain));
         // GLUE
-        v.push_back (percent (kGlue, "Glue", "Glue", 0.4));
-        v.push_back (percent (kGrit, "Grit", "Grit", 0.2));
+        v.push_back (percent (kGlue, "Glue", "Glue", 0.0));
+        v.push_back (percent (kGrit, "Grit", "Grit", 0.0));
         v.push_back (choice (kPasses, "Passes", "Passes", {"1", "2"}, kPasses1));
         // OUTPUT
         v.push_back (percent (kMix, "Mix", "Mix", 1.0));
@@ -77,9 +78,57 @@ const ParamTable& paramTable ()
         v.push_back (percent (kLiquidRes, "Liquid Res", "Res", 0.5));
         v.push_back (real (kLiquidLow, "Liquid Low", "Low", kLiquidLowMin, kLiquidLowMax, 250.0, Curve::Log, Disp::Hz));
         v.push_back (real (kLiquidHigh, "Liquid High", "High", kLiquidHighMin, kLiquidHighMax, 1600.0, Curve::Log, Disp::Hz));
+        // the SWEEP stage (0.24): the default sound. Bell A +18 dB sweeping 20 .. 120 Hz at 0.70 Hz, bell B -18 dB
+        // sweeping 30 .. 300 Hz at 0.77 Hz (both broad, Q 0.71, starting at Low), the High Shelf going round
+        // 100 .. 1000 Hz and -18 .. +6 dB, then the saturator at 18 dB
+        const std::vector<const char*> syncRates {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8"};
+        v.push_back (toggle (kSweep, "Sweep", "Sweep", true));
+        v.push_back (real (kSweepDrive, "Sweep Drive", "Drive", 0.0, kSweepDriveMax, 18.0, Curve::Linear, Disp::Db));
+        struct Bell
+        {
+            const char *rate, *sync, *syncRate, *low, *high, *gain, *width, *phase;
+            double rateHz, lowHz, highHz, gainDb;
+        };
+        const Bell bells[2] = {{"A Rate", "A Sync", "A Sync Rate", "A Low", "A High", "A Gain", "A Width", "A Phase", 0.70, 20.0, 120.0, 18.0},
+                               {"B Rate", "B Sync", "B Sync Rate", "B Low", "B High", "B Gain", "B Width", "B Phase", 0.77, 30.0, 300.0, -18.0}};
+        for (int b = 0; b < 2; ++b)
+        {
+            const uint32_t base = b == 0 ? kARate : kBRate;
+            const Bell& d = bells[b];
+            v.push_back (real (base + 0, d.rate, "Rate", kSweepRateMin, kSweepRateMax, d.rateHz, Curve::Log, Disp::Hz));
+            v.push_back (toggle (base + 1, d.sync, "Sync", false));
+            v.push_back (choice (base + 2, d.syncRate, "Sync Rate", syncRates, 2));
+            v.push_back (real (base + 3, d.low, "Low", kBellFreqMin, kBellFreqMax, d.lowHz, Curve::Log, Disp::Hz));
+            v.push_back (real (base + 4, d.high, "High", kBellFreqMin, kBellFreqMax, d.highHz, Curve::Log, Disp::Hz));
+            v.push_back (real (base + 5, d.gain, "Gain", -24.0, 24.0, d.gainDb, Curve::Linear, Disp::Db));
+            v.push_back (real (base + 6, d.width, "Width", kBellQMin, kBellQMax, kBellQDefault, Curve::Log, Disp::Number));
+            v.push_back (real (base + 7, d.phase, "Phase", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
+        }
+        v.push_back (toggle (kShelf, "High Shelf", "High Shelf", true));
+        v.push_back (real (kShelfRate, "Shelf Rate", "Rate", kSweepRateMin, kSweepRateMax, 0.53, Curve::Log, Disp::Hz));
+        v.push_back (real (kShelfLow, "Shelf Low", "Low", 50.0, 2000.0, 100.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kShelfHigh, "Shelf High", "High", 300.0, 5000.0, 1000.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kShelfMin, "Shelf Min", "Min", -24.0, 0.0, -18.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kShelfMax, "Shelf Max", "Max", -12.0, 12.0, 6.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kShelfQ, "Shelf Q", "Q", kShelfQMin, kShelfQMax, 18.0, Curve::Log, Disp::Number));
+        v.push_back (percent (kShelfWander, "Wander", "Wander", 0.5));
+        v.push_back (percent (kShelfTilt, "Tilt", "Tilt", 0.65));
         return v;
     }());
     return t;
+}
+
+double legacyDefaultNormalized (uint32_t id)
+{
+    switch (id)
+    {
+        case kDrive: return toNormalized (kDrive, 0.1);
+        case kMovement: return toNormalized (kMovement, 0.5);
+        case kGlue: return toNormalized (kGlue, 0.4);
+        case kGrit: return toNormalized (kGrit, 0.2);
+        case kSweep: return 0.0; // (off: the sound before 0.24)
+        default: return defaultNormalized (id);
+    }
 }
 
 } // namespace moistr

@@ -1,0 +1,8 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, movement, neuro
+comment: The sweep in front of the moving bands: the upper bands rise and fall on the Seed's pattern, glued back together, over the sweeping low end.
+Sweep = On
+Sweep Drive = 15 dB
+Movement = 50 %
+Glue = 40 %
+Grit = 20 %

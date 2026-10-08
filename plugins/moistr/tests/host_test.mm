@@ -165,6 +165,28 @@ int main (int argc, char** argv)
             win.click (Editor::kShiftLeft + Editor::kKnobLeft + Editor::kShiftSwitchW / 2, sy);
             pump (0.05);
             CHECK (plainOf (rig, kShiftOn) < 0.5, "Shift clicked off");
+            // the SWEEP stage's switches: Sweep (SWEEP, sweep row 1) and High Shelf (HIGH SHELF, sweep row 2), both on
+            // by default; and bell A's Sync (its compact column)
+            const double swy = Editor::kSweepRow1 + Editor::kSwitchTop + Editor::kSwitchH / 2;
+            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, swy);
+            pump (0.05);
+            CHECK (plainOf (rig, kSweep) < 0.5, "Sweep clicked off");
+            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, swy);
+            pump (0.05);
+            CHECK (plainOf (rig, kSweep) >= 0.5, "Sweep clicked on");
+            const double shy = Editor::kSweepRow2 + Editor::kSwitchTop + Editor::kSwitchH / 2;
+            win.click (Editor::kShelfLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, shy);
+            pump (0.05);
+            CHECK (plainOf (rig, kShelf) < 0.5, "High Shelf clicked off");
+            win.click (Editor::kShelfLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, shy);
+            pump (0.05);
+            CHECK (plainOf (rig, kShelf) >= 0.5, "High Shelf clicked on");
+            win.click (Editor::kBellALeft + Editor::kSwitchLeft + Editor::kBellColW / 2, swy);
+            pump (0.05);
+            CHECK (plainOf (rig, kASync) >= 0.5, "bell A's Sync clicked on");
+            win.click (Editor::kBellALeft + Editor::kSwitchLeft + Editor::kBellColW / 2, swy);
+            pump (0.05);
+            CHECK (plainOf (rig, kASync) < 0.5, "bell A's Sync clicked off");
             // the Sync switch in MOVEMENT (row 2)
             const double py = Editor::kRow2 + Editor::kSwitchTop + Editor::kSwitchH / 2;
             win.click (Editor::kMoveLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, py);
