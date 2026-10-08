@@ -44,6 +44,8 @@ pk_add_plugin(Moistr
         src/ui/BandView.cpp
         src/ui/SweepView.h
         src/ui/SweepView.cpp
+        src/ui/GestureView.h
+        src/ui/GestureView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )
