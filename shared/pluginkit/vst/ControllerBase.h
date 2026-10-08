@@ -99,6 +99,10 @@ public:
     bool saveAsDefault ();
     bool loadDefault (); // Init when there is none
     bool resetDefault ();
+    // The preset before (dir -1) or after (+1) the current one, as the Presets menu lists them (the
+    // factory presets, then the user's; only those with the tag filtered for), wrapping round; from no
+    // preset in the list, the first (or the last). The arrows beside a Basic page's preset name (pk::basic).
+    bool stepPreset (int dir);
     // The Presets menu (PresetBar) and its tag filter (for this editor session).
     std::vector<presets::MenuEntry> presetMenu (std::vector<presets::Item>* factoryOut = nullptr,
                                                 std::vector<presets::Item>* userOut = nullptr);
@@ -141,6 +145,16 @@ public:
     // saved with it keeps its layout ("" there is the Classic layout); loading a preset keeps the layout
     // the editor has.
     std::string uiLayout = layout::kDefaultLayout, uiLayoutName = layout::templateName (layout::kDefaultLayout);
+    // The editor's view (pk::basic): the Advanced view (every control, in the layout above) or the Basic page
+    // (a plug-in's main controls; only where the editor declares one, EditorBase::basicSpec), and whether
+    // the Basic page's extras are open (its strip expanded). Editor state, saved with the controller's after
+    // the layout (an older version ignores it). A new instance opens in the view Menu > Defaults > Advanced
+    // View by Default says (the Basic page unless it is on); a state saved without the field (before 0.29)
+    // opens in that view too, one saved with it keeps its view; loading a preset keeps the view the editor has.
+    bool uiAdvanced = false;
+    bool uiExtrasOpen = false;
+    // Advanced View by Default (the plug-in's .defaults.txt, GentlrDefaults.h): off when it is not set.
+    bool advancedViewByDefault () const;
     // The layouts file (<preset folder>/.layouts.txt): the user's saved layouts and default layout.
     layout::Saved savedLayouts () const;
     bool writeSavedLayouts (const layout::Saved& s) const;
@@ -149,8 +163,11 @@ public:
     // rebuilds an open editor at once; kMsgFindControl asks the open editor where the control of
     // parameter "id" (int) is: the answer, on the message, is "rect" (4 doubles: left, top, right, bottom
     // in window pixels), absent when it is not shown.
+    // kMsgSetView sets the view (int "advanced": 1 the Advanced view, 0 the Basic page) and rebuilds an
+    // open editor at once.
     static constexpr const char* kMsgSetLayout = "pk.layout.set";
     static constexpr const char* kMsgFindControl = "pk.ui.find";
+    static constexpr const char* kMsgSetView = "pk.view.set";
 
 protected:
     void refreshEditor ();

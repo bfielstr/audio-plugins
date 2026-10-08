@@ -1,10 +1,12 @@
 // VSTGUI editor base: a freely resizable window that shows the UI uniformly zoomed and centred (the
 // margins in the ground colour), parameter binding for pluginkit widgets, a periodic idle(), the info
-// box under every editor's content, switchable, wrapped hover tooltips, and the layouts (Menu > Layout:
-// the editor as built, the Wide template, the user's own arrangements; pluginkit/Layout.h).
+// box under every editor's content, switchable, wrapped hover tooltips, the layouts (Menu > Layout:
+// the editor as built, the Wide template, the user's own arrangements; pluginkit/Layout.h), and the Basic
+// page (the main controls only, the Advanced switch between it and the rest; pluginkit/ui/BasicView.h).
 #pragma once
 
 #include "pluginkit/Layout.h"
+#include "pluginkit/ui/BasicView.h"
 #include "pluginkit/ui/InfoBox.h"
 #include "pluginkit/ui/LayoutViews.h"
 #include "pluginkit/ui/Widgets.h"
@@ -46,8 +48,25 @@ public:
     Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) override;
     VSTGUI::CMessageResult notify (VSTGUI::CBaseObject* sender, const char* message) override;
 
-    // Builds the view hierarchy into an (unopened) frame.
+    // Builds the view hierarchy into an (unopened) frame: the Advanced view (every control). The Basic
+    // page, when the editor declares one (basicSpec) and the instance shows it, is built from its Spec
+    // instead.
     virtual void buildUI (VSTGUI::CFrame* f) = 0;
+    // ---- the Basic page (pluginkit/ui/BasicView.h)
+    // The editor's Basic page: its main controls, its output, its display and extras (the factories may
+    // keep the views they make, as buildUI does: onClose is called before either is built again). None
+    // (the default): the editor has only its Advanced view, and no Advanced switch.
+    virtual basic::Spec basicSpec () { return {}; }
+    bool hasBasicView () const { return hasBasic; } // (known once the window opens or getSize is asked)
+    // While building (and after): whether this build is the Basic page.
+    bool basicView () const { return showingBasic; }
+    // The Advanced view (on) or the Basic page: kept in the controller's state; the editor is built again
+    // in it at the next tick (now: at once).
+    void setAdvancedView (bool on, bool now = false);
+    // The Basic page's extras open or closed (its strip's Extras button): the same, built again.
+    void setExtrasOpen (bool open, bool now = false);
+    // The Basic page's geometry as built (empty in the Advanced view).
+    const basic::Geometry& basicGeometry () const { return basicPlace; }
     // Called about 30 times a second while open.
     virtual void idle () {}
     // Host or UI changed a parameter: repaints the views bound to it. Override to do more.
@@ -191,6 +210,17 @@ private:
 
     // buildUI (building), then the blocks of an arranged layout, the info strip and the layout report
     void buildContent ();
+
+    // the Basic page
+    void buildBasic ();       // the page from basicPage, into the frame
+    void addAdvancedSwitch (); // the Advanced view's switch in its header (Spec::advancedSwitch)
+    void tickBasic ();        // the mini meter and the strip's line, every tick
+    basic::Spec basicPage;    // the editor's (resolveLayout)
+    basic::Geometry basicPlace;
+    bool hasBasic = false, showingBasic = false;
+    bool appliedAdvanced = false, appliedExtras = false; // the view the frame was built in
+    std::vector<basic::MiniMeter*> meters;
+    Label* summaryLabel = nullptr;
 
     // layouts
     void resolveLayout ();   // the layout in the controller's state: spec, arrangement, geometry, base size

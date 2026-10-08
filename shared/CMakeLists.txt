@@ -48,6 +48,8 @@ if(PK_BUILD_PLUGINS)
         pluginkit/ui/LayoutCheck.cpp
         pluginkit/ui/LayoutViews.h
         pluginkit/ui/LayoutViews.cpp
+        pluginkit/ui/BasicView.h
+        pluginkit/ui/BasicView.cpp
         pluginkit/ui/ScopeView.h
         pluginkit/ui/DropFiles.h
         pluginkit/ui/ScopeView.cpp

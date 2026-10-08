@@ -26,6 +26,12 @@
 // plug-ins' folders):
 //   glue on touch = on
 // read each time a drag begins, so a change applies at once to every open editor of every plug-in.
+//
+// Advanced View by Default (Menu > Defaults, in a plug-in with a Basic view: pk::basic) is the view a new
+// instance's editor opens in: off (the default), the Basic page; on, the Advanced view (every control). In
+// the plug-in's own file:
+//   advanced view = on
+// A project keeps the view it was saved with (the controller's state); this only decides a new instance's.
 #pragma once
 
 #include "pluginkit/TailParams.h"
@@ -42,6 +48,7 @@ struct GentlrDefaults
 {
     std::optional<bool> gentlrOn, advancedOn;                // (nullopt: not set)
     std::optional<bool> glueOnTouch;                         // (the suite's file only: glueOnTouch ())
+    std::optional<bool> advancedView;                        // Advanced View by Default (not set: off)
     std::vector<std::pair<std::string, std::string>> other; // keys this version does not know (kept)
 };
 

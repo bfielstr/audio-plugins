@@ -15,6 +15,7 @@ namespace {
 constexpr const char* kGentlrKey = "gentlr";
 constexpr const char* kAdvancedKey = "advanced";
 constexpr const char* kGlueOnTouchKey = "glue on touch";
+constexpr const char* kAdvancedViewKey = "advanced view";
 
 std::string trim (const std::string& s)
 {
@@ -67,6 +68,8 @@ GentlrDefaults parseGentlrDefaults (const std::string& text)
             d.advancedOn = switchValue (value);
         else if (key == kGlueOnTouchKey)
             d.glueOnTouch = switchValue (value);
+        else if (key == kAdvancedViewKey)
+            d.advancedView = switchValue (value);
         else
             d.other.emplace_back (key, value);
     }
@@ -82,6 +85,8 @@ std::string gentlrDefaultsText (const GentlrDefaults& d)
         out += std::string (kAdvancedKey) + " = " + (*d.advancedOn ? "on" : "off") + "\n";
     if (d.glueOnTouch)
         out += std::string (kGlueOnTouchKey) + " = " + (*d.glueOnTouch ? "on" : "off") + "\n";
+    if (d.advancedView)
+        out += std::string (kAdvancedViewKey) + " = " + (*d.advancedView ? "on" : "off") + "\n";
     for (const auto& [k, v] : d.other)
         out += k + " = " + v + "\n";
     return out;

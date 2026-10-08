@@ -116,6 +116,9 @@ namespace {
 constexpr int32 kViewStateTag = 0x56575354; // 'VWST'
 // The editor's layout after it, tagged: its text and its name (uiLayout, uiLayoutName; 0.14).
 constexpr int32 kLayoutTag = 0x4c594f54; // 'LYOT'
+// The editor's view after that, tagged, then a count and that many values (uiAdvanced, uiExtrasOpen; 0.29):
+// a reader takes the ones it knows.
+constexpr int32 kViewTag = 0x56494557; // 'VIEW'
 } // namespace
 
 tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
@@ -191,6 +194,24 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
             delete[] name;
         }
     }
+    // the view after that, tagged: a state with it keeps its view; one from before it opens in the view a
+    // new instance has (Advanced View by Default)
+    uiAdvanced = advancedViewByDefault ();
+    uiExtrasOpen = false;
+    if (s.readInt32 (tag) && tag == kViewTag && s.readInt32 (count) && count >= 0 && count < 64)
+    {
+        int32 values[2] = {uiAdvanced ? 1 : 0, 0};
+        for (int32 i = 0; i < count; ++i)
+        {
+            int32 v = 0;
+            if (!s.readInt32 (v))
+                break;
+            if (i < 2)
+                values[i] = v;
+        }
+        uiAdvanced = values[0] != 0;
+        uiExtrasOpen = values[1] != 0;
+    }
     refreshEditor ();
     return kResultOk;
 }
@@ -206,7 +227,8 @@ tresult PLUGIN_API ControllerBase::getState (IBStream* stream)
     return s.writeDouble (uiScale) && s.writeBool (uiShowTips) && s.writeStr8 (presetTitle.c_str ()) &&
                    s.writeStr8 (ref.c_str ()) && s.writeInt32 (kViewStateTag) && s.writeInt32 (2) &&
                    s.writeInt32 (uiTailOpen) && s.writeInt32 (uiColorLayer) && s.writeInt32 (kLayoutTag) &&
-                   s.writeStr8 (uiLayout.c_str ()) && s.writeStr8 (uiLayoutName.c_str ())
+                   s.writeStr8 (uiLayout.c_str ()) && s.writeStr8 (uiLayoutName.c_str ()) && s.writeInt32 (kViewTag) &&
+                   s.writeInt32 (2) && s.writeInt32 (uiAdvanced ? 1 : 0) && s.writeInt32 (uiExtrasOpen ? 1 : 0)
                ? kResultOk
                : kResultFalse;
 }
@@ -321,12 +343,16 @@ bool ControllerBase::loadPreset (const std::string& path)
     }
     if (!controllerState.empty ())
     {
-        // (the preset's editor state, but the layout the editor has now: a preset does not rearrange it)
+        // (the preset's editor state, but the layout and the view the editor has now: a preset does not
+        // rearrange it)
         const std::string layoutNow = uiLayout, layoutName = uiLayoutName;
+        const bool advancedNow = uiAdvanced, extrasNow = uiExtrasOpen;
         MemoryStream ms (controllerState.data (), (TSize)controllerState.size ());
         setState (&ms);
         uiLayout = layoutNow;
         uiLayoutName = layoutName;
+        uiAdvanced = advancedNow;
+        uiExtrasOpen = extrasNow;
     }
     if (path == defaultPath ())
     {
@@ -533,6 +559,9 @@ bool ControllerBase::resetDefault ()
 
 void ControllerBase::applyStartupDefault ()
 {
+    // the view (Menu > Defaults > Advanced View by Default: the Basic page unless it is on)
+    uiAdvanced = advancedViewByDefault ();
+    uiExtrasOpen = false;
     // the user's default layout (Menu > Layout > Use as Default Layout), then the saved default preset's
     // settings (which keep it, as every preset does)
     if (const layout::Saved saved = savedLayouts (); saved.hasDefault)
@@ -566,10 +595,13 @@ void ControllerBase::applyDefaultPreset ()
     if (!controllerState.empty ())
     {
         const std::string layoutNow = uiLayout, layoutName = uiLayoutName;
+        const bool advancedNow = uiAdvanced;
         MemoryStream cs (controllerState.data (), (TSize)controllerState.size ());
         setState (&cs);
         uiLayout = layoutNow;
         uiLayoutName = layoutName;
+        uiAdvanced = advancedNow;
+        uiExtrasOpen = false;
     }
     currentKind = presets::Kind::Default;
     currentPath.clear ();
@@ -577,6 +609,31 @@ void ControllerBase::applyDefaultPreset ()
 }
 
 GentlrDefaults ControllerBase::gentlrDefaults () const { return readGentlrDefaults (presetFolder ()); }
+
+bool ControllerBase::advancedViewByDefault () const { return gentlrDefaults ().advancedView.value_or (false); }
+
+bool ControllerBase::stepPreset (int dir)
+{
+    // the presets in the menu's order (factory, then the user's), as the tag filter shows them
+    std::vector<presets::Item> list;
+    for (auto& items : {factoryItems (), userItems ()})
+        for (const auto& it : items)
+            if (presets::matches (it, tagFilter))
+                list.push_back (it);
+    if (list.empty () || dir == 0)
+        return false;
+    const int n = (int)list.size ();
+    int at = -1;
+    for (int i = 0; i < n; ++i)
+    {
+        const auto& it = list[(size_t)i];
+        if (it.path == currentPath && (it.factory ? currentKind == presets::Kind::Factory : currentKind == presets::Kind::User))
+            at = i;
+    }
+    const int next = at < 0 ? (dir > 0 ? 0 : n - 1) : ((at + (dir > 0 ? 1 : -1)) % n + n) % n;
+    const auto& it = list[(size_t)next];
+    return it.factory ? loadFactory (it.factoryIndex) : loadPreset (it.path);
+}
 
 bool ControllerBase::writeGentlrDefaults (const GentlrDefaults& d) const { return pk::writeGentlrDefaults (presetFolder (), d); }
 
@@ -677,6 +734,16 @@ tresult PLUGIN_API ControllerBase::notify (IMessage* message)
         markDirty ();
         for (auto* e : editors)
             e->setLayout (uiLayout, uiLayoutName, true);
+        return kResultOk;
+    }
+    if (std::strcmp (id, kMsgSetView) == 0)
+    {
+        int64 advanced = 1;
+        message->getAttributes ()->getInt ("advanced", advanced);
+        for (auto* e : editors)
+            e->setAdvancedView (advanced != 0, true);
+        if (editors.empty ())
+            uiAdvanced = advanced != 0;
         return kResultOk;
     }
     if (std::strcmp (id, kMsgFindControl) == 0)

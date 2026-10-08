@@ -6,6 +6,7 @@
 // instance and for older states without it, an explicit Classic kept, presets keeping the layout, the
 // user's default layout winning over Wide); the Gentlr defaults for new instances (Menu > Defaults: on top
 // of the saved default preset, never over a project or a loaded preset). Run: ./pluginkit_preset_tests
+#include "pluginkit/ui/BasicView.h"
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/Presets.h"
 
@@ -729,6 +730,184 @@ int main ()
             CHECK (off (c, 4) && off (c, 5) && off (c, 6), "corrupt file: not set (the factory defaults)");
         }
         fs::remove (file);
+    }
+
+    std::printf ("viewInTheControllerState\n");
+    {
+        // a new instance (no defaults file): the Basic page, the extras closed
+        {
+            Instance n (host);
+            CHECK (!n.ctrl->uiAdvanced && !n.ctrl->uiExtrasOpen, "a new instance: the Basic page");
+        }
+        // the view after the layout, read back
+        Instance a (host);
+        a.ctrl->uiAdvanced = true;
+        a.ctrl->uiExtrasOpen = true;
+        a.ctrl->uiLayout = "wide";
+        MemoryStream st;
+        CHECK (a.ctrl->getState (&st) == kResultOk, "get");
+        st.seek (0, IBStream::kIBSeekSet, nullptr);
+        Instance b (host);
+        CHECK (b.ctrl->setState (&st) == kResultOk && b.ctrl->uiAdvanced && b.ctrl->uiExtrasOpen && b.ctrl->uiLayout == "wide",
+               "kept (%d %d %s)", (int)b.ctrl->uiAdvanced, (int)b.ctrl->uiExtrasOpen, b.ctrl->uiLayout.c_str ());
+        a.ctrl->uiAdvanced = false;
+        MemoryStream st2;
+        a.ctrl->getState (&st2);
+        st2.seek (0, IBStream::kIBSeekSet, nullptr);
+        CHECK (b.ctrl->setState (&st2) == kResultOk && !b.ctrl->uiAdvanced, "the Basic page kept");
+        // a state from before the view (it ends after the layout): the view a new instance has
+        MemoryStream old;
+        {
+            IBStreamer s (&old, kLittleEndian);
+            s.writeDouble (1.0);
+            s.writeBool (true);
+            s.writeStr8 ("Old project");
+            s.writeStr8 ("0:");
+            s.writeInt32 (0x56575354); // 'VWST'
+            s.writeInt32 (2);
+            s.writeInt32 (-1);
+            s.writeInt32 (1);
+            s.writeInt32 (0x4c594f54); // 'LYOT'
+            s.writeStr8 ("default");
+            s.writeStr8 ("Classic");
+        }
+        old.seek (0, IBStream::kIBSeekSet, nullptr);
+        b.ctrl->uiAdvanced = true;
+        CHECK (b.ctrl->setState (&old) == kResultOk && !b.ctrl->uiAdvanced && !b.ctrl->uiExtrasOpen && b.ctrl->uiLayout == "default",
+               "no view field: the Basic page, the layout read (%s)", b.ctrl->uiLayout.c_str ());
+        // what an older version reads of a new state: everything up to the layout, as before
+        MemoryStream st3;
+        a.ctrl->uiLayout = "display,rack";
+        a.ctrl->uiLayoutName = "Mine";
+        a.ctrl->getState (&st3);
+        st3.seek (0, IBStream::kIBSeekSet, nullptr);
+        {
+            IBStreamer r (&st3, kLittleEndian);
+            double scale = 0;
+            bool tips = false;
+            int32 tag = 0, count = 0, v = 0;
+            char8* strs[4] = {};
+            CHECK (r.readDouble (scale) && r.readBool (tips) && (strs[0] = r.readStr8 ()) && (strs[1] = r.readStr8 ()) && r.readInt32 (tag) &&
+                       r.readInt32 (count) && count == 2 && r.readInt32 (v) && r.readInt32 (v) && r.readInt32 (tag) && tag == 0x4c594f54 &&
+                       (strs[2] = r.readStr8 ()) && (strs[3] = r.readStr8 ()) && std::string (strs[2]) == "display,rack",
+                   "an older reader's fields, up to the layout");
+            CHECK (r.readInt32 (tag) && tag == 0x56494557 && r.readInt32 (count) && count == 2, "then the view, tagged");
+            for (auto* p : strs)
+                delete[] p;
+        }
+        // a preset keeps the view the editor has
+        a.ctrl->uiAdvanced = true;
+        CHECK (a.ctrl->saveUserPreset ("Viewed", "", {}), "save");
+        a.ctrl->uiAdvanced = false;
+        CHECK (a.ctrl->loadPreset ((folder / "Viewed.vstpreset").string ()) && !a.ctrl->uiAdvanced, "the editor's view stays");
+        a.ctrl->deletePreset ((folder / "Viewed.vstpreset").string ());
+        // the message the host tests use (no editor open: the controller's view)
+        auto msg = owned (new HostMessage ());
+        msg->setMessageID (pk::ControllerBase::kMsgSetView);
+        msg->getAttributes ()->setInt ("advanced", 1);
+        a.ctrl->notify (msg);
+        CHECK (a.ctrl->uiAdvanced, "pk.view.set");
+    }
+
+    std::printf ("advancedViewByDefault\n");
+    {
+        const fs::path file = folder / ".defaults.txt";
+        fs::create_directories (folder);
+        Instance a (host);
+        pk::GentlrDefaults d = a.ctrl->gentlrDefaults ();
+        d.advancedView = true;
+        CHECK (a.ctrl->writeGentlrDefaults (d), "write");
+        CHECK (a.ctrl->advancedViewByDefault (), "read back");
+        {
+            Instance n (host);
+            CHECK (n.ctrl->uiAdvanced, "a new instance: the Advanced view");
+            // a project saved on the Basic page keeps it
+            Instance b (host);
+            b.ctrl->uiAdvanced = false;
+            MemoryStream st;
+            b.ctrl->getState (&st);
+            st.seek (0, IBStream::kIBSeekSet, nullptr);
+            CHECK (n.ctrl->setState (&st) == kResultOk && !n.ctrl->uiAdvanced, "the project's view wins");
+            // the Gentlr defaults' switches are not touched by it
+            CHECK (!n.ctrl->gentlrDefaults ().gentlrOn.has_value () && !n.ctrl->gentlrDefaults ().advancedOn.has_value (), "the other switches not set");
+        }
+        d.advancedView = false;
+        CHECK (a.ctrl->writeGentlrDefaults (d), "write off");
+        {
+            Instance n (host);
+            CHECK (!n.ctrl->uiAdvanced, "off: the Basic page");
+        }
+        fs::remove (file);
+    }
+
+    std::printf ("presetArrows\n");
+    {
+        // the factory preset (Tame), then the user's (A, B): the arrows go round them in the menu's order
+        Instance a (host);
+        CHECK (a.ctrl->saveUserPreset ("A", "", {"x"}), "save A");
+        CHECK (a.ctrl->saveUserPreset ("B", "", {}), "save B");
+        a.ctrl->loadInit ();
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "Tame", "from Init, the first: %s", a.ctrl->presetName ().c_str ());
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "A", "then A: %s", a.ctrl->presetName ().c_str ());
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "B", "then B: %s", a.ctrl->presetName ().c_str ());
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "Tame", "round again: %s", a.ctrl->presetName ().c_str ());
+        CHECK (a.ctrl->stepPreset (-1) && a.ctrl->presetName () == "B", "back: %s", a.ctrl->presetName ().c_str ());
+        a.ctrl->loadInit ();
+        CHECK (a.ctrl->stepPreset (-1) && a.ctrl->presetName () == "B", "from Init back, the last: %s", a.ctrl->presetName ().c_str ());
+        // with a tag filter, only the presets it shows
+        a.ctrl->tagFilter = "x";
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "A", "filtered: %s", a.ctrl->presetName ().c_str ());
+        CHECK (a.ctrl->stepPreset (1) && a.ctrl->presetName () == "A", "filtered, the only one: %s", a.ctrl->presetName ().c_str ());
+        a.ctrl->tagFilter.clear ();
+        fs::remove (folder / "A.vstpreset");
+        fs::remove (folder / "B.vstpreset");
+    }
+
+    std::printf ("basicPageGeometry\n");
+    {
+        using namespace pk::basic;
+        Spec s;
+        s.title = "test";
+        s.rows = {{segmented (2, "Mode", {"Soft", "Hard"})}, {knob (0), knob (1), knob (3), toggle (4, "Saturator")}};
+        s.output = {knob (3)};
+        s.display = [] (const VSTGUI::CRect&) -> VSTGUI::CView* { return nullptr; };
+        s.displayHeight = 120;
+        s.extras = s.display;
+        s.extrasHeight = 100;
+        s.tailOn = 4;
+        s.level = [] { return 0.5f; };
+        auto inside = [] (const VSTGUI::CRect& in, const VSTGUI::CRect& r) {
+            return r.left >= in.left && r.top >= in.top && r.right <= in.right && r.bottom <= in.bottom;
+        };
+        for (bool open : {false, true})
+        {
+            const Geometry g = place (s, open);
+            CHECK (g.problems.empty (), "fits (%zu problems)", g.problems.size ());
+            CHECK (g.width == kWidth, "as wide as every Basic page");
+            const VSTGUI::CRect page (0, 0, g.width, g.height);
+            for (const auto& r : {g.title, g.presets, g.presetNext, g.advanced, g.help, g.menu, g.display, g.main, g.side, g.strip})
+                CHECK (inside (page, r), "in the page");
+            CHECK (g.display.bottom < g.main.top && g.main.right < g.side.left && g.main.bottom < g.strip.top, "the sections in order");
+            CHECK (g.rows.size () == 2 && g.rows[1].size () == 4, "the rows");
+            const VSTGUI::CRect panel (0, 0, g.main.getWidth (), g.main.getHeight ());
+            for (const auto& row : g.rows)
+                for (size_t i = 0; i < row.size (); ++i)
+                {
+                    CHECK (inside (panel, row[i]), "a control in its panel");
+                    if (i > 0)
+                        CHECK (row[i].left - row[i - 1].right >= kGap, "controls apart");
+                }
+            CHECK (g.rows[0][0].bottom + kGap <= g.rows[1][0].top, "rows apart");
+            CHECK (open == !g.extras.isEmpty (), "the extras %s", open ? "open" : "closed");
+            CHECK (!g.tail.isEmpty () && !g.meter.isEmpty () && !g.expand.isEmpty (), "the strip's views");
+            CHECK (g.meter.left >= g.side.left - g.strip.left, "the meter under the output column");
+            const HeaderRight h = headerRight (g.width);
+            CHECK (h.advanced == g.advanced && h.menu == g.menu, "the header's right end");
+        }
+        CHECK (place (s, true).height > place (s, false).height, "taller with the extras open");
+        Spec wide = s;
+        wide.rows[1] = {knob (0), knob (1), knob (3), knob (0), knob (1)};
+        CHECK (!place (wide, false).problems.empty (), "five in a row: a problem");
     }
 
     std::printf ("menuMessage\n");
