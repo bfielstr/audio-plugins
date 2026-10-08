@@ -1,5 +1,5 @@
 # Multidyn: three-band upward/downward compressor-expander modelled on Live's Multiband Dynamics.
-project(Multidyn VERSION 0.26.0.0)
+project(Multidyn VERSION 0.27.0.0)
 
 add_library(multidyn_core STATIC
     src/core/Params.cpp
