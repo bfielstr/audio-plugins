@@ -323,7 +323,16 @@ jobs:
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    env:
+      # The source repository is private; releases go to the public downloads repository named by the
+      # RELEASES_REPO variable (e.g. bfielstr/audio-plugins-releases), written with the RELEASES_TOKEN
+      # secret (a fine-grained token with Contents read and write on that repository). Without the
+      # variable they go to this repository as before.
+      RELEASES_REPO: ${{ vars.RELEASES_REPO || github.repository }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -335,12 +344,30 @@ jobs:
           # every release carries both double-click installers next to the zips
           test -f Plugins-macOS.pkg && test -f Plugins-Windows-x64-Setup.exe
           sha256sum Plugins-*.zip Plugins-*.pkg Plugins-*.exe > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Update the downloads repository
+        if: env.RELEASES_REPO != github.repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::RELEASES_TOKEN is not set"; exit 1; }
+          git clone --depth 1 "https://x-access-token:$GH_TOKEN@github.com/$RELEASES_REPO.git" pub
+          python3 src/scripts/releases-readme.py src/README.md pub/README.md
+          mkdir -p pub/scripts
+          cp src/LICENSE src/THIRD_PARTY_NOTICES.md pub/
+          cp src/scripts/install.sh src/scripts/install.ps1 pub/scripts/
+          cd pub
+          git add -A
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "$GITHUB_REF_NAME: README, licence and install scripts"
+            git push -q origin HEAD
+          fi
       - name: Create release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ env.RELEASES_REPO != github.repository && secrets.RELEASES_TOKEN || github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" --title "Plug-ins $GITHUB_REF_NAME (smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr)" \
+            --repo "$RELEASES_REPO" --title "Plug-ins $GITHUB_REF_NAME (smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr)" \
             --notes "**Easiest:** download the installer for your system below and double-click it.
 
           - macOS: \`Plugins-macOS.pkg\`. It is not signed by Apple yet: if macOS will not open it, right-click it and choose Open, or go to System Settings > Privacy & Security and click Open Anyway.
@@ -350,11 +377,11 @@ jobs:
 
           **macOS / Linux**
           \`\`\`
-          curl -fsSL https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/scripts/install.sh | sh
+          curl -fsSL https://raw.githubusercontent.com/$RELEASES_REPO/main/scripts/install.sh | sh
           \`\`\`
           **Windows (PowerShell)**
           \`\`\`
-          irm https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/scripts/install.ps1 | iex
+          irm https://raw.githubusercontent.com/$RELEASES_REPO/main/scripts/install.ps1 | iex
           \`\`\`
           Or download the zip for your platform below and copy the \`.vst3\` folders into your VST3 folder."
 
