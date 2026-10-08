@@ -4144,9 +4144,10 @@ TEST (lab_paths_line_up)
         e->reset ();
         const Lab& lab = e->labStage ();
         const int labLat = e->labLatency ();
-        CHECK (lab.chainLatency (0) > lab.chainLatency (1) && lab.chainLatency (2) == 0 && labLat == lab.chainLatency (0) + lab.postLatency () &&
+        CHECK (lab.chainLatency (0) > lab.chainLatency (1) && lab.chainLatency (2) == 0 && labLat == Lab::kChunk + lab.chainLatency (0) + lab.postLatency () &&
                    e->latency () == labLat + ref->latency (),
-               "the latency: the slowest chain's (%d) and POST's (%d), then the end saturator's (%d)", lab.chainLatency (0), lab.postLatency (),
+               "the latency: the effects' block, the slowest chain's (%d) and POST's (%d), then the end saturator's (%d)", lab.chainLatency (0),
+               lab.postLatency (),
                e->latency () - labLat);
         std::vector<float> x (32768, 0.0f);
         x[0] = 0.5f;

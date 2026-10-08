@@ -57,7 +57,7 @@ void Lab::prepare (double sampleRate)
     fade = 1.0 - std::exp (-1.0 / (0.02 * sr));
     for (auto& s : slots)
         if (s)
-            s->prepare (sr, kTick);
+            s->prepare (sr, kChunk);
     reset ();
 }
 
@@ -75,6 +75,9 @@ void Lab::reset ()
         b.reset ();
     postBelow.reset ();
     lowDelay.reset ();
+    fill = 0;
+    for (int ch = 0; ch < 2; ++ch)
+        std::fill (held[ch], held[ch] + kChunk, 0.0);
     // every gain at its setting
     const bool anySolo = solo[0] || solo[1] || solo[2];
     for (int c = 0; c < kNumChains; ++c)
@@ -156,10 +159,12 @@ int Lab::postLatency () const
 
 int Lab::latency () const
 {
+    if (!holdsEffects ())
+        return 0;
     int l = 0;
     for (int c = 0; c < kNumBandChains; ++c)
         l = std::max (l, chainLatency (c));
-    return std::min (l + postLatency (), kMaxLatency - 1);
+    return std::min (kChunk + l + postLatency (), kMaxLatency - 1);
 }
 
 int Lab::firstOf (int chain, int fxType) const
@@ -182,11 +187,66 @@ void Lab::runSlots (int first, int count, float* l, float* r, int m)
     }
 }
 
+bool Lab::holdsEffects () const
+{
+    for (int s = 0; s < kNumLabSlots; ++s)
+        if (runs (s) && slots[(size_t)s]->type != smemplr::kFxEmpty)
+            return true;
+    return false;
+}
+
 void Lab::run (float (*in)[2][kTick], double (*low)[kTick], double (*up)[kTick], int m, double lowX)
 {
-    dsp::SvfCoefs below;
     below.set (std::tan (dsp::kPi * std::min (lowX, 0.45 * sr) / sr), dsp::kSqrt2);
-    double dry[2][kTick];
+    const bool chunked = holdsEffects ();
+    const int lowLat = latency ();
+    if (!chunked)
+    {
+        // (no effects: the gains, Mono and the sum at once)
+        for (int c = 0; c < kNumBandChains; ++c)
+            for (int ch = 0; ch < 2; ++ch)
+                std::copy (in[c][ch], in[c][ch] + m, chunkIn[c][ch]);
+        block (m);
+        for (int ch = 0; ch < 2; ++ch)
+            std::copy (chunkOut[ch], chunkOut[ch] + m, up[ch]);
+        fill = 0;
+    }
+    else
+        for (int i = 0; i < m; ++i)
+        {
+            // the effects run kChunk samples at a time: a sample in comes out kChunk later (part of the latency)
+            for (int c = 0; c < kNumBandChains; ++c)
+            {
+                chunkIn[c][0][fill] = in[c][0][i];
+                chunkIn[c][1][fill] = in[c][1][i];
+            }
+            up[0][i] = held[0][fill];
+            up[1][i] = held[1][fill];
+            if (++fill == kChunk)
+            {
+                block (kChunk);
+                for (int ch = 0; ch < 2; ++ch)
+                    std::copy (chunkOut[ch], chunkOut[ch] + kChunk, held[ch]);
+                fill = 0;
+            }
+        }
+    // the Low band, lined up (silent while a chain is soloed)
+    const bool anySolo = solo[0] || solo[1] || solo[2];
+    const double lowTarget = anySolo ? 0.0 : 1.0;
+    for (int i = 0; i < m; ++i)
+    {
+        lowGain += (lowTarget - lowGain) * fade;
+        if (std::fabs (lowTarget - lowGain) < 1e-6)
+            lowGain = lowTarget;
+        low[0][i] = lowDelay.tick (0, low[0][i] * lowGain, lowLat);
+        low[1][i] = lowDelay.tick (1, low[1][i] * lowGain, lowLat);
+        lowDelay.advance ();
+    }
+}
+
+void Lab::block (int m)
+{
+    double dry[2][kChunk];
     int lat[kNumBandChains], slowest = 0;
     for (int c = 0; c < kNumBandChains; ++c)
     {
@@ -194,13 +254,14 @@ void Lab::run (float (*in)[2][kTick], double (*low)[kTick], double (*up)[kTick],
         slowest = std::max (slowest, lat[c]);
     }
     const int postLat = postLatency ();
-    const int lowLat = std::min (slowest + postLat, kMaxLatency - 1);
     const bool anySolo = solo[0] || solo[1] || solo[2];
+    double (*up)[kChunk] = chunkOut;
     for (int ch = 0; ch < 2; ++ch)
         std::fill (up[ch], up[ch] + m, 0.0);
     for (int c = 0; c < kNumBandChains; ++c)
     {
         const auto cc = (size_t)c;
+        float (*in)[kChunk] = chunkIn[c];
         double target = levelDb[cc] <= kLevelOffDb ? 0.0 : std::pow (10.0, levelDb[cc] / 20.0);
         if (mute[cc] || (anySolo && !solo[cc]))
             target = 0.0;
@@ -209,8 +270,8 @@ void Lab::run (float (*in)[2][kTick], double (*low)[kTick], double (*up)[kTick],
         // (the input, lined up with the effects' output: always written, so it is ready when the chain is heard again)
         for (int i = 0; i < m; ++i)
         {
-            dry[0][i] = chainDry[c].tick (0, in[c][0][i], lat[c]);
-            dry[1][i] = chainDry[c].tick (1, in[c][1][i], lat[c]);
+            dry[0][i] = chainDry[c].tick (0, in[0][i], lat[c]);
+            dry[1][i] = chainDry[c].tick (1, in[1][i], lat[c]);
             chainDry[c].advance ();
         }
         if (!silent)
@@ -221,15 +282,15 @@ void Lab::run (float (*in)[2][kTick], double (*low)[kTick], double (*up)[kTick],
                     slots[(size_t)chainSlot (c, k)]->reset ();
                 chainBelow[c].reset ();
             }
-            runSlots (chainSlot (c, 0), kChainSlots, in[c][0], in[c][1], m);
+            runSlots (chainSlot (c, 0), kChainSlots, in[0], in[1], m);
         }
         wasRunning[cc] = !silent;
         const int delay = slowest - lat[c];
         double& g = gain[cc];
         for (int i = 0; i < m; ++i)
         {
-            double l = silent ? 0.0 : chainBelow[c].tick (0, dry[0][i], in[c][0][i], below);
-            double r = silent ? 0.0 : chainBelow[c].tick (1, dry[1][i], in[c][1][i], below);
+            double l = silent ? 0.0 : chainBelow[c].tick (0, dry[0][i], in[0][i], below);
+            double r = silent ? 0.0 : chainBelow[c].tick (1, dry[1][i], in[1][i], below);
             if (mono[cc])
                 l = r = 0.5 * (l + r);
             g += (target - g) * fade;
@@ -259,17 +320,6 @@ void Lab::run (float (*in)[2][kTick], double (*low)[kTick], double (*up)[kTick],
         for (int ch = 0; ch < 2; ++ch)
             for (int i = 0; i < m; ++i)
                 up[ch][i] = postBelow.tick (ch, dry[ch][i], post[ch][i], below);
-    }
-    // the Low band, lined up (silent while a chain is soloed)
-    const double lowTarget = anySolo ? 0.0 : 1.0;
-    for (int i = 0; i < m; ++i)
-    {
-        lowGain += (lowTarget - lowGain) * fade;
-        if (std::fabs (lowTarget - lowGain) < 1e-6)
-            lowGain = lowTarget;
-        low[0][i] = lowDelay.tick (0, low[0][i] * lowGain, lowLat);
-        low[1][i] = lowDelay.tick (1, low[1][i] * lowGain, lowLat);
-        lowDelay.advance ();
     }
 }
 
