@@ -1,15 +1,10 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: sweep, bass, bright
-comment: The High Shelf's orbit reaches up to 5 kHz; Tilt keeps the boost low at the high corners so it opens up without getting nasal.
+tags: sweep, bass, classic
+comment: The default sound of 0.24 and 0.25: bell A +18 dB sweeping 20 to 120 Hz at 0.70 Hz, bell B -18 dB sweeping 30 to 300 Hz at 0.77 Hz, the High Shelf orbiting 100 Hz to 1 kHz, then 18 dB of drive. The bands neutral.
 Sweep = On
-High Shelf = On
-Shelf Low = 120 Hz
-Shelf High = 5 kHz
-Shelf Max = 6 dB
-Tilt = 85 %
-Wander = 60 %
-# the SWEEP stage as it was before 0.26 (two bells, Curve Hard, no Tone, no sub options)
 Sweep Drive = 18 dB
+High Shelf = On
+# the SWEEP stage as it was before 0.26 (two bells, Curve Hard, no Tone, no sub options)
 A Gain = 18 dB
 A Width = 0.71
 B Gain = -18 dB

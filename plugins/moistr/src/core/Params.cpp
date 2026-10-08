@@ -1,7 +1,10 @@
 #include "Params.h"
 
+#include "Dsp.h"
+
 #include "smacheratr/src/core/TailExt.h"
 
+#include <string>
 #include <vector>
 
 namespace moistr {
@@ -78,33 +81,30 @@ const ParamTable& paramTable ()
         v.push_back (percent (kLiquidRes, "Liquid Res", "Res", 0.5));
         v.push_back (real (kLiquidLow, "Liquid Low", "Low", kLiquidLowMin, kLiquidLowMax, 250.0, Curve::Log, Disp::Hz));
         v.push_back (real (kLiquidHigh, "Liquid High", "High", kLiquidHighMin, kLiquidHighMax, 1600.0, Curve::Log, Disp::Hz));
-        // the SWEEP stage (0.24): the default sound. Bell A +18 dB sweeping 20 .. 120 Hz at 0.70 Hz, bell B -18 dB
-        // sweeping 30 .. 300 Hz at 0.77 Hz (both broad, Q 0.71, starting at Low), the High Shelf going round
-        // 100 .. 1000 Hz and -18 .. +6 dB, then the saturator at 18 dB
+        // the SWEEP stage (0.24; 0.26 the "Ocean" recipe, kOcean*): eight sweeping bells, the High Shelf (off),
+        // the saturator at 14 dB on its Soft curve, its sub option (kOceanSub), Tone at 7 kHz
         const std::vector<const char*> syncRates {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8"};
         v.push_back (toggle (kSweep, "Sweep", "Sweep", true));
-        v.push_back (real (kSweepDrive, "Sweep Drive", "Drive", 0.0, kSweepDriveMax, 18.0, Curve::Linear, Disp::Db));
-        struct Bell
-        {
-            const char *rate, *sync, *syncRate, *low, *high, *gain, *width, *phase;
-            double rateHz, lowHz, highHz, gainDb;
+        v.push_back (real (kSweepDrive, "Sweep Drive", "Drive", 0.0, kSweepDriveMax, kOceanDriveDb, Curve::Linear, Disp::Db));
+        // A and B (their IDs and ranges from 0.24), then the High Shelf
+        auto bell = [&] (int b) {
+            static const char* const letters[kNumBells] = {"A", "B", "C", "D", "E", "F", "G", "H"};
+            auto name = [&] (const char* what) { return keep (std::string (letters[b]) + " " + what); };
+            const BellRecipe& d = kOceanBells[b];
+            const double top = b < 2 ? kBellFreqMax : kBellFreqMaxWide;
+            const uint32_t base = bellRateId (b);
+            v.push_back (real (base + kBellRate, name ("Rate"), "Rate", kSweepRateMin, kSweepRateMax, d.rate, Curve::Log, Disp::Hz));
+            v.push_back (toggle (base + kBellSync, name ("Sync"), "Sync", false));
+            v.push_back (choice (base + kBellSyncRate, name ("Sync Rate"), "Sync Rate", syncRates, 2));
+            v.push_back (real (base + kBellLow, name ("Low"), "Low", kBellFreqMin, top, d.low, Curve::Log, Disp::Hz));
+            v.push_back (real (base + kBellHigh, name ("High"), "High", kBellFreqMin, top, d.high, Curve::Log, Disp::Hz));
+            v.push_back (real (base + kBellGain, name ("Gain"), "Gain", -24.0, 24.0, d.gainDb, Curve::Linear, Disp::Db));
+            v.push_back (real (base + kBellWidth, name ("Width"), "Width", kBellQMin, kBellQMax, d.q, Curve::Log, Disp::Number));
+            v.push_back (real (base + kBellPhase, name ("Phase"), "Phase", 0.0, 360.0, d.phaseRad * 180.0 / dsp::kPi, Curve::Linear, Disp::Degrees));
         };
-        const Bell bells[2] = {{"A Rate", "A Sync", "A Sync Rate", "A Low", "A High", "A Gain", "A Width", "A Phase", 0.70, 20.0, 120.0, 18.0},
-                               {"B Rate", "B Sync", "B Sync Rate", "B Low", "B High", "B Gain", "B Width", "B Phase", 0.77, 30.0, 300.0, -18.0}};
-        for (int b = 0; b < 2; ++b)
-        {
-            const uint32_t base = b == 0 ? kARate : kBRate;
-            const Bell& d = bells[b];
-            v.push_back (real (base + 0, d.rate, "Rate", kSweepRateMin, kSweepRateMax, d.rateHz, Curve::Log, Disp::Hz));
-            v.push_back (toggle (base + 1, d.sync, "Sync", false));
-            v.push_back (choice (base + 2, d.syncRate, "Sync Rate", syncRates, 2));
-            v.push_back (real (base + 3, d.low, "Low", kBellFreqMin, kBellFreqMax, d.lowHz, Curve::Log, Disp::Hz));
-            v.push_back (real (base + 4, d.high, "High", kBellFreqMin, kBellFreqMax, d.highHz, Curve::Log, Disp::Hz));
-            v.push_back (real (base + 5, d.gain, "Gain", -24.0, 24.0, d.gainDb, Curve::Linear, Disp::Db));
-            v.push_back (real (base + 6, d.width, "Width", kBellQMin, kBellQMax, kBellQDefault, Curve::Log, Disp::Number));
-            v.push_back (real (base + 7, d.phase, "Phase", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
-        }
-        v.push_back (toggle (kShelf, "High Shelf", "High Shelf", true));
+        bell (0);
+        bell (1);
+        v.push_back (toggle (kShelf, "High Shelf", "High Shelf", false));
         v.push_back (real (kShelfRate, "Shelf Rate", "Rate", kSweepRateMin, kSweepRateMax, 0.53, Curve::Log, Disp::Hz));
         v.push_back (real (kShelfLow, "Shelf Low", "Low", 50.0, 2000.0, 100.0, Curve::Log, Disp::Hz));
         v.push_back (real (kShelfHigh, "Shelf High", "High", 300.0, 5000.0, 1000.0, Curve::Log, Disp::Hz));
@@ -113,9 +113,58 @@ const ParamTable& paramTable ()
         v.push_back (real (kShelfQ, "Shelf Q", "Q", kShelfQMin, kShelfQMax, 18.0, Curve::Log, Disp::Number));
         v.push_back (percent (kShelfWander, "Wander", "Wander", 0.5));
         v.push_back (percent (kShelfTilt, "Tilt", "Tilt", 0.65));
+        // 0.26: the saturator's Curve, Tone, Clean Sub, Sub Boost, the bells' switches and bells C .. H
+        v.push_back (choice (kSweepCurve, "Curve", "Curve", {"Hard", "Soft"}, kCurveSoft));
+        v.push_back (toggle (kToneOn, "Tone On", "Tone", true));
+        v.push_back (real (kTone, "Tone", "Tone", kToneMin, kToneMax, kOceanToneHz, Curve::Log, Disp::Hz));
+        v.push_back (toggle (kCleanSub, "Clean Sub", "Clean Sub", kOceanSub == OceanSub::CleanSub));
+        v.push_back (real (kSplitFreq, "Split Freq", "Split", kSplitFreqMin, kSplitFreqMax, kOceanSplitHz, Curve::Log, Disp::Hz));
+        v.push_back (real (kSplitLevel, "Split Level", "Level", kSplitLevelMin, kSplitLevelMax, kOceanSplitLevelDb, Curve::Linear, Disp::Db));
+        v.push_back (real (kSplitDrive, "Split Drive", "Drive", 0.0, kSplitDriveMax, kOceanSplitDriveDb, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kSubBoost, "Sub Boost", "Sub Boost", kOceanSub == OceanSub::SubBoost));
+        v.push_back (real (kSubFreq, "Sub Freq", "Freq", kSubFreqMin, kSubFreqMax, kOceanSubHz, Curve::Log, Disp::Hz));
+        v.push_back (percent (kSubLevel, "Sub Level", "Level", kOceanSubLevel));
+        v.push_back (toggle (kAOn, "A On", "On", true));
+        v.push_back (toggle (kBOn, "B On", "On", true));
+        for (int b = 2; b < kNumBells; ++b)
+        {
+            static const char* const onNames[kNumBells] = {"A On", "B On", "C On", "D On", "E On", "F On", "G On", "H On"};
+            v.push_back (toggle (bellOnId (b), onNames[b], "On", true));
+            bell (b);
+        }
         return v;
     }());
     return t;
+}
+
+double defaultNormalized025 (uint32_t id)
+{
+    switch (id)
+    {
+        // 0.24 and 0.25: Drive 18 dB on the Hard curve, the High Shelf on, A and B at Q 0.71 from Phase 0, at +-18 dB
+        case kSweepDrive: return toNormalized (id, 18.0);
+        case kShelf: return 1.0;
+        case kAWidth:
+        case kBWidth: return toNormalized (id, kBellQDefault);
+        case kAGain: return toNormalized (id, 18.0);
+        case kBGain: return toNormalized (id, -18.0);
+        case kBPhase: return 0.0;
+        // what 0.26 added, as it leaves their sound: bells C .. H, Tone, Clean Sub and Sub Boost off, Curve Hard
+        case kSweepCurve: return toNormalized (id, kCurveHard);
+        case kToneOn:
+        case kCleanSub:
+        case kSubBoost: return 0.0;
+        default: break;
+    }
+    for (int b = 2; b < kNumBells; ++b)
+        if (id == bellOnId (b))
+            return 0.0;
+    return defaultNormalized (id);
+}
+
+double defaultNormalizedForVersion (uint32_t id, int version)
+{
+    return version < 3 ? legacyDefaultNormalized (id) : version < 5 ? defaultNormalized025 (id) : defaultNormalized (id);
 }
 
 double legacyDefaultNormalized (uint32_t id)
@@ -127,7 +176,7 @@ double legacyDefaultNormalized (uint32_t id)
         case kGlue: return toNormalized (kGlue, 0.4);
         case kGrit: return toNormalized (kGrit, 0.2);
         case kSweep: return 0.0; // (off: the sound before 0.24)
-        default: return defaultNormalized (id);
+        default: return defaultNormalized025 (id);
     }
 }
 

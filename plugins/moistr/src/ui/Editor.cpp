@@ -55,8 +55,15 @@ void Editor::onClose ()
     sweepView = nullptr;
     sweepControls.clear ();
     shelfControls.clear ();
-    for (int b = 0; b < 2; ++b)
+    splitControls.clear ();
+    boostControls.clear ();
+    toneKnob = nullptr;
+    for (int b = 0; b < kNumBells; ++b)
+    {
         rateViews[b] = syncRateViews[b] = nullptr;
+        bellViews[b].clear ();
+        bellKnobs[b].clear ();
+    }
     liquidKnobs.clear ();
     latencyLabel = nullptr;
     tail.reset ();
@@ -115,37 +122,80 @@ void Editor::buildUI (CFrame* f)
         return made;
     };
 
-    // ---- the SWEEP stage (the default sound): its switch and the saturator's Drive, the two bells, the High
-    // Shelf and its display
+    // ---- the SWEEP stage (the default sound): its switch, the saturator's Drive and Curve and the Tone after it;
+    // the eight bells (one at a time); the sub options; the High Shelf and the display
     auto* sweep = new Panel (CRect (kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH), "SWEEP");
     root->addView (sweep);
-    bind (sweep, new Toggle (switchRect (), this, kSweep, "Sweep"));
-    for (Knob* k : besides (sweep, {{kSweepDrive}}))
-        sweepControls.push_back (k);
-
-    // each bell: Sync, its Sync Rate and Phase in a compact column, then Rate, Low, High, Gain and Width
-    for (int b = 0; b < 2; ++b)
+    const double sc = kSwitchLeft, scr = kSwitchLeft + kSweepColW;
+    bind (sweep, new Toggle (CRect (sc, kSwitchTop, scr, kSwitchTop + kSwitchH), this, kSweep, "Sweep"));
+    sweepControls.push_back (bind (sweep, new Segmented (CRect (sc, kCurveTop, scr, kCurveTop + kSwitchH), this, kSweepCurve, {"Hard", "Soft"})));
+    sweepControls.push_back (bind (sweep, new Toggle (CRect (sc, kToneTop, scr, kToneTop + kSwitchH), this, kToneOn, "Tone")));
+    for (int i = 0; i < 2; ++i)
     {
-        const double left = b == 0 ? kBellALeft : kBellBLeft, right = b == 0 ? kBellARight : kBellBRight;
-        const uint32_t base = b == 0 ? kARate : kBRate;
-        auto* bell = new Panel (CRect (left, kSweepRow1, right, kSweepRow1 + kRowH), b == 0 ? "BELL A" : "BELL B");
-        root->addView (bell);
-        const double cx = kSwitchLeft, cr = kSwitchLeft + kBellColW;
-        sweepControls.push_back (bind (bell, new Toggle (CRect (cx, kSwitchTop, cr, kSwitchTop + kSwitchH), this, base + 1, "Sync")));
-        syncRateViews[b] = bind (bell, new pk::Choice (CRect (cx, 56, cr, 76), this, base + 2));
-        sweepControls.push_back (syncRateViews[b]);
-        bell->addView (new Label (CRect (cx, 84, cx + 38, 102), "Phase", 9.5));
-        sweepControls.push_back (bind (bell, new pk::NumberBox (CRect (cx + 40, 84, cr, 102), this, base + 7)));
+        const double x = kSweepKnobLeft + kKnobStep * i;
+        auto* k = bind (sweep, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, i == 0 ? kSweepDrive : kTone));
+        sweepControls.push_back (k);
+        if (i == 1)
+            toneKnob = k;
+    }
+
+    // the bells: a picker (A .. H) and every bell's On under it; the picked bell's Sync and Sync Rate, then its Rate,
+    // Low, High, Gain, Width and Phase
+    auto* bells = new Panel (CRect (kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH), "BELLS");
+    root->addView (bells);
+    static const char* const letters[kNumBells] = {"A", "B", "C", "D", "E", "F", "G", "H"};
+    for (int b = 0; b < kNumBells; ++b)
+    {
+        const double x = kSwitchLeft + kBellCellW * b, xr = x + kBellCellW - 2.0;
+        auto* pick = new ActionButton (CRect (x, kBellPickTop, xr, kBellPickTop + kBellRowH), letters[b], [this, b] { pickBell (b); },
+                                       [this, b] { return pickedBell == b; });
+        char tip[96];
+        std::snprintf (tip, sizeof (tip), "Shows bell %s's controls here (the curves of every bell on are in the display).", letters[b]);
+        pick->setTooltipText (tip);
+        bells->addView (pick);
+        sweepControls.push_back (bind (bells, new Toggle (CRect (x, kBellOnTop, xr, kBellOnTop + kBellRowH), this, bellOnId (b), letters[b])));
+        // (the picked bell's own controls, all in the same places: only the picked one's are shown)
+        auto keep = [&] (pk::ParamView* v) {
+            sweepControls.push_back (v);
+            bellViews[b].push_back (v);
+            return v;
+        };
+        keep (bind (bells, new Toggle (CRect (kSwitchLeft, kBellSyncTop, kSwitchLeft + kBellSyncW, kBellSyncTop + kSwitchH), this,
+                                       bellId (b, kBellSync), "Sync")));
+        syncRateViews[b] = keep (bind (bells, new pk::Choice (CRect (kSwitchLeft + kBellSyncW + 6.0, kBellSyncTop,
+                                                                     kSwitchLeft + kBellCellW * kNumBells - 2.0, kBellSyncTop + kSwitchH),
+                                                              this, bellId (b, kBellSyncRate))));
         int i = 0;
-        for (uint32_t id : {base + 0, base + 3, base + 4, base + 5, base + 6})
+        for (BellField f : {kBellRate, kBellLow, kBellHigh, kBellGain, kBellWidth, kBellPhase})
         {
-            const double x = kBellKnobLeft + kKnobStep * i++;
-            auto* k = bind (bell, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id, nullptr, id == base + 5));
-            sweepControls.push_back (k);
-            if (id == base + 0)
+            const double kx = kBellKnobLeft + kKnobStep * i++;
+            auto* k = bind (bells, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, bellId (b, f), nullptr, f == kBellGain));
+            keep (k);
+            bellKnobs[b].push_back (k);
+            if (f == kBellRate)
                 rateViews[b] = k;
         }
     }
+
+    // the sub options: Clean Sub (the lows around the saturator) and Sub Boost (the lows added back after it)
+    auto* sub = new Panel (CRect (kSubLeft, kSweepRow1, kSubRight, kSweepRow1 + kRowH), "SUB");
+    root->addView (sub);
+    auto subColumn = [&] (int col, uint32_t sw, const char* name, std::initializer_list<std::pair<uint32_t, const char*>> boxes,
+                          std::vector<pk::ParamView*>& views) {
+        const double x = kSwitchLeft + (kSubColW + 8.0) * col, xr = x + kSubColW;
+        sweepControls.push_back (bind (sub, new Toggle (CRect (x, kSwitchTop, xr, kSwitchTop + kSwitchH), this, sw, name)));
+        int i = 0;
+        for (const auto& [id, label] : boxes)
+        {
+            const double y = kSubBoxTop + kSubBoxStep * i++;
+            sub->addView (new Label (CRect (x, y, x + kSubLabelW, y + kSubBoxH), label, 9.5));
+            auto* box = bind (sub, new pk::NumberBox (CRect (x + kSubLabelW + 2.0, y, xr, y + kSubBoxH), this, id));
+            sweepControls.push_back (box);
+            views.push_back (box);
+        }
+    };
+    subColumn (0, kCleanSub, "Clean Sub", {{kSplitFreq, "Split"}, {kSplitLevel, "Level"}, {kSplitDrive, "Drive"}}, splitControls);
+    subColumn (1, kSubBoost, "Sub Boost", {{kSubFreq, "Freq"}, {kSubLevel, "Level"}}, boostControls);
 
     // the High Shelf: on, then its orbit's Rate, where its corner and gain go, its Q, Wander and Tilt
     auto* shelf = new Panel (CRect (kShelfLeft, kSweepRow2, kShelfRight, kSweepRow2 + kRowH), "HIGH SHELF");
@@ -248,8 +298,30 @@ void Editor::buildUI (CFrame* f)
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
+    pickBell (pickedBell);
     updateLooks ();
     idle ();
+}
+
+void Editor::pickBell (int b)
+{
+    pickedBell = std::clamp (b, 0, kNumBells - 1);
+    for (int i = 0; i < kNumBells; ++i)
+        for (CView* v : bellViews[i])
+            v->setVisible (i == pickedBell);
+    if (frame)
+        frame->invalid ();
+}
+
+bool Editor::affectsLooks (uint32_t id)
+{
+    if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
+        id == kCleanSub || id == kSubBoost)
+        return true;
+    for (int b = 0; b < kNumBells; ++b)
+        if (id == bellOnId (b) || id == bellId (b, kBellSync))
+            return true;
+    return false;
 }
 
 void Editor::updateLooks ()
@@ -271,13 +343,21 @@ void Editor::updateLooks ()
         v->setEnabledLook (sweeping);
     for (pk::ParamView* v : shelfControls)
         v->setEnabledLook (sweeping && shelving);
-    for (int b = 0; b < 2; ++b)
+    if (toneKnob)
+        toneKnob->setEnabledLook (sweeping && plainValue (kToneOn) >= 0.5);
+    for (pk::ParamView* v : splitControls)
+        v->setEnabledLook (sweeping && plainValue (kCleanSub) >= 0.5);
+    for (pk::ParamView* v : boostControls)
+        v->setEnabledLook (sweeping && plainValue (kSubBoost) >= 0.5);
+    for (int b = 0; b < kNumBells; ++b)
     {
-        const bool synced = plainValue (b == 0 ? kASync : kBSync) >= 0.5;
+        const bool on = sweeping && plainValue (bellOnId (b)) >= 0.5, synced = plainValue (bellId (b, kBellSync)) >= 0.5;
+        for (pk::ParamView* k : bellKnobs[b])
+            k->setEnabledLook (on);
         if (rateViews[b])
-            rateViews[b]->setEnabledLook (sweeping && !synced);
+            rateViews[b]->setEnabledLook (on && !synced);
         if (syncRateViews[b])
-            syncRateViews[b]->setEnabledLook (sweeping && synced);
+            syncRateViews[b]->setEnabledLook (on && synced);
     }
 }
 
@@ -286,8 +366,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kASync ||
-        id == kBSync)
+    if (affectsLooks (id))
         updateLooks ();
     if (sweepView && SweepView::shows (id))
     {
@@ -348,14 +427,14 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the SWEEP stage's row first (sweep; bell a over bell b; the high shelf over its display), then the
+    // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
     // and the end saturator in a row of its own at the bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
-        {"bell-a", "", {kBellALeft, kSweepRow1, kBellARight, kSweepRow1 + kRowH}, 0, 0},
-        {"bell-b", "", {kBellBLeft, kSweepRow1, kBellBRight, kSweepRow1 + kRowH}, 0, 0},
+        {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
+        {"sub", "", {kSubLeft, kSweepRow1, kSubRight, kSweepRow1 + kRowH}, 0, 0},
         {"shelf", "", {kShelfLeft, kSweepRow2, kShelfRight, kSweepRow2 + kRowH}, 0, 1},
         {"sweepview", "sweep", {kSweepViewLeft, kSweepRow2, kSweepViewRight, kSweepRow2 + kRowH}, 0, 1, true},
         {"display", "bands", {d.left, d.top, d.right, d.bottom}, 1},

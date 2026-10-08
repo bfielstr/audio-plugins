@@ -1,0 +1,14 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, ocean, clean
+comment: The Ocean sweep with Clean Sub: below 100 Hz the lows go around the saturator, so the sub stays clean under the crunch. Turn up Split Drive to let the sub crunch a little too.
+Sweep = On
+Sweep Drive = 14 dB
+Curve = Soft
+Tone On = On
+Tone = 7 kHz
+High Shelf = Off
+Clean Sub = On
+Split Freq = 100 Hz
+Split Level = -11.5 dB
+Split Drive = 0 dB
+Sub Boost = Off

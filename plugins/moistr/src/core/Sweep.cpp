@@ -9,14 +9,19 @@ namespace moistr {
 
 namespace {
 constexpr double kTwoPi = 2.0 * dsp::kPi;
-constexpr uint32_t kRateIds[3] = {kARate, kBRate, kShelfRate};
-constexpr uint32_t kLowIds[3] = {kALow, kBLow, kShelfLow};
-constexpr uint32_t kHighIds[3] = {kAHigh, kBHigh, kShelfHigh};
-constexpr uint32_t kQIds[3] = {kAWidth, kBWidth, kShelfQ};
-constexpr uint32_t kSyncIds[2] = {kASync, kBSync};
-constexpr uint32_t kSyncRateIds[2] = {kASyncRate, kBSyncRate};
-constexpr uint32_t kGainIds[2] = {kAGain, kBGain};
-constexpr uint32_t kPhaseIds[2] = {kAPhase, kBPhase};
+// the per-filter parameters: bells A .. H, then the shelf (Sweep::kShelfIdx)
+constexpr uint32_t rateId (int b) { return b < kNumBells ? bellId (b, kBellRate) : kShelfRate; }
+constexpr uint32_t lowId (int b) { return b < kNumBells ? bellId (b, kBellLow) : kShelfLow; }
+constexpr uint32_t highId (int b) { return b < kNumBells ? bellId (b, kBellHigh) : kShelfHigh; }
+constexpr uint32_t qId (int b) { return b < kNumBells ? bellId (b, kBellWidth) : kShelfQ; }
+// a bell's gain to glide to: its Gain while on, 0 dB (flat) while off
+inline double bellGainTarget (const double* p, int b) { return p[bellOnId (b)] >= 0.5 ? p[bellId (b, kBellGain)] : 0.0; }
+// the Curve's drive offset (dB): Hard 0, Soft 20 log10 (0.7)
+inline double curveTarget (const double* p)
+{
+    static const double soft = 20.0 * std::log10 (kSoftCurve);
+    return std::lround (p[kSweepCurve]) == kCurveSoft ? soft : 0.0;
+}
 // the orbit's smooth random curves: how far Wander 100 % moves the angle (radians), the radius (from 1, the
 // most) and the centre (of the range); the curves' rates in cycles of Shelf Rate (slow, at most 0.45: the
 // angle never runs backwards, 1.0 x 2 pi x 0.45 < 2 pi)
@@ -98,7 +103,7 @@ double Sweep::compensation (double driveDb, double avgDb, double inRms)
     return rms > 1e-12 ? inRms / rms : 1.0;
 }
 
-double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q)
+double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q, int n)
 {
     // the analog peaking EQ's magnitude: |(1 - w^2 + j w A / Q) / (1 - w^2 + j w / (A Q))|, w = f / centre
     constexpr int kSteps = 16;
@@ -110,8 +115,10 @@ double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* 
         {
             const double m = 0.5 - 0.5 * std::cos (dsp::kPi * (i + 0.5) / kSteps); // (the sweep's places, as often as it is there)
             double gain = 1.0;
-            for (int b = 0; b < 2; ++b)
+            for (int b = 0; b < n; ++b)
             {
+                if (gainDb[b] == 0.0)
+                    continue; // (flat: its factor would be exactly 1)
                 const double centre = lo[b] * std::pow (hi[b] / lo[b], m), w = kAvgRefHz[f] / centre, a = std::pow (10.0, gainDb[b] / 40.0);
                 const double re = 1.0 - w * w, num = w * a / q[b], den = w / (a * q[b]);
                 gain *= (re * re + num * num) / (re * re + den * den);
@@ -130,35 +137,58 @@ void Sweep::prepare (double sampleRate)
     tickSmooth = 1.0 - std::exp (-(double)kTick / (0.03 * sr));
     fadeStep = (double)kTick / (0.02 * sr);
     levelCoef = 1.0 - std::exp (-(double)kTick / (kLevelSec * sr));
+    boostCoef = 1.0 - std::exp (-(double)kTick / (kSubSec * sr));
 }
 
 void Sweep::reset (const double* p)
 {
-    for (int b = 0; b < 3; ++b)
+    for (int b = 0; b < kFilters; ++b)
     {
-        logLo[b] = std::log2 (std::max (p[kLowIds[b]], 1.0));
-        logHi[b] = std::log2 (std::max (p[kHighIds[b]], 1.0));
-        logQ[b] = std::log2 (std::max (p[kQIds[b]], 0.01));
+        logLo[b] = std::log2 (std::max (p[lowId (b)], 1.0));
+        logHi[b] = std::log2 (std::max (p[highId (b)], 1.0));
+        logQ[b] = std::log2 (std::max (p[qId (b)], 0.01));
         theta[b] = 0.0;
         for (auto& f : filt[b])
             f.reset ();
     }
-    for (int b = 0; b < 2; ++b)
+    for (int b = 0; b < kNumBells; ++b)
     {
-        gainDb[b] = p[kGainIds[b]];
-        phaseDeg[b] = p[kPhaseIds[b]];
+        gainDb[b] = bellGainTarget (p, b);
+        phaseDeg[b] = p[bellId (b, kBellPhase)];
+        bellRun[b] = gainDb[b] != 0.0;
     }
     shelfMin = p[kShelfMin];
     shelfMax = p[kShelfMax];
     wander = std::clamp (p[kShelfWander], 0.0, 1.0);
     tilt = std::clamp (p[kShelfTilt], 0.0, 1.0);
     driveDb = std::clamp (p[kSweepDrive], 0.0, kSweepDriveMax);
+    curveDb = curveTarget (p);
     fade = p[kSweep] >= 0.5 ? 1.0 : 0.0;
     shelfFade = p[kShelf] >= 0.5 ? 1.0 : 0.0;
-    sat[0].reset ();
-    sat[1].reset ();
+    subFade = p[kCleanSub] >= 0.5 ? 1.0 : 0.0;
+    boostFade = p[kSubBoost] >= 0.5 ? 1.0 : 0.0;
+    toneFade = p[kToneOn] >= 0.5 ? 1.0 : 0.0;
+    logSplit = std::log2 (std::clamp (p[kSplitFreq], 10.0, 20000.0));
+    splitLevelDb = std::clamp (p[kSplitLevel], -60.0, 24.0);
+    splitDriveDb = std::clamp (p[kSplitDrive], 0.0, kSplitDriveMax);
+    logBoost = std::log2 (std::clamp (p[kSubFreq], 10.0, 20000.0));
+    boostLevel = std::clamp (p[kSubLevel], 0.0, 1.0);
+    logTone = std::log2 (std::clamp (p[kTone], 10.0, 40000.0));
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        sat[ch].reset ();
+        satHigh[ch].reset ();
+        splitSat[ch].reset ();
+        split[ch].reset ();
+        tone[ch].reset ();
+        for (auto& f : boostLp[ch])
+            f.reset ();
+    }
     compKey[0] = -1.0;
     levelMs = kSweepRefRms * kSweepRefRms;
+    boostLowMs = boostOutMs = 0.0;
+    boostPrimed = false;
+    boostNow = boostPrev = 0.0;
     orbit.setSeed (std::clamp ((int)std::lround (p[kSeed]), kMinSeed, kMaxSeed));
     orbitFade = 1.0;
     targets (p, true);
@@ -169,21 +199,21 @@ void Sweep::beginBlock (const double* p, bool playing, bool relocate, double son
     lastBpm = bpm > 1.0 ? bpm : 120.0;
     if (!playing)
         return;
-    for (int b = 0; b < 3; ++b)
+    for (int b = 0; b < kFilters; ++b)
     {
-        if (b < 2 && p[kSyncIds[b]] >= 0.5)
-            theta[b] = songPpq / kSyncBeats[std::clamp ((int)std::lround (p[kSyncRateIds[b]]), 0, kNumSyncRates - 1)];
+        if (b < kNumBells && p[bellId (b, kBellSync)] >= 0.5)
+            theta[b] = songPpq / kSyncBeats[std::clamp ((int)std::lround (p[bellId (b, kBellSyncRate)]), 0, kNumSyncRates - 1)];
         else if (relocate)
-            theta[b] = songPpq * 60.0 / lastBpm * std::clamp (p[kRateIds[b]], 1e-3, 100.0);
+            theta[b] = songPpq * 60.0 / lastBpm * std::clamp (p[rateId (b)], 1e-3, 100.0);
     }
 }
 
 void Sweep::targets (const double* p, bool snap)
 {
-    for (int b = 0; b < 3; ++b)
+    for (int b = 0; b < kFilters; ++b)
         prev[b] = now[b];
     // the bells
-    for (int b = 0; b < 2; ++b)
+    for (int b = 0; b < kNumBells; ++b)
     {
         const double m = 0.5 - 0.5 * std::cos (kTwoPi * (theta[b] + phaseDeg[b] / 360.0));
         hz[b] = clampSr (std::exp2 (logLo[b] + (logHi[b] - logLo[b]) * m), sr);
@@ -196,64 +226,98 @@ void Sweep::targets (const double* p, bool snap)
     // the shelf on its orbit
     {
         double u, v;
-        orbit.at (theta[2], wander, u, v);
+        orbit.at (theta[kShelfIdx], wander, u, v);
         if (orbitFade < 1.0)
         {
             // (a new Seed: from the old orbit to the new one over kOrbitFadeSec, a raised cosine)
             double uo, vo;
-            oldOrbit.at (theta[2], wander, uo, vo);
+            oldOrbit.at (theta[kShelfIdx], wander, uo, vo);
             const double w = 0.5 - 0.5 * std::cos (dsp::kPi * orbitFade);
             u = uo + (u - uo) * w;
             v = vo + (v - vo) * w;
         }
         uNow = u;
         vNow = v;
-        hz[2] = clampSr (std::exp2 (logLo[2] + (logHi[2] - logLo[2]) * u), sr);
+        hz[kShelfIdx] = clampSr (std::exp2 (logLo[kShelfIdx] + (logHi[kShelfIdx] - logLo[kShelfIdx]) * u), sr);
         const double lo = std::min (shelfMin, shelfMax), hi = std::max (shelfMin, shelfMax);
-        ceilingNow = shelfCeilingDb (hz[2], lo, hi, tilt);
+        ceilingNow = shelfCeilingDb (hz[kShelfIdx], lo, hi, tilt);
         shelfGainNow = lo + (ceilingNow - lo) * v;
         const double a = std::pow (10.0, shelfGainNow / 40.0);
-        Coefs& c = now[2];
-        c.g = std::tan (dsp::kPi * hz[2] / sr) * std::sqrt (a);
-        c.k = 1.0 / std::exp2 (logQ[2]);
+        Coefs& c = now[kShelfIdx];
+        c.g = std::tan (dsp::kPi * hz[kShelfIdx] / sr) * std::sqrt (a);
+        c.k = 1.0 / std::exp2 (logQ[kShelfIdx]);
         c.m0 = a * a;
         c.m1 = c.k * (1.0 - a) * a;
         c.m2 = 1.0 - a * a;
     }
-    // the saturator: its drive and make-up (worked out again only when they change)
+    // the saturator: its drive (on its Curve) and make-up (worked out again only when they change)
     gPrev = gNow;
     compPrev = compNow;
-    gNow = std::pow (10.0, driveDb / 20.0);
+    const double drive = driveDb + curveDb; // (Hard: + 0, exactly the drive)
+    gNow = std::pow (10.0, drive / 20.0);
     // (the level in steps of 0.05 dB: worked out again only when it has moved)
     const double levelKey = std::round (10.0 * std::log10 (levelMs) / 0.05);
-    const double key[10] = {driveDb, logLo[0], logHi[0], logLo[1], logHi[1], gainDb[0], gainDb[1], logQ[0], logQ[1], levelKey};
-    if (!std::equal (key, key + 10, compKey))
+    double key[kKeySize];
+    key[0] = drive;
+    key[1] = levelKey;
+    for (int b = 0; b < kNumBells; ++b)
     {
-        std::copy (key, key + 10, compKey);
-        const double lo[2] = {std::exp2 (logLo[0]), std::exp2 (logLo[1])}, hi[2] = {std::exp2 (logHi[0]), std::exp2 (logHi[1])};
-        const double q[2] = {std::exp2 (logQ[0]), std::exp2 (logQ[1])};
-        avgNow = bellsAverageDb (lo, hi, gainDb, q);
-        compNow = compensation (driveDb, avgNow, std::sqrt (levelMs));
+        key[2 + 4 * b] = logLo[b];
+        key[3 + 4 * b] = logHi[b];
+        key[4 + 4 * b] = gainDb[b];
+        key[5 + 4 * b] = logQ[b];
     }
+    key[kKeySize - 1] = 0.0;
+    if (!std::equal (key, key + kKeySize, compKey))
+    {
+        std::copy (key, key + kKeySize, compKey);
+        double lo[kNumBells], hi[kNumBells], q[kNumBells];
+        for (int b = 0; b < kNumBells; ++b)
+        {
+            lo[b] = std::exp2 (logLo[b]);
+            hi[b] = std::exp2 (logHi[b]);
+            q[b] = std::exp2 (logQ[b]);
+        }
+        avgNow = bellsAverageDb (lo, hi, gainDb, q, kNumBells);
+        compNow = compensation (drive, avgNow, std::sqrt (levelMs));
+    }
+    // Clean Sub, Sub Boost and Tone: their corners and levels
+    splitGPrev = splitGNow;
+    boostGPrev = boostGNow;
+    toneGPrev = toneGNow;
+    splitLevelPrev = splitLevelNow;
+    boostPrev = boostNow;
+    splitGNow = std::tan (dsp::kPi * clampSr (std::exp2 (logSplit), sr) / sr);
+    boostGNow = std::tan (dsp::kPi * clampSr (std::exp2 (logBoost), sr) / sr);
+    toneGNow = std::tan (dsp::kPi * clampSr (std::exp2 (logTone), sr) / sr);
+    splitLevelNow = std::pow (10.0, splitLevelDb / 20.0);
+    // (Sub Boost at Sub Level 1: its lows as loud, in RMS, as the saturated signal)
+    const double unit = boostPrimed && boostLowMs > 1e-20 ? std::min (std::sqrt (boostOutMs / boostLowMs), kSubMaxGain) : 0.0;
+    boostNow = unit * boostLevel;
     if (snap)
     {
-        for (int b = 0; b < 3; ++b)
+        for (int b = 0; b < kFilters; ++b)
             prev[b] = now[b];
         gPrev = gNow;
         compPrev = compNow;
+        splitGPrev = splitGNow;
+        boostGPrev = boostGNow;
+        toneGPrev = toneGNow;
+        splitLevelPrev = splitLevelNow;
+        boostPrev = boostNow;
     }
 }
 
 void Sweep::tick (const double* p, double* l, double* r, int m)
 {
     // the clocks run on (off too, so the sweep is where it should be when it comes back)
-    for (int b = 0; b < 3; ++b)
+    for (int b = 0; b < kFilters; ++b)
     {
         double perSample;
-        if (b < 2 && p[kSyncIds[b]] >= 0.5)
-            perSample = lastBpm / 60.0 / kSyncBeats[std::clamp ((int)std::lround (p[kSyncRateIds[b]]), 0, kNumSyncRates - 1)] / sr;
+        if (b < kNumBells && p[bellId (b, kBellSync)] >= 0.5)
+            perSample = lastBpm / 60.0 / kSyncBeats[std::clamp ((int)std::lround (p[bellId (b, kBellSyncRate)]), 0, kNumSyncRates - 1)] / sr;
         else
-            perSample = std::clamp (p[kRateIds[b]], 1e-3, 100.0) / sr;
+            perSample = std::clamp (p[rateId (b)], 1e-3, 100.0) / sr;
         theta[b] += perSample * m;
         if (theta[b] > 1e6)
             theta[b] -= std::floor (theta[b]); // (the bells repeat every cycle; the orbit's curves wrap far later)
@@ -271,76 +335,188 @@ void Sweep::tick (const double* p, double* l, double* r, int m)
     if (orbitFade < 1.0)
         orbitFade = std::min (1.0, orbitFade + (double)m / (kOrbitFadeSec * sr));
     // the settings glide
-    for (int b = 0; b < 3; ++b)
+    for (int b = 0; b < kFilters; ++b)
     {
-        glide (logLo[b], std::log2 (std::max (p[kLowIds[b]], 1.0)), tickSmooth);
-        glide (logHi[b], std::log2 (std::max (p[kHighIds[b]], 1.0)), tickSmooth);
-        glide (logQ[b], std::log2 (std::max (p[kQIds[b]], 0.01)), tickSmooth);
+        glide (logLo[b], std::log2 (std::max (p[lowId (b)], 1.0)), tickSmooth);
+        glide (logHi[b], std::log2 (std::max (p[highId (b)], 1.0)), tickSmooth);
+        glide (logQ[b], std::log2 (std::max (p[qId (b)], 0.01)), tickSmooth);
     }
-    for (int b = 0; b < 2; ++b)
+    for (int b = 0; b < kNumBells; ++b)
     {
-        glide (gainDb[b], p[kGainIds[b]], tickSmooth);
-        glide (phaseDeg[b], p[kPhaseIds[b]], tickSmooth);
+        glide (gainDb[b], bellGainTarget (p, b), tickSmooth);
+        glide (phaseDeg[b], p[bellId (b, kBellPhase)], tickSmooth);
     }
     glide (shelfMin, p[kShelfMin], tickSmooth);
     glide (shelfMax, p[kShelfMax], tickSmooth);
     glide (wander, std::clamp (p[kShelfWander], 0.0, 1.0), tickSmooth);
     glide (tilt, std::clamp (p[kShelfTilt], 0.0, 1.0), tickSmooth);
     glide (driveDb, std::clamp (p[kSweepDrive], 0.0, kSweepDriveMax), tickSmooth);
+    glide (curveDb, curveTarget (p), tickSmooth);
+    glide (logSplit, std::log2 (std::clamp (p[kSplitFreq], 10.0, 20000.0)), tickSmooth);
+    glide (splitLevelDb, std::clamp (p[kSplitLevel], -60.0, 24.0), tickSmooth);
+    glide (splitDriveDb, std::clamp (p[kSplitDrive], 0.0, kSplitDriveMax), tickSmooth);
+    glide (logBoost, std::log2 (std::clamp (p[kSubFreq], 10.0, 20000.0)), tickSmooth);
+    glide (boostLevel, std::clamp (p[kSubLevel], 0.0, 1.0), tickSmooth);
+    glide (logTone, std::log2 (std::clamp (p[kTone], 10.0, 40000.0)), tickSmooth);
     // the input's level (both channels, this tick), held through silence
+    bool heard = false;
     {
         double e = 0.0;
         for (int i = 0; i < m; ++i)
             e += l[i] * l[i] + r[i] * r[i];
         e /= 2.0 * m;
-        if (e > kLevelGateRms * kLevelGateRms)
+        heard = e > kLevelGateRms * kLevelGateRms;
+        if (heard)
             levelMs = std::clamp (levelMs + (e - levelMs) * levelCoef * m / kTick, kLevelMinRms * kLevelMinRms, kLevelMaxRms * kLevelMaxRms);
     }
     targets (p, false);
-    const double fade0 = fade, shelf0 = shelfFade;
-    fade = std::clamp (fade + (on ? fadeStep : -fadeStep), 0.0, 1.0);
-    shelfFade = std::clamp (shelfFade + (p[kShelf] >= 0.5 ? fadeStep : -fadeStep), 0.0, 1.0);
+    const double fade0 = fade, shelf0 = shelfFade, sub0 = subFade, boost0 = boostFade, tone0 = toneFade;
+    auto step = [&] (double& f, bool to) { f = std::clamp (f + (to ? fadeStep : -fadeStep), 0.0, 1.0); };
+    step (fade, on);
+    step (shelfFade, p[kShelf] >= 0.5);
+    step (subFade, p[kCleanSub] >= 0.5);
+    step (boostFade, p[kSubBoost] >= 0.5);
+    step (toneFade, p[kToneOn] >= 0.5);
     const bool shelfRun = shelfFade > 0.0 || shelf0 > 0.0;
+    const bool splitRun = subFade > 0.0 || sub0 > 0.0, wholeRun = subFade < 1.0 || sub0 < 1.0;
+    const bool boostRun = boostFade > 0.0 || boost0 > 0.0, toneRun = toneFade > 0.0 || tone0 > 0.0;
+    // a bell at 0 dB at both ends of the tick is flat (x + 0 x band-pass): not run, and starts clean when it comes back
+    int run[kNumBells], runs = 0;
+    for (int b = 0; b < kNumBells; ++b)
+    {
+        const bool was = bellRun[b];
+        bellRun[b] = prev[b].m1 != 0.0 || now[b].m1 != 0.0;
+        if (bellRun[b])
+            run[runs++] = b;
+        else if (was)
+            for (auto& s : filt[b])
+                s.reset ();
+    }
+    // Split Drive: its gain, and how far it is blended in (0 dB: clean, not run)
+    const bool splitDriving = splitRun && splitDriveDb > 0.0;
+    const double splitDriveG = std::pow (10.0, splitDriveDb / 20.0), splitDriveMix = std::min (1.0, splitDriveDb / kSplitDriveBlendDb);
+    double lowEnergy = 0.0, outEnergy = 0.0;
     for (int i = 0; i < m; ++i)
     {
         const double t = (double)(i + 1) / m;
-        dsp::SvfCoefs c[3];
-        double m1[3];
-        for (int b = 0; b < 3; ++b)
+        dsp::SvfCoefs c[kFilters];
+        double m1[kFilters];
+        for (int k = 0; k < runs; ++k)
         {
+            const int b = run[k];
             c[b].set (prev[b].g + (now[b].g - prev[b].g) * t, prev[b].k + (now[b].k - prev[b].k) * t);
             m1[b] = prev[b].m1 + (now[b].m1 - prev[b].m1) * t;
         }
-        const double m0 = prev[2].m0 + (now[2].m0 - prev[2].m0) * t, m2 = prev[2].m2 + (now[2].m2 - prev[2].m2) * t;
+        constexpr int s = kShelfIdx;
+        c[s].set (prev[s].g + (now[s].g - prev[s].g) * t, prev[s].k + (now[s].k - prev[s].k) * t);
+        m1[s] = prev[s].m1 + (now[s].m1 - prev[s].m1) * t;
+        const double m0 = prev[s].m0 + (now[s].m0 - prev[s].m0) * t, m2 = prev[s].m2 + (now[s].m2 - prev[s].m2) * t;
         const double g = gPrev + (gNow - gPrev) * t, comp = compPrev + (compNow - compPrev) * t;
         const double f = fade0 + (fade - fade0) * t, sf = shelf0 + (shelfFade - shelf0) * t;
+        const double subF = sub0 + (subFade - sub0) * t, boostF = boost0 + (boostFade - boost0) * t, toneF = tone0 + (toneFade - tone0) * t;
+        dsp::SvfCoefs cSplit, cBoost, cTone;
+        if (splitRun)
+            cSplit.set (splitGPrev + (splitGNow - splitGPrev) * t, dsp::kSqrt2);
+        if (boostRun)
+            cBoost.set (boostGPrev + (boostGNow - boostGPrev) * t, dsp::kSqrt2);
+        if (toneRun)
+            cTone.set (toneGPrev + (toneGNow - toneGPrev) * t, dsp::kSqrt2);
+        const double splitLevel = splitLevelPrev + (splitLevelNow - splitLevelPrev) * t;
+        const double boost = (boostPrev + (boostNow - boostPrev) * t) * boostF;
         double* io[2] = {l + i, r + i};
         for (int ch = 0; ch < 2; ++ch)
         {
             const double x = *io[ch];
-            double y = x + m1[0] * filt[0][ch].tick (x, c[0]).bp;
-            y += m1[1] * filt[1][ch].tick (y, c[1]).bp;
+            double y = x;
+            for (int k = 0; k < runs; ++k)
+            {
+                const int b = run[k];
+                y += m1[b] * filt[b][ch].tick (y, c[b]).bp;
+            }
             if (shelfRun)
             {
-                const dsp::Svf::Out o = filt[2][ch].tick (y, c[2]);
-                const double shelved = m0 * y + m1[2] * o.bp + m2 * o.lp;
+                const dsp::Svf::Out o = filt[s][ch].tick (y, c[s]);
+                const double shelved = m0 * y + m1[s] * o.bp + m2 * o.lp;
                 y += (shelved - y) * sf;
             }
-            y = sat[ch].tick (g * y) * comp;
+            const double pre = y; // (the saturator's input: Sub Boost's lows come from here)
+            // the saturator: all of it, or (Clean Sub) the band above Split Freq with the lows around it
+            double whole = 0.0, parted = 0.0;
+            if (wholeRun)
+                whole = sat[ch].tick (g * y) * comp;
+            if (splitRun)
+            {
+                double low, high;
+                split[ch].tick (y, cSplit, low, high);
+                if (splitDriving)
+                    low += (splitSat[ch].tick (splitDriveG * low) / splitDriveG - low) * splitDriveMix;
+                parted = satHigh[ch].tick (g * high) * comp + low * g * comp * splitLevel;
+            }
+            y = !splitRun ? whole : !wholeRun ? parted : whole + (parted - whole) * subF;
+            if (boostRun)
+            {
+                // Sub Boost: the lows before the saturator, added after it (at the saturated signal's RMS x Sub Level)
+                const double low = boostLp[ch][1].tick (boostLp[ch][0].tick (pre, cBoost).lp, cBoost).lp;
+                lowEnergy += low * low;
+                outEnergy += y * y;
+                y += low * boost;
+            }
+            if (toneRun)
+                y += (tone[ch].tick (y, cTone).lp - y) * toneF;
             *io[ch] = x + (y - x) * f;
         }
     }
+    // Sub Boost's level match: the slow RMS of its lows and of the saturated signal, held through silence
+    if (boostRun && heard)
+    {
+        const double el = lowEnergy / (2.0 * m), eo = outEnergy / (2.0 * m);
+        if (!boostPrimed)
+            boostHeard = 0.0;
+        boostHeard += m;
+        boostPrimed = true;
+        const double c = std::max (boostCoef * m / kTick, (double)m / boostHeard); // (a plain mean at first)
+        boostLowMs += (el - boostLowMs) * c;
+        boostOutMs += (eo - boostOutMs) * c;
+    }
+    // what stopped running starts clean when it comes back
     if (shelfFade <= 0.0 && shelf0 > 0.0)
-        for (auto& s : filt[2])
-            s.reset ();
+        for (auto& f : filt[kShelfIdx])
+            f.reset ();
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        if (subFade <= 0.0 && sub0 > 0.0)
+        {
+            split[ch].reset ();
+            satHigh[ch].reset ();
+            splitSat[ch].reset ();
+        }
+        if (subFade >= 1.0 && sub0 < 1.0)
+            sat[ch].reset ();
+        if (boostFade <= 0.0 && boost0 > 0.0)
+            for (auto& f : boostLp[ch])
+                f.reset ();
+        if (toneFade <= 0.0 && tone0 > 0.0)
+            tone[ch].reset ();
+    }
+    if (boostFade <= 0.0 && boost0 > 0.0)
+        boostPrimed = false;
     if (fade <= 0.0)
     {
         // (faded out: off, and ready to start clean)
         for (auto& b : filt)
-            for (auto& s : b)
-                s.reset ();
-        sat[0].reset ();
-        sat[1].reset ();
+            for (auto& f : b)
+                f.reset ();
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            sat[ch].reset ();
+            satHigh[ch].reset ();
+            splitSat[ch].reset ();
+            split[ch].reset ();
+            tone[ch].reset ();
+            for (auto& f : boostLp[ch])
+                f.reset ();
+        }
+        boostPrimed = false;
     }
 }
 

@@ -4,37 +4,71 @@
 
 namespace moistr::help {
 
+// a bell's controls (the same for A .. H)
+inline const char* forBell (uint32_t id)
+{
+    for (int b = 0; b < kNumBells; ++b)
+    {
+        if (id == bellOnId (b))
+            return "Switches the bell on or off. Off, it fades out and is not run. The letters pick which bell's controls "
+                   "BELLS shows; this row switches each one.";
+        if (id == bellId (b, kBellRate))
+            return "How fast the bell sweeps from Low to High and back (Hz), while its Sync is off.";
+        if (id == bellId (b, kBellSync))
+            return "Takes the bell's sweep speed from the song tempo (the choice beside it) instead of Rate.";
+        if (id == bellId (b, kBellSyncRate))
+            return "One sweep of the bell, Low to High and back, in bars or beats, while its Sync is on.";
+        if (id == bellId (b, kBellLow))
+            return "The lowest the bell's centre goes (Hz). With Phase at 0 the sweep starts here.";
+        if (id == bellId (b, kBellHigh))
+            return "The highest the bell's centre goes (Hz). The sweep moves on a log scale, so it spends as long per octave.";
+        if (id == bellId (b, kBellGain))
+            return "How far the bell boosts (above 0) or cuts (below 0) around its centre (dB).";
+        if (id == bellId (b, kBellWidth))
+            return "The bell's Q: low is a broad bump (0.5 is broad and smooth), high a narrow, ringing peak.";
+        if (id == bellId (b, kBellPhase))
+            return "Where in its sweep the bell starts (degrees): 0 at Low, 180 at High. Sets the bells against each other.";
+    }
+    return nullptr;
+}
+
 inline const char* forParam (uint32_t id)
 {
+    if (const char* t = forBell (id))
+        return t;
     switch (id)
     {
         case kDrive: return "Light saturation before the sound is split into bands (after SWEEP). 0 leaves the input untouched.";
         case kSweep:
-            return "Switches the SWEEP stage on: two sweeping bell EQs, a High Shelf going round in a slow orbit, then a "
-                   "saturator, all before the bands. This is moistr's main sound. Off, the sound goes straight to the bands.";
+            return "Switches the SWEEP stage on: eight sweeping bell EQs, a High Shelf going round in a slow orbit, then a "
+                   "saturator and Tone, all before the bands. This is moistr's main sound. Off, the sound goes straight to the "
+                   "bands.";
         case kSweepDrive:
             return "How hard the SWEEP stage's saturator is driven after the bells and the shelf (dB). Its level is matched "
                    "to the input's automatically, so more Drive is more grit, not more volume. 12 to 24 dB is the sweet spot.";
-        case kARate:
-        case kBRate: return "How fast the bell sweeps from Low to High and back (Hz), while its Sync is off.";
-        case kASync:
-        case kBSync: return "Takes the bell's sweep speed from the song tempo (the choice under it) instead of Rate.";
-        case kASyncRate:
-        case kBSyncRate: return "One sweep of the bell, Low to High and back, in bars or beats, while its Sync is on.";
-        case kALow:
-        case kBLow: return "The lowest the bell's centre goes (Hz). With Phase at 0 the sweep starts here.";
-        case kAHigh:
-        case kBHigh: return "The highest the bell's centre goes (Hz). The sweep moves on a log scale, so it spends as long per octave.";
-        case kAGain:
-        case kBGain: return "How far the bell boosts (above 0) or cuts (below 0) around its centre (dB).";
-        case kAWidth:
-        case kBWidth: return "The bell's Q: low is a broad bump (0.71 is broad and smooth), high a narrow, ringing peak.";
-        case kAPhase:
-        case kBPhase:
-            return "Where in its sweep the bell starts (degrees): 0 at Low, 180 at High. Sets the two bells against each other.";
+        case kSweepCurve:
+            return "The saturator's curve: Hard bends sooner and crunches more; Soft is a gentler knee (the same Drive about "
+                   "3 dB softer).";
+        case kToneOn: return "Switches Tone on: a gentle low-pass after the saturator that rounds off its brightest fizz.";
+        case kTone: return "Where Tone's low-pass sits (Hz): lower is darker and smoother. 7 kHz takes the edge off the crunch.";
+        case kCleanSub:
+            return "Splits off the lows before the saturator and sends them around it, so the sub stays clean while the rest "
+                   "crunches. Split, Level and Drive set where, how loud and how much crunch the lows get after all.";
+        case kSplitFreq: return "Where Clean Sub splits (Hz): everything below goes around the saturator.";
+        case kSplitLevel:
+            return "The clean lows against the saturated rest (dB). 0 dB is the level they would have through the saturator "
+                   "if it did not compress; the saturated rest is quieter than that, so the lows usually sit below 0.";
+        case kSplitDrive: return "Lets the split-off lows crunch too, with a saturator of their own (dB). 0 keeps them clean.";
+        case kSubBoost:
+            return "Adds the lows back after the saturator: the whole sound still crunches, with a clean sub under it for "
+                   "weight. Freq and Level set how low and how much.";
+        case kSubFreq: return "How high Sub Boost's lows reach (Hz): a steep low-pass on the saturator's input.";
+        case kSubLevel:
+            return "How much of the lows Sub Boost adds: 100 % as loud as the saturated sound (matched slowly, on the music's "
+                   "level), 50 % half that.";
         case kShelf:
             return "Switches the High Shelf on: it lifts or cuts everything above its corner, and the corner and the gain move "
-                   "together in a slow orbit.";
+                   "together in a slow orbit. Off in a new instance.";
         case kShelfRate: return "How fast the High Shelf goes round its orbit (Hz).";
         case kShelfLow: return "The lowest the High Shelf's corner goes (Hz).";
         case kShelfHigh:
@@ -132,10 +166,10 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kSweepView =
-    "The SWEEP stage now: bell A (solid), bell B (dashed) and the High Shelf, each thin, and the whole stage bold, from "
-    "20 Hz to 5 kHz. The bars show where each bell sweeps (bottom) and where the shelf's corner goes (top). The box at "
-    "the right is the shelf's orbit: its corner across (Low to High), its gain up (Min to Max), the dashed line the most "
-    "it may boost at each corner (Tilt), the dot where it is now.";
+    "The SWEEP stage now: each bell that is on (A, C, E, G solid; B, D, F, H dashed) and the High Shelf, each thin, and "
+    "the whole stage bold (with Tone), from 20 Hz to 5 kHz. The bars show where each bell sweeps (bottom, A lowest) and "
+    "where the shelf's corner goes (top). The box at the right is the shelf's orbit: its corner across (Low to High), its "
+    "gain up (Min to Max), the dashed line the most it may boost at each corner (Tilt), the dot where it is now.";
 
 constexpr const char* kBandView =
     "The bands against frequency. The Low band is locked (solid, with a lock and where it ends in Hz) unless Push or Dip "

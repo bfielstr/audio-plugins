@@ -1,5 +1,22 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: sweep, bass, heavy
-comment: The default sweep driven harder into the saturator (24 dB): denser and dirtier, at about the same level.
+comment: The classic sweep (the default of 0.24 and 0.25) driven harder into the saturator (24 dB): denser and dirtier, at about the same level.
 Sweep = On
 Sweep Drive = 24 dB
+# the SWEEP stage as it was before 0.26 (two bells, Curve Hard, no Tone, no sub options)
+High Shelf = On
+A Gain = 18 dB
+A Width = 0.71
+B Gain = -18 dB
+B Width = 0.71
+B Phase = 0
+Curve = Hard
+Tone On = Off
+Clean Sub = Off
+Sub Boost = Off
+C On = Off
+D On = Off
+E On = Off
+F On = Off
+G On = Off
+H On = Off

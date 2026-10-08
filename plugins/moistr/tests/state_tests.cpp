@@ -1,6 +1,7 @@
 // Moistr's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a partial state, a
-// state from a newer build (parameters this one does not know), a 0.18 state (version 1), a stream that is
-// not Moistr's, and the parameter table's fixed points. Run: ./moistr_state_tests
+// state from a newer build (parameters this one does not know), a 0.18 state (version 1), 0.23 to 0.25 states
+// (versions 2 to 4: the 0.26 parameters as they keep the old sound), a stream that is not Moistr's, and the
+// parameter table's fixed points. Run: ./moistr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
 
@@ -119,7 +120,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 4 && count == (int32)kNumParams, "saved as version 4 (%d) with %d values", version, count);
+        CHECK (version == 5 && count == (int32)kNumParams, "saved as version 5 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
@@ -146,10 +147,46 @@ int main ()
             if (id < old)
                 kept += back.has[id] && back.norm[id] == std::fmod (0.173 * (id + 1), 1.0);
             else
-                rest += !back.has[id] && back.norm[id] == (version < 3 ? legacyDefaultNormalized (id) : defaultNormalized (id));
+                rest += !back.has[id] && back.norm[id] == defaultNormalizedForVersion (id, version);
         CHECK (kept == (int)old && rest == (int)(kNumParams - old), "version %d: %d values kept, %d at their defaults", version, kept,
                rest);
         CHECK ((back.norm[kSweep] >= 0.5) == (version >= 3), "version %d: Sweep %s", version, version >= 3 ? "on" : "off");
+    }
+    // a 0.24 / 0.25 state (version 3 / 4, IDs 0 .. 118, every one): every value kept, the 0.26 parameters at the
+    // values that keep its sound (bells C .. H, Tone, Clean Sub and Sub Boost off, Curve Hard); a 0.26 state
+    // (version 5) without them reads the new defaults (the Ocean recipe)
+    for (int32 version : {3, 4, 5})
+    {
+        MemoryStream s;
+        const uint32_t old = kSweepCurve; // (0.25's parameters: 0 .. 118)
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x5453494D);
+            w.writeInt32 (version);
+            w.writeInt32 ((int32)old);
+            for (uint32_t id = 0; id < old; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.191 * (id + 1), 1.0));
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a version %d state reads", version);
+        int kept = 0;
+        for (uint32_t id = 0; id < old; ++id)
+            kept += back.has[id] && back.norm[id] == std::fmod (0.191 * (id + 1), 1.0);
+        CHECK (kept == (int)old, "version %d: every stored value kept (%d of %u)", version, kept, old);
+        const bool before = version < 5;
+        int bellsOn = 0;
+        for (int b = 2; b < kNumBells; ++b)
+            bellsOn += back.norm[bellOnId (b)] >= 0.5;
+        CHECK (bellsOn == (before ? 0 : 6), "version %d: bells C .. H %s (%d on)", version, before ? "off" : "on", bellsOn);
+        CHECK ((std::lround (toPlain (kSweepCurve, back.norm[kSweepCurve])) == kCurveHard) == before &&
+                   (back.norm[kToneOn] < 0.5) == before && back.norm[kCleanSub] < 0.5 && (back.norm[kSubBoost] < 0.5) == before &&
+                   back.norm[kAOn] >= 0.5 && back.norm[kBOn] >= 0.5,
+               "version %d: Curve %s, Tone and Sub Boost %s, Clean Sub off, A and B on", version, before ? "Hard" : "Soft",
+               before ? "off" : "on");
     }
     // not Moistr's
     {
@@ -177,9 +214,12 @@ int main ()
                    t.info (kFall).def == 1.0 && t.info (kShiftOn).def == 0.0 && t.info (kShift).def == 0.0 &&
                    t.info (kShiftMix).def == 1.0,
                "3 bands, Depth 24 dB, Rise and Fall x1, the shifter off (0 Hz, Mix 100 %%)");
-        CHECK (t.info (kSweep).def == 1.0 && t.info (kShelf).def == 1.0 && t.info (kSweepDrive).def == 18.0 && t.info (kDrive).def == 0.0 &&
+        CHECK (t.info (kSweep).def == 1.0 && t.info (kShelf).def == 0.0 && t.info (kSweepDrive).def == 14.0 && t.info (kDrive).def == 0.0 &&
                    t.info (kMovement).def == 0.0 && t.info (kGlue).def == 0.0 && t.info (kGrit).def == 0.0,
-               "0.24: Sweep and High Shelf on, Drive 18 dB; the bands neutral (Drive, Movement, Glue, Grit 0)");
+               "0.26: Sweep on, High Shelf off, Drive 14 dB; the bands neutral (Drive, Movement, Glue, Grit 0)");
+        CHECK (toPlain (kShelf, defaultNormalized025 (kShelf)) == 1.0 && toPlain (kSweepDrive, defaultNormalized025 (kSweepDrive)) == 18.0 &&
+                   std::fabs (toPlain (kAWidth, defaultNormalized025 (kAWidth)) - 0.71) < 1e-9 && defaultNormalized025 (kBPhase) == 0.0,
+               "0.24 and 0.25: High Shelf on, Drive 18 dB, A and B at Width 0.71 and Phase 0");
         CHECK (legacyDefaultNormalized (kSweep) == 0.0 && toPlain (kMovement, legacyDefaultNormalized (kMovement)) == 0.5 &&
                    toPlain (kGlue, legacyDefaultNormalized (kGlue)) == 0.4,
                "before 0.24: Sweep off, Movement 50 %%, Glue 40 %%");

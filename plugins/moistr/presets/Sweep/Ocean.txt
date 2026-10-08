@@ -1,0 +1,17 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, default, ocean
+comment: The default sound: eight bells sweeping slowly against each other like waves (A to H, each at its own rate and start), the saturator at 14 dB on its Soft curve with Sub Boost adding the lows back under the crunch (the sub option is left to the defaults, so this is always Init's sound), Tone at 7 kHz. The High Shelf off, the bands neutral.
+Sweep = On
+Sweep Drive = 14 dB
+Curve = Soft
+Tone On = On
+Tone = 7 kHz
+High Shelf = Off
+A On = On
+B On = On
+C On = On
+D On = On
+E On = On
+F On = On
+G On = On
+H On = On

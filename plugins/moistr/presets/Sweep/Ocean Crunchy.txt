@@ -1,0 +1,11 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, ocean, crunchy
+comment: The Ocean sweep with all of it through the saturator: no Sub Boost and no Clean Sub, so the lows crunch along with the rest.
+Sweep = On
+Sweep Drive = 14 dB
+Curve = Soft
+Tone On = On
+Tone = 7 kHz
+High Shelf = Off
+Clean Sub = Off
+Sub Boost = Off

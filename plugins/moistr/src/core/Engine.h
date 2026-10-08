@@ -4,10 +4,11 @@
 //
 //   input -> SWEEP -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> Smacheratr (the end saturator)
 //
-// SWEEP (0.24, Sweep.h; on in a new instance, off in a state saved before 0.24): two sweeping bell EQs, a
-// High Shelf on a smooth orbit and a level-compensated saturator, before everything else. A new instance has
-// the rest neutral (Drive, Movement, Glue and Grit at 0), so its sound is the sweep alone. With Sweep off the
-// stage is not run (the engine is 0.23's, bit for bit).
+// SWEEP (0.24, Sweep.h; on in a new instance, off in a state saved before 0.24): eight sweeping bell EQs
+// (0.26; two before), a High Shelf on a smooth orbit, a level-compensated saturator (Curve, Clean Sub, Sub
+// Boost) and Tone, before everything else. A new instance has the rest neutral (Drive, Movement, Glue and Grit
+// at 0), so its sound is the sweep alone. With Sweep off the stage is not run (the engine is 0.23's, bit for
+// bit).
 //   a pass: the split (Low | Mid | High [| Air]), each band at its gain -> [Shift: the bands above Low] ->
 //           sum -> Glue -> Grit
 //
@@ -99,9 +100,11 @@ struct Meters
     std::atomic<float> shiftHz {0.0f}, shiftAmount {0.0f};
     // Liquid (0.23): its two formants now (Hz; 0 while it is off) and how strong (0 .. 1, as Liquid, gliding)
     std::atomic<float> liquidHz {0.0f}, liquidF2Hz {0.0f}, liquidAmount {0.0f};
-    // the SWEEP stage (0.24): the bells' centres and the shelf's corner now (Hz: [0] A, [1] B, [2] the shelf),
-    // the shelf's gain now and its ceiling there (dB), and how far the stage and the shelf are faded in (0 .. 1)
-    std::array<std::atomic<float>, 3> sweepHz {};
+    // the SWEEP stage (0.24): the bells' centres and the shelf's corner now (Hz: [0 .. 7] A .. H, [8] the
+    // shelf), the bells' gains now (dB: gliding to 0 while off), the shelf's gain now and its ceiling there
+    // (dB), and how far the stage and the shelf are faded in (0 .. 1)
+    std::array<std::atomic<float>, kNumBells + 1> sweepHz {};
+    std::array<std::atomic<float>, kNumBells> bellDb {};
     std::atomic<float> shelfDb {0.0f}, shelfCeiling {0.0f}, sweepAmount {0.0f}, shelfAmount {0.0f};
 };
 

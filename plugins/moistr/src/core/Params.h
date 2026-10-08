@@ -111,7 +111,39 @@ enum ParamId : uint32_t
     kShelfQ,      // 0.3 .. 24: its resonance at the corner
     kShelfWander, // 0 .. 1: 0 a perfect circle, 1 a loose, smooth random orbit (Seed's)
     kShelfTilt,   // 0 .. 1: lowers the gain ceiling as the corner rises above 1 kHz (less nasal)
-    kNumParams
+    // --- added in 0.26 (append only): the saturator's Curve, a Tone low-pass after it, Clean Sub (the lows
+    // around the saturator), Sub Boost (the lows added back after it), every bell's own switch and six more
+    // bells (C .. H, after B, in series). A new instance is the "Ocean" recipe (kOcean*: eight bells, Curve
+    // Soft, Tone 7 kHz, no High Shelf, with its sub option); a state saved before 0.26 reads these at the values
+    // that keep its sound (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off:
+    // defaultNormalizedForVersion) ---
+    kSweepCurve,  // Hard / Soft: the saturator's curve (Soft: tanh (0.7 g x), a gentler knee)
+    kToneOn,      // Off / On: the Tone low-pass after the saturator
+    kTone,        // Hz 1000 .. 20000: its corner (2nd-order Butterworth)
+    kCleanSub,    // Off / On: the lows (below Split Freq, a Linkwitz-Riley 4th-order split) go around the saturator
+    kSplitFreq,   // Hz 40 .. 250: Clean Sub's crossover
+    kSplitLevel,  // dB -24 .. +12: the lows against the saturated rest (0 dB: at the saturator's small-signal gain)
+    kSplitDrive,  // dB 0 .. 18: a saturation of their own on the lows (0: clean)
+    kSubBoost,    // Off / On: the lows before the saturator (a Linkwitz-Riley 4th-order low-pass) added after it
+    kSubFreq,     // Hz 40 .. 200: Sub Boost's low-pass
+    kSubLevel,    // 0 .. 1: how much (1: as loud, in RMS, as the saturated signal)
+    kAOn,         // Off / On: bell A
+    kBOn,         // Off / On: bell B
+    kCOn,         // bell C: On, then as bell A (Rate, Sync, Sync Rate, Low, High, Gain, Width, Phase)
+    kCRate,
+    kCSync,
+    kCSyncRate,
+    kCLow,
+    kCHigh,
+    kCGain,
+    kCWidth,
+    kCPhase,
+    kDOn,         // bells D .. H: as bell C, 9 IDs each
+    kEOn = kDOn + 9,
+    kFOn = kEOn + 9,
+    kGOn = kFOn + 9,
+    kHOn = kGOn + 9,
+    kNumParams = kHOn + 9
 };
 
 // pinned: these numbers are in saved projects
@@ -134,8 +166,26 @@ static_assert (kSweep == 92 && kSweepDrive == 93 && kARate == 94 && kASync == 95
                    kAGain == 99 && kAWidth == 100 && kAPhase == 101 && kBRate == 102 && kBSync == 103 && kBSyncRate == 104 &&
                    kBLow == 105 && kBHigh == 106 && kBGain == 107 && kBWidth == 108 && kBPhase == 109 && kShelf == 110 &&
                    kShelfRate == 111 && kShelfLow == 112 && kShelfHigh == 113 && kShelfMin == 114 && kShelfMax == 115 &&
-                   kShelfQ == 116 && kShelfWander == 117 && kShelfTilt == 118 && kNumParams == 119,
+                   kShelfQ == 116 && kShelfWander == 117 && kShelfTilt == 118,
                "saved IDs: the SWEEP stage at 92 .. 118");
+static_assert (kSweepCurve == 119 && kToneOn == 120 && kTone == 121 && kCleanSub == 122 && kSplitFreq == 123 && kSplitLevel == 124 &&
+                   kSplitDrive == 125 && kSubBoost == 126 && kSubFreq == 127 && kSubLevel == 128 && kAOn == 129 && kBOn == 130 &&
+                   kCOn == 131 && kCRate == 132 && kCSync == 133 && kCSyncRate == 134 && kCLow == 135 && kCHigh == 136 && kCGain == 137 &&
+                   kCWidth == 138 && kCPhase == 139 && kDOn == 140 && kEOn == 149 && kFOn == 158 && kGOn == 167 && kHOn == 176 &&
+                   kNumParams == 185,
+               "saved IDs: Curve, Tone, Clean Sub, Sub Boost, the bells' switches and bells C .. H at 119 .. 184");
+
+// the SWEEP stage's eight bells (A .. H, in series in that order). A and B keep their IDs from 0.24 (Rate ..
+// Phase at kARate / kBRate, their switches at kAOn / kBOn); C .. H are On, Rate .. Phase from kCOn.
+constexpr int kNumBells = 8;
+// a bell's parameters by field: rate, sync, sync rate, low, high, gain, width, phase (offsets from its Rate)
+enum BellField { kBellRate = 0, kBellSync, kBellSyncRate, kBellLow, kBellHigh, kBellGain, kBellWidth, kBellPhase };
+constexpr uint32_t bellRateId (int b) { return b == 0 ? kARate : b == 1 ? kBRate : kCRate + 9u * (uint32_t)(b - 2); }
+constexpr uint32_t bellId (int b, BellField f) { return bellRateId (b) + (uint32_t)f; }
+constexpr uint32_t bellOnId (int b) { return b == 0 ? kAOn : b == 1 ? kBOn : kCOn + 9u * (uint32_t)(b - 2); }
+static_assert (bellId (7, kBellPhase) == kNumParams - 1 && bellOnId (2) == kCOn && bellId (3, kBellRate) == kDOn + 1, "the bells' IDs");
+enum SweepCurve { kCurveHard = 0, kCurveSoft };
+constexpr double kSoftCurve = 0.7; // Soft: the saturator sees 0.7 x the drive (tanh (0.7 g x))
 
 enum Slope { kSlope12 = 0, kSlope24 };
 enum Passes { kPasses1 = 0, kPasses2 };
@@ -156,6 +206,28 @@ constexpr double kLevelOffDb = -48.0; // a band's Level at its minimum: off
 // the shelf's Q, the saturator's drive (dB)
 constexpr double kSweepRateMin = 0.05, kSweepRateMax = 8.0, kBellFreqMin = 20.0, kBellFreqMax = 2000.0;
 constexpr double kBellQMin = 0.2, kBellQMax = 10.0, kBellQDefault = 0.71, kShelfQMin = 0.3, kShelfQMax = 24.0, kSweepDriveMax = 36.0;
+// bells C .. H reach higher than A and B (whose ranges are fixed by saved projects): 20 Hz .. 8 kHz; Tone's range
+constexpr double kBellFreqMaxWide = 8000.0, kToneMin = 1000.0, kToneMax = 20000.0;
+// The "Ocean" recipe (0.26's default sound), per bell A .. H: rate (Hz), low and high (Hz), gain (dB), Q and
+// phase (radians; the Phase parameter is in degrees). (The gains are the first eight-bell recipe's x 1.3.)
+struct BellRecipe
+{
+    double rate, low, high, gainDb, q, phaseRad;
+};
+constexpr BellRecipe kOceanBells[kNumBells] = {{0.70, 20.0, 120.0, 23.4, 0.5, 0.0},   {0.77, 30.0, 300.0, -23.4, 0.5, 1.1},
+                                               {0.53, 80.0, 600.0, 11.7, 0.6, 2.3},   {0.91, 150.0, 1200.0, -11.7, 0.6, 0.7},
+                                               {0.41, 250.0, 2000.0, 7.8, 0.7, 3.9},  {1.13, 400.0, 3000.0, -10.4, 0.7, 5.1},
+                                               {0.63, 60.0, 450.0, -7.8, 0.5, 4.4},   {0.84, 200.0, 1600.0, 9.1, 0.6, 2.9}};
+// the rest of it: Sweep Drive (dB, Curve Soft) and Tone (Hz); the sub options' settings (Clean Sub: Split Freq
+// in Hz, Split Level in dB, Split Drive in dB; Sub Boost: Sub Freq in Hz, Sub Level 0 .. 1)
+constexpr double kOceanDriveDb = 14.0, kOceanToneHz = 7000.0;
+constexpr double kOceanSplitHz = 100.0, kOceanSplitLevelDb = -11.5, kOceanSplitDriveDb = 0.0, kOceanSubHz = 70.0, kOceanSubLevel = 0.7;
+// which sub option the Ocean recipe has on (none: the full crunch; Clean Sub: the lows around the saturator;
+// Sub Boost: the lows added back after it). The one line that picks the default sound's low end.
+enum class OceanSub { None, CleanSub, SubBoost };
+constexpr OceanSub kOceanSub = OceanSub::SubBoost;
+constexpr double kSplitFreqMin = 40.0, kSplitFreqMax = 250.0, kSplitLevelMin = -24.0, kSplitLevelMax = 12.0, kSplitDriveMax = 18.0;
+constexpr double kSubFreqMin = 40.0, kSubFreqMax = 200.0;
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
@@ -164,6 +236,14 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // The default a parameter had before 0.24, for a state saved before then that lacks it (State.cpp): 0.24 made
 // the SWEEP stage the default sound (Sweep on) and the rest neutral (Drive, Movement, Glue and Grit at 0).
 double legacyDefaultNormalized (uint32_t id);
+// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26) reads for a
+// parameter it lacks: before 0.24 legacyDefaultNormalized; 0.24 and 0.25 their defaults (Sweep Drive 18 dB,
+// High Shelf on, A and B at Width 0.71 and Phase 0, so before the Ocean recipe) with the 0.26 parameters at the
+// values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
+// from 0.26 the defaults.
+double defaultNormalizedForVersion (uint32_t id, int version);
+// the defaults from 0.24 to 0.25 (the SWEEP stage before the Ocean recipe; the 0.26 parameters as above)
+double defaultNormalized025 (uint32_t id);
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
