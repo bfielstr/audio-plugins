@@ -266,6 +266,8 @@ void Editor::onClose ()
         t = nullptr;
     for (auto& t : gentlrThresh)
         t = nullptr;
+    for (auto& t : gentlrSliders)
+        t = nullptr;
     fxSatAdvanced.clear ();
     satHost = nullptr;
     fxGonio = nullptr;
@@ -711,8 +713,39 @@ void Editor::selectGentlrBand (int band)
     if (gentlrView)
         gentlrView->setSelectedBand (gentlrBand);
     for (int k = 0; k < gentlr::kAllBands; ++k)
+    {
         if (gentlrThresh[k])
             gentlrThresh[k]->setSelected (k == gentlrBand);
+        if (gentlrSliders[k])
+            gentlrSliders[k]->setSelected (k == gentlrBand);
+    }
+}
+
+void Editor::updateGentlrAdvanced ()
+{
+    // the Gentlr page: with Advanced on, the Threshold sliders take a strip at the right of the display (as
+    // in gentlr's own editor), dimmed for a band that does not work (off, or its Range at 0 dB)
+    if (!gentlrView || fxTab >= kFxNone || ctl->slotType (fxTab) != kFxGentlr)
+        return;
+    pk::MappedParamHost* h = hostFor (fxTab);
+    if (!h)
+        return;
+    const bool advanced = h->plainValue (gentlr::kAdvanced) >= 0.5;
+    const CRect area (8, 8, 470, 204);
+    smacheratr::ThresholdSlider::layout (nullptr, gentlrSliders, area, advanced);
+    CRect r = area;
+    if (advanced)
+        r.right -= smacheratr::ThresholdSlider::kStripWidth;
+    if (gentlrView->getViewSize () != r)
+    {
+        gentlrView->setViewSize (r);
+        gentlrView->setMouseableArea (r);
+        gentlrView->invalid ();
+    }
+    for (int k = 0; k < gentlr::kAllBands; ++k)
+        if (gentlrSliders[k])
+            gentlrSliders[k]->setEnabledLook (
+                gentlr::bandWorks (k, gentlr::hasOn (k) ? h->plainValue (gentlr::onParam (k)) : 1.0, h->plainValue (gentlr::rangeParam (k))));
 }
 
 void Editor::setSatLayer (int layer)
@@ -814,6 +847,8 @@ void Editor::paramChanged (uint32_t id)
                 updateMdLooks ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxSmacheratr)
                 updateSatAdvanced ();
+            if (field >= kSlotParams && ctl->slotType (slot) == kFxGentlr)
+                updateGentlrAdvanced (); // (Advanced, and a band's On or Range: its slider's look)
             if (field >= kSlotParams && ctl->slotType (slot) == kFxWubr)
                 if (const int64_t w = fxIdAt (kFxWubr, field - kSlotParams); w >= 0)
                 {
@@ -952,10 +987,7 @@ pk::MappedParamHost* Editor::hostFor (int slot)
         // before the next idle): it is kept until then
         if (h)
             retiredHosts.push_back (std::move (h));
-        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) -> int64_t {
-            const int64_t j = fxBlockOf (type, id);
-            return j < 0 ? -1 : (int64_t)slotBlockParam (slot, (uint32_t)j);
-        });
+        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) { return slotParamOf (slot, type, id); });
         slotHostType[(size_t)slot] = type;
     }
     return h.get ();
@@ -1344,6 +1376,8 @@ void Editor::clearBody ()
     for (auto& t : fxThresholds)
         t = nullptr;
     for (auto& t : gentlrThresh)
+        t = nullptr;
+    for (auto& t : gentlrSliders)
         t = nullptr;
     fxSatAdvanced.clear ();
     satHost = nullptr;
@@ -1735,6 +1769,22 @@ void Editor::buildBody ()
                 return b ? &b->rack.gentlr[(size_t)s] : nullptr;
             });
             add (gentlrView, gentlr::help::kDisplay);
+            // Advanced: the bands' Threshold sliders at the display's right edge, as in gentlr's own editor
+            // (Smacheratr's sliders, on this slot's Gentlr Thresholds; updateGentlrAdvanced shows them).
+            // Not added through add (): their IDs are Smacheratr's (the Thresh boxes below are the page's).
+            gentlrSliderHost = std::make_unique<pk::MappedParamHost> (gh, smacheratr::paramTable (),
+                                                                      [] (uint32_t id) { return gentlr::fromSmacheratr (id); });
+            for (int k = 0; k < gentlr::kAllBands; ++k)
+            {
+                gentlrSliders[k] = new smacheratr::ThresholdSlider (CRect (0, 0, 1, 1), gentlrSliderHost.get (), k,
+                                                                    [this, s] () -> const smacheratr::Meters* {
+                                                                        auto* b = ctl->getBridge ();
+                                                                        return b ? &b->rack.gentlr[(size_t)s].bands : nullptr;
+                                                                    });
+                gentlrSliders[k]->onPicked = [this] (int b) { selectGentlrBand (b); };
+                gentlrSliders[k]->setTooltipText (help::kGentlrThresholdSlider);
+                g->addView (gentlrSliders[k]);
+            }
             // (its glue switches are the display's link icons: a click glues or detaches two bands)
             for (uint32_t id : gentlr::kGlueIds)
                 rackPageParams.insert (id);
@@ -1776,6 +1826,7 @@ void Editor::buildBody ()
             for (int i = 0; i < 4; ++i)
                 add (new Knob (knobRect (484 + i * 88, 150), gh, knobs[i], nullptr, i == 3), tip (knobs[i]));
             selectGentlrBand (gentlrBand);
+            updateGentlrAdvanced ();
             break;
         }
         case kFxSmoothr:
@@ -2210,6 +2261,9 @@ void Editor::idle ()
     if (fxColorView)
         fxColorView->idle ();
     for (auto* t : fxThresholds)
+        if (t && t->isVisible ())
+            t->idle ();
+    for (auto* t : gentlrSliders)
         if (t && t->isVisible ())
             t->idle ();
     if (wubrBands)

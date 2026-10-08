@@ -261,6 +261,9 @@ The slots, named as the tabs show them:
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag
   a band's edge onto a neighbour's to glue them; click the link icon on the border to detach them.
   Grabbing a band's handle or any value in its row selects the band: its handle and its Threshold are lit.
+  With **Advanced** on, each band's Threshold also has a slider at the right of the display, as in
+  gentlr's own display: drag it (Shift: fine), double-click or right-click for -18 dB. The band's level
+  rises beside it, bright where it is over the threshold and being cut.
 - **smoothr**: smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
   off in the rack: put a smacheratr slot before it for that.
 

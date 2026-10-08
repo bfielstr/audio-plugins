@@ -3,7 +3,8 @@
 // (in slot 0 and slot 7, every effect), a preset saved from a slot reads back in the plug-in's own state
 // format, a new slot starts from the plug-in's saved default and its Menu > Defaults switches, a project
 // loads as saved whatever those are, and what does not fit (unknown IDs, the parameters a slot has no place
-// for, another plug-in's file, a folder that cannot be made) is ignored. Run: ./smemplr_rack_preset_tests
+// for, another plug-in's file, a folder that cannot be made) is ignored. And the Gentlr page's Threshold
+// sliders (Editor::updateGentlrAdvanced): dragging one moves its band's Threshold in that slot, nothing else. Run: ./smemplr_rack_preset_tests
 #include "Params.h"
 #include "Rack.h"
 #include "RackPresets.h"
@@ -11,7 +12,11 @@
 #include "plugin/StateIO.h"
 
 #include "pluginkit/GentlrDefaults.h"
+#include "pluginkit/ui/Widgets.h"
 #include "pluginkit/vst/Presets.h"
+#include "smacheratr/src/ui/ThresholdSlider.h"
+#include "vstgui/lib/events.h"
+#include "vstgui/lib/vstguiinit.h"
 
 #include "public.sdk/source/common/memorystream.h"
 
@@ -24,6 +29,15 @@
 #include <fstream>
 #include <string>
 #include <vector>
+
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#elif defined(_WIN32)
+#define NOMINMAX
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 
 using namespace smemplr;
 namespace fs = std::filesystem;
@@ -337,6 +351,70 @@ static void newSlotDefaults ()
            "the project's slot as saved");
 }
 
+// smemplr's parameters, recording the edits (the editor's host, as the slot pages see it)
+struct RackHost : pk::ParamHost
+{
+    std::vector<double> n;
+    std::vector<uint32_t> began, ended;
+    const pk::ParamTable& table () override { return paramTable (); }
+    double norm (uint32_t id) override { return n[id]; }
+    double plainValue (uint32_t id) override { return paramTable ().toPlain (id, n[id]); }
+    void beginEdit (uint32_t id) override { began.push_back (id); }
+    void setNorm (uint32_t id, double v) override { n[id] = v; }
+    void endEdit (uint32_t id) override { ended.push_back (id); }
+    std::string valueText (uint32_t) override { return {}; }
+};
+
+static void gentlrThresholdSliders ()
+{
+    using namespace VSTGUI;
+    // (VSTGUI's platform: its mouse events are stamped with its clock)
+#if defined(__APPLE__)
+    VSTGUI::init (CFBundleGetMainBundle ());
+#elif defined(_WIN32)
+    VSTGUI::init (GetModuleHandle (nullptr));
+#else
+    VSTGUI::init (dlopen (nullptr, RTLD_LAZY));
+#endif
+    for (int slot : {0, 3, kRackSlots - 1})
+        for (int k = 0; k < gentlr::kAllBands; ++k)
+        {
+            // the Gentlr page's chain: the slot's host (Editor::hostFor), then Smacheratr's IDs on Gentlr's
+            RackHost rack;
+            rack.n = rackWith (slot, kFxGentlr);
+            pk::MappedParamHost slotHost (&rack, fxTable (kFxGentlr), [slot] (uint32_t id) { return slotParamOf (slot, kFxGentlr, id); });
+            pk::MappedParamHost sliderHost (&slotHost, smacheratr::paramTable (), [] (uint32_t id) { return gentlr::fromSmacheratr (id); });
+            auto* slider = new smacheratr::ThresholdSlider (CRect (0, 0, 24, 196), &sliderHost, k, nullptr);
+            int picked = -1;
+            slider->onPicked = [&] (int b) { picked = b; };
+            const std::vector<double> before = rack.n;
+            MouseDownEvent down (CPoint (12, 120), MouseButton::Left);
+            down.clickCount = 1;
+            slider->onMouseDownEvent (down);
+            MouseMoveEvent move;
+            move.mousePosition = CPoint (12, 70);
+            move.buttonState.set (MouseButton::Left);
+            slider->onMouseMoveEvent (move);
+            MouseUpEvent up;
+            up.mousePosition = move.mousePosition;
+            slider->onMouseUpEvent (up);
+            const int64_t want = slotParamOf (slot, kFxGentlr, gentlr::thresholdParam (k));
+            CHECK (want >= 0 && rack.n[(size_t)want] > before[(size_t)want], "slot %d band %d: its Threshold went up (%g -> %g)", slot, k,
+                   want >= 0 ? before[(size_t)want] : -1.0, want >= 0 ? rack.n[(size_t)want] : -1.0);
+            int moved = 0;
+            for (size_t id = 0; id < rack.n.size (); ++id)
+                moved += (int64_t)id != want && rack.n[id] != before[id] ? 1 : 0;
+            CHECK (moved == 0, "slot %d band %d: %d other parameters moved", slot, k, moved);
+            CHECK (rack.began.size () == 1 && rack.ended.size () == 1 && (int64_t)rack.began[0] == want && (int64_t)rack.ended[0] == want,
+                   "slot %d band %d: one gesture on it", slot, k);
+            CHECK (picked == k, "slot %d band %d: grabbing it picks its band", slot, k);
+            // and it shows that slot's value (drawn from it)
+            CHECK (sliderHost.norm (smacheratr::kGentlrThresholdIds[k]) == rack.n[(size_t)want], "slot %d band %d: reads its slot", slot, k);
+            slider->forget ();
+        }
+    VSTGUI::exit ();
+}
+
 int main ()
 {
     tmpRoot = (fs::temp_directory_path () / ("smemplr_rack_presets_" + std::to_string ((long)std::rand ()) + std::to_string ((long)time (nullptr))))
@@ -354,6 +432,7 @@ int main ()
         {"saved from a slot, read by the plug-in", savedFromSlotReadsInThePlugin},
         {"robustness", robustness},
         {"a new slot's defaults; a project loads as saved", newSlotDefaults},
+        {"the Gentlr page's Threshold sliders move their slot's Thresholds", gentlrThresholdSliders},
     };
     for (const auto& t : tests)
     {

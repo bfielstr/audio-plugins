@@ -32,6 +32,14 @@ const HostedPlugin* hostedPlugin (int type)
     }
 }
 
+int64_t slotParamOf (int slot, int type, uint32_t id)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return -1;
+    const int64_t j = fxBlockOf (type, id);
+    return j < 0 ? -1 : (int64_t)slotBlockParam (slot, (uint32_t)j);
+}
+
 SlotEdits slotEditsFor (int slot, int type, const std::vector<double>& values)
 {
     SlotEdits out;

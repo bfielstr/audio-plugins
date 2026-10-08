@@ -37,6 +37,10 @@ struct HostedPlugin
 };
 const HostedPlugin* hostedPlugin (int type);
 
+// The smemplr parameter behind the effect's own parameter `id` in slot `slot` (-1: the slot has no place
+// for it). The editor's pages show a slot through it (Editor::hostFor).
+int64_t slotParamOf (int slot, int type, uint32_t id);
+
 using SlotEdits = std::vector<std::pair<uint32_t, double>>; // (Smemplr ID, normalized)
 
 // The plug-in's values (normalized, by its own IDs; a shorter vector's missing ones at their defaults) as

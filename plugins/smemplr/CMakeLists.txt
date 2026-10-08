@@ -57,10 +57,11 @@ foreach(p IN ITEMS para multidyn smacheratr widr wubr levlr gentlr smoothr)
     list(APPEND smemplr_hosted_libs ${_lib})
 endforeach()
 
-# the rack slots' presets: the mapping, the effects' files and Save as Default / Menu > Defaults for a new slot
+# the rack slots' presets: the mapping, the effects' files and Save as Default / Menu > Defaults for a new slot;
+# and the Gentlr page's Threshold sliders on a slot's parameters
 add_executable(smemplr_rack_preset_tests tests/rack_preset_tests.cpp src/plugin/RackPresetIO.cpp src/plugin/StateIO.cpp)
 target_include_directories(smemplr_rack_preset_tests PRIVATE src src/core)
-target_link_libraries(smemplr_rack_preset_tests PRIVATE smemplr_core ${smemplr_hosted_libs} pluginkit_vst)
+target_link_libraries(smemplr_rack_preset_tests PRIVATE smemplr_core ${smemplr_hosted_libs} pluginkit_vst smacheratr_ui)
 if(APPLE)
     target_link_libraries(smemplr_rack_preset_tests PRIVATE "-framework CoreFoundation")
 endif()
