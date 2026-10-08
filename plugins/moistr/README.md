@@ -5,7 +5,8 @@ Its core is the **SWEEP** stage, on by default: eight bell EQs sweep slowly up a
 and low-mid range, some boosting and some cutting, each at its own rate and starting point, so they keep
 rolling against each other like waves and the sound never quite repeats; then a saturator, level matched,
 makes it all crunch, with **Sub Boost** adding the clean lows back under the crunch so the sub stays
-present, and **Tone** rounding off the top. The defaults are the **Ocean** recipe:
+present, and **Tone** rounding off the top. The defaults (**Init**, and the sound of every project from
+before 0.29) are the **Ocean** recipe:
 
 | Bell | Rate | Low to High | Gain | Width | Phase |
 | --- | --- | --- | --- | --- | --- |
@@ -28,8 +29,10 @@ compressor and soft clipping, with a frequency shifter, **Link** and a vowel-lik
 top. In a new instance they are all neutral (**Movement**, **Glue** and **Grit** at 0), so the sound is the
 sweep alone; turn them up to layer the movement on. A **gesture** (see [Gestures](#gestures)) moves many
 controls together in time with the song on the bands above the low end: band fades and swells, stutters, a
-wobble, a closing filter, a dirty crossfade, all on one timeline. Install instructions are in the
-[top-level README](../../README.md).
+wobble, a closing filter, a dirty crossfade, all on one timeline. The **LAB** (see [LAB](#lab)) puts
+effect chains on the bands above the low end: each band hits its own distortion and OTT, with one more OTT
+on their sum. A new instance starts from the **Neuro** recipe, which uses all of it: dense, dirty and
+moving, with the sub clean. Install instructions are in the [top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
 
@@ -75,6 +78,7 @@ input -> SWEEP: bells A .. H -> High Shelf -> saturator (level matched; Clean Su
                [+ Sub Boost: the saturator's input, low-passed] -> Tone
       -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
+         -> [LAB, pass 1: Mid, High, Air each through its chain -> their sum through POST; Low delayed]
          -> [Liquid: the bands above Low only] -> [Shift: the bands above Low only] -> Low + the others
          -> Glue -> Grit
 movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls (Density, Rise / Fall,
@@ -83,7 +87,8 @@ movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls 
 gesture:  one timeline in time with the song, a lane per target, every lane on one clock (in pass 1, the
           bands above Low only): Mid / High / Air Level, Wobble (a tremolo after Liquid), Close (a resonant
           low-pass after Liquid), Liquid Pos, Dirt / Bells (the SWEEP stage's clean or bare sound, split as
-          well and mixed into the bands above Low), Mid X, High X, Seed Blend, Shift
+          well and mixed into the bands above Low), Mid X, High X, Seed Blend, Shift, Mid / High / Air
+          Grit and OTT, Post OTT (the LAB's)
 ```
 
 ## Controls
@@ -303,6 +308,38 @@ its gentlr on, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
+## LAB
+
+A neuro bass is usually a Reese split into bands, each band through its own distortion and multiband
+compression, then one more OTT over all of it, with the bands' volumes automated so each one hits its
+distortion and its OTT at different levels. The **LAB** does that inside moistr, on the bands of the first
+pass:
+
+- Three **chains**, one per band above Low: **MID**, **HIGH** and **AIR** (with **3 Bands** the Air band
+  goes into the High chain). Each band's moving gain (**Movement**, the gestures) comes *before* its chain,
+  so when a band rises or falls it drives its effects harder or softer: the timbre moves, not only the
+  level. A chain has four effect slots in a row (the same slots as smemplr's rack: Empty, para, multidyn,
+  m/s eq, smacheratr, widr, wubr, levlr, gentlr or smoothr), then its **Level**, **Mute**, **Solo** (only
+  the soloed chains are heard, the Low band silent too) and **Mono**.
+- **POST**: three more slots on the chains' sum, before **Liquid**, **Close**, **Wobble** and the shifter
+  (so those movements stay on top of its compression).
+- The Low band never goes through a chain or POST, and nothing they add goes below Low X: what an effect
+  changes is high-passed at Low X before it is added back. The sub stays as it is without the LAB.
+
+The **LAB** row shows, for each chain, its first slot's smacheratr (**Grit**: its Drive; **Curve**: its Post
+Clip) and its second slot's multidyn (**OTT**: its Amount, OTT's Depth), and for POST its first slot's
+multidyn (**Depth**, **Time**, and **Up** and **Down**: how much upward and downward compression, 100 % at
+OTT's own ratios). Turning one of these on an empty slot loads the effect there. Every slot's every value
+is a parameter, for automation; editing the whole rack in the editor comes later.
+
+In **Init** and in every project from before 0.29 every slot is Empty and every chain at 0 dB: the LAB does
+not run and moistr sounds exactly as it did. A new instance (with no saved default) starts from the
+**Neuro** recipe: 4 bands above a low Low X (**Seed** 2: 146 Hz), each chain smacheratr driven into its
+hard clip (2x oversampling, its gentlr off) and a one-band multidyn OTT (the three chains together make a
+three-band OTT), an OTT and a hard clipper in POST, the bands moving every two beats and a quarter-note
+**Wobble** at 85 %. On a detuned saw at 140 BPM it has much more harmonic fill and level movement between
+200 Hz and 6 kHz than Ocean, a lower crest factor there, and the same sub. It takes about 12 % of a core.
+
 ## Gestures
 
 The automation a neuro bass usually gets by hand is many lanes drawn together on the same note grid: one
@@ -498,14 +535,20 @@ Gentle, Wide Bump, High Shelf 5k, Sweep + Bands; *Moist*: Bar Pulse, Chop, Class
 Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift;
 *Gestures* (the Ocean sweep with one gesture each): Reese Cell (the Reese Cell gesture), Stutter Wobble
 (Stutter Cell over a steady wobble, 4 bands), Talking Reese (Talking Cell with **Liquid** up), Crossover
-Scan (Crossover Walk walking back and forth at half speed, 4 bands). Save your own with **Save As...** (a category and tags are
+Scan (Crossover Walk walking back and forth at half speed, 4 bands); *Neuro* (the LAB): Neuro (a new
+instance's sound), Neuro Heavy (more drive and OTT, faster movement, an 8th-note Wobble), Neuro Gesture
+(Neuro with the Reese Cell gesture: its lanes move the bands into their chains), Dirty Mids (only the Mid
+chain dirty, High and Air clean and lower). Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 
 ## Latency
 
 moistr adds no latency of its own (its sweeping filters, crossovers, compressor and clippers work sample
-by sample). The end
+by sample), except for the **LAB** while one of its slots holds an effect: then every path is lined up to
+the slowest chain plus POST, plus 64 samples (the effects run 64 samples at a time), and the total is
+reported to the host; the dry signal for **Mix** is delayed to match. The Neuro recipe's LAB takes 495
+samples at 48 kHz. The end
 saturator is always in the path, so switching it on or off never changes the latency, and its latency is
 reported to the host for automatic compensation: 85 samples at 48 kHz at 4x **Oversampling** (the
 default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host
