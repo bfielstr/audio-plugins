@@ -196,6 +196,16 @@ their Advanced view for now). Every Basic page has the same layout:
 
 - the header: the plug-in's name, the presets (the name opens the Presets menu, **<** and **>** load the
   previous and the next preset in the menu's order), then **Advanced**, **?** and **Menu** at the right;
+- the capture band across the top: a scope of the plug-in's output over 1, 2 or 4 bars (synced to the
+  host's tempo while it plays, ending on the last bar line, so the capture loops; 1, 2 or 4 seconds
+  while it is stopped). **Freeze** holds what it shows. Drag the scope, or **Drag WAV**, onto a track in
+  your DAW to drop the audio there (a stereo 32-bit float WAV at the host's rate, written to a
+  `bfielstr captures` folder in your system's temporary folder first). **Drag Wavetable** drops it as a
+  wavetable instead: single cycles at the sound's pitch (found in the audio; in smemplr the last note
+  played when none is found), each resampled to 2048 samples, up to 256 of them evenly spaced, in a mono
+  WAV with the `clm` chunk that Serum, Vital and Ableton's Wavetable read. Right click the scope for
+  **Save Audio...** and **Save Wavetable...** to a file of your choice. The length is saved with the
+  project;
 - the main controls in the middle, three to six of them, large, under the plug-in's most useful display
   (smemplr's waveform), and the output at the right (**OUTPUT**);
 - the extras strip at the bottom: **Extras** opens the extras under the main controls (smemplr's output
