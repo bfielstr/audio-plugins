@@ -21,7 +21,7 @@ class Editor : public pk::EditorBase
 public:
     // Classic: two rows of the SWEEP stage at the top (SWEEP, BELLS, SUB over HIGH SHELF and the sweep display),
     // the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
-    // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gestures (GESTURES,
+    // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gesture (GESTURE,
     // WOBBLE and the gesture display), the end saturator's section at the bottom
     static constexpr double kWidth = 1132.0;
     static constexpr double kRowH = 116.0;
@@ -57,14 +57,13 @@ public:
     static constexpr double kLowLeft = 298.0, kLowRight = 470.0;            // row 3: Push, Dip (the Low band's)
     static constexpr double kExtremeLeft = 478.0, kExtremeRight = 770.0;    // row 3: Drop Out, Density, Speed (centred)
     static constexpr double kLiquidLeft = 778.0, kLiquidRight = 1124.0;     // row 3: Liquid, Res, Low, High
-    static constexpr double kGesturesLeft = 8.0, kGesturesRight = 600.0;    // row 4: the slot picker, File, Gesture, Target; Mode, Length, Speed; Position, Smooth, Depth, Intensity
-    static constexpr double kWobbleLeft = 608.0, kWobbleRight = 752.0;      // row 4: Wobble's Rate and Amount
-    static constexpr double kGestureViewLeft = 760.0, kGestureViewRight = 1124.0; // row 4: the gesture display
-    // GESTURES (panel coordinates): the slot picker (a cell per slot from kSwitchLeft) and File beside it, then
-    // the Gesture and Target menus under them (each with its label); the column of Mode, Length and Speed from
-    // kGestureColLeft; the knobs (Position, Smooth, Depth, Intensity) from kGestureKnobLeft
-    static constexpr double kSlotCellW = 30.0, kSlotTop = 28.0, kSlotRowH = 20.0, kGestureFileLeft = 142.0, kGestureMenuRight = 206.0;
-    static constexpr double kGestureMenuTop = 54.0, kGestureTargetTop = 80.0, kGestureLabelW = 46.0;
+    static constexpr double kGesturesLeft = 8.0, kGesturesRight = 530.0;    // row 4: Gesture, File; Mode, Length, Speed; Position, Smooth, Amount
+    static constexpr double kWobbleLeft = 538.0, kWobbleRight = 682.0;      // row 4: Wobble's Rate and Amount
+    static constexpr double kGestureViewLeft = 690.0, kGestureViewRight = 1124.0; // row 4: the gesture display (its lanes)
+    // GESTURE (panel coordinates): the Gesture menu (with its label) at kGestureTop, File under it; the column of
+    // Mode, Length and Speed from kGestureColLeft; the knobs (Position, Smooth, Amount) from kGestureKnobLeft
+    static constexpr double kGestureTop = 28.0, kGestureRowH = 20.0, kGestureFileTop = 54.0, kGestureMenuRight = 206.0, kGestureLabelW = 46.0;
+    static constexpr double kGestureLengthTop = 54.0, kGestureSpeedTop = 80.0;
     static constexpr double kGestureColLeft = 214.0, kGestureColRight = 318.0, kGestureColLabelW = 40.0, kGestureKnobLeft = 330.0;
     // a switch at the top left of its panel (Bands in SPLIT, Sync in MOVEMENT, Passes in GLUE; panel coordinates)
     static constexpr double kSwitchLeft = 14.0, kSwitchTop = 30.0, kSwitchW = 110.0, kSwitchH = 20.0;
@@ -102,10 +101,10 @@ private:
     // off, its Rate while its Sync is on and its Sync Rate while it is off
     void updateLooks ();
     static bool affectsLooks (uint32_t id);
-    // BELLS shows one bell's controls at a time; GESTURES one slot's
+    // BELLS shows one bell's controls at a time
     void pickBell (int b);
-    void pickSlot (int g);
-    void showGestureFiles (VSTGUI::CPoint where); // File: the gesture files for the picked slot
+    void showGestureFiles (VSTGUI::CPoint where); // File: the gesture files (the one gesture's User)
+    void openGestureFolder ();                    // (made when it is missing)
     VSTGUI::CRect displayRect (bool arranged) const;
 
     Controller* ctl;
@@ -119,13 +118,11 @@ private:
     std::vector<pk::ParamView*> bellKnobs[kNumBells];
     pk::ParamView *rateViews[kNumBells] {}, *syncRateViews[kNumBells] {};
     int pickedBell = 0;
-    // per gesture slot: every control GESTURES shows for it, the ones dimmed while its Target is Off, and its Speed
-    std::vector<VSTGUI::CView*> slotViews[kNumGestureSlots];
-    std::vector<pk::ParamView*> slotControls[kNumGestureSlots];
-    pk::ParamView* speedViews[kNumGestureSlots] {};
+    // GESTURE: the controls dimmed with Gesture None, and Speed (dimmed in Loop)
+    std::vector<pk::ParamView*> sceneControls;
+    pk::ParamView* sceneSpeed = nullptr;
     std::vector<pk::Knob*> wobbleKnobs;
     GestureView* gestureView = nullptr;
-    int pickedSlot = 0;
     pk::Label* latencyLabel = nullptr;
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;

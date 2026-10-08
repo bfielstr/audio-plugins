@@ -32,7 +32,8 @@ inline const char* forBell (uint32_t id)
     return nullptr;
 }
 
-// a gesture slot's controls (the same for slots 1 .. 4)
+// a 0.27 gesture slot's controls (the same for slots 1 .. 4; no longer in the editor, still played in a project that
+// uses them, and shown to the host)
 inline const char* forGesture (uint32_t id)
 {
     if (id < kG1Gesture || id >= kIntensity)
@@ -201,7 +202,31 @@ inline const char* forParam (uint32_t id)
             return "The shifted bands against the unshifted ones. Below 100 % both play, which beats and swirls. The Low "
                    "band is never shifted.";
         case kIntensity:
-            return "Scales every gesture slot's Depth at once: 0 switches all the gestures off, 100 % plays them as set.";
+            return "Scales every 0.27 gesture slot's Depth at once (an older project's slots): 0 switches them off, 100 % "
+                   "plays them as set.";
+        case kScene:
+            return "The gesture: one timeline of a few beats that moves many targets together (the band levels, Wobble, "
+                   "Close, Liquid, Dirt, Bells, the crossovers, Seed Blend, Shift), each on its own lane with its own range, "
+                   "all on one clock. The display shows every lane. User plays the file picked with File (from the Gestures "
+                   "folder beside your presets), saved with the project. None: no gesture. The Low band is never moved.";
+        case kSceneMode:
+            return "Loop plays the whole gesture over and over in time with the song. Walk goes back and forth through it "
+                   "(forwards, then backwards), at Speed. Every lane moves together either way.";
+        case kSceneLength:
+            return "How long the gesture lasts, in beats: Own is the length it was made with; the others stretch or squeeze "
+                   "it (every lane at once) to 1/2 .. 32 beats.";
+        case kSceneSpeed:
+            return "How fast Walk goes through the gesture: x1 takes Length per pass, x2 half that. Hold stops it at "
+                   "Position (move Position by hand or with automation to scrub every lane at once). Loop does not use it.";
+        case kScenePosition:
+            return "Loop: where the loop starts, as a share of Length (25 % starts it a quarter later). Walk: where it starts, "
+                   "and where it stays at Hold.";
+        case kSceneSmooth:
+            return "Glides every lane: 0 keeps the steps sharp (they still take 2 ms, so they never click), 100 % turns them "
+                   "into glides of a 16th of a beat.";
+        case kSceneAmount:
+            return "How far the gesture moves its targets, every lane at once: 100 % as the gesture has them, 50 % half way "
+                   "from where the controls are, 0 no gesture.";
         case kWobbleRate:
             return "Wobble's speed in cycles per beat (in time with the song): 2 is 8th notes, 4 16ths, 3 8th-note "
                    "triplets; the top end buzzes. A gesture on Wobble Rate sweeps it smoothly, without jumps.";
@@ -221,15 +246,14 @@ constexpr const char* kSweepView =
     "gain up (Min to Max), the dashed line the most it may boost at each corner (Tilt), the dot where it is now.";
 
 constexpr const char* kGestureView =
-    "The picked gesture slot: its curve across the gesture (up is where it pulls its target to), the beats it plays "
-    "over, and while it runs the playhead and the value now. Upside down when Depth is below 0.";
-
-constexpr const char* kGestureSlots =
-    "Shows that gesture slot's controls here (four slots, each moving one target; the display shows the picked one).";
+    "The gesture: one row per lane, named by its target, its curve across the gesture (up is the top of the lane's "
+    "range), the beats it plays over, and while it runs one playhead through every lane (they share one clock) with "
+    "each lane's value now.";
 
 constexpr const char* kGestureFile =
-    "Picks a gesture file (JSON) from the Gestures folder beside your moistr presets for this slot and sets its Gesture "
-    "to User. The curve is saved with the project, so the file is not needed again.";
+    "Picks a gesture file (JSON, a lane per target) from the Gestures folder beside your moistr presets and sets "
+    "Gesture to User; it is saved with the project, so the file is not needed again. Open Gestures Folder shows the "
+    "folder (made if missing). scripts/als_extract.py --moistr writes these files from Ableton automation.";
 
 constexpr const char* kBandView =
     "The bands against frequency. The Low band is locked (solid, with a lock and where it ends in Hz) unless Push or Dip "

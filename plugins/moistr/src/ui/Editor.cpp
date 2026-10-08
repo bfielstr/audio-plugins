@@ -15,7 +15,17 @@
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <spawn.h>
+#include <sys/wait.h>
+extern char** environ;
+#endif
 
 namespace moistr {
 
@@ -66,12 +76,8 @@ void Editor::onClose ()
         bellKnobs[b].clear ();
     }
     liquidKnobs.clear ();
-    for (int g = 0; g < kNumGestureSlots; ++g)
-    {
-        slotViews[g].clear ();
-        slotControls[g].clear ();
-        speedViews[g] = nullptr;
-    }
+    sceneControls.clear ();
+    sceneSpeed = nullptr;
     wobbleKnobs.clear ();
     gestureView = nullptr;
     latencyLabel = nullptr;
@@ -300,59 +306,34 @@ void Editor::buildUI (CFrame* f)
     root->addView (out);
     knobs (out, kOutRight - kOutLeft, {{kMix}, {kOutput, true}});
 
-    // the gestures: a slot picker (1 .. 4) and File (a user gesture for the picked slot); the picked slot's
-    // Gesture and Target, Mode, Length and Speed, Position, Smooth and Depth; Intensity for all of them
-    auto* gestures = new Panel (CRect (kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH), "GESTURES");
+    // the gesture (0.28): ONE gesture moving many targets together. Gesture and File (a user gesture from the
+    // Gestures folder); Mode, Length and Speed; Position, Smooth and Amount
+    auto* gestures = new Panel (CRect (kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH), "GESTURE");
     root->addView (gestures);
-    for (int g = 0; g < kNumGestureSlots; ++g)
     {
-        static const char* const numbers[kNumGestureSlots] = {"1", "2", "3", "4"};
-        const double x = kSwitchLeft + kSlotCellW * g, xr = x + kSlotCellW - 2.0;
-        auto* pick = new ActionButton (CRect (x, kSlotTop, xr, kSlotTop + kSlotRowH), numbers[g], [this, g] { pickSlot (g); },
-                                       [this, g] { return pickedSlot == g; });
-        pk::setHelp (pick, "Slot", help::kGestureSlots);
-        gestures->addView (pick);
-        auto keep = [&] (pk::ParamView* v, bool dims = true) {
-            slotViews[g].push_back (v);
-            if (dims)
-                slotControls[g].push_back (v);
-            return v;
-        };
-        auto label = [&] (double x0, double y, double w, const char* t) {
-            auto* l = new Label (CRect (x0, y + 3.0, x0 + w, y + 3.0 + 14.0), t, 9.5);
-            gestures->addView (l);
-            slotViews[g].push_back (l);
-        };
-        label (kSwitchLeft, kGestureMenuTop, kGestureLabelW, "Gesture");
-        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureMenuTop, kGestureMenuRight, kGestureMenuTop + kSwitchH),
-                                              this, gestureId (g, kGestureChoice))));
-        label (kSwitchLeft, kGestureTargetTop, kGestureLabelW, "Target");
-        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureTargetTop, kGestureMenuRight, kGestureTargetTop + kSwitchH),
-                                              this, gestureId (g, kGestureTarget))),
-              false);
-        keep (bind (gestures, new Segmented (CRect (kGestureColLeft, kSlotTop, kGestureColRight, kSlotTop + kSlotRowH), this, gestureId (g, kGestureMode),
-                                             {"Loop", "Walk"})));
-        label (kGestureColLeft, kGestureMenuTop, kGestureColLabelW, "Length");
-        keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureMenuTop, kGestureColRight, kGestureMenuTop + kSwitchH),
-                                              this, gestureId (g, kGestureLength))));
-        label (kGestureColLeft, kGestureTargetTop, kGestureColLabelW, "Speed");
-        speedViews[g] = keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureTargetTop, kGestureColRight,
-                                                                     kGestureTargetTop + kSwitchH),
-                                                              this, gestureId (g, kGestureSpeed))));
+        auto label = [&] (double x0, double y, double w, const char* t) { gestures->addView (new Label (CRect (x0, y + 3.0, x0 + w, y + 17.0), t, 9.5)); };
+        label (kSwitchLeft, kGestureTop, kGestureLabelW, "Gesture");
+        bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureTop, kGestureMenuRight, kGestureTop + kGestureRowH), this, kScene));
+        auto* file = new ActionButton (CRect (kSwitchLeft, kGestureFileTop, kGestureMenuRight, kGestureFileTop + kGestureRowH), "File",
+                                       [this] { showGestureFiles (layoutPoint (CPoint (kGesturesLeft + kSwitchLeft, kRow4 + kGestureFileTop + kGestureRowH))); });
+        pk::setHelp (file, "File", help::kGestureFile);
+        gestures->addView (file);
+        sceneControls.push_back (bind (gestures, new Segmented (CRect (kGestureColLeft, kGestureTop, kGestureColRight, kGestureTop + kGestureRowH), this,
+                                                                kSceneMode, {"Loop", "Walk"})));
+        label (kGestureColLeft, kGestureLengthTop, kGestureColLabelW, "Length");
+        sceneControls.push_back (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureLengthTop, kGestureColRight,
+                                                                        kGestureLengthTop + kGestureRowH),
+                                                                 this, kSceneLength)));
+        label (kGestureColLeft, kGestureSpeedTop, kGestureColLabelW, "Speed");
+        sceneSpeed = bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureSpeedTop, kGestureColRight,
+                                                            kGestureSpeedTop + kGestureRowH),
+                                                     this, kSceneSpeed));
         int i = 0;
-        for (GestureField f : {kGesturePosition, kGestureSmooth, kGestureDepth})
+        for (uint32_t id : {kScenePosition, kSceneSmooth, kSceneAmount})
         {
             const double kx = kGestureKnobLeft + kKnobStep * i++;
-            keep (bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, gestureId (g, f), nullptr, f == kGestureDepth)));
+            sceneControls.push_back (bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, id)));
         }
-    }
-    auto* file = new ActionButton (CRect (kGestureFileLeft, kSlotTop, kGestureMenuRight, kSlotTop + kSlotRowH), "File",
-                                   [this] { showGestureFiles (layoutPoint (CPoint (kGesturesLeft + kGestureFileLeft, kRow4 + kSlotTop + kSlotRowH))); });
-    pk::setHelp (file, "File", help::kGestureFile);
-    gestures->addView (file);
-    {
-        const double kx = kGestureKnobLeft + kKnobStep * 3;
-        bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, kIntensity));
     }
 
     // Wobble: the tremolo on the bands above Low (its rate in cycles per beat, how deep)
@@ -362,8 +343,7 @@ void Editor::buildUI (CFrame* f)
 
     gestureView = new GestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH)), this,
                                    [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
-                                   [this] { return pickedSlot; },
-                                   [c = ctl] (int g) -> const GestureData* { return &c->userGesture (g); });
+                                   [c = ctl] { return c->userScene (); }, [c = ctl] { return c->userSceneData ().name; });
     pk::setHelp (gestureView, "Gesture", help::kGestureView);
     root->addView (gestureView);
 
@@ -375,7 +355,6 @@ void Editor::buildUI (CFrame* f)
 
     applyParamTooltips (&help::forParam);
     pickBell (pickedBell);
-    pickSlot (pickedSlot);
     updateLooks ();
     idle ();
 }
@@ -386,18 +365,6 @@ void Editor::pickBell (int b)
     for (int i = 0; i < kNumBells; ++i)
         for (CView* v : bellViews[i])
             v->setVisible (i == pickedBell);
-    if (frame)
-        frame->invalid ();
-}
-
-void Editor::pickSlot (int g)
-{
-    pickedSlot = std::clamp (g, 0, kNumGestureSlots - 1);
-    for (int i = 0; i < kNumGestureSlots; ++i)
-        for (CView* v : slotViews[i])
-            v->setVisible (i == pickedSlot);
-    if (gestureView)
-        gestureView->invalid ();
     if (frame)
         frame->invalid ();
 }
@@ -413,22 +380,45 @@ void Editor::showGestureFiles (CPoint where)
     if (files.empty ())
         menu->addEntry ("No gesture files in the Gestures folder", -1, CMenuItem::kDisabled);
     menu->addSeparator ();
-    const int slot = pickedSlot;
-    const bool loaded = !ctl->userGesture (slot).empty ();
+    const bool loaded = !ctl->userSceneData ().empty ();
     menu->addEntry ("Clear the User Gesture", -1, loaded ? CMenuItem::kNoFlags : CMenuItem::kDisabled);
-    menu->popup (frame, where, [this, files, slot] (COptionMenu* m) {
+    menu->addEntry ("Open Gestures Folder");
+    const int32_t clearAt = (int32_t)std::max<size_t> (files.size (), 1) + 1;
+    menu->popup (frame, where, [this, files, clearAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (r >= 0 && r < (int32_t)files.size ())
         {
             std::string error;
-            if (!ctl->loadUserGesture (slot, files[(size_t)r].path, error) && gestureView)
+            if (!ctl->loadUserScene (files[(size_t)r].path, error) && gestureView)
                 gestureView->setNote (files[(size_t)r].name + ": " + error);
         }
-        else if (r == (int32_t)std::max<size_t> (files.size (), 1) + 1)
-            ctl->clearUserGesture (slot);
+        else if (r == clearAt)
+            ctl->clearUserScene ();
+        else if (r == clearAt + 1)
+            openGestureFolder ();
         if (gestureView)
             gestureView->invalid ();
     });
+}
+
+void Editor::openGestureFolder ()
+{
+    const std::string folder = ctl->makeGestureFolder ();
+    if (folder.empty ())
+        return;
+#if defined(_WIN32)
+    const std::wstring path = std::filesystem::path (folder).wstring ();
+    ShellExecuteW (nullptr, L"open", path.c_str (), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+#if defined(__APPLE__)
+    const char* argv[] = {"/usr/bin/open", folder.c_str (), nullptr};
+#else
+    const char* argv[] = {"xdg-open", folder.c_str (), nullptr};
+#endif
+    pid_t pid;
+    if (posix_spawnp (&pid, argv[0], nullptr, nullptr, const_cast<char**> (argv), environ) == 0)
+        waitpid (pid, nullptr, WNOHANG);
+#endif
 }
 
 bool Editor::affectsLooks (uint32_t id)
@@ -471,14 +461,16 @@ void Editor::updateLooks ()
         v->setEnabledLook (sweeping && plainValue (kSubBoost) >= 0.5);
     bool wobbleDriven = plainValue (kWobbleAmount) > 0.0;
     for (int g = 0; g < kNumGestureSlots; ++g)
+        wobbleDriven = wobbleDriven || std::lround (plainValue (gestureId (g, kGestureTarget))) == kTargetWobbleAmount;
     {
-        const int target = (int)std::lround (plainValue (gestureId (g, kGestureTarget)));
-        const bool on = target != kTargetOff, walk = std::lround (plainValue (gestureId (g, kGestureMode))) == kModeWalk;
-        wobbleDriven = wobbleDriven || target == kTargetWobbleAmount;
-        for (pk::ParamView* v : slotControls[g])
+        const Scene* sc = GestureView::sceneOf (this, ctl->userScene ());
+        const bool on = sc && sc->count > 0, walk = std::lround (plainValue (kSceneMode)) == kModeWalk;
+        for (pk::ParamView* v : sceneControls)
             v->setEnabledLook (on);
-        if (speedViews[g])
-            speedViews[g]->setEnabledLook (on && walk);
+        if (sceneSpeed)
+            sceneSpeed->setEnabledLook (on && walk);
+        for (int i = 0; on && i < sc->count; ++i)
+            wobbleDriven = wobbleDriven || sc->lane[i].target == kTargetWobbleAmount;
     }
     for (Knob* k : wobbleKnobs)
         k->setEnabledLook (wobbleDriven);
@@ -547,9 +539,12 @@ void Editor::showMenu (CPoint where)
         std::snprintf (buf, sizeof (buf), "Interface Size %d%%", (int)std::lround (s * 100));
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
+    menu->addSeparator ();
+    const int32_t folderAt = (int32_t)sizes.size () + 1;
+    menu->addEntry ("Open Gestures Folder");
     const int settingsAt = pk::addSettingsMenuEntries (menu);
     addLayoutMenu (menu);
-    menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
+    menu->popup (frame, where, [this, sizes, menu, settingsAt, folderAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
             return;
@@ -557,6 +552,8 @@ void Editor::showMenu (CPoint where)
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
+        else if (r == folderAt)
+            openGestureFolder ();
     });
 }
 
@@ -567,7 +564,7 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // a row of the gestures (gestures, wobble, the gesture display) and the end saturator in a row of its own at the
+    // a row of the gesture (gesture, wobble, the gesture display) and the end saturator in a row of its own at the
     // bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},

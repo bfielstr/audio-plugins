@@ -36,6 +36,7 @@ void Processor::publishUser ()
         std::lock_guard<std::mutex> lock (userMutex);
         for (int g = 0; g < kNumGestureSlots; ++g)
             bank->has[g] = toGesture (userData[(size_t)g], bank->g[g]);
+        bank->hasScene = !sceneData.empty () && toScene (sceneData, bank->scene) && bank->scene.count > 0;
     }
     userBank.publish (std::move (bank));
 }
@@ -104,10 +105,13 @@ tresult PLUGIN_API Processor::setActive (TBool state)
 
 tresult PLUGIN_API Processor::process (ProcessData& data)
 {
-    // the user gestures (a new copy only when one changed; never freed here)
+    // the user gestures, the slots' and the one gesture's (a new copy only when one changed; never freed here)
     if (userBank.fetch (userNow, userGen) && userNow)
+    {
         for (int g = 0; g < kNumGestureSlots; ++g)
             engine.setUserGesture (g, userNow->has[g] ? &userNow->g[g] : nullptr);
+        engine.setUserScene (userNow->hasScene ? &userNow->scene : nullptr);
+    }
     if (reloadParams.exchange (false, std::memory_order_acq_rel))
         for (uint32_t id = 0; id < kNumParams; ++id)
             engine.setParam (id, toPlain (id, normMirror[id].load (std::memory_order_relaxed)));
@@ -157,6 +161,7 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
     {
         std::lock_guard<std::mutex> lock (userMutex);
         userData = st.user;
+        sceneData = st.scene;
     }
     publishUser ();
     reloadParams.store (true, std::memory_order_release);
@@ -176,6 +181,7 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
     {
         std::lock_guard<std::mutex> lock (userMutex);
         st.user = userData;
+        st.scene = sceneData;
     }
     return writeState (stream, st) ? kResultOk : kResultFalse;
 }
@@ -184,6 +190,25 @@ tresult PLUGIN_API Processor::notify (IMessage* message)
 {
     if (pk::presets::handleProcessorMessage (*this, message))
         return kResultOk;
+    if (message && std::strcmp (message->getMessageID (), kSceneMessageId) == 0)
+    {
+        // the one gesture's user gesture from the controller (parsed here, off the audio thread)
+        const void* data = nullptr;
+        uint32 size = 0;
+        SceneData d;
+        if (message->getAttributes ()->getBinary (kGestureJsonAttr, data, size) == kResultOk && data && size > 0)
+        {
+            std::string err;
+            if (!parseSceneJson (std::string ((const char*)data, size), "User", d, err))
+                return kResultFalse;
+        }
+        {
+            std::lock_guard<std::mutex> lock (userMutex);
+            sceneData = std::move (d);
+        }
+        publishUser ();
+        return kResultOk;
+    }
     if (message && std::strcmp (message->getMessageID (), kGestureMessageId) == 0)
     {
         // a slot's user gesture from the controller (parsed here, off the audio thread)
