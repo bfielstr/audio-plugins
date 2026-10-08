@@ -106,10 +106,12 @@ kHz) the dragged band stops. Switched on, bands that overlap are split at the mi
 Automation that makes them overlap is kept apart the same way, and bands that do not overlap are left
 exactly as they are.
 
-**Glue** (nothing glued by default): drag a band's edge (or the Sub or High band's handle) onto its
-neighbour's edge in the display. Within a few pixels it snaps on, and when you let go the two are glued
-at that border. A small link icon sits on the border near the bottom of the display: copper where two
-bands only touch, lit cinnabar while they are glued. While glued, dragging the shared border moves both
+**Glue** (nothing glued by default): a small link icon sits on the border of two bands that touch,
+near the bottom of the display: copper where they only touch, lit cinnabar while they are glued. Click
+it to glue them. With **Menu > Defaults > Glue Bands on Touch** checked (off by default), dragging a
+band's edge (or the Sub or High band's handle) onto its neighbour's edge glues them too: within a few
+pixels it snaps on, and when you let go the two are glued at that border. Unchecked, edges move freely
+past each other and nothing glues by itself (pairs already glued stay glued). While glued, dragging the shared border moves both
 edges (one band gets wider as the other narrows; for the Sub and High bands their Freq is the border),
 and moving one band drags its neighbour's edge along. Click the link icon to detach them (they stay
 where they are), or click it on two bands that touch to glue them. Band 1 and Band 2, Sub and either

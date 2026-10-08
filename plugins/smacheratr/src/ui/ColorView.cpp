@@ -507,8 +507,9 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
     {
         host->beginEdit (cFreq);
         host->beginEdit (cRange);
-        // (No Overlap: first splits what overlaps; an edge within 6 px of a neighbour's snaps onto it)
-        push.begin (host, smacheratrBandParams (), dragBand, {cFreq, cRange}, BandPush::Grab::Body, snapOctaves ());
+        // (No Overlap: first splits what overlaps; with Glue Bands on Touch, an edge within 6 px of a
+        // neighbour's snaps onto it)
+        push.begin (host, smacheratrBandParams (), dragBand, {cFreq, cRange}, BandPush::Grab::Body, touchSnapOctaves (snapOctaves ()));
     }
     else if (drag == Drag::ClarityLow || drag == Drag::ClarityHigh || drag == Drag::ClarityWidth)
     {
@@ -517,7 +518,7 @@ void ColorView::onMouseDownEvent (MouseDownEvent& e)
                     drag == Drag::ClarityLow    ? BandPush::Grab::LowEdge
                     : drag == Drag::ClarityHigh ? BandPush::Grab::HighEdge
                                                 : BandPush::Grab::Width,
-                    snapOctaves ());
+                    touchSnapOctaves (snapOctaves ()));
     }
     startLo = host->plainValue (kColorLo);
     startHi = host->plainValue (kColorHi);

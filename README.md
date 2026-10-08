@@ -70,10 +70,10 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**
 - **Presets** in the header of every plug-in: **Init** (every control at its default) always at the
   top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
   as Default** so a new instance starts the way you like it (see below).
-- **Defaults** in every plug-in's **Menu** (all but smemplr): **Gentlr On by Default** and **Advanced
-  On by Default** decide whether gentlr (on unless you uncheck it), and its Advanced mode, are on in a
-  new instance (see
-  [Defaults for new instances](#defaults-for-new-instances)).
+- **Defaults** in every plug-in's **Menu**: **Gentlr On by Default** and **Advanced On by Default**
+  (all but smemplr) decide whether gentlr (on unless you uncheck it), and its Advanced mode, are on in a
+  new instance, and **Glue Bands on Touch** whether band edges dragged together in a gentlr display
+  snap and glue (see [Defaults for new instances](#defaults-for-new-instances)).
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr and locus was called lowfocus until 0.5.0. gentlr was called
@@ -184,8 +184,8 @@ same folder, so presets (and the saved default) go both ways between a slot and 
 
 ## Defaults for new instances
 
-Every plug-in except smemplr has a **Defaults** sub-menu in its **Menu**, after **Layout**, with two
-items you can check:
+Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. Every plug-in except
+smemplr has two items there for new instances:
 
 - **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end, and
   smacheratr at the end on (gentlr is not heard while it is off), with its other controls as they would
@@ -206,6 +206,15 @@ you insert a new instance: the instance you pick it in keeps its settings, a pro
 exactly as it was saved, and a preset, **Init** or **Load Default** loads exactly its own settings.
 With a saved default (**Save as Default**), a new instance starts from it and then gets these two on
 top, since you set them yourself. Delete `.defaults.txt` to go back to how the plug-in started before.
+
+The same sub-menu, in every plug-in (smemplr too), has **Glue Bands on Touch** (unchecked by default):
+checked, a band edge dragged to within a few pixels of a neighbour's in a gentlr display (gentlr's,
+smacheratr's, smacheratr at the end of any plug-in, smemplr's slots) snaps onto it, and the two are
+glued when you let go. Unchecked, edges move freely past each other and nothing glues by itself; the
+link icon on the border of two bands that touch still glues or detaches them, and pairs already glued
+stay glued. It is your own editor preference, not part of a project or preset: one setting for the
+whole suite (`.defaults.txt` in the `bfielstr` presets folder, beside the plug-ins' folders), applied at once to
+every open window.
 
 ## Layouts
 

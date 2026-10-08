@@ -792,7 +792,7 @@ void addCommand (COptionMenu* m, const std::string& title, std::function<void ()
 void EditorBase::addDefaultsMenu (COptionMenu* menu)
 {
     const GentlrIds ids = controller->gentlrIds ();
-    if (!menu || (ids.gentlr < 0 && ids.advanced < 0))
+    if (!menu)
         return;
     // Checked: what the file says, or (not set yet) the factory default: Gentlr with the end saturator on
     // (both on by default), Advanced off (gentlr's own Advanced is on in a new gentlr). A pick sets the switch to the other state; it reads the file again and changes
@@ -824,10 +824,21 @@ void EditorBase::addDefaultsMenu (COptionMenu* menu)
             },
             checked);
     }
-    sub->addSeparator ();
-    if (ids.gentlr >= 0 && ids.saturator >= 0)
-        addCommand (sub, "(Gentlr On also switches on smacheratr at the end)", {}, false, false);
-    addCommand (sub, "(For new instances; projects and presets keep theirs)", {}, false, false);
+    if (ids.gentlr >= 0 || ids.advanced >= 0)
+    {
+        sub->addSeparator ();
+        if (ids.gentlr >= 0 && ids.saturator >= 0)
+            addCommand (sub, "(Gentlr On also switches on smacheratr at the end)", {}, false, false);
+        addCommand (sub, "(For new instances; projects and presets keep theirs)", {}, false, false);
+        sub->addSeparator ();
+    }
+    // Glue Bands on Touch (GentlrDefaults.h): an editor preference of the whole suite, every plug-in's
+    // Gentlr displays at once (smemplr's slots too, which have no Gentlr defaults of their own here)
+    {
+        const bool checked = glueOnTouch ();
+        addCommand (sub, "Glue Bands on Touch", [checked] { writeGlueOnTouch (!checked); }, checked);
+        addCommand (sub, "(Band edges dragged together snap and glue; every plug-in)", {}, false, false);
+    }
     menu->addEntry (sub, "Defaults");
 }
 
@@ -838,9 +849,7 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
     if (layoutSpec (true).empty ())
     {
         // (no Layout: the Defaults after a separator of their own)
-        const GentlrIds ids = controller->gentlrIds ();
-        if (ids.gentlr >= 0 || ids.advanced >= 0)
-            menu->addSeparator ();
+        menu->addSeparator ();
         addDefaultsMenu (menu);
         return;
     }

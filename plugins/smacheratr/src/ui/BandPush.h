@@ -6,7 +6,8 @@
 //                               first splits any overlap the bands already have and holds the glued
 //                               borders), update () after each move of the grabbed band (its neighbours
 //                               are pushed, and its glued neighbours follow, from where they were when
-//                               the drag began, so dragging back lets them go back), end (). A band edge
+//                               the drag began, so dragging back lets them go back), end (). With Menu >
+//                               Defaults > Glue Bands on Touch checked (touchSnapOctaves), a band edge
 //                               dragged to within a few pixels of a neighbour's facing edge snaps onto
 //                               it, and the two are glued when the drag ends ("glue on touch"); a glued
 //                               edge dragged moves the border (the band's other edge stays, so one band
@@ -19,7 +20,8 @@
 //                               has them, the borders that get a link icon, a click on one (glue or
 //                               detach) and the icon itself (a thin copper chain link, lit cinnabar
 //                               while glued: docs/THEME.md)
-// With No Overlap off and nothing glued, a drag only snaps. Used by Smacheratr's colour display (and so
+// With No Overlap off and nothing glued, a drag only snaps (and with Glue Bands on Touch off, not even
+// that: the band moves as dragged). Used by Smacheratr's colour display (and so
 // by every plug-in's end saturator and Smemplr's rack), and by Gentlr's display.
 #pragma once
 
@@ -96,6 +98,11 @@ private:
     bool glued[kGluePairs] {};
     std::vector<uint32_t> opened;
 };
+
+// How near a display's dragged edge snaps onto a neighbour's: snapOct (the display's few pixels, in
+// octaves) while Menu > Defaults > Glue Bands on Touch is checked (pk::glueOnTouch, the suite's
+// preference), else 0: no snapping and no glue on touch. The displays pass it to BandPush::begin.
+double touchSnapOctaves (double snapOct);
 
 // Band `band` changed in one step from `before` (read before the change): its neighbours pushed, its
 // glued neighbours following.

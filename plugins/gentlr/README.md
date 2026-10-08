@@ -97,10 +97,15 @@ are left exactly where they are.
 
 ## Glue
 
-Two neighbouring bands can be held at a shared border (nothing is glued by default). Drag a band's edge
-(or the Sub or High band's handle) onto its neighbour's edge in the display: within a few pixels it
-snaps on, and when you let go the two are glued there. A small link icon sits on the border at the
-bottom of the display: copper where two bands only touch, lit cinnabar while they are glued.
+Two neighbouring bands can be held at a shared border (nothing is glued by default). A small link icon
+sits on the border of two bands that touch, at the bottom of the display: copper where they only touch,
+lit cinnabar while they are glued. Click it to glue them.
+
+**Glue Bands on Touch** (in **Menu > Defaults**, off by default): checked, dragging a band's edge (or
+the Sub or High band's handle) onto its neighbour's edge glues them too: within a few pixels it snaps
+on, and when you let go the two are glued there. Unchecked, edges move freely past each other and
+nothing glues by itself (pairs already glued stay glued). It is a preference of your own, not a setting
+of the project: it applies at once to every gentlr display in every plug-in.
 
 - While glued, dragging the shared border moves both edges together (one band gets wider as the other
   gets narrower; for the Sub and High bands their Freq is the border), and moving one band drags its

@@ -4,8 +4,12 @@
 // detaches and glues. Runs everywhere (no window). Run: ./smacheratr_bandpush_tests
 #include "ui/BandPush.h"
 
+#include "pluginkit/GentlrDefaults.h"
+
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <filesystem>
 #include <set>
 #include <vector>
 
@@ -186,6 +190,56 @@ int main ()
         dragBody (h, 1, {4000.0, 6000.0}, 0.0);
         CHECK (h.plainValue (kClarityHighFreq) > highWas * 1.01, "unglued High pushed: %.0f Hz", h.plainValue (kClarityHighFreq));
         CHECK (h.open.empty () && h.outside == 0, "every gesture closed");
+    }
+    // Menu > Defaults > Glue Bands on Touch (the suite's preference, in a folder of the test's own): the
+    // displays snap only while it is checked (touchSnapOctaves), so off (the default) an edge dragged onto a
+    // neighbour's neither snaps nor glues; glue already set still holds and a link click still glues
+    {
+        namespace fs = std::filesystem;
+        const fs::path dir = fs::temp_directory_path () /
+                             ("pk_bandpush_" + std::to_string ((long long)fs::file_time_type::clock::now ().time_since_epoch ().count ()));
+#if defined(_WIN32)
+        _putenv_s ("PK_PRESETS_DIR", dir.string ().c_str ());
+#else
+        setenv ("PK_PRESETS_DIR", dir.string ().c_str (), 1);
+#endif
+        const double snapOct = 0.05; // (a display's 6 px)
+        CHECK (!pk::glueOnTouch () && touchSnapOctaves (snapOct) == 0.0, "off by default: no snapping");
+        Host h = fresh ();
+        dragEdge (h, 0, true, {550.0, 650.0, 700.0}, touchSnapOctaves (snapOct));
+        CHECK (h.plainValue (kClarityGlue12) < 0.5 && near (hi (h, 0), 700.0, 1e-3), "off: dragged to %.1f Hz, no snap, no glue", hi (h, 0));
+        dragBody (h, 1, {1000.0, 960.0}, touchSnapOctaves (snapOct));
+        CHECK (h.plainValue (kClarityGlue12) < 0.5 && h.plainValue (kClarityGlueSub1) < 0.5 && near (h.plainValue (kClarity2Freq), 960.0),
+               "off: a band moved does not snap either");
+        // glued already: still held (a moved band drags its glued neighbour's edge)
+        {
+            Host g = fresh ();
+            dragEdge (g, 0, true, {700.0}); // (glued by a display with the option on: 707 Hz)
+            CHECK (g.plainValue (kClarityGlue12) >= 0.5, "glued");
+            dragBody (g, 1, {1200.0}, touchSnapOctaves (snapOct));
+            CHECK (g.plainValue (kClarityGlue12) >= 0.5 && near (hi (g, 0), lo (g, 1)), "off: a glued pair stays glued, the border held (%.1f / %.1f)",
+                   hi (g, 0), lo (g, 1));
+        }
+        // touching bands: the link click still glues
+        {
+            Host t = fresh ();
+            t.set (kClarityWidth, 2.0 * std::log2 (707.10678 / 250.0)); // (band 1's high edge on band 2's low edge)
+            GlueBorder b[kGentlrBands];
+            const int n = linkBorders (&t, smacheratrBandParams (), b);
+            CHECK (n >= 1 && !b[0].glued, "a link on the touching border (%d)", n);
+            if (n >= 1)
+                toggleGlue (&t, smacheratrBandParams (), b[0]);
+            CHECK (t.plainValue (kClarityGlue12) >= 0.5, "off: the link click glues");
+        }
+        // checked: snaps and glues; read back from the file each time
+        CHECK (pk::writeGlueOnTouch (true) && pk::glueOnTouch () && touchSnapOctaves (snapOct) == snapOct, "on: the display's snap");
+        Host on = fresh ();
+        dragEdge (on, 0, true, {550.0, 650.0, 700.0}, touchSnapOctaves (snapOct));
+        CHECK (on.plainValue (kClarityGlue12) >= 0.5 && near (hi (on, 0), lo (on, 1)), "on: snapped and glued (%.1f / %.1f Hz)", hi (on, 0),
+               lo (on, 1));
+        CHECK (pk::writeGlueOnTouch (false) && touchSnapOctaves (snapOct) == 0.0, "off again");
+        std::error_code ec;
+        fs::remove_all (dir, ec);
     }
     std::printf ("%d checks, %d failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;

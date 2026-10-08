@@ -693,8 +693,9 @@ void GentlrView::onMouseDownEvent (MouseDownEvent& e)
         return;
     }
     down = e.mousePosition;
-    // (No Overlap: first splits what overlaps; an edge within 6 px of a neighbour's snaps onto it)
-    const double snap = 6.0 * std::log2 (kMaxHz / kMinHz) / std::max (1.0, getViewSize ().getWidth ());
+    // (No Overlap: first splits what overlaps; with Glue Bands on Touch, an edge within 6 px of a
+    // neighbour's snaps onto it)
+    const double snap = smacheratr::touchSnapOctaves (6.0 * std::log2 (kMaxHz / kMinHz) / std::max (1.0, getViewSize ().getWidth ()));
     if (drag == Drag::Handle)
     {
         host->beginEdit (freq);

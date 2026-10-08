@@ -1,5 +1,6 @@
 #include "BandPush.h"
 
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/ui/Theme.h"
 
 #include "vstgui/lib/cdrawcontext.h"
@@ -245,6 +246,8 @@ void BandPush::end (pk::ParamHost* host, const GentlrBandParams& bp)
     snapPair = -1;
     on = false;
 }
+
+double touchSnapOctaves (double snapOct) { return pk::glueOnTouch () ? snapOct : 0.0; }
 
 void pushOnce (pk::ParamHost* host, const GentlrBandParams& bp, int band, const GentlrLayout& before)
 {
