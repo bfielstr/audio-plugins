@@ -5,7 +5,7 @@
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
 # removed (only if they are ours).
 #
-#   curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins-releases/main/scripts/install.sh | sh
 #
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
@@ -13,7 +13,7 @@
 #   SIMPLR_PLUGINS="Multidyn Locus"   install only some of the plug-ins
 set -eu
 
-REPO="${SIMPLR_REPO:-bfielstr/audio-plugins}"
+REPO="${SIMPLR_REPO:-bfielstr/audio-plugins-releases}"
 VERSION="${SIMPLR_VERSION:-latest}"
 
 os="$(uname -s)"
@@ -27,8 +27,8 @@ case "$os" in
         case "$arch" in
             x86_64 | amd64) asset="Plugins-Linux-x86_64.zip" ;;
             *)
-                echo "No prebuilt plug-ins for Linux/$arch yet. Build from source:" >&2
-                echo "  https://github.com/$REPO#build--install" >&2
+                echo "No prebuilt plug-ins for Linux/$arch yet. Ask for them here:" >&2
+                echo "  https://github.com/$REPO/issues" >&2
                 exit 1
                 ;;
         esac

@@ -3,7 +3,7 @@
 # into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
 # left at the top of the VST3 folder by older installers are removed (only if they are ours).
 #
-#   irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/bfielstr/audio-plugins-releases/main/scripts/install.ps1 | iex
 #
 # Run from an elevated (Administrator) PowerShell to install into the system VST3 folder
 # (C:\Program Files\Common Files\VST3), which every host scans. Otherwise it installs for the
@@ -15,7 +15,7 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest is very slow with the progress bar
 
-$repo = if ($env:SIMPLR_REPO) { $env:SIMPLR_REPO } else { 'bfielstr/audio-plugins' }
+$repo = if ($env:SIMPLR_REPO) { $env:SIMPLR_REPO } else { 'bfielstr/audio-plugins-releases' }
 $version = if ($env:SIMPLR_VERSION) { $env:SIMPLR_VERSION } else { 'latest' }
 $asset = 'Plugins-Windows-x64.zip'
 $base = if ($version -eq 'latest') { "https://github.com/$repo/releases/latest/download" }
