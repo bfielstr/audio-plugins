@@ -6,6 +6,8 @@
 #include "SweepView.h"
 #include "plugin/Controller.h"
 
+#include "smemplr/src/core/FxSlot.h"
+
 #include "pluginkit/ui/Theme.h"
 #include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/vst/PresetBar.h"
@@ -49,6 +51,86 @@ public:
     }
 };
 
+// A LAB slot's values through its kind's own table and units (the kind the LAB shows there): a control on it edits the
+// slot's value; turned while the slot holds another kind (Empty), it loads the kind there first (from the block's
+// values, the kind's defaults until they are changed).
+class LabSlotHost : public pk::ParamHost
+{
+public:
+    LabSlotHost (pk::ParamHost* host, Controller* c, int s, int k) : in (host), ctl (c), slot (s), kind (k) {}
+    const pk::ParamTable& table () override { return smemplr::fxTable (kind); }
+    double norm (uint32_t id) override { return in->norm (idOf (id)); }
+    double plainValue (uint32_t id) override { return table ().toPlain (id, norm (id)); }
+    void beginEdit (uint32_t id) override
+    {
+        load ();
+        in->beginEdit (idOf (id));
+    }
+    void setNorm (uint32_t id, double v) override { in->setNorm (idOf (id), v); }
+    void endEdit (uint32_t id) override { in->endEdit (idOf (id)); }
+    std::string valueText (uint32_t id) override { return table ().toText (id, plainValue (id)); }
+    int64_t sourceParam (uint32_t id) override { return idOf (id); }
+
+protected:
+    uint32_t idOf (uint32_t id) const { return labBlockParam (slot, (uint32_t)smemplr::fxBlockOf (kind, id)); }
+    void load ()
+    {
+        if (ctl->labKind (slot) != kind)
+            in->setOnce (labSlotParam (slot, kLabType), paramTable ().toNormalized (labSlotParam (slot, kLabType), kind));
+    }
+    pk::ParamHost* in;
+    Controller* ctl;
+    int slot, kind;
+};
+
+// POST's OTT Up and Down (ids 0 and 1, 0 .. 100 %) on its multidyn's bands' Below and Above ratios: 100 % at OTT's own
+// ratios (multidyn's defaults), 0 % at 1:1 (no upward or downward compression), in between the strength (1 - 1/r)
+// that multidyn's OTT style reads, scaled. Every band moves together; the first band's ratio is what they show.
+class OttRatioHost : public LabSlotHost
+{
+public:
+    OttRatioHost (pk::ParamHost* host, Controller* c, int s) : LabSlotHost (host, c, s, smemplr::kFxMultidyn) {}
+    const pk::ParamTable& table () override
+    {
+        using namespace pk::make;
+        static const pk::ParamTable t (std::vector<pk::ParamInfo> {percent (0, "OTT Up", "Up", 1.0), percent (1, "OTT Down", "Down", 1.0)});
+        return t;
+    }
+    double norm (uint32_t id) override
+    {
+        const uint32_t f = field (id);
+        const double r = multidyn::toPlain (multidyn::bandParam (0, f), in->norm (ratioId (0, f)));
+        return std::clamp ((1.0 - 1.0 / std::max (r, 1e-3)) / (1.0 - 1.0 / own (0, f)), 0.0, 1.0);
+    }
+    void beginEdit (uint32_t id) override
+    {
+        load ();
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+            in->beginEdit (ratioId (b, field (id)));
+    }
+    void setNorm (uint32_t id, double v) override
+    {
+        const uint32_t f = field (id);
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+        {
+            const double r = 1.0 / std::max (1e-6, 1.0 - std::clamp (v, 0.0, 1.0) * (1.0 - 1.0 / own (b, f)));
+            in->setNorm (ratioId (b, f), multidyn::toNormalized (multidyn::bandParam (b, f), r));
+        }
+    }
+    void endEdit (uint32_t id) override
+    {
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+            in->endEdit (ratioId (b, field (id)));
+    }
+    std::string valueText (uint32_t id) override { return table ().toText (id, norm (id)); }
+    int64_t sourceParam (uint32_t id) override { return ratioId (0, field (id)); }
+
+private:
+    static uint32_t field (uint32_t id) { return id == 0 ? (uint32_t)multidyn::kBelowRatio : (uint32_t)multidyn::kAboveRatio; }
+    static double own (int b, uint32_t f) { return multidyn::paramTable ().info (multidyn::bandParam (b, (int)f)).def; }
+    uint32_t ratioId (int b, uint32_t f) const { return idOf (multidyn::bandParam (b, (int)f)); }
+};
+
 // a panel's knobs in a row (bipolar: drawn from the centre)
 struct KnobDef
 {
@@ -76,6 +158,13 @@ void Editor::onClose ()
         bellKnobs[b].clear ();
     }
     liquidKnobs.clear ();
+    labViews.clear ();
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        labSat[c].clear ();
+        labOtt[c].clear ();
+        labAll[c].clear ();
+    }
     sceneControls.clear ();
     sceneSpeed = nullptr;
     wobbleKnobs.clear ();
@@ -347,6 +436,8 @@ void Editor::buildUI (CFrame* f)
     pk::setHelp (gestureView, "Gesture", help::kGestureView);
     root->addView (gestureView);
 
+    buildLab (root);
+
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
                                                     [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
@@ -357,6 +448,65 @@ void Editor::buildUI (CFrame* f)
     pickBell (pickedBell);
     updateLooks ();
     idle ();
+}
+
+void Editor::buildLab (CViewContainer* root)
+{
+    // the LAB (0.29): per chain (MID, HIGH, AIR) its first slot's smacheratr (Grit: Drive, Curve: Post Clip), its second
+    // slot's multidyn (OTT: Amount) and its Level, with Mute, Solo and Mono under them; POST's first slot's multidyn
+    // (Depth: Amount, Time, Up, Down). A slot's knobs show its kind's own values (the hosts map them onto the slot).
+    static const char* const titles[kNumBandChains + 1] = {"MID", "HIGH", "AIR", "POST"};
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        const double left = kLabLeft + kLabStep * c;
+        auto* panel = new Panel (CRect (left, kRow5, left + kLabW, kRow5 + kLabRowH), titles[c]);
+        root->addView (panel);
+        const double x0 = centredLeft (kLabW, 4);
+        auto at = [&] (int i) { return CRect (x0 + kKnobStep * i, kKnobTop, x0 + kKnobStep * i + kKnobW, kKnobTop + kKnobH); };
+        auto slotKnob = [&] (pk::ParamHost* h, int i, uint32_t id, const char* label, const char* help, std::vector<pk::ParamView*>& group) {
+            auto* k = new Knob (at (i), h, id, label);
+            pk::setHelp (k, label, help);
+            panel->addView (k);
+            labViews.push_back (k);
+            group.push_back (k);
+            labAll[c].push_back (k);
+            return k;
+        };
+        auto own = [&] (pk::ParamView* v, const char* title) {
+            bind (panel, v);
+            labViews.push_back (v);
+            labAll[c].push_back (v);
+            (void)title;
+        };
+        if (c < kNumBandChains)
+        {
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, chainSlot (c, 0), smemplr::kFxSmacheratr));
+            pk::ParamHost* sat = labHosts.back ().get ();
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, chainSlot (c, 1), smemplr::kFxMultidyn));
+            pk::ParamHost* ott = labHosts.back ().get ();
+            slotKnob (sat, 0, smacheratr::kDrive, "Grit", help::kLabGrit, labSat[c]);
+            slotKnob (sat, 1, smacheratr::kPostClip, "Curve", help::kLabCurve, labSat[c]);
+            slotKnob (ott, 2, multidyn::kAmount, "OTT", help::kLabOtt, labOtt[c]);
+            own (new Knob (at (3), this, chainId (c, kChainLevel), "Level", true), "Level");
+            const ChainField switches[3] = {kChainMute, kChainSolo, kChainMono};
+            static const char* const names[3] = {"Mute", "Solo", "Mono"};
+            for (int i = 0; i < 3; ++i)
+                own (new Toggle (CRect (x0 + kKnobStep * i, kLabSwitchTop, x0 + kKnobStep * i + kKnobW, kLabSwitchTop + kLabSwitchH), this,
+                                 chainId (c, switches[i]), names[i]),
+                     names[i]);
+        }
+        else
+        {
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, postSlot (0), smemplr::kFxMultidyn));
+            pk::ParamHost* ott = labHosts.back ().get ();
+            labHosts.push_back (std::make_unique<OttRatioHost> (this, ctl, postSlot (0)));
+            pk::ParamHost* ratios = labHosts.back ().get ();
+            slotKnob (ott, 0, multidyn::kAmount, "Depth", help::kPostDepth, labOtt[c]);
+            slotKnob (ott, 1, multidyn::kTime, "Time", help::kPostTime, labOtt[c]);
+            slotKnob (ratios, 2, 0, "Up", help::kPostUp, labOtt[c]);
+            slotKnob (ratios, 3, 1, "Down", help::kPostDown, labOtt[c]);
+        }
+    }
 }
 
 void Editor::pickBell (int b)
@@ -423,7 +573,7 @@ void Editor::openGestureFolder ()
 
 bool Editor::affectsLooks (uint32_t id)
 {
-    if (isGestureParam (id))
+    if (isGestureParam (id) || (isLabSlotParam (id) && labFieldOf (id) == kLabType))
         return true;
     if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
         id == kCleanSub || id == kSubBoost)
@@ -474,6 +624,20 @@ void Editor::updateLooks ()
     }
     for (Knob* k : wobbleKnobs)
         k->setEnabledLook (wobbleDriven);
+    // the LAB: a slot's knobs while it holds the kind they show; the Air chain with 4 bands only (with 3 Air goes into
+    // the High chain)
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        const bool heard = c != 2 || four;
+        for (pk::ParamView* v : labAll[c])
+            v->setEnabledLook (heard);
+        const bool sat = c < kNumBandChains && ctl->labKind (chainSlot (c, 0)) == smemplr::kFxSmacheratr;
+        const bool ott = ctl->labKind (c < kNumBandChains ? chainSlot (c, 1) : postSlot (0)) == smemplr::kFxMultidyn;
+        for (pk::ParamView* v : labSat[c])
+            v->setEnabledLook (heard && sat);
+        for (pk::ParamView* v : labOtt[c])
+            v->setEnabledLook (heard && ott);
+    }
     for (int b = 0; b < kNumBells; ++b)
     {
         const bool on = sweeping && plainValue (bellOnId (b)) >= 0.5, synced = plainValue (bellId (b, kBellSync)) >= 0.5;
@@ -500,6 +664,9 @@ void Editor::paramChanged (uint32_t id)
     }
     if (gestureView && isGestureParam (id))
         gestureView->invalid ();
+    if (isLabParam (id))
+        for (pk::ParamView* v : labViews)
+            v->invalid (); // (the slots' knobs show LAB parameters under their kinds' IDs)
     if (display && BandView::shows (id))
     {
         display->idle (); // (the snapshot: levels, crossovers, bands)
@@ -565,8 +732,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // a row of the gesture (gesture, wobble, the gesture display) and the end saturator in a row of its own at the
-    // bottom
+    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST) and
+    // the end saturator in a row of its own at the bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
         {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
@@ -589,7 +756,11 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"gestures", "", {kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH}, 3},
         {"wobble", "", {kWobbleLeft, kRow4, kWobbleRight, kRow4 + kRowH}, 3},
         {"gestureview", "gesture", {kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH}, 3, -1, true},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 4, -1, true},
+        {"lab-mid", "", {kLabLeft, kRow5, kLabLeft + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-high", "", {kLabLeft + kLabStep, kRow5, kLabLeft + kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-air", "", {kLabLeft + 2 * kLabStep, kRow5, kLabLeft + 2 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-post", "", {kLabLeft + 3 * kLabStep, kRow5, kLabLeft + 3 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 5, -1, true},
     };
     return s;
 }

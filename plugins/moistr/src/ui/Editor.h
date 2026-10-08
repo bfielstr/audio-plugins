@@ -22,13 +22,16 @@ public:
     // Classic: two rows of the SWEEP stage at the top (SWEEP, BELLS, SUB over HIGH SHELF and the sweep display),
     // the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
     // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gesture (GESTURE,
-    // WOBBLE and the gesture display), the end saturator's section at the bottom
+    // WOBBLE and the gesture display), a row of the LAB (MID, HIGH, AIR chains and POST), the end saturator's
+    // section at the bottom
     static constexpr double kWidth = 1132.0;
     static constexpr double kRowH = 116.0;
     static constexpr double kSweepRow1 = 40.0, kSweepRow2 = kSweepRow1 + kRowH + 8.0;
     static constexpr double kRow1 = kSweepRow2 + kRowH + 8.0 + 198.0, kRow2 = kRow1 + kRowH + 8.0, kRow3 = kRow2 + kRowH + 8.0;
     static constexpr double kRow4 = kRow3 + kRowH + 8.0;
-    static constexpr double kTailTop = kRow4 + kRowH + 8.0;
+    // the LAB's row (0.29): a row of knobs with a row of switches under them
+    static constexpr double kLabRowH = 128.0, kRow5 = kRow4 + kRowH + 8.0;
+    static constexpr double kTailTop = kRow5 + kLabRowH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
     static constexpr double kSweepLeft = 8.0, kSweepRight = 258.0;          // sweep row 1: Sweep, Curve, Tone (on); Drive, Tone
@@ -65,6 +68,10 @@ public:
     static constexpr double kGestureTop = 28.0, kGestureRowH = 20.0, kGestureFileTop = 54.0, kGestureMenuRight = 206.0, kGestureLabelW = 46.0;
     static constexpr double kGestureLengthTop = 54.0, kGestureSpeedTop = 80.0;
     static constexpr double kGestureColLeft = 214.0, kGestureColRight = 318.0, kGestureColLabelW = 40.0, kGestureKnobLeft = 330.0;
+    // the LAB (row 5): MID, HIGH, AIR (a chain each: Grit, Curve, OTT, Level over Mute, Solo, Mono) and POST (Depth,
+    // Time, Up, Down), kLabW wide from kLabLeft, kLabStep apart; the switches' row (panel coordinates)
+    static constexpr double kLabLeft = 8.0, kLabW = 273.0, kLabStep = kLabW + 8.0, kLabSwitchTop = 100.0, kLabSwitchH = 18.0;
+    static_assert (kLabLeft + 3 * kLabStep + kLabW == kWidth - 8.0, "the LAB's four panels fill the row");
     // a switch at the top left of its panel (Bands in SPLIT, Sync in MOVEMENT, Passes in GLUE; panel coordinates)
     static constexpr double kSwitchLeft = 14.0, kSwitchTop = 30.0, kSwitchW = 110.0, kSwitchH = 20.0;
     // SHIFT's On switch: a knob wide, in the first knob's place (its knobs follow it from kKnobLeft + kKnobStep)
@@ -127,6 +134,13 @@ private:
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;
     std::vector<pk::Knob*> liquidKnobs; // Res, Low, High
+    // the LAB: the hosts its knobs show slots' values through (a slot's kind's table; POST's OTT Up and Down), every
+    // control in it (repainted when a LAB parameter moves), and per chain (MID, HIGH, AIR; then POST) the controls of its
+    // smacheratr, its multidyn and all of them (dimmed: the slot not holding that kind; Air with 3 bands)
+    std::vector<std::unique_ptr<pk::ParamHost>> labHosts;
+    std::vector<pk::ParamView*> labViews;
+    std::vector<pk::ParamView*> labSat[kNumBandChains + 1], labOtt[kNumBandChains + 1], labAll[kNumBandChains + 1];
+    void buildLab (VSTGUI::CViewContainer* root);
 };
 
 } // namespace moistr

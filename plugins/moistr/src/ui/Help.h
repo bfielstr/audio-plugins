@@ -72,11 +72,30 @@ inline const char* forGesture (uint32_t id)
     }
 }
 
+// the LAB (0.29)
+inline const char* forLab (uint32_t id)
+{
+    if (!isChainParam (id))
+        return nullptr;
+    switch ((id - kChainBase) % kChainFields)
+    {
+        case kChainLevel: return "The chain's level after its effects (dB): its band in the mix, however hard it hits them. At the bottom it is off.";
+        case kChainMute: return "Silences the chain: it fades out and stops running (its band is gone from the mix until it is on again).";
+        case kChainSolo:
+            return "Hears only the soloed chains (the Low band too is silent while any chain is soloed), to set one band's "
+                   "dirt on its own.";
+        case kChainMono: return "Puts the chain's output in the middle: its band mono, whatever its effects do to the width.";
+        default: return nullptr;
+    }
+}
+
 inline const char* forParam (uint32_t id)
 {
     if (const char* t = forBell (id))
         return t;
     if (const char* t = forGesture (id))
+        return t;
+    if (const char* t = forLab (id))
         return t;
     switch (id)
     {
@@ -238,6 +257,25 @@ inline const char* forParam (uint32_t id)
         default: return nullptr;
     }
 }
+
+constexpr const char* kLabGrit =
+    "How hard the chain's band drives its smacheratr (its Drive, dB). The band's moving gain comes first, so Movement and "
+    "the gestures change how much it distorts. Turned on an empty chain, it loads smacheratr there.";
+constexpr const char* kLabCurve =
+    "What smacheratr does to the peaks after its curve (its Post Clip): No Clip, Soft Clip, or Hard Clip, the hardest edge.";
+constexpr const char* kLabOtt =
+    "How much the chain's multidyn squeezes its band, OTT style (its Amount, OTT's Depth): quiet detail up, peaks down. "
+    "Turned on an empty chain, it loads multidyn there.";
+constexpr const char* kPostDepth =
+    "POST: an OTT on the sum of the chains (never on the Low band), its Amount (OTT's Depth). It glues the three bands into "
+    "one dense sound; Liquid, Close, Wobble and the shifter come after it.";
+constexpr const char* kPostTime = "How fast POST's OTT lets go (its Time): lower pumps quicker, higher holds longer.";
+constexpr const char* kPostUp =
+    "How much POST's OTT brings quiet detail up (upward compression): 100 % is OTT's own, 0 % none. Sets every band's "
+    "Below ratio.";
+constexpr const char* kPostDown =
+    "How much POST's OTT pushes peaks down (downward compression): 100 % is OTT's own, 0 % none. Sets every band's Above "
+    "ratio.";
 
 constexpr const char* kSweepView =
     "The SWEEP stage now: each bell that is on (A, C, E, G solid; B, D, F, H dashed) and the High Shelf, each thin, and "
