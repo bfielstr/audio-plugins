@@ -7,6 +7,7 @@ on:
     # (a change that only touches documentation builds nothing; tags always build, whatever they change)
     paths-ignore: ["**.md", "docs/**"]
   pull_request:
+    types: [opened, synchronize, reopened, labeled]
     paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
     inputs:
@@ -31,12 +32,13 @@ permissions:
 jobs:
   # A pull request builds and tests only the plug-ins it changes, with the plug-ins that use them
   # (scripts/ci-changed-plugins.py; anything outside plugins/<name>/ builds everything). Pushes to
-  # main, tags and manual runs always build everything.
+  # main, tags and manual runs always build every plug-in (on the systems picked below).
   changes:
     name: Changed plug-ins
     runs-on: ubuntu-latest
     outputs:
       plugins: ${{ steps.pick.outputs.plugins }}
+      matrix: ${{ steps.oses.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
         if: github.event_name == 'pull_request'
@@ -53,26 +55,42 @@ jobs:
           # (the script writes plugins=... to $GITHUB_OUTPUT itself)
           plugins=$(scripts/ci-changed-plugins.py "$BASE" "$HEAD" | cut -d= -f2-)
           echo "Building: ${plugins:-every plug-in}" >> "$GITHUB_STEP_SUMMARY"
+      # The repository is private, so Actions minutes count (macOS 10x, Windows 2x). Tags and manual
+      # runs build on every system. A pull request builds on Linux only, unless it raises the version
+      # (a release: merging it tags it, so it must pass everywhere first) or carries the label full-ci.
+      # Pushes to main build on Linux only (the pull request already built them).
+      - name: Pick the systems
+        id: oses
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'full-ci') }}
+        run: |
+          full=false
+          if [ "$EVENT" = workflow_dispatch ] || [[ "$REF" == refs/tags/v* ]]; then
+            full=true
+          elif [ "$EVENT" = pull_request ]; then
+            if [ "$FULL_LABEL" = true ] || git diff "$BASE" "$HEAD" -- CMakeLists.txt | grep -qE '^[-+][[:space:]]*VERSION [0-9]'; then
+              full=true
+            fi
+          fi
+          linux='{"name":"Linux x86_64","os":"ubuntu-22.04","asset":"Plugins-Linux-x86_64.zip","installer":""}'
+          mac='{"name":"macOS","os":"macos-latest","asset":"Plugins-macOS.zip","installer":"Plugins-macOS.pkg"}'
+          win='{"name":"Windows x64","os":"windows-latest","asset":"Plugins-Windows-x64.zip","installer":"Plugins-Windows-x64-Setup.exe"}'
+          if [ "$full" = true ]; then m="[$mac,$linux,$win]"; else m="[$linux]"; fi
+          echo "matrix={\"include\":$m}" >> "$GITHUB_OUTPUT"
+          echo "Systems: $([ "$full" = true ] && echo 'macOS, Linux, Windows' || echo 'Linux only (add the label full-ci for all)')" >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: ${{ matrix.name }}
     needs: changes
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-            asset: Plugins-macOS.zip
-            installer: Plugins-macOS.pkg
-          - name: Linux x86_64
-            os: ubuntu-22.04 # oldest supported glibc for wider compatibility
-            asset: Plugins-Linux-x86_64.zip
-            installer: "" # Linux keeps the one-line script
-          - name: Windows x64
-            os: windows-latest
-            asset: Plugins-Windows-x64.zip
-            installer: Plugins-Windows-x64-Setup.exe
+      # (Linux on ubuntu-22.04: the oldest supported glibc, for wider compatibility; Linux keeps the
+      # one-line script instead of an installer)
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     env:
       # The double-click installers (installer/) are built and tested for releases, and on a manual run

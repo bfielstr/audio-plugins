@@ -39,6 +39,9 @@ cmake --build build
 
 - Pull requests build and test only the changed plug-ins and the plug-ins that use them
   (`scripts/ci-changed-plugins.py`); anything outside `plugins/<name>/` builds everything.
+  They build on Linux only, except a version bump or a pull request labelled `full-ci` (macOS, Linux,
+  Windows): the macOS host tests then run only there, so label a pull request that changes a host test
+  or the UI `full-ci`, and check host tests locally with the syntax check below.
 - Releasing: bump the root `CMakeLists.txt` VERSION, every `plugins/*/CMakeLists.txt` VERSION
   (`x.y.z.0`) and the README's "The current version is" line in the pull request. Merging it to main
   tags `vX.Y.Z` and runs the release (`.github/workflows/release-tag.yml`). Do not push tags.

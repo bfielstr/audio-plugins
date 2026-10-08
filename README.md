@@ -300,8 +300,13 @@ Every push to main and every pull request is built and tested on macOS, Linux an
 Actions (`.github/workflows/build.yml`). A pull request builds and tests only the plug-ins it changes,
 with the plug-ins that use them (`scripts/ci-changed-plugins.py`); a change outside `plugins/<name>/`
 (`shared/`, `cmake/`, the root `CMakeLists.txt`, `.github/`, `installer/`, `scripts/`, ...) builds all
-of them. Pushes to main and releases always build everything. The screenshots in `docs/<plug-in>/` come
-from the macOS host tests.
+of them. Pushes to main and releases always build every plug-in. The screenshots in `docs/<plug-in>/`
+come from the macOS host tests.
+
+Because the repository is private, Actions minutes count (macOS 10 times, Windows twice), so a pull
+request and a push to main build on Linux only. A pull request that raises the version (a release)
+builds on macOS, Linux and Windows, and so does one with the label `full-ci` (add it to run the macOS
+host tests before merging). Release tags and manual runs always build on all three.
 
 To release a version:
 
