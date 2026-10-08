@@ -325,14 +325,16 @@ and every project from before 0.28) moistr sounds exactly as before.
   - Talking Cell (2 beats): **Close** and **Liquid Pos** step through vowels together on a triplet grid,
     the mids dipping every beat.
   - Crossover Walk (2 beats): **Mid X** and **High X** move against each other in quarter- and third-beat
-    steps.
+    steps, the Mid band held 15 dB down so the crossover's moves are heard (with every band at one level the
+    bands add up to the input, wherever the crossovers are). **High X** needs **4 Bands**.
   - Slow Phrase (32 beats): **Seed Blend** scans up and back, the bells fade, **Close** slowly shuts and
     opens on the downbeat, the highs sink.
   - Pluck 1/8 (1 beat): **Close** and the High band open on every 8th note and fall over a 16th.
   - Buzz Tail (8 beats): a steady wobble, then an audio-rate buzz for the last two beats.
   - Triplet Wobble (4 beats): **Wobble Rate** steps through 3, 6, 9, 4.5 and 12 cycles per beat on
     quarter-note triplets, the Air band gated with it.
-  - Scan Cell (4 beats): **Seed Blend** jumps and scrubs per note, **Liquid Pos** sweeps, **Mid X** steps.
+  - Scan Cell (4 beats): **Bells** jumps and scrubs per note (a timbre scan), **Mid X** steps with the Mid
+    band 12 dB down, **Liquid Pos** sweeps (heard with **Liquid** up).
   - Gate Swap (2 beats): the Mid band on the first beat, the High band on the second, **Dirt** with the
     highs.
 
@@ -368,9 +370,13 @@ What a lane can move, and its units (a lane's range is in these):
   without the saturator) and its saturated sound (1), level matched, so a crossfade keeps its loudness.
 - **Bells** (0 to 1): the bands above Low without (0) and with (1) the SWEEP stage's bells, each level
   matched.
-- **Mid X**, **High X**, **Shift** (Hz) and **Seed Blend** (0 to 1): those controls (**Shift** needs the
-  shifter on; **Seed Blend** and the crossovers' drift need **Movement**). **Seed Blend** moves the upper
-  bands' pattern only: the Low band's own **Push** and **Dip** keep its set value.
+- **Mid X**, **High X** (Hz): the crossovers. A lane may take **Mid X** below the control's range, down to a
+  third of an octave above the Low band's crossover (which stays locked where **Seed** puts it, 100 to
+  500 Hz); **High X** stays a third of an octave above **Mid X**. A crossover's move is only heard when the
+  bands on either side differ in level (a gesture usually moves a band level too).
+- **Shift** (Hz) and **Seed Blend** (0 to 1): those controls (**Shift** needs the shifter on; **Seed Blend**
+  needs **Movement**). **Seed Blend** moves the upper bands' pattern only: the Low band's own **Push** and
+  **Dip** keep its set value.
 
 **WOBBLE**: a tremolo on the bands above Low.
 

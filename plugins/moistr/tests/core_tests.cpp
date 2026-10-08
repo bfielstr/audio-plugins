@@ -3715,7 +3715,9 @@ TEST (scene_factory_library)
         {
             const SceneLane& lane = s.lane[l];
             ranges = ranges && lane.target > kTargetOff && lane.target < kNumTargets && lane.curve.count >= 2 && lane.curve.length == s.length &&
-                     lane.lo >= 0.0 && lane.lo <= 1.0 && lane.hi >= 0.0 && lane.hi <= 1.0;
+                     (lane.target == kTargetMidX || lane.target == kTargetHighX
+                          ? std::min (lane.lo, lane.hi) >= std::log2 (20.0) && std::max (lane.lo, lane.hi) <= std::log2 (20000.0) // (log2 Hz)
+                          : lane.lo >= 0.0 && lane.lo <= 1.0 && lane.hi >= 0.0 && lane.hi <= 1.0);
             double lo = 1.0, hi = 0.0;
             for (int k = 0; k < lane.curve.count; ++k)
             {
@@ -3929,6 +3931,22 @@ TEST (scene_lane_ranges)
     CHECK (std::fabs (e->closeHz () - 400.0) < 1e-6, "Close at 400 Hz (%.3f; Tone on at 7 kHz)", e->closeHz ());
     CHECK (std::fabs (e->wobbleRate () - 9.0) < 1e-9 && std::fabs (e->wobbleAmount () - 0.5) < 1e-9, "Wobble at 9 cycles per beat, 50 %%");
     CHECK (std::fabs (e->xoverHz (0, 1) - 1000.0) < 1.0, "Mid X at 1 kHz (%.1f)", e->xoverHz (0, 1));
+    // a lane takes Mid X below the control's range (400 Hz), down to a third of an octave above the locked Low X
+    {
+        auto low = sceneFrom (R"({"length_beats": 1, "lanes": [{"target": "Mid X", "min": 100, "max": 100, "points": [[0, 1]]}]})");
+        for (int seed : {1, 40, 90})
+        {
+            auto f = fresh ();
+            f->setParam (kSeed, seed);
+            f->setUserScene (low.get ());
+            f->setParam (kScene, kSceneUser);
+            f->reset ();
+            run (*f, reese (0.3), nullptr, 256, playing (*f, 120.0));
+            const double floor = f->lowXover () * std::exp2 (1.0 / 3.0), want = std::max (100.0, floor);
+            CHECK (std::fabs (f->xoverHz (0, 1) - want) < 0.5 && f->xoverHz (0, 0) == f->lowXover (),
+                   "seed %d: Mid X at %.1f Hz (Low X %.1f stays locked)", seed, f->xoverHz (0, 1), f->lowXover ());
+        }
+    }
     CHECK (std::fabs (e->shiftNow () - 120.0) < 1e-6, "Shift: min above max turns the lane round (%.2f Hz)", e->shiftNow ());
     // Amount 50 %: half way from the controls (High Level at its Level: half way down the dB scale to -24 is -12)
     auto h = render (0.5);
@@ -3938,31 +3956,35 @@ TEST (scene_lane_ranges)
 
 TEST (scenes_never_touch_low)
 {
-    // every factory gesture: the sub (40 Hz) keeps its level within 0.5 dB of the same settings without it, a mono
-    // input stays mono (the channels share every gain and coefficient), finite
-    const auto x = bandsMix (2.0);
+    // every factory gesture on a new instance (the Ocean sound: 3 bands at one level, no Movement, no Liquid):
+    // clearly heard (the difference from the same render without it at least -20 dB of the whole), while the sub
+    // (the Reese's 55 Hz) keeps its level within 0.5 dB, a mono input stays mono (the channels share every gain and
+    // coefficient), finite
+    const auto x = reese (14.0); // (32 beats at 140 bpm: every gesture played through)
     const size_t a = (size_t)(0.5 * kSr), b = x.size ();
     auto ref = [&] {
         auto e = fresh ();
-        tailNeutral (*e);
-        e->setParam (kBandCount, kBands4);
-        e->setParam (kLiquid, 0.5);
         e->reset ();
         return run (*e, x, nullptr, 256, playing (*e, 140.0));
     }();
     for (int which = 0; which < kNumFactoryScenes; ++which)
     {
         auto e = fresh ();
-        tailNeutral (*e);
-        e->setParam (kBandCount, kBands4);
-        e->setParam (kLiquid, 0.5);
         sceneOn (*e, which);
         e->reset ();
         std::vector<float> r;
         const auto y = run (*e, x, &r, 256, playing (*e, 140.0));
-        const double sub = db (toneAt (y, 40.0, a, b) / toneAt (ref, 40.0, a, b));
-        std::printf ("    %-15s the sub %+.3f dB (the whole %+.2f dB)\n", factorySceneName (which), sub, db (rms (y, a, b) / rms (ref, a, b)));
+        double diff = 0.0, all = 0.0;
+        for (size_t i = a; i < b; ++i)
+        {
+            diff += ((double)y[i] - ref[i]) * ((double)y[i] - ref[i]);
+            all += (double)ref[i] * ref[i];
+        }
+        const double heard = 10.0 * std::log10 (std::max (diff, 1e-30) / all);
+        const double sub = db (toneAt (y, 55.0, a, b) / toneAt (ref, 55.0, a, b));
+        std::printf ("    %-15s the sub %+.3f dB, the difference %+.1f dB of the whole\n", factorySceneName (which), sub, heard);
         CHECK (std::fabs (sub) < 0.5 && y == r && finite (y), "%s: the sub kept (%.3f dB), mono, finite", factorySceneName (which), sub);
+        CHECK (heard > -20.0, "%s: heard on a new instance (the difference %.1f dB)", factorySceneName (which), heard);
     }
 }
 

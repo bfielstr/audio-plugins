@@ -442,10 +442,28 @@ double Engine::pulled (int target, double base) const
     for (const SlotRun& r : slot)
         if (r.target == target && r.k > 0.0)
             base += (r.shaped - base) * r.k;
+    if (target == kTargetMidX || target == kTargetHighX)
+        return base; // (the lanes: pulledX)
     for (const SlotRun& r : lane)
         if (r.target == target && r.k > 0.0)
             base += (r.shaped - base) * r.k;
     return base;
+}
+
+bool Engine::slotTargeted (int target) const
+{
+    for (const SlotRun& r : slot)
+        if (r.target == target && r.k > 0.0)
+            return true;
+    return false;
+}
+
+double Engine::pulledX (int target, double x) const
+{
+    for (const SlotRun& r : lane)
+        if (r.target == target && r.k > 0.0)
+            x += (r.shaped - x) * r.k;
+    return x;
 }
 
 bool Engine::targeted (int target) const
@@ -624,10 +642,18 @@ void Engine::gestureTick (int m, double beats, bool snap)
     auto overRange = [this] (int target, uint32_t id, double plain) {
         return paramTable ().toPlain (id, pulled (target, paramTable ().toNormalized (id, plain)));
     };
+    // (Mid X and High X: the slots over the controls' range as in 0.27, then the lanes in log2 Hz, so a lane may
+    // take Mid X below the control's range, down to a third of an octave above the locked Low X: targets)
     if (targeted (kTargetMidX))
-        gestX[1] = std::log2 (overRange (kTargetMidX, kXoverMid, std::exp2 (logX[1]))) - logX[1];
+    {
+        const double x = slotTargeted (kTargetMidX) ? std::log2 (overRange (kTargetMidX, kXoverMid, std::exp2 (logX[1]))) : logX[1];
+        gestX[1] = pulledX (kTargetMidX, x) - logX[1];
+    }
     if (targeted (kTargetHighX))
-        gestX[2] = std::log2 (overRange (kTargetHighX, kXoverHigh, std::exp2 (logX[2]))) - logX[2];
+    {
+        const double x = slotTargeted (kTargetHighX) ? std::log2 (overRange (kTargetHighX, kXoverHigh, std::exp2 (logX[2]))) : logX[2];
+        gestX[2] = pulledX (kTargetHighX, x) - logX[2];
+    }
     if (targeted (kTargetSeedBlend))
         blend = std::clamp (pulled (kTargetSeedBlend, blendBase), 0.0, 1.0);
     if (targeted (kTargetShift))

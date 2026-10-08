@@ -87,7 +87,8 @@ struct SceneLane
 {
     int target = 0;    // GestureTarget (Off: a lane that does nothing)
     Gesture curve;     // 0 .. 1 over the scene's length
-    double lo = 0.0, hi = 1.0; // where the curve's 0 and 1 put the target (its own 0 .. 1, targetNorm)
+    double lo = 0.0, hi = 1.0; // where the curve's 0 and 1 put the target (its own 0 .. 1, targetNorm; Mid X and
+                               // High X: log2 Hz, so a lane is not held to the control's range)
     // Close with a range in Hz: lo and hi follow the open corner (Tone's), worked out as it plays
     bool closeHz = false;
     double hzLo = 0.0, hzHi = 0.0;
@@ -107,12 +108,12 @@ enum FactoryScene
     kSceneReeseCell = 0, // 8 beats: mids fade out as highs swell, Close shuts on beat 6, Wobble ramps then buzzes, Dirt against the mids
     kSceneStutterCell,   // 4 beats: High and Air stutter in 16ths, then 8th-note triplets; the mids duck, Dirt up in the bursts
     kSceneTalkingCell,   // 2 beats: Close and Liquid Pos step and glide on a triplet grid (a talking filter)
-    kSceneCrossoverWalk, // 2 beats: Mid X and High X ramp against each other in quarter- and third-beat moves
+    kSceneCrossoverWalk, // 2 beats: Mid X and High X ramp against each other in quarter- and third-beat moves (Mid 15 dB down)
     kSceneSlowPhrase,    // 32 beats: Seed Blend scans, the bells fade, Close slowly shuts and opens on the downbeat
     kScenePluck,         // 1 beat: 8th-note plucks: Close and High Level open at once and fall over a 16th
     kSceneBuzzTail,      // 8 beats: a steady wobble, then an audio-rate buzz on the last two beats
     kSceneTripletWobble, // 4 beats: Wobble Rate steps through 3, 6, 9 cycles per beat on a triplet grid; Air gated
-    kSceneScanCell,      // 4 beats: Seed Blend and Liquid Pos jump and scrub per note; Mid X steps
+    kSceneScanCell,      // 4 beats: Bells jumps and scrubs per note, Liquid Pos sweeps, Mid X steps (Mid 12 dB down)
     kSceneGateSwap,      // 2 beats: Mid and High swap places every beat (Dirt follows the High band)
     kNumFactoryScenes
 };
@@ -124,7 +125,8 @@ const Scene& factoryScene (int s);
 //   Mid / High / Air Level   dB from the band's Level: 0 at it, -48 silent
 //   Wobble Rate              cycles per beat (1 .. 40)
 //   Close                    Hz: the low-pass's corner (openHz and above: open; kCloseOctaves below: shut)
-//   Mid X, High X, Shift     Hz, as the controls
+//   Mid X, High X, Shift     Hz (a lane on Mid X may go below the control's range, down to a third of an
+//                            octave above the locked Low X; High X as far as a third above Mid X)
 //   Wobble Amount, Liquid Pos, Dirt, Bells, Seed Blend    0 .. 1 (Dirt 1: the saturated sound, 0: clean)
 double targetNorm (int target, double unit, double openHz = kCloseOpenHz);
 // a target's whole range in its units (a lane without "min" or "max" takes these)

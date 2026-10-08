@@ -287,9 +287,13 @@ private:
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
     // then what they do this tick
     void gestureTick (int m, double beats, bool snap);
-    // a target pulled by every slot on it (in slot order), from `base`; targeted: some slot pulls it now
+    // a target pulled by every slot on it (in slot order), then every lane of the one gesture, from `base`;
+    // targeted: some slot or lane pulls it now. (Mid X and High X: the lanes pull in log2 Hz, after the slots:
+    // pulledX.)
     double pulled (int target, double base) const;
     bool targeted (int target) const;
+    bool slotTargeted (int target) const;
+    double pulledX (int target, double log2Hz) const;
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;

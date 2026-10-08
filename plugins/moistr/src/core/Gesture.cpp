@@ -197,6 +197,15 @@ void setLaneRange (SceneLane& lane, int target, bool hasRange, double lo, double
 {
     lane.target = target;
     lane.closeHz = false;
+    if (target == kTargetMidX || target == kTargetHighX)
+    {
+        // (in log2 Hz: the engine keeps them clear of Low X and of each other)
+        if (!hasRange)
+            targetUnits (target, lo, hi);
+        lane.lo = std::log2 (std::clamp (lo, 20.0, 20000.0));
+        lane.hi = std::log2 (std::clamp (hi, 20.0, 20000.0));
+        return;
+    }
     if (!hasRange)
     {
         lane.lo = 0.0;
@@ -300,10 +309,12 @@ struct SceneLibrary
             unitLane (c, kTargetMidLevel, {{0, 0}, {1, -6}, {1, 0}, {2, -6}});
         }
         {
-            // Crossover Walk: the upper crossovers move against each other
+            // Crossover Walk: the upper crossovers move against each other; the Mid band held 15 dB down, so where Mid X
+            // is moves the hollow (with every band at the same level the split sums flat and a crossover is not heard)
             Scene& c = s[kSceneCrossoverWalk];
             c.length = 2.0;
             unitLane (c, kTargetMidX, {{0, 400}, {0.25, 1200}, {0.5, 1200}, {0.5 + t, 600}, {1, 600}, {1.25, 2400}, {1.5, 2400}, {1.5 + t, 400}, {2, 400}});
+            unitLane (c, kTargetMidLevel, {{0, -12}, {2, -12}});
             unitLane (c, kTargetHighX,
                       {{0, 8000}, {0.25, 3000}, {0.5, 3000}, {0.5 + t, 6000}, {1, 6000}, {1.25, 4000}, {1.5, 4000}, {1.5 + t, 9000}, {2, 9000}});
         }
@@ -344,13 +355,15 @@ struct SceneLibrary
                                            {5 * q, 0}, {5 * q, -48}, {4, -48}});
         }
         {
-            // Scan Cell: per note a jump, then a slow scrub
+            // Scan Cell: per note a jump, then a slow scrub of the timbre (Bells), the Mid band (12 dB down) stepping
+            // through the spectrum with Mid X; Liquid Pos sweeps too (heard with Liquid up)
             Scene& c = s[kSceneScanCell];
             c.length = 4.0;
-            unitLane (c, kTargetSeedBlend, {{0, 0.1}, {0.5, 0.6}, {1, 0.6}, {1, 0.2}, {1.5, 0.9}, {2, 0.9}, {2, 0.0}, {2 + t, 0.5}, {3, 0.5}, {3, 0.3},
-                                            {3.5, 1.0}, {4, 1.0}});
+            unitLane (c, kTargetBells, {{0, 0.1}, {0.5, 0.6}, {1, 0.6}, {1, 0.2}, {1.5, 0.9}, {2, 0.9}, {2, 0.0}, {2 + t, 0.5}, {3, 0.5}, {3, 0.3},
+                                        {3.5, 1.0}, {4, 1.0}});
             unitLane (c, kTargetLiquid, {{0, 0.2}, {1, 1.0}, {2, 0.2}, {3, 1.0}, {4, 0.2}});
-            unitLane (c, kTargetMidX, {{0, 800}, {1, 800}, {1, 1600}, {2, 1600}, {2, 650}, {3, 650}, {3, 1200}, {4, 1200}});
+            unitLane (c, kTargetMidX, {{0, 800}, {1, 800}, {1, 1600}, {2, 1600}, {2, 300}, {3, 300}, {3, 1200}, {4, 1200}});
+            unitLane (c, kTargetMidLevel, {{0, -12}, {4, -12}});
         }
         {
             // Gate Swap: Mid on the first beat, High on the second (each fading out over the last 8th)
