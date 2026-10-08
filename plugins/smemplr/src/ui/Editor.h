@@ -76,6 +76,10 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's two rows, instrument and effects
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): the waveform, Mode, Transpose, Filter Freq, Amp Attack and
+    // Amp Release, Volume at the right; the sample's Load and arrows in the header; the output scope in
+    // the extras, the rack's effects listed in the strip
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
     void bridgeChanged ();
