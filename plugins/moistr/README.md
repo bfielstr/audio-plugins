@@ -26,9 +26,9 @@ After the sweep, moistr can also split the sound into **moving bands** (see [Mov
 the low end locked, the bands above it rising and falling on a seeded pattern, glued back together with a
 compressor and soft clipping, with a frequency shifter, **Link** and a vowel-like **Liquid** resonance on
 top. In a new instance they are all neutral (**Movement**, **Glue** and **Grit** at 0), so the sound is the
-sweep alone; turn them up to layer the movement on. Four **gestures** (see [Gestures](#gestures)) play
-curves in time with the song on the bands above the low end: band fades, stutters, a wobble, a closing
-filter. Install instructions are in the
+sweep alone; turn them up to layer the movement on. A **gesture** (see [Gestures](#gestures)) moves many
+controls together in time with the song on the bands above the low end: band fades and swells, stutters, a
+wobble, a closing filter, a dirty crossfade, all on one timeline. Install instructions are in the
 [top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
@@ -80,10 +80,10 @@ pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others ri
 movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls (Density, Rise / Fall,
           Speed, Depth [-> Drop Out]) [pulled together by Link]; the Low band's own pushes and dips (Push,
           Dip); Liquid's gliding resonance (Liquid Low .. Liquid High, raised by Link as the bands open)
-gestures: four slots, each a curve in time with the song pulling its Target (in pass 1, the bands above
-          Low only): Mid / High / Air Level, Wobble (a tremolo after Liquid), Close (a resonant low-pass
-          after Liquid), Liquid Pos, Dirt / Bells (the SWEEP stage's clean or bare sound, split as well and
-          mixed into the bands above Low), Mid X, High X, Seed Blend, Shift
+gesture:  one timeline in time with the song, a lane per target, every lane on one clock (in pass 1, the
+          bands above Low only): Mid / High / Air Level, Wobble (a tremolo after Liquid), Close (a resonant
+          low-pass after Liquid), Liquid Pos, Dirt / Bells (the SWEEP stage's clean or bare sound, split as
+          well and mixed into the bands above Low), Mid X, High X, Seed Blend, Shift
 ```
 
 ## Controls
@@ -305,103 +305,143 @@ it is off it folds to its header strips; click a strip (or switch it on) to open
 
 ## Gestures
 
-The automation a neuro bass usually gets by hand (bands fading in and out per note, stutters, a wobble
-speeding up, a filter closing on the last notes) comes from four **gesture** slots. A gesture is a curve
-over a few beats: points joined by straight lines, or jumping straight up or down, between 0 and 1. Each
-slot plays one in time with the song and pulls one control, its **Target**, towards it. Everything they
-move is on the bands above Low or in their movement: the Low band, and so the sub, never moves. With every
-**Target** at **Off** (a new instance, and every project from before 0.27) the gestures do nothing at all
-and moistr sounds exactly as before.
+The automation a neuro bass usually gets by hand is many lanes drawn together on the same note grid: one
+band fading out while another swells, a filter closing on the last note, a wobble speeding up, a clean
+layer crossfading into a dirty one. The sound comes from all of them moving at once. A moistr **gesture**
+is that: one timeline of a few beats with a **lane** per target it moves, every lane playing on the same
+clock, so one gesture moves many controls in tandem. Everything it moves is on the bands above Low or in
+their movement: the Low band, and so the sub, never moves. With **Gesture** at **None** (a new instance,
+and every project from before 0.28) moistr sounds exactly as before.
 
-**GESTURES**: the buttons **1** to **4** pick which slot's controls are shown; the display beside **WOBBLE**
-shows the picked slot.
+**GESTURE**:
 
-- **Gesture**: the curve. The factory gestures are simple shapes on straight and triplet grids: Cell Fade
-  (8 beats: held, then fading out over three beats), Swell (the other way round), 1/16 Stutter and
-  1/12 Stutter (gates in 16ths and in 8th-note triplets), Triplet Gate (quarter-note triplets), 1/4 Gate,
-  Off-Beat Gate, Rate Rise (low, rising over the last two of four beats), Buzz Tail (jumping to the top for
-  the last two of eight beats), Pluck 1/8 (open on every 8th, falling over a 16th), Resonant Close (open,
-  closing over beats 5 to 7 of 8, open again on the downbeat), Talk (glides on a triplet grid), Crossfade,
-  Scan (two slow ramps, each from a jump down) and Ramp Up. **User** plays the slot's own gesture, picked
-  with **File** (see [Your own gestures](#your-own-gestures)).
-- **Target** (**Off** by default): what the slot moves.
-  - **Mid Level**, **High Level**, **Air Level**: the band's level, from its **Level** (1) down to -48 dB
-    and then to silence (0). **Air Level** needs **4 Bands** (with 3, Air follows High).
-  - **Wobble Rate**, **Wobble Amount**: **WOBBLE**'s rate (over its whole range, 1 to 40 cycles per beat)
-    and depth.
-  - **Close**: a resonant low-pass on the bands above Low, open at **Tone**'s corner (20 kHz with **Tone**
-    off) and closing 6 octaves lower, its resonance rising as it closes (Q 0.71 to 5).
-  - **Liquid Pos**: where **Liquid**'s resonance is, from **Liquid Low** (0) to **Liquid High** (1).
-    Turn **Liquid** up to hear it.
-  - **Dirt**: the bands above Low between the SWEEP stage's saturated sound (1) and its clean sound (0: the
-    bells and the shelf without the saturator), level matched, so a crossfade from clean to dirty keeps
-    its loudness.
-  - **Bells**: the bands above Low with the SWEEP stage's bells (1) and without them (0: the saturator on
-    the plain input), each level matched.
-  - **Mid X**, **High X**, **Seed Blend**, **Shift**: those controls over their whole range (**Shift**
-    needs the shifter on; **Seed Blend** and the crossovers' drift need **Movement**). **Seed Blend**
-    moves the upper bands' pattern only: the Low band's own **Push** and **Dip** keep its set value.
-- **Loop** / **Walk**: **Loop** plays the gesture over and over, locked to the song position (a loop
+- **Gesture** (**None** by default): the gesture. The factory gestures are generic shapes on straight and
+  triplet grids, each moving several targets:
+  - Reese Cell (8 beats): the Mid band fades out over two and a half beats while the High band swells,
+    **Dirt** rises against the mids, the wobble speeds up from 3 to 9 cycles per beat and buzzes on the
+    last note, and **Close** shuts on beat 6 and snaps open on the downbeat.
+  - Stutter Cell (4 beats): two beats as they are, then High and Air stutter in 16ths and in 8th-note
+    triplets while the mids duck and **Dirt** comes up.
+  - Talking Cell (2 beats): **Close** and **Liquid Pos** step through vowels together on a triplet grid,
+    the mids dipping every beat.
+  - Crossover Walk (2 beats): **Mid X** and **High X** move against each other in quarter- and third-beat
+    steps.
+  - Slow Phrase (32 beats): **Seed Blend** scans up and back, the bells fade, **Close** slowly shuts and
+    opens on the downbeat, the highs sink.
+  - Pluck 1/8 (1 beat): **Close** and the High band open on every 8th note and fall over a 16th.
+  - Buzz Tail (8 beats): a steady wobble, then an audio-rate buzz for the last two beats.
+  - Triplet Wobble (4 beats): **Wobble Rate** steps through 3, 6, 9, 4.5 and 12 cycles per beat on
+    quarter-note triplets, the Air band gated with it.
+  - Scan Cell (4 beats): **Seed Blend** jumps and scrubs per note, **Liquid Pos** sweeps, **Mid X** steps.
+  - Gate Swap (2 beats): the Mid band on the first beat, the High band on the second, **Dirt** with the
+    highs.
+
+  **User** plays your own gesture, picked with **File** (see [Your own gestures](#your-own-gestures)).
+- **File**: picks a gesture file from the **Gestures** folder (and **Clear the User Gesture**, **Open
+  Gestures Folder**).
+- **Loop** / **Walk**: **Loop** plays the whole gesture over and over, locked to the song position (a loop
   starts on every multiple of its length from the song's start). **Walk** goes forwards through it, then
-  backwards, then forwards again, at **Speed**.
-- **Length** (**Own** by default): the gesture's own length, or 1/2 to 32 beats (the curve is stretched
-  or squeezed to fit).
+  backwards, then forwards again, at **Speed**. Either way every lane is at the same place.
+- **Length** (**Own** by default): the gesture's own length, or 1/2 to 32 beats (every lane stretched or
+  squeezed to fit).
 - **Speed** (**x1** by default; **Walk** only): **x1** takes one **Length** per pass, **x1/8** to **x4**
   slower or faster. **Hold** stops the walk at **Position**.
 - **Position** (0 by default): with **Loop**, where the loop starts (a share of its length: 25 % starts it
-  a quarter later); with **Walk**, where it starts and, at **Hold**, where it stays (automate it to scrub).
+  a quarter later); with **Walk**, where it starts and, at **Hold**, where it stays (automate it to scrub
+  every lane at once).
 - **Smooth** (0 by default): 0 keeps the steps sharp (each still takes 2 ms, so a gate never clicks);
   100 % turns them into glides of a 16th of a beat.
-- **Depth** (-100 to +100 %, +100 % by default): how far the slot pulls its target towards the curve. At
-  50 % half way (a level gate goes down to -24 dB). Below 0 the curve is turned upside down, so a fade out
-  becomes a fade in: two slots with the same gesture at +100 % and -100 % on two bands swap them.
-- **Intensity** (100 % by default): scales every slot's **Depth** at once.
+- **Amount** (100 % by default): how far the gesture moves its targets, every lane at once: 100 % as the
+  gesture has them, 50 % half way from where the controls are set, 0 no gesture.
+
+What a lane can move, and its units (a lane's range is in these):
+
+- **Mid Level**, **High Level**, **Air Level**: the band's level in dB from its **Level** (0) down to -48 dB,
+  which is silence. **Air Level** needs **4 Bands** (with 3, Air follows High).
+- **Wobble Rate** (1 to 40 cycles per beat) and **Wobble Amount** (0 to 1): **WOBBLE**'s rate and depth.
+- **Close**: a resonant low-pass on the bands above Low, its corner in Hz: open at **Tone**'s corner (20 kHz
+  with **Tone** off) and closing up to 6 octaves lower, its resonance rising as it closes (Q 0.71 to 5):
+  the corner and the resonance are tied together.
+- **Liquid Pos** (0 to 1): where **Liquid**'s resonance is, from **Liquid Low** to **Liquid High**. Turn
+  **Liquid** up to hear it.
+- **Dirt** (0 to 1): the bands above Low between the SWEEP stage's clean sound (0: the bells and the shelf
+  without the saturator) and its saturated sound (1), level matched, so a crossfade keeps its loudness.
+- **Bells** (0 to 1): the bands above Low without (0) and with (1) the SWEEP stage's bells, each level
+  matched.
+- **Mid X**, **High X**, **Shift** (Hz) and **Seed Blend** (0 to 1): those controls (**Shift** needs the
+  shifter on; **Seed Blend** and the crossovers' drift need **Movement**). **Seed Blend** moves the upper
+  bands' pattern only: the Low band's own **Push** and **Dip** keep its set value.
 
 **WOBBLE**: a tremolo on the bands above Low.
 
 - **Rate** (1 to 40 cycles per beat, 2 by default): in time with the song: 2 is 8th notes, 3 8th-note
-  triplets, 4 16ths; near the top it turns into a buzz. A gesture on **Wobble Rate** sweeps it without
-  ever jumping: the wobble's phase is the sum of its rate over the beats gone by, so a rate that rises
-  fast or snaps back at the end of a loop only changes how fast it turns.
+  triplets, 4 16ths; near the top it turns into a buzz. A lane on **Wobble Rate** sweeps it without ever
+  jumping: the wobble's phase is the sum of its rate over the beats gone by, so a rate that rises fast or
+  snaps back at the end of a loop only changes how fast it turns.
 - **Amount** (0 by default): how deep: 100 % goes to silence on every cycle. At 0 it is off, unless a
-  gesture drives **Wobble Amount**.
+  gesture moves **Wobble Amount**.
 
-Several slots may pull the same target; they apply in slot order. Switching a slot's **Target** fades the
-old one out and the new one in (20 ms), **Depth** and **Intensity** glide (30 ms). While the host plays
-the gestures follow the song position; stopped (or without a song position) they run on at the last
-tempo (120 bpm until the host gives one). Jumping the playhead jumps the curve, smoothed as by **Smooth**,
-so it does not click. Both channels get the same gains and filters, so a mono bass stays mono.
+Changing **Gesture** fades the old one out and the new one in (20 ms); **Amount** glides (30 ms). While the
+host plays the gesture follows the song position; stopped (or without a song position) it runs on at the
+last tempo (120 bpm until the host gives one). Jumping the playhead jumps every lane, smoothed as by
+**Smooth**, so it does not click. Both channels get the same gains and filters, so a mono bass stays mono.
+
+Projects from 0.27 had four gesture slots, each one curve on one target. They are not in the editor any
+more, but a project that used them still plays them exactly as before (beside the gesture, if you pick
+one); the display says so in its footer.
 
 ### Your own gestures
 
 **File** lists the gesture files (`.json`) in the **Gestures** folder beside your moistr presets
 (`<presets>/bfielstr/Moistr/Gestures`: on macOS `~/Library/Audio/Presets/bfielstr/Moistr/Gestures`, on
 Windows `Documents\VST3 Presets\bfielstr\Moistr\Gestures`, on Linux `~/.vst3/presets/bfielstr/Moistr/Gestures`;
-make the folder if it is not there). Picking one gives the picked slot that curve and sets its **Gesture**
-to **User**. The curve is saved with the project (and with your presets), so the file is not needed again.
+**Menu > Open Gestures Folder** opens it and makes it if it is not there). Picking one sets **Gesture** to
+**User**. The gesture is saved with the project (and with your presets), so the file is not needed again.
 A file is
 
 ```json
-{"name": "My Gate", "length_beats": 2, "points": [[0, 1], [0.5, 1], [0.5, 0], [2, 0]]}
+{"name": "My Cell", "length_beats": 4,
+ "lanes": [
+  {"target": "Mid Level", "min": -48, "max": 0, "points": [[0, 1], [2, 1], [3, 0], [4, 0]]},
+  {"target": "High Level", "min": -18, "max": 0, "points": [[0, 0], [2, 0], [2.5, 1], [4, 1]]},
+  {"target": "Close", "min": 400, "max": 20000, "points": [[0, 1], [3, 1], [3.333, 0], [4, 0]]}
+ ]}
 ```
 
-beats from the start, values from 0 to 1 (two points at the same beat are a jump), at most 512 points.
-Files written by `scripts/als_extract.py --out` (a lane's raw values with its `min` and `max`, in song
-beats) are read too: their values are scaled to 0 to 1 and their beats start at their first point.
+beats from the start, values from 0 to 1 (straight lines between points, two points at the same beat a
+jump), at most 16 lanes with a target and 512 points a lane. `min` and `max` are what 0 and 1 mean in the
+target's units (above); leave them out for the target's whole range, or give `min` above `max` to turn a
+lane round. A lane with `"target": "Off"` is kept in the file but does nothing, and `"source"` is a note for
+you (where the lane came from).
 
-To turn automation you drew in Ableton Live into gestures, run the extractor from this repository on a copy
-of your project (it only reads the file):
+To turn automation you drew in Ableton Live into a gesture, run the extractor from this repository on a
+copy of your project (it only reads the file):
 
 ```sh
+python3 scripts/als_extract.py "My Project.als" --group "Bass" --list
 python3 scripts/als_extract.py "My Project.als" --group "Bass" \
-    --moistr ~/Desktop/gestures --beats 64 72
+    --moistr ~/Desktop/my-cell.json --beats 64 72
 ```
 
-It prints the tracks' device chains and every automated parameter, and writes each lane that moves between
-beats 64 and 72 (8 beats, here bars 17 and 18 in 4/4) as a moistr gesture into the folder, scaled to its
-own range in that window. `--group` keeps the tracks of one group track; leave it out for all of them.
-Copy the files you want into the **Gestures** folder and pick them with **File**. Your files stay on your
-computer; nothing is sent anywhere.
+`--list` prints every automated lane with the moistr target it maps to. `--moistr` writes ONE gesture from
+every lane that moves between beats 64 and 72 (8 beats, here bars 17 and 18 in 4/4), each mapped by what it
+is:
+
+| Ableton lane | moistr target |
+|---|---|
+| a rack chain's or track's volume | **Mid / High / Air Level**, by the chain's EQ Eight cuts (a low cut under 350 Hz or none: Mid; under 2 kHz: High; above: Air) or its name (MID; HIGH, AUTO, TOP; AIR, NOISE). Chains named LOW or SUB, and the low chain of a split, are left out: moistr keeps the low band steady |
+| a chain named DIST, DIRT, DRIVE (or CLEAN, DRY: the other way round), or one with a distortion and no band | **Dirt** |
+| EQ Eight high cut frequency | **Close** (its Q is tied to Close's resonance, so the Q lane is left out) |
+| an EQ cut that moves the split of a rack split by frequency | **Mid X** (under 2 kHz) or **High X** |
+| Auto Pan LFO rate (Hz) and amount | **Wobble Rate** (in cycles per beat at the project's tempo) and **Wobble Amount** |
+| Simpler Sample Start (or a macro on it) | **Seed Blend** |
+
+Each lane keeps its range in the window. When several lanes map to one target, a chain with the band in
+its name wins, then the one with the most points; the others stay in the file as `"target": "Off"` (with
+their `"candidate"`), so you can swap them by editing `"target"`. What has no target is listed under
+`"skipped"` and in the table the script prints. `--group` keeps the tracks of one group track; leave it
+out for all of them. Copy the file into the **Gestures** folder and pick it with **File**. Your files stay
+on your computer; nothing is sent anywhere.
 
 ## The displays
 
@@ -425,10 +465,10 @@ markers show where its peaks are now.
 The first pass's gain reduction is shown at the top right. Half a second after the input goes quiet the
 display stops following the movement and shows the bands at their levels.
 
-The gesture display (beside **WOBBLE**) shows the picked slot: its name, gesture and target at the top, the
-curve across the whole gesture (up is where it pulls the target to; turned upside down with a negative
-**Depth**), the beats it plays over (the length it is played at), and while it runs a line where it is now
-with a dot at its value.
+The gesture display (beside **WOBBLE**) shows the gesture's name at the top and every lane in a row of its
+own, named by its target at the left: the lane's curve across the whole gesture (up is the top of the
+lane's range), over the beats it plays at, and while it runs one line through every lane where the clock is
+now (they share it), with a dot at each lane's value.
 
 ## Movement and the song position
 
@@ -450,11 +490,9 @@ Clean Sub, Broad (two broad bells, the **Hard** curve), Soft Recipe (two bells a
 **Soft** curve), Classic Sweep (the default sound of 0.24 and 0.25; it was called Moist Default), Heavy,
 Gentle, Wide Bump, High Shelf 5k, Sweep + Bands; *Moist*: Bar Pulse, Chop, Classic Moist, Coagulate, Double Pass, Fast Flicker, Four
 Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift;
-*Gestures* (the Ocean sweep with gestures): Reese Cell (an 8-beat cell: the Mid band fades out as the High
-band swells in, a resonant close on the last notes), Stutter Wobble (16th-note stutters on High and Air in
-turn, a wobble speeding up over each bar), Talking Reese (Liquid gliding between vowels, 8th-note plucks
-on **Close**, a crossfade to the clean sound every bar), Crossover Scan (**Mid X** walking back and forth,
-the bells in a triplet gate). Save your own with **Save As...** (a category and tags are
+*Gestures* (the Ocean sweep with one gesture each): Reese Cell (the Reese Cell gesture), Stutter Wobble
+(Stutter Cell over a steady wobble, 4 bands), Talking Reese (Talking Cell with **Liquid** up), Crossover
+Scan (Crossover Walk walking back and forth at half speed, 4 bands). Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 
