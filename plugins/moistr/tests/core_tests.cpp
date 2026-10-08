@@ -9,6 +9,7 @@
 #include "Engine.h"
 #include "Movement.h"
 #include "Params.h"
+#include "Sweep.h"
 
 #include "pluginkit/PresetStore.h"
 
@@ -20,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -150,11 +152,33 @@ std::vector<float> reese (double seconds)
     return x;
 }
 
+// moistr as it was before 0.24: the SWEEP stage off, Drive, Movement, Glue and Grit at their old defaults (the
+// tests written before 0.24 start from here; a state saved before 0.24 reads these too)
+void legacy (Engine& e)
+{
+    for (uint32_t id : {kDrive, kMovement, kGlue, kGrit, kSweep})
+        e.setParam (id, toPlain (id, legacyDefaultNormalized (id)));
+}
 std::unique_ptr<Engine> engine (int block = 512)
 {
     auto e = std::make_unique<Engine> ();
+    legacy (*e);
     e->prepare (kSr, block);
     return e;
+}
+// a new instance: every parameter at its default (0.24: the SWEEP stage on, the rest neutral)
+std::unique_ptr<Engine> fresh (double sr = kSr, int block = 512)
+{
+    auto e = std::make_unique<Engine> ();
+    e->prepare (sr, block);
+    return e;
+}
+// the end saturator out of the way (its Saturator and Gentlr off: it passes the engine's output through)
+void tailNeutral (Engine& e)
+{
+    e.setParam (kTailBase + pk::kTailOn, 0.0);
+    e.setParam (kTailExtBase + pk::kTailExtClarity, 0.0);
+    e.reset ();
 }
 
 // the split alone: no Drive, Glue, Grit or movement
@@ -2300,6 +2324,470 @@ TEST (liquid_preset_statistics)
     CHECK (s.sideDb < -60.0, "mono in, mono out (%.0f dB)", s.sideDb);
     const Stats dry = measure (0.0);
     CHECK (dry.peakMax < 700.0, "without Liquid the peak stays low (%.0f Hz)", dry.peakMax);
+}
+
+// ---- the SWEEP stage (0.24) -------------------------------------------------------------------------------
+namespace {
+// the SWEEP stage alone (no split, no end saturator): the defaults, then `set` (plain values)
+struct SweepRig
+{
+    ParamArray p = defaultParams ();
+    Sweep s;
+    double sr;
+    explicit SweepRig (double rate, const std::function<void (ParamArray&)>& set = {}) : sr (rate)
+    {
+        if (set)
+            set (p);
+        s.prepare (sr);
+        s.reset (p.data ());
+    }
+    // n samples of x (both channels the same; x shorter: silence after it), in ticks; `each` after every tick
+    std::vector<double> run (const std::vector<double>& x, size_t n, const std::function<void (size_t)>& each = {})
+    {
+        std::vector<double> y (n);
+        double l[Sweep::kTick], r[Sweep::kTick];
+        for (size_t a = 0; a < n; a += Sweep::kTick)
+        {
+            const int m = (int)std::min ((size_t)Sweep::kTick, n - a);
+            for (int i = 0; i < m; ++i)
+                l[i] = r[i] = a + i < x.size () ? x[a + i] : 0.0;
+            s.tick (p.data (), l, r, m);
+            for (int i = 0; i < m; ++i)
+                y[a + i] = l[i];
+            if (each)
+                each (a + m);
+        }
+        return y;
+    }
+};
+
+// the magnitude of an impulse response h at hz (sample rate sr), by a rotating phasor
+double irMagnitude (const std::vector<double>& h, double hz, double sr)
+{
+    const std::complex<double> step = std::polar (1.0, -2.0 * kPi * hz / sr);
+    std::complex<double> w = 1.0, sum = 0.0;
+    for (double v : h)
+    {
+        sum += v * w;
+        w *= step;
+    }
+    return std::abs (sum);
+}
+// RBJ's cookbook: the peaking EQ and the high shelf (with Q) at f0, their magnitude at hz
+double rbjMagnitude (bool shelf, double f0, double gainDb, double q, double hz, double sr)
+{
+    const double a = std::pow (10.0, gainDb / 40.0), w0 = 2.0 * kPi * f0 / sr, cs = std::cos (w0), al = std::sin (w0) / (2.0 * q);
+    double b[3], d[3];
+    if (!shelf)
+    {
+        b[0] = 1.0 + al * a, b[1] = -2.0 * cs, b[2] = 1.0 - al * a;
+        d[0] = 1.0 + al / a, d[1] = -2.0 * cs, d[2] = 1.0 - al / a;
+    }
+    else
+    {
+        const double sa = 2.0 * std::sqrt (a) * al;
+        b[0] = a * ((a + 1.0) + (a - 1.0) * cs + sa), b[1] = -2.0 * a * ((a - 1.0) + (a + 1.0) * cs), b[2] = a * ((a + 1.0) + (a - 1.0) * cs - sa);
+        d[0] = (a + 1.0) - (a - 1.0) * cs + sa, d[1] = 2.0 * ((a - 1.0) - (a + 1.0) * cs), d[2] = (a + 1.0) - (a - 1.0) * cs - sa;
+    }
+    const std::complex<double> z = std::polar (1.0, -2.0 * kPi * hz / sr);
+    return std::abs ((b[0] + b[1] * z + b[2] * z * z) / (d[0] + d[1] * z + d[2] * z * z));
+}
+// the prototype's centre (Hz) for a bell at t seconds: Low (High / Low)^(0.5 - 0.5 cos (2 pi Rate t))
+double protoCentre (double rate, double lo, double hi, double t) { return lo * std::pow (hi / lo, 0.5 - 0.5 * std::cos (2.0 * kPi * rate * t)); }
+} // namespace
+
+TEST (sweep_default_is_the_recipe)
+{
+    // a new instance: the SWEEP stage on with the recipe, the rest neutral
+    const auto d = defaultParams ();
+    CHECK (d[kSweep] == 1.0 && d[kShelf] == 1.0 && d[kSweepDrive] == 18.0, "Sweep and High Shelf on, Drive 18 dB");
+    CHECK (d[kARate] == 0.70 && d[kALow] == 20.0 && d[kAHigh] == 120.0 && d[kAGain] == 18.0 && d[kAWidth] == 0.71 && d[kAPhase] == 0.0 &&
+               d[kASync] == 0.0,
+           "bell A: 0.70 Hz, 20 .. 120 Hz, +18 dB, Q 0.71, Phase 0");
+    CHECK (d[kBRate] == 0.77 && d[kBLow] == 30.0 && d[kBHigh] == 300.0 && d[kBGain] == -18.0 && d[kBWidth] == 0.71 && d[kBPhase] == 0.0,
+           "bell B: 0.77 Hz, 30 .. 300 Hz, -18 dB, Q 0.71, Phase 0");
+    CHECK (d[kShelfLow] == 100.0 && d[kShelfHigh] == 1000.0 && d[kShelfMin] == -18.0 && d[kShelfMax] == 6.0 && d[kShelfQ] == 18.0,
+           "High Shelf: 100 .. 1000 Hz, -18 .. +6 dB, Q 18");
+    CHECK (d[kDrive] == 0.0 && d[kMovement] == 0.0 && d[kGlue] == 0.0 && d[kGrit] == 0.0 && d[kLink] == 0.0 && d[kLiquid] == 0.0 &&
+               d[kShiftOn] == 0.0 && d[kMix] == 1.0 && d[kOutput] == 0.0 && d[kTailBase + pk::kTailOn] == 0.0,
+           "the rest neutral: Drive, Movement, Glue, Grit, Link, Liquid 0, the shifter and the end saturator off, Mix 100 %%");
+    // the bells' centres follow the prototype's formula exactly, tick by tick, over 20 s (the engine, from reset)
+    for (double sr : {44100.0, 48000.0})
+    {
+        auto e = fresh (sr);
+        double worst = 0.0;
+        size_t done = 0;
+        const std::vector<float> z (Sweep::kTick, 0.0f);
+        std::vector<float> l (Sweep::kTick), r (Sweep::kTick);
+        for (int t = 0; t < (int)(20.0 * sr) / Sweep::kTick; ++t)
+        {
+            e->process (z.data (), z.data (), l.data (), r.data (), Sweep::kTick);
+            done += Sweep::kTick;
+            const double ts = (double)done / sr;
+            worst = std::max ({worst, std::fabs (e->sweepStage ().bellHz (0) / protoCentre (0.70, 20.0, 120.0, ts) - 1.0),
+                               std::fabs (e->sweepStage ().bellHz (1) / protoCentre (0.77, 30.0, 300.0, ts) - 1.0)});
+        }
+        CHECK (worst < 1e-9, "%.0f Hz: the bells' centres are the prototype's (worst %.1e relative)", sr, worst);
+    }
+}
+
+TEST (sweep_filters_match_rbj)
+{
+    // each filter alone, held still (Low = High), against RBJ's cookbook at 44.1 .. 192 kHz: the bells (peaking
+    // EQ) and the High Shelf (high shelf with Q, Min = Max). A tiny impulse keeps the saturator in its linear
+    // region: its make-up x drive is a plain gain there and its anti-aliasing the mean of two samples
+    struct Case
+    {
+        bool shelf;
+        double f0, gain, q;
+    };
+    const Case cases[] = {{false, 20.0, 18.0, 0.71},  {false, 60.0, 18.0, 0.71},  {false, 120.0, 18.0, 0.71}, {false, 30.0, -18.0, 0.71},
+                          {false, 300.0, -18.0, 0.71}, {false, 1000.0, 24.0, 10.0}, {true, 100.0, -18.0, 18.0},  {true, 1000.0, 6.0, 18.0},
+                          {true, 300.0, -18.0, 0.71},  {true, 5000.0, -12.0, 24.0}, {true, 50.0, -24.0, 24.0}};
+    for (double sr : {44100.0, 48000.0, 96000.0, 192000.0})
+    {
+        double worst = 0.0;
+        for (const Case& c : cases)
+        {
+            SweepRig rig (sr, [&] (ParamArray& p) {
+                p[kSweepDrive] = 0.0;
+                p[kBGain] = 0.0;
+                p[kShelf] = c.shelf ? 1.0 : 0.0;
+                if (c.shelf)
+                {
+                    p[kAGain] = 0.0;
+                    p[kShelfLow] = p[kShelfHigh] = c.f0;
+                    p[kShelfMin] = p[kShelfMax] = c.gain;
+                    p[kShelfQ] = c.q;
+                    p[kShelfTilt] = 0.0;
+                }
+                else
+                {
+                    p[kALow] = p[kAHigh] = c.f0;
+                    p[kAGain] = c.gain;
+                    p[kAWidth] = c.q;
+                }
+            });
+            std::vector<double> x (1, 1e-6);
+            const auto h = rig.run (x, (size_t)(3.0 * sr));
+            const double scale = 1e-6 * rig.s.compensationNow (); // (drive 0 dB: g = 1)
+            for (double k : {0.25, 0.5, 0.8, 1.0, 1.25, 2.0, 4.0})
+            {
+                const double hz = c.f0 * k;
+                if (hz < 10.0 || hz > 0.45 * sr)
+                    continue;
+                const double adaa = std::fabs (std::cos (kPi * hz / sr));
+                const double got = db (irMagnitude (h, hz, sr) / scale / adaa), want = db (rbjMagnitude (c.shelf, c.f0, c.gain, c.q, hz, sr));
+                worst = std::max (worst, std::fabs (got - want));
+            }
+            CHECK (finite (std::vector<float> (h.begin (), h.end ())), "%.0f Hz: finite", sr);
+        }
+        CHECK (worst < 0.05, "%.0f Hz: the bells and the shelf within 0.05 dB of RBJ (worst %.4f dB)", sr, worst);
+    }
+}
+
+TEST (sweep_off_changes_nothing)
+{
+    // with Sweep off the stage is not run: its settings change nothing, bit for bit (0.23's engine; renders like
+    // these were compared bit for bit with 0.23.0's when the stage was added)
+    const auto x = reese (2.0);
+    auto render = [&] (bool wild) {
+        auto e = engine ();
+        e->setParam (kMovement, 0.9);
+        e->setParam (kSeed, 17);
+        if (wild)
+        {
+            e->setParam (kSweepDrive, 36.0);
+            e->setParam (kAGain, -24.0);
+            e->setParam (kBGain, 24.0);
+            e->setParam (kShelfQ, 24.0);
+            e->setParam (kShelfWander, 1.0);
+            e->setParam (kASync, 1.0);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = run (*e, x, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    CHECK (render (false) == render (true), "Sweep off: its settings change nothing (bit for bit)");
+    auto e = engine ();
+    run (*e, x);
+    CHECK (e->sweepStage ().amount () == 0.0, "Sweep off: not faded in");
+}
+
+TEST (sweep_old_presets_unchanged)
+{
+    // every factory preset from before the stage sounds as it did: applied over the new defaults (as the menu
+    // does: Init plus its lines) it renders bit for bit as over the defaults it was made with (Sweep off)
+    namespace fs = std::filesystem;
+    const auto x = reese (1.5);
+    int checked = 0, sweeps = 0;
+    for (const auto& entry : fs::recursive_directory_iterator (MOISTR_PRESETS_DIR))
+    {
+        if (entry.path ().extension () != ".txt")
+            continue;
+        const std::string rel = fs::relative (entry.path (), MOISTR_PRESETS_DIR).generic_string ();
+        std::ifstream in (entry.path ());
+        std::stringstream ss;
+        ss << in.rdbuf ();
+        pk::presets::FactoryPreset fp;
+        std::string err;
+        CHECK (pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err), "%s parses: %s", rel.c_str (), err.c_str ());
+        if (rel.rfind ("Sweep/", 0) == 0)
+        {
+            // the new ones: the stage on
+            auto e = fresh ();
+            for (auto& [id, n] : fp.values)
+                e->setParam (id, toPlain (id, n));
+            CHECK (e->param (kSweep) >= 0.5, "%s: Sweep on", rel.c_str ());
+            ++sweeps;
+            continue;
+        }
+        auto render = [&] (bool legacyBase) {
+            auto e = fresh ();
+            for (uint32_t id = 0; id < kNumParams; ++id)
+                e->setParam (id, toPlain (id, legacyBase ? legacyDefaultNormalized (id) : defaultNormalized (id)));
+            for (auto& [id, n] : fp.values)
+                e->setParam (id, toPlain (id, n));
+            e->reset ();
+            std::vector<float> r;
+            auto l = run (*e, x, &r);
+            l.insert (l.end (), r.begin (), r.end ());
+            return l;
+        };
+        CHECK (render (false) == render (true), "%s: as before 0.24, bit for bit", rel.c_str ());
+        ++checked;
+    }
+    CHECK (checked >= 14 && sweeps >= 5, "%d presets from before, %d sweep presets", checked, sweeps);
+}
+
+TEST (sweep_stable_everywhere)
+{
+    // the defaults and the extremes at 44.1 .. 192 kHz: finite, bounded, no denormals once it falls silent
+    for (double sr : {44100.0, 48000.0, 96000.0, 192000.0})
+        for (int extreme = 0; extreme < 2; ++extreme)
+        {
+            auto e = fresh (sr);
+            tailNeutral (*e);
+            if (extreme)
+            {
+                for (uint32_t id : {kARate, kBRate, kShelfRate})
+                    e->setParam (id, kSweepRateMax);
+                e->setParam (kALow, kBellFreqMin);
+                e->setParam (kAHigh, kBellFreqMax);
+                e->setParam (kAGain, 24.0);
+                e->setParam (kAWidth, kBellQMax);
+                e->setParam (kBGain, -24.0);
+                e->setParam (kBWidth, kBellQMin);
+                e->setParam (kShelfLow, 50.0);
+                e->setParam (kShelfHigh, 5000.0);
+                e->setParam (kShelfMin, -24.0);
+                e->setParam (kShelfMax, 12.0);
+                e->setParam (kShelfQ, kShelfQMax);
+                e->setParam (kShelfWander, 1.0);
+                e->setParam (kShelfTilt, 0.0);
+                e->setParam (kSweepDrive, kSweepDriveMax);
+                e->reset ();
+            }
+            const size_t n = (size_t)(4.0 * sr);
+            std::vector<float> in (n, 0.0f), l (n), r (n);
+            uint32_t seed = 5;
+            double p1 = 0.0;
+            for (size_t i = 0; i < (size_t)(3.0 * sr); ++i)
+            {
+                seed = seed * 1664525u + 1013904223u;
+                p1 += 41.0 / sr;
+                p1 -= std::floor (p1);
+                in[i] = (float)(0.5 * (2.0 * p1 - 1.0) + 0.2 * ((int32_t)seed / 2147483648.0));
+            }
+            for (size_t a = 0; a < n; a += 512)
+            {
+                const int m = (int)std::min ((size_t)512, n - a);
+                e->process (in.data () + a, in.data () + a, l.data () + a, r.data () + a, m);
+            }
+            int denormals = 0;
+            const float tiny = std::numeric_limits<float>::min ();
+            for (size_t i = 0; i < n; ++i)
+                denormals += (l[i] != 0.0f && std::fabs (l[i]) < tiny) || (r[i] != 0.0f && std::fabs (r[i]) < tiny);
+            const double top = std::max (peak (l, 0, n), peak (r, 0, n));
+            CHECK (finite (l) && finite (r), "%.0f Hz%s: finite", sr, extreme ? " (extremes)" : "");
+            CHECK (denormals == 0, "%.0f Hz%s: no denormals (%d)", sr, extreme ? " (extremes)" : "", denormals);
+            CHECK (top < 4.0, "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
+        }
+}
+
+TEST (shelf_orbit_bounded_and_smooth)
+{
+    // the High Shelf's corner and gain stay in their ranges and move smoothly (bounded change per tick), the
+    // same way for the same Seed; Wander 0 is a circle
+    for (int seed : {1, 2, 77})
+        for (double wander : {0.0, 0.5, 1.0})
+            for (double tilt : {0.0, 0.65})
+            {
+                auto path = [&] (int s) {
+                    SweepRig rig (48000.0, [&] (ParamArray& p) {
+                        p[kSeed] = s;
+                        p[kShelfWander] = wander;
+                        p[kShelfTilt] = tilt;
+                        p[kShelfHigh] = 5000.0;
+                    });
+                    std::vector<double> hz, gain, u, v;
+                    rig.run ({}, (size_t)(60.0 * 48000.0), [&] (size_t) {
+                        hz.push_back (rig.s.shelfHz ());
+                        gain.push_back (rig.s.shelfDb ());
+                        u.push_back (rig.s.orbitU ());
+                        v.push_back (rig.s.orbitV ());
+                    });
+                    return std::make_tuple (hz, gain, u, v);
+                };
+                const auto [hz, gain, u, v] = path (seed);
+                double lo = 1e9, hi = 0.0, gLo = 1e9, gHi = -1e9, stepF = 0.0, stepG = 0.0, circle = 0.0;
+                for (size_t i = 0; i < hz.size (); ++i)
+                {
+                    lo = std::min (lo, hz[i]);
+                    hi = std::max (hi, hz[i]);
+                    gLo = std::min (gLo, gain[i]);
+                    gHi = std::max (gHi, gain[i]);
+                    if (i > 0)
+                    {
+                        stepF = std::max (stepF, std::fabs (std::log2 (hz[i] / hz[i - 1])));
+                        stepG = std::max (stepG, std::fabs (gain[i] - gain[i - 1]));
+                    }
+                    circle = std::max (circle, std::fabs ((u[i] - 0.5) * (u[i] - 0.5) + (v[i] - 0.5) * (v[i] - 0.5) - 0.25));
+                }
+                CHECK (lo >= 100.0 * (1.0 - 1e-9) && hi <= 5000.0 * (1.0 + 1e-9) && gLo >= -18.0 - 1e-9 && gHi <= 6.0 + 1e-9,
+                       "seed %d, wander %.1f, tilt %.2f: in range (%.1f .. %.1f Hz, %.2f .. %.2f dB)", seed, wander, tilt, lo, hi, gLo, gHi);
+                CHECK (hi / lo > 3.0 && gHi - gLo > 6.0, "seed %d, wander %.1f: it goes round (%.1f .. %.1f Hz, %.2f .. %.2f dB)", seed,
+                       wander, lo, hi, gLo, gHi);
+                CHECK (stepF < 0.01 && stepG < 0.1, "seed %d, wander %.1f: smooth (at most %.4f octaves, %.4f dB a tick)", seed, wander,
+                       stepF, stepG);
+                if (wander == 0.0)
+                    CHECK (circle < 1e-9, "wander 0: a circle (%.1e)", circle);
+                const auto again = path (seed);
+                CHECK (std::get<0> (again) == hz && std::get<1> (again) == gain, "seed %d: the same path again", seed);
+                if (wander > 0.0)
+                    CHECK (std::get<0> (path (seed + 1)) != hz, "seed %d and %d: different paths", seed, seed + 1);
+            }
+}
+
+TEST (shelf_tilt_tames_high_corners)
+{
+    // Tilt lowers the gain ceiling as the corner rises above 1 kHz: at its default, 9 dB or more lower at 5 kHz
+    // than at 300 Hz, and never above Max
+    const double tilt = defaultParams ()[kShelfTilt];
+    const double at300 = shelfCeilingDb (300.0, -18.0, 6.0, tilt), at5k = shelfCeilingDb (5000.0, -18.0, 6.0, tilt);
+    CHECK (at300 == 6.0 && at5k <= at300 - 9.0, "the ceiling: %.2f dB at 300 Hz, %.2f dB at 5 kHz", at300, at5k);
+    CHECK (shelfCeilingDb (5000.0, -18.0, 6.0, 0.0) == 6.0 && shelfCeilingDb (1000.0, -18.0, 6.0, 1.0) == 6.0,
+           "Tilt 0: the same range everywhere; up to 1 kHz never lowered");
+    // on the orbit (Low 300 Hz, High 5 kHz): the gain under the ceiling, high corners lower
+    SweepRig rig (48000.0, [] (ParamArray& p) {
+        p[kShelfLow] = 300.0;
+        p[kShelfHigh] = 5000.0;
+        p[kShelfWander] = 0.0;
+    });
+    double over = -1e9, topHigh = -1e9, topLow = -1e9;
+    rig.run ({}, (size_t)(30.0 * 48000.0), [&] (size_t) {
+        const double hz = rig.s.shelfHz (), g = rig.s.shelfDb ();
+        over = std::max (over, g - std::min (6.0, shelfCeilingDb (hz, -18.0, 6.0, tilt)));
+        if (hz > 4000.0)
+            topHigh = std::max (topHigh, g);
+        if (hz < 1000.0)
+            topLow = std::max (topLow, g);
+    });
+    CHECK (over <= 1e-9, "never above the ceiling (%.2e)", over);
+    CHECK (topHigh <= topLow - 6.0, "above 4 kHz at most %.2f dB, below 1 kHz up to %.2f dB", topHigh, topLow);
+}
+
+TEST (sweep_follows_transport)
+{
+    // while the host plays the sweep follows the song position: two instances that ran differently before agree
+    // from the moment it plays; free, the clock is the song's time x Rate; synced, the song position over the beats
+    const std::vector<float> in (256, 0.1f);
+    std::vector<float> l (256), r (256);
+    auto play = [&] (int warm, bool sync) {
+        auto e = fresh ();
+        if (sync)
+        {
+            e->setParam (kASync, 1.0);
+            e->setParam (kASyncRate, 3); // 1/2: 2 beats
+            e->reset ();
+        }
+        e->setTransport (128.0, 0.0, false);
+        for (int i = 0; i < warm; ++i)
+            e->process (in.data (), in.data (), l.data (), r.data (), 256);
+        std::vector<double> hz;
+        double ppq = 16.0;
+        for (int i = 0; i < 300; ++i)
+        {
+            e->setTransport (128.0, ppq, true);
+            e->process (in.data (), in.data (), l.data (), r.data (), 256);
+            if (i == 0)
+            {
+                const double t = 16.0 * 60.0 / 128.0 + 256.0 / kSr;
+                const double th = sync ? 16.0 / 2.0 + 256.0 * 128.0 / 60.0 / 2.0 / kSr : 0.70 * t;
+                const double want = 20.0 * std::pow (6.0, 0.5 - 0.5 * std::cos (2.0 * kPi * th));
+                CHECK (std::fabs (e->sweepStage ().bellHz (0) / want - 1.0) < 1e-9, "%s: bell A at the song position (%.3f Hz, want %.3f)",
+                       sync ? "synced" : "free", e->sweepStage ().bellHz (0), want);
+            }
+            for (int b = 0; b < 2; ++b)
+                hz.push_back (e->sweepStage ().bellHz (b));
+            hz.push_back (e->sweepStage ().shelfHz ());
+            ppq += 256.0 * 128.0 / 60.0 / kSr;
+        }
+        return hz;
+    };
+    for (bool sync : {false, true})
+        CHECK (play (0, sync) == play (123, sync), "%s: the same path from the same song position", sync ? "synced" : "free");
+}
+
+TEST (sweep_default_level)
+{
+    // a new instance on a detuned bass comes out about as loud as it went in (the saturator's make-up)
+    for (int which = 0; which < 2; ++which)
+    {
+        const auto x = which == 0 ? detunedBass (8.0) : reese (8.0);
+        auto e = fresh ();
+        tailNeutral (*e);
+        const auto y = run (*e, x);
+        const size_t from = (size_t)(0.5 * kSr);
+        const double gap = db (rms (y, from, y.size ())) - db (rms (x, from, x.size ()));
+        std::printf ("    %s: out %.2f dB against in\n", which == 0 ? "detuned bass" : "reese", gap);
+        CHECK (std::fabs (gap) < 3.0, "%s: within 3 dB of the input (%.2f dB)", which == 0 ? "detuned bass" : "reese", gap);
+    }
+    // and at every Drive, within 3 dB too
+    for (double drive : {0.0, 6.0, 12.0, 24.0, 36.0})
+    {
+        const auto x = detunedBass (6.0);
+        auto e = fresh ();
+        tailNeutral (*e);
+        e->setParam (kSweepDrive, drive);
+        e->reset ();
+        const auto y = run (*e, x);
+        const double gap = db (rms (y, (size_t)(0.5 * kSr), y.size ())) - db (rms (x, (size_t)(0.5 * kSr), x.size ()));
+        CHECK (std::fabs (gap) < 3.0, "Drive %.0f dB: within 3 dB of the input (%.2f dB)", drive, gap);
+    }
+}
+
+TEST (sweep_switches_smoothly)
+{
+    // switching Sweep and High Shelf on and off fades (no step larger than the signal's own)
+    const auto x = sine (55.0, 0.25, 3.0);
+    auto e = fresh ();
+    const auto y = run (*e, x, nullptr, 256, [&] (size_t at) {
+        if (at == 256 * 100)
+            e->setParam (kSweep, 0.0);
+        if (at == 256 * 200)
+            e->setParam (kSweep, 1.0);
+        if (at == 256 * 300)
+            e->setParam (kShelf, 0.0);
+        if (at == 256 * 400)
+            e->setParam (kShelf, 1.0);
+    });
+    double jump = 0.0;
+    for (size_t i = 1000; i < y.size (); ++i)
+        jump = std::max (jump, (double)std::fabs (y[i] - y[i - 1]));
+    CHECK (finite (y) && jump < 0.1, "no clicks (largest step %.3f)", jump);
 }
 
 TEST (cpu_budget)

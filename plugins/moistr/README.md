@@ -1,56 +1,58 @@
 # moistr
 
-moistr turns a bass, typically a detuned Reese, into the wet, moving texture of neuro bass. It splits
-the sound into bands with crossovers: 3 bands by default (Low, Mid and High) or 4 (with an Air band on
-top). The Low band is locked by default: it never moves, so the low end stays solid (with **Push** it
-can come forward on its own moments, and dip back a little with **Dip**). The other bands rise and fall
-on their own, on a pattern that comes from a **Seed** number, so the sound keeps shifting without
-anything being automated by hand, and a movement you like is always there again. A second pattern
-(**Seed B**) can be blended in for a fuller, louder movement, and **EXTREME** makes the movement chop:
-falls to silence, more rises and falls, and ramps of a few ms. A compressor and a
-little soft clipping glue the bands back together, and a second pass can run the result through the
-bands again. An optional frequency shifter can move the bands above the Low band up or down, for a
-metallic edge, without ever touching the sub. **Link** makes the moving bands open and close together,
-and **Liquid** sweeps a vowel-like resonance through them, for a wet, coagulating sound over a sub that
-stays put. Install instructions are in the [top-level README](../../README.md).
+moistr turns a dry bass, typically a detuned saw or a Reese, into the wet, moving texture of neuro bass.
+Its core is the **SWEEP** stage, on by default: two broad bell EQs sweep slowly up and down through the
+low end, one boosting and one cutting, at slightly different rates so they keep drifting against each
+other; a resonant **High Shelf** goes round a slow orbit, its corner and its gain moving together; then a
+saturator, level matched, makes it all bite. The defaults are a proven recipe: bell A +18 dB sweeping 20
+to 120 Hz at 0.70 Hz, bell B -18 dB sweeping 30 to 300 Hz at 0.77 Hz (both Q 0.71), the shelf going round
+between 100 Hz and 1 kHz and -18 and +6 dB at Q 18, and 18 dB of drive. Wide sweeps with broad bumps
+sound wet and talking, never like a phaser.
+
+After the sweep, moistr can also split the sound into **moving bands** (see [Moving bands](#moving-bands)):
+the low end locked, the bands above it rising and falling on a seeded pattern, glued back together with a
+compressor and soft clipping, with a frequency shifter, **Link** and a vowel-like **Liquid** resonance on
+top. In a new instance they are all neutral (**Movement**, **Glue** and **Grit** at 0), so the sound is the
+sweep alone; turn them up to layer the movement on. Install instructions are in the
+[top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
 
 ## How to use it
 
-1. Put moistr on a bass track, for example a detuned saw Reese. The defaults split it into 3 bands:
-   Low (up to a crossover between 100 and 500 Hz that **Seed** picks), Mid (up to 1.5 kHz) and High.
-2. Set where the moving bands meet with **Mid X** (and **High X** with **4 Bands**), and balance the
-   bands with **Low**, **Mid**, **High** and **Air** in **LEVELS**.
-3. Set how much the bands move with **Movement** and how often with **Rate** (or switch on **Sync** to
-   take the speed from the song tempo). **Depth** sets how far a band falls; **Rise** and **Fall** make
-   the rises and falls quicker or slower.
-4. Try other **Seed** numbers for other patterns. Each number picks when each band rises and falls, how
-   quickly, and where the Low band ends. The same number always moves the same way.
-5. For more, blend in a second pattern with **Seed B** and **Blend** (at 50 % a band is up whenever
-   either pattern has it up), let the low end come forward with **Push** in **LOW**, or make it chop
-   with **Drop Out**, **Density** and **Speed** in **EXTREME**.
-6. For a liquid, coagulating sound, turn up **Link** (the bands above Low open and close together) and
-   **Liquid** (a resonance glides through them like a vowel), or start from the *Moist/Liquid* preset.
-7. For a metallic, clashing top end, switch on **SHIFT** and turn **Shift** a little either way. The Low
-   band is never shifted, so the sub stays clean.
-8. Use **Glue** and **Grit** to glue the bands back together. For an even denser, more processed sound,
-   pick **2 Passes**.
+1. Put moistr on a dry bass track, for example a detuned saw. The defaults already sound: the two bells
+   sweep the low end, the **High Shelf** opens and closes the top, and the saturator glues it.
+2. Set how hard it bites with **Drive** in **SWEEP** (12 to 24 dB sounds best on most basses). The level
+   follows the input, so more **Drive** is more grit, not more volume.
+3. Shape the sweeps in **BELL A** and **BELL B**: **Rate** (or **Sync** and its rate for the song tempo),
+   where each bell goes (**Low**, **High**), how far it boosts or cuts (**Gain**) and how broad it is
+   (**Width**, 0.71 is broad). **Phase** sets where each starts.
+4. In **HIGH SHELF** set the orbit: where its corner goes (**Low**, **High**, up to 5 kHz), how far it cuts
+   and boosts (**Min**, **Max**), how resonant it is (**Q**), how loose the orbit is (**Wander**: 0 a circle,
+   higher a smooth random path) and how much less it boosts at high corners (**Tilt**, so it never gets
+   nasal).
+5. For more, layer the moving bands on: turn up **Movement** (and **Glue** and **Grit**), or start from the
+   *Sweep/Sweep + Bands* preset. The other steps are under [Moving bands](#moving-bands).
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
 
 ## The technique
 
-The idea is a common way of making this kind of bass by hand: split the bass into a few bands, keep
-the low end steady and let the bands above it come and go, each on its own timing, so the upper part
-of the sound keeps opening up and closing down. After the split comes some compression and subtle
-distortion to glue it together. Often the result is bounced and processed again. moistr does all of
-that in one plug-in, and the movement repeats exactly every time you play the song.
+A common way of making this kind of bass by hand: a parametric EQ with a big, broad boost swept slowly
+through the low end, a second with a broad cut swept a little faster over a wider range, a high shelf
+moved around by hand (lower gain the higher it goes, so it does not get nasal), then a saturator. The two
+sweeps at nearly the same rate keep moving against each other, so the sound never quite repeats. moistr
+does all of that in one plug-in, and the sweeps follow the song position, so a render is the same every
+time.
+
+The older technique, splitting the bass into bands and letting the bands above the low end come and go
+on their own timing, is moistr's second stage (the moving bands).
 
 ## Signal flow
 
 ```
-input -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
+input -> SWEEP: bell A -> bell B -> High Shelf -> saturator (level matched)
+      -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
          -> [Liquid: the bands above Low only] -> [Shift: the bands above Low only] -> Low + the others
          -> Glue -> Grit
@@ -61,12 +63,66 @@ movement: Seed's pattern [blended with Seed B's] -> each band's rises and falls 
 
 ## Controls
 
+**SWEEP**: the stage at the front, before everything else.
+
+- **Sweep** (on): switches the whole stage. Off, the sound goes straight to the bands (as moistr before
+  0.24). Switching fades over 20 ms.
+- **Drive** (0 to 36 dB, 18 dB by default): how hard the saturator after the bells and the shelf is
+  driven. It is a smooth tanh soft clipper with first-order antiderivative anti-aliasing (as **Grit**), so
+  it needs no oversampling and adds no latency; a bass's harmonics fall off fast, so what aliasing is left
+  stays far down. Its level is matched automatically: the make-up is worked out for the input's level (a
+  slow RMS of the input, before the bells, held through silence) and the bells' average gain, so the
+  output is about as loud as the input. The sweep never moves the make-up, so nothing pumps.
+
+**BELL A** and **BELL B**: two peaking EQs, A then B, each sweeping its centre from **Low** to **High**
+and back on a log scale (a smooth cosine, so it slows at each end).
+
+- **Rate** (0.05 to 8 Hz; A 0.70 Hz, B 0.77 Hz by default): how fast the bell sweeps, while **Sync** is off.
+- **Sync** (off) and its rate under it (**4 Bars** to **1/8**, 1 Bar by default): one sweep, there and
+  back, lasts that long at the song tempo.
+- **Phase** (0 to 360 degrees, 0 by default): where the bell starts: 0 at **Low**, 180 at **High**.
+  **Seed** does not move it.
+- **Low** and **High** (20 Hz to 2 kHz; A 20 to 120 Hz, B 30 to 300 Hz by default): the range of the
+  centre.
+- **Gain** (-24 to +24 dB; A +18 dB, B -18 dB by default): how far the bell boosts or cuts.
+- **Width** (Q 0.2 to 10, 0.71 by default): low is a broad bump, high a narrow, ringing peak.
+
+**HIGH SHELF**: a resonant high shelf after the bells, its corner and gain going round an orbit.
+
+- **High Shelf** (on): switches it. Switching fades over 20 ms.
+- **Rate** (0.05 to 8 Hz, 0.53 Hz by default): how fast it goes round.
+- **Low** (50 Hz to 2 kHz, 100 Hz by default) and **High** (300 Hz to 5 kHz, 1 kHz by default): where its
+  corner goes, on a log scale.
+- **Min** (-24 to 0 dB, -18 dB by default) and **Max** (-12 to +12 dB, +6 dB by default): its lowest and
+  highest gain.
+- **Q** (0.3 to 24, 18 by default): its resonance. A high Q adds a bump just above the corner and a dip
+  just under it, which makes the shelf talk as it moves. It stays stable at every setting and sample rate.
+- **Wander** (0 to 100 %, 50 % by default): the orbit's shape. At 0 the corner and the gain go round a
+  perfect circle (low corner and half gain, then up, then the high corner, then down); higher, the angle,
+  the size and the centre of the orbit drift on smooth random curves picked by **Seed**, so it never quite
+  repeats. It never jumps and always goes the same way round.
+- **Tilt** (0 to 100 %, 65 % by default): lowers how far the shelf may boost as its corner rises above
+  1 kHz, by up to three quarters of **Max** minus **Min** at 5 kHz. At the default the gain at a 5 kHz
+  corner tops out about 12 dB under the top at 1 kHz and below, so high corners never sound nasal. At 0 it
+  has the same gain range at every corner.
+
+While the host plays, the bells and the shelf follow the song position (synced: locked to it; free: set
+from it when playback starts or jumps), so rendering from the same place gives the same sweep. Every
+control glides, and the filters' coefficients glide sample by sample, so moving a knob never clicks.
+
+## Moving bands
+
+The second stage: the multiband split and its movement. In a new instance it is neutral (**Drive**,
+**Movement**, **Glue** and **Grit** at 0: the bands add back up to the sound), so it only does something
+once you turn it up. Projects and presets saved before 0.24 open with their old settings and **Sweep** off,
+so they sound exactly as they did.
+
 **SPLIT**
 
 - **3 Bands** / **4 Bands** (Bands): 3 bands (Low, Mid, High) or 4 (Low, Mid, High, Air). The bands
   are split with Linkwitz-Riley crossovers, so with every band at the same level and nothing moving
   they add back up to the full sound.
-- **Drive** (10 %): light saturation before the split (a soft clipper, up to 18 dB of drive at 100 %).
+- **Drive** (0 by default; 10 % before 0.24): light saturation before the split (a soft clipper, up to 18 dB of drive at 100 %).
   At 0 the input is untouched.
 - **Mid X** (400 Hz to 6 kHz, 1.5 kHz by default): where the Mid band ends and the High band starts.
 - **High X** (1.5 to 16 kHz, 5 kHz by default): where the High band ends and the Air band starts. Only
@@ -91,7 +147,7 @@ up to **Depth**. All the way down (-48 dB) switches a band off. **Air** is only 
 
 **MOVEMENT**
 
-- **Movement** (50 %): how much the bands rise and fall overall. At 0 every band holds still at its
+- **Movement** (0 by default; 50 % before 0.24): how much the bands rise and fall overall. At 0 every band holds still at its
   level.
 - **Rate** (0.05 to 2 Hz, 0.3 Hz by default): how often the pattern of rises and falls comes round.
 - **Sync** (off) and its rate below it (**4 Bars**, **2 Bars**, **1 Bar**, **1/2**, **1/4**, **1/8**; 1
@@ -182,11 +238,11 @@ The Low band (everything under the Low crossover, so the sub) is never shifted.
   **Grit**) runs through the same bands, **Glue** and **Grit** a second time, with a movement of its own
   (a second pattern from the same Seed). That is like bouncing the sound and splitting it again.
   Switching crossfades over 20 ms.
-- **Glue** (40 %): a compressor on the bands together. It listens to the level (RMS over 10 ms) of both
+- **Glue** (0 by default; 40 % before 0.24): a compressor on the bands together. It listens to the level (RMS over 10 ms) of both
   channels, with a soft knee (6 dB) and a fixed attack (10 ms) and release (150 ms). **Glue** sets the
   threshold (-10 to -30 dB) and the ratio (1:1 to 4:1) together, and makes up half of the gain it would
   take off at 0 dBFS. At 0 it is off.
-- **Grit** (20 %): soft clipping after the compressor (up to 24 dB of drive at 100 %), for a little
+- **Grit** (0 by default; 20 % before 0.24): soft clipping after the compressor (up to 24 dB of drive at 100 %), for a little
   dirt. Quiet signals pass at their level. The clipper is anti-aliased (first-order antiderivative
   anti-aliasing), so it needs no oversampling and adds no latency.
 
@@ -197,9 +253,15 @@ The Low band (everything under the Low crossover, so the sub) is never shifted.
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
-## The display
+## The displays
 
-The display shows the bands against frequency (20 Hz to 20 kHz), each band's level from -48 dB (off) at
+The sweep display (beside **HIGH SHELF**) shows the stage now from 20 Hz to 5 kHz: bell A's curve (solid),
+bell B's (dashed) and the shelf's, each thin, and the whole stage's response in bold. Bars show where each
+bell sweeps (at the bottom) and where the shelf's corner goes (at the top). The box at the right is the
+shelf's orbit: its corner across (**Low** to **High**), its gain up (**Min** to **Max**), a dashed line for
+the most it may boost at each corner (**Tilt**) and a dot where it is now.
+
+The bands' display shows the bands against frequency (20 Hz to 20 kHz), each band's level from -48 dB (off) at
 the bottom to +12 dB at the top. The Low band is drawn solid, with a lock and its crossover in Hz at the
 top left; with **Push** or **Dip** it has no lock and moves like the others, between dashed lines for
 how far it can come forward and dip back. Each moving band is a region between its crossovers, filled up to its level now: while sound
@@ -227,18 +289,23 @@ The movement is worked out from its phase alone, so it repeats exactly when the 
 ## Presets
 
 The **Presets** menu in the header starts with **Init** (every control at its default) and has these
-factory presets: *Moist*: Bar Pulse, Chop, Classic Moist, Coagulate, Double Pass, Fast Flicker, Four
+factory presets: *Sweep*: Moist Default (the defaults), Heavy, Gentle, Wide Bump, High Shelf 5k, Sweep +
+Bands; *Moist*: Bar Pulse, Chop, Classic Moist, Coagulate, Double Pass, Fast Flicker, Four
 Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift. Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 
 ## Latency
 
-moistr adds no latency of its own (its crossovers, compressor and clippers work sample by sample). The end
+moistr adds no latency of its own (its sweeping filters, crossovers, compressor and clippers work sample
+by sample). The end
 saturator is always in the path, so switching it on or off never changes the latency, and its latency is
 reported to the host for automatic compensation: 85 samples at 48 kHz at 4x **Oversampling** (the
 default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host
 is told.
+
+The *Moist* and *Subtle* presets are from before the SWEEP stage and keep it off, so they sound as they
+always did.
 
 ## Credits
 

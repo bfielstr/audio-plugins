@@ -298,6 +298,39 @@ static void gentlrDefaultValuesPerPlugin ()
     CHECK (gentlrDefaultValues (GentlrIds {}, d).empty (), "no IDs (smemplr): nothing");
 }
 
+// another plug-in's factory presets (smemplr's rack slots list their effect's own plug-in's): registered
+// under that plug-in's name apart from the plug-in's own, parsed and sorted as its menu lists them
+static void hostedFactoryPresets ()
+{
+    static const FactoryFile files[] = {
+        {"Mixing/Tame.txt", "Frequency = 3 kHz\n"},
+        {"Bright.txt", "Mode = Hard\n"},
+        {"Mixing/Broken.txt", "Nonsense = 3\n"},
+        {"Lows/Deep.txt", "tags: low\nRange = 12 dB\n"},
+    };
+    CHECK (factoryFilesOf ("Hosted Test").empty (), "nothing registered yet");
+    CHECK (!registerFactoryOf ("", files, 4) && !registerFactoryOf (nullptr, files, 4), "a name is needed");
+    CHECK (registerFactoryOf ("Hosted Test", files, 4) && factoryFilesOf ("Hosted Test").size () == 4, "registered");
+    CHECK (factoryFilesOf ("Other").empty (), "only under its name");
+    const auto parsed = parseFactoryFiles (factoryFilesOf ("Hosted Test"), table ());
+    CHECK (parsed.size () == 3, "the broken one left out (%zu)", parsed.size ());
+    if (parsed.size () == 3)
+        CHECK (parsed[0].name == "Bright" && parsed[1].name == "Deep" && parsed[2].name == "Tame", "by category, then name: %s %s %s",
+               parsed[0].name.c_str (), parsed[1].name.c_str (), parsed[2].name.c_str ());
+    const auto items = factoryItems (parsed);
+    CHECK (items.size () == 3 && items[1].factory && items[1].factoryIndex == 1 && items[1].category == "Lows" && hasTag (items[1].tags, "low"),
+           "menu items");
+    // a user preset is one in the folder or a category in it
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path () / "pk_hosted_folder_test";
+    std::error_code ec;
+    fs::create_directories (dir / "Cat", ec);
+    CHECK (inFolder ((dir / "A.vstpreset").string (), dir.string ()) && inFolder ((dir / "Cat" / "B.vstpreset").string (), dir.string ()),
+           "in the folder");
+    CHECK (!inFolder ((dir.parent_path () / "C.vstpreset").string (), dir.string ()) && !inFolder ("", dir.string ()), "elsewhere");
+    fs::remove_all (dir, ec);
+}
+
 int main ()
 {
     struct T
@@ -310,6 +343,7 @@ int main ()
         {"namesAreChecked", namesAreChecked},               {"tagFilter", tagFilter},
         {"menuLayout", menuLayout},                         {"menuFilteredByTag", menuFilteredByTag},
         {"gentlrDefaultsFile", gentlrDefaultsFile},         {"gentlrDefaultValuesPerPlugin", gentlrDefaultValuesPerPlugin},
+        {"hostedFactoryPresets", hostedFactoryPresets},
     };
     for (const auto& t : tests)
     {

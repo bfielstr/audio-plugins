@@ -87,6 +87,10 @@ public:
     // out (the ones after it move up); move the effect in slot `from` to slot `to` (the ones between
     // move over by one, towards where it was)
     void addFx (int type);
+    // A new slot of an effect (addFx), after its factory defaults: the effect's own plug-in's saved default
+    // (Save as Default) and its Menu > Defaults switches, as a new instance of the plug-in gets them
+    // (plugin/RackPresetIO.h). Only for a slot the user adds: a loaded project keeps its values.
+    void applyNewSlotDefaults (int slot, int type);
     void removeFx (int slot);
     void moveFx (int from, int to);
     void duplicateFx (int from, int at); // a copy of slot `from` at slot `at` (the ones from there move up one)
@@ -206,6 +210,12 @@ private:
     pk::NumberBox* gentlrThresh[4] = {nullptr, nullptr, nullptr, nullptr};
     int gentlrBand = 0;
     void selectGentlrBand (int band);
+    // Gentlr's Advanced mode on the Gentlr page: the bands' Threshold sliders at the right of its display,
+    // as in gentlr's own editor (Smacheratr's sliders, on Gentlr's Thresholds through gentlrSliderHost, in
+    // front of gentlrWatch), shown while Advanced is on and dimmed for a band that does not work
+    std::unique_ptr<pk::MappedParamHost> gentlrSliderHost;
+    smacheratr::ThresholdSlider* gentlrSliders[4] = {nullptr, nullptr, nullptr, nullptr};
+    void updateGentlrAdvanced ();
     // Gentlr's Advanced mode on the Smacheratr page: the Threshold sliders at the right of the colour
     // display and the region Drive's controls, shown while Advanced is on (satHost: the page's host)
     smacheratr::ThresholdSlider* fxThresholds[4] = {nullptr, nullptr, nullptr, nullptr};

@@ -227,6 +227,8 @@ is a slot like any other, so you can move it, switch it off or remove it.
   text as each effect's own plug-in (its **Menu → Copy Settings / Paste Settings**), so settings go from
   a para on a track into a **para** slot and back, or from one slot to another of the same effect.
   Settings of a different effect are ignored.
+- **Presets** (every effect but the **m/s eq**, which has no plug-in of its own): the same presets as
+  the effect's own plug-in, described below.
 
 ![The rack after Ctrl-dragging a copy of an effect](../../docs/smemplr/ui_fx_after_duplicate.png)
 
@@ -259,6 +261,9 @@ The slots, named as the tabs show them:
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag
   a band's edge onto a neighbour's to glue them; click the link icon on the border to detach them.
   Grabbing a band's handle or any value in its row selects the band: its handle and its Threshold are lit.
+  With **Advanced** on, each band's Threshold also has a slider at the right of the display, as in
+  gentlr's own display: drag it (Shift: fine), double-click or right-click for -18 dB. The band's level
+  rises beside it, bright where it is over the threshold and being cut.
 - **smoothr**: smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
   off in the rack: put a smacheratr slot before it for that.
 
@@ -266,6 +271,29 @@ Every control is an automatable parameter (the host shows a slot's values in the
 loaded there). The latency of the rack is reported to the host, which is told when it changes; a
 switched-off effect keeps its latency. The **Output Scope** on the right shows the final output (click
 it to change the time span).
+
+### A slot's presets
+
+The **Presets** control on the selected slot's line lists exactly what the effect's own plug-in lists
+in its header: **Init**, its factory presets, your presets from its preset folder (by category, with
+the **Tags** filter) and its saved default. Loading one changes only that slot: the other slots and
+smemplr's own controls stay as they are, and the host records the changes as edits (automation and
+undo see them). Parameters of the plug-in that a slot does not have (widr's cinema stage, the
+saturators of multidyn and wubr, and the plug-in's end saturator where the slot has no place for it)
+are skipped.
+
+**Save**, **Save As...**, **Rename...**, **Edit Tags...** and **Delete...** work on the plug-in's own
+preset folder, in its format, so a preset saved from a slot is in the plug-in's menu as well, and one
+saved in the plug-in is in the slot's. A preset saved from a slot holds the slot's values, and the
+plug-in's parameters the slot does not have at their defaults (widr's cinema stage off, for example).
+**Save as Default**, **Load Default** and **Reset Default** are the plug-in's: a default saved from a
+slot is what a new instance of the plug-in starts from, and the other way round. **Save Preset
+File...** and **Load Preset File...** save or open that effect's `.vstpreset` anywhere.
+
+When you add an effect with **+**, the new slot starts as a new instance of the effect's plug-in would:
+from its saved default, if there is one, and then with its **Menu → Defaults** switches (**Gentlr On
+by Default**, **Advanced On by Default**) on top. A project you open, or a smemplr preset, loads every
+slot exactly as it was saved, and a moved, copied or duplicated slot keeps its values.
 
 ## Presets
 

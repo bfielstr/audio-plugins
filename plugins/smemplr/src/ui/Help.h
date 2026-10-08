@@ -267,5 +267,14 @@ constexpr const char* kWaveHeight =
     "The waveform's height: makes quiet parts easier to see (the drawing only, the sound does not change). Drag "
     "sideways or use the mouse wheel, Alt + scroll over the waveform, double-click to reset.";
 constexpr const char* kWarpAs = "Change the Warp As length: -/+ one beat, or halve / double it.";
+constexpr const char* kGentlrThresholdSlider =
+    "Advanced: the band's Threshold (drag; Shift: fine), as in gentlr's own display. The band's level rises beside it, "
+    "bright where it is over the threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the "
+    "band (its handle and its Thresh value lit).";
+constexpr const char* kSlotPresets =
+    "This effect's presets: the same ones its own plug-in lists (Init, its factory presets and yours, by category, with "
+    "the Tags filter). A preset you save here is saved in the plug-in's preset folder, so the plug-in lists it too, and "
+    "the other way round. Save as Default sets what a new instance of the plug-in, and a new slot of this effect, starts "
+    "from. Loading a preset changes only this slot.";
 
 } // namespace smemplr::help

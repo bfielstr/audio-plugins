@@ -1,5 +1,6 @@
 #include "Controller.h"
 #include "Rack.h"
+#include "RackPresets.h"
 
 #include "Cids.h"
 #include "StateIO.h"
@@ -177,7 +178,24 @@ tresult PLUGIN_API Controller::setComponentState (IBStream* stream)
         if (isValidParam (id)) // (the MIDI ones are not in a state)
             setParamNormalized (id, st.has[id] ? st.norm[id] : defaultNormalized (id));
     pendingPath = st.samplePath;
+    slotPresets = {}; // (a project's or a preset's rack: no slot shows a preset of its effect)
     return kResultOk;
+}
+
+void Controller::applySlotValues (int slot, const std::vector<double>& values)
+{
+    if (slot < 0 || slot >= kRackSlots)
+        return;
+    for (const auto& [id, v] : slotEditsFor (slot, slotType (slot), values))
+    {
+        if (getParamNormalized (id) == v)
+            continue;
+        beginEdit (id);
+        setParamNormalized (id, v);
+        performEdit (id, v);
+        endEdit (id);
+    }
+    markDirty ();
 }
 
 IPlugView* PLUGIN_API Controller::createView (FIDString name)

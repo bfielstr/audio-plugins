@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.23.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.24.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -20,7 +20,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.23.0**
 | [**dropr**](plugins/dropr/README.md) | Slams a sound flat in 6 bands and drives it into a saturator. Negative ratios turn loud hits down below quieter parts, so a snare's body comes up and its snap is tamed. |
 | [**orbitr**](plugins/orbitr/README.md) | Turns a sound into a swarm: 1 to 16 copies fly around you, each one bending in pitch as it moves towards or away from you. |
 | [**ciphr**](plugins/ciphr/README.md) | An 8-voice synthesizer: clusters of wavetable oscillators you sweep with one knob, FM and ring modulation between them, and echoes that turn into reverb, with a frequency shifter in the feedback for endlessly climbing repeats. Metallic, screeching and vocal waves for alien textures, and Disperse, a dial that brings the sound back band by band. Can also play a track through its side-chain input. |
-| [**moistr**](plugins/moistr/README.md) | Turns a bass (a detuned Reese, typically) into a wet, moving neuro texture: splits it into 3 or 4 bands, holds the low band steady and lets the bands above it rise and fall on their own, then glues them back with a compressor and a little grit; an optional frequency shifter moves the upper bands but never the sub. The Seed picks the timing, how quickly the bands rise and fall, and where the low band ends; the same Seed always moves the same way. |
+| [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: two broad bell EQs sweep the low end against each other, a resonant high shelf goes round a slow orbit, and a level-matched saturator makes it bite. After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
 | [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
 
 ## Gallery
@@ -124,7 +124,7 @@ installed versions. Copies that older installers put directly in the VST3 folder
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
-`SIMPLR_VERSION=v0.23.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
+`SIMPLR_VERSION=v0.24.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
 
@@ -169,6 +169,11 @@ They live in
 
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
+
+smemplr's effects rack uses the same presets: a slot holding para, multidyn, smacheratr, widr, wubr,
+levlr, gentlr or smoothr has a **Presets** control with that plug-in's menu, reading and writing the
+same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
+[smemplr README](plugins/smemplr/README.md#a-slots-presets).
 
 ## Defaults for new instances
 
@@ -320,7 +325,7 @@ plugins/gentlr      gentle de-mud / de-harsh same structure
 plugins/dropr       multiband compressor     same structure
 plugins/orbitr      doppler swarm            same structure
 plugins/ciphr       wavetable synthesizer    same structure
-plugins/moistr      moving band split        same structure
+plugins/moistr      sweeps, moving bands     same structure
 plugins/smeezr      one-knob pink / OTT      same structure
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness

@@ -2,7 +2,12 @@
 // crossover (Linkwitz-Riley 4th order), keeps the low end locked and lets the bands above it rise and fall
 // on a seeded pattern, then glues the bands back together with a compressor and a little soft clipping.
 //
-//   input -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> Smacheratr (the end saturator)
+//   input -> SWEEP -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> Smacheratr (the end saturator)
+//
+// SWEEP (0.24, Sweep.h; on in a new instance, off in a state saved before 0.24): two sweeping bell EQs, a
+// High Shelf on a smooth orbit and a level-compensated saturator, before everything else. A new instance has
+// the rest neutral (Drive, Movement, Glue and Grit at 0), so its sound is the sweep alone. With Sweep off the
+// stage is not run (the engine is 0.23's, bit for bit).
 //   a pass: the split (Low | Mid | High [| Air]), each band at its gain -> [Shift: the bands above Low] ->
 //           sum -> Glue -> Grit
 //
@@ -54,6 +59,7 @@
 #include "Dsp.h"
 #include "Movement.h"
 #include "Params.h"
+#include "Sweep.h"
 
 #include "smacheratr/src/core/Tail.h"
 
@@ -93,6 +99,10 @@ struct Meters
     std::atomic<float> shiftHz {0.0f}, shiftAmount {0.0f};
     // Liquid (0.23): its two formants now (Hz; 0 while it is off) and how strong (0 .. 1, as Liquid, gliding)
     std::atomic<float> liquidHz {0.0f}, liquidF2Hz {0.0f}, liquidAmount {0.0f};
+    // the SWEEP stage (0.24): the bells' centres and the shelf's corner now (Hz: [0] A, [1] B, [2] the shelf),
+    // the shelf's gain now and its ceiling there (dB), and how far the stage and the shelf are faded in (0 .. 1)
+    std::array<std::atomic<float>, 3> sweepHz {};
+    std::atomic<float> shelfDb {0.0f}, shelfCeiling {0.0f}, sweepAmount {0.0f}, shelfAmount {0.0f};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -146,6 +156,8 @@ public:
     double liquidAmount () const { return liquid; }
     // F1's place (0 .. 1) and log2 (F2 / F1) at phase th, as the engine has them now (Seed Blend, the crossfade)
     void liquidAt (double th, double& pos, double& logRatio) const;
+    // the SWEEP stage now (its centres, gains, clocks and orbit)
+    const Sweep& sweepStage () const { return sweep; }
 
 private:
     struct PassState
@@ -194,6 +206,7 @@ private:
     double xfade = 1.0;   // 0 .. 1 over 100 ms (the new patterns' weight: raised cosine)
     bool running = false; // processed since the last reset (a pattern change crossfades)
     PassState state[kMaxPasses];
+    Sweep sweep;
     dsp::Saturator drive;
     // smoothed settings (per tick)
     double logX[kMaxXovers] {}, levelDb[kMaxBands] {}, share[kMaxBands] {};

@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, tempo, chop, extreme
 comment: The upper bands chop in and out to silence in a few ms, four times as often, in time with the song; the low end pushes a little.
+Sweep = Off
+Drive = 10 %
 Sync = On
 Sync Rate = 1 Bar
 Movement = 100 %

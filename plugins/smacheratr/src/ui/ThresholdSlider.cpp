@@ -59,15 +59,18 @@ void ThresholdSlider::draw (CDrawContext* ctx)
     const CRect r = getViewSize ();
     const CRect t = track ();
     const bool on = enabledLook;
-    // a meter bed: a well in a thin outline (copper; cinnabar while dragged), the band's name on top
-    ctx->setFillColor (theme::kWell);
-    ctx->drawRect (r, kDrawFilled);
-    pk::draw::outline (ctx, r, dragging ? theme::kEnergyLive : selected ? theme::kCopperPale : (on ? theme::kCopper : theme::kLineDim), 0);
-    text (ctx, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15),
-          selected ? theme::kText : on ? theme::kCopperPale : theme::kTextDim, 10.0, true);
-    // the band shown in the editor: a lamp under its name (lit while the band works, idle otherwise)
-    if (selected)
-        pk::draw::marker (ctx, CRect (r.left + 3, r.top, r.right - 3, r.top + 17), on ? theme::kEnergyLive : theme::kEnergyIdle);
+    // a meter bed: a well in a thin outline (copper; cinnabar while dragged), the band's name on top; it
+    // changes only with those states, so it is kept in a layer and the meter's ticks just blit it
+    bed.draw (ctx, r, pk::LayerKey ().add (r, band, selected, on, dragging), [&] (CDrawContext* c) {
+        c->setFillColor (theme::kWell);
+        c->drawRect (r, kDrawFilled);
+        pk::draw::outline (c, r, dragging ? theme::kEnergyLive : selected ? theme::kCopperPale : (on ? theme::kCopper : theme::kLineDim), 0);
+        text (c, band == 0 ? "1" : band == 1 ? "2" : band == kSubBand ? "S" : "H", CRect (r.left, r.top + 1, r.right, r.top + 15),
+              selected ? theme::kText : on ? theme::kCopperPale : theme::kTextDim, 10.0, true);
+        // the band shown in the editor: a lamp under its name (lit while the band works, idle otherwise)
+        if (selected)
+            pk::draw::marker (c, CRect (r.left + 3, r.top, r.right - 3, r.top + 17), on ? theme::kEnergyLive : theme::kEnergyIdle);
+    });
 
     // the level as a meter: energy idle below the threshold, lit live above it (the part being cut)
     const double thr = host->plainValue (param);

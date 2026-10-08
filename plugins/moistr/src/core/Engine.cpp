@@ -73,6 +73,7 @@ Engine::Engine ()
 void Engine::prepare (double sampleRate, int maxBlock)
 {
     sr = sampleRate;
+    sweep.prepare (sr);
     tickSmooth = 1.0 - std::exp (-(double)kTick / (0.03 * sr));
     gainSmooth = 1.0 - std::exp (-(double)kTick / (0.001 * sr)); // (1 ms: only takes the edge off a jump)
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
@@ -263,6 +264,7 @@ void Engine::reset ()
     secPerCycle = cycleSeconds ();
     theta = 0.0;
     wasPlaying = false;
+    sweep.reset (p.data ());
     drive.reset ();
     for (int k = 0; k < kMaxPasses; ++k)
     {
@@ -511,6 +513,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const bool sync = p[kSync] >= 0.5;
     const double beats = kSyncBeats[std::clamp ((int)std::lround (p[kSyncRate]), 0, kNumSyncRates - 1)];
     const double rate = p[kRate];
+    const bool relocate = playing && (!wasPlaying || std::fabs (songPpq - expectPpq) > 1e-3);
+    sweep.beginBlock (p.data (), playing, relocate, songPpq, bpm);
     // where the movement is: on the song's timeline while the host plays (synced: locked to it; free: set
     // from it when playback starts or jumps, then running at Rate), else running on its own
     if (playing)
@@ -591,6 +595,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (logLiqLo, std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0)), tickSmooth);
         glide (logLiqHi, std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0)), tickSmooth);
 
+        sweep.tick (p.data (), wl, wr, m); // (off: not run)
         drive.process (wl, wr, m);
         const double thetaEnd = theta + dTheta * m;
         const bool runSecond = twoPasses || pass2 > 0.0;
@@ -671,6 +676,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->liquidF2Hz.store (liq ? (float)liqF2 : 0.0f, rx);
         meters->liquidAmount.store ((float)liquid, rx);
         meters->glueDb.store ((float)state[0].glue.gainReductionDb (), rx);
+        for (int b = 0; b < 3; ++b)
+            meters->sweepHz[(size_t)b].store ((float)(b < 2 ? sweep.bellHz (b) : sweep.shelfHz ()), rx);
+        meters->shelfDb.store ((float)sweep.shelfDb (), rx);
+        meters->shelfCeiling.store ((float)sweep.shelfCeiling (), rx);
+        meters->sweepAmount.store ((float)sweep.amount (), rx);
+        meters->shelfAmount.store ((float)sweep.shelfAmount (), rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
     tail.process (yl, yr, n);

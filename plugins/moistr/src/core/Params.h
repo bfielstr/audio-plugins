@@ -80,6 +80,37 @@ enum ParamId : uint32_t
     kLiquidRes,  // 0 .. 1: its resonance (Q 1.5 .. 12)
     kLiquidLow,  // Hz: the lowest the resonance goes
     kLiquidHigh, // Hz: the highest
+    // --- added in 0.24 (append only): the SWEEP stage at the front of the chain (before Drive and the split):
+    // two sweeping bell EQs (A, then B), a sweeping High Shelf on a smooth orbit, then a saturator with
+    // automatic level compensation (Sweep.h). On in a new instance; a state saved before 0.24 reads it as off
+    // (legacyDefaultNormalized), so old projects and presets sound as they did ---
+    kSweep,       // Off / On: the whole stage
+    kSweepDrive,  // dB 0 .. 36: the saturator after the sweep (level compensated)
+    kARate,       // Hz: bell A's sweep rate (free)
+    kASync,       // Off / On: bell A's rate from the song tempo (A Sync Rate)
+    kASyncRate,   // a sweep cycle's length in beats (choice, as Sync Rate)
+    kALow,        // Hz: the lowest bell A's centre goes
+    kAHigh,       // Hz: the highest
+    kAGain,       // dB -24 .. +24: bell A's gain
+    kAWidth,      // Q 0.2 .. 10: bell A's width (low: broad)
+    kAPhase,      // degrees 0 .. 360: where in its sweep bell A starts (0: at Low)
+    kBRate,       // bell B: as bell A
+    kBSync,
+    kBSyncRate,
+    kBLow,
+    kBHigh,
+    kBGain,
+    kBWidth,
+    kBPhase,
+    kShelf,       // Off / On: the High Shelf (after the bells, before the saturator)
+    kShelfRate,   // Hz: how fast it goes round its orbit
+    kShelfLow,    // Hz: the lowest its corner goes
+    kShelfHigh,   // Hz: the highest
+    kShelfMin,    // dB: its lowest gain
+    kShelfMax,    // dB: its highest gain
+    kShelfQ,      // 0.3 .. 24: its resonance at the corner
+    kShelfWander, // 0 .. 1: 0 a perfect circle, 1 a loose, smooth random orbit (Seed's)
+    kShelfTilt,   // 0 .. 1: lowers the gain ceiling as the corner rises above 1 kHz (less nasal)
     kNumParams
 };
 
@@ -97,8 +128,14 @@ static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLe
                    kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kSeedB == 80 && kSeedBlend == 81 &&
                    kDensity == 82 && kLowPush == 83 && kLowDip == 84 && kDropOut == 85 && kSpeed == 86,
                "saved IDs: the multiband split at 69 .. 76, the shifter at 77 .. 79, the 0.22 controls at 80 .. 86");
-static_assert (kLink == 87 && kLiquid == 88 && kLiquidRes == 89 && kLiquidLow == 90 && kLiquidHigh == 91 && kNumParams == 92,
+static_assert (kLink == 87 && kLiquid == 88 && kLiquidRes == 89 && kLiquidLow == 90 && kLiquidHigh == 91,
                "saved IDs: Link and Liquid at 87 .. 91");
+static_assert (kSweep == 92 && kSweepDrive == 93 && kARate == 94 && kASync == 95 && kASyncRate == 96 && kALow == 97 && kAHigh == 98 &&
+                   kAGain == 99 && kAWidth == 100 && kAPhase == 101 && kBRate == 102 && kBSync == 103 && kBSyncRate == 104 &&
+                   kBLow == 105 && kBHigh == 106 && kBGain == 107 && kBWidth == 108 && kBPhase == 109 && kShelf == 110 &&
+                   kShelfRate == 111 && kShelfLow == 112 && kShelfHigh == 113 && kShelfMin == 114 && kShelfMax == 115 &&
+                   kShelfQ == 116 && kShelfWander == 117 && kShelfTilt == 118 && kNumParams == 119,
+               "saved IDs: the SWEEP stage at 92 .. 118");
 
 enum Slope { kSlope12 = 0, kSlope24 };
 enum Passes { kPasses1 = 0, kPasses2 };
@@ -115,11 +152,18 @@ constexpr int kMinSeed = 1, kMaxSeed = 128;
 // Liquid Low and Liquid High's ranges (Hz)
 constexpr double kLiquidLowMin = 150.0, kLiquidLowMax = 800.0, kLiquidHighMin = 600.0, kLiquidHighMax = 4000.0;
 constexpr double kLevelOffDb = -48.0; // a band's Level at its minimum: off
+// the SWEEP stage's ranges: the bells' and the shelf's rates (Hz), the bells' centres (Hz) and widths (Q),
+// the shelf's Q, the saturator's drive (dB)
+constexpr double kSweepRateMin = 0.05, kSweepRateMax = 8.0, kBellFreqMin = 20.0, kBellFreqMax = 2000.0;
+constexpr double kBellQMin = 0.2, kBellQMax = 10.0, kBellQDefault = 0.71, kShelfQMin = 0.3, kShelfQMax = 24.0, kSweepDriveMax = 36.0;
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
+// The default a parameter had before 0.24, for a state saved before then that lacks it (State.cpp): 0.24 made
+// the SWEEP stage the default sound (Sweep on) and the rest neutral (Drive, Movement, Glue and Grit at 0).
+double legacyDefaultNormalized (uint32_t id);
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced

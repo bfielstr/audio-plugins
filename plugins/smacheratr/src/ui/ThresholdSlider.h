@@ -13,6 +13,7 @@
 
 #include "ColorView.h"
 
+#include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/Widgets.h"
 
 #include <functional>
@@ -63,6 +64,8 @@ private:
     MeterSource meters;
     float shownDb = -120.0f; // the band's level, eased
     bool dragging = false, selected = false;
+    // the bed (the well, its outline, the band's name and lamp): drawn once, blitted while the level moves
+    pk::CachedLayer bed;
     double startY = 0.0, startValue = 0.0;
 };
 

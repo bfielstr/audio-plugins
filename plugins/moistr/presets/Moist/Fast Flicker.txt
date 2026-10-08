@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, fast, movement
 comment: Short rises and falls at a quick rate: the upper bands flicker in and out over a steady low end.
+Sweep = Off
+Drive = 10 %
 Movement = 80 %
 Rate = 1.5 Hz
 Rise = 0.25

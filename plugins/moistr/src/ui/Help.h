@@ -8,7 +8,49 @@ inline const char* forParam (uint32_t id)
 {
     switch (id)
     {
-        case kDrive: return "Light saturation before the sound is split into bands. 0 leaves the input untouched.";
+        case kDrive: return "Light saturation before the sound is split into bands (after SWEEP). 0 leaves the input untouched.";
+        case kSweep:
+            return "Switches the SWEEP stage on: two sweeping bell EQs, a High Shelf going round in a slow orbit, then a "
+                   "saturator, all before the bands. This is moistr's main sound. Off, the sound goes straight to the bands.";
+        case kSweepDrive:
+            return "How hard the SWEEP stage's saturator is driven after the bells and the shelf (dB). Its level is matched "
+                   "to the input's automatically, so more Drive is more grit, not more volume. 12 to 24 dB is the sweet spot.";
+        case kARate:
+        case kBRate: return "How fast the bell sweeps from Low to High and back (Hz), while its Sync is off.";
+        case kASync:
+        case kBSync: return "Takes the bell's sweep speed from the song tempo (the choice under it) instead of Rate.";
+        case kASyncRate:
+        case kBSyncRate: return "One sweep of the bell, Low to High and back, in bars or beats, while its Sync is on.";
+        case kALow:
+        case kBLow: return "The lowest the bell's centre goes (Hz). With Phase at 0 the sweep starts here.";
+        case kAHigh:
+        case kBHigh: return "The highest the bell's centre goes (Hz). The sweep moves on a log scale, so it spends as long per octave.";
+        case kAGain:
+        case kBGain: return "How far the bell boosts (above 0) or cuts (below 0) around its centre (dB).";
+        case kAWidth:
+        case kBWidth: return "The bell's Q: low is a broad bump (0.71 is broad and smooth), high a narrow, ringing peak.";
+        case kAPhase:
+        case kBPhase:
+            return "Where in its sweep the bell starts (degrees): 0 at Low, 180 at High. Sets the two bells against each other.";
+        case kShelf:
+            return "Switches the High Shelf on: it lifts or cuts everything above its corner, and the corner and the gain move "
+                   "together in a slow orbit.";
+        case kShelfRate: return "How fast the High Shelf goes round its orbit (Hz).";
+        case kShelfLow: return "The lowest the High Shelf's corner goes (Hz).";
+        case kShelfHigh:
+            return "The highest the High Shelf's corner goes (Hz), up to 5 kHz. With Tilt, the higher the corner, the less "
+                   "it may boost.";
+        case kShelfMin: return "The High Shelf's lowest gain (dB): how far it cuts the highs at the bottom of its orbit.";
+        case kShelfMax: return "The High Shelf's highest gain (dB) at the top of its orbit (lowered at high corners by Tilt).";
+        case kShelfQ:
+            return "The High Shelf's resonance: low is a gentle slope, high (18 and up) adds a bump just above the corner and "
+                   "a dip just under it, which is what makes it talk.";
+        case kShelfWander:
+            return "The shape of the High Shelf's orbit: 0 is a perfect circle (corner and gain round and round); higher "
+                   "drifts it smoothly and randomly (Seed picks how), so it never quite repeats. It never jumps.";
+        case kShelfTilt:
+            return "Lowers how far the High Shelf may boost as its corner rises above 1 kHz, so high corners never get nasal. "
+                   "0 gives the same gain range at every corner.";
         case kBandCount:
             return "Splits the sound into 3 bands (Low, Mid, High) or 4 (Low, Mid, High, Air). The Low band stays put; "
                    "the others rise and fall.";
@@ -88,6 +130,12 @@ inline const char* forParam (uint32_t id)
         default: return nullptr;
     }
 }
+
+constexpr const char* kSweepView =
+    "The SWEEP stage now: bell A (solid), bell B (dashed) and the High Shelf, each thin, and the whole stage bold, from "
+    "20 Hz to 5 kHz. The bars show where each bell sweeps (bottom) and where the shelf's corner goes (top). The box at "
+    "the right is the shelf's orbit: its corner across (Low to High), its gain up (Min to Max), the dashed line the most "
+    "it may boost at each corner (Tilt), the dot where it is now.";
 
 constexpr const char* kBandView =
     "The bands against frequency. The Low band is locked (solid, with a lock and where it ends in Hz) unless Push or Dip "

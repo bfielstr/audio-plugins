@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: reese, slow, movement
 comment: Long, slow rises and falls: the upper bands swell up and fade away over a held low end.
+Sweep = Off
+Drive = 10 %
 Movement = 70 %
 Rate = 0.08 Hz
 Rise = 3

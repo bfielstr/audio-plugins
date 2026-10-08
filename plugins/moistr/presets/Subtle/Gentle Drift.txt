@@ -1,6 +1,7 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: subtle, movement
 comment: A little movement and a light glue: the upper bands dip gently and slowly, nothing more.
+Sweep = Off
 Drive = 0 %
 Movement = 30 %
 Rate = 0.12 Hz

@@ -7,7 +7,10 @@
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginterfaces/vst/ivstmidicontrollers.h"
 
+#include <algorithm>
+#include <array>
 #include <functional>
+#include <string>
 #include <vector>
 
 namespace smemplr {
@@ -42,6 +45,19 @@ public:
     // out); the editor calls it while open.
     void checkLatency ();
 
+    // --- the rack slots' presets (SlotPresets.h: the presets of the effect's own plug-in) ---
+    // What a slot's Presets control shows: the preset last loaded into it or saved from it (editor state,
+    // not saved with the project: a loaded project, or a preset of smemplr's own, clears them).
+    struct SlotPreset
+    {
+        pk::presets::Kind kind = pk::presets::Kind::None;
+        std::string path, title, tagFilter;
+    };
+    SlotPreset& slotPreset (int slot) { return slotPresets[(size_t)std::clamp (slot, 0, kRackSlots - 1)]; }
+    // The effect's own plug-in's values (normalized, by its IDs: RackPresets.h) into slot `slot`'s carried
+    // parameters, as host edits (beginEdit, performEdit, endEdit) of the ones that change. Nothing else moves.
+    void applySlotValues (int slot, const std::vector<double>& values);
+
     // --- helpers for the editor -------------------------------------------------
     Bridge* getBridge () const { return bridge; }
     std::string sampleDisplayName ();
@@ -65,6 +81,7 @@ protected:
     {
         if (bridge)
             bridge->setMods ({});
+        slotPresets = {};
     }
     bool isSetting (uint32_t id) const override { return !isMidiParam (id); } // (not reset, copied or pasted)
 
@@ -75,6 +92,7 @@ private:
     int reportedLatency = -1;
     std::array<int, kRackSlots> titledType {};
     std::string pendingPath; // from setComponentState when no bridge is connected
+    std::array<SlotPreset, kRackSlots> slotPresets;
 };
 
 } // namespace smemplr

@@ -1,6 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, tempo, pulse
 comment: The upper bands rise quickly and fall slowly in time with the song (one cycle per bar) while the low end stays put.
+Sweep = Off
+Drive = 10 %
 Sync = On
 Sync Rate = 1 Bar
 Movement = 80 %

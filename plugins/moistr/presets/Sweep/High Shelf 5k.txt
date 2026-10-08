@@ -1,0 +1,10 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, bright
+comment: The High Shelf's orbit reaches up to 5 kHz; Tilt keeps the boost low at the high corners so it opens up without getting nasal.
+Sweep = On
+High Shelf = On
+Shelf Low = 120 Hz
+Shelf High = 5 kHz
+Shelf Max = 6 dB
+Tilt = 85 %
+Wander = 60 %

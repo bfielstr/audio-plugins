@@ -16,6 +16,9 @@
 #include "pluginkit/ui/ScopeView.h"
 #include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/vst/PresetBar.h"
+#include "plugin/RackPresetIO.h"
+#include "plugin/SlotPresets.h"
+#include "RackPresets.h"
 
 #include "multidyn/src/ui/DynDisplay.h"
 #include "multidyn/src/ui/Thresholds.h"
@@ -262,6 +265,8 @@ void Editor::onClose ()
     for (auto& t : fxThresholds)
         t = nullptr;
     for (auto& t : gentlrThresh)
+        t = nullptr;
+    for (auto& t : gentlrSliders)
         t = nullptr;
     fxSatAdvanced.clear ();
     satHost = nullptr;
@@ -708,8 +713,39 @@ void Editor::selectGentlrBand (int band)
     if (gentlrView)
         gentlrView->setSelectedBand (gentlrBand);
     for (int k = 0; k < gentlr::kAllBands; ++k)
+    {
         if (gentlrThresh[k])
             gentlrThresh[k]->setSelected (k == gentlrBand);
+        if (gentlrSliders[k])
+            gentlrSliders[k]->setSelected (k == gentlrBand);
+    }
+}
+
+void Editor::updateGentlrAdvanced ()
+{
+    // the Gentlr page: with Advanced on, the Threshold sliders take a strip at the right of the display (as
+    // in gentlr's own editor), dimmed for a band that does not work (off, or its Range at 0 dB)
+    if (!gentlrView || fxTab >= kFxNone || ctl->slotType (fxTab) != kFxGentlr)
+        return;
+    pk::MappedParamHost* h = hostFor (fxTab);
+    if (!h)
+        return;
+    const bool advanced = h->plainValue (gentlr::kAdvanced) >= 0.5;
+    const CRect area (8, 8, 470, 204);
+    smacheratr::ThresholdSlider::layout (nullptr, gentlrSliders, area, advanced);
+    CRect r = area;
+    if (advanced)
+        r.right -= smacheratr::ThresholdSlider::kStripWidth;
+    if (gentlrView->getViewSize () != r)
+    {
+        gentlrView->setViewSize (r);
+        gentlrView->setMouseableArea (r);
+        gentlrView->invalid ();
+    }
+    for (int k = 0; k < gentlr::kAllBands; ++k)
+        if (gentlrSliders[k])
+            gentlrSliders[k]->setEnabledLook (
+                gentlr::bandWorks (k, gentlr::hasOn (k) ? h->plainValue (gentlr::onParam (k)) : 1.0, h->plainValue (gentlr::rangeParam (k))));
 }
 
 void Editor::setSatLayer (int layer)
@@ -811,6 +847,8 @@ void Editor::paramChanged (uint32_t id)
                 updateMdLooks ();
             if (field >= kSlotParams && ctl->slotType (slot) == kFxSmacheratr)
                 updateSatAdvanced ();
+            if (field >= kSlotParams && ctl->slotType (slot) == kFxGentlr)
+                updateGentlrAdvanced (); // (Advanced, and a band's On or Range: its slider's look)
             if (field >= kSlotParams && ctl->slotType (slot) == kFxWubr)
                 if (const int64_t w = fxIdAt (kFxWubr, field - kSlotParams); w >= 0)
                 {
@@ -949,10 +987,7 @@ pk::MappedParamHost* Editor::hostFor (int slot)
         // before the next idle): it is kept until then
         if (h)
             retiredHosts.push_back (std::move (h));
-        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) -> int64_t {
-            const int64_t j = fxBlockOf (type, id);
-            return j < 0 ? -1 : (int64_t)slotBlockParam (slot, (uint32_t)j);
-        });
+        h = std::make_unique<pk::MappedParamHost> (this, fxTable (type), [slot, type] (uint32_t id) { return slotParamOf (slot, type, id); });
         slotHostType[(size_t)slot] = type;
     }
     return h.get ();
@@ -968,6 +1003,7 @@ double emptySlotValue (uint32_t k) { return k == kSlotOn ? 1.0 : 0.0; }
 
 void Editor::copySlot (int from, int to)
 {
+    ctl->slotPreset (to) = ctl->slotType (from) == kFxEmpty ? Controller::SlotPreset {} : ctl->slotPreset (from);
     // (only what differs, so the host's automation sees the real changes)
     const bool empty = ctl->slotType (from) == kFxEmpty;
     for (uint32_t k = 0; k < kSlotValues; ++k)
@@ -993,8 +1029,23 @@ void Editor::addFx (int type)
     setOnce (slotParam (slot, kSlotOn), 1.0);
     for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         setOnce (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
+    applyNewSlotDefaults (slot, type);
     fxTab = slot;
     rackDirty = true;
+}
+
+void Editor::applyNewSlotDefaults (int slot, int type)
+{
+    ctl->slotPreset (slot) = {};
+    if (!hostedPlugin (type))
+        return; // (the M/S EQ: no plug-in of its own)
+    bool fromDefault = false;
+    ctl->applySlotValues (slot, rackio::newSlotValues (type, &fromDefault));
+    if (fromDefault)
+    {
+        ctl->slotPreset (slot).kind = pk::presets::Kind::Default;
+        ctl->slotPreset (slot).title = pk::presets::kDefaultName;
+    }
 }
 
 void Editor::removeFx (int slot)
@@ -1013,8 +1064,11 @@ void Editor::removeFx (int slot)
         if (s + 1 < kRackSlots && (ctl->slotType (s + 1) != kFxEmpty || ctl->slotType (s) != kFxEmpty))
             copySlot (s + 1, s);
         else if (ctl->slotType (s) != kFxEmpty)
+        {
+            ctl->slotPreset (s) = {};
             for (uint32_t k = 0; k < kSlotValues; ++k)
                 setOnce (slotValueParam (s, k), emptySlotValue (k));
+        }
     // the effect that took its place is shown (else the one before it: see rebuildRack)
     fxTab = slot;
     rackDirty = true;
@@ -1028,6 +1082,7 @@ void Editor::moveFx (int from, int to)
     std::array<double, kSlotValues> moving;
     for (uint32_t k = 0; k < kSlotValues; ++k)
         moving[k] = norm (slotValueParam (from, k));
+    const Controller::SlotPreset movingPreset = ctl->slotPreset (from);
     // the slots between move over by one, towards where it was; then it takes its new place (and the
     // modulation goes along)
     const int dir = to > from ? 1 : -1;
@@ -1040,6 +1095,7 @@ void Editor::moveFx (int from, int to)
     for (uint32_t k = 0; k < kSlotValues; ++k)
         if (norm (slotValueParam (to, k)) != moving[k])
             setOnce (slotValueParam (to, k), moving[k]);
+    ctl->slotPreset (to) = movingPreset;
     fxTab = to;
     rackDirty = true;
 }
@@ -1059,6 +1115,7 @@ void Editor::duplicateFx (int from, int at)
     std::array<double, kSlotValues> copy;
     for (uint32_t k = 0; k < kSlotValues; ++k)
         copy[k] = norm (slotValueParam (from, k));
+    const Controller::SlotPreset copyPreset = ctl->slotPreset (from);
     for (int s = free; s > at; --s)
         copySlot (s - 1, s);
     // (the copy is not modulated; the ones that moved up keep their modulation)
@@ -1069,6 +1126,7 @@ void Editor::duplicateFx (int from, int at)
     for (uint32_t k = 0; k < kSlotValues; ++k)
         if (norm (slotValueParam (at, k)) != copy[k])
             setOnce (slotValueParam (at, k), copy[k]);
+    ctl->slotPreset (at) = copyPreset;
     fxTab = at;
     rackDirty = true;
 }
@@ -1267,6 +1325,14 @@ void Editor::rebuildRack ()
                             "Settings). Settings of another effect are ignored.");
         fxCtl->addView (ps);
         noteX = 402.0;
+        if (hostedPlugin (shownTypes[(size_t)s]))
+        {
+            // the presets of the effect's own plug-in (the same files: saved here, they are there too)
+            auto* pb = new pk::PresetBar (CRect (400, 0, 560, 20), makeSlotPresets (ctl, s));
+            pb->setTooltipText (help::kSlotPresets);
+            fxCtl->addView (pb);
+            noteX = 568.0;
+        }
     }
     // an old project's saturator after the rack, still on because the rack had no room for it
     if (plainValue (kTailBase + pk::kTailOn) >= 0.5)
@@ -1282,8 +1348,9 @@ void Editor::rebuildRack ()
     else
     {
         auto* note = new Label (CRect (noteX, 1, 838, 19),
-                                fxTab < kFxNone ? "drag a tab to move it; the rack runs left to right; right click resets a control"
-                                                : "the rack is empty: + adds an effect after the sampler",
+                                fxTab >= kFxNone ? "the rack is empty: + adds an effect after the sampler"
+                                : noteX > 402.0  ? "drag a tab to move it; right click resets a control"
+                                                 : "drag a tab to move it; the rack runs left to right; right click resets a control",
                                 9.5);
         note->setDim (true);
         fxCtl->addView (note);
@@ -1309,6 +1376,8 @@ void Editor::clearBody ()
     for (auto& t : fxThresholds)
         t = nullptr;
     for (auto& t : gentlrThresh)
+        t = nullptr;
+    for (auto& t : gentlrSliders)
         t = nullptr;
     fxSatAdvanced.clear ();
     satHost = nullptr;
@@ -1700,6 +1769,22 @@ void Editor::buildBody ()
                 return b ? &b->rack.gentlr[(size_t)s] : nullptr;
             });
             add (gentlrView, gentlr::help::kDisplay);
+            // Advanced: the bands' Threshold sliders at the display's right edge, as in gentlr's own editor
+            // (Smacheratr's sliders, on this slot's Gentlr Thresholds; updateGentlrAdvanced shows them).
+            // Not added through add (): their IDs are Smacheratr's (the Thresh boxes below are the page's).
+            gentlrSliderHost = std::make_unique<pk::MappedParamHost> (gh, smacheratr::paramTable (),
+                                                                      [] (uint32_t id) { return gentlr::fromSmacheratr (id); });
+            for (int k = 0; k < gentlr::kAllBands; ++k)
+            {
+                gentlrSliders[k] = new smacheratr::ThresholdSlider (CRect (0, 0, 1, 1), gentlrSliderHost.get (), k,
+                                                                    [this, s] () -> const smacheratr::Meters* {
+                                                                        auto* b = ctl->getBridge ();
+                                                                        return b ? &b->rack.gentlr[(size_t)s].bands : nullptr;
+                                                                    });
+                gentlrSliders[k]->onPicked = [this] (int b) { selectGentlrBand (b); };
+                gentlrSliders[k]->setTooltipText (help::kGentlrThresholdSlider);
+                g->addView (gentlrSliders[k]);
+            }
             // (its glue switches are the display's link icons: a click glues or detaches two bands)
             for (uint32_t id : gentlr::kGlueIds)
                 rackPageParams.insert (id);
@@ -1741,6 +1826,7 @@ void Editor::buildBody ()
             for (int i = 0; i < 4; ++i)
                 add (new Knob (knobRect (484 + i * 88, 150), gh, knobs[i], nullptr, i == 3), tip (knobs[i]));
             selectGentlrBand (gentlrBand);
+            updateGentlrAdvanced ();
             break;
         }
         case kFxSmoothr:
@@ -2175,6 +2261,9 @@ void Editor::idle ()
     if (fxColorView)
         fxColorView->idle ();
     for (auto* t : fxThresholds)
+        if (t && t->isVisible ())
+            t->idle ();
+    for (auto* t : gentlrSliders)
         if (t && t->isVisible ())
             t->idle ();
     if (wubrBands)

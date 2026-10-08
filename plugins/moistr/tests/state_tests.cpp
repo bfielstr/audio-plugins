@@ -81,7 +81,7 @@ int main ()
         CHECK (back.norm[kMix] == 0.9 && back.has[kMix], "its known values kept");
     }
     // a 0.18 state (version 1, IDs 0 .. 68): every stored value kept, the split's and the shifter's
-    // parameters (69 ..) at their defaults
+    // parameters (69 ..) at their defaults from before 0.24 (legacyDefaultNormalized: Sweep off)
     {
         MemoryStream s;
         const uint32_t old = kBandCount; // (0.18's parameters: 0 .. 68)
@@ -104,7 +104,8 @@ int main ()
             if (id < old)
                 kept += back.has[id] && back.norm[id] == std::fmod (0.311 * (id + 1), 1.0);
             else
-                defaults += !back.has[id] && back.norm[id] == defaultNormalized (id);
+                defaults += !back.has[id] && back.norm[id] == legacyDefaultNormalized (id);
+        CHECK (back.norm[kSweep] == 0.0, "a 0.18 state: Sweep off");
         CHECK (kept == (int)old, "every stored value kept (%d of %u)", kept, old);
         CHECK (defaults == (int)(kNumParams - old), "the new parameters at their defaults (%d of %u)", defaults, kNumParams - old);
         // and saved again it is the current version, with everything
@@ -118,7 +119,37 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 2 && count == (int32)kNumParams, "saved as version 2 (%d) with %d values", version, count);
+        CHECK (version == 3 && count == (int32)kNumParams, "saved as version 3 (%d) with %d values", version, count);
+    }
+    // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
+    // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
+    for (int32 version : {2, 3})
+    {
+        MemoryStream s;
+        const uint32_t old = kSweep; // (0.23's parameters: 0 .. 91)
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x5453494D);
+            w.writeInt32 (version);
+            w.writeInt32 ((int32)old);
+            for (uint32_t id = 0; id < old; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.173 * (id + 1), 1.0));
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a version %d state reads", version);
+        int kept = 0, rest = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (id < old)
+                kept += back.has[id] && back.norm[id] == std::fmod (0.173 * (id + 1), 1.0);
+            else
+                rest += !back.has[id] && back.norm[id] == (version < 3 ? legacyDefaultNormalized (id) : defaultNormalized (id));
+        CHECK (kept == (int)old && rest == (int)(kNumParams - old), "version %d: %d values kept, %d at their defaults", version, kept,
+               rest);
+        CHECK ((back.norm[kSweep] >= 0.5) == (version >= 3), "version %d: Sweep %s", version, version >= 3 ? "on" : "off");
     }
     // not Moistr's
     {
@@ -146,6 +177,12 @@ int main ()
                    t.info (kFall).def == 1.0 && t.info (kShiftOn).def == 0.0 && t.info (kShift).def == 0.0 &&
                    t.info (kShiftMix).def == 1.0,
                "3 bands, Depth 24 dB, Rise and Fall x1, the shifter off (0 Hz, Mix 100 %%)");
+        CHECK (t.info (kSweep).def == 1.0 && t.info (kShelf).def == 1.0 && t.info (kSweepDrive).def == 18.0 && t.info (kDrive).def == 0.0 &&
+                   t.info (kMovement).def == 0.0 && t.info (kGlue).def == 0.0 && t.info (kGrit).def == 0.0,
+               "0.24: Sweep and High Shelf on, Drive 18 dB; the bands neutral (Drive, Movement, Glue, Grit 0)");
+        CHECK (legacyDefaultNormalized (kSweep) == 0.0 && toPlain (kMovement, legacyDefaultNormalized (kMovement)) == 0.5 &&
+                   toPlain (kGlue, legacyDefaultNormalized (kGlue)) == 0.4,
+               "before 0.24: Sweep off, Movement 50 %%, Glue 40 %%");
         for (uint32_t a = 0; a < kNumParams; ++a)
         {
             CHECK (t.info (a).id == a, "entry %u has its own ID", a);

@@ -14,9 +14,13 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 // 2: 0.19, the multiband split and the frequency shifter (IDs 69 .. 79 appended). A version-1 state keeps every value it stored
 //    (the filters' parameters are kept, though the split no longer uses them) and reads the new
 //    parameters at their defaults: nothing to convert.
+// 3: 0.24, the SWEEP stage (IDs 92 .. 118 appended) and new defaults (Sweep on; Drive, Movement, Glue and
+//    Grit at 0). An older state reads what it lacks at the defaults from before 0.24 (legacyDefaultNormalized:
+//    Sweep off), so a project or preset from before keeps its sound. (Since 0.18 a saved state has every
+//    parameter it knew, so in practice that is Sweep off and the stage's settings at their defaults.)
 // A later version that changes what a saved value means converts older states in readState (as the other
 // plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -41,7 +45,7 @@ bool readState (IBStream* stream, State& st)
         return false;
     for (uint32 id = 0; id < kNumParams; ++id)
     {
-        st.norm[id] = defaultNormalized (id);
+        st.norm[id] = version < 3 ? legacyDefaultNormalized (id) : defaultNormalized (id);
         st.has[id] = false;
     }
     for (int32 i = 0; i < count; ++i)
