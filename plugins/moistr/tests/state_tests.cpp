@@ -119,7 +119,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 3 && count == (int32)kNumParams, "saved as version 3 (%d) with %d values", version, count);
+        CHECK (version == 4 && count == (int32)kNumParams, "saved as version 4 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)

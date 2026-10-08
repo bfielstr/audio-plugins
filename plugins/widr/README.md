@@ -174,7 +174,8 @@ a vertical line) and a **CORRELATION** meter (+1 mono, 0 unrelated, below 0 it c
 Cinema on, five thin arcs on the stage are the lanes (Voice innermost, Ambience outermost), each as wide
 as its Position and Width put it and lit by how much of the sound it holds right now.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). Here it
+**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
+its gentlr on, Drive 0 dB). Here it
 saturates the mid and the side apart, so pushing it does not narrow the image. While it is off it folds
 to its header strips; click a strip (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 

@@ -147,8 +147,8 @@ TEST (parameters_and_defaults)
         CHECK (t.info (bandParam (b, kGain)).def == 0.0 && t.info (bandParam (b, kMute)).def == 0.0 &&
                    t.info (bandParam (b, kSolo)).def == 0.0,
                "band %d at 0 dB, heard", b + 1);
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
-           "the end Smacheratr: off, Pre-Limit on");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailBase + pk::kTailPreLimit).def == 1.0,
+           "the end Smacheratr: on, Pre-Limit on");
     // the band count and the drives come after the end saturator's blocks, at the IDs they are saved under
     CHECK (kBandCount == 49 && kDriveBase == 50 && kTailExt3Base == 58 && kTailExt4Base == 64 && kDriveOversampling == 69 && kNumParams == 70,
            "Bands at 49, the drives at 50 .. 57, the end saturator's fourth block at 58 .. 63, its fifth at 64 .. 68, Oversampling at 69");
@@ -243,8 +243,9 @@ TEST (a_band_moves_its_own_range)
         CHECK (std::fabs (mid - 12.0) < tol, "%s: the band's middle: %.2f dB", kSlopeNames[s], mid);
         CHECK (std::fabs (low) < spill && std::fabs (high) < spill, "%s: the other bands: %.2f, %.2f dB", kSlopeNames[s], low, high);
     }
-    // a sine through the whole engine (end saturator included, off)
+    // a sine through the whole engine (end saturator included, off: on by default, switched off here)
     Engine full;
+    full.setParam (kTailBase + pk::kTailOn, 0.0);
     full.setParam (bandParam (1, kGain), 12.0);
     full.setParam (bandParam (3, kGain), -6.0);
     full.prepare (kSr, 512);

@@ -29,7 +29,7 @@ enum ParamId : uint32_t
     kOversampling,
     kDcFilter,  // high-pass at the input
     kMidSide,   // saturate the mid and the side apart (keeps the width when pushed)
-    kClarity,   // Gentlr (called Clarity before) on (both bands; see Engine.h)
+    kClarity,   // Gentlr (called Clarity before) on (both bands; see Engine.h). On by default (off up to 0.24)
     kClarityFreq,  // Hz, the centre of Gentlr's band (ClarityBand.h); 20 Hz - 20 kHz (20 - 500 Hz before)
     kClarityWidth, // octaves between the band's edges
     kClarityRange, // dB: the most Clarity turns its band down (before the curve; half as much after)
@@ -63,8 +63,9 @@ enum ParamId : uint32_t
     // a band switched on) makes them overlap (resolveOverlaps, NoOverlap.h).
     kClarityNoOverlap,
     // Slope: the shape of Gentlr's two bands (not the Sub and High bands, shelves of their own), both at
-    // once (ClaritySlope, ClarityBand.h). 12 / 12 for a new instance; states from before it load Classic,
-    // the shape there was then.
+    // once (ClaritySlope, ClarityBand.h). Signature for a new instance (12 / 12 up to 0.24: states saved
+    // by those without it keep that, tailOldDefaults); states from before it load Classic, the shape there
+    // was then.
     kClaritySlope,
     // Glue: two neighbouring bands held at a shared border (Glue.h), one switch per pair that can meet:
     // band 1 and band 2, the Sub band and either band, either band and the High band. (The Sub and High
@@ -83,7 +84,8 @@ static_assert (kClaritySlope == 36 && kClarityGlue12 == 37 && kClarityGlue2High 
                "the IDs are persisted: the glue switches were appended after the Slope");
 
 // Gentlr's band slopes (kClaritySlope's choices, in this order: persisted), below / above the band:
-// 12 / 12 dB per octave (the default), Signature 24 / 12 and Classic 12 / 6 (the only shape before).
+// 12 / 12 dB per octave (the default up to 0.24), Signature 24 / 12 (the default) and Classic 12 / 6 (the
+// only shape before).
 enum ClaritySlope : int
 {
     kSlope12 = 0,

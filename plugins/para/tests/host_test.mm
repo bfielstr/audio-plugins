@@ -26,6 +26,11 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
+    // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12): the checks are
+    // about para's own sound (a new instance has it on: checkNewInstanceGentlr)
+    st.norm[kTailBase + pk::kTailOn] = 0.0;
+    st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+    st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
     return st;
 }
 
@@ -75,6 +80,7 @@ int main (int argc, char** argv)
             return finish ("para host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams + 1, "param count (+ hidden pitch bend)");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus");
 
         State st = baseState ();

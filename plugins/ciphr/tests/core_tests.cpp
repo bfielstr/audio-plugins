@@ -139,9 +139,12 @@ std::vector<double> spectrum (const std::vector<float>& x, size_t n)
     return p;
 }
 
+// The defaults with the end saturator (on by default) off: the tests are about Ciphr's own sound (the
+// saturator's switch it on).
 std::unique_ptr<Engine> engine (double sr = kSr, int block = 512)
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (sr, block);
     return e;
 }

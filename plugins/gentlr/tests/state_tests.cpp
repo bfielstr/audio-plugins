@@ -177,7 +177,7 @@ int main ()
                        smacheratr::kSlopeClassic,
                "Gently's bands: Classic (Gentlr's and the end saturator's)");
     }
-    // the Slope from version 3 on: as saved; not saved (and in a new instance), 12 / 12
+    // the Slope from version 3 on: as saved; not saved, 12 / 12 (the default then; a new instance has Signature)
     {
         MemoryStream s;
         {
@@ -194,7 +194,45 @@ int main ()
         CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == smacheratr::kSlopeSignature &&
                    std::lround (toPlain (kTailExt3Base + pk::kTailExt3Slope, back.norm[kTailExt3Base + pk::kTailExt3Slope])) == smacheratr::kSlope12,
                "version 3: Signature as saved, the end saturator's (not saved) 12 / 12");
-        CHECK (defaultNormalized (kSlope) == 0.0 && defaultNormalized (kTailExt3Base + pk::kTailExt3Slope) == 0.0, "a new instance: 12 / 12");
+        CHECK (defaultNormalized (kSlope) == 0.5 && defaultNormalized (kTailExt3Base + pk::kTailExt3Slope) == 0.5, "a new instance: Signature");
+    }
+    // the defaults up to version 4: the end saturator off, its Gentlr off, both Slopes 12 / 12. A version 4
+    // state without them loads them so (it sounds as it did); with them, as saved. A new instance (and a
+    // version 5 state without them) has the saturator on, its Gentlr on and both Slopes Signature
+    {
+        auto read = [] (int32 version, const std::vector<std::pair<uint32_t, double>>& values, State& back) {
+            MemoryStream s;
+            {
+                IBStreamer w (&s, kLittleEndian);
+                w.writeInt32 (0x474E544C);
+                w.writeInt32 (version);
+                w.writeInt32 ((int32)values.size ());
+                for (const auto& [id, v] : values)
+                {
+                    w.writeInt32u (id);
+                    w.writeDouble (v);
+                }
+            }
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            return readState (&s, back);
+        };
+        const uint32_t on = kTailBase + pk::kTailOn, gentlrOn = kTailExtBase + pk::kTailExtClarity,
+                       tSlope = kTailExt3Base + pk::kTailExt3Slope;
+        auto slopeOf = [] (const State& st, uint32_t id) { return std::lround (toPlain (id, st.norm[id])); };
+        State old, saved, now;
+        CHECK (read (4, {{bandParam (0, kFreq), 0.5}}, old), "read");
+        CHECK (old.norm[on] == 0.0 && old.norm[gentlrOn] == 0.0 && slopeOf (old, kSlope) == smacheratr::kSlope12 &&
+                   slopeOf (old, tSlope) == smacheratr::kSlope12 && old.has[on] && old.has[kSlope],
+               "version 4 without them: saturator off, Gentlr off, 12 / 12");
+        CHECK (read (4, {{on, 1.0}, {gentlrOn, 1.0}, {kSlope, 1.0}, {tSlope, 0.5}}, saved), "read");
+        CHECK (saved.norm[on] == 1.0 && saved.norm[gentlrOn] == 1.0 && slopeOf (saved, kSlope) == smacheratr::kSlopeClassic &&
+                   slopeOf (saved, tSlope) == smacheratr::kSlopeSignature,
+               "version 4 with them: as saved");
+        CHECK (read (5, {{bandParam (0, kFreq), 0.5}}, now), "read");
+        CHECK (now.norm[on] == 1.0 && now.norm[gentlrOn] == 1.0 && slopeOf (now, kSlope) == smacheratr::kSlopeSignature &&
+                   slopeOf (now, tSlope) == smacheratr::kSlopeSignature && !now.has[on],
+               "version 5 without them: the defaults (on, on, Signature)");
+        CHECK (defaultNormalized (on) == 1.0 && defaultNormalized (gentlrOn) == 1.0, "a new instance: the saturator and its Gentlr on");
     }
     // a state from a newer Gentlr: the IDs this one does not know are skipped, the rest read
     {

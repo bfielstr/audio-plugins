@@ -26,6 +26,11 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
+    // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12): the checks are
+    // about orbitr's own sound (a new instance has it on: checkNewInstanceGentlr)
+    st.norm[kTailBase + pk::kTailOn] = 0.0;
+    st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+    st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
     return st;
 }
 
@@ -70,6 +75,7 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");

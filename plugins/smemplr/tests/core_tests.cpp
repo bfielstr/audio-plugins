@@ -113,6 +113,10 @@ static Out run (Engine& e, int frames, HostInfo host = {}, int block = 256)
 static Engine* makeEngine (std::shared_ptr<SampleData> s)
 {
     auto* e = new Engine ();
+    // the first slot's Smacheratr as it was up to 0.24 (its Gentlr off, 12 / 12): the tests measure the
+    // sampler's own levels and timing through it
+    e->setParam (slotBlockParam (0, smacheratr::kClarity), 0.0);
+    e->setParam (slotBlockParam (0, smacheratr::kClaritySlope), 0.0);
     e->prepare (kHostSr, 512);
     e->setSample (s);
     e->setParam (kVolume, 0.0);

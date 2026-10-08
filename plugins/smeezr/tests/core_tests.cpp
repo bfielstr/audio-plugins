@@ -254,9 +254,12 @@ double spread (const std::vector<double>& oct, int o0, int o1)
     return std::sqrt (s / (o1 - o0 + 1));
 }
 
+// The defaults at `squeeze`, with the end saturator (on by default) off: the tests are about Smeezr's own
+// processing (the saturator's switch it on).
 std::unique_ptr<Engine> engine (double squeeze, int block = 512)
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, block);
     e->setParam (kSqueeze, squeeze);
     e->reset ();

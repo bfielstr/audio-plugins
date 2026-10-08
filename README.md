@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.24.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.25.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -39,8 +39,14 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.24.0**
 
 ## What every plug-in has
 
-- **smacheratr at the end.** Every plug-in can end its chain with smacheratr, with all its controls
-  (off by default, Drive 0 dB). That includes its **gentlr**: two bands, a **Sub** band (from 20 Hz up
+- **smacheratr at the end.** Every plug-in ends its chain with smacheratr, with all its controls. A
+  new instance runs through it with gentlr on and gentlr's **Slope** at **Signature**, and smacheratr's
+  own defaults as they are (Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %); switch
+  **Saturator** off for the plug-in alone. Projects and presets saved with 0.24 or earlier load as they
+  were saved (where they did not set them: smacheratr at the end as it was then, off in most plug-ins,
+  gentlr off, **12 / 12**). Factory presets start from **Init**, so they run through it too, except the
+  few that switch it off (gentlr's and ciphr's **Dry Cluster**). That
+  includes its **gentlr**: two bands, a **Sub** band (from 20 Hz up
   to a point of 20 to 100 Hz) and a **High** band (from a point of 2 to 16 kHz up). The Sub and High
   bands are always there and start at Range 0 dB, so they cut nothing until you pull them down.
   gentlr's **Slope**, **No Overlap**, band glue and **Advanced** mode (a Threshold per band and a Drive
@@ -65,7 +71,8 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.24.0**
   top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
   as Default** so a new instance starts the way you like it (see below).
 - **Defaults** in every plug-in's **Menu** (all but smemplr): **Gentlr On by Default** and **Advanced
-  On by Default** decide whether gentlr, and its Advanced mode, are on in a new instance (see
+  On by Default** decide whether gentlr (on unless you uncheck it), and its Advanced mode, are on in a
+  new instance (see
   [Defaults for new instances](#defaults-for-new-instances)).
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
@@ -124,7 +131,7 @@ installed versions. Copies that older installers put directly in the VST3 folder
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
 Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
-`SIMPLR_VERSION=v0.24.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
+`SIMPLR_VERSION=v0.25.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
 
@@ -180,18 +187,19 @@ same folder, so presets (and the saved default) go both ways between a slot and 
 Every plug-in except smemplr has a **Defaults** sub-menu in its **Menu**, after **Layout**, with two
 items you can check:
 
-- **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end. gentlr is
-  not heard while smacheratr at the end is off (as it is in a new instance of most plug-ins), so this
-  switches smacheratr at the end on too, with its other controls as they would be (by default Drive
-  0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %). Unchecked, a new instance starts with gentlr
-  off and smacheratr at the end as it would be.
+- **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end, and
+  smacheratr at the end on (gentlr is not heard while it is off), with its other controls as they would
+  be (by default Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %). This is how a new instance
+  starts anyway, so it is checked until you uncheck it. Unchecked, a new instance starts with gentlr
+  off and smacheratr at the end as it would be (on, unless your saved default has it off).
 - **Advanced On by Default**: a new instance starts with gentlr's **Advanced** mode on (unchecked: off).
 
-In smacheratr they set its own **Gentlr** and **Advanced**. gentlr has only **Advanced On by
+In smacheratr they set its own **Gentlr** (on in a new smacheratr) and **Advanced**. gentlr has only **Advanced On by
 Default**, for its own **Advanced**, which is already on in a new gentlr: uncheck it to have new
 instances start with Advanced off.
 
-Until you pick one, it shows the plug-in's factory default and changes nothing. A pick is saved at once
+Until you pick one, it shows the plug-in's factory default (gentlr on, Advanced off) and changes
+nothing. A pick is saved at once
 in the hidden file `.defaults.txt` in the plug-in's preset folder (beside the saved default), so it
 lasts after you close the host and applies to every new instance of that plug-in. It applies only when
 you insert a new instance: the instance you pick it in keeps its settings, a project you open loads

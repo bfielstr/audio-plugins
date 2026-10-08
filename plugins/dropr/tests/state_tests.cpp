@@ -140,7 +140,7 @@ int main ()
         CHECK (slopeOf (v3) == 2 && slopeOf (v2) == 2 && v3.has[slope], "versions 2 and 3: Classic (%ld / %ld)", slopeOf (v3), slopeOf (v2));
         CHECK (slopeOf (v4) == 1 && slopeOf (v4none) == 0, "version 4: as saved, or 12 / 12 (%ld / %ld)", slopeOf (v4), slopeOf (v4none));
         CHECK (v3.norm[kDownThreshold] == 0.25, "the rest as saved");
-        CHECK (defaultNormalized (slope) == 0.0 && std::string (paramTable ().info (slope).name) == "Saturator Gentlr Slope", "a new instance: 12 / 12");
+        CHECK (defaultNormalized (slope) == 0.5 && std::string (paramTable ().info (slope).name) == "Saturator Gentlr Slope", "a new instance: Signature");
     }
     // not Dropr's
     {

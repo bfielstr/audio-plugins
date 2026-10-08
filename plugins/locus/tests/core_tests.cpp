@@ -117,9 +117,11 @@ static double rmsDb (const std::vector<float>& x, size_t a, size_t b)
     return 10.0 * std::log10 (std::max (1e-24, s / (double)(b - a)));
 }
 
+// The defaults with the end saturator (on by default) off: the tests are about Locus's own processing.
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }

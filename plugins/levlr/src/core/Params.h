@@ -115,9 +115,12 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 
 // The state's version: 2 (0.6.0) had Slope's eight choices; 3 adds Bands and the bands' drives; 4: the
 // end saturator's Sub and High bands have no buttons (they work while their Range is above 0 dB); 5: the
-// end saturator's Gentlr Slope; 6: Oversampling (the drives' and the end saturator's, Off / 2x / 4x).
-constexpr int kStateVersion = 6;
+// end saturator's Gentlr Slope; 6: Oversampling (the drives' and the end saturator's, Off / 2x / 4x); 7: the
+// end saturator and its Gentlr on by default, Gentlr's Slope Signature (State.cpp gives a state saved before
+// that the old defaults where it lacks them: smacheratr::tailOldDefaults).
+constexpr int kStateVersion = 7;
 constexpr int kOversamplingChoiceVersion = 6;
+constexpr int kNewDefaultsVersion = 7;
 // Brings the normalized values of a state saved by `version` to this one: version 1's three slopes
 // among the eight; before 3, four bands and every drive off (the sound it was saved with); before 4,
 // the end saturator's Sub and High bands that were off get Range 0 (smacheratr::subHighStateToRange);

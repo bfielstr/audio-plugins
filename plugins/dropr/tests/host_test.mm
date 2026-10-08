@@ -26,6 +26,10 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
+    // the end saturator's Gentlr as a new instance had it up to 0.24 (off, 12 / 12; the saturator on, as
+    // it still is): the checks are about dropr's own sound (a new instance: checkNewInstanceGentlr)
+    st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+    st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
     return st;
 }
 
@@ -92,6 +96,7 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");

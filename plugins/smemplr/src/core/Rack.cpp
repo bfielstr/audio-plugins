@@ -395,6 +395,23 @@ void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool,
     }
 }
 
+void keepOldFirstSlotDefaults (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
+{
+    // (only while the first slot holds a Smacheratr: its block positions are Smacheratr's IDs; another
+    // effect there keeps its own values)
+    const uint32_t typeId = slotParam (0, kSlotType);
+    if ((int)std::lround (toPlain (typeId, has[typeId] ? norm[typeId] : defaultNormalized (typeId))) != kFxSmacheratr)
+        return;
+    for (uint32_t j : {(uint32_t)smacheratr::kClarity, (uint32_t)smacheratr::kClaritySlope})
+    {
+        const uint32_t id = slotBlockParam (0, j);
+        if (has[id])
+            continue;
+        norm[id] = j == smacheratr::kClaritySlope ? smacheratr::oldDefaultSlopeNorm () : 0.0;
+        has[id] = true;
+    }
+}
+
 void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
 {
     if (version >= 21)

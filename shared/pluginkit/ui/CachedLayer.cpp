@@ -116,11 +116,24 @@ bool CachedLayer::build (CDrawContext* ctx, const Target& t, const CRect& area, 
 void CachedLayer::blit (CDrawContext* ctx, const Target& t)
 {
     ++counts.blits;
+    // The bitmap's edge pixels already hold the area's share of them (it was clipped to the area when
+    // painted): the blit is clipped to whole pixels, the context's clip rounded out, so a clip edge
+    // inside a pixel (a view at a fractional place, at 150 %) does not count that share a second time
+    // (the edge came out paler than drawn directly)
+    ctx->saveGlobalState ();
+    CRect clip;
+    ctx->getClipRect (clip);
+    const double l = std::floor (t.sx * clip.left + t.toDevice.dx + kSnap), r = std::ceil (t.sx * clip.right + t.toDevice.dx - kSnap);
+    const double tp = std::floor (t.sy * clip.top + t.toDevice.dy + kSnap), bt = std::ceil (t.sy * clip.bottom + t.toDevice.dy - kSnap);
+    ctx->setClipRect (CRect ((l - t.toDevice.dx) / t.sx, (tp - t.toDevice.dy) / t.sy, (r - t.toDevice.dx) / t.sx, (bt - t.toDevice.dy) / t.sy));
     // device pixels back to the context's coordinates: drawn at whole pixels, one bitmap pixel each
     const double b = ctx->getScaleFactor ();
     const CGraphicsTransform toLocal = ctx->getCurrentTransform ().inverse () * CGraphicsTransform ().scale (1.0 / b, 1.0 / b);
-    CDrawContext::Transform tr (*ctx, toLocal);
-    ctx->drawBitmap (bitmap, CRect (t.px0, t.py0, t.px0 + t.w, t.py0 + t.h));
+    {
+        CDrawContext::Transform tr (*ctx, toLocal);
+        ctx->drawBitmap (bitmap, CRect (t.px0, t.py0, t.px0 + t.w, t.py0 + t.h));
+    }
+    ctx->restoreGlobalState ();
 }
 
 CRect CachedLayer::clipped (CDrawContext* ctx, const CRect& area)

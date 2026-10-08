@@ -81,7 +81,7 @@ void migrateState (int version, double norm[kNumParams], const bool has[kNumPara
         smacheratr::subHighStateToRange (norm, has, kTailExt2Base + pk::kTailExt2Sub, kTailExt2Base + pk::kTailExt2SubRange,
                                          kTailExt3Base + pk::kTailExt3High, kTailExt3Base + pk::kTailExt3HighRange);
     // before 5 the end saturator's Gentlr bands had one shape: Classic, the same sound (a new instance
-    // gets 12 / 12)
+    // gets Signature)
     if (version < 5)
         norm[kTailExt3Base + pk::kTailExt3Slope] = smacheratr::classicSlopeNorm ();
     // before 6 the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off

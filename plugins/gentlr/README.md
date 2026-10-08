@@ -60,9 +60,9 @@ was, bit for bit.
 **Band Slope** (in the header, left of the presets; one setting for Band 1 and Band 2, the Sub and High
 bands keep their own shape):
 
-- **12 / 12** (the default): 12 dB/oct below the band and 12 dB/oct above it. The band is symmetric, so
+- **12 / 12**: 12 dB/oct below the band and 12 dB/oct above it. The band is symmetric, so
   at its centre the cut is exactly what the law asks for.
-- **Signature**: 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
+- **Signature** (the default): 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
   mids leaves the bass under it alone.
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Band Slope existed.
 
@@ -158,8 +158,10 @@ is cutting. The readouts at the top show each band's frequency and its cut now.
 **No Overlap**, **Mix** (dry / wet: the input, delayed to line up, against gentlr's output) and
 **Output** (±24 dB, before the smacheratr at the end) sit at the right of the controls.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB), with all
-its controls, its own gentlr included. While it is off it folds to its header strips; click a strip (or
+**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance, Drive
+0 dB, its own gentlr on with the **Signature** Slope), with all its controls, its own gentlr included.
+After gentlr's own bands, its gentlr is a second one: switch **Saturator** off to hear gentlr alone (the
+factory presets do). While it is off it folds to its header strips; click a strip (or
 switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 Grabbing any of a band's controls (its handle or edge in the display, a knob or switch of its own, its
@@ -186,5 +188,7 @@ the host for automatic compensation.
 ## Older projects
 
 Projects saved before Band Slope existed load with **Classic** and sound exactly as they did. Projects
+and presets saved with 0.24 or earlier keep the defaults they were saved with: **12 / 12**, and the
+smacheratr at the end off with its gentlr off, where they did not set them. Projects
 saved while the Sub and High bands had On buttons sound the same: a band that was off loads with its
 Range at 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing glued.

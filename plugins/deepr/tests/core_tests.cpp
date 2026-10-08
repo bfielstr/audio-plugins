@@ -92,9 +92,12 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
     return 20.0 * std::log10 (std::max (1e-12, 2.0 * std::hypot (re, im) / (double)(b - a)));
 }
 
+// The defaults with the end saturator (on by default) off: the tests are about Deepr's own processing
+// (the saturator's have it on).
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }
@@ -114,7 +117,8 @@ TEST (params)
     CHECK (t.info (kDepth).def == 6.0 && t.info (kDipFreq).def == 250.0 && t.info (kSplit).def == 100.0 &&
                t.info (kMonoSub).def == 1.0 && t.info (kSubGain).def == 0.0 && t.info (kMix).def == 1.0,
            "defaults: Depth 6 dB at 250 Hz, split at 100 Hz, mono sub, Sub 0 dB, Mix 100 %%");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end saturator starts off");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailExtBase + pk::kTailExtClarity).def == 1.0,
+           "the end saturator starts on, its Gentlr on");
     CHECK (dipKey (-40.0, -30.0) == 0.0 && dipKey (-24.0, -30.0) == 0.5 && dipKey (0.0, -30.0) == 1.0, "the key's law");
 }
 

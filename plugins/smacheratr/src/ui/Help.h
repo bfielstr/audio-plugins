@@ -12,8 +12,8 @@ inline constexpr const char* kGlue =
     "icon on the border (lit cinnabar while glued) detaches them, or glues two bands that touch. Automation holds a "
     "glued border too. Off by default.";
 inline constexpr const char* kSlope =
-    "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12 (the "
-    "default): 12 dB/oct on both sides, the cut exactly the Range at the band's centre. Signature: 24 dB/oct below and "
+    "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12: 12 "
+    "dB/oct on both sides, the cut exactly the Range at the band's centre. Signature (the default): 24 dB/oct below and "
     "12 above, a steeper floor under the band. Classic: 12 below and 6 above, the shape before the Slope (older "
     "projects load with it, so they sound as they did).";
 

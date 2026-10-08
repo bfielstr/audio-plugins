@@ -94,6 +94,22 @@ int main (int argc, char** argv)
         CHECK (a.controller->getParameterCount () == (int32)kNumPluginParams, "param count");
         CHECK (countNonAutomatable (a.controller) == 0, "non-automatable parameters");
         checkPresetMenu (a.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (a.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
+        // starts: the checks are about widr's own sound
+        {
+            State st;
+            for (uint32_t id = 0; id < kNumPluginParams; ++id)
+            {
+                st.norm[id] = defaultNormalized (id);
+                st.has[id] = true;
+            }
+            st.norm[kTailBase + pk::kTailOn] = 0.0;
+            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
+            CHECK (a.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+            CHECK (b.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+        }
         CHECK (a.start () && b.start (), "start");
         const uint32 latency = a.processor->getLatencySamples ();
         CHECK (latency > 0 && latency < 200, "latency reported %u", latency);

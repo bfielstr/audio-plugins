@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,9 +14,10 @@ namespace {
 constexpr int32 kMagic = 0x4C45564C; // 'LEVL'
 // 2: Slope has eight choices (12 .. 96 dB/oct) instead of three; 3: Bands and the bands' drives; 4: the
 // end saturator's Sub and High bands without buttons; 5: the end saturator's Gentlr Slope; 6: Oversampling
-// (the drives' and the end saturator's)
+// (the drives' and the end saturator's); 7: the end saturator and its Gentlr on by default, Gentlr's Slope
+// Signature (below)
 constexpr int32 kVersion = kStateVersion;
-static_assert (kVersion == 6, "a new state version needs its migration (migrateState)");
+static_assert (kVersion == 7, "a new state version needs its migration (migrateState)");
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -55,6 +58,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved then
+    // keeps them where it lacks them (before migrateState, which gives the Slope Classic before version 5)
+    if (version < kNewDefaultsVersion)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
     migrateState (version, st.norm.data (), st.has.data ());
     return true;
 }

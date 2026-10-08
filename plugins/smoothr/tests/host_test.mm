@@ -72,6 +72,20 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, smoothr::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // the end saturator's Gentlr as a new instance had it up to 0.24 (off, 12 / 12; the saturator on, as it
+        // still is), before it starts: the checks are about smoothr's own sound
+        {
+            State st;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                st.norm[id] = defaultNormalized (id);
+                st.has[id] = true;
+            }
+            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+        }
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
         CHECK (latency > 0 && latency < 48000 / 20, "latency %u samples", (unsigned)latency);

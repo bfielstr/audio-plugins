@@ -1,7 +1,8 @@
 // Every plug-in's factory presets (plugins/<plugin>/presets/**/*.txt) parse against its parameter table:
 // known parameter names, values the parameter accepts and inside its range, unique names. Also
 // `factory_presets_tests --dump <plugin>` lists a plug-in's parameters (names, ranges, defaults,
-// choices) for writing presets.
+// choices) for writing presets. And a new instance of every plug-in runs through its end saturator with
+// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them).
 #include "pluginkit/PresetStore.h"
 
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
@@ -63,6 +64,7 @@
 #include "smacheratr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_smemplr
+#include "smacheratr/src/core/Params.h"
 #include "smemplr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_smoothr
@@ -186,6 +188,49 @@ void dump (const Plugin& p)
     }
 }
 
+// The default (as the plug-in shows it) of the parameter called `name`, or "" when it has none.
+std::string defaultText (const pk::ParamTable& t, const char* name)
+{
+    for (uint32_t id = 0; id < t.size (); ++id)
+        if (std::strcmp (t.info (id).name, name) == 0)
+            return t.toText (id, t.info (id).def);
+    return {};
+}
+
+// Every Gentlr a new instance has: on, with the Signature Slope; the end saturator on.
+void checkNewInstance (const Plugin& p)
+{
+    const auto& t = p.table ();
+    const std::string n = p.name;
+    auto expect = [&] (const char* param, const char* want) {
+        const std::string got = defaultText (t, param);
+        check (got == want, n + ": a new instance's " + param + " is " + (got.empty () ? "missing" : got) + ", want " + want);
+    };
+    if (n == "smacheratr")
+    {
+        expect ("Gentlr", "On");
+        expect ("Gentlr Slope", "Signature");
+        return;
+    }
+    if (n == "gentlr")
+        expect ("Slope", "Signature");
+#ifdef PK_WITH_smemplr
+    if (n == "smemplr")
+    {
+        // its rack's first slot is a Smacheratr with its own defaults (Smacheratr's IDs are its block
+        // positions); the old saturator after the rack stays off (only old projects use it)
+        const uint32_t block = smemplr::slotBlockParam (0, 0);
+        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) == 0.5,
+               "smemplr: the first slot's Smacheratr has Gentlr on, Signature");
+        check (t.defaultNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0, "smemplr: the old saturator after the rack off");
+        return;
+    }
+#endif
+    expect ("Saturator", "On");
+    expect ("Saturator Gentlr", "On");
+    expect ("Saturator Gentlr Slope", "Signature");
+}
+
 } // namespace
 
 int main (int argc, char** argv)
@@ -197,6 +242,8 @@ int main (int argc, char** argv)
                 dump (p);
         return 0;
     }
+    for (const auto& p : kPlugins)
+        checkNewInstance (p);
     for (const auto& p : kPlugins)
     {
         const fs::path dir = fs::path (PK_SOURCE_DIR) / "plugins" / p.name / "presets";

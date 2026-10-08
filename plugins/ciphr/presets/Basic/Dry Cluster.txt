@@ -8,3 +8,5 @@ Space = 0 %
 Movement = 0 %
 Cutoff = 12000 Hz
 Env Amount = 0 %
+# the end saturator off (on by default since 0.25): the plain voices
+Saturator = Off

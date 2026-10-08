@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -12,7 +14,10 @@ namespace {
 constexpr int32 kMagic = 0x525A4D53; // 'SMZR'
 // 1: the first. A later version that changes what a saved value means converts older states in
 // readState (as the other plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 1;
+constexpr int32 kVersion = 2;
+// 2: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
+// old defaults where they lack them)
+constexpr int32 kNewDefaults = 2;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -52,6 +57,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them
+    if (version < kNewDefaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
     return true;
 }
 

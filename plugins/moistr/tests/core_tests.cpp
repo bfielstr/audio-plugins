@@ -163,6 +163,7 @@ std::unique_ptr<Engine> engine (int block = 512)
 {
     auto e = std::make_unique<Engine> ();
     legacy (*e);
+    e->setParam (kTailBase + pk::kTailOn, 0.0); // (the end saturator, on by default since 0.25: the tests are about moistr's own processing)
     e->prepare (kSr, block);
     return e;
 }
@@ -2409,8 +2410,9 @@ TEST (sweep_default_is_the_recipe)
     CHECK (d[kShelfLow] == 100.0 && d[kShelfHigh] == 1000.0 && d[kShelfMin] == -18.0 && d[kShelfMax] == 6.0 && d[kShelfQ] == 18.0,
            "High Shelf: 100 .. 1000 Hz, -18 .. +6 dB, Q 18");
     CHECK (d[kDrive] == 0.0 && d[kMovement] == 0.0 && d[kGlue] == 0.0 && d[kGrit] == 0.0 && d[kLink] == 0.0 && d[kLiquid] == 0.0 &&
-               d[kShiftOn] == 0.0 && d[kMix] == 1.0 && d[kOutput] == 0.0 && d[kTailBase + pk::kTailOn] == 0.0,
-           "the rest neutral: Drive, Movement, Glue, Grit, Link, Liquid 0, the shifter and the end saturator off, Mix 100 %%");
+               d[kShiftOn] == 0.0 && d[kMix] == 1.0 && d[kOutput] == 0.0,
+           "the rest neutral: Drive, Movement, Glue, Grit, Link, Liquid 0, the shifter off, Mix 100 %%");
+    CHECK (d[kTailBase + pk::kTailOn] == 1.0, "the end saturator on (as in every plug-in since 0.25)");
     // the bells' centres follow the prototype's formula exactly, tick by tick, over 20 s (the engine, from reset)
     for (double sr : {44100.0, 48000.0})
     {

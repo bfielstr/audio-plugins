@@ -1,6 +1,7 @@
 // The optional Smacheratr at the end of every plug-in's chain: a block of parameters each plug-in
 // appends to its table at some base ID. The processing is smacheratr::Tail, the editor panel
-// smacheratr::TailPanel. Off by default, Drive 0 dB.
+// smacheratr::TailPanel. On by default (off up to 0.24, and states saved by those keep it off:
+// smacheratr::tailOldDefaults), Drive 0 dB.
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -21,7 +22,7 @@ enum TailField : uint32_t
     kTailFields
 };
 
-void addTailParams (std::vector<ParamInfo>& table, uint32_t base, bool onByDefault = false);
+void addTailParams (std::vector<ParamInfo>& table, uint32_t base, bool onByDefault = true);
 
 // The rest of Smacheratr's controls, a second block each plug-in appends to its IDs (the parameters
 // themselves: smacheratr/src/core/TailExt.h, addTailExtParams). This block is full: some plug-ins

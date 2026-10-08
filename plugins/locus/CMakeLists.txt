@@ -1,5 +1,5 @@
 # Locus: low-end contrast processor in the spirit of Ozone's Low End Focus.
-project(Locus VERSION 0.24.0.0)
+project(Locus VERSION 0.25.0.0)
 
 add_library(locus_core STATIC
     src/core/Params.cpp

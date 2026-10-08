@@ -14,12 +14,15 @@ namespace {
 constexpr int32 kMagic = 0x504F5244; // 'DROP'
 // 1: the drawn transient shape (never released); 2: the multiband compressor. A version 1 state loads
 // as the defaults (its parameters meant something else).
-constexpr int32 kVersion = 5;
+constexpr int32 kVersion = 6;
 // 3: the end saturator's Sub and High bands work while their Range is above 0 dB (no buttons)
 constexpr int32 kSubHighRange = 3;
 // 4: the end saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kClassicSlope = 4;
 constexpr int32 kOversamplingChoice = 5; // 5: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
+// 6: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
+// old defaults where they lack them)
+constexpr int32 kNewDefaults = 6;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -64,12 +67,16 @@ bool readState (IBStream* stream, State& st)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
-    // instance gets 12 / 12)
+    // instance gets Signature)
     if (version >= 2 && version < kClassicSlope) // (a version 1 state loads as the defaults)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
     if (version >= 2 && version < kOversamplingChoice)
         smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
+    // the defaults were the end saturator on, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them (after the Slope's Classic above)
+    if (version >= 2 && version < kNewDefaults) // (a version 1 state loads as the defaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base, true);
     return true;
 }
 

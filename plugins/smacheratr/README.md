@@ -15,7 +15,8 @@ other plug-in in the suite can end with the same smacheratr. Install instruction
    into the saturation; drag the display up or down to set Drive too.
 2. Keep **Pre-Limit** on (the default) so transients do not clip harder than the body. Pick a **Post
    Clip** mode to keep the output under 0 dBFS, and use **Dry/Wet** to blend.
-3. If the sound gets boomy or harsh, switch on **gentlr** in the GENTLR panel. To saturate the bass less
+3. **gentlr** in the GENTLR panel (on by default) keeps the sound from getting boomy or harsh; switch it
+   off to hear the curve alone. To saturate the bass less
    than the rest, use **Color** and **Amt Lo**.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -56,8 +57,8 @@ drawn faint behind it. The knobs under the display follow the switch too: with C
 
 ## gentlr
 
-gentlr keeps a hard-pushed drive from going muddy or harsh. Switch it on with **gentlr** in the GENTLR
-panel. It has four bands, chosen with **Band 1**, **Band 2**, **Sub** and **High** (or by grabbing a
+gentlr keeps a hard-pushed drive from going muddy or harsh. It is on in a new instance; switch it off
+and on with **gentlr** in the GENTLR panel. It has four bands, chosen with **Band 1**, **Band 2**, **Sub** and **High** (or by grabbing a
 band's handle in the display, or its Threshold slider in Advanced mode: any of them brings Gentlr's
 layer to the front and selects that band). The selected band's handle is lit, and so is its Threshold
 slider; its knobs are under the display. Each turns its
@@ -86,9 +87,9 @@ so it does nothing at gentle settings.
 **Slope** (under the band selector; one setting for Band 1 and Band 2, the Sub and High bands keep
 their own shape) sets the shape of the two bands:
 
-- **12 / 12** (the default): 12 dB/oct below the band and 12 dB/oct above it. The band is symmetric, so
+- **12 / 12**: 12 dB/oct below the band and 12 dB/oct above it. The band is symmetric, so
   at its centre the cut is exactly the Range.
-- **Signature**: 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
+- **Signature** (the default): 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
   mids leaves the bass under it alone.
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Slope existed.
 
@@ -141,12 +142,14 @@ Advanced off, every band starts cutting at -18 dB.
 
 ## At the end of the other plug-ins
 
-Every other plug-in in the suite ends with this smacheratr, in a section at the bottom of its window
-(off by default). The section has two parts, each with a header strip: **SMACHERATR** (the curve, the
+Every other plug-in in the suite ends with this smacheratr, in a section at the bottom of its window.
+A new instance has it on, with its gentlr on and the **Signature** Slope (smemplr has it in its rack's
+first slot instead). Switch **Saturator** off for the plug-in's own sound alone. The section has two parts, each with a header strip: **SMACHERATR** (the curve, the
 Colour EQ display with its Color | Gentlr switch in the strip, the switches, Drive, Dry/Wet and Output)
 and **GENTLR** (gentlr's On in its strip, then Advanced with the region Drive, Slope and No Overlap).
 Each part folds away to its strip and opens on its own: click its strip, or switch it on (switching it
-off folds it). A new instance opens the saturator only while it is on, so a plug-in starts compact; the
+off folds it). A new instance opens the saturator only while it is on (as it is by default: fold it to make the
+window compact); the
 window gets shorter while a part is folded and taller when it opens (a host that does not let plug-ins
 resize their window keeps the space). What you open and fold, and the layer in front, are kept with the
 project.
@@ -172,4 +175,6 @@ gentlr was called Clarity. Projects saved before Slope existed load with **Class
 as they did. Projects saved while the Sub and High bands had switches sound the same: a band that was
 off loads at Range 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing
 glued. Projects saved while Oversampling was the **Hi-Quality** switch load with 4x where it was on and
-Off where it was off: they sound as they did.
+Off where it was off: they sound as they did. Projects and presets saved with 0.24 or earlier keep the
+defaults they were saved with where they did not set them: gentlr off with **12 / 12**, and in the
+other plug-ins the smacheratr at the end as it was then (off in most of them).

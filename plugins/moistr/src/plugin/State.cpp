@@ -1,5 +1,7 @@
 #include "State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
@@ -20,7 +22,10 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    parameter it knew, so in practice that is Sweep off and the stage's settings at their defaults.)
 // A later version that changes what a saved value means converts older states in readState (as the other
 // plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 3;
+// 4: 0.25, the end saturator and its Gentlr on by default, Gentlr's Slope Signature (an older state keeps
+//    the old defaults where it lacks them: smacheratr::tailOldDefaults below).
+constexpr int32 kVersion = 4;
+constexpr int32 kNewDefaults = 4;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -60,6 +65,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them
+    if (version < kNewDefaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
     return true;
 }
 

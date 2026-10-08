@@ -98,9 +98,11 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
     return 20.0 * std::log10 (std::max (1e-12, amp));
 }
 
+// The defaults with the end saturator (on by default) off: the tests are about Para's own filters.
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }

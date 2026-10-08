@@ -6,7 +6,8 @@
 //   gentlr = on
 //   advanced = off
 // Each switch is on, off or not set (no line for it). Not set, a new instance keeps what it starts with
-// (the saved default preset's value, else the factory default); set, a new instance gets it: Gentlr on
+// (the saved default preset's value, else the factory default: the end saturator and its Gentlr on, Advanced
+// off, gentlr's own Advanced on; the menu shows a switch not set as that); set, a new instance gets it: Gentlr on
 // switches on the end saturator (its Saturator switch) and its Gentlr, Gentlr off switches Gentlr off
 // (the saturator stays as it was); Advanced sets Gentlr's Advanced mode (in gentlr, its own Advanced).
 // A missing or unreadable file, or a line it does not understand, leaves a switch not set; keys it does

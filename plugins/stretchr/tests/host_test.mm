@@ -96,6 +96,21 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
+        // starts: the checks are about stretchr's own sound
+        {
+            State st;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                st.norm[id] = defaultNormalized (id);
+                st.has[id] = true;
+            }
+            st.norm[kTailBase + pk::kTailOn] = 0.0;
+            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+        }
         CHECK (rig.start (), "start");
         // the only latency is the end-of-chain saturator's (constant, even when it is off)
         const size_t lat = rig.processor->getLatencySamples ();

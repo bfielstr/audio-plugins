@@ -96,6 +96,10 @@ static smemplr::PluginState baseState (const std::string& sample)
         st.has[i] = true;
     }
     st.samplePath = sample;
+    // the first slot's Smacheratr as it was up to 0.24 (its Gentlr off, 12 / 12): the checks measure the
+    // sampler's own levels through it (a new instance has Gentlr on, Signature: checked after loading)
+    st.norm[smemplr::slotBlockParam (0, smacheratr::kClarity)] = 0.0;
+    st.norm[smemplr::slotBlockParam (0, smacheratr::kClaritySlope)] = 0.0;
     auto set = [&] (uint32_t id, double plain) { st.norm[id] = smemplr::toNormalized (id, plain); };
     set (smemplr::kVolume, 0.0);
     set (smemplr::kWarpBeats, 8);
@@ -380,6 +384,13 @@ int main (int argc, char** argv)
         // (the hidden MIDI parameters are in the table's range, 1000 .. 1002: no more than its size)
         CHECK (count == (int32)smemplr::kNumParams, "param count %d", count);
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        // a new instance: the first slot's Smacheratr with Gentlr on and the Signature Slope (its block
+        // positions are Smacheratr's IDs, normalized as Smacheratr's), the old saturator after the rack off
+        CHECK (rig.controller->getParamNormalized (smemplr::slotBlockParam (0, smacheratr::kClarity)) == 1.0 &&
+                   rig.controller->getParamNormalized (smemplr::slotBlockParam (0, smacheratr::kClaritySlope)) ==
+                       smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature) &&
+                   rig.controller->getParamNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0,
+               "a new instance: the first slot's Gentlr on, Signature; the old saturator off");
         String128 str;
         rig.controller->getParamStringByValue (smemplr::kFilterFreq, 1.0, str);
         const std::string freqText = StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (str)));

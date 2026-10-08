@@ -25,7 +25,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kOversampling, "Oversampling", "Oversampling", {"Off", "2x", "4x"}, kOs4x));
         v.push_back (toggle (kDcFilter, "Pre-DC Filter", "DC Filter", false));
         v.push_back (toggle (kMidSide, "Mid/Side", "M/S", false));
-        v.push_back (toggle (kClarity, "Gentlr", "Gentlr", false));
+        v.push_back (toggle (kClarity, "Gentlr", "Gentlr", true));
         v.push_back (real (kClarityFreq, "Gentlr Frequency", "Freq", 20.0, 20000.0, 250.0, Curve::Log, Disp::Hz));
         v.push_back (real (kClarityWidth, "Gentlr Width", "Width", kMinWidthOct, kMaxWidthOct, 2.0, Curve::Linear, Disp::Number));
         v.push_back (real (kClarityRange, "Gentlr Range", "Range", 0.0, 24.0, 8.0, Curve::Linear, Disp::Db));
@@ -48,7 +48,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kClarityHighRange, "Gentlr High Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClarityHighThreshold, "Gentlr High Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityNoOverlap, "Gentlr No Overlap", "No Overlap", false));
-        v.push_back (choice (kClaritySlope, "Gentlr Slope", "Slope", {"12 / 12", "Signature", "Classic"}, kSlope12));
+        v.push_back (choice (kClaritySlope, "Gentlr Slope", "Slope", {"12 / 12", "Signature", "Classic"}, kSlopeSignature));
         // (glue: off, every pair; Glue.h)
         v.push_back (toggle (kClarityGlue12, "Gentlr Glue 1 / 2", "Glue 1/2", false));
         v.push_back (toggle (kClarityGlueSub1, "Gentlr Glue Sub / 1", "Glue Sub/1", false));
