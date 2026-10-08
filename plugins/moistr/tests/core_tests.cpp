@@ -8,7 +8,8 @@
 // touching the Low band, Wobble's phase, the files; off: 0.26's sound bit for bit; they still play in a 0.27
 // project), the one gesture (0.28: the factory gestures, every lane at the same place on one clock, Loop and Walk
 // keeping every lane continuous, Amount 0 or None 0.27's sound bit for bit, the lanes' ranges, the sub and the
-// stereo image kept, the files of lanes) and the CPU budget.
+// stereo image kept, the files of lanes), the LAB (0.29: empty, 0.28's sound bit for bit; its paths lined up; mono kept,
+// the sub untouched; Mute, Solo, Level and Mono) and the CPU budget.
 #include "Dsp.h"
 #include "Engine.h"
 #include "Gesture.h"
@@ -4052,6 +4053,233 @@ TEST (scene_files)
     for (int i = 0; i <= kMaxSceneLanes; ++i)
         many += std::string (i ? "," : "") + R"({"target": "Dirt", "points": [[0, 0]]})";
     CHECK (!parseSceneJson (many + "]}", "x", d, err), "too many lanes: %s", err.c_str ());
+}
+
+// ---- the LAB (0.29)
+
+namespace {
+// a LAB slot holding `kind` (On or off), with some of the kind's own parameters (its IDs, plain values) set
+void labSlot (Engine& e, int slot, int kind, bool on = true, std::initializer_list<std::pair<uint32_t, double>> values = {})
+{
+    e.setParam (labSlotParam (slot, kLabType), kind);
+    e.setParam (labSlotParam (slot, kLabOn), on ? 1.0 : 0.0);
+    const auto& t = smemplr::fxBlockTable (kind);
+    for (const auto& [id, v] : values)
+    {
+        const int64_t j = smemplr::fxBlockOf (kind, id);
+        if (j >= 0)
+            e.setParam (labBlockParam (slot, (uint32_t)j), t.toNormalized ((uint32_t)j, v));
+    }
+}
+// every chain on the bands with a driven smacheratr and an OTT, and an OTT in POST (a dirty, dense LAB)
+void dirtyLab (Engine& e, double driveDb = 18.0)
+{
+    for (int c = 0; c < kNumBandChains; ++c)
+    {
+        labSlot (e, chainSlot (c, 0), smemplr::kFxSmacheratr, true, {{smacheratr::kDrive, driveDb}, {smacheratr::kPostClip, 1.0}});
+        labSlot (e, chainSlot (c, 1), smemplr::kFxMultidyn, true, {{multidyn::kAmount, 0.7}});
+    }
+    labSlot (e, postSlot (0), smemplr::kFxMultidyn, true, {{multidyn::kAmount, 0.4}});
+}
+// the engine linear: no SWEEP stage, Drive, Glue, Grit or movement, the end saturator out of the way
+std::unique_ptr<Engine> linearEngine (int bands = 4)
+{
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kSweep, 0.0);
+    e->setParam (kBandCount, bands == 4 ? kBands4 : kBands3);
+    e->setParam (kXoverMid, 1200.0);
+    e->setParam (kXoverHigh, 6000.0);
+    tailNeutral (*e);
+    return e;
+}
+} // namespace
+
+TEST (lab_empty_is_028)
+{
+    // every slot Empty and every chain at 0 dB (Init, and a state saved before 0.29, which reads the LAB's parameters at
+    // these: defaultNormalizedForVersion): the LAB does not run, the latency is the end saturator's alone, and the sound
+    // is the engine's without the LAB, bit for bit, also where the LAB had been set up and taken back (the check against
+    // 0.28 itself, a build of each rendering every factory preset and gesture, bit for bit, is run by hand)
+    const auto x = reese (1.5);
+    for (int which = 0; which < 2; ++which)
+    {
+        auto a = fresh ();
+        auto b = fresh ();
+        for (auto* e : {a.get (), b.get ()})
+        {
+            e->setParam (kBandCount, which ? kBands4 : kBands3);
+            e->setParam (kMovement, 0.6);
+        }
+        dirtyLab (*b);
+        b->setParam (chainId (1, kChainLevel), -6.0);
+        b->setParam (chainId (2, kChainMono), 1.0);
+        b->setParam (chainId (0, kChainSolo), 1.0);
+        b->reset ();
+        CHECK (b->labStage ().active () && b->labLatency () > 0, "set up: running, with a latency");
+        // (a 0.28 state: every LAB parameter at what such a state reads)
+        for (uint32_t id = kChainBase; id < kNumParams; ++id)
+            b->setParam (id, toPlain (id, defaultNormalizedForVersion (id, 7)));
+        a->reset ();
+        b->reset ();
+        CHECK (!b->labStage ().active () && b->labLatency () == 0 && b->latency () == a->latency (), "taken back: not running, no latency of its own");
+        std::vector<float> ar, br;
+        const auto al = run (*a, x, &ar), bl = run (*b, x, &br);
+        CHECK (al == bl && ar == br, "%d bands: the sound without the LAB, bit for bit", which ? 4 : 3);
+    }
+}
+
+TEST (lab_paths_line_up)
+{
+    // the chains and POST with their effects switched off (smacheratr fully dry, multidyn bypassed: their latencies
+    // only): every path lined up, the bands sum to the same all-pass as without the LAB, just later by its latency
+    for (int bands : {3, 4})
+    {
+        auto ref = linearEngine (bands);
+        auto e = linearEngine (bands);
+        labSlot (*e, chainSlot (0, 0), smemplr::kFxSmacheratr, false);
+        labSlot (*e, chainSlot (0, 1), smemplr::kFxMultidyn, false);
+        labSlot (*e, chainSlot (1, 0), smemplr::kFxSmacheratr, false); // (a shorter chain)
+        labSlot (*e, postSlot (0), smemplr::kFxMultidyn, false);      // (chain 3 empty)
+        e->reset ();
+        const Lab& lab = e->labStage ();
+        const int labLat = e->labLatency ();
+        CHECK (lab.chainLatency (0) > lab.chainLatency (1) && lab.chainLatency (2) == 0 && labLat == lab.chainLatency (0) + lab.postLatency () &&
+                   e->latency () == labLat + ref->latency (),
+               "the latency: the slowest chain's (%d) and POST's (%d), then the end saturator's (%d)", lab.chainLatency (0), lab.postLatency (),
+               e->latency () - labLat);
+        std::vector<float> x (32768, 0.0f);
+        x[0] = 0.5f;
+        const auto y0 = run (*ref, x), y = run (*e, x);
+        double worst = 0.0, lo = 1e9, hi = -1e9;
+        for (size_t i = 0; i + (size_t)labLat < y.size (); ++i)
+            worst = std::max (worst, std::fabs ((double)y[i + (size_t)labLat] - y0[i]));
+        for (int i = 0; i <= 80; ++i)
+        {
+            const double f = 20.0 * std::pow (1000.0, i / 80.0);
+            const double r = responseDb (y, (size_t)e->latency (), f) - db (0.5);
+            lo = std::min (lo, r);
+            hi = std::max (hi, r);
+        }
+        std::printf ("    %d bands: latency %d, %.3f .. %.3f dB, off the LAB-less sum by %.1e\n", bands, labLat, lo, hi, worst);
+        CHECK (lo > -0.1 && hi < 0.1, "%d bands: flat within 0.1 dB (%.3f .. %.3f)", bands, lo, hi);
+        CHECK (worst < 1e-5, "%d bands: the same sum, %d samples later (%.1e)", bands, labLat, worst);
+    }
+    // Mix at 0: the dry signal, delayed by the whole latency (so dry and wet line up at every Mix)
+    auto e = linearEngine ();
+    dirtyLab (*e);
+    e->setParam (kMix, 0.0);
+    e->reset ();
+    std::vector<float> x (8192, 0.0f);
+    x[100] = 0.5f;
+    const auto y = run (*e, x);
+    const size_t at = (size_t)(std::max_element (y.begin (), y.end (), [] (float a, float b) { return std::fabs (a) < std::fabs (b); }) - y.begin ());
+    CHECK (at == 100 + (size_t)e->latency () && std::fabs (y[at] - 0.5f) < 1e-6, "Mix 0: the dry impulse at %zu (latency %d)", at, e->latency ());
+}
+
+TEST (lab_mono_and_sub)
+{
+    // a dirty LAB on a mono Reese: the output stays mono, and the sub (the Low band: never in a chain) as it is
+    // without the LAB, lined up
+    const auto x = reese (3.0);
+    auto ref = fresh ();
+    auto e = fresh ();
+    for (auto* en : {ref.get (), e.get ()})
+    {
+        en->setParam (kBandCount, kBands4);
+        en->setParam (kMovement, 0.5);
+        tailNeutral (*en); // (the end saturator after it all would take the sub down as the rest gets louder)
+    }
+    dirtyLab (*e, 24.0);
+    ref->reset ();
+    e->reset ();
+    std::vector<float> rr, er;
+    const auto rl = run (*ref, x, &rr), el = run (*e, x, &er);
+    double side = 0.0;
+    for (size_t i = 0; i < el.size (); ++i)
+        side = std::max (side, (double)std::fabs (el[i] - er[i]));
+    CHECK (finite (el) && side == 0.0, "mono in, mono out (L - R up to %.1e)", side);
+    const size_t lat = (size_t)e->labLatency (), a = (size_t)(1.0 * kSr), b = x.size () - lat;
+    std::vector<float> shifted (el.begin () + (long)lat, el.end ());
+    const double subRef = toneAt (rl, 55.0, a, b), subLab = toneAt (shifted, 55.0, a, b);
+    std::printf ("    the 55 Hz fundamental: %.2f dB without the LAB, %.2f dB with it\n", db (subRef), db (subLab));
+    CHECK (std::fabs (db (subLab) - db (subRef)) < 1.0, "the sub within 1 dB (%.2f dB)", db (subLab) - db (subRef));
+    // and something happened above it
+    const double midRef = rms (rl, a, b), midLab = rms (shifted, a, b);
+    CHECK (std::fabs (db (midLab) - db (midRef)) < 12.0 && peak (el, 0, el.size ()) < 4.0, "level in reason (%.1f dB against %.1f)", db (midLab),
+           db (midRef));
+}
+
+TEST (lab_mute_solo_level)
+{
+    // Mute: the chain fades out and stops running (its settings no longer matter); Solo: only the soloed chain (the Low
+    // band silent too); Level: after the chain's effects; Mono: the chain in the middle
+    const auto x = reese (1.5);
+    auto render = [&] (const std::function<void (Engine&)>& set, std::vector<float>* right = nullptr) {
+        auto e = fresh ();
+        e->setParam (kBandCount, kBands4);
+        dirtyLab (*e);
+        set (*e);
+        tailNeutral (*e);
+        return run (*e, x, right);
+    };
+    const size_t a = (size_t)(0.6 * kSr), b = x.size ();
+    const auto all = render ([] (Engine&) {});
+    const auto muted = render ([] (Engine& e) { e.setParam (chainId (0, kChainMute), 1.0); });
+    const auto mutedHot = render ([] (Engine& e) {
+        e.setParam (chainId (0, kChainMute), 1.0);
+        labSlot (e, chainSlot (0, 0), smemplr::kFxSmacheratr, true, {{smacheratr::kDrive, 36.0}});
+    });
+    CHECK (muted == mutedHot, "a muted chain is not run: its Drive does not matter");
+    CHECK (db (rms (muted, a, b)) < db (rms (all, a, b)), "muting the Mid chain takes something away");
+    const auto soloed = render ([] (Engine& e) { e.setParam (chainId (2, kChainSolo), 1.0); });
+    const auto airOnly = render ([] (Engine& e) {
+        e.setParam (chainId (0, kChainMute), 1.0);
+        e.setParam (chainId (1, kChainMute), 1.0);
+        e.setParam (kLowLevel, kLevelOffDb);
+    });
+    double worst = 0.0;
+    for (size_t i = a; i < b; ++i)
+        worst = std::max (worst, (double)std::fabs (soloed[i] - airOnly[i]));
+    std::printf ("    Solo Air against Mid and High muted and Low off: %.1e\n", worst);
+    CHECK (worst < 1e-3, "Solo: the soloed chain alone (%.1e)", worst);
+    // (without POST: its OTT after the chains would not take a level change as it is)
+    const auto quieter = render ([] (Engine& e) {
+        for (int c = 0; c < kNumBandChains; ++c)
+            e.setParam (chainId (c, kChainLevel), -6.0);
+        e.setParam (kLowLevel, kLevelOffDb);
+        e.setParam (labSlotParam (postSlot (0), kLabType), 0.0);
+    });
+    const auto lowOff = render ([] (Engine& e) {
+        e.setParam (kLowLevel, kLevelOffDb);
+        e.setParam (labSlotParam (postSlot (0), kLabType), 0.0);
+    });
+    CHECK (std::fabs (db (rms (quieter, a, b)) - db (rms (lowOff, a, b)) + 6.0) < 0.2, "Level -6 dB on every chain: 6 dB down after the effects (%.2f)",
+           db (rms (quieter, a, b)) - db (rms (lowOff, a, b)));
+    std::vector<float> wideR;
+    auto stereo = [&] (bool mono) {
+        auto e = fresh ();
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kLowLevel, kLevelOffDb);
+        dirtyLab (*e);
+        for (int c = 0; c < kNumBandChains; ++c)
+            e->setParam (chainId (c, kChainMono), mono ? 1.0 : 0.0);
+        e->reset ();
+        std::vector<float> l (x.size ()), r (x.size ()), xr (x.size ());
+        for (size_t i = 0; i < x.size (); ++i)
+            xr[i] = i >= 40 ? x[i - 40] : 0.0f; // (a wide input)
+        for (size_t s = 0; s < x.size (); s += 256)
+        {
+            const int m = (int)std::min<size_t> (256, x.size () - s);
+            e->process (x.data () + s, xr.data () + s, l.data () + s, r.data () + s, m);
+        }
+        double d = 0.0;
+        for (size_t i = a; i < b; ++i)
+            d = std::max (d, (double)std::fabs (l[i] - r[i]));
+        return d;
+    };
+    const double wide = stereo (false), narrow = stereo (true);
+    CHECK (wide > 1e-3 && narrow < 1e-6, "Mono: the chains in the middle (L - R %.1e, wide %.1e)", narrow, wide);
 }
 
 TEST (cpu_budget)

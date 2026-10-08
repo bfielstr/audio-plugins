@@ -64,6 +64,8 @@ void Engine::PassState::resetShifter ()
 
 Engine::Engine ()
 {
+    for (auto& d : dryDelay)
+        d.assign ((size_t)Lab::kMaxLatency, 0.0f);
     flatGesture.flat (1.0);
     drive.maxDb = 18.0;
     for (auto& s : state)
@@ -81,6 +83,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
     for (auto& s : state)
         s.glue.prepare (sr);
     tail.prepare (sr, std::max (1, maxBlock));
+    lab.prepare (sr);
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParam (id, p[id]);
     reset ();
@@ -297,6 +300,10 @@ void Engine::reset ()
     out = dbToGain (p[kOutput]);
     quiet = (int)sr;
     tail.reset ();
+    lab.reset ();
+    for (auto& d : dryDelay)
+        std::fill (d.begin (), d.end (), 0.0f);
+    dryW = 0;
 }
 
 void Engine::setParam (uint32_t id, double plain)
@@ -306,6 +313,11 @@ void Engine::setParam (uint32_t id, double plain)
     if ((id == kDensity || id == kSpeed) && std::fabs (plain - 1.0) < 1e-6)
         plain = 1.0; // (x1 exactly: the default from a normalized value, so the movement is 0.21's bit for bit)
     p[id] = plain;
+    if (isLabParam (id))
+    {
+        lab.setParam (id, plain);
+        return;
+    }
     if (id == kSeedB || id == kDensity)
         applyPattern (true);
     if (id >= kBandCount)
@@ -345,6 +357,7 @@ void Engine::setTransport (double tempo, double ppq, bool isPlaying)
     songPpq = ppq;
     playing = isPlaying;
     transportSet = true;
+    lab.setTransport (bpm, ppq, isPlaying);
 }
 
 void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
@@ -740,7 +753,9 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
     const bool auxOn = first && (pullDirt > 0.0 || pullDirtPrev > 0.0 || pullBells > 0.0 || pullBellsPrev > 0.0);
     const bool closeOn = first && (closeNow.mix > 0.0 || closePrev.mix > 0.0);
     const bool wobbleOn = first && (wobAmt > 0.0 || wobAmtPrev > 0.0);
-    if (shifting || liquidOn || auxOn || closeOn || wobbleOn)
+    if (pass == 0 && labRun)
+        runLab (s, l, r, m, g1, gain1, c, still, shifting, liquidOn, auxOn, closeOn, wobbleOn);
+    else if (shifting || liquidOn || auxOn || closeOn || wobbleOn)
     {
         // Liquid and the shifter on the bands above Low (the Low band, and so everything below Low X, untouched)
         const LiquidCoefs& la = liqPrev;
@@ -853,6 +868,115 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
     s.grit.process (l, r, m);
 }
 
+void Engine::runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still,
+                     bool shifting, bool liquidOn, bool auxOn, bool closeOn, bool wobbleOn)
+{
+    // the split, each band at its gain: Mid, High and Air into their chains (with 3 bands Air follows High: it goes into
+    // the High chain), the Low band beside them
+    float in[kNumBandChains][2][Lab::kTick];
+    double low[2][Lab::kTick], up[2][Lab::kTick];
+    for (int i = 0; i < m; ++i)
+    {
+        const double t = (double)(i + 1) / m;
+        if (!still)
+            for (int x = 0; x < kMaxXovers; ++x)
+                c[x].set (s.gNow[x] + (g1[x] - s.gNow[x]) * t, dsp::kSqrt2);
+        double gain[kMaxBands];
+        for (int b = 0; b < kMaxBands; ++b)
+            gain[b] = s.gainNow[b] + (gain1[b] - s.gainNow[b]) * t;
+        double* io[2] = {l + i, r + i};
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            double band[kMaxBands];
+            s.split[ch].tick (*io[ch], c, band);
+            if (auxOn)
+            {
+                double z[kMaxBands];
+                auxSplit[ch].tick (aux[ch][i], c, z);
+                band[1] += z[1];
+                band[2] += z[2];
+                band[3] += z[3];
+            }
+            const double air = gain[3] * band[3];
+            low[ch][i] = gain[0] * band[0];
+            in[0][ch][i] = (float)(gain[1] * band[1]);
+            in[1][ch][i] = (float)(gain[2] * band[2] + (1.0 - airOwn) * air);
+            in[2][ch][i] = (float)(airOwn * air);
+        }
+    }
+    lab.run (in, low, up, m, s.xoverHz[0]);
+    // the rest on the bands above Low, as runPass has it (on the chains' sum here), then the Low band back
+    const LiquidCoefs& la = liqPrev;
+    const LiquidCoefs& lb = liqNow;
+    const double w0 = 2.0 * dsp::kPi * shiftHzPrev / sr, w1 = 2.0 * dsp::kPi * shiftHz / sr;
+    for (int i = 0; i < m; ++i)
+    {
+        const double t = (double)(i + 1) / m;
+        if (!still && shifting)
+            for (int x = 0; x < kMaxXovers; ++x)
+                c[x].set (s.gNow[x] + (g1[x] - s.gNow[x]) * t, dsp::kSqrt2); // (the shifter's high-pass at Low X)
+        double fade = 0.0, wet = 0.0, cs = 1.0, sn = 0.0;
+        if (shifting)
+        {
+            fade = shiftFadePrev + (shiftFade - shiftFadePrev) * t;
+            wet = shiftMixPrev + (shiftMix - shiftMixPrev) * t;
+            cs = std::cos (s.shiftPhase);
+            sn = std::sin (s.shiftPhase);
+            s.shiftPhase += w0 + (w1 - w0) * t;
+            if (s.shiftPhase > dsp::kPi)
+                s.shiftPhase -= 2.0 * dsp::kPi;
+            else if (s.shiftPhase < -dsp::kPi)
+                s.shiftPhase += 2.0 * dsp::kPi;
+        }
+        double wob = 1.0, closeMix = 0.0;
+        dsp::SvfCoefs cc;
+        if (wobbleOn)
+        {
+            const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
+            wob = 1.0 - a * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * ph));
+        }
+        if (closeOn)
+        {
+            cc.set (closePrev.g + (closeNow.g - closePrev.g) * t, closePrev.k + (closeNow.k - closePrev.k) * t);
+            closeMix = closePrev.mix + (closeNow.mix - closePrev.mix) * t;
+        }
+        dsp::SvfCoefs lc1, lc2;
+        double a1 = 0.0, a2 = 0.0;
+        if (liquidOn)
+        {
+            const double k = la.k + (lb.k - la.k) * t;
+            lc1.set (la.g1 + (lb.g1 - la.g1) * t, k);
+            lc2.set (la.g2 + (lb.g2 - la.g2) * t, k);
+            a1 = (la.a1 + (lb.a1 - la.a1) * t) * k;
+            a2 = (la.a2 + (lb.a2 - la.a2) * t) * k;
+        }
+        double* io[2] = {l + i, r + i};
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            double u = up[ch][i];
+            if (liquidOn)
+            {
+                u += a1 * s.liq1[ch].tick (u, lc1).bp;
+                u += a2 * s.liq2[ch].tick (u, lc2).bp;
+            }
+            if (closeOn)
+                u += (closeLp[ch].tick (u, cc).lp - u) * closeMix;
+            if (wobbleOn)
+                u *= wob;
+            if (!shifting)
+            {
+                *io[ch] = low[ch][i] + u;
+                continue;
+            }
+            double hi, hq;
+            s.hilbert[ch].tick (u, hi, hq);
+            const double shifted = s.shiftHp[ch].tick (hi * cs + hq * sn, c[0]).hp;
+            const double moved = hi + (shifted - hi) * wet;
+            *io[ch] = low[ch][i] + u + (moved - u) * fade;
+        }
+    }
+}
+
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
     const pk::NoDenormals guard;
@@ -907,6 +1031,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
     float dryL[kTick], dryR[kTick];
     double wl[kTick], wr[kTick], ql[kTick], qr[kTick];
+    // (the LAB's latency: its kinds change between blocks)
+    const int labLat = lab.latency ();
     for (int a = 0; a < n; a += kTick)
     {
         const int m = std::min (kTick, n - a);
@@ -920,6 +1046,20 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             peak = std::max (peak, std::max (std::fabs (dryL[i]), std::fabs (dryR[i])));
         }
         quiet = peak > 1e-6f ? 0 : std::min (quiet + m, (int)sr * 10);
+        // the dry signal for Mix, delayed to the LAB's latency
+        for (int i = 0; i < m; ++i)
+        {
+            dryDelay[0][(size_t)dryW] = dryL[i];
+            dryDelay[1][(size_t)dryW] = dryR[i];
+            if (labLat > 0)
+            {
+                const auto at = (size_t)((dryW - labLat) & (Lab::kMaxLatency - 1));
+                dryL[i] = dryDelay[0][at];
+                dryR[i] = dryDelay[1][at];
+            }
+            dryW = (dryW + 1) & (Lab::kMaxLatency - 1);
+        }
+        labRun = lab.active ();
         // the settings glide
         for (int x = 0; x < kMaxXovers; ++x)
             glide (logX[x], targetLogX[x], tickSmooth);
@@ -1085,6 +1225,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->shelfCeiling.store ((float)sweep.shelfCeiling (), rx);
         meters->sweepAmount.store ((float)sweep.amount (), rx);
         meters->shelfAmount.store ((float)sweep.shelfAmount (), rx);
+        meters->labLatency.store (lab.latency (), rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
     tail.process (yl, yr, n);

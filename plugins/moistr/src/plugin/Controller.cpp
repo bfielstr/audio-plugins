@@ -270,6 +270,7 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                     shared->release ();
                 shared = m;
                 watchLatency (&shared->tailMeters.latency); // (the end saturator's moves with its Oversampling)
+                watchLatency (&shared->meters.labLatency);  // (the LAB's with the kinds in its slots)
             }
         }
         return kResultOk;

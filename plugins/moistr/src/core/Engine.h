@@ -82,11 +82,18 @@
 // (its range, in the target's own 0 .. 1), by Amount (gliding). Lanes come after the slots (a 0.27 project's
 // slots still play). Changing the gesture fades the old one out (20 ms), then the new one in.
 //
-// The latency is the end saturator's (always in the path).
+// 0.29, the LAB (Lab.h; every slot Empty and every chain at 0 dB by default and in older states, so the engine is then
+// 0.28's, bit for bit): effects chains on the Mid, High and Air bands of the first pass, after their moving gains,
+// and POST on their sum, before Liquid, Close, Wobble and the shifter. The Low band is delayed to line up and never
+// goes through them.
+//
+// The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too) and the end
+// saturator's (always in the path).
 #pragma once
 
 #include "Dsp.h"
 #include "Gesture.h"
+#include "Lab.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -97,6 +104,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <vector>
 
 namespace moistr {
 
@@ -143,6 +151,9 @@ struct Meters
     // value there (its curve, smoothed)
     std::atomic<float> scenePos {0.0f}, scenePull {0.0f};
     std::array<std::atomic<float>, kMaxSceneLanes> laneValue {};
+    // the LAB (0.29): its latency now (samples; -1 before the first block: a controller watching it tells the host,
+    // pk::ControllerBase::watchLatency)
+    std::atomic<int> labLatency {-1};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -164,7 +175,10 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return lab.latency () + tail.latency (); } // the LAB's, then the end saturator's
+    int labLatency () const { return lab.latency (); }
+    const Lab& labStage () const { return lab; }
+    Lab& labStage () { return lab; }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
@@ -283,6 +297,10 @@ private:
     // the targets at theta th for a pass: g per corner and gain per band (snap: no smoothing)
     void targets (int pass, double th, double* g, double* gain, bool snap);
     void runPass (int pass, double* l, double* r, int m, double thetaEnd);
+    // the first pass with the LAB (labRun): the split and the bands' gains, the chains and POST (Lab::run), then what
+    // runPass does on the bands above Low (Liquid, Close, Wobble, the shifter) on their sum, and the Low band back
+    void runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still, bool shifting,
+                 bool liquidOn, bool auxOn, bool closeOn, bool wobbleOn);
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
     // then what they do this tick
@@ -366,6 +384,12 @@ private:
     int quiet = 0; // samples since the input was last heard
     Meters* meters = nullptr;
     smacheratr::Tail tail;
+    // the LAB (0.29), whether it runs this tick (Lab::active), and the dry signal's delay to its latency (always
+    // written, read only while it has one)
+    Lab lab;
+    bool labRun = false;
+    std::vector<float> dryDelay[2];
+    int dryW = 0;
 };
 
 } // namespace moistr

@@ -521,8 +521,9 @@ void Editor::idle ()
         if (auto* s = ctl->getShared ())
         {
             char buf[64];
-            const int tailNow = s->tailMeters.latency.load (); // (the end saturator's is all of it; -1: not known yet)
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 ? tailNow : s->latency.load ());
+            // (the LAB's and the end saturator's; -1: not known yet)
+            const int tailNow = s->tailMeters.latency.load (), labNow = s->meters.labLatency.load ();
+            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 && labNow >= 0 ? tailNow + labNow : s->latency.load ());
             latencyLabel->setText (buf);
         }
 }
