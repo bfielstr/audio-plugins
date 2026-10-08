@@ -16,6 +16,9 @@
 #include "pluginkit/ui/ScopeView.h"
 #include "pluginkit/vst/Clipboard.h"
 #include "pluginkit/vst/PresetBar.h"
+#include "plugin/RackPresetIO.h"
+#include "plugin/SlotPresets.h"
+#include "RackPresets.h"
 
 #include "multidyn/src/ui/DynDisplay.h"
 #include "multidyn/src/ui/Thresholds.h"
@@ -968,6 +971,7 @@ double emptySlotValue (uint32_t k) { return k == kSlotOn ? 1.0 : 0.0; }
 
 void Editor::copySlot (int from, int to)
 {
+    ctl->slotPreset (to) = ctl->slotType (from) == kFxEmpty ? Controller::SlotPreset {} : ctl->slotPreset (from);
     // (only what differs, so the host's automation sees the real changes)
     const bool empty = ctl->slotType (from) == kFxEmpty;
     for (uint32_t k = 0; k < kSlotValues; ++k)
@@ -993,8 +997,23 @@ void Editor::addFx (int type)
     setOnce (slotParam (slot, kSlotOn), 1.0);
     for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         setOnce (slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
+    applyNewSlotDefaults (slot, type);
     fxTab = slot;
     rackDirty = true;
+}
+
+void Editor::applyNewSlotDefaults (int slot, int type)
+{
+    ctl->slotPreset (slot) = {};
+    if (!hostedPlugin (type))
+        return; // (the M/S EQ: no plug-in of its own)
+    bool fromDefault = false;
+    ctl->applySlotValues (slot, rackio::newSlotValues (type, &fromDefault));
+    if (fromDefault)
+    {
+        ctl->slotPreset (slot).kind = pk::presets::Kind::Default;
+        ctl->slotPreset (slot).title = pk::presets::kDefaultName;
+    }
 }
 
 void Editor::removeFx (int slot)
@@ -1013,8 +1032,11 @@ void Editor::removeFx (int slot)
         if (s + 1 < kRackSlots && (ctl->slotType (s + 1) != kFxEmpty || ctl->slotType (s) != kFxEmpty))
             copySlot (s + 1, s);
         else if (ctl->slotType (s) != kFxEmpty)
+        {
+            ctl->slotPreset (s) = {};
             for (uint32_t k = 0; k < kSlotValues; ++k)
                 setOnce (slotValueParam (s, k), emptySlotValue (k));
+        }
     // the effect that took its place is shown (else the one before it: see rebuildRack)
     fxTab = slot;
     rackDirty = true;
@@ -1028,6 +1050,7 @@ void Editor::moveFx (int from, int to)
     std::array<double, kSlotValues> moving;
     for (uint32_t k = 0; k < kSlotValues; ++k)
         moving[k] = norm (slotValueParam (from, k));
+    const Controller::SlotPreset movingPreset = ctl->slotPreset (from);
     // the slots between move over by one, towards where it was; then it takes its new place (and the
     // modulation goes along)
     const int dir = to > from ? 1 : -1;
@@ -1040,6 +1063,7 @@ void Editor::moveFx (int from, int to)
     for (uint32_t k = 0; k < kSlotValues; ++k)
         if (norm (slotValueParam (to, k)) != moving[k])
             setOnce (slotValueParam (to, k), moving[k]);
+    ctl->slotPreset (to) = movingPreset;
     fxTab = to;
     rackDirty = true;
 }
@@ -1059,6 +1083,7 @@ void Editor::duplicateFx (int from, int at)
     std::array<double, kSlotValues> copy;
     for (uint32_t k = 0; k < kSlotValues; ++k)
         copy[k] = norm (slotValueParam (from, k));
+    const Controller::SlotPreset copyPreset = ctl->slotPreset (from);
     for (int s = free; s > at; --s)
         copySlot (s - 1, s);
     // (the copy is not modulated; the ones that moved up keep their modulation)
@@ -1069,6 +1094,7 @@ void Editor::duplicateFx (int from, int at)
     for (uint32_t k = 0; k < kSlotValues; ++k)
         if (norm (slotValueParam (at, k)) != copy[k])
             setOnce (slotValueParam (at, k), copy[k]);
+    ctl->slotPreset (at) = copyPreset;
     fxTab = at;
     rackDirty = true;
 }
@@ -1267,6 +1293,14 @@ void Editor::rebuildRack ()
                             "Settings). Settings of another effect are ignored.");
         fxCtl->addView (ps);
         noteX = 402.0;
+        if (hostedPlugin (shownTypes[(size_t)s]))
+        {
+            // the presets of the effect's own plug-in (the same files: saved here, they are there too)
+            auto* pb = new pk::PresetBar (CRect (400, 0, 560, 20), makeSlotPresets (ctl, s));
+            pb->setTooltipText (help::kSlotPresets);
+            fxCtl->addView (pb);
+            noteX = 568.0;
+        }
     }
     // an old project's saturator after the rack, still on because the rack had no room for it
     if (plainValue (kTailBase + pk::kTailOn) >= 0.5)
@@ -1282,8 +1316,9 @@ void Editor::rebuildRack ()
     else
     {
         auto* note = new Label (CRect (noteX, 1, 838, 19),
-                                fxTab < kFxNone ? "drag a tab to move it; the rack runs left to right; right click resets a control"
-                                                : "the rack is empty: + adds an effect after the sampler",
+                                fxTab >= kFxNone ? "the rack is empty: + adds an effect after the sampler"
+                                : noteX > 402.0  ? "drag a tab to move it; right click resets a control"
+                                                 : "drag a tab to move it; the rack runs left to right; right click resets a control",
                                 9.5);
         note->setDim (true);
         fxCtl->addView (note);

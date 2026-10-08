@@ -170,6 +170,11 @@ They live in
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
 
+smemplr's effects rack uses the same presets: a slot holding para, multidyn, smacheratr, widr, wubr,
+levlr, gentlr or smoothr has a **Presets** control with that plug-in's menu, reading and writing the
+same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
+[smemplr README](plugins/smemplr/README.md#a-slots-presets).
+
 ## Defaults for new instances
 
 Every plug-in except smemplr has a **Defaults** sub-menu in its **Menu**, after **Layout**, with two

@@ -87,6 +87,10 @@ public:
     // out (the ones after it move up); move the effect in slot `from` to slot `to` (the ones between
     // move over by one, towards where it was)
     void addFx (int type);
+    // A new slot of an effect (addFx), after its factory defaults: the effect's own plug-in's saved default
+    // (Save as Default) and its Menu > Defaults switches, as a new instance of the plug-in gets them
+    // (plugin/RackPresetIO.h). Only for a slot the user adds: a loaded project keeps its values.
+    void applyNewSlotDefaults (int slot, int type);
     void removeFx (int slot);
     void moveFx (int from, int to);
     void duplicateFx (int from, int at); // a copy of slot `from` at slot `at` (the ones from there move up one)

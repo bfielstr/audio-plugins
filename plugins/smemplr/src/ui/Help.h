@@ -267,5 +267,10 @@ constexpr const char* kWaveHeight =
     "The waveform's height: makes quiet parts easier to see (the drawing only, the sound does not change). Drag "
     "sideways or use the mouse wheel, Alt + scroll over the waveform, double-click to reset.";
 constexpr const char* kWarpAs = "Change the Warp As length: -/+ one beat, or halve / double it.";
+constexpr const char* kSlotPresets =
+    "This effect's presets: the same ones its own plug-in lists (Init, its factory presets and yours, by category, with "
+    "the Tags filter). A preset you save here is saved in the plug-in's preset folder, so the plug-in lists it too, and "
+    "the other way round. Save as Default sets what a new instance of the plug-in, and a new slot of this effect, starts "
+    "from. Loading a preset changes only this slot.";
 
 } // namespace smemplr::help
