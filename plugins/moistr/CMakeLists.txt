@@ -22,6 +22,13 @@ target_compile_definitions(moistr_tests PRIVATE MOISTR_PRESETS_DIR="${CMAKE_CURR
 add_test(NAME moistr_core COMMAND moistr_tests)
 pk_cpu_test(moistr_core) # times the DSP against a CPU budget
 
+# scripts/als_extract.py --moistr on a synthetic Live set (made by the test): Ableton lanes to one gesture of lanes
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME moistr_als_extract
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/als_extract_test.py ${CMAKE_SOURCE_DIR}/scripts/als_extract.py)
+endif()
+
 if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
