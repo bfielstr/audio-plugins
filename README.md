@@ -57,6 +57,12 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.28.0**
   info box is always there.
 - **Free resizing.** Drag the window corner to any shape. The interface keeps its proportions, zoomed
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
+- **Basic and Advanced views** (smemplr so far; the other plug-ins follow). The window opens on a
+  **Basic** page with the plug-in's main controls only, large, its most useful display, and the
+  output at the right; **Advanced** in the header shows every control, in the layout you pick (below),
+  and switches back. A strip at the bottom of the Basic page holds the extras: **Extras** opens them
+  under the main controls, and a small meter shows the output level (see
+  [Basic and Advanced views](#basic-and-advanced-views)).
 - **Layouts.** **Menu > Layout** picks how the window is laid out: **Wide** (what a new instance
   opens in), a long, short strip for a DAW's device area, with the sections side by side as titled
   blocks in rows by purpose, or **Classic** (the fixed layout the plug-ins had before; see
@@ -183,9 +189,35 @@ levlr, gentlr or smoothr has a **Presets** control with that plug-in's menu, rea
 same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
 [smemplr README](plugins/smemplr/README.md#a-slots-presets).
 
+## Basic and Advanced views
+
+smemplr opens on its **Basic** page, the way every plug-in will once it has one (the others show only
+their Advanced view for now). Every Basic page has the same layout:
+
+- the header: the plug-in's name, the presets (the name opens the Presets menu, **<** and **>** load the
+  previous and the next preset in the menu's order), then **Advanced**, **?** and **Menu** at the right;
+- the main controls in the middle, three to six of them, large, under the plug-in's most useful display
+  (smemplr's waveform), and the output at the right (**OUTPUT**);
+- the extras strip at the bottom: **Extras** opens the extras under the main controls (smemplr's output
+  scope), **Tail** (in a plug-in with smacheratr at the end) switches it on or off, a line says what is
+  there (smemplr's: the effects in its rack), and a small meter shows the output level (-60 to +6 dB,
+  the mark at 0 dB).
+
+**Advanced** shows every control, in the layout of **Menu > Layout**; **Advanced** in its header
+(lit) goes back to the Basic page. The two views play the same sound: the controls the Basic page leaves
+out keep their settings, and the effects in smemplr's rack keep running. The view you pick, and whether
+the extras are open, is saved with the project; loading a preset does not change it. A new instance
+opens on the Basic page unless **Menu > Defaults > Advanced View by Default** is checked; a project
+saved before 0.29 opens in the same view as a new instance (its layout is kept for the Advanced view).
+The Layout sub-menu is in the Menu of the Advanced view only.
+
 ## Defaults for new instances
 
-Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. Every plug-in except
+Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. In a plug-in with a Basic
+page (smemplr) it starts with **Advanced View by Default** (unchecked): checked, a new instance opens in
+the Advanced view instead of the Basic page (see [Basic and Advanced views](#basic-and-advanced-views)).
+It is saved in the same `.defaults.txt` as the items below and, like them, applies to new instances
+only. Every plug-in except
 smemplr has two items there for new instances:
 
 - **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end, and

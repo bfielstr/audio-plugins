@@ -52,6 +52,9 @@ cmake --build build
 
 - Parameter IDs are saved in projects: only ever append to a plug-in's `ParamId` enum, and pin the
   numbers with `static_assert`s as the existing ones do (`src/core/Params.h`).
+- Basic page: an editor lists its main controls (3 to 6), display, output and extras in `basicSpec ()`
+  (`shared/pluginkit/ui/BasicView.h`); EditorBase builds the page and the Advanced switch, and
+  `<plugin>_drawbench --check-layouts` checks it. Done so far: smemplr (next: ciphr, widr, multidyn, the rest).
 - Docs and UI text: plug-in names in lowercase in prose (orbitr, smacheratr); controls named exactly
   as their UI labels; no em dashes; no "inspired by" wording.
 - Commits: one logical change each, subject `<plug-in or area>: what changed`.
