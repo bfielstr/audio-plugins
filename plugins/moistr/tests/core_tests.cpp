@@ -2751,9 +2751,9 @@ TEST (sweep_old_presets_unchanged)
         pk::presets::FactoryPreset fp;
         std::string err;
         CHECK (pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err), "%s parses: %s", rel.c_str (), err.c_str ());
-        if (rel.rfind ("Sweep/", 0) == 0)
+        if (rel.rfind ("Sweep/", 0) == 0 || rel.rfind ("Gestures/", 0) == 0)
         {
-            // the new ones: the stage on
+            // the new ones (0.24's sweep presets, 0.27's gesture presets): the stage on
             auto e = fresh ();
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
@@ -3626,6 +3626,46 @@ TEST (gesture_files)
     for (int i = 0; i <= kMaxGesturePoints; ++i)
         many += (i ? ", [" : "[") + std::to_string (i) + ", 0.5]";
     CHECK (!parseGestureJson (many + "]}", "x", d, err), "too many: %s", err.c_str ());
+}
+
+TEST (gesture_presets)
+{
+    // the gesture presets (presets/Gestures): each turns gestures on and renders clean (finite, mono, no clicks
+    // beyond the plain sound's), and the sub (the Reese's 55 Hz) stays within 0.5 dB of the same settings without
+    // the gestures
+    const auto x = reese (4.0);
+    const size_t a = (size_t)(1.0 * kSr), b = x.size ();
+    int checked = 0;
+    for (const char* rel : {"Gestures/Reese Cell.txt", "Gestures/Stutter Wobble.txt", "Gestures/Talking Reese.txt", "Gestures/Crossover Scan.txt"})
+    {
+        auto e = fresh ();
+        tailNeutral (*e);
+        CHECK (loadPreset (*e, rel), "%s loads", rel);
+        e->reset ();
+        auto off = fresh ();
+        tailNeutral (*off);
+        loadPreset (*off, rel);
+        for (int g = 0; g < kNumGestureSlots; ++g)
+            off->setParam (gestureId (g, kGestureTarget), kTargetOff);
+        off->setParam (kWobbleAmount, 0.0);
+        off->reset ();
+        std::vector<float> r;
+        const auto y = run (*e, x, &r, 256, playing (*e, 140.0));
+        const auto ref = run (*off, x, nullptr, 256, playing (*off, 140.0));
+        double jump = 0.0, own = 0.0;
+        for (size_t i = 1000; i < y.size (); ++i)
+        {
+            jump = std::max (jump, (double)std::fabs (y[i] - y[i - 1]));
+            own = std::max (own, (double)std::fabs (ref[i] - ref[i - 1]));
+        }
+        const double sub = db (toneAt (y, 55.0, a, b) / toneAt (ref, 55.0, a, b));
+        std::printf ("    %-28s the sub %+.3f dB, the whole %+.2f dB, largest step %.3f (%.3f without)\n", rel, sub, db (rms (y, a, b) / rms (ref, a, b)), jump, own);
+        CHECK (e->gesturesRunning () && finite (y) && y == r, "%s: gestures on, finite, mono", rel);
+        CHECK (std::fabs (sub) < 0.5, "%s: the sub keeps its level (%.3f dB)", rel, sub);
+        CHECK (jump < 1.5 * own, "%s: no clicks", rel);
+        ++checked;
+    }
+    CHECK (checked == 4, "%d gesture presets", checked);
 }
 
 TEST (cpu_budget)
