@@ -43,6 +43,16 @@ using namespace smemplr;
 namespace fs = std::filesystem;
 
 static int gFailures = 0, gChecks = 0;
+
+// the presets folder override (PK_PRESETS_DIR), on every platform
+static void setPresetsDir (const std::string& dir)
+{
+#if defined(_WIN32)
+    _putenv_s ("PK_PRESETS_DIR", dir.c_str ());
+#else
+    setenv ("PK_PRESETS_DIR", dir.c_str (), 1);
+#endif
+}
 #define CHECK(cond, ...)                                                   \
     do                                                                     \
     {                                                                      \
@@ -266,7 +276,7 @@ static void robustness ()
         const std::string file = (fs::path (tmpRoot) / "a-file").string ();
         std::ofstream (file) << "x";
         const std::string saved = std::getenv ("PK_PRESETS_DIR");
-        setenv ("PK_PRESETS_DIR", (fs::path (file) / "presets").string ().c_str (), 1);
+        setPresetsDir ((fs::path (file) / "presets").string ().c_str ());
         CHECK (rackio::folderOf (kFxLevlr).empty (), "no folder");
         CHECK (pk::presets::listUser (rackio::folderOf (kFxLevlr)).empty (), "nothing listed");
         CHECK (!rackio::writeValues (kFxLevlr, (fs::path (file) / "presets" / "Levlr" / "x.vstpreset").string (), pluginDefaults (kFxLevlr), {}),
@@ -274,7 +284,7 @@ static void robustness ()
         bool applied = true;
         CHECK (rackio::newSlotValues (kFxLevlr, &applied) == pluginDefaults (kFxLevlr) && !applied, "a new slot: the factory defaults");
         CHECK (!rackio::factoryPresetsOf (kFxLevlr).empty (), "the factory presets are still there");
-        setenv ("PK_PRESETS_DIR", saved.c_str (), 1);
+        setPresetsDir (saved.c_str ());
     }
 }
 
@@ -421,7 +431,7 @@ int main ()
                   .string ();
     std::error_code ec;
     fs::create_directories (tmpRoot, ec);
-    setenv ("PK_PRESETS_DIR", (fs::path (tmpRoot) / "presets").string ().c_str (), 1);
+    setPresetsDir ((fs::path (tmpRoot) / "presets").string ().c_str ());
     struct T
     {
         const char* name;
