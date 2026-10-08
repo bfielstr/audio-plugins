@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.28.0**.
 
 | Plug-in | What it does for you |
 |---|---|
