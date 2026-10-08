@@ -1,28 +1,13 @@
-// Smemplr's effects rack: kRackSlots slots after the sampler (Params.h), each Empty or one of the
-// suite's effects (para, multidyn, m/s eq, smacheratr, widr, wubr, levlr, gentlr, smoothr), in any order; the same effect may sit
-// in several slots. Every slot owns one engine of each kind, allocated up front, so loading or
-// moving an effect never allocates on the audio thread; only the slot's current kind runs.
-//
-// A slot's block of parameters is stored normalized and read through the kind's own table (fxTable),
-// so a knob of the slot's effect in the editor, the host's automation and a saved project all see
-// the effect's real ranges. The latency is the sum of the slots' effects' (Multidyn's look-ahead,
-// Smacheratr's oversampling), whether they are on or not, so switching one off does not move it.
+// Smemplr's effects rack: kRackSlots slots after the sampler (Params.h), each an FxSlot (FxSlot.h: Empty or
+// one of the suite's effects, in any order; the same effect may sit in several slots). The latency is the sum
+// of the slots' effects' (FxSlot::latency), whether they are on or not, so switching one off does not move it.
+// The migrations of old states' rack values are here (FxSlot.h has the slot itself and the kinds' tables).
 #pragma once
 
-#include "MsEq.h"
+#include "FxSlot.h"
 #include "Params.h"
 
-#include "multidyn/src/core/Engine.h"
 #include "multidyn/src/plugin/Meters.h"
-#include "para/src/core/Engine.h"
-#include "smacheratr/src/core/Engine.h"
-#include "widr/src/core/Engine.h"
-#include "wubr/src/core/Engine.h"
-#include "levlr/src/core/Engine.h"
-#include "smoothr/src/core/Engine.h"
-#include "gentlr/src/core/Engine.h"
-
-#include "pluginkit/ParamTable.h"
 
 #include <array>
 #include <atomic>
@@ -31,39 +16,6 @@
 #include <vector>
 
 namespace smemplr {
-
-// The M/S EQ's own parameters (a slot of kind kFxMsEq).
-namespace mseq {
-enum ParamId : uint32_t { kSideHp = 0, kSlope, kSideGain, kMidGain, kNumParams };
-const pk::ParamTable& paramTable ();
-// A slope stored over the three choices of states before version 9 (normalized: 6, 12, 24 dB), as a
-// value of the slope now (MsEq::Slope).
-double slopeFromThreeChoices (double oldNorm);
-} // namespace mseq
-
-const char* fxName (int type); // "para", ...; "" for Empty
-const char* fxFormerName (int type); // the name a renamed kind had ("gently" for gentlr), for pasting its old settings; "" for none
-// The table a kind reads its block through (an empty table for Empty).
-const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
-// A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
-// added after the rack (RMS Window, Soften) sit where its saturator's are (not used in the rack):
-// the block has room for 62; Wubr's (79, without its own saturator) run on into the slot's
-// extension; and Para's after its low-pass drive (Low-Pass Slope and the Gain Locks, IDs 62 .. 64) are
-// at block positions 62 .. 64 too, the first of the slot's extension (its block position is its ID
-// throughout). fxBlockTable is the table by block position; fxIdAt and fxBlockOf convert (-1: none).
-const pk::ParamTable& fxBlockTable (int type);
-int64_t fxIdAt (int type, uint32_t block);
-int64_t fxBlockOf (int type, uint32_t id);
-
-// The effect parameters that its rack page deliberately does not show, and why. Every other parameter
-// of the effect must have a control on the page (the host test checks it), so an effect that gains a
-// parameter gets it in Smemplr too.
-struct RackHidden
-{
-    uint32_t first, last; // a range of the effect's own IDs
-    const char* why;
-};
-const std::vector<RackHidden>& rackHiddenParams (int type);
 
 // The saturator after the rack before 0.9 (Smemplr's kTailBase and kTailExtBase parameters, now "Old
 // End") as a Smacheratr slot with the same settings: set (Smemplr ID, normalized value) is called for
@@ -167,26 +119,9 @@ public:
     void setMeters (RackMeters* m);
 
 private:
-    struct Slot
-    {
-        int type = kFxEmpty;
-        bool on = true;
-        std::array<double, kSlotBlockAll> norm {};
-        para::Engine para {false};
-        multidyn::Engine multidyn {false};
-        MsEq ms;
-        smacheratr::Engine sat;
-        widr::Engine widr {false};
-        wubr::Engine wubr {false};
-        levlr::Engine levlr {false};
-        smoothr::Engine smoothr;
-        gentlr::Engine gentlr {false};
-    };
-    void apply (Slot& s, uint32_t j);      // one value to the slot's current effect
-    void applyAll (Slot& s);               // every value (a new kind), and a clean start
     void publish (int slot);               // meters for the editor
 
-    std::array<std::unique_ptr<Slot>, kRackSlots> slots;
+    std::array<std::unique_ptr<FxSlot>, kRackSlots> slots;
     RackMeters* meters = nullptr;
     double sr = 48000.0;
     int maxBlock = 512;
