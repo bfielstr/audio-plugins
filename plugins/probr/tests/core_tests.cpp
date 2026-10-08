@@ -689,12 +689,12 @@ TEST (session_shared)
     // a probe in another process (no session in its memory) joins a session used a moment ago...
     const std::string id = Session::global ().current ();
     FakeFs fake;
-    fake.writeFile ("/f/.probr-session", id + " 1000\n");
+    fake.writeFile (joinPath ("/f", ".probr-session"), id + " 1000\n");
     Session::global ().reset ();
     CHECK (Session::global ().id (fake, "/f", 1000 + 60) == id, "joined within %lld s", (long long)Session::kJoinSeconds);
     // ...but not an old one
     Session::global ().reset ();
-    fake.writeFile ("/f/.probr-session", id + " 1000\n");
+    fake.writeFile (joinPath ("/f", ".probr-session"), id + " 1000\n");
     CHECK (Session::global ().id (fake, "/f", 1000 + 600) == Session::format (1600), "a new session after ten minutes");
     Session::global ().reset ();
     // labels as file names
