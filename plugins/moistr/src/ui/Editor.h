@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Params.h"
+
 #include "smacheratr/src/ui/TailPanel.h"
 
 #include <memory>
@@ -16,8 +18,8 @@ class SweepView;
 class Editor : public pk::EditorBase
 {
 public:
-    // Classic: two rows of the SWEEP stage at the top (SWEEP, BELL A, BELL B over HIGH SHELF and the sweep
-    // display), the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
+    // Classic: two rows of the SWEEP stage at the top (SWEEP, BELLS, SUB over HIGH SHELF and the sweep display),
+    // the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
     // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), the end saturator's section at
     // the bottom
     static constexpr double kWidth = 1132.0;
@@ -27,13 +29,20 @@ public:
     static constexpr double kTailTop = kRow3 + kRowH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
-    static constexpr double kSweepLeft = 8.0, kSweepRight = 214.0;          // sweep row 1: Sweep, Drive
-    static constexpr double kBellALeft = 222.0, kBellARight = 669.0;        // sweep row 1: Sync, Sync Rate, Phase; Rate, Low, High, Gain, Width
-    static constexpr double kBellBLeft = 677.0, kBellBRight = 1124.0;       // sweep row 1: as BELL A
+    static constexpr double kSweepLeft = 8.0, kSweepRight = 258.0;          // sweep row 1: Sweep, Curve, Tone (on); Drive, Tone
+    static constexpr double kBellsLeft = 266.0, kBellsRight = 854.0;        // sweep row 1: the bell picker, the On strip, Sync, Sync Rate; the picked bell's knobs
+    static constexpr double kSubLeft = 862.0, kSubRight = 1124.0;           // sweep row 1: Clean Sub (Split, Level, Drive), Sub Boost (Freq, Level)
     static constexpr double kShelfLeft = 8.0, kShelfRight = 662.0;          // sweep row 2: High Shelf; Rate, Low, High, Min, Max, Q, Wander, Tilt
     static constexpr double kSweepViewLeft = 670.0, kSweepViewRight = 1124.0; // sweep row 2: the sweep display
-    // a bell's compact column (Sync, Sync Rate, Phase; panel coordinates) and its first knob's left
-    static constexpr double kBellColW = 99.0, kBellKnobLeft = 121.0;
+    // SWEEP's column of switches (Sweep, Curve, Tone; from kSwitchLeft) and its knobs' left (panel coordinates)
+    static constexpr double kSweepColW = 90.0, kSweepKnobLeft = 116.0, kCurveTop = 56.0, kToneTop = 82.0;
+    // BELLS (panel coordinates): a cell per bell (A .. H from kSwitchLeft) in the picker's row and the On strip's
+    // under it, then the picked bell's Sync and Sync Rate; its knobs (Rate, Low, High, Gain, Width, Phase) from
+    // kBellKnobLeft
+    static constexpr double kBellCellW = 22.0, kBellPickTop = 30.0, kBellOnTop = 54.0, kBellRowH = 18.0, kBellSyncTop = 80.0;
+    static constexpr double kBellSyncW = 56.0, kBellKnobLeft = 198.0;
+    // SUB (panel coordinates): two columns (Clean Sub, Sub Boost), each its switch over its value boxes
+    static constexpr double kSubColW = 113.0, kSubBoxTop = 56.0, kSubBoxStep = 20.0, kSubBoxH = 18.0, kSubLabelW = 36.0;
     static constexpr double kSplitLeft = 8.0, kSplitRight = 342.0;          // row 1: Bands, Drive, Mid X, High X
     static constexpr double kLevelsLeft = 350.0, kLevelsRight = 626.0;      // row 1: Low, Mid, High, Air (Level)
     static constexpr double kShiftLeft = 634.0, kShiftRight = 846.0;        // row 1: On, Shift, Shift Mix
@@ -78,15 +87,25 @@ private:
     void showMenu (VSTGUI::CPoint where);
     // High X, Air Level and Air Move dimmed with 3 Bands; Shift and Shift Mix while it is off; Seed B at Blend 0;
     // Liquid's Res, Low and High at Liquid 0; the SWEEP stage's controls while Sweep is off, the shelf's while High
-    // Shelf is off, a bell's Rate while its Sync is on and its Sync Rate while it is off
+    // Shelf is off, Tone while it is off, Clean Sub's and Sub Boost's while they are off, a bell's knobs while it is
+    // off, its Rate while its Sync is on and its Sync Rate while it is off
     void updateLooks ();
+    static bool affectsLooks (uint32_t id);
+    // BELLS shows one bell's controls at a time
+    void pickBell (int b);
     VSTGUI::CRect displayRect (bool arranged) const;
 
     Controller* ctl;
     BandView* display = nullptr;
     SweepView* sweepView = nullptr;
     std::vector<pk::ParamView*> sweepControls, shelfControls; // (everything in the stage but the Sweep switch; the shelf's knobs)
-    pk::ParamView *rateViews[2] {}, *syncRateViews[2] {};
+    std::vector<pk::ParamView*> splitControls, boostControls; // (Clean Sub's and Sub Boost's value boxes)
+    pk::ParamView* toneKnob = nullptr;
+    // per bell: every control BELLS shows for it (shown while it is picked), its knobs, Rate and Sync Rate
+    std::vector<VSTGUI::CView*> bellViews[kNumBells];
+    std::vector<pk::ParamView*> bellKnobs[kNumBells];
+    pk::ParamView *rateViews[kNumBells] {}, *syncRateViews[kNumBells] {};
+    int pickedBell = 0;
     pk::Label* latencyLabel = nullptr;
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;

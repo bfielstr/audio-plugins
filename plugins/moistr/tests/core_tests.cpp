@@ -2393,28 +2393,42 @@ double rbjMagnitude (bool shelf, double f0, double gainDb, double q, double hz, 
     const std::complex<double> z = std::polar (1.0, -2.0 * kPi * hz / sr);
     return std::abs ((b[0] + b[1] * z + b[2] * z * z) / (d[0] + d[1] * z + d[2] * z * z));
 }
-// the prototype's centre (Hz) for a bell at t seconds: Low (High / Low)^(0.5 - 0.5 cos (2 pi Rate t))
-double protoCentre (double rate, double lo, double hi, double t) { return lo * std::pow (hi / lo, 0.5 - 0.5 * std::cos (2.0 * kPi * rate * t)); }
+// the prototype's centre (Hz) for a bell at t seconds: Low (High / Low)^(0.5 - 0.5 cos (2 pi Rate t + phase))
+double protoCentre (double rate, double lo, double hi, double t, double phase = 0.0)
+{
+    return lo * std::pow (hi / lo, 0.5 - 0.5 * std::cos (2.0 * kPi * rate * t + phase));
+}
 } // namespace
 
 TEST (sweep_default_is_the_recipe)
 {
-    // a new instance: the SWEEP stage on with the recipe, the rest neutral
+    // a new instance: the SWEEP stage on with the Ocean recipe (eight bells, Curve Soft at 14 dB, Tone 7 kHz, no
+    // High Shelf, Sub Boost at 70 Hz and 70 %), the rest neutral
     const auto d = defaultParams ();
-    CHECK (d[kSweep] == 1.0 && d[kShelf] == 1.0 && d[kSweepDrive] == 18.0, "Sweep and High Shelf on, Drive 18 dB");
-    CHECK (d[kARate] == 0.70 && d[kALow] == 20.0 && d[kAHigh] == 120.0 && d[kAGain] == 18.0 && d[kAWidth] == 0.71 && d[kAPhase] == 0.0 &&
-               d[kASync] == 0.0,
-           "bell A: 0.70 Hz, 20 .. 120 Hz, +18 dB, Q 0.71, Phase 0");
-    CHECK (d[kBRate] == 0.77 && d[kBLow] == 30.0 && d[kBHigh] == 300.0 && d[kBGain] == -18.0 && d[kBWidth] == 0.71 && d[kBPhase] == 0.0,
-           "bell B: 0.77 Hz, 30 .. 300 Hz, -18 dB, Q 0.71, Phase 0");
-    CHECK (d[kShelfLow] == 100.0 && d[kShelfHigh] == 1000.0 && d[kShelfMin] == -18.0 && d[kShelfMax] == 6.0 && d[kShelfQ] == 18.0,
-           "High Shelf: 100 .. 1000 Hz, -18 .. +6 dB, Q 18");
+    CHECK (d[kSweep] == 1.0 && d[kShelf] == 0.0 && d[kSweepDrive] == 14.0 && std::lround (d[kSweepCurve]) == kCurveSoft,
+           "Sweep on, High Shelf off, Drive 14 dB on the Soft curve");
+    CHECK (d[kToneOn] == 1.0 && d[kTone] == 7000.0, "Tone on at 7 kHz");
+    CHECK (d[kCleanSub] == 0.0 && d[kSubBoost] == 1.0 && d[kSubFreq] == 70.0 && d[kSubLevel] == 0.7,
+           "Clean Sub off; Sub Boost on at 70 Hz, 70 %%");
+    // the eight bells, exactly the recipe (rate, low, high, gain, Q, phase in radians as degrees)
+    const double want[kNumBells][6] = {{0.70, 20, 120, 23.4, 0.5, 0.0}, {0.77, 30, 300, -23.4, 0.5, 1.1}, {0.53, 80, 600, 11.7, 0.6, 2.3},
+                                       {0.91, 150, 1200, -11.7, 0.6, 0.7}, {0.41, 250, 2000, 7.8, 0.7, 3.9}, {1.13, 400, 3000, -10.4, 0.7, 5.1},
+                                       {0.63, 60, 450, -7.8, 0.5, 4.4}, {0.84, 200, 1600, 9.1, 0.6, 2.9}};
+    for (int b = 0; b < kNumBells; ++b)
+    {
+        const double* w = want[b];
+        CHECK (d[bellOnId (b)] == 1.0 && d[bellId (b, kBellRate)] == w[0] && d[bellId (b, kBellLow)] == w[1] && d[bellId (b, kBellHigh)] == w[2] &&
+                   d[bellId (b, kBellGain)] == w[3] && d[bellId (b, kBellWidth)] == w[4] && d[bellId (b, kBellSync)] == 0.0 &&
+                   std::fabs (d[bellId (b, kBellPhase)] * kPi / 180.0 - w[5]) < 1e-12,
+               "bell %c: on, %.2f Hz, %.0f .. %.0f Hz, %+.1f dB, Q %.1f, phase %.1f rad", 'A' + b, w[0], w[1], w[2], w[3], w[4], w[5]);
+    }
+    CHECK (std::fabs (d[kBPhase] - 63.0254) < 1e-4, "B Phase: 1.1 rad is %.4f degrees", d[kBPhase]);
     CHECK (d[kDrive] == 0.0 && d[kMovement] == 0.0 && d[kGlue] == 0.0 && d[kGrit] == 0.0 && d[kLink] == 0.0 && d[kLiquid] == 0.0 &&
                d[kShiftOn] == 0.0 && d[kMix] == 1.0 && d[kOutput] == 0.0,
            "the rest neutral: Drive, Movement, Glue, Grit, Link, Liquid 0, the shifter off, Mix 100 %%");
     CHECK (d[kTailBase + pk::kTailOn] == 1.0, "the end saturator on (as in every plug-in since 0.25)");
     // the bells' centres follow the prototype's formula exactly, tick by tick, over 20 s (the engine, from reset)
-    for (double sr : {44100.0, 48000.0})
+    for (double sr : {44100.0, 48000.0, 96000.0})
     {
         auto e = fresh (sr);
         double worst = 0.0;
@@ -2426,11 +2440,203 @@ TEST (sweep_default_is_the_recipe)
             e->process (z.data (), z.data (), l.data (), r.data (), Sweep::kTick);
             done += Sweep::kTick;
             const double ts = (double)done / sr;
-            worst = std::max ({worst, std::fabs (e->sweepStage ().bellHz (0) / protoCentre (0.70, 20.0, 120.0, ts) - 1.0),
-                               std::fabs (e->sweepStage ().bellHz (1) / protoCentre (0.77, 30.0, 300.0, ts) - 1.0)});
+            for (int b = 0; b < kNumBells; ++b)
+                worst = std::max (worst, std::fabs (e->sweepStage ().bellHz (b) / protoCentre (want[b][0], want[b][1], want[b][2], ts, want[b][5]) - 1.0));
         }
-        CHECK (worst < 1e-9, "%.0f Hz: the bells' centres are the prototype's (worst %.1e relative)", sr, worst);
+        CHECK (worst < 1e-9, "%.0f Hz: the eight bells' centres are the prototype's (worst %.1e relative)", sr, worst);
     }
+}
+
+TEST (sweep_old_states_keep_their_sound)
+{
+    // a 0.24 / 0.25 state reads the 0.26 parameters at values that leave its sound (defaultNormalizedForVersion):
+    // bells C .. H, Tone, Clean Sub and Sub Boost off, Curve Hard. Those paths are then not run at all: whatever
+    // their settings, the render is the same, bit for bit. (Renders like these were compared bit for bit with
+    // 0.25.0's, for every factory preset and the 0.25 default state, when they were added.)
+    const auto x = reese (2.0);
+    for (int version : {3, 4})
+    {
+        CHECK (defaultNormalizedForVersion (kSweepCurve, version) == toNormalized (kSweepCurve, kCurveHard) &&
+                   defaultNormalizedForVersion (kToneOn, version) == 0.0 && defaultNormalizedForVersion (kCleanSub, version) == 0.0 &&
+                   defaultNormalizedForVersion (kSubBoost, version) == 0.0 && defaultNormalizedForVersion (kShelf, version) == 1.0 &&
+                   toPlain (kSweepDrive, defaultNormalizedForVersion (kSweepDrive, version)) == 18.0,
+               "version %d: Curve Hard, Tone, Clean Sub and Sub Boost off; High Shelf on, Sweep Drive 18 dB", version);
+        int bellsOff = 0;
+        for (int b = 2; b < kNumBells; ++b)
+            bellsOff += defaultNormalizedForVersion (bellOnId (b), version) == 0.0;
+        CHECK (bellsOff == 6 && defaultNormalizedForVersion (kAOn, version) == 1.0 && defaultNormalizedForVersion (kBOn, version) == 1.0,
+               "version %d: bells A and B on, C .. H off", version);
+    }
+    auto render = [&] (bool wild) {
+        auto e = fresh ();
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            e->setParam (id, toPlain (id, defaultNormalizedForVersion (id, 4)));
+        if (wild)
+            for (int b = 2; b < kNumBells; ++b)
+            {
+                e->setParam (bellId (b, kBellGain), 24.0);
+                e->setParam (bellId (b, kBellRate), 7.0);
+                e->setParam (bellId (b, kBellWidth), 9.0);
+            }
+        if (wild)
+        {
+            e->setParam (kTone, 1000.0);
+            e->setParam (kSplitFreq, 250.0);
+            e->setParam (kSplitLevel, 12.0);
+            e->setParam (kSplitDrive, 18.0);
+            e->setParam (kSubFreq, 200.0);
+            e->setParam (kSubLevel, 1.0);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = run (*e, x, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    const auto calm = render (false);
+    CHECK (calm == render (true), "0.25's settings: the new paths' settings change nothing (bit for bit)");
+    // and the old Sweep presets (explicit since 0.26) over the new defaults render as over 0.25's
+    namespace fs = std::filesystem;
+    int checked = 0;
+    for (const char* name : {"Sweep/Gentle.txt", "Sweep/Heavy.txt", "Sweep/High Shelf 5k.txt", "Sweep/Classic Sweep.txt",
+                             "Sweep/Sweep + Bands.txt", "Sweep/Wide Bump.txt"})
+    {
+        std::ifstream in (fs::path (MOISTR_PRESETS_DIR) / name);
+        std::stringstream ss;
+        ss << in.rdbuf ();
+        pk::presets::FactoryPreset fp;
+        std::string err;
+        CHECK (pk::presets::parseFactoryPreset (ss.str (), name, paramTable (), fp, err), "%s parses: %s", name, err.c_str ());
+        auto renderOver = [&] (bool old) {
+            auto e = fresh ();
+            for (uint32_t id = 0; id < kNumParams; ++id)
+                e->setParam (id, toPlain (id, old ? defaultNormalized025 (id) : defaultNormalized (id)));
+            for (auto& [id, n] : fp.values)
+                e->setParam (id, toPlain (id, n));
+            e->reset ();
+            std::vector<float> r;
+            auto l = run (*e, x, &r);
+            l.insert (l.end (), r.begin (), r.end ());
+            return l;
+        };
+        CHECK (renderOver (false) == renderOver (true), "%s: as in 0.25, bit for bit", name);
+        ++checked;
+    }
+    CHECK (checked == 6, "%d old sweep presets", checked);
+}
+
+TEST (sweep_ocean_preset_is_init)
+{
+    // Sweep/Ocean is the new instance's sound: over Init it sets nothing that differs
+    std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / "Sweep/Ocean.txt");
+    std::stringstream ss;
+    ss << in.rdbuf ();
+    pk::presets::FactoryPreset fp;
+    std::string err;
+    CHECK (pk::presets::parseFactoryPreset (ss.str (), "Sweep/Ocean.txt", paramTable (), fp, err), "parses: %s", err.c_str ());
+    int differ = 0;
+    for (auto& [id, n] : fp.values)
+        differ += std::fabs (toPlain (id, n) - defaultParams ()[id]) > 1e-9 * std::max (1.0, std::fabs (defaultParams ()[id]));
+    CHECK (differ == 0 && fp.values.size () >= 10, "%d of %zu values differ from Init", differ, fp.values.size ());
+}
+
+TEST (sweep_keeps_the_stereo_image)
+{
+    // the stage (and the engine at its defaults) treats both channels alike: an L-only input leaves R silent, and
+    // swapping L and R in swaps them out, bit for bit; a mono input stays mono
+    const auto a = reese (3.0);
+    const auto b = noise (0.2, 3.0, 11);
+    for (int tailOn = 0; tailOn < 2; ++tailOn)
+    {
+        auto render = [&] (const std::vector<float>& l, const std::vector<float>& r, std::vector<float>& outR) {
+            auto e = fresh ();
+            if (!tailOn)
+                tailNeutral (*e);
+            std::vector<float> outL (l.size ());
+            outR.assign (l.size (), 0.0f);
+            for (size_t i = 0; i < l.size (); i += 256)
+            {
+                const int m = (int)std::min ((size_t)256, l.size () - i);
+                e->process (l.data () + i, r.data () + i, outL.data () + i, outR.data () + i, m);
+            }
+            return outL;
+        };
+        const std::vector<float> silent (a.size (), 0.0f);
+        std::vector<float> r1, r2, r3, r4;
+        const auto l1 = render (a, silent, r1);
+        CHECK (peak (r1, 0, r1.size ()) == 0.0 && rms (l1, 0, l1.size ()) > 0.01, "%s: L only in, R out silent (peak %.3g)",
+               tailOn ? "the end saturator on" : "the engine", peak (r1, 0, r1.size ()));
+        const auto l2 = render (a, b, r2);
+        const auto l3 = render (b, a, r3);
+        CHECK (l2 == r3 && r2 == l3, "%s: swapping L and R in swaps them out, bit for bit", tailOn ? "the end saturator on" : "the engine");
+        const auto l4 = render (a, a, r4);
+        CHECK (l4 == r4, "%s: mono in, mono out", tailOn ? "the end saturator on" : "the engine");
+    }
+}
+
+TEST (clean_sub_split_is_flat)
+{
+    // Clean Sub with the saturator linear (a tiny impulse, Drive 0 dB) and Split Level 0 dB: the split's two sides
+    // add up to an all-pass, so the response is the one without it (the anti-aliasing's average aside, as there)
+    for (double sr : {44100.0, 48000.0, 96000.0})
+        for (double fc : {40.0, 100.0, 250.0})
+        {
+            auto response = [&] (bool split) {
+                SweepRig rig (sr, [&] (ParamArray& p) {
+                    p[kSweepDrive] = 0.0;
+                    p[kSweepCurve] = kCurveHard;
+                    p[kToneOn] = 0.0;
+                    p[kSubBoost] = 0.0;
+                    p[kCleanSub] = split ? 1.0 : 0.0;
+                    p[kSplitFreq] = fc;
+                    p[kSplitLevel] = 0.0;
+                });
+                std::vector<double> x (1, 1e-6);
+                return rig.run (x, (size_t)(2.0 * sr));
+            };
+            const auto with = response (true), without = response (false);
+            double worst = 0.0;
+            for (double hz : {20.0, 30.0, 50.0, 70.0, 100.0, 150.0, 250.0, 400.0, 1000.0, 5000.0})
+                worst = std::max (worst, std::fabs (db (irMagnitude (with, hz, sr) / irMagnitude (without, hz, sr))));
+            CHECK (worst < 0.1 && finite (std::vector<float> (with.begin (), with.end ())), "%.0f Hz, split at %.0f Hz: flat within 0.1 dB (%.3f)",
+                   sr, fc, worst);
+        }
+}
+
+TEST (sub_boost_adds_the_lows)
+{
+    // Sub Boost at Sub Level 0 adds nothing (bit for bit as off); up, it lifts the lows (30 .. 70 Hz) against the
+    // highs and only them; at 100 %% its lows come in at about the saturated signal's RMS
+    const auto x = detunedBass (6.0);
+    auto render = [&] (bool on, double level, double* unit = nullptr) {
+        auto e = fresh ();
+        tailNeutral (*e);
+        e->setParam (kSubBoost, on ? 1.0 : 0.0);
+        e->setParam (kSubLevel, level);
+        e->reset ();
+        auto y = run (*e, x);
+        if (unit)
+            *unit = e->sweepStage ().boostUnit ();
+        return y;
+    };
+    const auto off = render (false, 0.7);
+    CHECK (render (true, 0.0) == off, "Sub Level 0: as off, bit for bit");
+    const auto on = render (true, 0.7), full = render (true, 1.0);
+    const size_t from = (size_t)(1.0 * kSr);
+    auto balance = [&] (const std::vector<float>& y) {
+        double lo = 0, hi = 0;
+        for (double hz : {40.0, 55.0, 65.0})
+            lo += toneAt (y, hz, from, y.size ());
+        for (double hz : {1000.0, 2000.0})
+            hi += toneAt (y, hz, from, y.size ());
+        return db (lo / hi);
+    };
+    std::printf ("    lows against highs: off %.1f dB, 70 %% %.1f dB, 100 %% %.1f dB\n", balance (off), balance (on), balance (full));
+    CHECK (balance (on) > balance (off) + 1.0 && balance (full) > balance (on), "the lows come up (%.1f, %.1f, %.1f dB)", balance (off),
+           balance (on), balance (full));
+    double unit = 0.0;
+    render (true, 1.0, &unit);
+    CHECK (unit > 0.1 && unit < kSubMaxGain, "its RMS match is in range (x%.2f)", unit);
 }
 
 TEST (sweep_filters_match_rbj)
@@ -2453,7 +2659,13 @@ TEST (sweep_filters_match_rbj)
         {
             SweepRig rig (sr, [&] (ParamArray& p) {
                 p[kSweepDrive] = 0.0;
-                p[kBGain] = 0.0;
+                p[kSweepCurve] = kCurveHard;
+                p[kToneOn] = 0.0;
+                p[kSubBoost] = 0.0;
+                for (int b = 1; b < kNumBells; ++b)
+                    p[bellOnId (b)] = 0.0; // (off: gliding to 0 dB from 0 dB, never run)
+                for (int b = 1; b < kNumBells; ++b)
+                    p[bellId (b, kBellGain)] = 0.0;
                 p[kShelf] = c.shelf ? 1.0 : 0.0;
                 if (c.shelf)
                 {
@@ -2590,6 +2802,22 @@ TEST (sweep_stable_everywhere)
                 e->setParam (kShelfWander, 1.0);
                 e->setParam (kShelfTilt, 0.0);
                 e->setParam (kSweepDrive, kSweepDriveMax);
+                e->setParam (kShelf, 1.0);
+                for (int b = 2; b < kNumBells; ++b)
+                {
+                    e->setParam (bellId (b, kBellRate), kSweepRateMax);
+                    e->setParam (bellId (b, kBellLow), kBellFreqMin);
+                    e->setParam (bellId (b, kBellHigh), kBellFreqMaxWide);
+                    e->setParam (bellId (b, kBellGain), b % 2 ? -24.0 : 24.0);
+                    e->setParam (bellId (b, kBellWidth), b % 2 ? kBellQMin : kBellQMax);
+                }
+                e->setParam (kCleanSub, 1.0);
+                e->setParam (kSplitFreq, kSplitFreqMax);
+                e->setParam (kSplitLevel, kSplitLevelMax);
+                e->setParam (kSplitDrive, kSplitDriveMax);
+                e->setParam (kSubLevel, 1.0);
+                e->setParam (kSubFreq, kSubFreqMax);
+                e->setParam (kTone, kToneMin);
                 e->reset ();
             }
             const size_t n = (size_t)(4.0 * sr);
@@ -2615,7 +2843,9 @@ TEST (sweep_stable_everywhere)
             const double top = std::max (peak (l, 0, n), peak (r, 0, n));
             CHECK (finite (l) && finite (r), "%.0f Hz%s: finite", sr, extreme ? " (extremes)" : "");
             CHECK (denormals == 0, "%.0f Hz%s: no denormals (%d)", sr, extreme ? " (extremes)" : "", denormals);
-            CHECK (top < 4.0, "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
+            // (the extremes: Clean Sub at +12 dB and Sub Boost at 100 % pass lows boosted by several +24 dB bells
+            // around the saturator, so they are bounded only by the bells' gain)
+            CHECK (top < (extreme ? 30.0 : 4.0), "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
         }
 }
 
@@ -2629,6 +2859,7 @@ TEST (shelf_orbit_bounded_and_smooth)
             {
                 auto path = [&] (int s) {
                     SweepRig rig (48000.0, [&] (ParamArray& p) {
+                        p[kShelf] = 1.0;
                         p[kSeed] = s;
                         p[kShelfWander] = wander;
                         p[kShelfTilt] = tilt;
@@ -2684,6 +2915,7 @@ TEST (shelf_tilt_tames_high_corners)
            "Tilt 0: the same range everywhere; up to 1 kHz never lowered");
     // on the orbit (Low 300 Hz, High 5 kHz): the gain under the ceiling, high corners lower
     SweepRig rig (48000.0, [] (ParamArray& p) {
+        p[kShelf] = 1.0;
         p[kShelfLow] = 300.0;
         p[kShelfHigh] = 5000.0;
         p[kShelfWander] = 0.0;
@@ -2774,7 +3006,7 @@ TEST (sweep_default_level)
 TEST (sweep_switches_smoothly)
 {
     // switching Sweep and High Shelf on and off fades (no step larger than the signal's own)
-    const auto x = sine (55.0, 0.25, 3.0);
+    const auto x = sine (55.0, 0.25, 4.0);
     auto e = fresh ();
     const auto y = run (*e, x, nullptr, 256, [&] (size_t at) {
         if (at == 256 * 100)
@@ -2785,6 +3017,16 @@ TEST (sweep_switches_smoothly)
             e->setParam (kShelf, 0.0);
         if (at == 256 * 400)
             e->setParam (kShelf, 1.0);
+        if (at == 256 * 450)
+            e->setParam (kCleanSub, 1.0);
+        if (at == 256 * 500)
+            e->setParam (kToneOn, 0.0);
+        if (at == 256 * 520)
+            e->setParam (kSubBoost, 0.0);
+        if (at == 256 * 540)
+            e->setParam (kCOn, 0.0);
+        if (at == 256 * 560)
+            e->setParam (kSweepCurve, kCurveHard);
     });
     double jump = 0.0;
     for (size_t i = 1000; i < y.size (); ++i)
@@ -2797,13 +3039,21 @@ TEST (cpu_budget)
     // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
-    for (bool heavy : {false, true})
+    for (int which = 0; which < 3; ++which)
     {
+        const bool heavy = which == 1, ocean = which == 2;
         double secs = 1e9;
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
         {
-            auto e = engine ();
+            auto e = ocean ? fresh () : engine ();
+            if (ocean)
+            {
+                // a new instance (eight bells, Sub Boost, Tone, the end saturator) with Clean Sub on as well
+                e->setParam (kCleanSub, 1.0);
+                e->setParam (kSplitDrive, 6.0);
+                e->setParam (kShelf, 1.0);
+            }
             if (heavy)
             {
                 e->setParam (kBandCount, kBands4);
@@ -2839,7 +3089,9 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on" : "the defaults");
+                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
+                     : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
+                             : "the bands alone (Sweep off)");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }

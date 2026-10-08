@@ -1,0 +1,30 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, broad
+comment: Two broad bells only: A +18 dB sweeping 20 to 120 Hz at 0.70 Hz, B -18 dB sweeping 30 to 300 Hz at 0.77 Hz (both Width 0.4, starting at Low), into 12 dB of drive on the Hard curve. No shelf, no Tone.
+Sweep = On
+Sweep Drive = 12 dB
+Curve = Hard
+Tone On = Off
+High Shelf = Off
+Clean Sub = Off
+Sub Boost = Off
+A On = On
+A Rate = 0.7 Hz
+A Low = 20 Hz
+A High = 120 Hz
+A Gain = 18 dB
+A Width = 0.4
+A Phase = 0
+B On = On
+B Rate = 0.77 Hz
+B Low = 30 Hz
+B High = 300 Hz
+B Gain = -18 dB
+B Width = 0.4
+B Phase = 0
+C On = Off
+D On = Off
+E On = Off
+F On = Off
+G On = Off
+H On = Off

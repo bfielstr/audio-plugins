@@ -1,6 +1,0 @@
-# moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: sweep, bass, default
-comment: The defaults: bell A +18 dB sweeping 20 to 120 Hz at 0.70 Hz, bell B -18 dB sweeping 30 to 300 Hz at 0.77 Hz, the High Shelf orbiting 100 Hz to 1 kHz, then 18 dB of drive. The bands neutral.
-Sweep = On
-Sweep Drive = 18 dB
-High Shelf = On

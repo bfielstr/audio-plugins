@@ -1,5 +1,5 @@
 # Dropr: a 6-band, Fuse-style compressor (downward with normal or negative ratios, upward) feeding a saturator.
-project(Dropr VERSION 0.25.0.0)
+project(Dropr VERSION 0.26.0.0)
 
 add_library(dropr_core STATIC
     src/core/Params.cpp

@@ -171,26 +171,48 @@ int main (int argc, char** argv)
             win.click (Editor::kShiftLeft + Editor::kKnobLeft + Editor::kShiftSwitchW / 2, sy);
             pump (0.05);
             CHECK (plainOf (rig, kShiftOn) < 0.5, "Shift clicked off");
-            // the SWEEP stage's switches: Sweep (SWEEP, sweep row 1) and High Shelf (HIGH SHELF, sweep row 2), both on
-            // by default; and bell A's Sync (its compact column)
+            // the SWEEP stage's switches: Sweep (SWEEP, sweep row 1; on by default) and High Shelf (HIGH SHELF, sweep
+            // row 2; off by default since 0.26); in BELLS, bell C picked and switched off and on in the On strip, and
+            // the picked bell's Sync (C's, then A's again)
             const double swy = Editor::kSweepRow1 + Editor::kSwitchTop + Editor::kSwitchH / 2;
-            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, swy);
+            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSweepColW / 2, swy);
             pump (0.05);
             CHECK (plainOf (rig, kSweep) < 0.5, "Sweep clicked off");
-            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, swy);
+            win.click (Editor::kSweepLeft + Editor::kSwitchLeft + Editor::kSweepColW / 2, swy);
             pump (0.05);
             CHECK (plainOf (rig, kSweep) >= 0.5, "Sweep clicked on");
             const double shy = Editor::kSweepRow2 + Editor::kSwitchTop + Editor::kSwitchH / 2;
             win.click (Editor::kShelfLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, shy);
             pump (0.05);
-            CHECK (plainOf (rig, kShelf) < 0.5, "High Shelf clicked off");
+            CHECK (plainOf (rig, kShelf) >= 0.5, "High Shelf clicked on");
             win.click (Editor::kShelfLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, shy);
             pump (0.05);
-            CHECK (plainOf (rig, kShelf) >= 0.5, "High Shelf clicked on");
-            win.click (Editor::kBellALeft + Editor::kSwitchLeft + Editor::kBellColW / 2, swy);
+            CHECK (plainOf (rig, kShelf) < 0.5, "High Shelf clicked off");
+            auto cellX = [] (int b) { return Editor::kBellsLeft + Editor::kSwitchLeft + Editor::kBellCellW * b + Editor::kBellCellW / 2 - 1; };
+            const double pickY = Editor::kSweepRow1 + Editor::kBellPickTop + Editor::kBellRowH / 2;
+            const double onY = Editor::kSweepRow1 + Editor::kBellOnTop + Editor::kBellRowH / 2;
+            const double syncX = Editor::kBellsLeft + Editor::kSwitchLeft + Editor::kBellSyncW / 2;
+            const double syncY = Editor::kSweepRow1 + Editor::kBellSyncTop + Editor::kSwitchH / 2;
+            win.click (cellX (2), onY);
+            pump (0.05);
+            CHECK (plainOf (rig, kCOn) < 0.5, "bell C clicked off in the On strip");
+            win.click (cellX (2), onY);
+            pump (0.05);
+            CHECK (plainOf (rig, kCOn) >= 0.5, "bell C clicked on in the On strip");
+            win.click (cellX (2), pickY); // (bell C picked: its Sync in the picked bell's place)
+            pump (0.05);
+            win.click (syncX, syncY);
+            pump (0.05);
+            CHECK (plainOf (rig, kCSync) >= 0.5 && plainOf (rig, kASync) < 0.5, "bell C's Sync clicked on (A's untouched)");
+            win.click (syncX, syncY);
+            pump (0.05);
+            CHECK (plainOf (rig, kCSync) < 0.5, "bell C's Sync clicked off");
+            win.click (cellX (0), pickY);
+            pump (0.05);
+            win.click (syncX, syncY);
             pump (0.05);
             CHECK (plainOf (rig, kASync) >= 0.5, "bell A's Sync clicked on");
-            win.click (Editor::kBellALeft + Editor::kSwitchLeft + Editor::kBellColW / 2, swy);
+            win.click (syncX, syncY);
             pump (0.05);
             CHECK (plainOf (rig, kASync) < 0.5, "bell A's Sync clicked off");
             // the Sync switch in MOVEMENT (row 2)

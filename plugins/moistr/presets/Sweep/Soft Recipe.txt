@@ -1,0 +1,39 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, bass, soft
+comment: Bells A and B (+18 and -18 dB, Width 0.5, starting at Low) with the High Shelf going round 100 Hz to 1 kHz and -12 to +3 dB, into 14 dB of drive on the Soft curve, Tone at 7 kHz.
+Sweep = On
+Sweep Drive = 14 dB
+Curve = Soft
+Tone On = On
+Tone = 7 kHz
+Clean Sub = Off
+Sub Boost = Off
+A On = On
+A Rate = 0.7 Hz
+A Low = 20 Hz
+A High = 120 Hz
+A Gain = 18 dB
+A Width = 0.5
+A Phase = 0
+B On = On
+B Rate = 0.77 Hz
+B Low = 30 Hz
+B High = 300 Hz
+B Gain = -18 dB
+B Width = 0.5
+B Phase = 0
+C On = Off
+D On = Off
+E On = Off
+F On = Off
+G On = Off
+H On = Off
+High Shelf = On
+Shelf Rate = 0.6 Hz
+Shelf Low = 100 Hz
+Shelf High = 1 kHz
+Shelf Min = -12 dB
+Shelf Max = 3 dB
+Shelf Q = 1
+Wander = 40 %
+Tilt = 60 %

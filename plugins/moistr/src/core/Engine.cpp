@@ -676,8 +676,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->liquidF2Hz.store (liq ? (float)liqF2 : 0.0f, rx);
         meters->liquidAmount.store ((float)liquid, rx);
         meters->glueDb.store ((float)state[0].glue.gainReductionDb (), rx);
-        for (int b = 0; b < 3; ++b)
-            meters->sweepHz[(size_t)b].store ((float)(b < 2 ? sweep.bellHz (b) : sweep.shelfHz ()), rx);
+        for (int b = 0; b <= kNumBells; ++b)
+            meters->sweepHz[(size_t)b].store ((float)(b < kNumBells ? sweep.bellHz (b) : sweep.shelfHz ()), rx);
+        for (int b = 0; b < kNumBells; ++b)
+            meters->bellDb[(size_t)b].store ((float)sweep.bellDb (b), rx);
         meters->shelfDb.store ((float)sweep.shelfDb (), rx);
         meters->shelfCeiling.store ((float)sweep.shelfCeiling (), rx);
         meters->sweepAmount.store ((float)sweep.amount (), rx);

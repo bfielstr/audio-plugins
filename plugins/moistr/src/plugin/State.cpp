@@ -24,7 +24,11 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 // plug-ins do), so projects keep sounding the same.
 // 4: 0.25, the end saturator and its Gentlr on by default, Gentlr's Slope Signature (an older state keeps
 //    the old defaults where it lacks them: smacheratr::tailOldDefaults below).
-constexpr int32 kVersion = 4;
+// 5: 0.26, the SWEEP stage's eight bells, Curve, Tone, Clean Sub and Sub Boost (IDs 119 .. 184 appended), and
+//    the "Ocean" recipe as the new defaults. A version 3 or 4 state reads what it lacks at 0.25's defaults with
+//    the new parameters as they leave its sound (bells C .. H, Tone, Clean Sub and Sub Boost off, Curve Hard:
+//    defaultNormalizedForVersion), so a 0.24 or 0.25 project sounds as it did.
+constexpr int32 kVersion = 5;
 constexpr int32 kNewDefaults = 4;
 } // namespace
 
@@ -50,7 +54,7 @@ bool readState (IBStream* stream, State& st)
         return false;
     for (uint32 id = 0; id < kNumParams; ++id)
     {
-        st.norm[id] = version < 3 ? legacyDefaultNormalized (id) : defaultNormalized (id);
+        st.norm[id] = defaultNormalizedForVersion (id, version);
         st.has[id] = false;
     }
     for (int32 i = 0; i < count; ++i)
