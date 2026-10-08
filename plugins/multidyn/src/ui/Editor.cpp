@@ -107,7 +107,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (new Label (CRect (kStyleLeft - 42, 6, kStyleLeft - 4, 28), "Style", 10.5, false, 2));
     bind (root, new Segmented (CRect (kStyleLeft, kStyleTop, kStyleRight, kStyleTop + 20), this, kStyle, {"OTT", "Character"}));
     scStatus = new Label (CRect (8, kScStatusTop, 342, kScStatusTop + 16), "", 9.5);
-    root->addView (new pk::PresetBar (CRect (570, 6, 778, 28), ctl));
+    root->addView (new pk::PresetBar (CRect (578, 6, 778, 28), ctl));
     scStatus->setDim (true);
     root->addView (scStatus);
     root->addView (tip (new ActionButton (CRect (786, 6, 808, 28), "?", [this] { setTooltipsEnabled (!tooltipsEnabled ()); },
@@ -189,9 +189,7 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
     // the end-of-chain Smacheratr, after the Output gain
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base},
-                                                    [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, 424, 912, 424 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -200,9 +198,41 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
+smacheratr::TailBases Editor::tailBases () { return {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // how many bands and which compressor (Bands, Style), how hard (Amount) and how fast (Time); Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "multidyn";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* m = c->getMeters (); return m ? &m->capture : nullptr; };
+    s.displayHeight = 240;
+    s.display = [this] (const CRect& r) -> CView* {
+        display = new DynDisplay (r, this, [c = ctl] { return c->getMeters (); });
+        pk::setHelp (display, "Bands", help::kDisplay);
+        return display;
+    };
+    s.rows = {{segmented (kBands, "Bands", {"1", "2", "3", "4"}, 200), segmented (kStyle, "Style", {"OTT", "Character"})},
+              {knob (kAmount), knob (kTime)}};
+    s.output = {knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (504, 6, 570, 28);
+    return s;
+}
+
 void Editor::updateLayout ()
 {
-    if (!display)
+    if (!display || !nameLabels[0]) // (the Basic page has the display alone)
         return;
     const int n = std::clamp ((int)std::lround (plainValue (kBands)) + 1, 1, kMaxBands);
     const bool sub = display->subShown ();

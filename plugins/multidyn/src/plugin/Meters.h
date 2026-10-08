@@ -5,6 +5,7 @@
 #include "../core/Params.h"
 
 #include "smacheratr/src/core/Engine.h"
+#include "pluginkit/Capture.h"
 
 #include <array>
 #include <atomic>
@@ -20,6 +21,7 @@ struct Meters
     std::atomic<bool> sidechainConnected {false};
     smacheratr::Meters satMeters;            // the saturator at the end of the chain
     std::atomic<double> sampleRate {48000.0};
+    pk::CaptureBuffer capture;               // the output, for the Basic page's capture band
 
     Meters ()
     {
