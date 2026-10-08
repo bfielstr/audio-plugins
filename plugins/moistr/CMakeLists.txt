@@ -1,13 +1,15 @@
 # Moistr: a SWEEP stage (eight sweeping bell EQs, a High Shelf on a slow orbit, a level-matched saturator), then
 # a split into a low band held steady and upper bands that rise and fall slowly (seeded, repeatable), glued back
 # together with a compressor and soft clipping; optionally a second pass through the bands.
-project(Moistr VERSION 0.26.0.0)
+project(Moistr VERSION 0.27.0.0)
 
 add_library(moistr_core STATIC
     src/core/Params.cpp
     src/core/Movement.cpp
     src/core/Engine.cpp
     src/core/Sweep.cpp
+    src/core/Gesture.cpp
+    src/core/GestureFile.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core)
@@ -42,6 +44,8 @@ pk_add_plugin(Moistr
         src/ui/BandView.cpp
         src/ui/SweepView.h
         src/ui/SweepView.cpp
+        src/ui/GestureView.h
+        src/ui/GestureView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )

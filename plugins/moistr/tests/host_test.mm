@@ -139,6 +139,39 @@ int main (int argc, char** argv)
         CHECK (std::lround (toPlain (kBandCount, back.norm[kBandCount])) == kBands4, "Bands saved");
         rig.param (kBandCount, toNormalized (kBandCount, kBands3));
 
+        // the gestures: a user gesture in slot 1 on Mid Level through the state (version 6) plays and comes back
+        // with getState; the render moves (a gate) and stays finite and mono
+        {
+            State g = baseState ();
+            g.norm[gestureId (0, kGestureTarget)] = toNormalized (gestureId (0, kGestureTarget), kTargetMidLevel);
+            g.norm[gestureId (0, kGestureChoice)] = toNormalized (gestureId (0, kGestureChoice), kUserGesture);
+            g.user[0].name = "Host Gate";
+            g.user[0].length = 1.0;
+            g.user[0].points = {{0.0, 1.0}, {0.5, 1.0}, {0.5, 0.0}, {1.0, 0.0}};
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, g); }), "setState with a user gesture");
+            std::vector<float> gl, gr;
+            rig.render (0.1, gl, nullptr, tone ()); // (the processor takes the state with its next block)
+            gl.clear ();
+            rig.render (2.0, gl, &gr, tone ());
+            CHECK (allFinite (gl) && gl == gr, "a gesture: finite, mono in mono out");
+            double lo = 1e9, hi = 0.0;
+            for (size_t w = 24000; w + 2400 <= gl.size (); w += 2400)
+            {
+                const double r = rms (gl, w, w + 2400);
+                lo = std::min (lo, r);
+                hi = std::max (hi, r);
+            }
+            CHECK (hi > 3.0 * lo, "the user gate on the Mid band (the 1 kHz tone) moves the level (%.4f .. %.4f RMS)", lo, hi);
+            MemoryStream back;
+            CHECK (rig.component->getState (&back) == kResultOk, "getState with a user gesture");
+            back.seek (0, IBStream::kIBSeekSet, nullptr);
+            State b;
+            CHECK (readState (&back, b) && b.user[0].name == "Host Gate" && b.user[0].points == g.user[0].points && b.user[1].empty (),
+                   "the user gesture saved with the state");
+            CHECK (std::lround (plainOf (rig, gestureId (0, kGestureTarget))) == kTargetMidLevel, "the controller has slot 1's Target");
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "back to the base state");
+        }
+
         // editor (Classic): the Bands, Passes and Sync switches, double-clicks on Mid X and Depth, then a
         // screenshot while the bands move
         {
@@ -233,6 +266,27 @@ int main (int argc, char** argv)
             win.click (ex, ey);
             pump (0.05);
             CHECK (plainOf (rig, kDropOut) < 0.5, "Drop Out clicked off");
+            // GESTURES (row 4): slot 2 picked, its Mode clicked to Walk (slot 1's untouched), back to Loop and slot 1
+            const double slotY = Editor::kRow4 + Editor::kSlotTop + Editor::kSlotRowH / 2;
+            auto slotX = [] (int g) { return Editor::kGesturesLeft + Editor::kSwitchLeft + Editor::kSlotCellW * g + Editor::kSlotCellW / 2 - 1; };
+            const double walkX = Editor::kGesturesLeft + Editor::kGestureColLeft + (Editor::kGestureColRight - Editor::kGestureColLeft) * 3 / 4;
+            const double loopX = Editor::kGesturesLeft + Editor::kGestureColLeft + (Editor::kGestureColRight - Editor::kGestureColLeft) / 4;
+            win.click (slotX (1), slotY);
+            pump (0.05);
+            win.click (walkX, slotY);
+            pump (0.05);
+            CHECK (std::lround (plainOf (rig, gestureId (1, kGestureMode))) == kModeWalk && std::lround (plainOf (rig, gestureId (0, kGestureMode))) == kModeLoop,
+                   "slot 2's Mode clicked to Walk (slot 1's untouched)");
+            win.click (loopX, slotY);
+            pump (0.05);
+            CHECK (std::lround (plainOf (rig, gestureId (1, kGestureMode))) == kModeLoop, "slot 2's Mode back to Loop");
+            win.click (slotX (0), slotY);
+            pump (0.05);
+            win.click (walkX, slotY);
+            pump (0.05);
+            CHECK (std::lround (plainOf (rig, gestureId (0, kGestureMode))) == kModeWalk, "slot 1 picked again: its Mode clicked to Walk");
+            win.click (loopX, slotY);
+            pump (0.05);
             // Mid X's knob (the second beside SPLIT's switch): a double-click puts it back to its default
             const double midXDefault = toPlain (kXoverMid, defaultNormalized (kXoverMid));
             rig.param (kXoverMid, toNormalized (kXoverMid, 3000.0));
@@ -262,7 +316,7 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_moistr.png"), "screenshot");
             // Classic, Wide and Classic again: knobs found and turned in each (Wide's screenshot)
-            checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix},
+            checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix, (uint32_t)kIntensity},
                           outDir + "/ui_moistr_wide.png");
         }
         rig.stop ();

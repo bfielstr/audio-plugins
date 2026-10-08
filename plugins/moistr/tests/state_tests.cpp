@@ -1,6 +1,7 @@
 // Moistr's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a partial state, a
 // state from a newer build (parameters this one does not know), a 0.18 state (version 1), 0.23 to 0.25 states
-// (versions 2 to 4: the 0.26 parameters as they keep the old sound), a stream that is not Moistr's, and the
+// (versions 2 to 4: the 0.26 parameters as they keep the old sound), a 0.26 state (version 5: the gestures off),
+// the user gestures (version 6: there and back, missing, damaged), a stream that is not Moistr's, and the
 // parameter table's fixed points. Run: ./moistr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
@@ -11,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 using namespace Steinberg;
 using namespace moistr;
@@ -120,7 +122,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 5 && count == (int32)kNumParams, "saved as version 5 (%d) with %d values", version, count);
+        CHECK (version == 6 && count == (int32)kNumParams, "saved as version 6 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
@@ -188,6 +190,96 @@ int main ()
                "version %d: Curve %s, Tone and Sub Boost %s, Clean Sub off, A and B on", version, before ? "Hard" : "Soft",
                before ? "off" : "on");
     }
+    // a 0.26 state (version 5, IDs 0 .. 184, every one): every value kept, the gestures off (every Target Off,
+    // Wobble Amount 0) and no user gestures
+    {
+        MemoryStream s;
+        const uint32_t old = kG1Gesture; // (0.26's parameters: 0 .. 184)
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x5453494D);
+            w.writeInt32 (5);
+            w.writeInt32 ((int32)old);
+            for (uint32_t id = 0; id < old; ++id)
+            {
+                w.writeInt32u (id);
+                w.writeDouble (std::fmod (0.227 * (id + 1), 1.0));
+            }
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "a 0.26 state reads");
+        int kept = 0, off = 0;
+        for (uint32_t id = 0; id < old; ++id)
+            kept += back.has[id] && back.norm[id] == std::fmod (0.227 * (id + 1), 1.0);
+        for (int g = 0; g < kNumGestureSlots; ++g)
+        {
+            const uint32_t id = gestureId (g, kGestureTarget);
+            off += !back.has[id] && std::lround (toPlain (id, back.norm[id])) == kTargetOff;
+        }
+        CHECK (kept == (int)old, "0.26: every stored value kept (%d of %u)", kept, old);
+        CHECK (off == kNumGestureSlots && back.norm[kWobbleAmount] == 0.0, "0.26: every gesture slot Off (%d), Wobble Amount 0", off);
+        bool none = true;
+        for (const auto& u : back.user)
+            none = none && u.empty ();
+        CHECK (none, "0.26: no user gestures");
+    }
+    // the user gestures (version 6): there and back; a state without the block, or with it cut short, has none
+    // (its parameters read all the same); one with too many points is left out
+    {
+        State st;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            st.norm[id] = defaultNormalized (id);
+            st.has[id] = true;
+        }
+        st.norm[gestureId (1, kGestureTarget)] = toNormalized (gestureId (1, kGestureTarget), kTargetHighLevel);
+        st.user[0].name = "Gate";
+        st.user[0].length = 2.0;
+        st.user[0].points = {{0.0, 1.0}, {0.5, 1.0}, {0.5, 0.0}, {2.0, 0.0}};
+        st.user[2].name = "";
+        st.user[2].length = 0.75;
+        st.user[2].points = {{0.0, 0.25}, {0.75, 0.5}};
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write with user gestures");
+        int64 full = 0;
+        s.tell (&full);
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "read with user gestures");
+        CHECK (back.user[0].name == "Gate" && back.user[0].length == 2.0 && back.user[0].points == st.user[0].points, "slot 1's user gesture back");
+        CHECK (back.user[1].empty () && back.user[3].empty (), "slots 2 and 4: none");
+        CHECK (back.user[2].name.empty () && back.user[2].length == 0.75 && back.user[2].points == st.user[2].points, "slot 3's back");
+        CHECK (std::lround (toPlain (gestureId (1, kGestureTarget), back.norm[gestureId (1, kGestureTarget)])) == kTargetHighLevel,
+               "the gesture parameters back");
+        // cut short in the gestures' block (or just after the parameters): the parameters read, no user gestures
+        std::vector<char> bytes ((size_t)full);
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        int32 got = 0;
+        s.read (bytes.data (), (int32)full, &got);
+        for (int64 cut : {full - 8, full - 40, (int64)(12 + 12 * kNumParams + 6), (int64)(12 + 12 * kNumParams)})
+        {
+            MemoryStream c;
+            c.write (bytes.data (), (int32)cut, nullptr);
+            c.seek (0, IBStream::kIBSeekSet, nullptr);
+            State part;
+            CHECK (readState (&c, part), "cut at %lld of %lld: reads", (long long)cut, (long long)full);
+            bool none = true;
+            for (const auto& u : part.user)
+                none = none && u.empty ();
+            CHECK (none && part.has[kWobbleAmount], "cut at %lld: the parameters, no user gestures", (long long)cut);
+        }
+        // more points than a gesture holds: left out
+        State big = st;
+        big.user[0].points.clear ();
+        for (int i = 0; i <= kMaxGesturePoints; ++i)
+            big.user[0].points.emplace_back (i * 0.001, 0.5);
+        MemoryStream b;
+        CHECK (writeState (&b, big), "write a gesture too long");
+        b.seek (0, IBStream::kIBSeekSet, nullptr);
+        State bb;
+        CHECK (readState (&b, bb) && bb.user[0].empty () && bb.user[2].points == st.user[2].points, "too many points: left out, the rest read");
+    }
     // not Moistr's
     {
         MemoryStream s;
@@ -223,6 +315,13 @@ int main ()
         CHECK (legacyDefaultNormalized (kSweep) == 0.0 && toPlain (kMovement, legacyDefaultNormalized (kMovement)) == 0.5 &&
                    toPlain (kGlue, legacyDefaultNormalized (kGlue)) == 0.4,
                "before 0.24: Sweep off, Movement 50 %%, Glue 40 %%");
+        CHECK (t.info (kIntensity).def == 1.0 && t.info (kWobbleAmount).def == 0.0 && t.info (kWobbleRate).def == 2.0,
+               "0.27: Intensity 100 %%, Wobble Amount 0, Wobble Rate 2 cycles per beat");
+        for (int g = 0; g < kNumGestureSlots; ++g)
+            CHECK (std::lround (t.info (gestureId (g, kGestureTarget)).def) == kTargetOff && t.info (gestureId (g, kGestureDepth)).def == 1.0 &&
+                       std::lround (t.info (gestureId (g, kGestureMode)).def) == kModeLoop &&
+                       std::lround (t.info (gestureId (g, kGestureLength)).def) == 0 && std::lround (t.info (gestureId (g, kGestureSpeed)).def) == 4,
+                   "slot %d: Target Off, Depth 100 %%, Loop at its own length, Speed x1", g + 1);
         for (uint32_t a = 0; a < kNumParams; ++a)
         {
             CHECK (t.info (a).id == a, "entry %u has its own ID", a);

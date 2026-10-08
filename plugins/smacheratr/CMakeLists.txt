@@ -1,5 +1,5 @@
 # Smacheratr: waveshaping saturator in the spirit of Live's Saturator.
-project(Smacheratr VERSION 0.26.0.0)
+project(Smacheratr VERSION 0.27.0.0)
 
 add_library(smacheratr_core STATIC
     src/core/Params.cpp

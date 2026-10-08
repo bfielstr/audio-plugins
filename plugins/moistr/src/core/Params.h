@@ -143,7 +143,18 @@ enum ParamId : uint32_t
     kFOn = kEOn + 9,
     kGOn = kFOn + 9,
     kHOn = kGOn + 9,
-    kNumParams = kHOn + 9
+    // --- added in 0.27 (append only): the gestures (Gesture.h). Four slots, each a breakpoint curve played in
+    // time with the song and pulling one target (Target) towards it; Intensity scales them all. Wobble: a tremolo
+    // on the bands above Low. All off in a new instance and in a state saved before 0.27 (every Target Off,
+    // Wobble Amount 0: moistr as 0.26, bit for bit) ---
+    kG1Gesture = kHOn + 9, // slot 1: Gesture, Target, Mode, Length, Speed, Position, Smooth, Depth (kGestureFields)
+    kG2Gesture = kG1Gesture + 8, // slots 2 .. 4: as slot 1
+    kG3Gesture = kG2Gesture + 8,
+    kG4Gesture = kG3Gesture + 8,
+    kIntensity = kG4Gesture + 8, // 0 .. 1: scales every slot's Depth
+    kWobbleRate,                 // cycles per beat 1 .. 40: the tremolo's rate
+    kWobbleAmount,               // 0 .. 1: how deep (0: off, not run)
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
@@ -171,9 +182,11 @@ static_assert (kSweep == 92 && kSweepDrive == 93 && kARate == 94 && kASync == 95
 static_assert (kSweepCurve == 119 && kToneOn == 120 && kTone == 121 && kCleanSub == 122 && kSplitFreq == 123 && kSplitLevel == 124 &&
                    kSplitDrive == 125 && kSubBoost == 126 && kSubFreq == 127 && kSubLevel == 128 && kAOn == 129 && kBOn == 130 &&
                    kCOn == 131 && kCRate == 132 && kCSync == 133 && kCSyncRate == 134 && kCLow == 135 && kCHigh == 136 && kCGain == 137 &&
-                   kCWidth == 138 && kCPhase == 139 && kDOn == 140 && kEOn == 149 && kFOn == 158 && kGOn == 167 && kHOn == 176 &&
-                   kNumParams == 185,
+                   kCWidth == 138 && kCPhase == 139 && kDOn == 140 && kEOn == 149 && kFOn == 158 && kGOn == 167 && kHOn == 176,
                "saved IDs: Curve, Tone, Clean Sub, Sub Boost, the bells' switches and bells C .. H at 119 .. 184");
+static_assert (kG1Gesture == 185 && kG2Gesture == 193 && kG3Gesture == 201 && kG4Gesture == 209 && kIntensity == 217 &&
+                   kWobbleRate == 218 && kWobbleAmount == 219 && kNumParams == 220,
+               "saved IDs: the gestures at 185 .. 219");
 
 // the SWEEP stage's eight bells (A .. H, in series in that order). A and B keep their IDs from 0.24 (Rate ..
 // Phase at kARate / kBRate, their switches at kAOn / kBOn); C .. H are On, Rate .. Phase from kCOn.
@@ -183,8 +196,41 @@ enum BellField { kBellRate = 0, kBellSync, kBellSyncRate, kBellLow, kBellHigh, k
 constexpr uint32_t bellRateId (int b) { return b == 0 ? kARate : b == 1 ? kBRate : kCRate + 9u * (uint32_t)(b - 2); }
 constexpr uint32_t bellId (int b, BellField f) { return bellRateId (b) + (uint32_t)f; }
 constexpr uint32_t bellOnId (int b) { return b == 0 ? kAOn : b == 1 ? kBOn : kCOn + 9u * (uint32_t)(b - 2); }
-static_assert (bellId (7, kBellPhase) == kNumParams - 1 && bellOnId (2) == kCOn && bellId (3, kBellRate) == kDOn + 1, "the bells' IDs");
+static_assert (bellId (7, kBellPhase) == kG1Gesture - 1 && bellOnId (2) == kCOn && bellId (3, kBellRate) == kDOn + 1, "the bells' IDs");
 enum SweepCurve { kCurveHard = 0, kCurveSoft };
+
+// the gestures (0.27): four slots of eight parameters each, by field (offsets from the slot's Gesture)
+constexpr int kNumGestureSlots = 4;
+enum GestureField { kGestureChoice = 0, kGestureTarget, kGestureMode, kGestureLength, kGestureSpeed, kGesturePosition, kGestureSmooth,
+                    kGestureDepth, kGestureFields };
+constexpr uint32_t gestureId (int slot, GestureField f) { return kG1Gesture + (uint32_t)kGestureFields * (uint32_t)slot + (uint32_t)f; }
+static_assert (gestureId (3, kGestureDepth) == kIntensity - 1, "the gesture slots' IDs");
+constexpr bool isGestureParam (uint32_t id) { return id >= kG1Gesture && id < kNumParams; }
+// what a slot pulls (Target). The Low band is never a target: the sub stays steady.
+enum GestureTarget
+{
+    kTargetOff = 0,
+    kTargetMidLevel,     // the Mid band's level (1: at its Level, 0: silent)
+    kTargetHighLevel,    // the High band's
+    kTargetAirLevel,     // the Air band's (4 bands; with 3 it follows High)
+    kTargetWobbleRate,   // Wobble's rate (0 .. 1 over 1 .. 40 cycles per beat, log)
+    kTargetWobbleAmount, // Wobble's depth
+    kTargetClose,        // a resonant low-pass on the bands above Low (1: open at Tone's corner, 0: closed, resonant)
+    kTargetLiquid,       // Liquid's place (0: Liquid Low .. 1: Liquid High)
+    kTargetDirt,         // the bands above Low between the SWEEP stage's saturated sound (1) and its clean one (0)
+    kTargetBells,        // the bands above Low with (1) and without (0) the SWEEP stage's bells (and High Shelf)
+    kTargetMidX,         // Mid X over its range
+    kTargetHighX,        // High X over its range
+    kTargetSeedBlend,    // Seed Blend
+    kTargetShift,        // Shift over its range (-500 .. +500 Hz; Shift On must be on)
+    kNumTargets
+};
+enum GestureMode { kModeLoop = 0, kModeWalk };
+// Length: the gesture's own (0), else a loop's length in beats; Speed (Walk): Hold, then x1/8 .. x4
+constexpr int kNumGestureLengths = 8, kNumGestureSpeeds = 7;
+constexpr double kGestureLengthBeats[kNumGestureLengths] = {0.0, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0};
+constexpr double kGestureSpeeds[kNumGestureSpeeds] = {0.0, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0};
+constexpr double kWobbleRateMin = 1.0, kWobbleRateMax = 40.0;
 constexpr double kSoftCurve = 0.7; // Soft: the saturator sees 0.7 x the drive (tanh (0.7 g x))
 
 enum Slope { kSlope12 = 0, kSlope24 };
@@ -236,12 +282,14 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // The default a parameter had before 0.24, for a state saved before then that lacks it (State.cpp): 0.24 made
 // the SWEEP stage the default sound (Sweep on) and the rest neutral (Drive, Movement, Glue and Grit at 0).
 double legacyDefaultNormalized (uint32_t id);
-// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26) reads for a
+// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26; 6 0.27) reads for a
 // parameter it lacks: before 0.24 legacyDefaultNormalized; 0.24 and 0.25 their defaults (Sweep Drive 18 dB,
 // High Shelf on, A and B at Width 0.71 and Phase 0, so before the Ocean recipe) with the 0.26 parameters at the
 // values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
-// from 0.26 the defaults.
+// from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized).
 double defaultNormalizedForVersion (uint32_t id, int version);
+// The gestures as a state saved before 0.27 reads them: every Target Off, Wobble Amount 0 (the rest at the defaults)
+double gestureOffNormalized (uint32_t id);
 // the defaults from 0.24 to 0.25 (the SWEEP stage before the Ocean recipe; the 0.26 parameters as above)
 double defaultNormalized025 (uint32_t id);
 

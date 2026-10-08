@@ -10,6 +10,8 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 
+#include <cstring>
+
 namespace moistr {
 
 using namespace Steinberg;
@@ -24,6 +26,18 @@ Processor::Processor ()
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);
+    publishUser ();
+}
+
+void Processor::publishUser ()
+{
+    auto bank = std::make_shared<UserBank> ();
+    {
+        std::lock_guard<std::mutex> lock (userMutex);
+        for (int g = 0; g < kNumGestureSlots; ++g)
+            bank->has[g] = toGesture (userData[(size_t)g], bank->g[g]);
+    }
+    userBank.publish (std::move (bank));
 }
 
 Processor::~Processor ()
@@ -90,6 +104,10 @@ tresult PLUGIN_API Processor::setActive (TBool state)
 
 tresult PLUGIN_API Processor::process (ProcessData& data)
 {
+    // the user gestures (a new copy only when one changed; never freed here)
+    if (userBank.fetch (userNow, userGen) && userNow)
+        for (int g = 0; g < kNumGestureSlots; ++g)
+            engine.setUserGesture (g, userNow->has[g] ? &userNow->g[g] : nullptr);
     if (reloadParams.exchange (false, std::memory_order_acq_rel))
         for (uint32_t id = 0; id < kNumParams; ++id)
             engine.setParam (id, toPlain (id, normMirror[id].load (std::memory_order_relaxed)));
@@ -111,11 +129,12 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     if (const ProcessContext* ctx = data.processContext)
     {
         const bool ppqValid = (ctx->state & ProcessContext::kProjectTimeMusicValid) != 0;
-        engine.setTransport ((ctx->state & ProcessContext::kTempoValid) ? ctx->tempo : 120.0, ppqValid ? ctx->projectTimeMusic : 0.0,
+        // (no tempo: 0, so the gestures run on at the last one; the movement takes 120)
+        engine.setTransport ((ctx->state & ProcessContext::kTempoValid) ? ctx->tempo : 0.0, ppqValid ? ctx->projectTimeMusic : 0.0,
                              ppqValid && (ctx->state & ProcessContext::kPlaying) != 0);
     }
     else
-        engine.setTransport (120.0, 0.0, false);
+        engine.setTransport (0.0, 0.0, false);
     const int n = data.numSamples;
     if (n <= 0 || data.numInputs < 1 || data.numOutputs < 1 || data.inputs[0].numChannels < 2 ||
         data.outputs[0].numChannels < 2)
@@ -135,6 +154,11 @@ tresult PLUGIN_API Processor::setState (IBStream* stream)
         return kResultFalse;
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (st.norm[id]);
+    {
+        std::lock_guard<std::mutex> lock (userMutex);
+        userData = st.user;
+    }
+    publishUser ();
     reloadParams.store (true, std::memory_order_release);
     return kResultOk;
 }
@@ -149,6 +173,10 @@ tresult PLUGIN_API Processor::getState (IBStream* stream)
         st.norm[id] = normMirror[id].load ();
         st.has[id] = true;
     }
+    {
+        std::lock_guard<std::mutex> lock (userMutex);
+        st.user = userData;
+    }
     return writeState (stream, st) ? kResultOk : kResultFalse;
 }
 
@@ -156,6 +184,28 @@ tresult PLUGIN_API Processor::notify (IMessage* message)
 {
     if (pk::presets::handleProcessorMessage (*this, message))
         return kResultOk;
+    if (message && std::strcmp (message->getMessageID (), kGestureMessageId) == 0)
+    {
+        // a slot's user gesture from the controller (parsed here, off the audio thread)
+        int64 slot = -1;
+        const void* data = nullptr;
+        uint32 size = 0;
+        if (message->getAttributes ()->getInt (kGestureSlotAttr, slot) != kResultOk || slot < 0 || slot >= kNumGestureSlots)
+            return kInvalidArgument;
+        GestureData g;
+        if (message->getAttributes ()->getBinary (kGestureJsonAttr, data, size) == kResultOk && data && size > 0)
+        {
+            std::string err;
+            if (!parseGestureJson (std::string ((const char*)data, size), "User", g, err))
+                return kResultFalse;
+        }
+        {
+            std::lock_guard<std::mutex> lock (userMutex);
+            userData[(size_t)slot] = std::move (g);
+        }
+        publishUser ();
+        return kResultOk;
+    }
     return AudioEffect::notify (message);
 }
 

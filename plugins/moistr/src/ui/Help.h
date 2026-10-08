@@ -32,9 +32,50 @@ inline const char* forBell (uint32_t id)
     return nullptr;
 }
 
+// a gesture slot's controls (the same for slots 1 .. 4)
+inline const char* forGesture (uint32_t id)
+{
+    if (id < kG1Gesture || id >= kIntensity)
+        return nullptr;
+    switch ((GestureField)((id - kG1Gesture) % kGestureFields))
+    {
+        case kGestureChoice:
+            return "The slot's gesture: a curve over a few beats (gates and stutters on straight and triplet grids, fades, "
+                   "swells, plucks, ramps). User plays the file picked with File (from the Gestures folder beside your "
+                   "presets), saved with the project.";
+        case kGestureTarget:
+            return "What the slot moves. Mid, High and Air Level fade the band (down to silence); Wobble Rate and Amount "
+                   "drive Wobble; Close sweeps a resonant low-pass down from Tone's corner; Liquid Pos moves Liquid's "
+                   "resonance; Dirt goes from the saturated sound to the clean one, Bells from the bells to none (both "
+                   "level matched); Mid X, High X, Seed Blend and Shift move those controls. Off: the slot does nothing. "
+                   "The Low band is never moved.";
+        case kGestureMode:
+            return "Loop plays the gesture over and over in time with the song. Walk goes back and forth through it (forwards, "
+                   "then backwards), at Speed.";
+        case kGestureLength:
+            return "How long the gesture lasts, in beats: Own is the length it was made with; the others stretch or squeeze "
+                   "it to 1/2 .. 32 beats.";
+        case kGestureSpeed:
+            return "How fast Walk goes through the gesture: x1 takes Length per pass, x2 half that. Hold stops it at "
+                   "Position (move Position by hand or with automation to scrub). Loop does not use it.";
+        case kGesturePosition:
+            return "Loop: where the loop starts, as a share of Length (25 % starts it a quarter later). Walk: where it starts, "
+                   "and where it stays at Hold.";
+        case kGestureSmooth:
+            return "Glides the gesture: 0 keeps its steps sharp (they still take 2 ms, so they never click), 100 % turns them "
+                   "into glides of a 16th of a beat.";
+        case kGestureDepth:
+            return "How far the slot pulls its target towards the gesture: 100 % all the way, 50 % half way. Below 0 the "
+                   "gesture is turned upside down (a fade out becomes a fade in).";
+        default: return nullptr;
+    }
+}
+
 inline const char* forParam (uint32_t id)
 {
     if (const char* t = forBell (id))
+        return t;
+    if (const char* t = forGesture (id))
         return t;
     switch (id)
     {
@@ -159,6 +200,14 @@ inline const char* forParam (uint32_t id)
         case kShiftMix:
             return "The shifted bands against the unshifted ones. Below 100 % both play, which beats and swirls. The Low "
                    "band is never shifted.";
+        case kIntensity:
+            return "Scales every gesture slot's Depth at once: 0 switches all the gestures off, 100 % plays them as set.";
+        case kWobbleRate:
+            return "Wobble's speed in cycles per beat (in time with the song): 2 is 8th notes, 4 16ths, 3 8th-note "
+                   "triplets; the top end buzzes. A gesture on Wobble Rate sweeps it smoothly, without jumps.";
+        case kWobbleAmount:
+            return "How deep Wobble, the tremolo on the bands above Low, goes: 100 % to silence on every cycle. 0 switches "
+                   "it off unless a gesture drives Wobble Amount. The Low band never wobbles.";
         case kMix: return "Blend of the effect and the untouched signal.";
         case kOutput: return "Overall output level.";
         default: return nullptr;
@@ -170,6 +219,17 @@ constexpr const char* kSweepView =
     "the whole stage bold (with Tone), from 20 Hz to 5 kHz. The bars show where each bell sweeps (bottom, A lowest) and "
     "where the shelf's corner goes (top). The box at the right is the shelf's orbit: its corner across (Low to High), its "
     "gain up (Min to Max), the dashed line the most it may boost at each corner (Tilt), the dot where it is now.";
+
+constexpr const char* kGestureView =
+    "The picked gesture slot: its curve across the gesture (up is where it pulls its target to), the beats it plays "
+    "over, and while it runs the playhead and the value now. Upside down when Depth is below 0.";
+
+constexpr const char* kGestureSlots =
+    "Shows that gesture slot's controls here (four slots, each moving one target; the display shows the picked one).";
+
+constexpr const char* kGestureFile =
+    "Picks a gesture file (JSON) from the Gestures folder beside your moistr presets for this slot and sets its Gesture "
+    "to User. The curve is saved with the project, so the file is not needed again.";
 
 constexpr const char* kBandView =
     "The bands against frequency. The Low band is locked (solid, with a lock and where it ends in Hz) unless Push or Dip "

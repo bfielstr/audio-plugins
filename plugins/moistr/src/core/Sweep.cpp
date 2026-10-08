@@ -181,6 +181,9 @@ void Sweep::reset (const double* p)
         splitSat[ch].reset ();
         split[ch].reset ();
         tone[ch].reset ();
+        satBare[ch].reset ();
+        toneClean[ch].reset ();
+        toneBare[ch].reset ();
         for (auto& f : boostLp[ch])
             f.reset ();
     }
@@ -253,6 +256,8 @@ void Sweep::targets (const double* p, bool snap)
     // the saturator: its drive (on its Curve) and make-up (worked out again only when they change)
     gPrev = gNow;
     compPrev = compNow;
+    cleanPrev = cleanNow;
+    barePrev = bareNow;
     const double drive = driveDb + curveDb; // (Hard: + 0, exactly the drive)
     gNow = std::pow (10.0, drive / 20.0);
     // (the level in steps of 0.05 dB: worked out again only when it has moved)
@@ -280,6 +285,8 @@ void Sweep::targets (const double* p, bool snap)
         }
         avgNow = bellsAverageDb (lo, hi, gainDb, q, kNumBells);
         compNow = compensation (drive, avgNow, std::sqrt (levelMs));
+        bareNow = compensation (drive, 0.0, std::sqrt (levelMs));
+        cleanNow = std::pow (10.0, -avgNow / 20.0);
     }
     // Clean Sub, Sub Boost and Tone: their corners and levels
     splitGPrev = splitGNow;
@@ -300,6 +307,8 @@ void Sweep::targets (const double* p, bool snap)
             prev[b] = now[b];
         gPrev = gNow;
         compPrev = compNow;
+        cleanPrev = cleanNow;
+        barePrev = bareNow;
         splitGPrev = splitGNow;
         boostGPrev = boostGNow;
         toneGPrev = toneGNow;
@@ -308,8 +317,15 @@ void Sweep::targets (const double* p, bool snap)
     }
 }
 
-void Sweep::tick (const double* p, double* l, double* r, int m)
+void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
 {
+    if (taps)
+        for (int i = 0; i < m; ++i)
+        {
+            // (the stage not run: both are its input)
+            taps->clean[0][i] = taps->bare[0][i] = l[i];
+            taps->clean[1][i] = taps->bare[1][i] = r[i];
+        }
     // the clocks run on (off too, so the sweep is where it should be when it comes back)
     for (int b = 0; b < kFilters; ++b)
     {
@@ -412,6 +428,7 @@ void Sweep::tick (const double* p, double* l, double* r, int m)
         m1[s] = prev[s].m1 + (now[s].m1 - prev[s].m1) * t;
         const double m0 = prev[s].m0 + (now[s].m0 - prev[s].m0) * t, m2 = prev[s].m2 + (now[s].m2 - prev[s].m2) * t;
         const double g = gPrev + (gNow - gPrev) * t, comp = compPrev + (compNow - compPrev) * t;
+        const double cleanGain = taps ? cleanPrev + (cleanNow - cleanPrev) * t : 0.0, bareComp = taps ? barePrev + (bareNow - barePrev) * t : 0.0;
         const double f = fade0 + (fade - fade0) * t, sf = shelf0 + (shelfFade - shelf0) * t;
         const double subF = sub0 + (subFade - sub0) * t, boostF = boost0 + (boostFade - boost0) * t, toneF = tone0 + (toneFade - tone0) * t;
         dsp::SvfCoefs cSplit, cBoost, cTone;
@@ -440,6 +457,17 @@ void Sweep::tick (const double* p, double* l, double* r, int m)
                 y += (shelved - y) * sf;
             }
             const double pre = y; // (the saturator's input: Sub Boost's lows come from here)
+            if (taps)
+            {
+                double clean = pre * cleanGain, bare = satBare[ch].tick (g * x) * bareComp;
+                if (toneRun)
+                {
+                    clean += (toneClean[ch].tick (clean, cTone).lp - clean) * toneF;
+                    bare += (toneBare[ch].tick (bare, cTone).lp - bare) * toneF;
+                }
+                taps->clean[ch][i] = x + (clean - x) * f;
+                taps->bare[ch][i] = x + (bare - x) * f;
+            }
             // the saturator: all of it, or (Clean Sub) the band above Split Freq with the lows around it
             double whole = 0.0, parted = 0.0;
             if (wholeRun)
@@ -496,7 +524,11 @@ void Sweep::tick (const double* p, double* l, double* r, int m)
             for (auto& f : boostLp[ch])
                 f.reset ();
         if (toneFade <= 0.0 && tone0 > 0.0)
+        {
             tone[ch].reset ();
+            toneClean[ch].reset ();
+            toneBare[ch].reset ();
+        }
     }
     if (boostFade <= 0.0 && boost0 > 0.0)
         boostPrimed = false;
@@ -513,6 +545,9 @@ void Sweep::tick (const double* p, double* l, double* r, int m)
             splitSat[ch].reset ();
             split[ch].reset ();
             tone[ch].reset ();
+            satBare[ch].reset ();
+            toneClean[ch].reset ();
+            toneBare[ch].reset ();
             for (auto& f : boostLp[ch])
                 f.reset ();
         }

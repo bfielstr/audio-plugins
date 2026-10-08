@@ -1,7 +1,7 @@
 # Ciphr: an 8-voice instrument. Clusters of wavetable oscillators (Timbre scans each one's list of
 # waves and pitches, Cross modulates neighbours), a morphing filter and envelopes per voice, then a
 # processor that goes from multi-tap delay to diffuse reverb with a frequency shifter in its feedback.
-project(Ciphr VERSION 0.26.0.0)
+project(Ciphr VERSION 0.27.0.0)
 
 add_library(ciphr_core STATIC
     src/core/Params.cpp
