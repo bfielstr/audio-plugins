@@ -1,0 +1,4 @@
+# probr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: analysis, takes
+comment: Records only while the song plays, a new take at every play start (the default).
+Mode = While Playing
