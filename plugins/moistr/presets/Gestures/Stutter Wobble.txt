@@ -10,5 +10,5 @@ G2 Position = 50 %
 G3 Gesture = Rate Rise
 G3 Target = Wobble Rate
 G3 Smooth = 40 %
-Wobble Rate = 3
+Wobble Rate = 4
 Wobble Amount = 70 %

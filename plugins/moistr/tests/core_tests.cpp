@@ -3229,7 +3229,7 @@ TEST (gestures_off_are_026)
     CHECK (defaultParams ()[kWobbleAmount] == 0.0 && defaultNormalizedForVersion (kWobbleAmount, 5) == 0.0, "Wobble Amount 0");
     const auto x = reese (2.0);
     auto plainNew = fresh ();
-    const auto want = run (*plainNew, x, nullptr, 256, playing (*plainNew, 140.0));
+    const auto want = run (*plainNew, x, nullptr, 256, playing (*plainNew, 150.0));
     auto e = fresh ();
     for (int g = 0; g < kNumGestureSlots; ++g)
     {
@@ -3242,16 +3242,16 @@ TEST (gestures_off_are_026)
     e->setParam (kIntensity, 0.4);
     e->setParam (kWobbleRate, 9.0);
     e->reset ();
-    const auto got = run (*e, x, nullptr, 256, playing (*e, 140.0));
+    const auto got = run (*e, x, nullptr, 256, playing (*e, 150.0));
     CHECK (got == want, "gesture settings with every Target Off: a new instance's sound, bit for bit");
     CHECK (!e->gesturesRunning (), "nothing of it runs");
     // a slot switched on and off again: back to running nothing
     auto f = fresh ();
     gesture (*f, 0, kTargetHighLevel, kGestureStutter16);
-    run (*f, reese (0.5), nullptr, 256, playing (*f, 140.0));
+    run (*f, reese (0.5), nullptr, 256, playing (*f, 150.0));
     CHECK (f->gesturesRunning (), "on: it runs");
     f->setParam (gestureId (0, kGestureTarget), kTargetOff);
-    run (*f, reese (0.2), nullptr, 256, playing (*f, 140.0, 2.0));
+    run (*f, reese (0.2), nullptr, 256, playing (*f, 150.0, 2.0));
     CHECK (!f->gesturesRunning () && f->gesturePull (0) == 0.0, "off again: faded out, not run");
 }
 
@@ -3387,7 +3387,7 @@ TEST (wobble_phase_continuous)
     e->reset ();
     const std::vector<float> z (Engine::kTick, 0.1f);
     std::vector<float> l (Engine::kTick), r (Engine::kTick);
-    const double bpm = 140.0, beatsPerTick = Engine::kTick / kSr * bpm / 60.0;
+    const double bpm = 150.0, beatsPerTick = Engine::kTick / kSr * bpm / 60.0;
     double prevPhase = e->wobblePhase (), worstPhase = 0.0, worstGain = 0.0, prevGain = e->wobbleGainNow (), loRate = 1e9, hiRate = 0.0;
     double expect = 0.0;
     bool stepsRight = true;
@@ -3448,7 +3448,7 @@ TEST (gestures_never_touch_low)
                 gesture (*e, 1, target, kGestureRampUp, -1.0);
             }
             e->reset ();
-            return run (*e, x, right, 256, playing (*e, 140.0));
+            return run (*e, x, right, 256, playing (*e, 150.0));
         };
         for (int target : kAllTargets)
         {
@@ -3458,7 +3458,7 @@ TEST (gestures_never_touch_low)
                 e->setParam (kSeed, seed);
                 audible (*e, target);
                 e->reset ();
-                return run (*e, x, nullptr, 256, playing (*e, 140.0));
+                return run (*e, x, nullptr, 256, playing (*e, 150.0));
             }();
             std::vector<float> r;
             const auto y = render (target, &r);
@@ -3493,7 +3493,7 @@ TEST (gesture_targets_act)
             gesture (*held, 0, target, kUserGesture, depth);
         }
         held->reset ();
-        auto y = run (*held, x, nullptr, 256, playing (*held, 140.0));
+        auto y = run (*held, x, nullptr, 256, playing (*held, 150.0));
         if (keep)
             *keep = held.get ();
         return y;
@@ -3504,7 +3504,7 @@ TEST (gesture_targets_act)
     const auto closed = render (kTargetClose, 1.0, &e);
     const double hiDrop = db (toneAt (closed, 55.0 * 61, a, b) / toneAt (ref, 55.0 * 61, a, b));
     std::printf ("    Close: corner %.0f Hz, 3.4 kHz %+.1f dB\n", e->closeHz (), hiDrop);
-    CHECK (std::fabs (e->closeHz () - kOceanToneHz * std::exp2 (-kCloseOctaves)) < 1.0 && hiDrop < -30.0, "Close: down to Tone / 2^5.5, the highs cut");
+    CHECK (std::fabs (e->closeHz () - kOceanToneHz * std::exp2 (-kCloseOctaves)) < 1.0 && hiDrop < -30.0, "Close: down to Tone / 2^6, the highs cut");
     // Dirt: clean (fewer harmonics: the 3rd's share of the 1st falls) and about as loud; Bells: a different
     // sound, as loud
     const auto clean = render (kTargetDirt, 1.0, &e);
@@ -3605,6 +3605,11 @@ TEST (gesture_files)
     CHECK (d.length == 4.0 && d.points.front ().first == 0.0 && d.points[1].first == 2.0 && d.points[0].second == 0.5 && d.points[1].second == 1.0 &&
                d.points[2].second == 0.0,
            "the extractor's: from its first point, normalised by min and max");
+    // what scripts/als_extract.py --moistr writes: already 0 .. 1 (source_min and source_max are the lane's range)
+    CHECK (parseGestureJson (R"({"name": "Gain", "length_beats": 2.0, "points": [[0.0, 0.0], [0.5, 1.0], [0.5, 0.25], [2.0, 1.0]], "source_min": -12.0, "source_max": 0.0})",
+                             "file", d, err) &&
+               d.name == "Gain" && d.length == 2.0 && d.points.size () == 4 && d.points[2].second == 0.25,
+           "the extractor's --moistr files");
     CHECK (parseGestureJson (R"({"points": [[0, 3], [1, 3]], "min": 3, "max": 3})", "Flat", d, err) && d.name == "Flat" && d.points[0].second == 1.0,
            "a flat lane: 1; no name: the file's");
     CHECK (parseGestureJson (R"({"points": [[1, 0.2], [0, 0.4], [0.5, 2]]})", "x", d, err) && d.points[0].first == 0.0 && d.points[0].second == 0.4 &&
@@ -3650,8 +3655,8 @@ TEST (gesture_presets)
         off->setParam (kWobbleAmount, 0.0);
         off->reset ();
         std::vector<float> r;
-        const auto y = run (*e, x, &r, 256, playing (*e, 140.0));
-        const auto ref = run (*off, x, nullptr, 256, playing (*off, 140.0));
+        const auto y = run (*e, x, &r, 256, playing (*e, 150.0));
+        const auto ref = run (*off, x, nullptr, 256, playing (*off, 150.0));
         double jump = 0.0, own = 0.0;
         for (size_t i = 1000; i < y.size (); ++i)
         {

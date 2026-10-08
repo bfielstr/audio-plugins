@@ -155,7 +155,7 @@ const ParamTable& paramTable ()
             v.push_back (real (gestureId (g, kGestureDepth), name ("Depth"), "Depth", -1.0, 1.0, 1.0, Curve::Linear, Disp::Percent));
         }
         v.push_back (percent (kIntensity, "Intensity", "Intensity", 1.0));
-        v.push_back (real (kWobbleRate, "Wobble Rate", "Rate", kWobbleRateMin, kWobbleRateMax, 3.0, Curve::Log, Disp::Number));
+        v.push_back (real (kWobbleRate, "Wobble Rate", "Rate", kWobbleRateMin, kWobbleRateMax, 2.0, Curve::Log, Disp::Number));
         v.push_back (percent (kWobbleAmount, "Wobble Amount", "Amount", 0.0));
         return v;
     }());

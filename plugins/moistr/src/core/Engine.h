@@ -140,7 +140,7 @@ struct Meters
 constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
 // the gestures: a level target's range (dB) before it fades to silence (over its last 1 / kLevelFadeShare); Close's
 // travel (octaves) and Q at its most; Smooth's shortest (s) and longest (beats) glide
-constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 5.5, kCloseQ = 4.0, kCloseOpenHz = 20000.0;
+constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 6.0, kCloseQ = 5.0, kCloseOpenHz = 20000.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
 
 class Engine

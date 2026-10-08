@@ -315,8 +315,8 @@ int main ()
         CHECK (legacyDefaultNormalized (kSweep) == 0.0 && toPlain (kMovement, legacyDefaultNormalized (kMovement)) == 0.5 &&
                    toPlain (kGlue, legacyDefaultNormalized (kGlue)) == 0.4,
                "before 0.24: Sweep off, Movement 50 %%, Glue 40 %%");
-        CHECK (t.info (kIntensity).def == 1.0 && t.info (kWobbleAmount).def == 0.0 && t.info (kWobbleRate).def == 3.0,
-               "0.27: Intensity 100 %%, Wobble Amount 0, Wobble Rate 3 cycles per beat");
+        CHECK (t.info (kIntensity).def == 1.0 && t.info (kWobbleAmount).def == 0.0 && t.info (kWobbleRate).def == 2.0,
+               "0.27: Intensity 100 %%, Wobble Amount 0, Wobble Rate 2 cycles per beat");
         for (int g = 0; g < kNumGestureSlots; ++g)
             CHECK (std::lround (t.info (gestureId (g, kGestureTarget)).def) == kTargetOff && t.info (gestureId (g, kGestureDepth)).def == 1.0 &&
                        std::lround (t.info (gestureId (g, kGestureMode)).def) == kModeLoop &&
