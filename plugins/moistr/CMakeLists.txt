@@ -1,7 +1,7 @@
 # Moistr: a SWEEP stage (eight sweeping bell EQs, a High Shelf on a slow orbit, a level-matched saturator), then
 # a split into a low band held steady and upper bands that rise and fall slowly (seeded, repeatable), glued back
 # together with a compressor and soft clipping; optionally a second pass through the bands.
-project(Moistr VERSION 0.27.0.0)
+project(Moistr VERSION 0.27.1.0)
 
 add_library(moistr_core STATIC
     src/core/Params.cpp

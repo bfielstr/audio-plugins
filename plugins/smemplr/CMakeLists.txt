@@ -1,5 +1,5 @@
 # Smemplr: a sampler modelled on Ableton Live's Simpler.
-project(Smemplr VERSION 0.27.0.0)
+project(Smemplr VERSION 0.27.1.0)
 
 add_library(smemplr_core STATIC
     src/core/Params.cpp
