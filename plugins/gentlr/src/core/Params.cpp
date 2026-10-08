@@ -62,7 +62,7 @@ std::vector<ParamInfo> buildTable ()
     v.push_back (like (kHighThreshold, smacheratr::kClarityHighThreshold, "High Threshold", "Thresh", smacheratr::kClarityThresholdDb));
     v.push_back (like (kNoOverlap, smacheratr::kClarityNoOverlap, "No Overlap", "No Overlap", 0.0));
     smacheratr::addTailExt3Params (v, kTailExt3Base);
-    v.push_back (like (kSlope, smacheratr::kClaritySlope, "Slope", "Slope", smacheratr::kSlopeSignature)); // (12 / 12 up to 0.23)
+    v.push_back (like (kSlope, smacheratr::kClaritySlope, "Slope", "Slope", smacheratr::kSlopeSignature)); // (12 / 12 up to 0.24)
     // the glue switches: Smacheratr's (off), without its "Gentlr " in front
     for (int g = 0; g < smacheratr::kGluePairs; ++g)
     {

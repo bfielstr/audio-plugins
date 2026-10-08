@@ -42,7 +42,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.24.0**
 - **smacheratr at the end.** Every plug-in ends its chain with smacheratr, with all its controls. A
   new instance runs through it with gentlr on and gentlr's **Slope** at **Signature**, and smacheratr's
   own defaults as they are (Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %); switch
-  **Saturator** off for the plug-in alone. Projects and presets saved with 0.23 or earlier load as they
+  **Saturator** off for the plug-in alone. Projects and presets saved with 0.24 or earlier load as they
   were saved (where they did not set them: smacheratr at the end as it was then, off in most plug-ins,
   gentlr off, **12 / 12**). Factory presets start from **Init**, so they run through it too, except the
   few that switch it off (gentlr's and ciphr's **Dry Cluster**). That

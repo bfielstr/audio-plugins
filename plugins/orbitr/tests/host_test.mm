@@ -26,7 +26,7 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
-    // the end saturator as a new instance had it up to 0.23 (off, its Gentlr off, 12 / 12): the checks are
+    // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12): the checks are
     // about orbitr's own sound (a new instance has it on: checkNewInstanceGentlr)
     st.norm[kTailBase + pk::kTailOn] = 0.0;
     st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;

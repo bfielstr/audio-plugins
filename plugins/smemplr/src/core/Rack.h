@@ -95,7 +95,7 @@ void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<boo
 
 // States from before version 20: the rack's Smacheratrs and Gentlrs had one band shape, before Gentlr's
 // Slope; their Slope gets Classic, that shape (the places held nothing that was used, or a default set
-// by the migrations before this one). Same sound; a new slot gets Signature (12 / 12 up to 0.23).
+// by the migrations before this one). Same sound; a new slot gets Signature (12 / 12 up to 0.24).
 void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
 // States from before version 21: the rack's Smacheratrs and Gentlrs had no glue; their glue switches get

@@ -188,7 +188,7 @@ the host for automatic compensation.
 ## Older projects
 
 Projects saved before Band Slope existed load with **Classic** and sound exactly as they did. Projects
-and presets saved with 0.23 or earlier keep the defaults they were saved with: **12 / 12**, and the
+and presets saved with 0.24 or earlier keep the defaults they were saved with: **12 / 12**, and the
 smacheratr at the end off with its gentlr off, where they did not set them. Projects
 saved while the Sub and High bands had On buttons sound the same: a band that was off loads with its
 Range at 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing glued.

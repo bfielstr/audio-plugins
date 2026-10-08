@@ -175,6 +175,6 @@ gentlr was called Clarity. Projects saved before Slope existed load with **Class
 as they did. Projects saved while the Sub and High bands had switches sound the same: a band that was
 off loads at Range 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing
 glued. Projects saved while Oversampling was the **Hi-Quality** switch load with 4x where it was on and
-Off where it was off: they sound as they did. Projects and presets saved with 0.23 or earlier keep the
+Off where it was off: they sound as they did. Projects and presets saved with 0.24 or earlier keep the
 defaults they were saved with where they did not set them: gentlr off with **12 / 12**, and in the
 other plug-ins the smacheratr at the end as it was then (off in most of them).

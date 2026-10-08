@@ -175,10 +175,10 @@ inline void tailSlopeToClassic (Norm& norm, Has& has, uint32_t ext3Base)
     has[ext3Base + pk::kTailExt3Slope] = true;
 }
 
-// Gentlr's band Slope's default up to 0.23 (12 / 12; Signature since), normalized.
+// Gentlr's band Slope's default up to 0.24 (12 / 12; Signature since), normalized.
 inline double oldDefaultSlopeNorm () { return toNormalized (kClaritySlope, kSlope12); }
 
-// The defaults up to 0.23 for a state saved by one of those versions: the end saturator was off by default
+// The defaults up to 0.24 for a state saved by one of those versions: the end saturator was off by default
 // (on where a plug-in asked for it: onBefore), its Gentlr off and Gentlr's Slope 12 / 12. A new instance
 // has the saturator on, its Gentlr on and the Slope Signature; a state that does not have one of the three
 // (it was saved before the parameter was there, or by a host that left it out) gets the default it was

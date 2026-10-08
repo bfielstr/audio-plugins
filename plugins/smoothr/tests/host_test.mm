@@ -73,7 +73,7 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
-        // the end saturator's Gentlr as a new instance had it up to 0.23 (off, 12 / 12; the saturator on, as it
+        // the end saturator's Gentlr as a new instance had it up to 0.24 (off, 12 / 12; the saturator on, as it
         // still is), before it starts: the checks are about smoothr's own sound
         {
             State st;

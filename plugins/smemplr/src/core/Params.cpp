@@ -239,7 +239,7 @@ std::vector<ParamInfo> buildTable ()
     // the rest of the old end-of-chain Smacheratr
     const size_t tailExtAt = t.size ();
     smacheratr::addTailExtParams (t, kTailExtBase);
-    // (its Gentlr off, as it was: Smacheratr's Gentlr is on by default since 0.24, the old saturator keeps
+    // (its Gentlr off, as it was: Smacheratr's Gentlr is on by default since 0.25, the old saturator keeps
     // the defaults old projects were saved with)
     t[tailExtAt + pk::kTailExtClarity].def = 0.0;
     markOld (tailExtAt);

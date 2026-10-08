@@ -26,7 +26,7 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
-    // the end saturator's Gentlr as a new instance had it up to 0.23 (off, 12 / 12; the saturator on, as
+    // the end saturator's Gentlr as a new instance had it up to 0.24 (off, 12 / 12; the saturator on, as
     // it still is): the checks are about dropr's own sound (a new instance: checkNewInstanceGentlr)
     st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
     st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;

@@ -96,7 +96,7 @@ static smemplr::PluginState baseState (const std::string& sample)
         st.has[i] = true;
     }
     st.samplePath = sample;
-    // the first slot's Smacheratr as it was up to 0.23 (its Gentlr off, 12 / 12): the checks measure the
+    // the first slot's Smacheratr as it was up to 0.24 (its Gentlr off, 12 / 12): the checks measure the
     // sampler's own levels through it (a new instance has Gentlr on, Signature: checked after loading)
     st.norm[smemplr::slotBlockParam (0, smacheratr::kClarity)] = 0.0;
     st.norm[smemplr::slotBlockParam (0, smacheratr::kClaritySlope)] = 0.0;

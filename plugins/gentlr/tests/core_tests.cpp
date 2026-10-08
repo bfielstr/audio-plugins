@@ -60,7 +60,7 @@ struct Sig
 };
 
 // Gentlr alone (no end saturator), with `set` applied before it starts. Its bands with the 12 / 12 Slope
-// (the default up to 0.23; Signature now): the cuts the tests expect are that shape's, exactly the Range
+// (the default up to 0.24; Signature now): the cuts the tests expect are that shape's, exactly the Range
 // at a band's centre (the Slopes have tests of their own).
 static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr, Meters* meters = nullptr)
 {

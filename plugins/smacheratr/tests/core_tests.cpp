@@ -133,7 +133,7 @@ static std::unique_ptr<Engine> engineOs (int mode)
     auto e = std::make_unique<Engine> ();
     e->setParam (kOversampling, mode);
     e->setParam (kColorOn, 0.0); // the defaults have Color on; tests start neutral
-    // ... and Gentlr on with the Signature Slope: off, with the 12 / 12 Slope (the defaults up to 0.23), the
+    // ... and Gentlr on with the Signature Slope: off, with the 12 / 12 Slope (the defaults up to 0.24), the
     // shape the Gentlr tests' numbers are for (they switch it on themselves; the Slopes have tests of their own)
     e->setParam (kClarity, 0.0);
     e->setParam (kClaritySlope, kSlope12);
@@ -2253,7 +2253,7 @@ TEST (gentlr_and_the_saturator_on_by_default)
            "the saturator's other defaults");
 }
 
-// tailOldDefaults: a state saved up to 0.23 that lacks the saturator's On, its Gentlr or the Slope gets
+// tailOldDefaults: a state saved up to 0.24 that lacks the saturator's On, its Gentlr or the Slope gets
 // the defaults then (off, off, 12 / 12; on where the plug-in had it on); what it has stays.
 TEST (tail_old_defaults_for_old_states)
 {

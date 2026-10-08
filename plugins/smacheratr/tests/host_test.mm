@@ -39,7 +39,7 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
-    // Gentlr as a new instance had it up to 0.23 (off, 12 / 12): the checks are about the curve and the
+    // Gentlr as a new instance had it up to 0.24 (off, 12 / 12): the checks are about the curve and the
     // pre-limiter (a new instance has it on: checkNewInstanceGentlr)
     st.norm[kClarity] = 0.0;
     st.norm[kClaritySlope] = 0.0;

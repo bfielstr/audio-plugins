@@ -1,6 +1,6 @@
 // The optional Smacheratr at the end of every plug-in's chain: a block of parameters each plug-in
 // appends to its table at some base ID. The processing is smacheratr::Tail, the editor panel
-// smacheratr::TailPanel. On by default (off up to 0.23, and states saved by those keep it off:
+// smacheratr::TailPanel. On by default (off up to 0.24, and states saved by those keep it off:
 // smacheratr::tailOldDefaults), Drive 0 dB.
 #pragma once
 

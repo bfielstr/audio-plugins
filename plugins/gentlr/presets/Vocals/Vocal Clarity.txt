@@ -5,5 +5,5 @@ Band 1 Frequency = 250 Hz
 Band 1 Range = 4 dB
 Band 2 Frequency = 6 kHz
 Band 2 Range = 4 dB
-# the end saturator off (on by default since 0.24): only this preset's own bands, no second Gentlr after them
+# the end saturator off (on by default since 0.25): only this preset's own bands, no second Gentlr after them
 Saturator = Off

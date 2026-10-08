@@ -110,7 +110,7 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kSlope);
-        // the end saturator as a new instance had it up to 0.23 (off, its Gentlr off, 12 / 12), before it
+        // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
         // starts: the checks are about gentlr's own sound, its bands with the 12 / 12 Slope they were written for
         {
             State st;
