@@ -2,7 +2,8 @@
 // known parameter names, values the parameter accepts and inside its range, unique names. Also
 // `factory_presets_tests --dump <plugin>` lists a plug-in's parameters (names, ranges, defaults,
 // choices) for writing presets. And a new instance of every plug-in runs through its end saturator with
-// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them).
+// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them; probr,
+// which passes the sound untouched, has none).
 #include "pluginkit/PresetStore.h"
 
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
@@ -16,6 +17,7 @@
 #define PK_WITH_locus
 #define PK_WITH_moistr
 #define PK_WITH_smeezr
+#define PK_WITH_probr
 #define PK_WITH_multidyn
 #define PK_WITH_orbitr
 #define PK_WITH_para
@@ -50,6 +52,9 @@
 #endif
 #ifdef PK_WITH_smeezr
 #include "smeezr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_probr
+#include "probr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
@@ -130,6 +135,9 @@ const Plugin kPlugins[] = {
 #endif
 #ifdef PK_WITH_smeezr
     {"smeezr", smeezr::paramTable},
+#endif
+#ifdef PK_WITH_probr
+    {"probr", probr::paramTable},
 #endif
 #ifdef PK_WITH_orbitr
     {"orbitr", orbitr::paramTable},
@@ -214,6 +222,12 @@ void checkNewInstance (const Plugin& p)
     }
     if (n == "gentlr")
         expect ("Slope", "Signature");
+    if (n == "probr")
+    {
+        // an analysis probe: the sound passes untouched, so it has no end saturator; it starts off
+        expect ("Record", "Off");
+        return;
+    }
 #ifdef PK_WITH_smemplr
     if (n == "smemplr")
     {

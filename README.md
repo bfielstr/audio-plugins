@@ -1,4 +1,4 @@
-# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
+# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
 to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**.
@@ -22,6 +22,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**
 | [**ciphr**](plugins/ciphr/README.md) | An 8-voice synthesizer: clusters of wavetable oscillators you sweep with one knob, FM and ring modulation between them, and echoes that turn into reverb, with a frequency shifter in the feedback for endlessly climbing repeats. Metallic, screeching and vocal waves for alien textures, and Disperse, a dial that brings the sound back band by band. Can also play a track through its side-chain input. |
 | [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: eight bell EQs sweep the low end against each other like rolling waves, and a level-matched saturator makes it crunch with a clean sub kept underneath (a resonant high shelf on a slow orbit is there too). After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
 | [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
+| [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
 
 ## Gallery
 
@@ -35,11 +36,11 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**
 | [<img src="docs/smoothr/ui_smoothr.png" width="420" alt="smoothr">](plugins/smoothr/README.md)<br>smoothr | [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr |
 | [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/orbitr/ui_orbitr.png" width="420" alt="orbitr">](plugins/orbitr/README.md)<br>orbitr |
 | [<img src="docs/ciphr/ui_ciphr.png" width="420" alt="ciphr">](plugins/ciphr/README.md)<br>ciphr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
-| [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | |
+| [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr |
 
 ## What every plug-in has
 
-- **smacheratr at the end.** Every plug-in ends its chain with smacheratr, with all its controls. A
+- **smacheratr at the end.** Every plug-in except probr (which passes the sound untouched) ends its chain with smacheratr, with all its controls. A
   new instance runs through it with gentlr on and gentlr's **Slope** at **Signature**, and smacheratr's
   own defaults as they are (Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %); switch
   **Saturator** off for the plug-in alone. Projects and presets saved with 0.24 or earlier load as they
@@ -70,10 +71,10 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**
 - **Presets** in the header of every plug-in: **Init** (every control at its default) always at the
   top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
   as Default** so a new instance starts the way you like it (see below).
-- **Defaults** in every plug-in's **Menu**: **Gentlr On by Default** and **Advanced On by Default**
-  (all but smemplr) decide whether gentlr (on unless you uncheck it), and its Advanced mode, are on in a
-  new instance, and **Glue Bands on Touch** whether band edges dragged together in a gentlr display
-  snap and glue (see [Defaults for new instances](#defaults-for-new-instances)).
+- **Defaults** in every plug-in's **Menu** (all but probr): **Gentlr On by Default** and **Advanced On by
+  Default** (all but smemplr) decide whether gentlr (on unless you uncheck it), and its Advanced mode, are
+  on in a new instance, and **Glue Bands on Touch** whether band edges dragged together in a gentlr
+  display snap and glue (see [Defaults for new instances](#defaults-for-new-instances)).
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr and locus was called lowfocus until 0.5.0. gentlr was called
@@ -290,7 +291,7 @@ ctest --test-dir build -j 4 --output-on-failure          # everything, before a 
 ```
 
 - **Targets** per plug-in (`orbitr` here): `orbitr_tests` (DSP tests), `orbitr_state_tests` (saved
-  state; ciphr, dropr, gentlr, moistr, smacheratr and smemplr), `Orbitr` (the bundle, checked by the
+  state; ciphr, dropr, gentlr, moistr, probr, smacheratr and smemplr), `Orbitr` (the bundle, checked by the
   VST3 validator as it builds), `orbitr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
   `orbitr_hosttest` (macOS). The tests are named `orbitr_core`, `orbitr_state`,
   `orbitr_drawbench`, `orbitr_drawbench_layouts` and `orbitr_hosttest`.
@@ -357,11 +358,12 @@ plugins/orbitr      doppler swarm            same structure
 plugins/ciphr       wavetable synthesizer    same structure
 plugins/moistr      sweeps, moving bands     same structure
 plugins/smeezr      one-knob pink / OTT      same structure
+plugins/probr       analysis probe           same structure (scripts/probr_align.py analyses its sessions)
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
 cmake/EmbedPresets.cmake  builds a plug-in's presets/*.txt into it (its factory presets)
-scripts             build.sh, install.sh, install.ps1
+scripts             build.sh, install.sh, install.ps1, probr_align.py
 installer           the double-click installers: macos (.pkg), windows (Inno Setup), their CI tests
 ```
 

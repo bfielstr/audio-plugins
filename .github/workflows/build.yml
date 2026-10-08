@@ -256,7 +256,7 @@ jobs:
           cd build/VST3/Release
           # (a filtered build also leaves empty folders for the plug-ins it only takes libraries from)
           ls -d -- *.vst3
-          BUNDLES=(Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gentlr.vst3 Dropr.vst3 Orbitr.vst3 Ciphr.vst3 Moistr.vst3 Smeezr.vst3)
+          BUNDLES=(Smemplr.vst3 Multidyn.vst3 Locus.vst3 Stretchr.vst3 Smacheratr.vst3 Para.vst3 Widr.vst3 Wubr.vst3 Levlr.vst3 Deepr.vst3 Smoothr.vst3 Gentlr.vst3 Dropr.vst3 Orbitr.vst3 Ciphr.vst3 Moistr.vst3 Smeezr.vst3 Probr.vst3)
           if [ -n "$PK_ONLY_PLUGINS" ]; then
             # a pull request that built only these (orbitr: Orbitr.vst3)
             BUNDLES=()
@@ -385,7 +385,7 @@ jobs:
           GH_TOKEN: ${{ env.RELEASES_REPO != github.repository && secrets.RELEASES_TOKEN || github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$RELEASES_REPO" --title "Plug-ins $GITHUB_REF_NAME (smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr)" \
+            --repo "$RELEASES_REPO" --title "Plug-ins $GITHUB_REF_NAME (smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr)" \
             --notes "**Easiest:** download the installer for your system below and double-click it.
 
           - macOS: \`Plugins-macOS.pkg\`. It is not signed by Apple yet: if macOS will not open it, right-click it and choose Open, or go to System Settings > Privacy & Security and click Open Anyway.

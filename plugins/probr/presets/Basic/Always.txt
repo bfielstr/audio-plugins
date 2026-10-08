@@ -1,0 +1,4 @@
+# probr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: analysis, live input
+comment: Records from arming until Record goes off, playing or not (live input, a host without a song position).
+Mode = Always
