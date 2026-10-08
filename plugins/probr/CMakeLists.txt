@@ -25,6 +25,19 @@ add_test(NAME probr_core COMMAND probr_tests)
 add_test(NAME probr_cpu COMMAND probr_tests cpu_budget)
 pk_cpu_test(probr_cpu)
 
+# scripts/probr_align.py on generated sessions, and on one the writer made (needs Python 3 with numpy;
+# skipped without numpy)
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+    set(_probr_session ${CMAKE_CURRENT_BINARY_DIR}/align-session)
+    add_test(NAME probr_make_session COMMAND probr_tests --make-session ${_probr_session})
+    set_tests_properties(probr_make_session PROPERTIES FIXTURES_SETUP probr_session)
+    add_test(NAME probr_align
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/align_test.py ${CMAKE_SOURCE_DIR}/scripts/probr_align.py
+                     ${CMAKE_CURRENT_BINARY_DIR}/align-test ${_probr_session})
+    set_tests_properties(probr_align PROPERTIES FIXTURES_REQUIRED probr_session SKIP_RETURN_CODE 77)
+endif()
+
 if(NOT PK_BUILD_PLUGINS)
     return()
 endif()
