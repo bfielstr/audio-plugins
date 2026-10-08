@@ -4,9 +4,12 @@
 // Seed, the host's transport), switching Bands, the Glue compressor, Grit, Mix, Passes, silence, the 0.22
 // controls (Low Push / Dip, Seed B / Blend, Density, Speed, Drop Out; all at their defaults 0.21's sound bit
 // for bit), Link and Liquid (0.23: off, 0.22's sound bit for bit; the Liquid preset's statistics on a detuned
-// bass, pinned) and the CPU budget.
+// bass, pinned), the gestures (0.27: the curves, Loop and Walk, the transport, every target and none of them
+// touching the Low band, Wobble's phase, the files; off: 0.26's sound bit for bit) and the CPU budget.
 #include "Dsp.h"
 #include "Engine.h"
+#include "Gesture.h"
+#include "GestureFile.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -3034,14 +3037,605 @@ TEST (sweep_switches_smoothly)
     CHECK (finite (y) && jump < 0.1, "no clicks (largest step %.3f)", jump);
 }
 
+// ---- the gestures (0.27)
+
+namespace {
+// a slot pulling `target` with a factory gesture (Loop, its own length, Depth 100 %)
+void gesture (Engine& e, int slot, int target, int which, double depth = 1.0)
+{
+    e.setParam (gestureId (slot, kGestureTarget), target);
+    e.setParam (gestureId (slot, kGestureChoice), which);
+    e.setParam (gestureId (slot, kGestureDepth), depth);
+}
+// the host playing from `fromBeat` at `bpm`, block by block (for run's `at`)
+std::function<void (size_t)> playing (Engine& e, double bpm, double fromBeat = 0.0)
+{
+    return [&e, bpm, fromBeat] (size_t at) { e.setTransport (bpm, fromBeat + (double)at / kSr * bpm / 60.0, true); };
+}
+// a tone mix with something in every band: 40 Hz (the sub), 700 Hz, 3 kHz and 9 kHz
+std::vector<float> bandsMix (double seconds)
+{
+    std::vector<float> x ((size_t)(seconds * kSr));
+    for (size_t i = 0; i < x.size (); ++i)
+    {
+        const double t = (double)i / kSr;
+        x[i] = (float)(0.3 * std::sin (2 * kPi * 40.0 * t) + 0.08 * std::sin (2 * kPi * 700.0 * t) + 0.05 * std::sin (2 * kPi * 3000.0 * t) +
+                       0.03 * std::sin (2 * kPi * 9000.0 * t));
+    }
+    return x;
+}
+const int kAllTargets[] = {kTargetMidLevel,  kTargetHighLevel, kTargetAirLevel, kTargetWobbleRate, kTargetWobbleAmount,
+                           kTargetClose,     kTargetLiquid,    kTargetDirt,     kTargetBells,      kTargetMidX,
+                           kTargetHighX,     kTargetSeedBlend, kTargetShift};
+// what a target needs to be heard (Liquid up, the shifter on, Wobble at some rate, movement for Seed Blend)
+void audible (Engine& e, int target)
+{
+    e.setParam (kBandCount, kBands4);
+    if (target == kTargetLiquid)
+        e.setParam (kLiquid, 1.0);
+    if (target == kTargetShift)
+        e.setParam (kShiftOn, 1.0);
+    if (target == kTargetWobbleRate)
+        e.setParam (kWobbleAmount, 1.0);
+    if (target == kTargetSeedBlend)
+    {
+        e.setParam (kMovement, 1.0);
+        e.setParam (kLowPush, 6.0); // (the Low band's own events keep Seed Blend's value)
+    }
+}
+} // namespace
+
+TEST (gesture_curve_breakpoints)
+{
+    // linear segments between points, a jump where two points share a beat (the later from that beat on), held
+    // before the first point and after the last, clamped to the length
+    Gesture g;
+    const double b[] = {0.5, 1.0, 2.0, 2.0, 3.0}, v[] = {0.2, 1.0, 0.5, 0.0, 0.8};
+    CHECK (g.set (b, v, 5, 4.0), "set");
+    struct At
+    {
+        double beat, want;
+    };
+    for (const At& a : {At {0.0, 0.2}, At {0.5, 0.2}, At {0.75, 0.6}, At {1.0, 1.0}, At {1.5, 0.75}, At {1.999999, 0.5000005},
+                        At {2.0, 0.0}, At {2.5, 0.4}, At {3.0, 0.8}, At {3.9, 0.8}, At {4.0, 0.8}, At {9.0, 0.8}, At {-1.0, 0.2}})
+        CHECK (std::fabs (g.at (a.beat) - a.want) < 1e-6, "at %.6f: %.6f (want %.6f)", a.beat, g.at (a.beat), a.want);
+    // values clamped; out of order, too many, none or past the length refused (the gesture kept)
+    const double vb[] = {-0.5, 1.5};
+    const double bb[] = {0.0, 1.0};
+    CHECK (g.set (bb, vb, 2, 1.0) && g.at (0.0) == 0.0 && g.at (1.0) == 1.0, "values clamped to 0 .. 1");
+    const double bad[] = {1.0, 0.5};
+    CHECK (!g.set (bad, v, 2, 4.0) && g.count == 2, "out of order: refused");
+    CHECK (!g.set (b, v, 0, 4.0) && !g.set (b, v, kMaxGesturePoints + 1, 4.0), "none or too many: refused");
+    CHECK (!g.set (b, v, 5, 2.5), "a point past the length: refused");
+    Gesture f;
+    f.flat (0.3, 2.0);
+    CHECK (f.at (0.0) == 0.3 && f.at (1.7) == 0.3 && f.length == 2.0, "flat");
+    Gesture none;
+    CHECK (none.at (0.3) == 1.0, "no points: 1 (no pull)");
+}
+
+TEST (gesture_factory_library)
+{
+    // 15 gestures, named, within 0 .. 1, each starting and ending on the beat grid (straight or triplet)
+    CHECK (kNumFactoryGestures == 15 && kUserGesture == 15, "15 factory gestures, then User");
+    const auto& info = paramTable ().info (gestureId (0, kGestureChoice));
+    CHECK ((int)info.choices.size () == kNumFactoryGestures + 1 && std::string (info.choices.back ()) == "User", "the Gesture choice lists them and User");
+    for (int i = 0; i < kNumFactoryGestures; ++i)
+    {
+        const Gesture& g = factoryGesture (i);
+        CHECK (std::string (info.choices[(size_t)i]) == factoryGestureName (i), "%s in the choice", factoryGestureName (i));
+        bool ok = g.count >= 2 && g.length > 0.0 && g.beat[0] == 0.0;
+        double lo = 1.0, hi = 0.0;
+        for (int k = 0; k < g.count; ++k)
+        {
+            lo = std::min (lo, g.value[k]);
+            hi = std::max (hi, g.value[k]);
+            // every point on a 1/8-beat or a 1/12-beat grid
+            const double eighth = g.beat[k] * 8.0, twelfth = g.beat[k] * 12.0;
+            ok = ok && (std::fabs (eighth - std::round (eighth)) < 1e-9 || std::fabs (twelfth - std::round (twelfth)) < 1e-9);
+        }
+        CHECK (ok && lo >= 0.0 && hi <= 1.0 && hi - lo >= 0.5, "%s: %d points over %.2f beats, %.2f .. %.2f", factoryGestureName (i), g.count,
+               g.length, lo, hi);
+        for (int j = 0; j < i; ++j)
+            CHECK (std::string (factoryGestureName (i)) != factoryGestureName (j), "unique names");
+    }
+    // the stutters' grids: 16ths (on for half of each) and 8th-note triplets
+    const Gesture& s16 = factoryGesture (kGestureStutter16);
+    CHECK (s16.at (0.0) == 1.0 && s16.at (0.124) == 1.0 && s16.at (0.125) == 0.0 && s16.at (0.25) == 1.0 && s16.at (0.9) == 0.0, "1/16 Stutter");
+    const Gesture& s12 = factoryGesture (kGestureStutter12);
+    CHECK (s12.at (0.1) == 1.0 && s12.at (0.2) == 0.0 && s12.at (0.34) == 1.0 && s12.at (0.5 + 1e-6) == 0.0, "1/12 Stutter");
+}
+
+TEST (gesture_loop_wrap)
+{
+    // Loop: frac (beats / Length - Position); it wraps to the start at each Length, from the song's beat 0
+    for (double length : {0.5, 1.0, 4.0, 8.0, 32.0})
+        for (double beats : {0.0, 0.3, 3.99, 4.0, 17.25, 100.5})
+        {
+            const double pos = gesturePosition (kModeLoop, beats, length, 1.0, 0.0);
+            const double want = std::fmod (beats, length) / length;
+            CHECK (std::fabs (pos - want) < 1e-12 && pos >= 0.0 && pos < 1.0, "length %.1f, beat %.2f: %.4f (%.4f)", length, beats, pos, want);
+        }
+    CHECK (std::fabs (gesturePosition (kModeLoop, 1.0, 4.0, 1.0, 0.25) - 0.0) < 1e-12, "Position 25 %%: the loop starts a quarter later");
+    CHECK (std::fabs (gesturePosition (kModeLoop, 0.0, 4.0, 1.0, 0.25) - 0.75) < 1e-12, "Position 25 %%: before it, the loop's last quarter");
+    CHECK (gesturePosition (kModeLoop, -1.0, 4.0, 1.0, 0.0) == 0.75, "before the song's start");
+    // a gesture played across its loop point: the value jumps back exactly at the Length (Cell Fade: 0, then 1)
+    const Gesture& g = factoryGesture (kGestureCellFade);
+    auto at = [&] (double beats) { return g.at (gesturePosition (kModeLoop, beats, 8.0, 1.0, 0.0) * g.length); };
+    CHECK (at (7.999) == 0.0 && at (8.0) == 1.0 && at (16.0) == 1.0 && std::fabs (at (12.5) - 0.5) < 1e-12, "Cell Fade wraps every 8 beats");
+    // a Length other than the gesture's own stretches it: Cell Fade over 4 beats is at its middle at beat 2
+    CHECK (std::fabs (g.at (gesturePosition (kModeLoop, 2.0, 4.0, 1.0, 0.0) * g.length) - g.at (4.0)) < 1e-12, "stretched to Length");
+}
+
+TEST (gesture_walk_reversal)
+{
+    // Walk: forwards over one Length, backwards over the next; the place is continuous through each turn (and
+    // so the value), the direction changes there; Hold stays at Position
+    for (double speed : {0.125, 0.5, 1.0, 4.0})
+    {
+        const double length = 4.0, turn = length / speed;
+        double prev = gesturePosition (kModeWalk, 0.0, length, speed, 0.0), worst = 0.0;
+        const double step = 0.001;
+        for (double b = step; b < 3.0 * turn; b += step)
+        {
+            const double pos = gesturePosition (kModeWalk, b, length, speed, 0.0);
+            worst = std::max (worst, std::fabs (pos - prev));
+            prev = pos;
+        }
+        CHECK (worst <= step * speed / length * 1.0001, "x%.3f: no jumps (the largest step %.6f)", speed, worst);
+        const double before = gesturePosition (kModeWalk, turn - 0.01, length, speed, 0.0), at = gesturePosition (kModeWalk, turn, length, speed, 0.0);
+        const double after = gesturePosition (kModeWalk, turn + 0.01, length, speed, 0.0);
+        CHECK (std::fabs (at - 1.0) < 1e-12 && before < at && after < at && std::fabs (before - after) < 1e-9, "x%.3f: turns at the end after %.1f beats",
+               speed, turn);
+        CHECK (std::fabs (gesturePosition (kModeWalk, 2.0 * turn, length, speed, 0.0)) < 1e-12, "x%.3f: back at the start", speed);
+    }
+    for (double pos : {0.0, 0.3, 1.0})
+        CHECK (gesturePosition (kModeWalk, 123.4, 4.0, 0.0, pos) == pos, "Hold: at Position %.1f", pos);
+    // the engine: a Walk across its turns, Talk on Liquid Pos, the curve's value continuous (no step beyond
+    // what the curve's steepest slope allows in a tick)
+    auto e = fresh ();
+    tailNeutral (*e);
+    gesture (*e, 0, kTargetLiquid, kGestureTalk);
+    e->setParam (kLiquid, 1.0);
+    e->setParam (gestureId (0, kGestureMode), kModeWalk);
+    e->setParam (gestureId (0, kGestureSpeed), 6); // x4: a turn every half beat
+    e->reset ();
+    const std::vector<float> z (Engine::kTick, 0.1f);
+    std::vector<float> l (Engine::kTick), r (Engine::kTick);
+    double prevV = -1.0, worst = 0.0;
+    for (int t = 0; t < 4000; ++t)
+    {
+        e->setTransport (120.0, (double)(t * Engine::kTick) / kSr * 2.0, true);
+        e->process (z.data (), z.data (), l.data (), r.data (), Engine::kTick);
+        if (prevV >= 0.0)
+            worst = std::max (worst, std::fabs (e->gestureValue (0) - prevV));
+        prevV = e->gestureValue (0);
+    }
+    // (Talk's steepest segment: 0.6 in 1/3 beat; x4 over its 2 beats: 0.6 / (1/3 / 4) per beat; a tick is 16 / 24000 beats)
+    const double most = 0.6 / (1.0 / 3.0 / 4.0) * Engine::kTick / 24000.0;
+    CHECK (worst <= most * 1.01, "the value through the turns: steps of %.4f at most (%.4f allowed)", worst, most);
+}
+
+TEST (gestures_off_are_026)
+{
+    // every Target Off (the default, and a state saved before 0.27): whatever the other gesture settings, the
+    // render is a new instance's, bit for bit; Wobble Amount 0 too
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        CHECK (defaultParams ()[gestureId (g, kGestureTarget)] == kTargetOff, "slot %d: Target Off by default", g + 1);
+        for (int version = 1; version <= 5; ++version)
+            CHECK (defaultNormalizedForVersion (gestureId (g, kGestureTarget), version) == 0.0, "slot %d: Off in a version %d state", g + 1, version);
+    }
+    CHECK (defaultParams ()[kWobbleAmount] == 0.0 && defaultNormalizedForVersion (kWobbleAmount, 5) == 0.0, "Wobble Amount 0");
+    const auto x = reese (2.0);
+    auto plainNew = fresh ();
+    const auto want = run (*plainNew, x, nullptr, 256, playing (*plainNew, 140.0));
+    auto e = fresh ();
+    for (int g = 0; g < kNumGestureSlots; ++g)
+    {
+        e->setParam (gestureId (g, kGestureChoice), g + 3);
+        e->setParam (gestureId (g, kGestureMode), kModeWalk);
+        e->setParam (gestureId (g, kGestureLength), 3);
+        e->setParam (gestureId (g, kGestureDepth), -0.7);
+        e->setParam (gestureId (g, kGestureSmooth), 0.5);
+    }
+    e->setParam (kIntensity, 0.4);
+    e->setParam (kWobbleRate, 9.0);
+    e->reset ();
+    const auto got = run (*e, x, nullptr, 256, playing (*e, 140.0));
+    CHECK (got == want, "gesture settings with every Target Off: a new instance's sound, bit for bit");
+    CHECK (!e->gesturesRunning (), "nothing of it runs");
+    // a slot switched on and off again: back to running nothing
+    auto f = fresh ();
+    gesture (*f, 0, kTargetHighLevel, kGestureStutter16);
+    run (*f, reese (0.5), nullptr, 256, playing (*f, 140.0));
+    CHECK (f->gesturesRunning (), "on: it runs");
+    f->setParam (gestureId (0, kGestureTarget), kTargetOff);
+    run (*f, reese (0.2), nullptr, 256, playing (*f, 140.0, 2.0));
+    CHECK (!f->gesturesRunning () && f->gesturePull (0) == 0.0, "off again: faded out, not run");
+}
+
+TEST (gesture_level_gate)
+{
+    // 1/16 Stutter on High Level: the High band (a 6 kHz tone, alone) is at its level for the first half of each
+    // 16th and silent for the second, in time with the song (120 bpm: a 16th is 125 ms); Depth 50 % halves the
+    // dB travel; a negative Depth turns it round
+    const auto x = sine (6000.0, 0.25, 2.0);
+    auto render = [&] (double depth) {
+        auto e = engine ();
+        plain (*e);
+        e->setParam (kXoverMid, 1000.0);
+        solo (*e, kBandHigh);
+        gesture (*e, 0, kTargetHighLevel, kGestureStutter16, depth);
+        e->reset ();
+        return run (*e, x, nullptr, 128, playing (*e, 120.0));
+    };
+    const size_t sixteenth = (size_t)(0.125 * kSr);
+    for (double depth : {1.0, 0.5, -1.0})
+    {
+        const auto y = render (depth);
+        double onDb = 0.0, offDb = 0.0;
+        for (int k = 4; k < 14; ++k)
+        {
+            const size_t a = (size_t)k * sixteenth;
+            onDb += db (rms (y, a + sixteenth / 8, a + sixteenth / 2 - 100) / rms (x, a, a + sixteenth / 2)) / 10.0;
+            offDb += db (rms (y, a + sixteenth / 2 + sixteenth / 8, a + sixteenth - 100) / rms (x, a, a + sixteenth / 2)) / 10.0;
+        }
+        std::printf ("    Depth %+.0f %%: on %.2f dB, off %.2f dB\n", depth * 100.0, onDb, offDb);
+        if (depth == 1.0)
+            CHECK (std::fabs (onDb) < 0.2 && offDb < -60.0, "on at its level, off silent");
+        else if (depth == 0.5)
+            CHECK (std::fabs (onDb) < 0.2 && std::fabs (offDb + 24.0) < 0.5, "Depth 50 %%: off at -24 dB");
+        else
+            CHECK (onDb < -60.0 && std::fabs (offDb) < 0.2, "Depth -100 %%: the other way round");
+        double jump = 0.0;
+        for (size_t i = 1000; i < y.size (); ++i)
+            jump = std::max (jump, (double)std::fabs (y[i] - y[i - 1]));
+        CHECK (jump < 0.25 * 2.0 * kPi * 6000.0 / kSr * 1.2, "no clicks at the gate's edges (largest step %.3f)", jump);
+    }
+}
+
+TEST (gesture_tempo_and_transport)
+{
+    // the gestures follow the song position at any tempo; stopped, they run on at the last tempo; with no tempo
+    // at all, at 120
+    auto e = fresh ();
+    gesture (*e, 0, kTargetHighLevel, kGestureRampUp);
+    e->setParam (gestureId (0, kGestureLength), 5); // 8 beats
+    e->reset ();
+    const std::vector<float> z (512, 0.0f);
+    std::vector<float> l (512), r (512);
+    for (double bpm : {90.0, 174.0})
+    {
+        e->setTransport (bpm, 6.0, true);
+        e->process (z.data (), z.data (), l.data (), r.data (), 512);
+        const double end = 6.0 + 512.0 / kSr * bpm / 60.0;
+        CHECK (std::fabs (e->gestureBeats () - end) < 1e-9 && std::fabs (e->gesturePos (0) - end / 8.0) < 1e-9, "%.0f bpm: at beat %.4f (%.4f)",
+               bpm, e->gestureBeats (), end);
+    }
+    // stopped: runs on at 174 bpm from where it was
+    const double from = e->gestureBeats ();
+    for (int b = 0; b < 10; ++b)
+    {
+        e->setTransport (0.0, 0.0, false); // (no tempo given: the last one)
+        e->process (z.data (), z.data (), l.data (), r.data (), 512);
+    }
+    const double ran = e->gestureBeats () - from, want = 10.0 * 512.0 / kSr * 174.0 / 60.0;
+    CHECK (std::fabs (ran - want) < 1e-9, "stopped: %.4f beats in 10 blocks at the last tempo (%.4f)", ran, want);
+    auto f = fresh ();
+    gesture (*f, 0, kTargetHighLevel, kGestureRampUp);
+    f->reset ();
+    f->process (z.data (), z.data (), l.data (), r.data (), 512);
+    CHECK (std::fabs (f->gestureBeats () - 512.0 / kSr * 2.0) < 1e-9, "never told a tempo: 120 bpm");
+    // a tempo change while playing: the value follows the song position, without a step
+    auto g = fresh ();
+    tailNeutral (*g);
+    gesture (*g, 0, kTargetHighLevel, kGestureRampUp);
+    g->setParam (gestureId (0, kGestureLength), 5);
+    g->reset ();
+    double beat = 0.0, prev = -1.0, worst = 0.0;
+    for (int b = 0; b < 400; ++b)
+    {
+        const double bpm = b < 200 ? 100.0 : 160.0;
+        g->setTransport (bpm, beat, true);
+        g->process (z.data (), z.data (), l.data (), r.data (), 512);
+        beat += 512.0 / kSr * bpm / 60.0;
+        if (prev >= 0.0 && g->gesturePos (0) > prev)
+            worst = std::max (worst, g->gestureValue (0) - prev);
+        prev = g->gestureValue (0);
+    }
+    CHECK (worst < 512.0 / kSr * 160.0 / 60.0 / 8.0 * 1.05, "across the tempo change: steps of %.5f at most", worst);
+}
+
+TEST (gesture_playhead_jump)
+{
+    // jumping the playhead (backwards, into the middle of a gesture) glides the value over Smooth's 2 ms rather
+    // than stepping: no click; the place follows the jump at once
+    const auto x = sine (3000.0, 0.25, 1.5);
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kXoverMid, 1000.0);
+    solo (*e, kBandHigh);
+    gesture (*e, 0, kTargetHighLevel, kGestureCellFade);
+    e->reset ();
+    // 120 bpm from beat 5.5 (fading: the value about 0.17); at 0.75 s back to beat 1 (held at 1)
+    double worstStep = 0.0;
+    const auto y = run (*e, x, nullptr, 64, [&] (size_t at) {
+        const double t = (double)at / kSr;
+        e->setTransport (120.0, t < 0.75 ? 5.5 + 2.0 * t : 1.0 + 2.0 * (t - 0.75), true);
+    });
+    for (size_t i = 2000; i < y.size (); ++i)
+        worstStep = std::max (worstStep, (double)std::fabs (y[i] - y[i - 1]));
+    const double sineStep = 0.25 * 2.0 * kPi * 3000.0 / kSr;
+    CHECK (worstStep < sineStep * 1.3, "no click at the jump (largest step %.4f, the sine's own %.4f)", worstStep, sineStep);
+    // the level after the jump: the band back at its level within 15 ms
+    const size_t jumpAt = (size_t)(0.75 * kSr);
+    const double before = rms (y, jumpAt - 1200, jumpAt - 200), after = rms (y, jumpAt + 720, jumpAt + 1920);
+    CHECK (db (after / rms (x, jumpAt, jumpAt + 1200)) > -0.5 && before < 0.5 * after, "back at its level (%.1f dB before, %.1f dB after)",
+           db (before / 0.177), db (after / 0.177));
+}
+
+TEST (wobble_phase_continuous)
+{
+    // Wobble's phase is the integral of its rate: across the loop point of a rate gesture (Rate Rise snaps from
+    // 0.9 back to 0.2 of the range) the phase runs on without a jump, its step each tick the rate x the tick's
+    // beats, and the gain on the bands above Low moves no more than the fastest rate allows
+    auto e = fresh ();
+    tailNeutral (*e);
+    gesture (*e, 0, kTargetWobbleRate, kGestureRateRise);
+    e->setParam (kWobbleAmount, 1.0);
+    e->reset ();
+    const std::vector<float> z (Engine::kTick, 0.1f);
+    std::vector<float> l (Engine::kTick), r (Engine::kTick);
+    const double bpm = 140.0, beatsPerTick = Engine::kTick / kSr * bpm / 60.0;
+    double prevPhase = e->wobblePhase (), worstPhase = 0.0, worstGain = 0.0, prevGain = e->wobbleGainNow (), loRate = 1e9, hiRate = 0.0;
+    double expect = 0.0;
+    bool stepsRight = true;
+    for (int t = 0; t < (int)(12.0 / beatsPerTick); ++t) // (three loops of 4 beats)
+    {
+        e->setTransport (bpm, t * beatsPerTick, true);
+        e->process (z.data (), z.data (), l.data (), r.data (), Engine::kTick);
+        double d = e->wobblePhase () - prevPhase;
+        d -= std::floor (d + 0.5); // (wrapped to the nearest)
+        if (t > 0)
+            stepsRight = stepsRight && std::fabs (d - e->wobbleRate () * beatsPerTick) < 1e-9;
+        worstPhase = std::max (worstPhase, std::fabs (d));
+        worstGain = std::max (worstGain, std::fabs (e->wobbleGainNow () - prevGain));
+        prevPhase = e->wobblePhase ();
+        prevGain = e->wobbleGainNow ();
+        loRate = std::min (loRate, e->wobbleRate ());
+        hiRate = std::max (hiRate, e->wobbleRate ());
+        expect += e->wobbleRate () * beatsPerTick;
+    }
+    std::printf ("    rate %.2f .. %.2f cycles per beat; largest phase step %.4f, gain step %.4f\n", loRate, hiRate, worstPhase, worstGain);
+    CHECK (stepsRight, "each tick the phase moves by the rate x the tick's beats");
+    CHECK (worstPhase <= kWobbleRateMax * beatsPerTick, "no jump in the phase at the loop points");
+    CHECK (worstGain <= 2.0 * kPi * 0.5 * hiRate * beatsPerTick * 1.01, "the gain moves at most as the fastest rate lets it (%.4f)", worstGain);
+    CHECK (hiRate > 3.0 * loRate, "the rate gesture moves the rate (%.2f .. %.2f)", loRate, hiRate);
+    // at Wobble Rate x2 with no gesture, the tremolo's period is half a beat at 2 cycles per beat
+    auto f = fresh ();
+    tailNeutral (*f);
+    f->setParam (kWobbleAmount, 1.0);
+    f->setParam (kWobbleRate, 2.0);
+    f->reset ();
+    for (int t = 0; t < 3000; ++t)
+    {
+        f->setTransport (120.0, t * Engine::kTick / kSr * 2.0, true);
+        f->process (z.data (), z.data (), l.data (), r.data (), Engine::kTick);
+    }
+    const double beatsGone = 3000.0 * Engine::kTick / kSr * 2.0, cycles = 2.0 * beatsGone;
+    double off = (cycles - std::floor (cycles)) - f->wobblePhase ();
+    off -= std::round (off);
+    CHECK (std::fabs (off) < 1e-6, "2 cycles per beat: at phase %.4f after %.3f beats (%.4f)", f->wobblePhase (), beatsGone, cycles - std::floor (cycles));
+}
+
+TEST (gestures_never_touch_low)
+{
+    // every target, pulled hard (a 1/16 Stutter at Depth 100 %): the sub (40 Hz, under every Low X) keeps its
+    // level within 0.5 dB, and a mono input stays mono (the channels share every gain and coefficient)
+    const auto x = bandsMix (2.0);
+    const size_t a = (size_t)(0.5 * kSr), b = x.size ();
+    for (int seed : {1, 70})
+    {
+        auto render = [&] (int target, std::vector<float>* right) {
+            auto e = fresh ();
+            tailNeutral (*e);
+            e->setParam (kSeed, seed);
+            if (target != kTargetOff)
+            {
+                audible (*e, target);
+                gesture (*e, 0, target, kGestureStutter16);
+                gesture (*e, 1, target, kGestureRampUp, -1.0);
+            }
+            e->reset ();
+            return run (*e, x, right, 256, playing (*e, 140.0));
+        };
+        for (int target : kAllTargets)
+        {
+            auto ref = [&] {
+                auto e = fresh ();
+                tailNeutral (*e);
+                e->setParam (kSeed, seed);
+                audible (*e, target);
+                e->reset ();
+                return run (*e, x, nullptr, 256, playing (*e, 140.0));
+            }();
+            std::vector<float> r;
+            const auto y = render (target, &r);
+            const double change = db (toneAt (y, 40.0, a, b) / toneAt (ref, 40.0, a, b));
+            const double moved = db (rms (y, a, b) / rms (ref, a, b));
+            const char* name = paramTable ().info (gestureId (0, kGestureTarget)).choices[(size_t)target];
+            std::printf ("    seed %3d, %-13s: the sub %+.3f dB (the whole %+.2f dB)\n", seed, name, change, moved);
+            CHECK (std::fabs (change) < 0.5, "%s: the sub keeps its level (%.3f dB)", name, change);
+            CHECK (y == r, "%s: mono in, mono out", name);
+            CHECK (finite (y), "%s: finite", name);
+        }
+    }
+}
+
+TEST (gesture_targets_act)
+{
+    // each target does what it says: Close takes the highs down, Dirt the saturator's harmonics, Bells the bells,
+    // Mid X moves the crossover, Shift the shift, Liquid Pos the resonance; Dirt and Bells stay level matched
+    const auto x = reese (2.0);
+    const size_t a = (size_t)(1.0 * kSr), b = x.size ();
+    auto render = [&] (int target, double depth, Engine** keep = nullptr) {
+        static std::unique_ptr<Engine> held;
+        held = fresh ();
+        tailNeutral (*held);
+        audible (*held, target);
+        if (target != kTargetOff)
+        {
+            // a flat line at 0 (Depth 100 %: all the way), via a user gesture
+            static Gesture zero;
+            zero.flat (0.0);
+            held->setUserGesture (0, &zero);
+            gesture (*held, 0, target, kUserGesture, depth);
+        }
+        held->reset ();
+        auto y = run (*held, x, nullptr, 256, playing (*held, 140.0));
+        if (keep)
+            *keep = held.get ();
+        return y;
+    };
+    const auto ref = render (kTargetOff, 1.0);
+    // Close: the highs (5 kHz) down a lot, the sub not at all
+    Engine* e = nullptr;
+    const auto closed = render (kTargetClose, 1.0, &e);
+    const double hiDrop = db (toneAt (closed, 55.0 * 61, a, b) / toneAt (ref, 55.0 * 61, a, b));
+    std::printf ("    Close: corner %.0f Hz, 3.4 kHz %+.1f dB\n", e->closeHz (), hiDrop);
+    CHECK (std::fabs (e->closeHz () - kOceanToneHz * std::exp2 (-kCloseOctaves)) < 1.0 && hiDrop < -30.0, "Close: down to Tone / 2^5.5, the highs cut");
+    // Dirt: clean (fewer harmonics: the 3rd's share of the 1st falls) and about as loud; Bells: a different
+    // sound, as loud
+    const auto clean = render (kTargetDirt, 1.0, &e);
+    CHECK (e->dirtPull () == 1.0, "Dirt: all the way");
+    const auto bare = render (kTargetBells, 1.0, &e);
+    CHECK (e->bellsPull () == 1.0, "Bells: all the way");
+    // (the bands above Low only: the RMS above 600 Hz, a Linkwitz-Riley high-pass)
+    auto upper = [&] (const std::vector<float>& y) {
+        dsp::Lr4Split hp;
+        dsp::SvfCoefs c;
+        c.set (std::tan (kPi * 600.0 / kSr), dsp::kSqrt2);
+        double s = 0.0;
+        for (size_t i = 0; i < b; ++i)
+        {
+            double lo, hi;
+            hp.tick (y[i], c, lo, hi);
+            if (i >= a)
+                s += hi * hi;
+        }
+        return std::sqrt (s / (double)(b - a));
+    };
+    const double cleanDb = db (upper (clean) / upper (ref)), bareDb = db (upper (bare) / upper (ref));
+    std::printf ("    Dirt: the upper bands %+.2f dB; Bells: %+.2f dB\n", cleanDb, bareDb);
+    // (Dirt is level matched; Bells takes the bells' cuts and boosts away, so the upper bands' balance changes)
+    CHECK (std::fabs (cleanDb) < 1.5 && std::fabs (bareDb) < 6.0, "Dirt about as loud, Bells within 6 dB (%.2f, %.2f dB)", cleanDb, bareDb);
+    CHECK (clean != ref && bare != ref && clean != bare, "Dirt and Bells change the sound");
+    // Mid X at 0 of its range: 400 Hz
+    render (kTargetMidX, 1.0, &e);
+    const double lowest = std::max (400.0, e->lowXover () * std::exp2 (1.0 / 3.0)); // (a third of an octave above Low X at least)
+    CHECK (std::fabs (e->xoverHz (0, 1) - lowest) < 1.0, "Mid X: at %.1f Hz (%.1f)", lowest, e->xoverHz (0, 1));
+    render (kTargetShift, 1.0, &e);
+    CHECK (std::fabs (e->shiftNow () + 500.0) < 1e-6, "Shift: at -500 Hz (%.1f)", e->shiftNow ());
+    render (kTargetLiquid, 1.0, &e);
+    CHECK (std::fabs (e->liquidHz () - toPlain (kLiquidLow, defaultNormalized (kLiquidLow))) < 1.0, "Liquid Pos: at Liquid Low (%.1f Hz)", e->liquidHz ());
+    render (kTargetHighLevel, -1.0, &e);
+    CHECK (e->gestureGain (kBandHigh) == 1.0, "Depth -100 %%: the flat 0 turned to 1, no pull");
+    render (kTargetHighLevel, 1.0, &e);
+    CHECK (e->gestureGain (kBandHigh) == 0.0 && e->bandGainDb (0, kBandHigh) <= -100.0 && e->gestureGain (kBandMid) == 1.0, "High Level: silent, Mid untouched");
+    // Intensity scales every slot: at 50 % High Level is half way down (-24 dB)
+    auto h = fresh ();
+    static Gesture zero2;
+    zero2.flat (0.0);
+    h->setUserGesture (1, &zero2);
+    gesture (*h, 1, kTargetHighLevel, kUserGesture, 1.0);
+    h->setParam (kIntensity, 0.5);
+    h->reset ();
+    run (*h, x, nullptr, 256);
+    CHECK (std::fabs (db (h->gestureGain (kBandHigh)) + 24.0) < 1e-9, "Intensity 50 %%: -24 dB (%.2f)", db (h->gestureGain (kBandHigh)));
+}
+
+TEST (gesture_target_change_fades)
+{
+    // switching a slot's Target (or the gesture on and off) fades: no click
+    const auto x = bandsMix (3.0);
+    auto e = fresh ();
+    tailNeutral (*e);
+    static Gesture zero;
+    zero.flat (0.0);
+    e->setUserGesture (0, &zero);
+    gesture (*e, 0, kTargetHighLevel, kUserGesture);
+    e->reset ();
+    const auto y = run (*e, x, nullptr, 256, [&] (size_t at) {
+        if (at == 256 * 100)
+            e->setParam (gestureId (0, kGestureTarget), kTargetClose);
+        if (at == 256 * 200)
+            e->setParam (gestureId (0, kGestureTarget), kTargetMidLevel);
+        if (at == 256 * 300)
+            e->setParam (gestureId (0, kGestureTarget), kTargetOff);
+        if (at == 256 * 400)
+            e->setParam (gestureId (0, kGestureTarget), kTargetDirt);
+        if (at == 256 * 450)
+            e->setParam (kWobbleAmount, 1.0);
+    });
+    auto f = fresh ();
+    tailNeutral (*f);
+    const auto ref = run (*f, x, nullptr, 256);
+    double jump = 0.0, own = 0.0;
+    for (size_t i = 1000; i < y.size (); ++i)
+    {
+        jump = std::max (jump, (double)std::fabs (y[i] - y[i - 1]));
+        own = std::max (own, (double)std::fabs (ref[i] - ref[i - 1]));
+    }
+    CHECK (finite (y) && jump < 1.5 * own, "no clicks (largest step %.3f, without the gestures %.3f)", jump, own);
+}
+
+TEST (gesture_files)
+{
+    // moistr's own format; the extractor's (raw values with min and max, song beats); errors
+    GestureData d;
+    std::string err;
+    CHECK (parseGestureJson (R"({"name": "Up", "length_beats": 2, "points": [[0, 0], [1, 0.5], [1, 1], [2, 0.25]]})", "file", d, err), "%s", err.c_str ());
+    CHECK (d.name == "Up" && d.length == 2.0 && d.points.size () == 4 && d.points[2].second == 1.0, "moistr's format");
+    Gesture g;
+    CHECK (toGesture (d, g) && g.at (1.0) == 1.0 && std::fabs (g.at (0.5) - 0.25) < 1e-12, "as a curve (the jump kept)");
+    const std::string extractor = R"({"name": "Track > Device > Gain", "source": {"kind": "arrangement"}, "time_unit": "beats",
+        "points": [[64.0, -12.0], [66.0, 0.0], [66.0, -24.0], [68.0, -24.0]], "min": -24.0, "max": 0.0})";
+    CHECK (parseGestureJson (extractor, "file", d, err), "%s", err.c_str ());
+    CHECK (d.length == 4.0 && d.points.front ().first == 0.0 && d.points[1].first == 2.0 && d.points[0].second == 0.5 && d.points[1].second == 1.0 &&
+               d.points[2].second == 0.0,
+           "the extractor's: from its first point, normalised by min and max");
+    CHECK (parseGestureJson (R"({"points": [[0, 3], [1, 3]], "min": 3, "max": 3})", "Flat", d, err) && d.name == "Flat" && d.points[0].second == 1.0,
+           "a flat lane: 1; no name: the file's");
+    CHECK (parseGestureJson (R"({"points": [[1, 0.2], [0, 0.4], [0.5, 2]]})", "x", d, err) && d.points[0].first == 0.0 && d.points[0].second == 0.4 &&
+               d.points[1].second == 1.0,
+           "sorted, clamped");
+    CHECK (!parseGestureJson ("[1, 2]", "x", d, err), "not an object: %s", err.c_str ());
+    CHECK (!parseGestureJson (R"({"points": []})", "x", d, err), "no points: %s", err.c_str ());
+    CHECK (!parseGestureJson (R"({"points": [[0, 1]], "time_unit": "seconds"})", "x", d, err), "seconds: %s", err.c_str ());
+    CHECK (!parseGestureJson (R"({"points": [[0, "a"]]})", "x", d, err), "a bad point: %s", err.c_str ());
+    CHECK (!parseGestureJson (R"({"points": [[0, 1]] )", "x", d, err), "cut short: %s", err.c_str ());
+    // round trip through moistr's format
+    GestureData back;
+    d.name = "Say \"hi\"";
+    d.length = 3.0;
+    d.points = {{0.0, 0.1}, {1.5, 0.9}, {1.5, 0.3}, {3.0, 0.3}};
+    CHECK (parseGestureJson (gestureJson (d), "x", back, err) && back.name == d.name && back.length == 3.0 && back.points == d.points, "round trip");
+    // too many points
+    std::string many = "{\"points\": [";
+    for (int i = 0; i <= kMaxGesturePoints; ++i)
+        many += (i ? ", [" : "[") + std::to_string (i) + ", 0.5]";
+    CHECK (!parseGestureJson (many + "]}", "x", d, err), "too many: %s", err.c_str ());
+}
+
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
-    for (int which = 0; which < 3; ++which)
+    for (int which = 0; which < 4; ++which)
     {
-        const bool heavy = which == 1, ocean = which == 2;
+        const bool heavy = which == 1, ocean = which >= 2, gestures = which == 3;
         double secs = 1e9;
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
@@ -3053,6 +3647,15 @@ TEST (cpu_budget)
                 e->setParam (kCleanSub, 1.0);
                 e->setParam (kSplitDrive, 6.0);
                 e->setParam (kShelf, 1.0);
+            }
+            if (gestures)
+            {
+                // and every gesture path: a level gate, Close, Wobble on a rate gesture, Dirt (the taps' second split)
+                gesture (*e, 0, kTargetHighLevel, kGestureStutter16);
+                gesture (*e, 1, kTargetClose, kGestureResonantClose);
+                gesture (*e, 2, kTargetWobbleRate, kGestureRateRise);
+                gesture (*e, 3, kTargetDirt, kGestureCrossfade);
+                e->setParam (kWobbleAmount, 0.8);
             }
             if (heavy)
             {
@@ -3090,9 +3693,10 @@ TEST (cpu_budget)
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
                      heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
+                     : gestures ? "the new instance as above, with four gestures (a level gate, Close, Wobble on a rate gesture, Dirt)"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
                              : "the bands alone (Sweep off)");
-        CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
+        CHECK (secs / 10.0 < (heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
     }
 }
 

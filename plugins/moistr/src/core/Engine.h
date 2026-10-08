@@ -54,10 +54,33 @@
 // same Low crossover), as if it were bounced and split once more. While the host plays, the movement
 // follows the song position (setTransport), so a render is the same every time.
 //
+// 0.27, the gestures (Gesture.h; off by default and in older states: every Target Off and Wobble Amount 0, so
+// the engine is then 0.26's, bit for bit). Four slots, each playing a breakpoint curve in time with the song
+// (Loop or Walk) and pulling its Target towards the curve by |Depth| x Intensity (a negative Depth turns the
+// curve upside down): target = target + (curve - target) x |Depth| x Intensity, in the target's own range
+// (slot by slot, when several pull the same one). Switching a slot's Target fades it out and the new one in
+// (20 ms); its Depth and Intensity glide (30 ms). Every target is on the bands above Low or the movement of
+// the upper bands, in pass 1 (the second pass takes its result): the Low band and so the sub never move.
+//   Mid / High / Air Level   the band's gain: 1 at its Level, down a dB scale to -48 dB, then fading to silence
+//   Wobble Rate / Amount     Wobble: a tremolo on the bands above Low, 1 - Amount (0.5 - 0.5 cos (2 pi phase)),
+//                            the phase the integral of the rate (cycles per beat x the beats gone by), so it is
+//                            continuous whatever the rate does (a loop's end, a jump, a fast rise)
+//   Close                    a resonant low-pass on the bands above Low: open at Tone's corner (20 kHz with Tone
+//                            off), closing kCloseOctaves lower with its Q rising from 0.71 to kCloseQ (the corner
+//                            and the resonance tied together)
+//   Liquid Pos               Liquid's place between Liquid Low and Liquid High (Liquid must be up to hear it)
+//   Dirt / Bells             the bands above Low between the SWEEP stage's output and its level-matched clean
+//                            (no saturator) or bare (no bells) versions (Sweep.h: the taps), through a second
+//                            split with the same corners so they line up
+//   Mid X / High X, Seed Blend, Shift    those controls over their range (the Low band's own Push and Dip keep
+//                            Seed Blend's own value)
+// Both channels share every gain and coefficient: a mono input stays mono.
+//
 // The latency is the end saturator's (always in the path).
 #pragma once
 
 #include "Dsp.h"
+#include "Gesture.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -106,11 +129,19 @@ struct Meters
     std::array<std::atomic<float>, kNumBells + 1> sweepHz {};
     std::array<std::atomic<float>, kNumBells> bellDb {};
     std::atomic<float> shelfDb {0.0f}, shelfCeiling {0.0f}, sweepAmount {0.0f}, shelfAmount {0.0f};
+    // the gestures (0.27): per slot where in its gesture it is (0 .. 1), the curve's value there (smoothed) and
+    // how far it pulls now (0: off)
+    std::array<std::atomic<float>, kNumGestureSlots> gesturePos {}, gestureValue {}, gesturePull {};
+    std::atomic<float> wobbleGain {1.0f}; // Wobble's gain now (1: none)
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
 // place that follows the bands' opening
 constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
+// the gestures: a level target's range (dB) before it fades to silence (over its last 1 / kLevelFadeShare); Close's
+// travel (octaves) and Q at its most; Smooth's shortest (s) and longest (beats) glide
+constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 5.5, kCloseQ = 4.0, kCloseOpenHz = 20000.0;
+constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
 
 class Engine
 {
@@ -162,6 +193,30 @@ public:
     // the SWEEP stage now (its centres, gains, clocks and orbit)
     const Sweep& sweepStage () const { return sweep; }
 
+    // The gestures. A slot's user gesture (the Gesture choice's User): the engine keeps the pointer (nullptr: a
+    // flat line at 1); the caller keeps it alive and unchanged while it is set.
+    void setUserGesture (int slot, const Gesture* g) { user[std::clamp (slot, 0, kNumGestureSlots - 1)] = g; }
+    // now (the last tick's end): the song position the gestures are at (beats), and per slot the target it pulls,
+    // how far (0 .. 1), where in its gesture (0 .. 1) and the curve's value there (smoothed, before Depth's sign)
+    double gestureBeats () const { return gBeatsNow; }
+    int gestureTarget (int g) const { return slot[g].target; }
+    double gesturePull (int g) const { return slot[g].k; }
+    double gesturePos (int g) const { return slot[g].pos; }
+    double gestureValue (int g) const { return slot[g].s; }
+    // what the gestures do now: the gain on Mid, High and Air (1: none), Wobble's phase (cycles), rate (cycles
+    // per beat), amount and gain, Close's corner (Hz; 0 open) and the Dirt and Bells pulls (0 .. 1)
+    double gestureGain (int band) const { return gLevel[band]; }
+    double wobblePhase () const { return wobPhase; }
+    double wobbleRate () const { return wobRate; }
+    double wobbleAmount () const { return wobAmt; }
+    double wobbleGainNow () const { return wobGain; }
+    double closeHz () const { return closeNow.mix > 0.0 ? closeHzNow : 0.0; }
+    double dirtPull () const { return pullDirt; }
+    double bellsPull () const { return pullBells; }
+    bool gesturesRunning () const { return gestActive; }
+    // the gesture a slot plays now (its Gesture choice: a factory one, or its user gesture)
+    const Gesture& gestureOf (int g) const;
+
 private:
     struct PassState
     {
@@ -202,6 +257,12 @@ private:
     void targets (int pass, double th, double* g, double* gain, bool snap);
     void runPass (int pass, double* l, double* r, int m, double thetaEnd);
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
+    // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
+    // then what they do this tick
+    void gestureTick (int m, double beats, bool snap);
+    // a target pulled by every slot on it (in slot order), from `base`; targeted: some slot pulls it now
+    double pulled (int target, double base) const;
+    bool targeted (int target) const;
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -224,6 +285,39 @@ private:
     LiquidCoefs liqPrev, liqNow;
     double liqF1 = 0.0, liqF2 = 0.0;
     double secPerCycle = 1.0;
+    // the gestures (0.27)
+    struct SlotRun
+    {
+        int target = kTargetOff; // the target it pulls (a new one: this fades out first, then the new one in)
+        double k = 0.0;          // how far it pulls (|Depth| x Intensity, gliding)
+        double s = 1.0;          // the curve's value now (smoothed)
+        double shaped = 1.0;     // s, or 1 - s with a negative Depth
+        double pos = 0.0;
+        bool primed = false;     // (s has a value)
+    };
+    SlotRun slot[kNumGestureSlots];
+    const Gesture* user[kNumGestureSlots] {};
+    Gesture flatGesture;
+    double gBeats = 0.0, gBeatsNow = 0.0, gBpm = 120.0; // (the beats at the block's start; free-running while stopped)
+    bool gestActive = false;                             // a slot pulling, or Wobble on: the gestures' paths run
+    double gLevel[kMaxBands] {1.0, 1.0, 1.0, 1.0};       // (pass 1: the gain on each band; [0] always 1)
+    double gestX[kMaxXovers] {};                         // (log2 offsets of Mid X and High X)
+    double blendBase = 0.0, shiftBase = 0.0;             // (Seed Blend and Shift gliding, before the gestures)
+    // Wobble: its rate (log2, gliding) and amount before the gestures; phase, amount and gain now and at the tick's start
+    double logWobRate = 0.0, wobBase = 0.0, wobRate = 3.0, wobPhase = 0.0, wobPhasePrev = 0.0, wobAmt = 0.0, wobAmtPrev = 0.0, wobGain = 1.0;
+    // Close: its low-pass at the tick's start and end (g, k = 1 / Q, how far it is mixed in)
+    struct CloseCoefs
+    {
+        double g = 0.0, k = dsp::kSqrt2, mix = 0.0;
+    };
+    CloseCoefs closePrev, closeNow;
+    double closeHzNow = 0.0;
+    dsp::Svf closeLp[2];
+    // Dirt and Bells: their pulls now and at the tick's start; the SWEEP stage's taps and what they add (this tick)
+    double pullDirt = 0.0, pullDirtPrev = 0.0, pullBells = 0.0, pullBellsPrev = 0.0;
+    SweepTaps taps;
+    double aux[2][kTick] {};
+    dsp::Split4 auxSplit[2];
     double tickSmooth = 0.1, gainSmooth = 0.3;
     // the movement's phase (cycles of Rate) and the transport
     double theta = 0.0;
