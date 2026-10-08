@@ -139,7 +139,7 @@ const ParamTable& paramTable ()
         for (int g = 0; g < kNumFactoryGestures; ++g)
             gestures.push_back (factoryGestureName (g));
         gestures.push_back ("User");
-        const std::vector<const char*> targets (std::begin (kTargetNames), std::end (kTargetNames));
+        const std::vector<const char*> targets (std::begin (kTargetNames), std::begin (kTargetNames) + kNumSlotTargets);
         // (a different gesture in each slot to start from)
         static const int firstGesture[kNumGestureSlots] = {kGestureCellFade, kGestureStutter16, kGestureRateRise, kGestureResonantClose};
         for (int g = 0; g < kNumGestureSlots; ++g)

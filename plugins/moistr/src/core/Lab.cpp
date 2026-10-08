@@ -187,6 +187,50 @@ void Lab::runSlots (int first, int count, float* l, float* r, int m)
     }
 }
 
+double Lab::ownValue (int chain, bool ott) const
+{
+    const int kind = ott ? smemplr::kFxMultidyn : smemplr::kFxSmacheratr;
+    const int s = firstOf (chain, kind);
+    if (s < 0)
+        return -1.0;
+    const uint32_t id = ott ? (uint32_t)multidyn::kAmount : (uint32_t)smacheratr::kDrive;
+    return std::clamp (slots[(size_t)s]->norm[(size_t)smemplr::fxBlockOf (kind, id)], 0.0, 1.0);
+}
+
+void Lab::pull (int chain, bool ott, double v)
+{
+    const int kind = ott ? smemplr::kFxMultidyn : smemplr::kFxSmacheratr;
+    const uint32_t id = ott ? (uint32_t)multidyn::kAmount : (uint32_t)smacheratr::kDrive;
+    const auto j = (uint32_t)smemplr::fxBlockOf (kind, id);
+    double& now = pulls[(size_t)chain][ott ? 1 : 0];
+    int& at = pulledSlot[(size_t)chain][ott ? 1 : 0];
+    const int s = v >= 0.0 ? firstOf (chain, kind) : -1;
+    if (at >= 0 && at != s && slots[(size_t)at] && slots[(size_t)at]->type == kind)
+        slots[(size_t)at]->apply (j); // (let go: the slot's own setting)
+    at = s;
+    if (s < 0)
+    {
+        now = -1.0;
+        return;
+    }
+    if (std::fabs (v - now) < 1e-6)
+        return;
+    now = v;
+    const double plain = smemplr::fxBlockTable (kind).toPlain (j, v);
+    if (ott)
+        slots[(size_t)s]->multidyn.setParam (id, plain);
+    else
+        slots[(size_t)s]->sat.setParam (id, plain);
+}
+
+void Lab::releasePulls ()
+{
+    for (int c = 0; c <= kNumBandChains; ++c)
+        for (bool ott : {false, true})
+            if (pulledSlot[(size_t)c][ott ? 1 : 0] >= 0)
+                pull (c, ott, -1.0);
+}
+
 bool Lab::holdsEffects () const
 {
     for (int s = 0; s < kNumLabSlots; ++s)

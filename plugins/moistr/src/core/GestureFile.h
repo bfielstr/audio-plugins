@@ -39,7 +39,8 @@ std::string gestureJson (const GestureData& d);
 //               "source": "where it came from (optional)"}, ...]}
 //
 // target: a target's name (kTargetNames: Mid Level, High Level, Air Level, Wobble Rate, Wobble Amount, Close,
-// Liquid Pos, Dirt, Bells, Mid X, High X, Seed Blend, Shift; "Off": a lane kept in the file that does nothing).
+// Liquid Pos, Dirt, Bells, Mid X, High X, Seed Blend, Shift, Mid Grit, High Grit, Air Grit, Mid OTT, High OTT, Air OTT,
+// Post OTT; "Off": a lane kept in the file that does nothing).
 // Values 0 .. 1 (clamped), straight lines between points, two points at one beat a jump. min and max (optional)
 // are what 0 and 1 mean in the target's units (Gesture.h: targetNorm; Level in dB from the band's Level, Close in
 // Hz, Wobble Rate in cycles per beat ...); without them a lane covers the target's whole range. min above max turns

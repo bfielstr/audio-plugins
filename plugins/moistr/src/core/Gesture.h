@@ -128,6 +128,8 @@ const Scene& factoryScene (int s);
 //   Mid X, High X, Shift     Hz (a lane on Mid X may go below the control's range, down to a third of an
 //                            octave above the locked Low X; High X as far as a third above Mid X)
 //   Wobble Amount, Liquid Pos, Dirt, Bells, Seed Blend    0 .. 1 (Dirt 1: the saturated sound, 0: clean)
+//   Mid / High / Air Grit    dB: the Drive of the chain's first smacheratr (-36 .. +36)
+//   Mid / High / Air / Post OTT    0 .. 1: the Amount (OTT's Depth) of the chain's (POST's) first multidyn
 double targetNorm (int target, double unit, double openHz = kCloseOpenHz);
 // a target's whole range in its units (a lane without "min" or "max" takes these)
 void targetUnits (int target, double& lo, double& hi);

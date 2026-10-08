@@ -289,12 +289,23 @@ enum GestureTarget
     kTargetHighX,        // High X over its range
     kTargetSeedBlend,    // Seed Blend
     kTargetShift,        // Shift over its range (-500 .. +500 Hz; Shift On must be on)
+    // (0.29: the LAB's, for the one gesture's lanes; the 0.27 slots' Target choice keeps the 14 above)
+    kTargetMidGrit,      // the Mid chain's Grit: the Drive of its first smacheratr over its range (-36 .. +36 dB)
+    kTargetHighGrit,     // the High chain's
+    kTargetAirGrit,      // the Air chain's
+    kTargetMidOtt,       // the Mid chain's OTT: the Amount (OTT's Depth) of its first multidyn
+    kTargetHighOtt,      // the High chain's
+    kTargetAirOtt,       // the Air chain's
+    kTargetPostOtt,      // POST's OTT: the Amount of its first multidyn
     kNumTargets
 };
-// the targets' names (the 0.27 Target choice's entries; a gesture file's lane "target")
+constexpr int kNumSlotTargets = kTargetShift + 1; // the 0.27 slots' Target choice (its entries are saved: never more)
+// the targets' names (the 0.27 Target choice's entries, the first kNumSlotTargets; a gesture file's lane "target")
 constexpr const char* kTargetNames[kNumTargets] = {"Off",        "Mid Level", "High Level", "Air Level", "Wobble Rate",
                                                    "Wobble Amount", "Close",  "Liquid Pos", "Dirt",      "Bells",
-                                                   "Mid X",      "High X",    "Seed Blend", "Shift"};
+                                                   "Mid X",      "High X",    "Seed Blend", "Shift",
+                                                   "Mid Grit",   "High Grit", "Air Grit",   "Mid OTT",   "High OTT",
+                                                   "Air OTT",    "Post OTT"};
 enum GestureMode { kModeLoop = 0, kModeWalk };
 // Length: the gesture's own (0), else a loop's length in beats; Speed (Walk): Hold, then x1/8 .. x4
 constexpr int kNumGestureLengths = 8, kNumGestureSpeeds = 7;

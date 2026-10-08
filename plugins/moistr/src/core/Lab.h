@@ -72,6 +72,13 @@ public:
     smemplr::FxSlot* slot (int s) { return slots[(size_t)s].get (); }
     // a chain's first slot of a kind (-1: none), among chains 0 .. 2 (3: POST)
     int firstOf (int chain, int fxType) const;
+    // The gestures' targets on the LAB: a chain's Grit (ott false: its first smacheratr's Drive) or OTT (its first
+    // multidyn's Amount; chain 3: POST's). ownValue: the slot's own setting (normalized in the kind's table; -1: no such
+    // slot). pull: run it at v instead (normalized; < 0: at its own setting again). releasePulls: every one let go.
+    double ownValue (int chain, bool ott) const;
+    void pull (int chain, bool ott, double v);
+    void releasePulls ();
+    double pulledTo (int chain, bool ott) const { return pulls[(size_t)chain][ott ? 1 : 0]; } // (-1: none)
     double chainGain (int chain) const { return gain[(size_t)chain]; } // now, with its fades (0 .. )
 
 private:
@@ -109,6 +116,9 @@ private:
     double chunkOut[2][kChunk] {}, held[2][kChunk] {}; // (held: the last chunk's, coming out now)
     int fill = 0;
     dsp::SvfCoefs below;
+    // what the gestures pull (per chain 0 .. 2 and POST: Grit, OTT; -1 none) and in which slot
+    std::array<std::array<double, 2>, kNumBandChains + 1> pulls {{{-1.0, -1.0}, {-1.0, -1.0}, {-1.0, -1.0}, {-1.0, -1.0}}};
+    std::array<std::array<int, 2>, kNumBandChains + 1> pulledSlot {{{-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}}};
 };
 
 } // namespace moistr

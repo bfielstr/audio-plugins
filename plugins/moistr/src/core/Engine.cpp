@@ -499,7 +499,7 @@ void Engine::gestureTick (int m, double beats, bool snap)
     for (int g = 0; g < kNumGestureSlots; ++g)
     {
         SlotRun& r = slot[g];
-        const int want = std::clamp ((int)std::lround (p[gestureId (g, kGestureTarget)]), 0, kNumTargets - 1);
+        const int want = std::clamp ((int)std::lround (p[gestureId (g, kGestureTarget)]), 0, kNumSlotTargets - 1);
         const double depth = std::clamp (p[gestureId (g, kGestureDepth)], -1.0, 1.0);
         const double k = want == kTargetOff ? 0.0 : std::fabs (depth) * intensity;
         if (snap)
@@ -638,6 +638,7 @@ void Engine::gestureTick (int m, double beats, bool snap)
     gestX[1] = gestX[2] = 0.0;
     if (!gestActive)
     {
+        lab.releasePulls (); // (the LAB's Grit and OTT at their own settings)
         wobPhasePrev = wobPhase;
         wobAmtPrev = wobAmt = 0.0;
         wobGain = 1.0;
@@ -671,6 +672,20 @@ void Engine::gestureTick (int m, double beats, bool snap)
         blend = std::clamp (pulled (kTargetSeedBlend, blendBase), 0.0, 1.0);
     if (targeted (kTargetShift))
         shiftHz = overRange (kTargetShift, kShift, shiftBase);
+    // the LAB (0.29): a chain's Grit (its first smacheratr's Drive) and OTT (its first multidyn's Amount), POST's OTT, each
+    // pulled from the slot's own setting (in its own 0 .. 1); let go, the slot's setting again
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        if (c < kNumBandChains)
+        {
+            const int t = kTargetMidGrit + c;
+            const double base = lab.ownValue (c, false);
+            lab.pull (c, false, base >= 0.0 && targeted (t) ? std::clamp (pulled (t, base), 0.0, 1.0) : -1.0);
+        }
+        const int t = c < kNumBandChains ? kTargetMidOtt + c : kTargetPostOtt;
+        const double base = lab.ownValue (c, true);
+        lab.pull (c, true, base >= 0.0 && targeted (t) ? std::clamp (pulled (t, base), 0.0, 1.0) : -1.0);
+    }
     // Wobble: the phase runs on by the rate x the beats of this tick (the integral of the rate: no jumps)
     {
         const double lo = std::log2 (kWobbleRateMin), hi = std::log2 (kWobbleRateMax);

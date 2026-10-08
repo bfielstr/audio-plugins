@@ -4364,6 +4364,54 @@ TEST (neuro_presets)
     }
 }
 
+TEST (lab_gesture_targets)
+{
+    // the LAB's targets (0.29, lanes only): Mid / High / Air Grit move the chain's first smacheratr's Drive, the OTT targets
+    // its first multidyn's Amount (Post OTT: POST's), from the slot's own setting; let go, the slot's own setting again.
+    // A chain without such a slot: nothing. The 0.27 slots' Target choice keeps its 14 entries.
+    CHECK ((int)paramTable ().info (gestureId (0, kGestureTarget)).choices.size () == kNumSlotTargets && kNumSlotTargets == 14,
+           "the slots' Target: the 0.27 targets only");
+    SceneData d;
+    std::string err;
+    const bool parsed = parseSceneJson (R"({"name": "Grit", "length_beats": 4, "lanes": [
+        {"target": "Mid Grit", "min": 0, "max": 36, "points": [[0, 0], [4, 1]]},
+        {"target": "High OTT", "points": [[0, 1], [4, 0]]},
+        {"target": "Air Grit", "points": [[0, 1], [4, 1]]},
+        {"target": "Post OTT", "points": [[0, 0.25], [4, 0.25]]}]})",
+                                        "Grit", d, err);
+    CHECK (parsed, "a file with the LAB's targets: %s", err.c_str ());
+    auto scene = std::make_unique<Scene> ();
+    CHECK (toScene (d, *scene) && scene->count == 4 && scene->lane[0].target == kTargetMidGrit && scene->lane[3].target == kTargetPostOtt,
+           "four lanes, by name");
+    const double lo = targetNorm (kTargetMidGrit, 0.0), hi = targetNorm (kTargetMidGrit, 36.0);
+    CHECK (std::fabs (lo - 0.5) < 1e-12 && std::fabs (hi - 1.0) < 1e-12, "Grit in dB of Drive (0 dB: halfway)");
+    auto e = withValues (newInstanceValues ());
+    e->setParam (labSlotParam (chainSlot (2, 0), kLabType), 0.0); // (no smacheratr on Air: its lane does nothing)
+    e->setUserScene (scene.get ());
+    e->setParam (kScene, kSceneUser);
+    e->reset ();
+    const auto x = reese (2.0);
+    double atOne = -1.0, atThree = -1.0;
+    run (*e, x, nullptr, 256, [&] (size_t a) {
+        e->setTransport (120.0, (double)a / kSr * 2.0, true);
+        if (a == 256 * 94) // (1 beat at 120 BPM: 24000 samples)
+            atOne = e->labStage ().pulledTo (0, false);
+        if (a == 256 * 281)
+            atThree = e->labStage ().pulledTo (0, false);
+    });
+    const Lab& lab = e->labStage ();
+    std::printf ("    Mid Grit at beat 1: %.3f, at beat 3: %.3f (its own: %.3f); High OTT %.3f; Post OTT %.3f\n", atOne, atThree, lab.ownValue (0, false),
+                 lab.pulledTo (1, true), lab.pulledTo (3, true));
+    CHECK (atOne > lo && atThree > atOne && atThree < hi, "Mid Grit rises with its lane");
+    CHECK (lab.pulledTo (2, false) < 0.0, "Air Grit without a smacheratr on Air: nothing");
+    CHECK (std::fabs (lab.pulledTo (3, true) - 0.25) < 0.01 && lab.pulledTo (1, true) >= 0.0, "the OTT targets pull");
+    // let go: the slots' own settings again
+    e->setParam (kScene, kSceneNone);
+    std::vector<float> rest (8192, 0.0f);
+    run (*e, rest);
+    CHECK (lab.pulledTo (0, false) < 0.0 && lab.pulledTo (3, true) < 0.0, "Gesture None: every pull let go");
+}
+
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults, the heaviest settings and a new instance (the Neuro recipe, under 18 %) (4 bands, 2 passes, full movement at the

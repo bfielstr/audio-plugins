@@ -1,5 +1,7 @@
 #include "Gesture.h"
 
+#include "smacheratr/src/core/Params.h"
+
 #include "Params.h"
 
 #include <algorithm>
@@ -152,6 +154,9 @@ double targetNorm (int target, double u, double openHz)
         case kTargetMidX: return std::clamp (paramTable ().toNormalized (kXoverMid, u), 0.0, 1.0);
         case kTargetHighX: return std::clamp (paramTable ().toNormalized (kXoverHigh, u), 0.0, 1.0);
         case kTargetShift: return std::clamp (paramTable ().toNormalized (kShift, u), 0.0, 1.0);
+        case kTargetMidGrit:
+        case kTargetHighGrit:
+        case kTargetAirGrit: return std::clamp (smacheratr::paramTable ().toNormalized (smacheratr::kDrive, u), 0.0, 1.0);
         default: return std::clamp (u, 0.0, 1.0);
     }
 }
@@ -168,6 +173,12 @@ void targetUnits (int target, double& lo, double& hi)
         case kTargetMidX: lo = paramTable ().info (kXoverMid).min; hi = paramTable ().info (kXoverMid).max; return;
         case kTargetHighX: lo = paramTable ().info (kXoverHigh).min; hi = paramTable ().info (kXoverHigh).max; return;
         case kTargetShift: lo = paramTable ().info (kShift).min; hi = paramTable ().info (kShift).max; return;
+        case kTargetMidGrit:
+        case kTargetHighGrit:
+        case kTargetAirGrit:
+            lo = smacheratr::paramTable ().info (smacheratr::kDrive).min;
+            hi = smacheratr::paramTable ().info (smacheratr::kDrive).max;
+            return;
         default: lo = 0.0; hi = 1.0; return;
     }
 }
