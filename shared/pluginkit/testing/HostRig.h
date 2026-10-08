@@ -75,11 +75,13 @@ void pump (double seconds);
 
 // The plug-in editor attached to an offscreen window. Every test starts from a known layout: the editor
 // opens in `layout` (pk.layout.set before the view is made; by default the Classic layout, the fixed one
-// the tests' coordinates are in, whatever layout a new instance would have).
+// the tests' coordinates are in, whatever layout a new instance would have), in the Advanced view unless
+// `advanced` is false (pk.view.set: the Basic page, pluginkit/ui/BasicView.h, where the editor has one).
 class EditorWindow
 {
 public:
-    explicit EditorWindow (Steinberg::Vst::IEditController* controller, const std::string& layout = "default", const std::string& name = "Classic");
+    explicit EditorWindow (Steinberg::Vst::IEditController* controller, const std::string& layout = "default", const std::string& name = "Classic",
+                           bool advanced = true);
     ~EditorWindow ();
     bool ok () const { return attached; }
     Steinberg::IPlugView* view () const { return plugView; }
@@ -110,6 +112,9 @@ private:
 // The controller's open editor in another layout (pk::ControllerBase::kMsgSetLayout): "default" (or "")
 // the Classic layout, "wide", or an arrangement's text; it is built in it again at once.
 void setLayout (Steinberg::Vst::IEditController* controller, const std::string& text, const std::string& name = {});
+// The controller's editor in the Advanced view or on the Basic page (pk::ControllerBase::kMsgSetView); an
+// open one is built in it again at once.
+void setView (Steinberg::Vst::IEditController* controller, bool advanced);
 // Where the control bound to parameter `id` is shown in the open editor, in the coordinates
 // EditorWindow's mouse functions take (pk::ControllerBase::kMsgFindControl, through the view tree:
 // right in any layout and at any zoom). False when none is shown.

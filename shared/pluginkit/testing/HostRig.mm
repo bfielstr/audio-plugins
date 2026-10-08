@@ -203,9 +203,10 @@ public:
 };
 } // namespace
 
-EditorWindow::EditorWindow (IEditController* controller, const std::string& layout, const std::string& name)
+EditorWindow::EditorWindow (IEditController* controller, const std::string& layout, const std::string& name, bool advanced)
 {
     setLayout (controller, layout, name); // (no editor yet: the layout it opens in)
+    setView (controller, advanced);       // (and the view)
     plugView = controller->createView (ViewType::kEditor);
     if (!plugView)
         return;
@@ -365,6 +366,18 @@ void setLayout (IEditController* controller, const std::string& text, const std:
     msg->setMessageID ("pk.layout.set");
     msg->getAttributes ()->setBinary ("text", text.data (), (uint32)text.size ());
     msg->getAttributes ()->setBinary ("name", name.data (), (uint32)name.size ());
+    cp->notify (msg);
+    pump (0.1);
+}
+
+void setView (IEditController* controller, bool advanced)
+{
+    FUnknownPtr<IConnectionPoint> cp (controller);
+    if (!cp)
+        return;
+    auto msg = owned (new HostMessage ());
+    msg->setMessageID ("pk.view.set");
+    msg->getAttributes ()->setInt ("advanced", advanced ? 1 : 0);
     cp->notify (msg);
     pump (0.1);
 }
