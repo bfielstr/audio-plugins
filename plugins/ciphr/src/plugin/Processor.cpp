@@ -1,5 +1,6 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
 #include "pluginkit/vst/Presets.h"
 
 #include "Cids.h"
@@ -168,6 +169,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     for (int i = 0; i < n && silent; ++i)
         silent = L[i] == 0.0f && R[i] == 0.0f;
     data.outputs[0].silenceFlags = silent ? 3 : 0;
+    pk::captureOutput (shared->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

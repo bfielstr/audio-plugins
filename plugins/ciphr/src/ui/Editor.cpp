@@ -139,13 +139,43 @@ void Editor::buildUI (CFrame* f)
     bind (out, new Knob (CRect (18, kKnobTop + kRow2 - kRow1, 18 + kKnobW, kKnobTop + kKnobH + kRow2 - kRow1), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // what makes ciphr's sound: the cluster's colour (Timbre, Character), its brightness (the filter's
+    // Cutoff) and the processor's room (Space); how much of it (Blend) and how loud (Output)
+    using namespace pk::basic;
+    Spec s;
+    s.title = "ciphr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 180;
+    s.display = [this] (const CRect& r) -> CView* {
+        display = new CipherView (r, this, [c = ctl] () -> const Meters* { auto* sh = c->getShared (); return sh ? &sh->meters : nullptr; });
+        pk::setHelp (display, "Cluster and taps", help::kCipherView);
+        return display;
+    };
+    s.rows = {{knob (kTimbre), knob (kCharacter), knob (kCutoff), knob (kSpace)}};
+    s.output = {knob (kBlend), knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (kWidth - 416, 6, kWidth - 328, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)

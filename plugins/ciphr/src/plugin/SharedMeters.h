@@ -2,6 +2,7 @@
 #pragma once
 
 #include "Engine.h"
+#include "pluginkit/Capture.h"
 
 #include <atomic>
 
@@ -13,6 +14,7 @@ struct SharedMeters
     smacheratr::Meters tailMeters; // the saturator at the end of the chain
     std::atomic<int> latency {0};
     std::atomic<double> sampleRate {48000.0};
+    pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }
     void release ()
     {
