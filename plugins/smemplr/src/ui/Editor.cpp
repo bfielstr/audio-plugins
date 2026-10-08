@@ -2593,6 +2593,7 @@ pk::basic::Spec Editor::basicSpec ()
         lastName.clear ();
         return g;
     };
+    s.capture = [this] () -> const pk::CaptureBuffer* { return ctl->getBridge () ? &ctl->getBridge ()->capture : nullptr; };
     s.displayHeight = 200;
     s.display = [this] (const CRect& r) -> CView* {
         waveform = new WaveformView (r, ctl, this);

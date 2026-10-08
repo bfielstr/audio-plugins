@@ -8,6 +8,7 @@
 #include "Rack.h"
 #include "plugin/StateIO.h"
 #include "pluginkit/testing/HostRig.h"
+#include "plugin/Controller.h"
 #include "ui/Editor.h"
 
 #include "dr_wav.h"
@@ -947,6 +948,19 @@ int main (int argc, char** argv)
                 CHECK (rig.controller->getParamNormalized (smemplr::kFilterFreq) > 0.26, "Basic: Filter Freq turns (%.3f)",
                        rig.controller->getParamNormalized (smemplr::kFilterFreq));
                 rig.param (smemplr::kFilterFreq, v0);
+            }
+            // the capture band's buffer: the processor's output, every frame
+            if (auto* c = dynamic_cast<smemplr::Controller*> (rig.controller.get ()); c && c->getBridge ())
+            {
+                const uint64_t before = c->getBridge ()->capture.written ();
+                std::vector<float> cap;
+                rig.note (60, 0.9f);
+                rig.render (0.5, cap);
+                rig.note (60, 0.0f);
+                CHECK (c->getBridge ()->capture.written () - before == cap.size (), "the capture buffer has every frame (%llu of %zu)",
+                       (unsigned long long)(c->getBridge ()->capture.written () - before), cap.size ());
+                CHECK (std::fabs (c->getBridge ()->capture.noteHz () - 261.6256) < 0.01, "the last note");
+                pump (0.1);
             }
             CHECK (win.savePng (outDir + "/ui_smemplr_basic.png"), "screenshot, Basic");
             auto savedAdvanced = [&] {

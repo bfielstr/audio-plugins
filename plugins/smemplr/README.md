@@ -10,7 +10,9 @@ single track can go from raw sample to finished sound. Install instructions are 
 
 ## Basic and Advanced
 
-smemplr opens on its **Basic** page: the waveform, then **Mode** (**Classic**, **One-Shot** or
+smemplr opens on its **Basic** page: the capture band (a scope of the output to hold with **Freeze** and
+drag onto a track as audio, or into a wavetable synth as a wavetable: see the [top-level
+README](../../README.md#basic-and-advanced-views)), the waveform, then **Mode** (**Classic**, **One-Shot** or
 **Slicing**), **Transpose**, **Filter Freq** (the filter's frequency), **Amp Attack** and **Amp
 Release** (the amp envelope), and **Volume** at the right. **Load** and the arrows beside the sample's
 name load a sample, as in the Advanced view, and a file dropped on the waveform loads too. The strip at
