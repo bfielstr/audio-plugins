@@ -138,8 +138,7 @@ const ParamTable& paramTable ()
         for (int g = 0; g < kNumFactoryGestures; ++g)
             gestures.push_back (factoryGestureName (g));
         gestures.push_back ("User");
-        const std::vector<const char*> targets {"Off", "Mid Level", "High Level", "Air Level", "Wobble Rate", "Wobble Amount", "Close",
-                                                "Liquid Pos", "Dirt", "Bells", "Mid X", "High X", "Seed Blend", "Shift"};
+        const std::vector<const char*> targets (std::begin (kTargetNames), std::end (kTargetNames));
         // (a different gesture in each slot to start from)
         static const int firstGesture[kNumGestureSlots] = {kGestureCellFade, kGestureStutter16, kGestureRateRise, kGestureResonantClose};
         for (int g = 0; g < kNumGestureSlots; ++g)
@@ -157,6 +156,18 @@ const ParamTable& paramTable ()
         v.push_back (percent (kIntensity, "Intensity", "Intensity", 1.0));
         v.push_back (real (kWobbleRate, "Wobble Rate", "Rate", kWobbleRateMin, kWobbleRateMax, 2.0, Curve::Log, Disp::Number));
         v.push_back (percent (kWobbleAmount, "Wobble Amount", "Amount", 0.0));
+        // 0.28: the one gesture (a Scene: many lanes on one clock). None by default: moistr as 0.27.
+        std::vector<const char*> scenes {"None"};
+        for (int g = 0; g < kNumFactoryScenes; ++g)
+            scenes.push_back (factorySceneName (g));
+        scenes.push_back ("User");
+        v.push_back (choice (kScene, "Gesture", "Gesture", scenes, kSceneNone));
+        v.push_back (choice (kSceneMode, "Gesture Mode", "Mode", {"Loop", "Walk"}, kModeLoop));
+        v.push_back (choice (kSceneLength, "Gesture Length", "Length", {"Own", "1/2", "1", "2", "4", "8", "16", "32"}, 0));
+        v.push_back (choice (kSceneSpeed, "Gesture Speed", "Speed", {"Hold", "x1/8", "x1/4", "x1/2", "x1", "x2", "x4"}, 4));
+        v.push_back (percent (kScenePosition, "Gesture Position", "Position", 0.0));
+        v.push_back (percent (kSceneSmooth, "Gesture Smooth", "Smooth", 0.0));
+        v.push_back (percent (kSceneAmount, "Gesture Amount", "Amount", 1.0));
         return v;
     }());
     return t;

@@ -18,6 +18,14 @@
 //
 // The factory gestures are simple generic shapes on straight and triplet grids (factoryGesture). A user gesture
 // is a JSON file (GestureFile.h).
+//
+// 0.28: ONE gesture moving many targets together (a Scene). A scene is one timeline in beats with a lane per
+// target it moves (any of the slots' targets: Mid / High / Air Level, Wobble Rate / Amount, Close, Liquid Pos,
+// Dirt, Bells, Mid X, High X, Seed Blend, Shift). Every lane is a curve as above over the scene's length, with
+// its own range: the curve's 0 and 1 are two values in the target's units (targetNorm), so the scene alone sets
+// how far each target goes. All lanes play on one clock (Loop or Walk, Length, Speed, Position, Smooth: the
+// GESTURE section), so they move in tandem; Amount scales them all. The 0.27 slots keep playing beside it (a
+// 0.27 project keeps its sound); a new instance has neither.
 #pragma once
 
 #include <cmath>
@@ -67,6 +75,68 @@ constexpr int kUserGesture = kNumFactoryGestures; // the Gesture choice's last e
 
 const char* factoryGestureName (int g);
 const Gesture& factoryGesture (int g);
+
+// ---- the one gesture (0.28): a Scene
+
+// a level target's range (dB) before it fades to silence; Close's travel (octaves) below its open corner, and the
+// open corner with Tone off (Hz)
+constexpr double kGestureLevelDb = 48.0, kCloseOctaves = 6.0, kCloseOpenHz = 20000.0;
+constexpr int kMaxSceneLanes = 16;
+
+struct SceneLane
+{
+    int target = 0;    // GestureTarget (Off: a lane that does nothing)
+    Gesture curve;     // 0 .. 1 over the scene's length
+    double lo = 0.0, hi = 1.0; // where the curve's 0 and 1 put the target (its own 0 .. 1, targetNorm)
+    // Close with a range in Hz: lo and hi follow the open corner (Tone's), worked out as it plays
+    bool closeHz = false;
+    double hzLo = 0.0, hzHi = 0.0;
+};
+
+struct Scene
+{
+    double length = 8.0; // beats
+    int count = 0;       // lanes
+    SceneLane lane[kMaxSceneLanes];
+};
+
+// The Gesture choice (kScene): None, the factory gestures, then User. (Append only: the index is saved.)
+constexpr int kSceneNone = 0;
+enum FactoryScene
+{
+    kSceneReeseCell = 0, // 8 beats: mids fade out as highs swell, Close shuts on beat 6, Wobble ramps then buzzes, Dirt against the mids
+    kSceneStutterCell,   // 4 beats: High and Air stutter in 16ths, then 8th-note triplets; the mids duck, Dirt up in the bursts
+    kSceneTalkingCell,   // 2 beats: Close and Liquid Pos step and glide on a triplet grid (a talking filter)
+    kSceneCrossoverWalk, // 2 beats: Mid X and High X ramp against each other in quarter- and third-beat moves
+    kSceneSlowPhrase,    // 32 beats: Seed Blend scans, the bells fade, Close slowly shuts and opens on the downbeat
+    kScenePluck,         // 1 beat: 8th-note plucks: Close and High Level open at once and fall over a 16th
+    kSceneBuzzTail,      // 8 beats: a steady wobble, then an audio-rate buzz on the last two beats
+    kSceneTripletWobble, // 4 beats: Wobble Rate steps through 3, 6, 9 cycles per beat on a triplet grid; Air gated
+    kSceneScanCell,      // 4 beats: Seed Blend and Liquid Pos jump and scrub per note; Mid X steps
+    kSceneGateSwap,      // 2 beats: Mid and High swap places every beat (Dirt follows the High band)
+    kNumFactoryScenes
+};
+constexpr int kSceneUser = kNumFactoryScenes + 1; // the Gesture choice's last entry
+const char* factorySceneName (int s);               // s: 0 .. kNumFactoryScenes - 1
+const Scene& factoryScene (int s);
+
+// A target's own 0 .. 1 (what a slot or a lane pulls it to) from a value in its units:
+//   Mid / High / Air Level   dB from the band's Level: 0 at it, -48 silent
+//   Wobble Rate              cycles per beat (1 .. 40)
+//   Close                    Hz: the low-pass's corner (openHz and above: open; kCloseOctaves below: shut)
+//   Mid X, High X, Shift     Hz, as the controls
+//   Wobble Amount, Liquid Pos, Dirt, Bells, Seed Blend    0 .. 1 (Dirt 1: the saturated sound, 0: clean)
+double targetNorm (int target, double unit, double openHz = kCloseOpenHz);
+// a target's whole range in its units (a lane without "min" or "max" takes these)
+void targetUnits (int target, double& lo, double& hi);
+// whether the target's units are spaced on a log scale (Hz, rates): a lane's values between min and max are
+// then on that scale (so straight lines in the curve are straight in the target's own 0 .. 1)
+bool targetLog (int target);
+// a target by name (kTargetNames; case and spaces do not matter); -1 when there is none
+int targetByName (const char* name);
+// Sets a lane from its curve (values 0 .. 1) and its range in units (lo at 0, hi at 1); hasRange false: the
+// target's whole own range (0 .. 1)
+void setLaneRange (SceneLane& lane, int target, bool hasRange, double lo, double hi);
 
 // 0 .. 1 .. 0 over u = 0 .. 1 .. 2 (period 2)
 inline double triangle (double u)

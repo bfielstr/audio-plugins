@@ -1,14 +1,7 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: gestures, neuro, wobble, stutter
-comment: A 16th-note stutter on the High and Air bands in turn, with Wobble on top: the wobble speeds up over the last two beats of every bar and snaps back on the downbeat. The sub keeps playing underneath.
+comment: Two beats as they are, then the High and Air bands stutter in 16ths and in 8th-note triplets while the mids duck and Dirt comes up, all from one gesture, with a steady wobble under it. The sub keeps playing underneath.
 Bands = 4 Bands
-G1 Gesture = 1/16 Stutter
-G1 Target = High Level
-G2 Gesture = 1/16 Stutter
-G2 Target = Air Level
-G2 Position = 50 %
-G3 Gesture = Rate Rise
-G3 Target = Wobble Rate
-G3 Smooth = 40 %
+Gesture = Stutter Cell
 Wobble Rate = 4
-Wobble Amount = 70 %
+Wobble Amount = 40 %

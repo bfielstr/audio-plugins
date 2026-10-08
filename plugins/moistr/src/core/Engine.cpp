@@ -438,7 +438,11 @@ const Gesture& Engine::gestureOf (int g) const
 
 double Engine::pulled (int target, double base) const
 {
+    // (the 0.27 slots in order, then the one gesture's lanes)
     for (const SlotRun& r : slot)
+        if (r.target == target && r.k > 0.0)
+            base += (r.shaped - base) * r.k;
+    for (const SlotRun& r : lane)
         if (r.target == target && r.k > 0.0)
             base += (r.shaped - base) * r.k;
     return base;
@@ -447,6 +451,9 @@ double Engine::pulled (int target, double base) const
 bool Engine::targeted (int target) const
 {
     for (const SlotRun& r : slot)
+        if (r.target == target && r.k > 0.0)
+            return true;
+    for (const SlotRun& r : lane)
         if (r.target == target && r.k > 0.0)
             return true;
     return false;
@@ -509,6 +516,77 @@ void Engine::gestureTick (int m, double beats, bool snap)
         }
         r.shaped = depth >= 0.0 ? r.s : 1.0 - r.s;
         pulling = pulling || r.k > 0.0;
+    }
+    // the one gesture (0.28): every lane at the same place on one clock, pulling its target by Amount; a change of
+    // gesture fades the old one out first (20 ms), then the new one in
+    {
+        const int choice = std::clamp ((int)std::lround (p[kScene]), 0, kSceneUser);
+        const Scene* want = choice == kSceneNone ? nullptr : choice == kSceneUser ? userScene : &factoryScene (choice - 1);
+        const double amount = want ? std::clamp (p[kSceneAmount], 0.0, 1.0) : 0.0;
+        bool fresh = false;
+        if (snap)
+        {
+            scene = want;
+            sceneK = amount;
+            fresh = true;
+        }
+        else if (want != scene)
+        {
+            sceneK = std::max (0.0, sceneK - fadeStep);
+            if (sceneK <= 0.0 || !scene)
+            {
+                sceneK = 0.0;
+                scene = want;
+                fresh = true;
+            }
+        }
+        else
+            glide (sceneK, amount, tickSmooth);
+        const int lanes = scene ? std::clamp (scene->count, 0, kMaxSceneLanes) : 0;
+        if (lanes > 0)
+        {
+            const int lengthChoice = std::clamp ((int)std::lround (p[kSceneLength]), 0, kNumGestureLengths - 1);
+            const double length = lengthChoice == 0 ? scene->length : kGestureLengthBeats[lengthChoice];
+            const int speedChoice = std::clamp ((int)std::lround (p[kSceneSpeed]), 0, kNumGestureSpeeds - 1);
+            const int mode = std::lround (p[kSceneMode]) == kModeWalk ? kModeWalk : kModeLoop;
+            scenePosNow = gesturePosition (mode, beats, length, kGestureSpeeds[speedChoice], std::clamp (p[kScenePosition], 0.0, 1.0));
+            const double at = scenePosNow * scene->length;
+            const double smooth = std::clamp (p[kSceneSmooth], 0.0, 1.0);
+            const double longest = std::max (kSmoothMaxBeats * 60.0 / gBpm, kSmoothMinSec);
+            const double tau = kSmoothMinSec + (longest - kSmoothMinSec) * smooth;
+            const double follow = 1.0 - std::exp (-(double)m / (tau * sr));
+            const double open = std::min (p[kToneOn] >= 0.5 ? std::clamp (p[kTone], kToneMin, kToneMax) : kCloseOpenHz, 0.45 * sr);
+            for (int i = 0; i < lanes; ++i)
+            {
+                const SceneLane& sl = scene->lane[i];
+                SlotRun& r = lane[i];
+                r.target = std::clamp (sl.target, 0, kNumTargets - 1);
+                r.k = r.target == kTargetOff ? 0.0 : sceneK;
+                const double raw = sl.curve.at (at);
+                if (fresh || !r.primed)
+                {
+                    r.s = raw;
+                    r.primed = true;
+                }
+                else
+                    r.s += (raw - r.s) * follow;
+                double lo = sl.lo, hi = sl.hi;
+                if (sl.closeHz)
+                {
+                    lo = targetNorm (kTargetClose, sl.hzLo, open);
+                    hi = targetNorm (kTargetClose, sl.hzHi, open);
+                }
+                r.shaped = lo + (hi - lo) * r.s;
+                r.pos = scenePosNow;
+                pulling = pulling || r.k > 0.0;
+            }
+        }
+        for (int i = lanes; i < kMaxSceneLanes; ++i)
+        {
+            lane[i].target = kTargetOff;
+            lane[i].k = 0.0;
+            lane[i].primed = false;
+        }
     }
     // Wobble's own settings glide; it runs while it or a gesture on it is up
     if (snap)
@@ -939,6 +1017,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             meters->gesturePull[(size_t)g].store ((float)slot[g].k, rx);
         }
         meters->wobbleGain.store ((float)wobGain, rx);
+        meters->scenePos.store ((float)scenePosNow, rx);
+        meters->scenePull.store ((float)sceneK, rx);
+        for (int i = 0; i < kMaxSceneLanes; ++i)
+            meters->laneValue[(size_t)i].store ((float)lane[i].s, rx);
         meters->active.store (quiet < (int)(0.5 * sr), rx);
         meters->passes.store (twoPasses ? 2 : 1, rx);
         meters->bands.store (fourBands ? 4 : 3, rx);

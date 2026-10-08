@@ -1,11 +1,8 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: gestures, reese, scan, crossover
-comment: The crossover between Mid and High walks slowly back and forth while the bells come and go in a triplet gate: the timbre scans and stutters, the sub steady under it.
-G1 Gesture = Scan
-G1 Target = Mid X
-G1 Mode = Walk
-G1 Speed = x1/2
-G1 Smooth = 60 %
-G2 Gesture = Triplet Gate
-G2 Target = Bells
-G2 Depth = 60 %
+comment: Both upper crossovers move against each other in quarter- and third-beat steps, walking back and forth through the gesture at half speed: the timbre scans while the sub stays steady under it.
+Bands = 4 Bands
+Gesture = Crossover Walk
+Gesture Mode = Walk
+Gesture Speed = x1/2
+Gesture Smooth = 50 %

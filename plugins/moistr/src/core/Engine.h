@@ -76,6 +76,12 @@
 //                            Seed Blend's own value)
 // Both channels share every gain and coefficient: a mono input stays mono.
 //
+// 0.28, the one gesture (Gesture.h: a Scene; None by default and in older states, so the engine is then 0.27's,
+// bit for bit). One clock (Loop or Walk, Length, Speed, Position, as a slot's) places every lane of the scene at
+// the same point of its timeline; each lane pulls its target as a slot does, towards lo + (hi - lo) x its curve
+// (its range, in the target's own 0 .. 1), by Amount (gliding). Lanes come after the slots (a 0.27 project's
+// slots still play). Changing the gesture fades the old one out (20 ms), then the new one in.
+//
 // The latency is the end saturator's (always in the path).
 #pragma once
 
@@ -133,6 +139,10 @@ struct Meters
     // how far it pulls now (0: off)
     std::array<std::atomic<float>, kNumGestureSlots> gesturePos {}, gestureValue {}, gesturePull {};
     std::atomic<float> wobbleGain {1.0f}; // Wobble's gain now (1: none)
+    // the one gesture (0.28): where in it the clock is (0 .. 1), how far it pulls now (0: none) and each lane's
+    // value there (its curve, smoothed)
+    std::atomic<float> scenePos {0.0f}, scenePull {0.0f};
+    std::array<std::atomic<float>, kMaxSceneLanes> laneValue {};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -140,7 +150,8 @@ struct Meters
 constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
 // the gestures: a level target's range (dB) before it fades to silence (over its last 1 / kLevelFadeShare); Close's
 // travel (octaves) and Q at its most; Smooth's shortest (s) and longest (beats) glide
-constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 6.0, kCloseQ = 5.0, kCloseOpenHz = 20000.0;
+// (kGestureLevelDb, kCloseOctaves and kCloseOpenHz: Gesture.h)
+constexpr double kLevelFadeShare = 16.0, kCloseQ = 5.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
 
 class Engine
@@ -216,6 +227,22 @@ public:
     bool gesturesRunning () const { return gestActive; }
     // the gesture a slot plays now (its Gesture choice: a factory one, or its user gesture)
     const Gesture& gestureOf (int g) const;
+
+    // The one gesture (0.28). The user's (the Gesture choice's User): the engine keeps the pointer (nullptr: none);
+    // the caller keeps it alive and unchanged while it is set. (A new one playing in its place takes over at once.)
+    void setUserScene (const Scene* s)
+    {
+        if (scene == userScene)
+            scene = s;
+        userScene = s;
+    }
+    // the scene playing now (nullptr: none), where in it the clock is (0 .. 1), how far it pulls (Amount, gliding;
+    // 0 while it fades out to change) and a lane's curve value now (smoothed, 0 .. 1) and where it pulls its target to
+    const Scene* scenePlaying () const { return scene; }
+    double scenePos () const { return scenePosNow; }
+    double scenePull () const { return sceneK; }
+    double laneValue (int i) const { return lane[i].s; }
+    double laneTargetValue (int i) const { return lane[i].shaped; }
 
 private:
     struct PassState
@@ -296,6 +323,12 @@ private:
         bool primed = false;     // (s has a value)
     };
     SlotRun slot[kNumGestureSlots];
+    // the one gesture (0.28): its lanes (as slots: lane i pulls the scene's lane i's target; shaped is where, in
+    // the target's own 0 .. 1), the scene playing, the user's, how far it pulls and the clock's place
+    SlotRun lane[kMaxSceneLanes];
+    const Scene* scene = nullptr;
+    const Scene* userScene = nullptr;
+    double sceneK = 0.0, scenePosNow = 0.0;
     const Gesture* user[kNumGestureSlots] {};
     Gesture flatGesture;
     double gBeats = 0.0, gBeatsNow = 0.0, gBpm = 120.0; // (the beats at the block's start; free-running while stopped)

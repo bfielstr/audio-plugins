@@ -1,12 +1,4 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: gestures, reese, neuro, tempo
-comment: The Ocean sweep in 8-beat note cells: the Mid band holds, then fades out over three beats while the High band swells in, and a resonant low-pass closes over the last notes and jumps open on the downbeat. The sub stays put.
-G1 Gesture = Cell Fade
-G1 Target = Mid Level
-G2 Gesture = Swell
-G2 Target = High Level
-G2 Depth = 80 %
-G3 Gesture = Resonant Close
-G3 Target = Close
-G3 Depth = 70 %
-G3 Smooth = 30 %
+comment: One gesture over an 8-beat note cell, every lane moving together: the Mid band fades out over two and a half beats while the High band swells and Dirt rises against it, Wobble speeds up from 3 to 9 cycles per beat and buzzes on the last note, and a resonant low-pass shuts on beat 6 and snaps open on the downbeat. The sub stays put.
+Gesture = Reese Cell
