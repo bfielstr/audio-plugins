@@ -119,6 +119,23 @@ struct FactoryPreset
 };
 bool parseFactoryPreset (const std::string& text, const std::string& relPath, const ParamTable& table, FactoryPreset& out,
                          std::string& error);
+// Files parsed against a plug-in's table and sorted as its menu lists them (by category, then name);
+// a file that does not parse is left out (the factory preset test catches it).
+std::vector<FactoryPreset> parseFactoryFiles (const std::vector<FactoryFile>& files, const ParamTable& table);
+// The menu's items for parsed factory presets (factoryIndex: the index in `presets`).
+std::vector<Item> factoryItems (const std::vector<FactoryPreset>& presets);
+
+// ---- another plug-in's presets
+// Smemplr's rack hosts the suite's effects, and a slot lists the same presets as the effect's own
+// plug-in: that plug-in's factory files are compiled into Smemplr too (cmake: pk_embed_hosted_presets),
+// registered under the plug-in's name ("Para", its user folder's name), apart from Smemplr's own
+// (registerFactory). The user presets are the ones in that plug-in's folder (userFolder (its name)).
+bool registerFactoryOf (const char* pluginName, const FactoryFile* files, int count);
+// (empty when none are registered for that name)
+const std::vector<FactoryFile>& factoryFilesOf (const std::string& pluginName);
+// true when `path` is in `folder` or one of its sub-folders (a category): a user preset, not a file
+// from somewhere else
+bool inFolder (const std::string& path, const std::string& folder);
 
 // ---- the Presets menu
 enum class Action

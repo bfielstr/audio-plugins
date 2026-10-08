@@ -504,6 +504,79 @@ bool parseFactoryPreset (const std::string& text, const std::string& relPath, co
     return true;
 }
 
+std::vector<FactoryPreset> parseFactoryFiles (const std::vector<FactoryFile>& files, const ParamTable& table)
+{
+    std::vector<FactoryPreset> out;
+    for (const auto& f : files)
+    {
+        FactoryPreset fp;
+        std::string err;
+        if (f.path && f.text && parseFactoryPreset (f.text, f.path, table, fp, err))
+            out.push_back (std::move (fp));
+    }
+    std::stable_sort (out.begin (), out.end (), [] (const FactoryPreset& a, const FactoryPreset& b) {
+        return a.category != b.category ? a.category < b.category : a.name < b.name;
+    });
+    return out;
+}
+
+std::vector<Item> factoryItems (const std::vector<FactoryPreset>& presets)
+{
+    std::vector<Item> out;
+    for (size_t i = 0; i < presets.size (); ++i)
+    {
+        Item it;
+        it.name = presets[i].name;
+        it.category = presets[i].category;
+        it.path = presets[i].path;
+        it.tags = presets[i].tags;
+        it.factory = true;
+        it.factoryIndex = (int)i;
+        out.push_back (std::move (it));
+    }
+    return out;
+}
+
+// ---- another plug-in's presets --------------------------------------------------------------------
+namespace {
+std::map<std::string, std::vector<FactoryFile>>& hostedRegistry ()
+{
+    static std::map<std::string, std::vector<FactoryFile>> files;
+    return files;
+}
+} // namespace
+
+bool registerFactoryOf (const char* pluginName, const FactoryFile* files, int count)
+{
+    if (!pluginName || !*pluginName)
+        return false;
+    auto& reg = hostedRegistry ()[pluginName];
+    for (int i = 0; i < count; ++i)
+        reg.push_back (files[i]);
+    return true;
+}
+
+const std::vector<FactoryFile>& factoryFilesOf (const std::string& pluginName)
+{
+    static const std::vector<FactoryFile> none;
+    const auto& reg = hostedRegistry ();
+    const auto f = reg.find (pluginName);
+    return f == reg.end () ? none : f->second;
+}
+
+bool inFolder (const std::string& path, const std::string& folder)
+{
+    if (path.empty () || folder.empty ())
+        return false;
+    std::error_code ec;
+    const fs::path f = fs::weakly_canonical (folder, ec);
+    fs::path p = fs::weakly_canonical (path, ec).parent_path ();
+    for (int i = 0; i < 2 && !p.empty (); ++i, p = p.parent_path ())
+        if (p == f)
+            return true;
+    return false;
+}
+
 // ---- the menu -------------------------------------------------------------------------------------
 namespace {
 MenuEntry entry (const std::string& title, Action a, bool enabled = true)

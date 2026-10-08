@@ -266,21 +266,7 @@ std::string ControllerBase::presetFolder () const
     return presetPlugin.empty () ? std::string () : presets::userFolder (presetPlugin.c_str (), presetFormer.c_str ());
 }
 
-namespace {
-// true when `path` is in `folder` or one of its sub-folders (a category)
-bool inFolder (const std::string& path, const std::string& folder)
-{
-    if (path.empty () || folder.empty ())
-        return false;
-    std::error_code ec;
-    const fs::path f = fs::weakly_canonical (folder, ec);
-    fs::path p = fs::weakly_canonical (path, ec).parent_path ();
-    for (int i = 0; i < 2 && !p.empty (); ++i, p = p.parent_path ())
-        if (p == f)
-            return true;
-    return false;
-}
-} // namespace
+using presets::inFolder;
 
 bool ControllerBase::savePreset (const std::string& path, const presets::Meta* meta)
 {
@@ -413,16 +399,7 @@ const std::vector<presets::FactoryPreset>& ControllerBase::factoryPresets ()
     if (!factoryParsed)
     {
         factoryParsed = true;
-        for (const auto& f : presets::factoryFiles ())
-        {
-            presets::FactoryPreset fp;
-            std::string err;
-            if (f.path && f.text && presets::parseFactoryPreset (f.text, f.path, tableRef, fp, err))
-                factory.push_back (std::move (fp));
-        }
-        std::stable_sort (factory.begin (), factory.end (), [] (const presets::FactoryPreset& a, const presets::FactoryPreset& b) {
-            return a.category != b.category ? a.category < b.category : a.name < b.name;
-        });
+        factory = presets::parseFactoryFiles (presets::factoryFiles (), tableRef);
     }
     return factory;
 }
@@ -441,23 +418,7 @@ bool ControllerBase::loadFactory (int index)
     return true;
 }
 
-std::vector<presets::Item> ControllerBase::factoryItems ()
-{
-    std::vector<presets::Item> out;
-    const auto& f = factoryPresets ();
-    for (size_t i = 0; i < f.size (); ++i)
-    {
-        presets::Item it;
-        it.name = f[i].name;
-        it.category = f[i].category;
-        it.path = f[i].path;
-        it.tags = f[i].tags;
-        it.factory = true;
-        it.factoryIndex = (int)i;
-        out.push_back (std::move (it));
-    }
-    return out;
-}
+std::vector<presets::Item> ControllerBase::factoryItems () { return presets::factoryItems (factoryPresets ()); }
 
 std::vector<presets::Item> ControllerBase::userItems () const { return presets::listUser (presetFolder ()); }
 

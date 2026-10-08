@@ -106,6 +106,23 @@ function(pk_add_plugin target)
     endif()
 endfunction()
 
+# pk_embed_hosted_presets(<target> PLUGIN <folder name> NAME <plug-in name> FUNCTION <function>)
+# Another plug-in's factory presets (plugins/<folder name>/presets) compiled into <target> (smemplr's rack
+# lists the presets of the effects it hosts): a generated source that defines `void <function> ()`, which
+# registers them under <plug-in name> (pk::presets::registerFactoryOf) when first called.
+function(pk_embed_hosted_presets target)
+    cmake_parse_arguments(ARG "" "PLUGIN;NAME;FUNCTION" "" ${ARGN})
+    set(dir "${CMAKE_SOURCE_DIR}/plugins/${ARG_PLUGIN}/presets")
+    file(GLOB_RECURSE files CONFIGURE_DEPENDS "${dir}/*.txt")
+    set(out "${CMAKE_CURRENT_BINARY_DIR}/${target}_hosted_presets.cpp")
+    add_custom_command(OUTPUT "${out}"
+        COMMAND ${CMAKE_COMMAND} -DPRESET_DIR=${dir} -DOUT=${out} -DHOSTED_FUNCTION=${ARG_FUNCTION} -DHOSTED_PLUGIN=${ARG_NAME}
+                -P ${CMAKE_SOURCE_DIR}/cmake/EmbedPresets.cmake
+        DEPENDS ${files} ${CMAKE_SOURCE_DIR}/cmake/EmbedPresets.cmake
+        COMMENT "Embedding the factory presets of ${ARG_NAME} into ${target}")
+    target_sources(${target} PRIVATE "${out}")
+endfunction()
+
 # pk_add_draw_bench(<target>)
 # With -DPK_DRAW_BENCH=ON (Linux): <target>_drawbench, the plug-in's sources built into an executable
 # that hosts it, plays a test signal through it and draws its editor offscreen, printing how long the
