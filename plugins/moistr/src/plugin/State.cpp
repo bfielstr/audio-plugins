@@ -5,6 +5,7 @@
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace moistr {
 
@@ -33,8 +34,15 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    An older state reads the gestures off (every Target Off, Wobble Amount 0: defaultNormalizedForVersion) and
 //    no user gestures, so it sounds as it did. (An older build reads a version 6 state's parameters and stops
 //    before the gestures' block.)
-constexpr int32 kVersion = 6;
+// 7: 0.28, the one gesture (IDs 220 .. 226 appended: Gesture, its Mode, Length, Speed, Position, Smooth and
+//    Amount) and, after the slots' block, its user gesture: 'SCNE', the length in bytes and the gesture's JSON
+//    (GestureFile.h: sceneJson; 0 bytes: none). An older state reads Gesture None (its default) and keeps its
+//    slots, which still play, so a 0.27 project sounds as it did. (A 0.27 build reads a version 7 state's
+//    parameters and slots and stops before the new block.)
+constexpr int32 kVersion = 7;
 constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
+constexpr int32 kSceneMagic = 0x454E4353;   // 'SCNE'
+constexpr int32 kMaxSceneBytes = 4 << 20;
 constexpr int32 kMaxNameBytes = 1024;
 constexpr int32 kNewDefaults = 4;
 } // namespace
@@ -63,8 +71,30 @@ bool writeState (IBStream* stream, const State& st)
         for (const auto& [beat, value] : g.points)
             ok = ok && s.writeDouble (beat) && s.writeDouble (value);
     }
+    // the one gesture's user gesture
+    const std::string scene = st.scene.empty () ? std::string () : sceneJson (st.scene);
+    ok = ok && s.writeInt32 (kSceneMagic) && s.writeInt32 ((int32)scene.size ()) &&
+         (scene.empty () || s.writeRaw (scene.data (), (int32)scene.size ()) == (int32)scene.size ());
     return ok;
 }
+
+namespace {
+// the one gesture's user gesture (version 7; none when the block is missing or damaged)
+void readScene (IBStreamer& s, State& st)
+{
+    int32 magic = 0, bytes = 0;
+    if (!s.readInt32 (magic) || magic != kSceneMagic || !s.readInt32 (bytes) || bytes <= 0 || bytes > kMaxSceneBytes)
+        return;
+    std::string text ((size_t)bytes, '\0');
+    if (s.readRaw (text.data (), bytes) != bytes)
+        return;
+    SceneData d;
+    std::string error;
+    auto check = std::make_unique<Scene> ();
+    if (parseSceneJson (text, "User", d, error) && toScene (d, *check)) // (one the engine cannot play is left out)
+        st.scene = std::move (d);
+}
+} // namespace
 
 bool readState (IBStream* stream, State& st)
 {
@@ -97,6 +127,7 @@ bool readState (IBStream* stream, State& st)
     // the user gestures (version 6; a state without the block has none). A damaged block is left out whole.
     for (GestureData& g : st.user)
         g = {};
+    st.scene = {};
     int32 magic2 = 0, slots = 0;
     if (version < 6 || !s.readInt32 (magic2) || magic2 != kGestureMagic || !s.readInt32 (slots) || slots < 0 || slots > 64)
         return true;
@@ -132,6 +163,8 @@ bool readState (IBStream* stream, State& st)
             user[(size_t)k] = std::move (g);
     }
     st.user = std::move (user);
+    if (version >= 7)
+        readScene (s, st);
     return true;
 }
 
