@@ -1,6 +1,7 @@
 // End-to-end test of the built Smacheratr.vst3. usage: smacheratr_hosttest <Smacheratr.vst3> <output dir>
 #include "Params.h"
 #include "plugin/State.h"
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
 #include "ui/ThresholdSlider.h"
@@ -272,6 +273,14 @@ int main (int argc, char** argv)
                 auto edge1 = [&] { return plainOf (rig, kClarityFreq) * std::exp2 (0.5 * plainOf (rig, kClarityWidth)); };
                 auto edge2 = [&] { return plainOf (rig, kClarity2Freq) / std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
                 CHECK (plainOf (rig, kClarityGlue12) < 0.5, "nothing glued by default");
+                CHECK (!pk::glueOnTouch (), "Glue Bands on Touch: off by default");
+                win.drag (gx (edge1 ()), gy, gx (edge2 ()) - 3.0, gy);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityGlue12) < 0.5 && std::log2 (edge2 () / edge1 ()) > 1e-3, "off: no snap, no glue (%.1f / %.1f Hz)",
+                       edge1 (), edge2 ());
+                rig.param (kClarityWidth, defaultNormalized (kClarityWidth));
+                pump (0.05);
+                CHECK (pk::writeGlueOnTouch (true), "Glue Bands on Touch checked");
                 win.drag (gx (edge1 ()), gy, gx (edge2 ()) - 3.0, gy);
                 pump (0.05);
                 CHECK (plainOf (rig, kClarityGlue12) >= 0.5, "band 1's edge dragged onto band 2's: glued");
@@ -282,6 +291,7 @@ int main (int argc, char** argv)
                 pump (0.05);
                 CHECK (plainOf (rig, kClarityGlue12) < 0.5 && plainOf (rig, kClarityFreq) == f1 && plainOf (rig, kClarity2Freq) == f2,
                        "the link icon clicked: detached, the bands where they were");
+                pk::writeGlueOnTouch (false);
                 for (uint32_t id : {(uint32_t)kClarityFreq, (uint32_t)kClarityWidth, (uint32_t)kClarity2Freq, (uint32_t)kClarity2Width})
                     rig.param (id, defaultNormalized (id));
             }
