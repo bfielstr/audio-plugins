@@ -8,6 +8,7 @@
 #include "vstgui/lib/cview.h"
 #include "vstgui/lib/cviewcontainer.h"
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -208,6 +209,9 @@ public:
     std::vector<TextSpot> textSpots () const; // (the layout check)
     // The square the dial (track, arc and body) is drawn in: under the label, above the value.
     VSTGUI::CRect dialRect () const;
+    // The label's and the value's text sizes (10.5 and 10 by default; a Basic page's large knobs use
+    // larger ones, pk::basic): the strips they are drawn in grow with them.
+    void setTextSizes (double labelSize, double valueSize);
     void onMouseDownEvent (VSTGUI::MouseDownEvent& e) override;
     void onMouseMoveEvent (VSTGUI::MouseMoveEvent& e) override;
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
@@ -215,10 +219,13 @@ public:
     void onMouseWheelEvent (VSTGUI::MouseWheelEvent& e) override;
 
 private:
+    double labelHeight () const { return std::round (labelSize + 2.5); } // 13 px at 10.5
+    double valueHeight () const { return std::round (valueSize + 3.0); } // 13 px at 10
     std::string label;
     bool bipolar;
     bool dragging = false;
     double startY = 0, startValue = 0, dragValue = 0;
+    double labelSize = 10.5, valueSize = 10.0;
 };
 
 // Horizontal bar slider (LFO amounts), label on the left, value on the right.

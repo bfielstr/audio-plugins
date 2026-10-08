@@ -213,13 +213,20 @@ Knob::Knob (const CRect& r, ParamHost* h, uint32_t id, const char* l, bool bi)
 {
 }
 
+void Knob::setTextSizes (double l, double v)
+{
+    labelSize = l;
+    valueSize = v;
+    invalid ();
+}
+
 CRect Knob::dialRect () const
 {
-    // as large as fits between the label (13 px, and 2 px clear) and the value strip, and 7 px in
-    // from each side
+    // as large as fits between the label (13 px at the default size, and 2 px clear) and the value strip
+    // (13 px, 2 px clear), and 7 px in from each side
     const CRect r = getViewSize ();
-    const double size = std::min (r.getWidth () - 14.0, r.getHeight () - 30.0);
-    const double cx = r.getCenter ().x, cy = r.top + 15 + size / 2;
+    const double size = std::min (r.getWidth () - 14.0, r.getHeight () - (labelHeight () + 2.0) - (valueHeight () + 2.0));
+    const double cx = r.getCenter ().x, cy = r.top + labelHeight () + 2.0 + size / 2;
     return CRect (cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2);
 }
 
@@ -228,7 +235,7 @@ void Knob::draw (CDrawContext* ctx)
     const CRect r = getViewSize ();
     const double v = host->norm (param);
     // the label in pale copper (small text: plain copper is too dark for it), text dim when disabled
-    text (ctx, label, CRect (r.left, r.top, r.right, r.top + 13), enabledLook ? theme::kCopperPale : theme::kTextDim, 10.5);
+    text (ctx, label, CRect (r.left, r.top, r.right, r.top + labelHeight ()), enabledLook ? theme::kCopperPale : theme::kTextDim, labelSize);
 
     const CRect kr = dialRect ();
     const CPoint c = kr.getCenter ();
@@ -270,14 +277,14 @@ void Knob::draw (CDrawContext* ctx)
     ctx->setLineWidth (1.0);
 
     // the value: text colour, its unit dim; cinnabar while it is being dragged (the lit interaction)
-    const CRect vr (r.left - 4, r.bottom - 13, r.right + 4, r.bottom);
+    const CRect vr (r.left - 4, r.bottom - valueHeight (), r.right + 4, r.bottom);
     const std::string vt = host->valueText (param);
     if (dragging)
-        text (ctx, vt, vr, theme::kEnergyLive, 10.0);
+        text (ctx, vt, vr, theme::kEnergyLive, valueSize);
     else if (enabledLook)
-        valueText (ctx, vt, vr, theme::kText, theme::kTextDim, 10.0);
+        valueText (ctx, vt, vr, theme::kText, theme::kTextDim, valueSize);
     else
-        text (ctx, vt, vr, theme::kTextDim, 10.0);
+        text (ctx, vt, vr, theme::kTextDim, valueSize);
 }
 
 void Knob::onMouseDownEvent (MouseDownEvent& e)
@@ -839,9 +846,9 @@ std::vector<std::string> ParamView::sampleTexts () const
 std::vector<TextSpot> Knob::textSpots () const
 {
     const CRect r = getViewSize ();
-    std::vector<TextSpot> out {{CRect (r.left, r.top, r.right, r.top + 13), label, 10.5, false, 1, 0}};
+    std::vector<TextSpot> out {{CRect (r.left, r.top, r.right, r.top + labelHeight ()), label, labelSize, false, 1, 0}};
     for (const auto& s : sampleTexts ())
-        out.push_back ({CRect (r.left - 4, r.bottom - 13, r.right + 4, r.bottom), s, 10.0, false, 1, 0});
+        out.push_back ({CRect (r.left - 4, r.bottom - valueHeight (), r.right + 4, r.bottom), s, valueSize, false, 1, 0});
     return out;
 }
 
