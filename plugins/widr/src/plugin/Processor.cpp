@@ -1,5 +1,6 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
 #include "pluginkit/vst/Presets.h"
 
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -130,6 +131,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     // controller tells the host
     shared->latency.store (engine.latency (), std::memory_order_relaxed);
     data.outputs[0].silenceFlags = 0;
+    pk::captureOutput (shared->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

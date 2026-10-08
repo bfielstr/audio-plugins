@@ -58,7 +58,7 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "widr", 14.0, true));
-    statusLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
+    statusLabel = new Label (CRect (66, 6, 340, 28), "", 10.5);
     statusLabel->setDim (true);
     root->addView (statusLabel);
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
@@ -127,13 +127,53 @@ void Editor::buildUI (CFrame* f)
     bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // how wide and in what character (Character, Width), the top's sheen (Air), the low end kept mono
+    // (Mono Below) and the cinema stage's lanes (Cinema); Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "widr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        auto* g = new pk::Group (r);
+        const double split = r.getWidth () - 224; // (the stage 460 wide: whole pixels at every zoom)
+        stage = new StageView (CRect (0, 0, split - 8, r.getHeight ()), this, ctl);
+        pk::setHelp (stage, "Stage", help::kStage);
+        g->addView (stage);
+        gonio = new GonioView (CRect (split, 0, r.getWidth (), r.getHeight ()), [c = ctl] () -> Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        pk::setHelp (gonio, "Goniometer", help::kGonio);
+        g->addView (gonio);
+        return g;
+    };
+    s.rows = {{segmented (kCharacter, "Character", {"Tight", "Wide", "Epic", "Surround"})},
+              {knob (widr::kWidth), knob (kAir), knob (kMonoBelow), knob (kCinema)}};
+    s.output = {knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (348, 6, 432, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)
