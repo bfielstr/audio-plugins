@@ -57,7 +57,8 @@ public:
     void showMenu (VSTGUI::CPoint where);
     void say (const std::string& text); // the status line
 
-    static constexpr double kControlsW = 228; // the controls at the band's right
+    static constexpr double kControlsW = 436; // the controls at the right of the band's top row
+    static constexpr double kRowH = 22;       // that row (the scope under it, the band's whole width)
 
 private:
     friend class CaptureScope;

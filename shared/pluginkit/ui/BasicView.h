@@ -54,7 +54,7 @@ constexpr double kSideW = 148;      // the output column at the right
 constexpr double kStripH = 36;      // the extras strip
 constexpr int kPerRow = 4;          // controls in a row, at most
 constexpr double kTitleSize = 16.0;
-constexpr double kCaptureH = 92;    // the capture band
+constexpr double kCaptureH = 104;   // the capture band (its row of controls, the scope under it)
 
 // One of the page's controls, bound to a parameter. Its label is the parameter's short name unless given
 // (keep it the label the Advanced view shows the control by, docs name controls by their labels).
@@ -97,7 +97,8 @@ struct Spec
     double displayHeight = 0;               // (0: no display)
     Factory header;                         // the plug-in's own views in the header, after the title (optional)
     double headerWidth = 0;                 // (as wide as this)
-    std::function<float ()> level;          // the mini meter's level now (linear peak; none: no meter)
+    std::function<float ()> level;          // the mini meter's level now (linear peak; none: the capture
+                                            // buffer's, else no meter)
     // The capture band across the top (the plug-in's output, held and dragged out as audio or a
     // wavetable): the plug-in's capture buffer, which its processor pushes its output into (none yet: an
     // empty scope). One line in a basicSpec: s.capture = [this] { return &<the buffer>; };

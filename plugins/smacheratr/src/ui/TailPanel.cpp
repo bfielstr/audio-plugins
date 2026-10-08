@@ -109,6 +109,13 @@ TailPanel::TailPanel (pk::EditorBase* ed, const TailBases& b, ColorView::RateSou
     });
 }
 
+VSTGUI::CView* TailPanel::basicExtras (const CRect& r)
+{
+    auto* g = new pk::Group (r);
+    add (g, CRect (0, 0, r.getWidth (), r.getHeight ()));
+    return g;
+}
+
 void TailPanel::add (CViewContainer* parent, const CRect& r)
 {
     area = CRect (r.left, r.top, r.right, r.top + kOpenHeight);

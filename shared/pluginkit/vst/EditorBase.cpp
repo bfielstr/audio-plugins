@@ -106,6 +106,9 @@ tresult PLUGIN_API EditorBase::getSize (ViewRect* size)
 
 bool EditorBase::setContentHeight (double h)
 {
+    // (the Basic page keeps its height: a section folding in its extras leaves its space)
+    if (showingBasic)
+        return true;
     if (arranged)
     {
         // the last section (the one that folds) is shorter by as much as the build's content would be:
@@ -457,6 +460,21 @@ void EditorBase::resolveLayout ()
     // the Basic page, when the editor has one and the instance shows it (no layouts there: it has one)
     basicPage = basicSpec ();
     hasBasic = !basicPage.empty ();
+    // the mini meter's level: the capture buffer's last 1024 frames when the page gives none
+    if (!basicPage.level && basicPage.capture)
+    {
+        auto buf = std::make_shared<std::vector<float>> (2048);
+        basicPage.level = [src = basicPage.capture, buf] () -> float {
+            const CaptureBuffer* c = src ();
+            if (!c)
+                return 0.0f;
+            c->read (c->written (), 1024, buf->data (), buf->data () + 1024);
+            float peak = 0.0f;
+            for (float v : *buf)
+                peak = std::max (peak, std::fabs (v));
+            return peak;
+        };
+    }
     showingBasic = hasBasic && !appliedAdvanced;
     basicPlace = showingBasic ? basic::place (basicPage, appliedExtras) : basic::Geometry {};
     arranged = false;

@@ -60,6 +60,10 @@ public:
     // open). It must be the last thing in the editor's content: the content ends where it ends, plus the
     // gap under it as built.
     void add (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r);
+    // A Basic page's extras (pk::basic::Spec::extras, untitled: extrasHeight kBasicHeight): the section in a
+    // group of r's size, which the page adds. The page keeps its height when a part folds.
+    static constexpr double kBasicHeight = kOpenHeight + 16.0;
+    VSTGUI::CView* basicExtras (const VSTGUI::CRect& r);
     void idle ();
     void paramChanged (uint32_t id); // redraws when a tail parameter changes
     void closed ();                  // the editor closed: its views are gone

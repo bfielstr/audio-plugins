@@ -282,14 +282,16 @@ CaptureBand::CaptureBand (const CRect& r, Source src, std::shared_ptr<CaptureHol
 : CViewContainer (r), source (std::move (src)), hold (std::move (h)), name (std::move (n)), getChoice (std::move (get)), setChoice (std::move (set))
 {
     setTransparency (true);
+    // a slim row of controls on top (the status at its left, the controls at its right), the scope as wide
+    // as the band under it
     const double w = r.getWidth (), ht = r.getHeight ();
     const double cx = w - kControlsW;
-    auto* sc = new CaptureScope (CRect (0, 0, cx - 12, ht), this);
+    auto* sc = new CaptureScope (CRect (0, kRowH + 6, w, ht), this);
     setHelp (sc, "Capture", kScopeHelp);
     addView (sc);
     scope = sc;
     // the length (1, 2, 4) and its unit, Freeze
-    auto* len = new ViewSwitch (CRect (cx, 6, cx + 96, 28), {"1", "2", "4"}, [this] { return getChoice ? getChoice () : 1; },
+    auto* len = new ViewSwitch (CRect (cx, 0, cx + 96, kRowH), {"1", "2", "4"}, [this] { return getChoice ? getChoice () : 1; },
                                 [this] (int c) {
                                     if (setChoice)
                                         setChoice (c);
@@ -298,29 +300,31 @@ CaptureBand::CaptureBand (const CRect& r, Source src, std::shared_ptr<CaptureHol
                                 });
     setHelp (len, "Capture Length", kLengthHelp);
     addView (len);
-    unit = new Label (CRect (cx + 100, 8, cx + 136, 26), "bars", 10.5, false, 0);
+    unit = new Label (CRect (cx + 100, 2, cx + 132, kRowH - 2), "bars", 10.5, false, 0);
     setHelp (unit, "Capture Length", kLengthHelp);
     addView (unit);
-    auto* freeze = new ActionButton (CRect (cx + 144, 6, cx + kControlsW, 28), "Freeze", [this] { setFrozen (!hold->frozen); },
+    auto* freeze = new ActionButton (CRect (cx + 140, 0, cx + 204, kRowH), "Freeze", [this] { setFrozen (!hold->frozen); },
                                      [this] { return hold->frozen; });
     setHelp (freeze, "Freeze", kFreezeHelp);
     addView (freeze);
     // the drags out
     auto failed = [this] (const std::string& e) { say (e); };
-    auto* wav = new DragHandle (CRect (cx, 36, cx + 110, 58), "Drag WAV", [this] (std::string& e) { return writeAudio (e); }, failed);
+    auto* wav = new DragHandle (CRect (cx + 212, 0, cx + 308, kRowH), "Drag WAV", [this] (std::string& e) { return writeAudio (e); }, failed);
     setHelp (wav, "Drag WAV", kDragWavHelp);
     addView (wav);
-    auto* table = new DragHandle (CRect (cx + 118, 36, cx + kControlsW, 58), "Drag Wavetable", [this] (std::string& e) { return writeWavetable (e); },
+    auto* table = new DragHandle (CRect (cx + 316, 0, cx + kControlsW, kRowH), "Drag Wavetable", [this] (std::string& e) { return writeWavetable (e); },
                                   failed);
     setHelp (table, "Drag as Wavetable", kDragTableHelp);
     addView (table);
-    status = new Label (CRect (cx, 64, cx + kControlsW, ht - 4), "right click the scope to save", 9.5, false, 0);
+    status = new Label (CRect (0, 2, cx - 12, kRowH - 2), "right click the scope to save", 10.0, false, 0);
     status->setDim (true);
     addView (status);
 }
 
 void CaptureBand::idle ()
 {
+    if (const CaptureBuffer* buf = source ? source () : nullptr; buf && !buf->enabled ())
+        buf->enable (); // (the ring, the first time a page shows it)
     if (auto* s = dynamic_cast<CaptureScope*> (scope))
         s->idle ();
     if (unit)

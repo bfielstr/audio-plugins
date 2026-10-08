@@ -47,6 +47,15 @@ void captureKeepsEverything ()
 {
     std::printf ("captureKeepsEverything\n");
     auto buf = std::make_unique<pk::CaptureBuffer> ();
+    // before an editor enables it: only counted, nothing kept
+    {
+        std::vector<float> one (64, 1.0f), back (64, 5.0f);
+        buf->push (one.data (), one.data (), 64, {}, 48000.0);
+        CHECK (!buf->enabled () && buf->written () == 64 && buf->read (64, 64, back.data (), nullptr) == 0 && back[0] == 0.0f, "not enabled: zeros");
+        buf = std::make_unique<pk::CaptureBuffer> ();
+    }
+    buf->enable ();
+    CHECK (buf->enabled (), "enabled");
     // a count as the signal (exact in floats), in blocks of 1 .. 1024 frames
     std::vector<float> l (1024), r (1024);
     uint64_t f = 0;
@@ -99,6 +108,7 @@ void captureSyncsToBars ()
 {
     std::printf ("captureSyncsToBars\n");
     auto buf = std::make_unique<pk::CaptureBuffer> ();
+    buf->enable ();
     const double sr = 48000, bpm = 120, perBeat = sr * 60 / bpm; // 24000 frames a beat
     std::vector<float> z (480, 0.25f);
     uint64_t f = 0;

@@ -3,7 +3,9 @@
 // wavetable (pluginkit/WavFile.h, pluginkit/Wavetable.h).
 //
 // The audio thread pushes every block with the host's transport (push); nothing is allocated there: the
-// ring (kFrames stereo frames, about 21 s at 48 kHz, 5 s at 192 kHz) is made with the buffer. One writer,
+// ring (kFrames stereo frames, about 21 s at 48 kHz, 5 s at 192 kHz; 8 MB) is made the first time an
+// editor shows the buffer (enable), so an instance whose window never opens keeps none, and it stays until
+// the buffer goes. Until then a push only counts its frames and keeps the transport. One writer,
 // any number of readers, lock-free: a reader may catch the block being written, which only shows as a few
 // fresh samples. Beside the samples the writer keeps each kPeakBlock frames' minimum and maximum (of both
 // channels), so a display can draw any length of it without reading every sample.
@@ -38,6 +40,13 @@ public:
     };
 
     CaptureBuffer ();
+    ~CaptureBuffer ();
+    CaptureBuffer (const CaptureBuffer&) = delete;
+    CaptureBuffer& operator= (const CaptureBuffer&) = delete;
+    // The ring, made if it is not yet (not on the audio thread: the editor calls it). Frames pushed before
+    // read as 0.
+    void enable () const;
+    bool enabled () const { return store.load (std::memory_order_acquire) != nullptr; }
 
     // ---- the audio thread
     void push (const float* l, const float* r, int frames, const Transport& t, double sampleRate);
@@ -69,7 +78,9 @@ public:
     void readPeaks (uint64_t end, int64_t frames, int columns, float* mn, float* mx) const;
 
 private:
-    std::unique_ptr<std::atomic<float>[]> ringL, ringR, peakMin, peakMax;
+    struct Storage;
+    mutable std::atomic<Storage*> store {nullptr};
+    mutable std::atomic<uint64_t> since {0}; // the first frame the ring holds
     std::atomic<uint64_t> pos {0};
     std::atomic<double> rate {48000.0};
     std::atomic<int> lastNote {-1};

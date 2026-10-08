@@ -10,20 +10,41 @@ constexpr uint64_t kMask = (uint64_t)CaptureBuffer::kFrames - 1;
 constexpr uint64_t kPeakMask = (uint64_t)CaptureBuffer::kPeaks - 1;
 } // namespace
 
-CaptureBuffer::CaptureBuffer ()
-: ringL (new std::atomic<float>[(size_t)kFrames]), ringR (new std::atomic<float>[(size_t)kFrames]),
-  peakMin (new std::atomic<float>[(size_t)kPeaks]), peakMax (new std::atomic<float>[(size_t)kPeaks])
+struct CaptureBuffer::Storage
 {
-    for (int64_t i = 0; i < kFrames; ++i)
+    std::unique_ptr<std::atomic<float>[]> ringL, ringR, peakMin, peakMax;
+    Storage ()
+    : ringL (new std::atomic<float>[(size_t)kFrames]), ringR (new std::atomic<float>[(size_t)kFrames]),
+      peakMin (new std::atomic<float>[(size_t)kPeaks]), peakMax (new std::atomic<float>[(size_t)kPeaks])
     {
-        ringL[(size_t)i].store (0.0f, std::memory_order_relaxed);
-        ringR[(size_t)i].store (0.0f, std::memory_order_relaxed);
+        for (int64_t i = 0; i < kFrames; ++i)
+        {
+            ringL[(size_t)i].store (0.0f, std::memory_order_relaxed);
+            ringR[(size_t)i].store (0.0f, std::memory_order_relaxed);
+        }
+        for (int64_t i = 0; i < kPeaks; ++i)
+        {
+            peakMin[(size_t)i].store (0.0f, std::memory_order_relaxed);
+            peakMax[(size_t)i].store (0.0f, std::memory_order_relaxed);
+        }
     }
-    for (int64_t i = 0; i < kPeaks; ++i)
-    {
-        peakMin[(size_t)i].store (0.0f, std::memory_order_relaxed);
-        peakMax[(size_t)i].store (0.0f, std::memory_order_relaxed);
-    }
+};
+
+CaptureBuffer::CaptureBuffer () = default;
+
+CaptureBuffer::~CaptureBuffer () { delete store.load (); }
+
+void CaptureBuffer::enable () const
+{
+    if (store.load (std::memory_order_acquire))
+        return;
+    auto* s = new Storage ();
+    Storage* none = nullptr;
+    // (from the next whole peak block on: what the ring holds is real)
+    const uint64_t now = written ();
+    since.store (now == 0 ? 0 : (now / kPeakBlock + 2) * kPeakBlock, std::memory_order_relaxed);
+    if (!store.compare_exchange_strong (none, s, std::memory_order_acq_rel))
+        delete s;
 }
 
 void CaptureBuffer::push (const float* l, const float* r, int frames, const Transport& t, double sampleRate)
@@ -39,6 +60,16 @@ void CaptureBuffer::push (const float* l, const float* r, int frames, const Tran
     seq.fetch_add (1, std::memory_order_acq_rel);
     if (sampleRate > 0)
         rate.store (sampleRate, std::memory_order_relaxed);
+    Storage* st = store.load (std::memory_order_acquire);
+    if (!st)
+    {
+        pos.store (start + (uint64_t)std::max (0, frames), std::memory_order_release);
+        return;
+    }
+    auto& ringL = st->ringL;
+    auto& ringR = st->ringR;
+    auto& peakMin = st->peakMin;
+    auto& peakMax = st->peakMax;
     uint64_t p = start;
     for (int i = 0; i < frames; ++i, ++p)
     {
@@ -109,8 +140,22 @@ CaptureBuffer::Window CaptureBuffer::window (int choice) const
 
 int64_t CaptureBuffer::read (uint64_t end, int64_t frames, float* l, float* r) const
 {
+    Storage* st = store.load (std::memory_order_acquire);
     const uint64_t now = written ();
-    const uint64_t oldest = now > (uint64_t)kMaxWindow ? now - (uint64_t)kMaxWindow : 0;
+    const uint64_t oldest = std::max (now > (uint64_t)kMaxWindow ? now - (uint64_t)kMaxWindow : 0, since.load (std::memory_order_relaxed));
+    if (!st)
+    {
+        for (int64_t i = 0; i < frames; ++i)
+        {
+            if (l)
+                l[i] = 0.0f;
+            if (r)
+                r[i] = 0.0f;
+        }
+        return 0;
+    }
+    auto& ringL = st->ringL;
+    auto& ringR = st->ringR;
     int64_t real = 0;
     for (int64_t i = 0; i < frames; ++i)
     {
@@ -128,8 +173,17 @@ int64_t CaptureBuffer::read (uint64_t end, int64_t frames, float* l, float* r) c
 
 void CaptureBuffer::readPeaks (uint64_t end, int64_t frames, int columns, float* mn, float* mx) const
 {
+    Storage* st = store.load (std::memory_order_acquire);
     const uint64_t now = written ();
-    const uint64_t oldest = now > (uint64_t)kMaxWindow ? now - (uint64_t)kMaxWindow : 0;
+    const uint64_t oldest = std::max (now > (uint64_t)kMaxWindow ? now - (uint64_t)kMaxWindow : 0, since.load (std::memory_order_relaxed));
+    if (!st)
+    {
+        std::fill (mn, mn + columns, 0.0f);
+        std::fill (mx, mx + columns, 0.0f);
+        return;
+    }
+    auto& peakMin = st->peakMin;
+    auto& peakMax = st->peakMax;
     const double from = (double)end - (double)frames;
     for (int c = 0; c < columns; ++c)
     {
