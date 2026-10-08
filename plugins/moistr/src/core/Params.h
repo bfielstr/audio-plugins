@@ -6,6 +6,8 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace moistr {
 
@@ -363,9 +365,17 @@ double gestureOffNormalized (uint32_t id);
 double defaultNormalized025 (uint32_t id);
 
 // A lab slot's name ("Mid FX 1", "Post FX 2") and the kind it is meant for (smemplr::FxType: a chain's first slot
-// Smacheratr, its second Multidyn, POST's first Multidyn, the others Empty): its block's defaults are that kind's.
+// Smacheratr, its second Multidyn, POST's first Multidyn and its second Smacheratr, the others Empty): its block's
+// defaults are that kind's.
 std::string labSlotName (int slot);
 int labSlotKind (int slot);
+
+// The Neuro recipe (0.29): what a new instance starts from, over the defaults (normalized values by ID). Init and an
+// older state keep the defaults (the LAB empty: the Ocean sound); a new instance with no saved default gets these
+// (the factory preset Neuro/Neuro is the same). Four bands, each above Low driven into a hard-clipping smacheratr and
+// an OTT (multidyn) in its chain, an OTT and a hard clipper on their sum in POST, a quarter-note Wobble after it, the
+// bands moving in time with the song; the Low band (below 146 Hz, Seed 2) clean.
+std::vector<std::pair<uint32_t, double>> newInstanceValues ();
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced

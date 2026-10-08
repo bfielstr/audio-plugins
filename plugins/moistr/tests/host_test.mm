@@ -1,4 +1,5 @@
 // End-to-end test of the built Moistr.vst3. usage: moistr_hosttest <Moistr.vst3> <output dir>
+#include "Engine.h"
 #include "Params.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
@@ -85,12 +86,29 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // a new instance starts from the Neuro recipe (the LAB on), and reports the LAB's latency with the end saturator's,
+        // as the engine has it with those settings
+        {
+            int differ = 0;
+            for (const auto& [id, n] : newInstanceValues ())
+                differ += std::fabs (rig.controller->getParamNormalized (id) - n) > 1e-9;
+            CHECK (differ == 0, "a new instance: the Neuro recipe (%d values differ)", differ);
+            Engine ref;
+            for (const auto& [id, n] : newInstanceValues ())
+                ref.setParam (id, toPlain (id, n));
+            ref.prepare (48000.0, 512);
+            CHECK (rig.start (), "start");
+            const uint32 neuroLatency = rig.processor->getLatencySamples ();
+            CHECK ((int)neuroLatency == ref.latency () && ref.labLatency () > 0, "a new instance's latency %u: the engine's %d (the LAB's %d)",
+                   neuroLatency, ref.latency (), ref.labLatency ());
+            rig.stop ();
+        }
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
-        CHECK (latency < 200, "latency reported %u (the end saturator's)", latency);
+        CHECK (latency < 200, "latency reported %u (the end saturator's: the LAB empty)", latency);
 
         // Mix 0 %: the tone passes at its level
         rig.param (kMix, 0.0);

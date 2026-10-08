@@ -220,10 +220,71 @@ int labSlotKind (int slot)
 {
     if (slot == postSlot (0))
         return smemplr::kFxMultidyn;
+    if (slot == postSlot (1))
+        return smemplr::kFxSmacheratr;
     if (slot >= postSlot (0))
         return smemplr::kFxEmpty;
     const int k = slot % kChainSlots;
     return k == 0 ? smemplr::kFxSmacheratr : k == 1 ? smemplr::kFxMultidyn : smemplr::kFxEmpty;
+}
+
+namespace {
+using Values = std::vector<std::pair<uint32_t, double>>;
+// a LAB slot holding `kind`, some of the kind's own parameters (its IDs, plain values) set; a kind the slot is not meant
+// for (labSlotKind) gets its own defaults in the block first, as the editor loads a kind
+void labKind (Values& v, int slot, int kind, std::initializer_list<std::pair<uint32_t, double>> plain)
+{
+    v.emplace_back (labSlotParam (slot, kLabType), toNormalized (labSlotParam (slot, kLabType), kind));
+    const auto& t = smemplr::fxBlockTable (kind);
+    if (kind != labSlotKind (slot))
+        for (uint32_t j = 0; j < t.size (); ++j)
+            if (t.defaultNormalized (j) != defaultNormalized (labBlockParam (slot, j)))
+                v.emplace_back (labBlockParam (slot, j), t.defaultNormalized (j));
+    for (const auto& [id, x] : plain)
+        if (const int64_t j = smemplr::fxBlockOf (kind, id); j >= 0)
+            v.emplace_back (labBlockParam (slot, (uint32_t)j), t.toNormalized ((uint32_t)j, x));
+}
+} // namespace
+
+std::vector<std::pair<uint32_t, double>> newInstanceValues ()
+{
+    Values v;
+    auto set = [&] (uint32_t id, double plain) { v.emplace_back (id, toNormalized (id, plain)); };
+    // four bands above a low Low X (Seed 2: 146 Hz), moving in time with the song; a quarter-note Wobble on the top
+    set (kBandCount, kBands4);
+    set (kSeed, 2.0);
+    set (kXoverMid, 900.0);
+    set (kXoverHigh, 3500.0);
+    set (kMovement, 0.55);
+    set (kSync, 1.0);
+    set (kSyncRate, 3.0); // (1/2)
+    set (kDensity, 2.0);
+    set (kMidMove, 0.6);
+    set (kHighMove, 1.0);
+    set (kAirMove, 1.0);
+    set (kDepth, 18.0);
+    set (kWobbleRate, 1.0);
+    set (kWobbleAmount, 0.85);
+    // each band's chain: smacheratr driven into its hard clip (Drive, Output; at 2x, its Gentlr off: a band alone needs
+    // neither), then an OTT (Amount) of one band: the chain is the band (with the three chains, a three-band OTT)
+    struct ChainRecipe
+    {
+        double driveDb, outputDb, ott;
+    };
+    static constexpr ChainRecipe chains[kNumBandChains] = {{22.0, -10.0, 0.6}, {18.0, -10.0, 0.7}, {12.0, -8.0, 0.5}};
+    for (int c = 0; c < kNumBandChains; ++c)
+    {
+        labKind (v, chainSlot (c, 0), smemplr::kFxSmacheratr,
+                 {{smacheratr::kOversampling, smacheratr::kOs2x}, {smacheratr::kClarity, 0.0}, {smacheratr::kDrive, chains[c].driveDb},
+                  {smacheratr::kPostClip, smacheratr::kPostHard}, {smacheratr::kOutput, chains[c].outputDb}});
+        labKind (v, chainSlot (c, 1), smemplr::kFxMultidyn, {{multidyn::kBands, 0.0}, {multidyn::kAmount, chains[c].ott}});
+    }
+    // POST: an OTT on the chains' sum, then a hard clipper (Gentlr and the pre-limiter off)
+    labKind (v, postSlot (0), smemplr::kFxMultidyn, {{multidyn::kAmount, 0.4}});
+    labKind (v, postSlot (1), smemplr::kFxSmacheratr,
+             {{smacheratr::kDrive, 27.0}, {smacheratr::kPostClip, smacheratr::kPostHard}, {smacheratr::kClarity, 0.0}, {smacheratr::kPreLimit, 0.0},
+              {smacheratr::kOutput, -18.0}});
+    return v;
 }
 
 double defaultNormalized025 (uint32_t id)

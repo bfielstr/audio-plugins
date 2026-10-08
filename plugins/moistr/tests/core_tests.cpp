@@ -2534,7 +2534,7 @@ TEST (sweep_old_states_keep_their_sound)
 
 TEST (sweep_ocean_preset_is_init)
 {
-    // Sweep/Ocean is the new instance's sound: over Init it sets nothing that differs
+    // Sweep/Ocean is Init's sound (a new instance's up to 0.28): over Init it sets nothing that differs
     std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / "Sweep/Ocean.txt");
     std::stringstream ss;
     ss << in.rdbuf ();
@@ -2755,9 +2755,9 @@ TEST (sweep_old_presets_unchanged)
         pk::presets::FactoryPreset fp;
         std::string err;
         CHECK (pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err), "%s parses: %s", rel.c_str (), err.c_str ());
-        if (rel.rfind ("Sweep/", 0) == 0 || rel.rfind ("Gestures/", 0) == 0)
+        if (rel.rfind ("Sweep/", 0) == 0 || rel.rfind ("Gestures/", 0) == 0 || rel.rfind ("Neuro/", 0) == 0)
         {
-            // the new ones (0.24's sweep presets, 0.27's gesture presets): the stage on
+            // the new ones (0.24's sweep presets, 0.27's gesture presets, 0.29's LAB presets): the stage on
             auto e = fresh ();
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
@@ -4283,19 +4283,100 @@ TEST (lab_mute_solo_level)
     CHECK (wide > 1e-3 && narrow < 1e-6, "Mono: the chains in the middle (L - R %.1e, wide %.1e)", narrow, wide);
 }
 
+namespace {
+// a factory preset's values (Init plus its lines), by ID
+std::vector<std::pair<uint32_t, double>> presetValues (const char* file)
+{
+    std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / file);
+    std::stringstream ss;
+    ss << in.rdbuf ();
+    pk::presets::FactoryPreset fp;
+    std::string err;
+    const bool ok = pk::presets::parseFactoryPreset (ss.str (), file, paramTable (), fp, err);
+    CHECK (ok, "%s parses: %s", file, err.c_str ());
+    return {fp.values.begin (), fp.values.end ()};
+}
+// an engine with the defaults and these values (normalized, by ID)
+std::unique_ptr<Engine> withValues (const std::vector<std::pair<uint32_t, double>>& values)
+{
+    auto e = fresh ();
+    for (const auto& [id, n] : values)
+        e->setParam (id, toPlain (id, n));
+    e->reset ();
+    return e;
+}
+} // namespace
+
+TEST (neuro_recipe)
+{
+    // a new instance's recipe (newInstanceValues) is the factory preset Neuro/Neuro, value for value
+    std::array<double, kNumParams> fromPreset {}, fromRecipe {};
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        fromPreset[id] = fromRecipe[id] = defaultNormalized (id);
+    for (const auto& [id, n] : presetValues ("Neuro/Neuro.txt"))
+        fromPreset[id] = n;
+    for (const auto& [id, n] : newInstanceValues ())
+        fromRecipe[id] = n;
+    int differ = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        differ += std::fabs (fromPreset[id] - fromRecipe[id]) > 1e-7;
+    CHECK (differ == 0, "Neuro/Neuro is the new instance's recipe (%d values differ)", differ);
+    // and it has the LAB on: smacheratr and multidyn in the chains, multidyn and smacheratr in POST, nothing in chain 4
+    auto e = withValues (newInstanceValues ());
+    const Lab& lab = e->labStage ();
+    CHECK (lab.active () && lab.kind (chainSlot (0, 0)) == smemplr::kFxSmacheratr && lab.kind (chainSlot (2, 1)) == smemplr::kFxMultidyn &&
+               lab.kind (postSlot (0)) == smemplr::kFxMultidyn && lab.kind (postSlot (1)) == smemplr::kFxSmacheratr &&
+               lab.kind (chainSlot (3, 0)) == smemplr::kFxEmpty,
+           "the LAB: smacheratr and an OTT on each band, an OTT and a clipper in POST");
+    std::printf ("    latency: the LAB's %d (chains %d, %d, %d; POST %d) and the end saturator's %d\n", e->labLatency (), lab.chainLatency (0),
+                 lab.chainLatency (1), lab.chainLatency (2), lab.postLatency (), e->latency () - e->labLatency ());
+}
+
+TEST (neuro_presets)
+{
+    // every LAB preset on a mono Reese at 140 BPM: finite, mono, and the sub (55 Hz, the Low band's) within 1 dB of the
+    // same settings with the LAB empty (the end saturator out of the way: it takes everything down as the rest gets
+    // louder), lined up by the LAB's latency
+    const auto x = reese (4.0);
+    const size_t a = (size_t)(1.0 * kSr);
+    for (const char* file : {"Neuro/Neuro.txt", "Neuro/Neuro Heavy.txt", "Neuro/Dirty Mids.txt", "Neuro/Neuro Gesture.txt"})
+    {
+        const auto values = presetValues (file);
+        auto e = withValues (values);
+        auto bare = withValues (values);
+        tailNeutral (*e);
+        tailNeutral (*bare);
+        for (int sl = 0; sl < kNumLabSlots; ++sl)
+            bare->setParam (labSlotParam (sl, kLabType), 0.0);
+        bare->reset ();
+        auto at = [&] (Engine& en) { return [&en] (size_t s) { en.setTransport (140.0, (double)s / kSr * 140.0 / 60.0, true); }; };
+        std::vector<float> r, br;
+        const auto l = run (*e, x, &r, 256, at (*e)), bl = run (*bare, x, &br, 256, at (*bare));
+        double side = 0.0;
+        for (size_t i = 0; i < l.size (); ++i)
+            side = std::max (side, (double)std::fabs (l[i] - r[i]));
+        const size_t lat = (size_t)e->labLatency ();
+        const std::vector<float> lined (l.begin () + (long)lat, l.end ());
+        const double sub = db (toneAt (lined, 55.0, a, lined.size ())), subBare = db (toneAt (bl, 55.0, a, lined.size ()));
+        std::printf ("    %-24s 55 Hz %.2f dB (LAB empty %.2f), peak %.2f\n", file, sub, subBare, peak (l, 0, l.size ()));
+        CHECK (finite (l) && side == 0.0, "%s: finite, mono in mono out (%.1e)", file, side);
+        CHECK (std::fabs (sub - subBare) < 1.0, "%s: the sub within 1 dB (%.2f dB)", file, sub - subBare);
+    }
+}
+
 TEST (cpu_budget)
 {
-    // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
+    // 10 s of a stereo Reese, the defaults, the heaviest settings and a new instance (the Neuro recipe, under 18 %) (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
-    for (int which = 0; which < 4; ++which)
+    for (int which = 0; which < 5; ++which)
     {
-        const bool heavy = which == 1, ocean = which >= 2, gestures = which == 3;
+        const bool heavy = which == 1, ocean = which == 2 || which == 3, gestures = which == 3, neuro = which == 4;
         double secs = 1e9;
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
         {
-            auto e = ocean ? fresh () : engine ();
+            auto e = ocean ? fresh () : neuro ? withValues (newInstanceValues ()) : engine ();
             if (ocean)
             {
                 // a new instance (eight bells, Sub Boost, Tone, the end saturator) with Clean Sub on as well
@@ -4349,11 +4430,12 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
+                     neuro ? "a new instance (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
+                     : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
                      : gestures ? "the new instance as above, with four slots (a level gate, Close, Wobble on a rate gesture, Dirt) and Reese Cell"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
                              : "the bands alone (Sweep off)");
-        CHECK (secs / 10.0 < (heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
+        CHECK (secs / 10.0 < (neuro ? 0.18 : heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
     }
 }
 
