@@ -249,7 +249,8 @@ The Low band (everything under the Low crossover, so the sub) is never shifted.
 **OUTPUT**: **Mix** (100 %: the effect against the untouched input) and **Output** (-24 to +12 dB). At
 **Mix** 0 the output is exactly the input (delayed by the end saturator's latency, as the effect is).
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
+its gentlr on, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 

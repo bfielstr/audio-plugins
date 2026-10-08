@@ -794,15 +794,15 @@ void EditorBase::addDefaultsMenu (COptionMenu* menu)
     const GentlrIds ids = controller->gentlrIds ();
     if (!menu || (ids.gentlr < 0 && ids.advanced < 0))
         return;
-    // Checked: what the file says, or (not set yet) the parameter's factory default (gentlr's own Advanced
-    // is on in a new gentlr). A pick sets the switch to the other state; it reads the file again and changes
+    // Checked: what the file says, or (not set yet) the factory default: Gentlr with the end saturator on
+    // (both on by default), Advanced off (gentlr's own Advanced is on in a new gentlr). A pick sets the switch to the other state; it reads the file again and changes
     // its own switch only (another instance may have changed the other one since this menu opened).
     const GentlrDefaults d = controller->gentlrDefaults ();
     const auto factoryOn = [this] (int32_t id) { return controller->table ().defaultNormalized ((uint32_t)id) >= 0.5; };
     auto sub = makeOwned<COptionMenu> ();
     if (ids.gentlr >= 0)
     {
-        const bool checked = d.gentlrOn.value_or (factoryOn (ids.gentlr));
+        const bool checked = d.gentlrOn.value_or (factoryOn (ids.gentlr) && (ids.saturator < 0 || factoryOn (ids.saturator)));
         addCommand (
             sub, "Gentlr On by Default",
             [this, checked] {

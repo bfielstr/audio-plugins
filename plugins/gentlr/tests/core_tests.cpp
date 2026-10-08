@@ -59,10 +59,13 @@ struct Sig
     std::vector<float> l, r;
 };
 
-// Gentlr alone (no end saturator), with `set` applied before it starts.
+// Gentlr alone (no end saturator), with `set` applied before it starts. Its bands with the 12 / 12 Slope
+// (the default up to 0.23; Signature now): the cuts the tests expect are that shape's, exactly the Range
+// at a band's centre (the Slopes have tests of their own).
 static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr, Meters* meters = nullptr)
 {
     auto e = std::make_unique<Engine> (false);
+    e->setParam (kSlope, smacheratr::kSlope12);
     if (set)
         set (*e);
     e->setMeters (meters);
@@ -168,7 +171,7 @@ TEST (parameters_and_defaults)
         const int f = smacheratr::tailFieldIn (id, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base});
         CHECK (isTailParam (id) == (f >= 0) && (f < 0 || tailField (id) == (uint32_t)f), "ID %u: tail field %d", id, f);
     }
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end Smacheratr off");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0, "the end Smacheratr on");
     CHECK (t.info (kAdvanced).def == 1.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced on (the Thresholds show), Drive off (12 dB)");
     CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
     CHECK (t.info (kStereo).def == (double)kStereoLinked && t.info (kMix).def == 1.0 && t.info (kOutput).def == 0.0, "stereo, 100 %%, 0 dB");
@@ -1014,9 +1017,9 @@ static uint64_t slopeRenderHash (int slope)
 TEST (slope)
 {
     const auto& t = paramTable ();
-    CHECK (std::lround (t.info (kSlope).def) == smacheratr::kSlope12 && std::string (t.info (kSlope).name) == "Slope" &&
+    CHECK (std::lround (t.info (kSlope).def) == smacheratr::kSlopeSignature && std::string (t.info (kSlope).name) == "Slope" &&
                t.toText (kSlope, smacheratr::kSlopeSignature) == "Signature",
-           "Slope: 12 / 12 for a new instance");
+           "Slope: Signature for a new instance");
     CHECK (fromSmacheratr (smacheratr::kClaritySlope) == (int64_t)kSlope, "Smacheratr's Slope is Gentlr's (the shared displays)");
     CHECK (!isTailParam (kSlope) && isTailParam (kTailExt3Base + pk::kTailExt3Slope), "Gentlr's own, and the end saturator's");
 

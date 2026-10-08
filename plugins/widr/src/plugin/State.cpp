@@ -14,12 +14,15 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x52444957; // 'WIDR'
-constexpr int32 kVersion = 6;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 7;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kSubHighRange = 4;     // 4: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
 constexpr int32 kClassicSlope = 5;     // 5: the end saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 6; // 6: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
+// 7: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
+// old defaults where they lack them)
+constexpr int32 kNewDefaults = 7;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -81,12 +84,16 @@ bool readState (IBStream* stream, State& st)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
-    // instance gets 12 / 12)
+    // instance gets Signature)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
     if (version < kOversamplingChoice)
         smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
+    // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them (after the Slope's Classic above)
+    if (version < kNewDefaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
     return true;
 }
 

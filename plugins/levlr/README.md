@@ -53,7 +53,7 @@ with **Bands** next to Slope.
   split). Changing it fades out and back in over a few milliseconds.
 - **Output**.
 - **smacheratr** (bottom panel): the saturator every plug-in here can end with, with all its controls
-  and displays (off by default, Pre-Limit on). While it is off it folds to its header strips; click a
+  and displays (on in a new instance, its gentlr on, Pre-Limit on). While it is off it folds to its header strips; click a
   strip (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
 ![Three bands, two of them driven](../../docs/levlr/ui_levlr_3_bands.png)

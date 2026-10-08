@@ -21,7 +21,9 @@ constexpr int32 kStyleAdded = 5;       // 5: Style (OTT for new instances; older
 constexpr int32 kSubHighRange = 6;     // 6: no Sub and High buttons in the saturator (a band works while its Range is above 0)
 constexpr int32 kClassicSlope = 7;     // 7: the saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 8; // 8: the saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
-static_assert (kStateVersion == kOversamplingChoice);
+constexpr int32 kNewDefaults = 9; // 9: the saturator and its Gentlr on by default, Gentlr's Slope Signature
+                                 // (older states keep the old defaults where they lack them)
+static_assert (kStateVersion == kNewDefaults);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -99,12 +101,16 @@ bool readState (IBStream* stream, State& st)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kSatExt2Base, kSatExt3Base);
     // the saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
-    // instance gets 12 / 12)
+    // instance gets Signature)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kSatExt3Base);
     // the saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
     if (version < kOversamplingChoice)
         smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kSatExtBase);
+    // the defaults were the saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them (after the Slope's Classic above)
+    if (version < kNewDefaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kSatOn, kSatExtBase, kSatExt3Base);
     return true;
 }
 

@@ -100,7 +100,8 @@ The ball and the head light up when you point at them and turn cinnabar while yo
 Distance and Angle the way turning their knobs would, so the host can undo it and record it as
 automation.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
+its gentlr on, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 

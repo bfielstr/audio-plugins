@@ -170,9 +170,12 @@ std::vector<double> periods (const std::vector<float>& y, size_t from)
     return f;
 }
 
+// The defaults with the end saturator (on by default) off: the tests are about Orbitr's own processing
+// (the saturator's switch it on).
 std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }
@@ -514,7 +517,8 @@ TEST (params)
                t.info (kRandom).def == 0.6 && t.info (kFloor).def == 1.0 && t.info (kMix).def == 0.5,
            "Liquid Debris: 6 orbs swarming at 18 m/s, 3 m ahead, radius 2 m, Spread 80 %%, Random 60 %%, Floor, Mix 50 %%");
     CHECK (t.info (kDryWet).def == 1.0 && t.info (kOutput).def == 0.0, "Dry/Wet 100 %%, Output 0 dB");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the end saturator starts off");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailExtBase + pk::kTailExtClarity).def == 1.0,
+           "the end saturator starts on, its Gentlr on");
     // the engine starts where the table does
     Engine e;
     e.prepare (kSr, 512);

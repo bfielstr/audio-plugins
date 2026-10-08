@@ -522,4 +522,18 @@ void checkPresetMenu (IEditController* controller)
     PK_CHECK (factory, "the Presets menu lists factory presets");
 }
 
+void checkNewInstanceGentlr (IEditController* controller, long long saturator, long long gentlr, long long slope)
+{
+    if (saturator >= 0)
+        PK_CHECK (controller->getParamNormalized ((ParamID)saturator) == 1.0, "a new instance: the end saturator on");
+    if (gentlr >= 0)
+        PK_CHECK (controller->getParamNormalized ((ParamID)gentlr) == 1.0, "a new instance: Gentlr on");
+    if (slope >= 0)
+    {
+        String128 txt {};
+        controller->getParamStringByValue ((ParamID)slope, controller->getParamNormalized ((ParamID)slope), txt);
+        PK_CHECK (std::u16string (reinterpret_cast<const char16_t*> (txt)) == u"Signature", "a new instance: Gentlr's Slope Signature");
+    }
+}
+
 } // namespace pk::testing

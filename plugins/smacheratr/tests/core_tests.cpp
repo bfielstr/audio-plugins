@@ -133,6 +133,10 @@ static std::unique_ptr<Engine> engineOs (int mode)
     auto e = std::make_unique<Engine> ();
     e->setParam (kOversampling, mode);
     e->setParam (kColorOn, 0.0); // the defaults have Color on; tests start neutral
+    // ... and Gentlr on with the Signature Slope: off, with the 12 / 12 Slope (the defaults up to 0.23), the
+    // shape the Gentlr tests' numbers are for (they switch it on themselves; the Slopes have tests of their own)
+    e->setParam (kClarity, 0.0);
+    e->setParam (kClaritySlope, kSlope12);
     e->prepare (kSr, 512);
     return e;
 }
@@ -2209,20 +2213,82 @@ TEST (gentlr_slopes_at_the_ends_are_shelves)
 TEST (gentlr_slope_parameter)
 {
     const auto& t = paramTable ();
-    CHECK (t.info (kClaritySlope).def == kSlope12 && t.toText (kClaritySlope, kSlope12) == "12 / 12" &&
+    CHECK (t.info (kClaritySlope).def == kSlopeSignature && t.toText (kClaritySlope, kSlope12) == "12 / 12" &&
                t.toText (kClaritySlope, kSlopeSignature) == "Signature" && t.toText (kClaritySlope, kSlopeClassic) == "Classic" &&
                std::string (t.info (kClaritySlope).name) == "Gentlr Slope",
-           "the Slope: 12 / 12 by default, then Signature and Classic (%s)", t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
+           "the Slope: 12 / 12, Signature (the default) and Classic (%s)", t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
     CHECK (kClaritySlope == kClarityNoOverlap + 1 && kClarityGlue12 == kClaritySlope + 1, "appended: ID %u", (unsigned)kClaritySlope);
-    CHECK (defaultParams ()[kClaritySlope] == kSlope12, "a new engine: 12 / 12");
+    CHECK (defaultParams ()[kClaritySlope] == kSlopeSignature, "a new engine: Signature");
     // the end saturators: the last field of the tail's fourth block
     CHECK (tailFieldOf (kClaritySlope) == (int)(kTailExt3First + pk::kTailExt3Slope) && pk::kTailExt3Slope == pk::kTailExt3Fields - 1,
            "the Slope's tail field");
     std::vector<pk::ParamInfo> v3;
     addTailExt3Params (v3, 300);
-    CHECK (std::string (v3[pk::kTailExt3Slope].name) == "Saturator Gentlr Slope" && v3[pk::kTailExt3Slope].def == kSlope12,
-           "the tail's Slope: 12 / 12 by default");
+    CHECK (std::string (v3[pk::kTailExt3Slope].name) == "Saturator Gentlr Slope" && v3[pk::kTailExt3Slope].def == kSlopeSignature,
+           "the tail's Slope: Signature by default");
     CHECK (classicSlopeNorm () == 1.0, "Classic: the last choice");
+    CHECK (oldDefaultSlopeNorm () == 0.0 && t.defaultNormalized (kClaritySlope) == 0.5, "12 / 12 (the old default) at 0, Signature at 0.5");
+}
+
+// A new instance: Gentlr on with the Signature Slope, here and in every end saturator, and the end
+// saturator on (where a plug-in does not ask for it off)
+TEST (gentlr_and_the_saturator_on_by_default)
+{
+    const auto& t = paramTable ();
+    CHECK (t.info (kClarity).def == 1.0 && defaultParams ()[kClarity] == 1.0, "Gentlr on by default");
+    std::vector<pk::ParamInfo> v, v2, ext, ext3;
+    pk::addTailParams (v, 100);
+    pk::addTailParams (v2, 100, false);
+    addTailExtParams (ext, 200);
+    addTailExt3Params (ext3, 300);
+    CHECK (v[pk::kTailOn].def == 1.0 && std::string (v[pk::kTailOn].name) == "Saturator", "the end saturator: on by default");
+    CHECK (v2[pk::kTailOn].def == 0.0, "off where a plug-in asks for it (smemplr's old end saturator)");
+    CHECK (ext[pk::kTailExtClarity].def == 1.0 && std::string (ext[pk::kTailExtClarity].name) == "Saturator Gentlr",
+           "its Gentlr: on by default");
+    CHECK (ext3[pk::kTailExt3Slope].def == kSlopeSignature, "its Slope: Signature");
+    // the rest of the saturator as it was: Pre-Limit on at -6 dB, Drive 0 dB, No Clip, 100 % wet, 4x
+    CHECK (v[pk::kTailPreLimit].def == 1.0 && v[pk::kTailDrive].def == 0.0 && v[pk::kTailPostClip].def == 0.0 &&
+               v[pk::kTailMix].def == 1.0 && v[pk::kTailThreshold].def == -6.0 && ext[pk::kTailExtOversampling].def == kOs4x &&
+               ext[pk::kTailExtColorOn].def == 0.0,
+           "the saturator's other defaults");
+}
+
+// tailOldDefaults: a state saved up to 0.23 that lacks the saturator's On, its Gentlr or the Slope gets
+// the defaults then (off, off, 12 / 12; on where the plug-in had it on); what it has stays.
+TEST (tail_old_defaults_for_old_states)
+{
+    constexpr uint32_t base = 10, extBase = 20, ext3Base = 40, n = 50;
+    const uint32_t on = base + pk::kTailOn, gentlr = extBase + pk::kTailExtClarity, slope = ext3Base + pk::kTailExt3Slope;
+    std::array<double, n> norm {};
+    std::array<bool, n> has {};
+    norm.fill (0.75); // (what a new instance would read: anything but the old defaults)
+    tailOldDefaults (norm, has, base, extBase, ext3Base);
+    CHECK (norm[on] == 0.0 && norm[gentlr] == 0.0 && norm[slope] == oldDefaultSlopeNorm () && has[on] && has[gentlr] && has[slope],
+           "missing: the old defaults, marked present");
+    CHECK (norm[base + pk::kTailDrive] == 0.75 && !has[base + pk::kTailDrive] && norm[extBase] == 0.75, "nothing else touched");
+    norm.fill (0.75);
+    has.fill (false);
+    tailOldDefaults (norm, has, base, extBase, ext3Base, true);
+    CHECK (norm[on] == 1.0 && norm[gentlr] == 0.0, "a plug-in whose saturator was on by default: on");
+    // saved: kept
+    norm.fill (0.75);
+    has.fill (false);
+    norm[on] = 1.0;
+    norm[gentlr] = 1.0;
+    norm[slope] = 0.5;
+    has[on] = has[gentlr] = has[slope] = true;
+    tailOldDefaults (norm, has, base, extBase, ext3Base);
+    CHECK (norm[on] == 1.0 && norm[gentlr] == 1.0 && norm[slope] == 0.5, "saved values kept");
+    // after tailSlopeToClassic (a state from before the Slope): Classic stays
+    has.fill (false);
+    tailSlopeToClassic (norm, has, ext3Base);
+    tailOldDefaults (norm, has, base, extBase, ext3Base);
+    CHECK (norm[slope] == classicSlopeNorm () && norm[on] == 0.0, "Classic from before the Slope stays");
+    // a `has` that cannot be written (Levlr's migrateState): the values only
+    norm.fill (0.75);
+    const std::array<bool, n> none {};
+    tailOldDefaults (norm, none, base, extBase, ext3Base);
+    CHECK (norm[on] == 0.0 && norm[gentlr] == 0.0 && norm[slope] == 0.0, "read-only has: values set");
 }
 
 // The engine's output with every Gentlr band at work (both bands, Sub, High, Advanced and the region

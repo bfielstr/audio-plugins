@@ -81,8 +81,9 @@ enum ParamId : uint32_t
     kNoOverlap,    // the bands never cover the same frequencies (they push each other: smacheratr/src/core/NoOverlap.h)
     kTailExt3Base, // the end Smacheratr's Gentlr High band, No Overlap and Slope: pk::kTailExt3Fields entries
     // --- after the end saturator's fourth block ---
-    // Slope: the shape of bands 1 and 2 (smacheratr::ClaritySlope: 12 / 12 for a new instance; State.cpp
-    // gives states from before it Classic, the shape there was then). The Sub and High bands keep theirs.
+    // Slope: the shape of bands 1 and 2 (smacheratr::ClaritySlope: Signature for a new instance, 12 / 12
+    // up to 0.23; State.cpp gives states from before it Classic, the shape there was then, and states saved
+    // up to 0.23 without it 12 / 12). The Sub and High bands keep theirs.
     kSlope = kTailExt3Base + pk::kTailExt3Fields,
     // Glue: two neighbouring bands held at a shared border (smacheratr/src/core/Glue.h), one switch per
     // pair that can meet, in smacheratr::GluePair's order; all off by default (and in states from before)

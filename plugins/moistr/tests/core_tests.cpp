@@ -163,6 +163,7 @@ std::unique_ptr<Engine> engine (int block = 512)
 {
     auto e = std::make_unique<Engine> ();
     legacy (*e);
+    e->setParam (kTailBase + pk::kTailOn, 0.0); // (the end saturator, on by default since 0.25: the tests are about moistr's own processing)
     e->prepare (kSr, block);
     return e;
 }

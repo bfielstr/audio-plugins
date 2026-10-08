@@ -16,6 +16,7 @@
 #include "pluginkit/TailParams.h"
 
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace smacheratr {
@@ -164,7 +165,7 @@ inline void tailSubHighToRange (Norm& norm, Has& has, uint32_t ext2Base, uint32_
 }
 
 // Gentlr's band Slope for a state saved before it: Classic (12 dB/oct below, 6 above), the only shape
-// there was, so the state sounds as it did (a new instance gets 12 / 12), normalized.
+// there was, so the state sounds as it did (a new instance gets Signature), normalized.
 inline double classicSlopeNorm () { return toNormalized (kClaritySlope, kSlopeClassic); }
 // The same for a plug-in's end saturator (its fourth block at ext3Base), marked as present.
 template <class Norm, class Has>
@@ -172,6 +173,31 @@ inline void tailSlopeToClassic (Norm& norm, Has& has, uint32_t ext3Base)
 {
     norm[ext3Base + pk::kTailExt3Slope] = classicSlopeNorm ();
     has[ext3Base + pk::kTailExt3Slope] = true;
+}
+
+// Gentlr's band Slope's default up to 0.23 (12 / 12; Signature since), normalized.
+inline double oldDefaultSlopeNorm () { return toNormalized (kClaritySlope, kSlope12); }
+
+// The defaults up to 0.23 for a state saved by one of those versions: the end saturator was off by default
+// (on where a plug-in asked for it: onBefore), its Gentlr off and Gentlr's Slope 12 / 12. A new instance
+// has the saturator on, its Gentlr on and the Slope Signature; a state that does not have one of the three
+// (it was saved before the parameter was there, or by a host that left it out) gets the default it was
+// saved under, so it sounds as it did. Those it has keep their values. Each one set is marked as present
+// (when `has` can be written: Levlr's migrateState only reads it). After the conversions that give the
+// Slope Classic (tailSlopeToClassic): those mark it present.
+template <class Norm, class Has>
+inline void tailOldDefaults (Norm& norm, Has& has, uint32_t base, uint32_t extBase, uint32_t ext3Base, bool onBefore = false)
+{
+    auto keep = [&] (uint32_t id, double v) {
+        if (has[id])
+            return;
+        norm[id] = v;
+        if constexpr (!std::is_const_v<std::remove_reference_t<decltype (has[id])>>)
+            has[id] = true;
+    };
+    keep (base + pk::kTailOn, onBefore ? 1.0 : 0.0);
+    keep (extBase + pk::kTailExtClarity, 0.0);
+    keep (ext3Base + pk::kTailExt3Slope, oldDefaultSlopeNorm ());
 }
 
 // The end saturator's Oversampling for a state saved while it was the Hi-Quality switch (its second block

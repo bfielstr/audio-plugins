@@ -55,6 +55,21 @@ int main (int argc, char** argv)
             return finish ("wubr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // the end saturator as a new instance had it up to 0.23 (off, its Gentlr off, 12 / 12), before it
+        // starts: the checks are about wubr's own sound
+        {
+            State st;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                st.norm[id] = defaultNormalized (id);
+                st.has[id] = true;
+            }
+            st.norm[kTailBase + pk::kTailOn] = 0.0;
+            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
+            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+        }
         CHECK (rig.component->getBusCount (kEvent, kInput) == 1, "event input bus (the envelope's MIDI trigger)");
         CHECK (rig.start (), "start");
         // measured below: band 1 alone moving its gain, synced at 1/4 (the defaults sweep both bands' centres at 0 dB)

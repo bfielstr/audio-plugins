@@ -97,8 +97,8 @@ int main ()
         const auto& t = paramTable ();
         CHECK (t.size () == kNumParams, "%u parameters", t.size ());
         CHECK (t.info (kSqueeze).def == 0.4 && std::lround (t.info (kSpeed).def) == kSpeedFast && t.info (kMix).def == 1.0 &&
-                   t.info (kOutput).def == 0.0 && t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0,
-               "Squeeze 40 %%, Speed Fast, Mix 100 %%, Output 0 dB, the end saturator off");
+                   t.info (kOutput).def == 0.0 && t.info ((uint32_t)kTailBase + pk::kTailOn).def == 1.0,
+               "Squeeze 40 %%, Speed Fast, Mix 100 %%, Output 0 dB, the end saturator on");
         for (uint32_t a = 0; a < kNumParams; ++a)
         {
             CHECK (t.info (a).id == a, "entry %u has its own ID", a);

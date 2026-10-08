@@ -163,7 +163,8 @@ Drift while notes play). On the right the processor's taps against time, each as
 dim when Character has faded it out, under a haze as thick as Space. With Alien, Metal or Voice
 **Waves** the title names the set.
 
-**smacheratr** (bottom panel): the saturator every plug-in here can end with (off, Drive 0 dB). While
+**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
+its gentlr on, Drive 0 dB). While
 it is off it folds to its header strips; click a strip (or switch it on) to open it. See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 

@@ -481,7 +481,9 @@ TEST (preset_defaults)
            "3 bands at 88.3 Hz / 2.5 kHz (8 kHz for a fourth)");
     CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) < 0.5 && e.param (kPreLimitCeiling) == 0.0,
            "Character mode, pre-limit off");
-    CHECK (e.param (kSatOn) < 0.5 && e.param (kSatDrive) == 0.0, "end-of-chain saturator off, Drive 0 dB");
+    CHECK (e.param (kSatOn) >= 0.5 && e.param (kSatDrive) == 0.0 && e.param (kSatExtBase + pk::kTailExtClarity) >= 0.5 &&
+               std::lround (e.param (kSatExt3Base + pk::kTailExt3Slope)) == smacheratr::kSlopeSignature,
+           "end-of-chain saturator on, Drive 0 dB, its Gentlr on with the Signature Slope");
     for (int b = 0; b < kMaxBands; ++b)
         CHECK (std::fabs (e.param (bandParam (b, kAboveRatio)) - 66.7) < 1e-9 && std::fabs (e.param (bandParam (b, kBelowRatio)) - 4.17) < 1e-9,
                "band %d ratios: Above 1:66.7, Below 1:4.17", b + 1);
@@ -586,6 +588,7 @@ TEST (built_in_saturator)
     CHECK (h3 (out) < -80.0, "off: clean %f", h3 (out));
     e->setParam (kSatOn, 1.0);
     e->setParam (kSatDrive, 14.0);
+    e->setParam (kSatExtBase + pk::kTailExtClarity, 0.0); // (the curve alone: its Gentlr, on by default, off)
     e->reset ();
     out = run (*e, in);
     CHECK (h3 (out) > -30.0, "on: third harmonic %f dB", h3 (out));
@@ -1241,6 +1244,7 @@ TEST (soften_color_softens_the_highs)
     auto measure = [] (bool colorOn, double soften, double& rms, double& crest, double& all) {
         Engine e;
         e.prepare (kSr, 512);
+        e.setParam (kSatOn, 0.0); // (Multidyn's own curve: the end saturator, on by default, off)
         e.setParam (kOutput, 10.0); // hot, as OTT usually leaves it: into the curve
         e.setParam (kSoftenColor, colorOn ? 1.0 : 0.0);
         e.setParam (kSoften, soften);

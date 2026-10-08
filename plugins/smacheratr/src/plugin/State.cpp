@@ -5,6 +5,7 @@
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace smacheratr {
 
@@ -12,12 +13,13 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 7; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 8; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
 constexpr int32 kSubHighRange = 5;     // 5: no Sub and High buttons (those bands work while their Range is above 0)
 constexpr int32 kClassicSlope = 6;     // 6: Gentlr's band Slope (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 7; // 7: Oversampling Off / 2x / 4x (the Hi-Quality switch before: on 4x, off Off)
+constexpr int32 kNewDefaults = 8;      // 8: Gentlr on and its Slope Signature by default (off and 12 / 12 before)
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -81,7 +83,7 @@ bool readState (IBStream* stream, State& st)
         for (uint32_t id : {kClarityFreq})
             if (st.has[id])
                 st.norm[id] = smacheratr::clarityFreqFromNarrowRange (st.norm[id]);
-    // Gentlr's bands had one shape before their Slope: Classic, the same sound (a new instance gets 12 / 12)
+    // Gentlr's bands had one shape before their Slope: Classic, the same sound (a new instance gets Signature)
     if (version < kClassicSlope)
     {
         st.norm[kClaritySlope] = classicSlopeNorm ();
@@ -90,6 +92,15 @@ bool readState (IBStream* stream, State& st)
     // Oversampling was the Hi-Quality switch: on is 4x, off is Off (oversamplingFromHiQuality)
     if (version < kOversamplingChoice && st.has[kOversampling])
         st.norm[kOversampling] = oversamplingFromHiQuality (st.norm[kOversampling]);
+    // Gentlr was off by default and its Slope 12 / 12: a state saved then keeps them where it lacks them
+    // (after the conversions above, which mark what they set)
+    if (version < kNewDefaults)
+        for (const auto& [id, v] : {std::pair<uint32_t, double> {kClarity, 0.0}, {kClaritySlope, oldDefaultSlopeNorm ()}})
+            if (!st.has[id])
+            {
+                st.norm[id] = v;
+                st.has[id] = true;
+            }
     return true;
 }
 

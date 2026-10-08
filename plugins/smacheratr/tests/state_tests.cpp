@@ -115,7 +115,7 @@ int main ()
         CHECK (std::fabs (plain (back, kClaritySubRange) - 12.0) < 1e-9, "a new state's Range as saved");
     }
     // the band Slope: a state from before it (version 5) loads Classic, the shape its bands had; a state of
-    // version 6 loads it as saved, and one without it (or a new instance) has 12 / 12
+    // version 6 loads it as saved, and one without it has 12 / 12 (the default then; a new instance has Signature)
     {
         State back;
         CHECK (readOld (5, {{kClarity, 1.0}, {kClarityRange, toNormalized (kClarityRange, 8.0)}}, back), "read");
@@ -128,7 +128,7 @@ int main ()
                "version 6: as saved");
         State none;
         CHECK (readOld (6, {{kClarity, 1.0}}, none) && std::lround (plain (none, kClaritySlope)) == kSlope12, "version 6, not saved: 12 / 12");
-        CHECK (defaultNormalized (kClaritySlope) == 0.0, "a new instance: 12 / 12");
+        CHECK (defaultNormalized (kClaritySlope) == 0.5, "a new instance: Signature");
     }
     // Oversampling (version 7) was the Hi-Quality switch: on -> 4x, off -> Off, a value in between on the
     // end the switch read it as; a state of version 7 keeps 2x; a new instance (and a state without it) 4x
@@ -142,6 +142,35 @@ int main ()
         CHECK (readOld (3, {{kDrive, 0.5}}, none) && osOf (none) == 4, "not saved: 4x, as Hi-Quality was (%d)", osOf (none));
         CHECK (readOld (7, {{kOversampling, toNormalized (kOversampling, kOs2x)}}, now) && osOf (now) == 2, "version 7: 2x as saved");
         CHECK (oversamplingFactor (toPlain (kOversampling, defaultNormalized (kOversampling))) == 4, "a new instance: 4x");
+    }
+    // Gentlr on and the Signature Slope by default (version 8): a state saved before without them loads
+    // them off and 12 / 12, the defaults then; saved, they load as saved; a state of version 8 has them
+    // both, and a new instance has them on and Signature
+    {
+        State old, saved, now;
+        CHECK (readOld (7, {{kDrive, toNormalized (kDrive, 6.0)}}, old), "read");
+        CHECK (plain (old, kClarity) == 0.0 && std::lround (plain (old, kClaritySlope)) == kSlope12 && old.has[kClarity] && old.has[kClaritySlope],
+               "version 7 without them: Gentlr off, 12 / 12");
+        CHECK (readOld (7, {{kClarity, 1.0}, {kClaritySlope, toNormalized (kClaritySlope, kSlopeClassic)}}, saved) &&
+                   plain (saved, kClarity) == 1.0 && std::lround (plain (saved, kClaritySlope)) == kSlopeClassic,
+               "version 7 with them: as saved");
+        CHECK (readOld (8, {{kClarity, 0.0}, {kClaritySlope, 0.0}}, now) && plain (now, kClarity) == 0.0 &&
+                   std::lround (plain (now, kClaritySlope)) == kSlope12,
+               "version 8: as saved");
+        CHECK (defaultNormalized (kClarity) == 1.0 && std::lround (toPlain (kClaritySlope, defaultNormalized (kClaritySlope))) == kSlopeSignature,
+               "a new instance: Gentlr on, Signature");
+        // this version writes both (a round trip of a new instance's values keeps them)
+        State st;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            st.norm[id] = defaultNormalized (id);
+            st.has[id] = true;
+        }
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && back.norm[kClarity] == 1.0 && back.norm[kClaritySlope] == 0.5, "a new instance's state: on, Signature");
     }
     std::printf ("smacheratr state: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

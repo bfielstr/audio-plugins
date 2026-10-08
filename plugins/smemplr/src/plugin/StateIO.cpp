@@ -49,7 +49,10 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     nothing that was used)
 // 22: Oversampling (Off / 2x / 4x) in the rack's Smacheratrs and the old saturator after the rack (the
 //     Hi-Quality switch before: on 4x, off Off), and in a Levlr slot's drives (4x, as they always ran)
-constexpr int32 kVersion = 22;
+// 23: a new Smemplr's first slot (Smacheratr with its own defaults) has Gentlr on and its Slope Signature
+//     (off and 12 / 12 before: a state without them keeps those)
+constexpr int32 kVersion = 23;
+constexpr int32 kNewDefaults = 23;
 constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -289,6 +292,9 @@ bool readState (IBStream* stream, PluginState& st)
     migrateGlueInSlots (st.norm, st.has, version);
     // Oversampling (22): the Smacheratrs' Hi-Quality as Off or 4x, a Levlr's drives at 4x
     migrateOversamplingInSlots (st.norm, st.has, version);
+    // the first slot's defaults before 23 (Gentlr off, Slope 12 / 12): kept where the state lacks them
+    if (version < kNewDefaults)
+        keepOldFirstSlotDefaults (st.norm, st.has);
     return true;
 }
 

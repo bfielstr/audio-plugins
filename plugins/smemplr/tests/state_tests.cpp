@@ -123,7 +123,7 @@ int main ()
     }
     // a version 19 state (before Gentlr's band Slope): its Smacheratr (slot 0) and Gentlr (slot 1) get
     // Classic, the shape their bands had; a Para (slot 2) keeps what its own place holds. A version 20
-    // state keeps them as saved, and a new slot has 12 / 12
+    // state keeps them as saved, and a new slot has Signature (12 / 12 before 23)
     for (int32 version : {19, 20})
     {
         PluginState st = someState (), back;
@@ -141,9 +141,44 @@ int main ()
                "version %d: the Smacheratr's and the Gentlr's Slope %s", version, old ? "Classic" : "as saved");
         CHECK (back.norm[paraSame] == 0.3, "version %d: the Para's own place as saved", version);
     }
-    CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == 0.0 &&
-               fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == 0.0,
-           "a new slot: 12 / 12");
+    CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == 0.5 &&
+               fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == 0.5,
+           "a new slot: Signature");
+    // Gentlr on and the Signature Slope by default (23): a new Smemplr's first slot (Smacheratr) and a new
+    // Smacheratr or Gentlr slot have them; a state from before 23 keeps what it saved, and where it lacks
+    // them in the first slot (the defaults then) Gentlr off and 12 / 12
+    {
+        const uint32_t clarity = slotBlockParam (0, smacheratr::kClarity), slope = slotBlockParam (0, smacheratr::kClaritySlope);
+        CHECK (defaultNormalized (clarity) == 1.0 && defaultNormalized (slope) == 0.5, "a new Smemplr's Smacheratr: Gentlr on, Signature");
+        CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClarity) == 1.0,
+               "a new Smacheratr slot (Editor::addFx: the effect's own defaults): Gentlr on");
+        for (int32 version : {22, 23})
+        {
+            PluginState st = someState (), back;
+            st.has[clarity] = st.has[slope] = false; // (a state without them)
+            CHECK (roundTrip (st, back, version), "read version %d", version);
+            const bool old = version < 23;
+            // (what a state lacks, the processor and the controller take from the defaults: on, Signature)
+            CHECK (old ? back.norm[clarity] == 0.0 && back.norm[slope] == 0.0 && back.has[clarity] && back.has[slope]
+                       : !back.has[clarity] && !back.has[slope],
+                   "version %d without them: %s", version, old ? "off, 12 / 12" : "the defaults");
+            PluginState saved = someState (), backSaved;
+            saved.norm[clarity] = 1.0;
+            saved.norm[slope] = 1.0;
+            CHECK (roundTrip (saved, backSaved, version) && backSaved.norm[clarity] == 1.0 && backSaved.norm[slope] == 1.0,
+                   "version %d with them: as saved", version);
+        }
+        // another effect in the first slot (a Para): its places are its own, untouched
+        {
+            PluginState st = someState (), back;
+            st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+            st.has[clarity] = st.has[slope] = false;
+            CHECK (roundTrip (st, back, 22) && !back.has[clarity] && !back.has[slope], "version 22, a Para in the first slot: untouched");
+        }
+        // the old saturator after the rack keeps its defaults: off, its Gentlr off
+        CHECK (defaultNormalized (kTailBase + pk::kTailOn) == 0.0 && defaultNormalized (kTailExtBase + pk::kTailExtClarity) == 0.0,
+               "the old saturator after the rack: off, its Gentlr off");
+    }
     // the hidden MIDI parameters are never saved (whatever the state holds for them), and a state from
     // before the parameters after them (the Grid) reads without them: their defaults
     {

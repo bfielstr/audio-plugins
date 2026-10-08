@@ -17,7 +17,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x43525453; // 'STRC'
-constexpr int32 kVersion = 7; // 2: the Algorithm choice has 8 entries (Alien)
+constexpr int32 kVersion = 8; // 2: the Algorithm choice has 8 entries (Alien)
                                // 3: the end saturator's Clarity Frequency 20 Hz - 20 kHz
                                // 4: one Clarity button in the end saturator
                                // 5: no Sub and High buttons in the end saturator (a band works while its Range is above 0)
@@ -25,6 +25,9 @@ constexpr int32 kVersion = 7; // 2: the Algorithm choice has 8 entries (Alien)
 constexpr int32 kSubHighRange = 5;
 constexpr int32 kClassicSlope = 6;
 constexpr int32 kOversamplingChoice = 7; // 7: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
+// 8: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
+// old defaults where they lack them)
+constexpr int32 kNewDefaults = 8;
 constexpr int64 kMaxBlob = (int64)1 << 33;
 } // namespace
 
@@ -108,12 +111,16 @@ bool readState (IBStream* stream, State& st, bool withClip)
     if (version < kSubHighRange)
         smacheratr::tailSubHighToRange (st.norm, st.has, kTailExt2Base, kTailExt3Base);
     // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
-    // instance gets 12 / 12)
+    // instance gets Signature)
     if (version < kClassicSlope)
         smacheratr::tailSlopeToClassic (st.norm, st.has, kTailExt3Base);
     // the end saturator's Oversampling was its Hi-Quality switch: on is 4x, off is Off
     if (version < kOversamplingChoice)
         smacheratr::tailOversamplingFromHiQuality (st.norm, st.has, kTailExtBase);
+    // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
+    // then keeps them where it lacks them (after the Slope's Classic above)
+    if (version < kNewDefaults)
+        smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
     st.hasClip = false;
     st.clip = {};
     if (!withClip)

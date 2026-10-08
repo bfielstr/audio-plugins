@@ -95,7 +95,7 @@ void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<boo
 
 // States from before version 20: the rack's Smacheratrs and Gentlrs had one band shape, before Gentlr's
 // Slope; their Slope gets Classic, that shape (the places held nothing that was used, or a default set
-// by the migrations before this one). Same sound; a new slot gets 12 / 12.
+// by the migrations before this one). Same sound; a new slot gets Signature (12 / 12 up to 0.23).
 void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
 // States from before version 21: the rack's Smacheratrs and Gentlrs had no glue; their glue switches get
@@ -121,6 +121,13 @@ void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, 
 // States from before version 13: a Levlr slot's Bands and band drives (added in 0.7) read 0 there,
 // which is 1 band: they get their defaults (4 bands, no drive: the same sound).
 void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+
+// States from before version 23: a new Smemplr's first slot (Smacheratr, its own defaults: Params.cpp
+// slotDefault) had Gentlr off and its Slope 12 / 12; Smacheratr has them on and Signature by default now.
+// Where such a state lacks them (and the slot holds a Smacheratr, as by default), they get the old values
+// (normalized 0), so it sounds as it did. (A state
+// from 9 on has every rack parameter, and moveEndSaturatorIntoRack fills an older one's rack.)
+void keepOldFirstSlotDefaults (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
 // What the rack's effects show in the editor, per slot.
 struct RackMeters

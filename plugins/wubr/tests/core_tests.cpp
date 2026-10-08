@@ -50,10 +50,12 @@ struct Reg
 
 constexpr double kSr = 48000.0;
 
-// The tests measure band 1 alone moving its gain, synced at 1/4: the defaults set to that.
+// The tests measure band 1 alone moving its gain, synced at 1/4: the defaults set to that, and the end
+// saturator (on by default) off: they are about Wubr's own bands.
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
+    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->setParam (bandParam (0, kTarget), kTargetGain);
     e->setParam (bandParam (0, kRateMode), kSynced);
     e->setParam (bandParam (1, kBandOn), 0.0);
@@ -355,8 +357,9 @@ TEST (defaults_and_the_end_saturator)
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
            "Gentlr's Advanced block (the end saturator's), its High band block, then its glue block last (off)");
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0 && t.info (kTailExtBase + pk::kTailExtClarity).id == kTailExtBase + pk::kTailExtClarity,
-           "the end Smacheratr, off");
+    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0 && t.info (kTailExtBase + pk::kTailExtClarity).id == kTailExtBase + pk::kTailExtClarity &&
+               t.info (kTailExtBase + pk::kTailExtClarity).def == 1.0 && t.info (kTailExt3Base + pk::kTailExt3Slope).def == 1.0,
+           "the end Smacheratr: on, its Gentlr on, Signature");
     // dry passes when the bands are off and the mix is 0
     auto e = engine ();
     e->setParam (kDryWet, 0.0);

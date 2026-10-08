@@ -39,6 +39,10 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
+    // Gentlr as a new instance had it up to 0.23 (off, 12 / 12): the checks are about the curve and the
+    // pre-limiter (a new instance has it on: checkNewInstanceGentlr)
+    st.norm[kClarity] = 0.0;
+    st.norm[kClaritySlope] = 0.0;
     return st;
 }
 
@@ -78,6 +82,7 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
+        checkNewInstanceGentlr (rig.controller, -1, kClarity, kClaritySlope);
 
         State st = baseState ();
         st.norm[kDrive] = toNormalized (kDrive, 0.0); // the defaults are a preset; start neutral

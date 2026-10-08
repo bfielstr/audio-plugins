@@ -137,6 +137,10 @@ int countNonAutomatable (Steinberg::Vst::IEditController* controller);
 // commands and at least one factory preset (a fresh preset folder assumed: no tag filter).
 std::vector<std::string> presetMenu (Steinberg::Vst::IEditController* controller);
 void checkPresetMenu (Steinberg::Vst::IEditController* controller);
+// A new instance (before any state, a fresh preset folder) as the controller reports it: the end
+// saturator on (`saturator`), its Gentlr on (`gentlr`) and Gentlr's Slope at Signature (`slope`, by its
+// text). -1 for one the plug-in does not have.
+void checkNewInstanceGentlr (Steinberg::Vst::IEditController* controller, long long saturator, long long gentlr, long long slope);
 
 // Modifier flag values (NSEventModifierFlag*), usable without Cocoa headers.
 constexpr unsigned long kShift = 1ul << 17;
