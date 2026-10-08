@@ -3,12 +3,14 @@
 #include "Params.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
+#include "smacheratr/src/core/TailExt.h"
 #include "ui/Editor.h"
 
 #include "base/source/fstreamer.h"
 #include "public.sdk/source/common/memorystream.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -172,10 +174,16 @@ int main (int argc, char** argv)
         rig.param (kBandCount, toNormalized (kBandCount, 0.0));
         rig.param (driveParam (2, kDriveDb), toNormalized (driveParam (2, kDriveDb), 20.0));
         CHECK (rig.applyState ([] (IBStream* stream) {
+                   // (the values a 0.6.0 instance had: the end saturator and its Gentlr off, 12 / 12)
+                   std::array<double, kNumParams> norm {};
+                   std::array<bool, kNumParams> has {};
+                   for (uint32 id = 0; id < kNumParams; ++id)
+                       norm[id] = defaultNormalized (id);
+                   smacheratr::tailOldDefaults (norm, has, kTailBase, kTailExtBase, kTailExt3Base);
                    IBStreamer s (stream, kLittleEndian);
                    bool ok = s.writeInt32 (0x4C45564C) && s.writeInt32 (2) && s.writeInt32 ((int32)kBandCount);
                    for (uint32 id = 0; ok && id < kBandCount; ++id)
-                       ok = s.writeInt32u (id) && s.writeDouble (defaultNormalized (id));
+                       ok = s.writeInt32u (id) && s.writeDouble (norm[id]);
                    return ok;
                }),
                "a 0.6.0 state loads");
