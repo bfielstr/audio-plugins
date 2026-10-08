@@ -174,7 +174,7 @@ int main (int argc, char** argv)
             const double colorLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.25, gentlrLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.75;
             const double gentlrX = Editor::kGentlrButtonX, gentlrY = Editor::kGentlrTop + 40;
             {
-                auto* ctl = dynamic_cast<pk::ControllerBase*> (rig.controller.get ());
+                auto* ctl = static_cast<pk::ControllerBase*> (rig.controller.get ()); // (always a ControllerBase here; dynamic_cast needs typeinfo the macOS link does not export)
                 CHECK (ctl && ctl->uiColorLayer == 1, "a new instance: Gentlr's layer in front");
             }
             win.click (gentlrX, gentlrY);
