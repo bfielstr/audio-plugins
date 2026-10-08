@@ -1,12 +1,17 @@
 #pragma once
 
 #include "Engine.h"
+#include "GestureFile.h"
 #include "SharedMeters.h"
+
+#include "pluginkit/RtShared.h"
 
 #include "public.sdk/source/vst/vstaudioeffect.h"
 
 #include <array>
 #include <atomic>
+#include <memory>
+#include <mutex>
 
 namespace moistr {
 
@@ -32,6 +37,20 @@ public:
     Steinberg::uint32 PLUGIN_API getLatencySamples () override { return (Steinberg::uint32)engine.latency (); }
 
 private:
+    // the slots' user gestures: as saved (under userMutex) and as the engine plays them (immutable copies,
+    // published to the audio thread)
+    struct UserBank
+    {
+        Gesture g[kNumGestureSlots];
+        bool has[kNumGestureSlots] {};
+    };
+    void publishUser ();
+    std::mutex userMutex;
+    std::array<GestureData, kNumGestureSlots> userData;
+    pk::RtShared<UserBank> userBank;
+    std::shared_ptr<const UserBank> userNow; // (the audio thread's)
+    uint32_t userGen = 0;
+
     Engine engine;
     SharedMeters* shared = nullptr;
     std::array<std::atomic<double>, kNumParams> normMirror;
