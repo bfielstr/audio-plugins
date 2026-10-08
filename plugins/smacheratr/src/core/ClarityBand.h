@@ -1,13 +1,19 @@
 // Gentlr's (called Clarity before) band: the region it compresses, a high-pass below and a low-pass
 // above, Width octaves apart around the centre frequency, scaled so the band peaks at 0 dB. The Slope
-// (ClaritySlope, kClaritySlope) picks the two filters:
+// (ClaritySlope, kClaritySlope) picks the filters:
 //   12 / 12    a 12 dB/oct Butterworth high-pass and a 12 dB/oct Butterworth low-pass (both -3 dB at
 //              their edge). The band is symmetric on a log axis, so the two filters' phases cancel at
-//              its centre and a cut there is exactly what the law asks for. The default.
+//              its centre and a cut there is exactly what the law asks for.
 //   Signature  24 dB/oct below (a Linkwitz-Riley high-pass: two of the Butterworth sections, -6 dB at
-//              the edge) and the same 12 dB/oct low-pass above: a steeper floor under the band.
+//              the edge) and the same 12 dB/oct low-pass above: a steeper floor under the band. The
+//              default.
 //   Classic    a 12 dB/oct Butterworth high-pass and a 6 dB/oct first-order low-pass, the only shape
 //              before the Slope (states from then load it), bit for bit as it was.
+//   Alt Signature
+//              36 dB/oct below (three of the Butterworth sections, -9 dB at the edge) and the same
+//              12 dB/oct low-pass above: Signature with a steeper floor still. Its three sections turn
+//              the band's phase further from the low-pass's, so its deepest cut comes about 2 dB short of
+//              the Range (Signature's about 0.7 dB).
 // A band that reaches an end of the spectrum turns into a shelf there, rather than dipping back up
 // past the end: with its low edge at 20 Hz or below it is its upper filter alone (flat to the bottom),
 // with its high edge at 20 kHz or above its lower filter alone (flat to the top). The engine turns
@@ -18,14 +24,15 @@
 // first-order pair (lowPass1 / highPass1, which add up to the input exactly; Classic's high shelf is
 // a 6 dB/oct high-pass at its low edge, not the band's 12 dB one). The steeper shelves are Linkwitz-
 // Riley halves at the same order as the side they replace: an LR2 (critically damped 12 dB/oct)
-// section for a 12 dB side, two of them (LR2 squared) for Signature's 24 dB side. A critically damped
-// section is exactly 1 at its end of the spectrum (the bilinear transform puts DC and Nyquist there)
-// and the least resonant: turned down by the full 24 dB, the region just past the edge comes up by
-// about 1.2 dB with one section and 2.6 dB with two (a Butterworth or LR4 shelf: 1.9 and 4 dB; any
-// minimum-phase shelf steeper than 6 dB/oct lifts a little there). Their corners are moved so the
-// shelf is at the band's level at its edge (-3 dB for a 12 dB side, -6 dB for Signature's 24 dB):
-// both are where one critically damped section is at -3 dB (kCritEdge). The Sub and High bands are
-// shelves of their own (subBand, highBand) and keep their shape whatever the Slope.
+// section for a 12 dB side, two of them (LR2 squared) for Signature's 24 dB side, three for Alt
+// Signature's 36 dB side. A critically damped section is exactly 1 at its end of the spectrum (the
+// bilinear transform puts DC and Nyquist there) and the least resonant: turned down by the full 24 dB,
+// the region just past the edge comes up by about 1.2 dB with one section, 2.6 dB with two and 3.4 dB
+// with three (a Butterworth or LR4 shelf: 1.9 and 4 dB; any minimum-phase shelf steeper than 6 dB/oct
+// lifts a little there). Their corners are moved so the shelf is at the band's level at its edge (-3 dB
+// for a 12 dB side, -6 dB for Signature's 24 dB, -9 dB for Alt Signature's 36 dB): all are where one
+// critically damped section is at -3 dB (kCritEdge). The Sub and High bands are shelves of their own
+// (subBand, highBand) and keep their shape whatever the Slope.
 // The engine turns the band down (x + (g - 1) * band) and the colour display draws it
 // (clarityCutAtDb). The law that sets the cut is clarityCutDb (Params.h).
 #pragma once
@@ -80,8 +87,9 @@ inline BiquadCoeffs complementOf (const BiquadCoeffs& h)
 struct ClarityBand
 {
     BiquadCoeffs hp, lp;
-    BiquadCoeffs hp2; // a second section below (Signature's 24 dB/oct); the identity otherwise
-    bool hp2On = false;
+    BiquadCoeffs hp2; // a second section below (Signature's 24 dB/oct, Alt Signature's 36); the identity otherwise
+    BiquadCoeffs hp3; // a third section below (Alt Signature's 36 dB/oct); the identity otherwise
+    bool hp2On = false, hp3On = false;
     double norm = 1.0; // scales the band's peak to 0 dB
     double lowHz = 0.0, highHz = 0.0;
     bool lowShelf = false, highShelf = false; // runs flat past its low / high edge (no filter there)
@@ -95,14 +103,21 @@ constexpr double kShelfLowHz = 20.0, kShelfHighHz = 20000.0;
 // sections there are at -6 dB.
 inline const double kCritEdge = std::sqrt (M_SQRT2 - 1.0);
 
-// The band's two (Signature: three) filters at its edges, as the Slope makes them (not a shelf)
+// how many sections the Slope has below a band: 1 (12 dB/oct), 2 (Signature's 24) or 3 (Alt Signature's 36)
+constexpr int claritySectionsBelow (int slope) { return slope == kSlopeAltSignature ? 3 : slope == kSlopeSignature ? 2 : 1; }
+
+// The band's two (Signature: three, Alt Signature: four) filters at its edges, as the Slope makes them
+// (not a shelf)
 inline void clarityBandFilters (ClarityBand& b, double sr, int slope)
 {
     b.hp = highPass (sr, b.lowHz, M_SQRT1_2);
-    b.hp2 = BiquadCoeffs {};
-    b.hp2On = slope == kSlopeSignature;
+    b.hp2 = b.hp3 = BiquadCoeffs {};
+    b.hp2On = claritySectionsBelow (slope) >= 2;
+    b.hp3On = claritySectionsBelow (slope) >= 3;
     if (b.hp2On)
         b.hp2 = b.hp; // Linkwitz-Riley: two Butterworth sections
+    if (b.hp3On)
+        b.hp3 = b.hp; // (and a third)
     b.lp = slope == kSlopeClassic ? lowPass1 (sr, b.highHz) : lowPass (sr, b.highHz, M_SQRT1_2);
 }
 
@@ -124,9 +139,12 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int
             else
             {
                 b.hp = highPass (sr, b.lowHz * kCritEdge, 0.5);
-                b.hp2On = slope == kSlopeSignature;
+                b.hp2On = claritySectionsBelow (slope) >= 2;
+                b.hp3On = claritySectionsBelow (slope) >= 3;
                 if (b.hp2On)
                     b.hp2 = b.hp;
+                if (b.hp3On)
+                    b.hp3 = b.hp;
             }
         }
         if (b.lowShelf && !b.highShelf)
@@ -139,7 +157,8 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int
     for (int i = 0; i <= 64; ++i)
     {
         const double hz = b.lowHz * 0.5 * std::pow (b.highHz * 2.0 / (b.lowHz * 0.5), i / 64.0);
-        peakDb = std::max (peakDb, magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) + magnitudeDb (b.lp, hz, sr));
+        peakDb = std::max (peakDb, magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) +
+                                       (b.hp3On ? magnitudeDb (b.hp3, hz, sr) : 0.0) + magnitudeDb (b.lp, hz, sr));
     }
     b.norm = std::pow (10.0, -peakDb / 20.0);
     return b;
@@ -201,7 +220,7 @@ inline double clarityCutAtDb (const ClarityBand& b, double hz, double sr, double
         const std::complex<double> z1 = std::polar (1.0, -2.0 * M_PI * hz / sr), z2 = z1 * z1;
         return (c.b0 + c.b1 * z1 + c.b2 * z2) / (1.0 + c.a1 * z1 + c.a2 * z2);
     };
-    const std::complex<double> h = resp (b.hp) * (b.hp2On ? resp (b.hp2) : 1.0) * resp (b.lp) * b.norm;
+    const std::complex<double> h = resp (b.hp) * (b.hp2On ? resp (b.hp2) : 1.0) * (b.hp3On ? resp (b.hp3) : 1.0) * resp (b.lp) * b.norm;
     const double g = std::pow (10.0, cutDb / 20.0);
     return 20.0 * std::log10 (std::max (1e-9, std::abs (1.0 + (g - 1.0) * h)));
 }
@@ -209,7 +228,8 @@ inline double clarityCutAtDb (const ClarityBand& b, double hz, double sr, double
 // the band's level at hz, dB (0 at its peak)
 inline double clarityBandDb (const ClarityBand& b, double hz, double sr)
 {
-    return magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) + magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
+    return magnitudeDb (b.hp, hz, sr) + (b.hp2On ? magnitudeDb (b.hp2, hz, sr) : 0.0) + (b.hp3On ? magnitudeDb (b.hp3, hz, sr) : 0.0) +
+           magnitudeDb (b.lp, hz, sr) + 20.0 * std::log10 (b.norm);
 }
 
 // Gentlr's region drive: what driving the cut band region `x` (the bands after their cut) through the

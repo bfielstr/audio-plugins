@@ -15,7 +15,8 @@ inline constexpr const char* kSlope =
     "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12: 12 "
     "dB/oct on both sides, the cut exactly the Range at the band's centre. Signature (the default): 24 dB/oct below and "
     "12 above, a steeper floor under the band. Classic: 12 below and 6 above, the shape before the Slope (older "
-    "projects load with it, so they sound as they did).";
+    "projects load with it, so they sound as they did). Alt Signature: 36 dB/oct below and 12 above, the steepest "
+    "floor.";
 
 inline const char* forParam (uint32_t id)
 {

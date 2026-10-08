@@ -92,6 +92,8 @@ their own shape) sets the shape of the two bands:
 - **Signature** (the default): 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
   mids leaves the bass under it alone.
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Slope existed.
+- **Alt Signature**: 36 dB/oct below, 12 dB/oct above. Signature with a steeper floor still, for a band
+  that must leave everything under it alone.
 
 Every band is scaled to peak at 0 dB, a band at an end of the spectrum is still a shelf there, and the
 display draws the shape selected. The end saturator in the other plug-ins has the same Slope (in its

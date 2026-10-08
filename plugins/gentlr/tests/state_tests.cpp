@@ -186,7 +186,7 @@ int main ()
             w.writeInt32 (3);
             w.writeInt32 (1);
             w.writeInt32u (kSlope);
-            w.writeDouble (toNormalized (kSlope, (double)smacheratr::kSlopeSignature));
+            w.writeDouble (0.5); // (Signature, of the three choices then)
         }
         s.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
@@ -194,7 +194,9 @@ int main ()
         CHECK (std::lround (toPlain (kSlope, back.norm[kSlope])) == smacheratr::kSlopeSignature &&
                    std::lround (toPlain (kTailExt3Base + pk::kTailExt3Slope, back.norm[kTailExt3Base + pk::kTailExt3Slope])) == smacheratr::kSlope12,
                "version 3: Signature as saved, the end saturator's (not saved) 12 / 12");
-        CHECK (defaultNormalized (kSlope) == 0.5 && defaultNormalized (kTailExt3Base + pk::kTailExt3Slope) == 0.5, "a new instance: Signature");
+        const double signature = toNormalized (kSlope, (double)smacheratr::kSlopeSignature);
+        CHECK (defaultNormalized (kSlope) == signature && defaultNormalized (kTailExt3Base + pk::kTailExt3Slope) == signature,
+               "a new instance: Signature");
     }
     // the defaults up to version 4: the end saturator off, its Gentlr off, both Slopes 12 / 12. A version 4
     // state without them loads them so (it sounds as it did); with them, as saved. A new instance (and a
@@ -233,6 +235,42 @@ int main ()
                    slopeOf (now, tSlope) == smacheratr::kSlopeSignature && !now.has[on],
                "version 5 without them: the defaults (on, on, Signature)");
         CHECK (defaultNormalized (on) == 1.0 && defaultNormalized (gentlrOn) == 1.0, "a new instance: the saturator and its Gentlr on");
+
+        // Alt Signature (version 6), the Slope's fourth choice: a state saved before has both Slopes over
+        // three choices (0, 0.5, 1: 12 / 12, Signature, Classic) and loads the same choices, so it sounds as it
+        // did; a version 6 state loads them as saved, Alt Signature too
+        const double was[3] = {0.0, 0.5, 1.0};
+        const int choice[3] = {smacheratr::kSlope12, smacheratr::kSlopeSignature, smacheratr::kSlopeClassic};
+        for (int32 version : {3, 4, 5})
+            for (int i = 0; i < 3; ++i)
+            {
+                State back;
+                CHECK (read (version, {{kSlope, was[i]}, {tSlope, was[2 - i]}}, back) && slopeOf (back, kSlope) == choice[i] &&
+                           slopeOf (back, tSlope) == choice[2 - i],
+                       "version %d: Slope %s, the end saturator's %s, as saved", version, paramTable ().toText (kSlope, choice[i]).c_str (),
+                       paramTable ().toText (kSlope, choice[2 - i]).c_str ());
+            }
+        for (int s = 0; s < smacheratr::kNumSlopes; ++s)
+        {
+            State back;
+            CHECK (read (6, {{kSlope, toNormalized (kSlope, s)}, {tSlope, toNormalized (tSlope, s)}}, back) && slopeOf (back, kSlope) == s &&
+                       slopeOf (back, tSlope) == s,
+                   "version 6: %s as saved", paramTable ().toText (kSlope, s).c_str ());
+        }
+        State altBack;
+        State alt;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            alt.norm[id] = defaultNormalized (id);
+            alt.has[id] = true;
+        }
+        alt.norm[kSlope] = toNormalized (kSlope, (double)smacheratr::kSlopeAltSignature);
+        MemoryStream s;
+        CHECK (writeState (&s, alt), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        CHECK (readState (&s, altBack) && slopeOf (altBack, kSlope) == smacheratr::kSlopeAltSignature &&
+                   slopeOf (altBack, tSlope) == smacheratr::kSlopeSignature,
+               "Alt Signature: a round trip");
     }
     // a state from a newer Gentlr: the IDs this one does not know are skipped, the rest read
     {

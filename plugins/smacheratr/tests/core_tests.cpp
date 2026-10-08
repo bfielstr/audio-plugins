@@ -2112,14 +2112,15 @@ TEST (gentlr_glue_in_the_engine)
 }
 
 // ---------------------------------------------------------------------------
-// Gentlr's band Slope: 12 / 12 (the default), Signature (24 / 12) and Classic (12 / 6, as before)
+// Gentlr's band Slope: 12 / 12, Signature (24 / 12, the default), Classic (12 / 6, as before) and Alt
+// Signature (36 / 12)
 
 TEST (gentlr_slopes_shape_the_bands)
 {
-    const int slopes[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
-    const char* names[3] = {"12 / 12", "Signature", "Classic"};
-    const double below[3] = {12.0, 24.0, 12.0}, above[3] = {12.0, 12.0, 6.0};
-    for (int i = 0; i < 3; ++i)
+    const int slopes[4] = {kSlope12, kSlopeSignature, kSlopeClassic, kSlopeAltSignature};
+    const char* names[4] = {"12 / 12", "Signature", "Classic", "Alt Signature"};
+    const double below[4] = {12.0, 24.0, 12.0, 36.0}, above[4] = {12.0, 12.0, 6.0, 12.0};
+    for (int i = 0; i < 4; ++i)
     {
         const ClarityBand b = clarityBand (kSr, 400.0, 2.0, slopes[i]); // (200 - 800 Hz: away from Nyquist's warping)
         auto db = [&] (double hz) { return clarityBandDb (b, hz, kSr); };
@@ -2127,24 +2128,29 @@ TEST (gentlr_slopes_shape_the_bands)
         for (double hz = 40.0; hz < 4000.0; hz *= 1.01)
             peak = std::max (peak, db (hz));
         CHECK (std::fabs (peak) < 0.1, "%s: peaks at 0 dB (%.2f)", names[i], peak);
-        CHECK (b.hp2On == (slopes[i] == kSlopeSignature) && !b.lowShelf && !b.highShelf, "%s: its sections", names[i]);
+        CHECK (b.hp2On == (slopes[i] == kSlopeSignature || slopes[i] == kSlopeAltSignature) && b.hp3On == (slopes[i] == kSlopeAltSignature) &&
+                   !b.lowShelf && !b.highShelf,
+               "%s: its sections", names[i]);
         // an octave and two octaves past each edge, and the slope between them (the other side's filter
         // still a little in it, two octaves away)
         const double lo1 = db (b.lowHz / 2), lo2 = db (b.lowHz / 4), hi1 = db (b.highHz * 2), hi2 = db (b.highHz * 4);
-        std::printf ("    %-9s an octave / two below: %.1f / %.1f dB, above: %.1f / %.1f dB\n", names[i], lo1, lo2, hi1, hi2);
+        std::printf ("    %-13s an octave / two below: %.1f / %.1f dB, above: %.1f / %.1f dB\n", names[i], lo1, lo2, hi1, hi2);
         CHECK (std::fabs ((lo1 - lo2) - below[i]) < 1.0, "%s: %.0f dB/oct below (%.1f)", names[i], below[i], lo1 - lo2);
         CHECK (std::fabs ((hi1 - hi2) - above[i]) < 1.0, "%s: %.0f dB/oct above (%.1f)", names[i], above[i], hi1 - hi2);
         CHECK (lo1 < -below[i] + 2.0 && lo1 > -below[i] - 4.0 && hi1 < -above[i] + 2.0 && hi1 > -above[i] - 4.0,
                "%s: an octave past each edge about one slope down (%.1f / %.1f dB)", names[i], lo1, hi1);
         // the cut at the band's centre: 12 / 12 is symmetric, its phases cancel there and the cut is the whole
-        // Range; the others' deepest cut comes within 1.5 dB of it
+        // Range; the others' deepest cut comes within 1.5 dB of it (Alt Signature's within 2.5: its three
+        // sections below turn the band's phase further from the low-pass's)
         double deepest = 0.0;
         for (double hz = 40.0; hz < 4000.0; hz *= 1.01)
             deepest = std::min (deepest, clarityCutAtDb (b, hz, kSr, -12.0));
         if (slopes[i] == kSlope12)
             CHECK (std::fabs (clarityCutAtDb (b, 400.0, kSr, -12.0) + 12.0) < 0.05, "12 / 12: the whole cut at the centre (%.2f dB)",
                    clarityCutAtDb (b, 400.0, kSr, -12.0));
-        CHECK (deepest < -10.5 && deepest > -12.05, "%s: the deepest cut %.2f dB of 12", names[i], deepest);
+        const double least = slopes[i] == kSlopeAltSignature ? -9.5 : -10.5;
+        std::printf ("    %-13s the deepest cut %.2f dB of 12\n", names[i], deepest);
+        CHECK (deepest < least && deepest > -12.05, "%s: the deepest cut %.2f dB of 12", names[i], deepest);
     }
     // Classic is the shape before the Slope, coefficient for coefficient (and clarityBand's default, for
     // Smoothr's character filters)
@@ -2162,7 +2168,12 @@ TEST (gentlr_slopes_shape_the_bands)
         const ClarityBand at = clarityBandAt (kSr, 500.0, 1.5, c.norm, kSlopeClassic);
         CHECK (same (at.lp, lowPass1 (kSr, at.highHz)) && !at.hp2On, "and retuned the same way");
         const ClarityBand sig = clarityBandAt (kSr, 500.0, 1.5, 1.0, kSlopeSignature);
-        CHECK (sig.hp2On && same (sig.hp2, sig.hp), "Signature retuned: its second section too");
+        CHECK (sig.hp2On && same (sig.hp2, sig.hp) && !sig.hp3On, "Signature retuned: its second section too");
+        const ClarityBand alt = clarityBandAt (kSr, 500.0, 1.5, 1.0, kSlopeAltSignature);
+        CHECK (alt.hp2On && alt.hp3On && same (alt.hp2, alt.hp) && same (alt.hp3, alt.hp), "Alt Signature retuned: its second and third sections");
+        // Signature's band is what it was before Alt Signature: two sections below, nothing more
+        const ClarityBand s2 = clarityBand (kSr, 500.0, 1.5, kSlopeSignature);
+        CHECK (!s2.hp3On && s2.hp3.b0 == 1.0 && s2.hp3.b1 == 0.0 && s2.hp3.a1 == 0.0, "Signature: no third section");
     }
 }
 
@@ -2170,11 +2181,12 @@ TEST (gentlr_slopes_at_the_ends_are_shelves)
 {
     // at an end of the spectrum each slope's band is a shelf: flat to the end, the cut exactly the Range
     // there, the side it keeps at that side's slope (12 / 12: 12 and 12; Signature: 24 below, 12 above;
-    // Classic: 6 and 6, as before), at the band's level at its edge (-3 dB, Signature's 24 dB side -6 dB)
-    const int slopes[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
-    const char* names[3] = {"12 / 12", "Signature", "Classic"};
-    const double below[3] = {12.0, 24.0, 6.0}, above[3] = {12.0, 12.0, 6.0};
-    for (int i = 0; i < 3; ++i)
+    // Classic: 6 and 6, as before; Alt Signature: 36 below, 12 above), at the band's level at its edge (-3
+    // dB, Signature's 24 dB side -6 dB, Alt Signature's 36 dB side -9 dB)
+    const int slopes[4] = {kSlope12, kSlopeSignature, kSlopeClassic, kSlopeAltSignature};
+    const char* names[4] = {"12 / 12", "Signature", "Classic", "Alt Signature"};
+    const double below[4] = {12.0, 24.0, 6.0, 36.0}, above[4] = {12.0, 12.0, 6.0, 12.0};
+    for (int i = 0; i < 4; ++i)
     {
         const ClarityBand low = clarityBand (kSr, 40.0, 2.0, slopes[i]), high = clarityBand (kSr, 10000.0, 4.0, slopes[i]); // (edges 80 Hz, 2.5 kHz)
         auto db = [] (const ClarityBand& b, double hz) { return clarityBandDb (b, hz, kSr); };
@@ -2195,7 +2207,7 @@ TEST (gentlr_slopes_at_the_ends_are_shelves)
         if (slopes[i] != kSlopeClassic)
         {
             const double edgeLo = db (low, low.highHz), edgeHi = db (high, high.lowHz);
-            const double wantHi = slopes[i] == kSlopeSignature ? -6.0 : -3.0;
+            const double wantHi = slopes[i] == kSlopeAltSignature ? -9.0 : slopes[i] == kSlopeSignature ? -6.0 : -3.0;
             CHECK (std::fabs (edgeLo + 3.0) < 0.3 && std::fabs (edgeHi - wantHi) < 0.3, "%s: at its edge -3 / %.0f dB (%.2f / %.2f)", names[i],
                    wantHi, edgeLo, edgeHi);
             // turned down by the full 24 dB, what comes up past the edge stays small (critically damped)
@@ -2204,7 +2216,9 @@ TEST (gentlr_slopes_at_the_ends_are_shelves)
                 lift = std::max (lift, clarityCutAtDb (low, hz, kSr, -24.0));
             for (double hz = 100.0; hz < 23000.0; hz *= 1.02)
                 lift = std::max (lift, clarityCutAtDb (high, hz, kSr, -24.0));
-            CHECK (lift < (slopes[i] == kSlopeSignature ? 2.8 : 1.4), "%s: at most %.2f dB up past a shelf's edge", names[i], lift);
+            const double most = slopes[i] == kSlopeAltSignature ? 3.6 : slopes[i] == kSlopeSignature ? 2.8 : 1.4;
+            std::printf ("    %-13s at most %.2f dB up past a shelf's edge\n", names[i], lift);
+            CHECK (lift < most, "%s: at most %.2f dB up past a shelf's edge (%.2f)", names[i], most, lift);
         }
     }
     // the Sub and High bands keep their shape whatever the Slope (they take none)
@@ -2215,8 +2229,12 @@ TEST (gentlr_slope_parameter)
     const auto& t = paramTable ();
     CHECK (t.info (kClaritySlope).def == kSlopeSignature && t.toText (kClaritySlope, kSlope12) == "12 / 12" &&
                t.toText (kClaritySlope, kSlopeSignature) == "Signature" && t.toText (kClaritySlope, kSlopeClassic) == "Classic" &&
+               t.toText (kClaritySlope, kSlopeAltSignature) == "Alt Signature" && t.info (kClaritySlope).choices.size () == (size_t)kNumSlopes &&
                std::string (t.info (kClaritySlope).name) == "Gentlr Slope",
-           "the Slope: 12 / 12, Signature (the default) and Classic (%s)", t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
+           "the Slope: 12 / 12, Signature (the default), Classic and Alt Signature (%s)",
+           t.toText (kClaritySlope, t.info (kClaritySlope).def).c_str ());
+    double altText = -1.0;
+    CHECK (t.fromText (kClaritySlope, "Alt Signature", altText) && altText == kSlopeAltSignature, "Alt Signature typed in");
     CHECK (kClaritySlope == kClarityNoOverlap + 1 && kClarityGlue12 == kClaritySlope + 1, "appended: ID %u", (unsigned)kClaritySlope);
     CHECK (defaultParams ()[kClaritySlope] == kSlopeSignature, "a new engine: Signature");
     // the end saturators: the last field of the tail's fourth block
@@ -2226,8 +2244,26 @@ TEST (gentlr_slope_parameter)
     addTailExt3Params (v3, 300);
     CHECK (std::string (v3[pk::kTailExt3Slope].name) == "Saturator Gentlr Slope" && v3[pk::kTailExt3Slope].def == kSlopeSignature,
            "the tail's Slope: Signature by default");
-    CHECK (classicSlopeNorm () == 1.0, "Classic: the last choice");
-    CHECK (oldDefaultSlopeNorm () == 0.0 && t.defaultNormalized (kClaritySlope) == 0.5, "12 / 12 (the old default) at 0, Signature at 0.5");
+    CHECK (classicSlopeNorm () == t.toNormalized (kClaritySlope, kSlopeClassic) && std::fabs (classicSlopeNorm () - 2.0 / 3.0) < 1e-12,
+           "Classic: the third choice of four");
+    CHECK (oldDefaultSlopeNorm () == 0.0 && std::fabs (t.defaultNormalized (kClaritySlope) - 1.0 / 3.0) < 1e-12,
+           "12 / 12 (the old default) at 0, Signature at 1/3");
+    // a value saved over the three choices before Alt Signature (0, 0.5, 1), as the same choice now
+    const int was[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
+    for (int i = 0; i < 3; ++i)
+        CHECK (std::lround (t.toPlain (kClaritySlope, slopeNormFromThreeChoices (0.5 * i))) == was[i], "saved at %.1f: %s", 0.5 * i,
+               t.toText (kClaritySlope, was[i]).c_str ());
+    CHECK (std::lround (t.toPlain (kClaritySlope, slopeNormFromThreeChoices (0.3))) == kSlopeSignature &&
+               std::lround (t.toPlain (kClaritySlope, slopeNormFromThreeChoices (0.8))) == kSlopeClassic,
+           "values between: the choice the three-choice table read them as");
+    {
+        double norm[4] = {0.5, 1.0, 0.0, 0.5};
+        const bool has[4] = {true, true, true, false};
+        for (uint32_t id = 0; id < 4; ++id)
+            slopeFromThreeChoices (norm, has, id);
+        CHECK (norm[0] == t.toNormalized (kClaritySlope, kSlopeSignature) && norm[1] == classicSlopeNorm () && norm[2] == 0.0 && norm[3] == 0.5,
+               "slopeFromThreeChoices: what the state has, not what it lacks");
+    }
 }
 
 // A new instance: Gentlr on with the Signature Slope, here and in every end saturator, and the end
@@ -2352,13 +2388,18 @@ TEST (gentlr_classic_slope_is_the_engine_before)
     // library, so it is pinned only for the Linux x86-64 GCC build (the CI's and the usual one), and
     // elsewhere printed
     const uint64_t classic = gentlrRenderHash (kSlopeClassic), twelve = gentlrRenderHash (kSlope12),
-                   signature = gentlrRenderHash (kSlopeSignature);
-    std::printf ("    Classic %016llx, 12 / 12 %016llx, Signature %016llx\n", (unsigned long long)classic, (unsigned long long)twelve,
-                 (unsigned long long)signature);
-    CHECK (classic != twelve && classic != signature && twelve != signature, "each slope sounds its own");
+                   signature = gentlrRenderHash (kSlopeSignature), alt = gentlrRenderHash (kSlopeAltSignature);
+    std::printf ("    Classic %016llx, 12 / 12 %016llx, Signature %016llx, Alt Signature %016llx\n", (unsigned long long)classic,
+                 (unsigned long long)twelve, (unsigned long long)signature, (unsigned long long)alt);
+    CHECK (classic != twelve && classic != signature && twelve != signature && alt != classic && alt != twelve && alt != signature,
+           "each slope sounds its own");
     CHECK (gentlrRenderHash (kSlopeClassic) == classic, "the same every time");
 #if defined(__linux__) && defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
     CHECK (classic == 0xb72650abb487a4f5ull, "Classic: the engine before the Slope, bit for bit (%016llx)", (unsigned long long)classic);
+    // and 12 / 12 and Signature as they rendered before Alt Signature (0.25), bit for bit
+    CHECK (twelve == 0x1998260c0e57eed6ull && signature == 0x15deaf4f29339c53ull,
+           "12 / 12 and Signature: the engine before Alt Signature, bit for bit (%016llx, %016llx)", (unsigned long long)twelve,
+           (unsigned long long)signature);
 #endif
 }
 

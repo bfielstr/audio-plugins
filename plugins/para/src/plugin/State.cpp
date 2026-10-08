@@ -14,7 +14,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50455252; // 'PERR'
-constexpr int32 kVersion = 9;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
+constexpr int32 kVersion = 10;         // 2: the end saturator's Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityFullRange = 2;
 constexpr int32 kClarityOneButton = 3; // 3: one Clarity button in the end saturator
 constexpr int32 kPerBandDrive = 4;     // 4: a drive per filter, slopes 6 .. 96 dB and Brickwall
@@ -25,6 +25,9 @@ constexpr int32 kOversamplingChoice = 8; // 8: the end saturator's Oversampling 
 // 9: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
 // old defaults where they lack them)
 constexpr int32 kNewDefaults = 9;
+// 10: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 10;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -64,6 +67,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // one Clarity button: a state from before, made to mean the same
     if (version < kClarityOneButton)
     {

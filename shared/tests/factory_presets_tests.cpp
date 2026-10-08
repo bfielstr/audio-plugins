@@ -220,7 +220,8 @@ void checkNewInstance (const Plugin& p)
         // its rack's first slot is a Smacheratr with its own defaults (Smacheratr's IDs are its block
         // positions); the old saturator after the rack stays off (only old projects use it)
         const uint32_t block = smemplr::slotBlockParam (0, 0);
-        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) == 0.5,
+        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) ==
+                                                                                 smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature),
                "smemplr: the first slot's Smacheratr has Gentlr on, Signature");
         check (t.defaultNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0, "smemplr: the old saturator after the rack off");
         return;

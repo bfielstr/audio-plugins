@@ -70,7 +70,8 @@ inline const char* forParam (uint32_t id)
             case kFreq: return "The band's centre (drag its handle in the display sideways).";
             case kWidth:
                 return "How wide the band is, in octaves between its edges (drag an edge in the display, or Alt-drag the "
-                       "band). Its slopes below and above are the Band Slope (Signature by default: 24 dB/oct below, 12 above).";
+                       "band). Its slopes below and above are the Band Slope (Signature by default: 24 dB/oct below, 12 above; Alt "
+                       "Signature: 36 below).";
             case kRange:
                 return "The most the band is turned down (drag its handle down). It cuts 3 dB for every 5 the band is over "
                        "its threshold, up to this. 0 dB: the band does nothing.";

@@ -33,6 +33,8 @@ void Engine::Channel::reset ()
         postLp[k].reset ();
         bandHp2[k].reset ();
         postHp2[k].reset ();
+        bandHp3[k].reset ();
+        postHp3[k].reset ();
     }
     dc.reset ();
     preLo.reset ();
@@ -298,7 +300,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     // Gentlr (called Clarity before), a compressor on up to four bands (one button; a band works while
     // its Range is above 0; the third and fourth are the Sub and High bands, shelves at the ends of the
     // spectrum, which also need their own buttons) (ClarityBand.h: the two bands' shape is the Slope,
-    // 12 / 12 dB/oct, Signature 24 / 12 or Classic 12 / 6, around each band's frequency): when the drive pushes a band past its threshold into the curve (-18 dBFS, or the
+    // 12 / 12 dB/oct, Signature 24 / 12, Classic 12 / 6 or Alt Signature 36 / 12, around each band's frequency): when the drive pushes a band past its threshold into the curve (-18 dBFS, or the
     // band's Threshold with Advanced on), it is turned down before the curve (3 dB for every 5 over, at
     // most the band's Range: clarityCutDb), so it does not pile up into mud and intermodulate, and
     // after it by half as much (the curve squashes the cut before it back up). The bands work one
@@ -339,6 +341,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 c.postLp[k].reset ();
                 c.bandHp2[k].reset ();
                 c.postHp2[k].reset ();
+                c.bandHp3[k].reset ();
+                c.postHp3[k].reset ();
             }
         }
         if (!clarity[k])
@@ -356,19 +360,28 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             const ClarityBand b = k == kSubBand    ? subBand (sr, bandFreq[k])
                                   : k == kHighBand ? highBand (sr, bandFreq[k])
                                                    : clarityBand (sr, bandFreq[k], bandWidth[k], slope);
-            if (b.hp2On && !bandHp2On[k])
-                for (auto& c : chan)
+            // the second and third sections come in from rest (they held whatever they had when last used)
+            for (auto& c : chan)
+            {
+                if (b.hp2On && !bandHp2On[k])
                 {
-                    // the second section comes in from rest (it held whatever it had when last used)
                     c.bandHp2[k].reset ();
                     c.postHp2[k].reset ();
                 }
+                if (b.hp3On && !bandHp3On[k])
+                {
+                    c.bandHp3[k].reset ();
+                    c.postHp3[k].reset ();
+                }
+            }
             bandHp2On[k] = b.hp2On;
+            bandHp3On[k] = b.hp3On;
             for (auto& c : chan)
             {
                 c.bandHp[k].c = c.postHp[k].c = b.hp;
                 c.bandLp[k].c = c.postLp[k].c = b.lp;
                 c.bandHp2[k].c = c.postHp2[k].c = b.hp2;
+                c.bandHp3[k].c = c.postHp3[k].c = b.hp3;
             }
             bandNorm[k] = (float)b.norm;
         }
@@ -446,8 +459,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             for (int k = 0; k < kGentlrBands; ++k)
                 if (clarity[k])
                 {
-                    const double h = chan[c].bandHp[k].process (d);
-                    const double band = chan[c].bandLp[k].process (bandHp2On[k] ? chan[c].bandHp2[k].process (h) : h) * bandNorm[k];
+                    double h = chan[c].bandHp[k].process (d);
+                    if (bandHp2On[k])
+                        h = chan[c].bandHp2[k].process (h);
+                    if (bandHp3On[k])
+                        h = chan[c].bandHp3[k].process (h);
+                    const double band = chan[c].bandLp[k].process (h) * bandNorm[k];
                     lmPower[k] = std::max (lmPower[k], 2.0 * band * band); // a sine's peak level
                     d = (float)(d + (gBandPre[k] - 1.0f) * band);
                     cutBands += gBandPre[k] * band;
@@ -509,8 +526,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 for (int i = 0; i < n; ++i)
                 {
                     const float w = wet[(size_t)i];
-                    const double h = ch.postHp[k].process (w);
-                    const double band = ch.postLp[k].process (bandHp2On[k] ? ch.postHp2[k].process (h) : h) * bandNorm[k];
+                    double h = ch.postHp[k].process (w);
+                    if (bandHp2On[k])
+                        h = ch.postHp2[k].process (h);
+                    if (bandHp3On[k])
+                        h = ch.postHp3[k].process (h);
+                    const double band = ch.postLp[k].process (h) * bandNorm[k];
                     wet[(size_t)i] = (float)(w + (gPost[k][(size_t)i] - 1.0f) * band);
                 }
         for (int i = 0; i < n; ++i)

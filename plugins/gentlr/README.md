@@ -65,6 +65,8 @@ bands keep their own shape):
 - **Signature** (the default): 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
   mids leaves the bass under it alone.
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Band Slope existed.
+- **Alt Signature**: 36 dB/oct below, 12 dB/oct above. Signature with a steeper floor still, for a band
+  that must leave everything under it alone.
 
 A band at an end of the spectrum is still a shelf there, keeping the slope of its other side, and the
 display draws the shape selected.

@@ -123,7 +123,9 @@ int main ()
     }
     // a version 19 state (before Gentlr's band Slope): its Smacheratr (slot 0) and Gentlr (slot 1) get
     // Classic, the shape their bands had; a Para (slot 2) keeps what its own place holds. A version 20
-    // state keeps them as saved, and a new slot has Signature (12 / 12 before 23)
+    // state keeps them as saved (over the Slope's three choices then: Signature at 0.5), and a new slot
+    // has Signature (12 / 12 before 23)
+    const double signature = smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature);
     for (int32 version : {19, 20})
     {
         PluginState st = someState (), back;
@@ -136,20 +138,53 @@ int main ()
         st.norm[paraSame] = 0.3;
         CHECK (roundTrip (st, back, version), "read version %d", version);
         const bool old = version < 20;
-        const double want = old ? smacheratr::classicSlopeNorm () : 0.5;
+        const double want = old ? smacheratr::classicSlopeNorm () : signature;
         CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.has[smSlope] && back.has[gtSlope],
                "version %d: the Smacheratr's and the Gentlr's Slope %s", version, old ? "Classic" : "as saved");
         CHECK (back.norm[paraSame] == 0.3, "version %d: the Para's own place as saved", version);
     }
-    CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == 0.5 &&
-               fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == 0.5,
+    CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == signature &&
+               fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == signature,
            "a new slot: Signature");
+    // Alt Signature (24): a state from before has the Slope over three choices (0, 0.5, 1: 12 / 12,
+    // Signature, Classic), read as the same choice; a version 24 state keeps it as saved, Alt Signature too
+    for (int32 version : {23, 24})
+    {
+        const uint32_t smSlope = slotBlockParam (0, smacheratr::kClaritySlope), gtSlope = slotBlockParam (1, gentlr::kSlope);
+        const uint32_t paraSame = slotBlockParam (2, smacheratr::kClaritySlope);
+        const bool old = version < 24;
+        const double saved[3] = {0.0, 0.5, 1.0};
+        const int was[3] = {smacheratr::kSlope12, smacheratr::kSlopeSignature, smacheratr::kSlopeClassic};
+        for (int i = 0; i < 3; ++i)
+        {
+            PluginState st = someState (), back;
+            st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
+            st.norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxGentlr);
+            st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxPara);
+            st.norm[smSlope] = st.norm[gtSlope] = saved[i];
+            st.norm[paraSame] = 0.5;
+            CHECK (roundTrip (st, back, version), "read version %d", version);
+            const double want = old ? smacheratr::toNormalized (smacheratr::kClaritySlope, was[i]) : saved[i];
+            CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.norm[paraSame] == 0.5,
+                   "version %d, Slope saved at %.1f: %s (the Para's place untouched)", version, saved[i],
+                   smacheratr::paramTable ().toText (smacheratr::kClaritySlope, smacheratr::toPlain (smacheratr::kClaritySlope, want)).c_str ());
+        }
+        if (!old)
+        {
+            PluginState st = someState (), back;
+            st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
+            st.norm[smSlope] = smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeAltSignature);
+            CHECK (roundTrip (st, back) && std::lround (smacheratr::toPlain (smacheratr::kClaritySlope, back.norm[smSlope])) ==
+                                               smacheratr::kSlopeAltSignature,
+                   "Alt Signature in a slot: as saved");
+        }
+    }
     // Gentlr on and the Signature Slope by default (23): a new Smemplr's first slot (Smacheratr) and a new
     // Smacheratr or Gentlr slot have them; a state from before 23 keeps what it saved, and where it lacks
     // them in the first slot (the defaults then) Gentlr off and 12 / 12
     {
         const uint32_t clarity = slotBlockParam (0, smacheratr::kClarity), slope = slotBlockParam (0, smacheratr::kClaritySlope);
-        CHECK (defaultNormalized (clarity) == 1.0 && defaultNormalized (slope) == 0.5, "a new Smemplr's Smacheratr: Gentlr on, Signature");
+        CHECK (defaultNormalized (clarity) == 1.0 && defaultNormalized (slope) == signature, "a new Smemplr's Smacheratr: Gentlr on, Signature");
         CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClarity) == 1.0,
                "a new Smacheratr slot (Editor::addFx: the effect's own defaults): Gentlr on");
         for (int32 version : {22, 23})
@@ -164,8 +199,9 @@ int main ()
                    "version %d without them: %s", version, old ? "off, 12 / 12" : "the defaults");
             PluginState saved = someState (), backSaved;
             saved.norm[clarity] = 1.0;
-            saved.norm[slope] = 1.0;
-            CHECK (roundTrip (saved, backSaved, version) && backSaved.norm[clarity] == 1.0 && backSaved.norm[slope] == 1.0,
+            saved.norm[slope] = 1.0; // (Classic, over the three choices then)
+            CHECK (roundTrip (saved, backSaved, version) && backSaved.norm[clarity] == 1.0 &&
+                       backSaved.norm[slope] == smacheratr::classicSlopeNorm (),
                    "version %d with them: as saved", version);
         }
         // another effect in the first slot (a Para): its places are its own, untouched

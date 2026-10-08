@@ -15,12 +15,15 @@ constexpr int32 kMagic = 0x5442524F; // 'ORBT'
 // 1: the first (never released before its end saturator's Sub and High bands lost their buttons, so a
 // version 1 state already means "a band works while its Range is above 0 dB": nothing to convert)
 // 2: the end saturator's Gentlr Slope (Classic for states from before it: version 1 was released)
-constexpr int32 kVersion = 4;
+constexpr int32 kVersion = 5;
 constexpr int32 kClassicSlope = 2;
 constexpr int32 kOversamplingChoice = 3; // 3: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 // 4: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
 // old defaults where they lack them)
 constexpr int32 kNewDefaults = 4;
+// 5: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 5;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -60,6 +63,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // the end saturator's Gentlr bands had one shape before their Slope: Classic, the same sound (a new
     // instance gets Signature)
     if (version < kClassicSlope)

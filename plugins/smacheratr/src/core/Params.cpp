@@ -48,7 +48,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kClarityHighRange, "Gentlr High Range", "Range", 0.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (real (kClarityHighThreshold, "Gentlr High Threshold", "Thresh", -60.0, 0.0, kClarityThresholdDb, Curve::Linear, Disp::Db));
         v.push_back (toggle (kClarityNoOverlap, "Gentlr No Overlap", "No Overlap", false));
-        v.push_back (choice (kClaritySlope, "Gentlr Slope", "Slope", {"12 / 12", "Signature", "Classic"}, kSlopeSignature));
+        v.push_back (choice (kClaritySlope, "Gentlr Slope", "Slope", {"12 / 12", "Signature", "Classic", "Alt Signature"}, kSlopeSignature));
         // (glue: off, every pair; Glue.h)
         v.push_back (toggle (kClarityGlue12, "Gentlr Glue 1 / 2", "Glue 1/2", false));
         v.push_back (toggle (kClarityGlueSub1, "Gentlr Glue Sub / 1", "Glue Sub/1", false));

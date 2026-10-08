@@ -395,6 +395,26 @@ void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool,
     }
 }
 
+void migrateSlopeChoicesInSlots (std::array<double, kNumParams>& norm, const std::array<bool, kNumParams>& has, int version)
+{
+    if (version >= 24)
+        return;
+    for (int slot = 0; slot < kRackSlots; ++slot)
+    {
+        const uint32_t typeId = slotParam (slot, kSlotType);
+        if (!has[typeId])
+            continue;
+        const int type = (int)std::lround (toPlain (typeId, norm[typeId]));
+        const int64_t j = type == kFxSmacheratr ? fxBlockOf (type, smacheratr::kClaritySlope)
+                          : type == kFxGentlr   ? fxBlockOf (type, gentlr::kSlope)
+                                                : -1;
+        if (j < 0)
+            continue; // (the other effects' own saturators are not used in the rack)
+        // (Gentlr's Slope is Smacheratr's choice: the same normalized values)
+        smacheratr::slopeFromThreeChoices (norm, has, slotBlockParam (slot, (uint32_t)j));
+    }
+}
+
 void keepOldFirstSlotDefaults (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
 {
     // (only while the first slot holds a Smacheratr: its block positions are Smacheratr's IDs; another
