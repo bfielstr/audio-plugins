@@ -743,12 +743,14 @@ int main ()
         Instance a (host);
         a.ctrl->uiAdvanced = true;
         a.ctrl->uiExtrasOpen = true;
+        a.ctrl->uiCaptureLength = 2;
         a.ctrl->uiLayout = "wide";
         MemoryStream st;
         CHECK (a.ctrl->getState (&st) == kResultOk, "get");
         st.seek (0, IBStream::kIBSeekSet, nullptr);
         Instance b (host);
-        CHECK (b.ctrl->setState (&st) == kResultOk && b.ctrl->uiAdvanced && b.ctrl->uiExtrasOpen && b.ctrl->uiLayout == "wide",
+        CHECK (b.ctrl->setState (&st) == kResultOk && b.ctrl->uiAdvanced && b.ctrl->uiExtrasOpen && b.ctrl->uiLayout == "wide" &&
+                   b.ctrl->uiCaptureLength == 2,
                "kept (%d %d %s)", (int)b.ctrl->uiAdvanced, (int)b.ctrl->uiExtrasOpen, b.ctrl->uiLayout.c_str ());
         a.ctrl->uiAdvanced = false;
         MemoryStream st2;
@@ -791,7 +793,7 @@ int main ()
                        r.readInt32 (count) && count == 2 && r.readInt32 (v) && r.readInt32 (v) && r.readInt32 (tag) && tag == 0x4c594f54 &&
                        (strs[2] = r.readStr8 ()) && (strs[3] = r.readStr8 ()) && std::string (strs[2]) == "display,rack",
                    "an older reader's fields, up to the layout");
-            CHECK (r.readInt32 (tag) && tag == 0x56494557 && r.readInt32 (count) && count == 2, "then the view, tagged");
+            CHECK (r.readInt32 (tag) && tag == 0x56494557 && r.readInt32 (count) && count == 3, "then the view, tagged");
             for (auto* p : strs)
                 delete[] p;
         }

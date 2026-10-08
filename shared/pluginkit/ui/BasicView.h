@@ -11,6 +11,9 @@
 //
 //   +-------------------------------------------------------------------------------------+
 //   | title  [the plug-in's header views]  [preset name] < >        [Advanced] [?] [Menu] |  header
+//   +-------------------------------------------------------------------------------------+
+//   | the capture band (optional): the output's scope, Freeze, drag it out as audio or as  |
+//   | a wavetable (pluginkit/ui/CaptureView.h)                                             |
 //   +-------------------------------------------------------------------+-----------------+
 //   | the display (optional)                                            | OUTPUT          |
 //   |                                                                   |  the output     |
@@ -27,6 +30,7 @@
 #pragma once
 
 #include "vstgui/lib/crect.h"
+#include "pluginkit/Capture.h"
 #include "vstgui/lib/cview.h"
 
 #include <cstdint>
@@ -50,6 +54,7 @@ constexpr double kSideW = 148;      // the output column at the right
 constexpr double kStripH = 36;      // the extras strip
 constexpr int kPerRow = 4;          // controls in a row, at most
 constexpr double kTitleSize = 16.0;
+constexpr double kCaptureH = 92;    // the capture band
 
 // One of the page's controls, bound to a parameter. Its label is the parameter's short name unless given
 // (keep it the label the Advanced view shows the control by, docs name controls by their labels).
@@ -93,6 +98,10 @@ struct Spec
     Factory header;                         // the plug-in's own views in the header, after the title (optional)
     double headerWidth = 0;                 // (as wide as this)
     std::function<float ()> level;          // the mini meter's level now (linear peak; none: no meter)
+    // The capture band across the top (the plug-in's output, held and dragged out as audio or a
+    // wavetable): the plug-in's capture buffer, which its processor pushes its output into (none yet: an
+    // empty scope). One line in a basicSpec: s.capture = [this] { return &<the buffer>; };
+    std::function<const CaptureBuffer* ()> capture;
     int64_t tailOn = -1;                    // the end saturator's On parameter: the strip's Tail switch (-1: none)
     Factory extras;                         // what the expanded strip shows (the end saturator's section, the meters)
     double extrasHeight = 0;                // (0: nothing to expand)
@@ -115,6 +124,7 @@ struct Geometry
     double width = 0, height = 0;                    // the content (the info strip goes under it)
     VSTGUI::CRect title, headerViews, presets, presetPrev, presetNext;
     VSTGUI::CRect advanced, help, menu;              // the header's right end
+    VSTGUI::CRect capture;                           // the capture band (empty: none)
     VSTGUI::CRect display;                           // (empty: none)
     VSTGUI::CRect main;                              // the main controls' panel
     std::vector<std::vector<VSTGUI::CRect>> rows;    // each control's rectangle, inside `main` (the panel's coordinates)

@@ -7,6 +7,7 @@
 
 #include "pluginkit/Layout.h"
 #include "pluginkit/ui/BasicView.h"
+#include "pluginkit/ui/CaptureView.h"
 #include "pluginkit/ui/InfoBox.h"
 #include "pluginkit/ui/LayoutViews.h"
 #include "pluginkit/ui/Widgets.h"
@@ -65,6 +66,9 @@ public:
     void setAdvancedView (bool on, bool now = false);
     // The Basic page's extras open or closed (its strip's Extras button): the same, built again.
     void setExtrasOpen (bool open, bool now = false);
+    // Every tick, before idle (): the Basic page's mini meter, capture band and strip line (the draw
+    // benchmark calls it as the timer does).
+    void tickBasic ();
     // The Basic page's geometry as built (empty in the Advanced view).
     const basic::Geometry& basicGeometry () const { return basicPlace; }
     // Called about 30 times a second while open.
@@ -214,12 +218,13 @@ private:
     // the Basic page
     void buildBasic ();       // the page from basicPage, into the frame
     void addAdvancedSwitch (); // the Advanced view's switch in its header (Spec::advancedSwitch)
-    void tickBasic ();        // the mini meter and the strip's line, every tick
     basic::Spec basicPage;    // the editor's (resolveLayout)
     basic::Geometry basicPlace;
     bool hasBasic = false, showingBasic = false;
     bool appliedAdvanced = false, appliedExtras = false; // the view the frame was built in
     std::vector<basic::MiniMeter*> meters;
+    std::vector<CaptureBand*> bands;
+    std::shared_ptr<CaptureHold> captureHold = std::make_shared<CaptureHold> (); // (Freeze: kept across builds)
     Label* summaryLabel = nullptr;
 
     // layouts

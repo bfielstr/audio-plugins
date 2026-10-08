@@ -13,7 +13,7 @@
 // the two renderings differ.
 // Linux only (the cairo backend draws offscreen without a display). Built with -DPK_DRAW_BENCH=ON:
 //   <plugin>_drawbench [ticks] [--all] [--quiet-rects] [--dump <dir>] [--compare <dir>] [--set <id>=<normalized>]...
-//                      [--view basic|advanced|extras] [--layout <text>] [--check-layouts]
+//                      [--view basic|advanced|extras] [--layout <text>] [--state <file>] [--check-layouts]
 // ticks: draws timed per figure (the median is shown). --all times every view, not only the large
 // displays; --quiet-rects lists the rectangles still repainted once the audio has stopped. --dump
 // writes the renderings (PNG to look at, .rgba to compare); --compare reports how far this build's
@@ -22,12 +22,14 @@
 // state: an end saturator switched on, its section open). --view: the editor's view to time and dump: the
 // Advanced view (the default, so the figures compare with earlier ones), the Basic page, or the Basic page
 // with its extras open (pluginkit/ui/BasicView.h; an editor without a Basic page shows its Advanced view).
-// --check-layouts checks the Advanced view's layouts, then the Basic page, open and closed (below).
+// --state loads a component state (the processor's bytes, as a host saves them) before anything else: a
+// state to look at (smemplr's with a sample). --check-layouts checks the Advanced view's layouts, then the Basic page, open and closed (below).
 #include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/LayoutCheck.h"
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/EditorBase.h"
 
+#include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -588,6 +590,7 @@ int main (int argc, char** argv)
     bool allViews = false, listQuiet = false, checkLayouts = false;
     const char* layoutText = nullptr;
     std::string viewName = "advanced";
+    std::string stateFile;
     std::vector<std::pair<uint32, double>> sets;
     for (int i = 1; i < argc; ++i)
     {
@@ -609,6 +612,8 @@ int main (int argc, char** argv)
             listQuiet = true;
         else if (!std::strcmp (argv[i], "--layout") && i + 1 < argc)
             layoutText = argv[++i];
+        else if (!std::strcmp (argv[i], "--state") && i + 1 < argc)
+            stateFile = argv[++i];
         else if (!std::strcmp (argv[i], "--view") && i + 1 < argc)
             viewName = argv[++i];
         else if (!std::strcmp (argv[i], "--check-layouts"))
@@ -645,6 +650,26 @@ int main (int argc, char** argv)
         }
         audio.component = audio.provider->getComponentPtr ();
         audio.controller = audio.provider->getControllerPtr ();
+        if (!stateFile.empty () && audio.component && audio.controller)
+        {
+            std::vector<char> bytes;
+            if (FILE* f = std::fopen (stateFile.c_str (), "rb"))
+            {
+                char chunk[4096];
+                size_t got;
+                while ((got = std::fread (chunk, 1, sizeof (chunk), f)) > 0)
+                    bytes.insert (bytes.end (), chunk, chunk + got);
+                std::fclose (f);
+            }
+            MemoryStream ms (bytes.data (), (TSize)bytes.size ());
+            const bool ok = !bytes.empty () && audio.component->setState (&ms) == kResultOk;
+            ms.seek (0, IBStream::kIBSeekSet, nullptr);
+            if (!ok || audio.controller->setComponentState (&ms) != kResultOk)
+            {
+                std::printf ("FAIL: the state in %s does not load\n", stateFile.c_str ());
+                return 1;
+            }
+        }
         if (!audio.component || !audio.controller || !audio.start ())
         {
             std::printf ("FAIL: the plug-in does not start\n");
@@ -791,6 +816,7 @@ int main (int argc, char** argv)
             {
                 audio.play (33.0);
                 recorder->rects.clear ();
+                editor->tickBasic ();
                 editor->idle ();
                 const std::vector<CRect> dirty = recorder->take ();
                 if (i < 10)
@@ -834,6 +860,7 @@ int main (int argc, char** argv)
             for (int i = 0; i < 180; ++i)
             {
                 audio.play (33.0, true);
+                editor->tickBasic ();
                 editor->idle ();
             }
             recorder->rects.clear ();
@@ -842,6 +869,7 @@ int main (int argc, char** argv)
             for (int i = 0; i < 30; ++i)
             {
                 audio.play (33.0, true);
+                editor->tickBasic ();
                 editor->idle ();
                 for (const CRect& r : recorder->take ())
                 {

@@ -75,6 +75,7 @@ void EditorBase::buildContent ()
 {
     building = true;
     meters.clear ();
+    bands.clear ();
     summaryLabel = nullptr;
     if (showingBasic)
         buildBasic ();
@@ -229,6 +230,7 @@ void PLUGIN_API EditorBase::close ()
         headerRight.clear ();
         dropMark = nullptr;
         meters.clear ();
+    bands.clear ();
         summaryLabel = nullptr;
         frame->forget ();
         frame = nullptr;
@@ -656,6 +658,7 @@ void EditorBase::relayout ()
     hoverWatch.hovered = nullptr;
     info = nullptr;
     meters.clear ();
+    bands.clear ();
     summaryLabel = nullptr;
     boxes.clear ();
     framed.clear ();
@@ -1089,7 +1092,21 @@ void EditorBase::buildBasic ()
     setHelp (menu, "Menu", "The plug-in's menu: copy and paste settings, the interface size, the defaults for new instances.");
     root->addView (menu);
 
-    // ---- the display, the main controls, the output
+    // ---- the capture band, the display, the main controls, the output
+    if (basicPage.capture && !g.capture.isEmpty ())
+    {
+        auto* band = new CaptureBand (
+            g.capture, basicPage.capture, captureHold, basicPage.title, [this] { return controller->uiCaptureLength; },
+            [this] (int c) {
+                if (controller->uiCaptureLength != c)
+                {
+                    controller->uiCaptureLength = c;
+                    controller->markDirty ();
+                }
+            });
+        root->addView (band);
+        bands.push_back (band);
+    }
     if (basicPage.display && !g.display.isEmpty ())
         if (CView* v = basicPage.display (g.display))
             root->addView (v);
@@ -1168,6 +1185,8 @@ void EditorBase::tickBasic ()
 {
     for (auto* m : meters)
         m->idle ();
+    for (auto* b : bands)
+        b->idle ();
     if (summaryLabel && basicPage.summary)
         summaryLabel->setText (basicPage.summary ());
 }

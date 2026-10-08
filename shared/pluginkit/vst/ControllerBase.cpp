@@ -198,19 +198,21 @@ tresult PLUGIN_API ControllerBase::setState (IBStream* stream)
     // new instance has (Advanced View by Default)
     uiAdvanced = advancedViewByDefault ();
     uiExtrasOpen = false;
+    uiCaptureLength = 1;
     if (s.readInt32 (tag) && tag == kViewTag && s.readInt32 (count) && count >= 0 && count < 64)
     {
-        int32 values[2] = {uiAdvanced ? 1 : 0, 0};
+        int32 values[3] = {uiAdvanced ? 1 : 0, 0, 1};
         for (int32 i = 0; i < count; ++i)
         {
             int32 v = 0;
             if (!s.readInt32 (v))
                 break;
-            if (i < 2)
+            if (i < 3)
                 values[i] = v;
         }
         uiAdvanced = values[0] != 0;
         uiExtrasOpen = values[1] != 0;
+        uiCaptureLength = std::clamp ((int)values[2], 0, 2);
     }
     refreshEditor ();
     return kResultOk;
@@ -228,7 +230,8 @@ tresult PLUGIN_API ControllerBase::getState (IBStream* stream)
                    s.writeStr8 (ref.c_str ()) && s.writeInt32 (kViewStateTag) && s.writeInt32 (2) &&
                    s.writeInt32 (uiTailOpen) && s.writeInt32 (uiColorLayer) && s.writeInt32 (kLayoutTag) &&
                    s.writeStr8 (uiLayout.c_str ()) && s.writeStr8 (uiLayoutName.c_str ()) && s.writeInt32 (kViewTag) &&
-                   s.writeInt32 (2) && s.writeInt32 (uiAdvanced ? 1 : 0) && s.writeInt32 (uiExtrasOpen ? 1 : 0)
+                   s.writeInt32 (3) && s.writeInt32 (uiAdvanced ? 1 : 0) && s.writeInt32 (uiExtrasOpen ? 1 : 0) &&
+                   s.writeInt32 (uiCaptureLength)
                ? kResultOk
                : kResultFalse;
 }

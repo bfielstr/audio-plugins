@@ -153,6 +153,9 @@ public:
     // opens in that view too, one saved with it keeps its view; loading a preset keeps the view the editor has.
     bool uiAdvanced = false;
     bool uiExtrasOpen = false;
+    // The capture band's length (pluginkit/ui/CaptureView.h): 0, 1, 2 for 1, 2, 4 bars (or seconds); saved
+    // with the view.
+    int uiCaptureLength = 1;
     // Advanced View by Default (the plug-in's .defaults.txt, GentlrDefaults.h): off when it is not set.
     bool advancedViewByDefault () const;
     // The layouts file (<preset folder>/.layouts.txt): the user's saved layouts and default layout.

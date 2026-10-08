@@ -1,7 +1,7 @@
 # pluginkit: code shared by all plug-ins.
 
 # Parameter tables (no SDK dependency, used by DSP tests too).
-add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp pluginkit/Layout.h pluginkit/Layout.cpp pluginkit/GentlrDefaults.h pluginkit/GentlrDefaults.cpp pluginkit/testing/CpuClock.h pluginkit/testing/CpuClock.cpp)
+add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp pluginkit/Layout.h pluginkit/Layout.cpp pluginkit/GentlrDefaults.h pluginkit/GentlrDefaults.cpp pluginkit/testing/CpuClock.h pluginkit/testing/CpuClock.cpp pluginkit/Capture.h pluginkit/Capture.cpp pluginkit/WavFile.h pluginkit/WavFile.cpp pluginkit/Wavetable.h pluginkit/Wavetable.cpp)
 target_include_directories(pluginkit_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(WIN32)
     target_link_libraries(pluginkit_core PUBLIC dbghelp)
@@ -17,6 +17,11 @@ add_test(NAME pluginkit_core COMMAND pluginkit_tests)
 add_executable(pluginkit_preset_store_tests tests/preset_store_tests.cpp)
 target_link_libraries(pluginkit_preset_store_tests PRIVATE pluginkit_core)
 add_test(NAME pluginkit_preset_store COMMAND pluginkit_preset_store_tests)
+
+# The capture band's buffer, WAV writer and wavetable slicer (pluginkit/Capture.h, WavFile.h, Wavetable.h).
+add_executable(pluginkit_capture_tests tests/capture_tests.cpp)
+target_link_libraries(pluginkit_capture_tests PRIVATE pluginkit_core)
+add_test(NAME pluginkit_capture COMMAND pluginkit_capture_tests)
 
 # The editors' layout model without VSTGUI (layout texts, the Wide template, dragging, saved layouts).
 add_executable(pluginkit_layout_tests tests/layout_tests.cpp)
@@ -50,6 +55,8 @@ if(PK_BUILD_PLUGINS)
         pluginkit/ui/LayoutViews.cpp
         pluginkit/ui/BasicView.h
         pluginkit/ui/BasicView.cpp
+        pluginkit/ui/CaptureView.h
+        pluginkit/ui/CaptureView.cpp
         pluginkit/ui/ScopeView.h
         pluginkit/ui/DropFiles.h
         pluginkit/ui/ScopeView.cpp
