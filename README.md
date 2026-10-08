@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.27.1**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -85,9 +85,9 @@ unchanged.
 ### Download the installer for your system
 
 - **macOS** (Apple Silicon and Intel, macOS 11 or newer):
-  [Plugins-macOS.pkg](https://github.com/bfielstr/audio-plugins/releases/latest/download/Plugins-macOS.pkg)
+  [Plugins-macOS.pkg](https://github.com/bfielstr/audio-plugins-releases/releases/latest/download/Plugins-macOS.pkg)
 - **Windows** (64-bit, Windows 10 or newer):
-  [Plugins-Windows-x64-Setup.exe](https://github.com/bfielstr/audio-plugins/releases/latest/download/Plugins-Windows-x64-Setup.exe)
+  [Plugins-Windows-x64-Setup.exe](https://github.com/bfielstr/audio-plugins-releases/releases/latest/download/Plugins-Windows-x64-Setup.exe)
 
 Double-click the file and follow the steps. You can untick any plug-ins you do not want. They are
 installed for every user on the computer, into `/Library/Audio/Plug-Ins/VST3/bfielstr` on macOS and
@@ -114,17 +114,17 @@ If you prefer the command line, these do the same for your user only and also wo
 **macOS** (universal: Apple Silicon + Intel) **and Linux** (x86_64):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/bfielstr/audio-plugins-releases/main/scripts/install.sh | sh
 ```
 
 **Windows** (x64), in PowerShell. Run it as Administrator to install into
 `C:\Program Files\Common Files\VST3`; otherwise it installs for your user only:
 
 ```powershell
-irm https://raw.githubusercontent.com/bfielstr/audio-plugins/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/bfielstr/audio-plugins-releases/main/scripts/install.ps1 | iex
 ```
 
-The scripts download the latest [release](https://github.com/bfielstr/audio-plugins/releases), check
+The scripts download the latest [release](https://github.com/bfielstr/audio-plugins-releases/releases), check
 its SHA-256 checksum and install the `.vst3` bundles into a **`bfielstr`** folder inside the standard
 VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running a script again replaces the
 installed versions. Copies that older installers put directly in the VST3 folder, and bundles under the
@@ -136,7 +136,7 @@ Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only
 ### Install by hand
 
 Download the zip for your system from the
-[latest release](https://github.com/bfielstr/audio-plugins/releases/latest), unzip it and copy the
+[latest release](https://github.com/bfielstr/audio-plugins-releases/releases/latest), unzip it and copy the
 `.vst3` bundles you want into a `bfielstr` folder inside your VST3 folder: `/Library/Audio/Plug-Ins/VST3`
 or `~/Library/Audio/Plug-Ins/VST3` on macOS, `C:\Program Files\Common Files\VST3` on Windows,
 `~/.vst3` on Linux.
@@ -314,6 +314,14 @@ To release a version:
    against it. An existing tag is never moved, and running it again does nothing.
 
 Pushing a `v*` tag by hand still works the same way.
+
+The source repository is private. Releases are published to the public downloads repository
+[bfielstr/audio-plugins-releases](https://github.com/bfielstr/audio-plugins-releases), named by the
+Actions variable `RELEASES_REPO` and written with the secret `RELEASES_TOKEN` (a fine-grained token
+with Contents read and write on that repository). Each release also refreshes its README (made from
+this one by `scripts/releases-readme.py`: the plug-in table and Install), `LICENSE`,
+`THIRD_PARTY_NOTICES.md` and the one-line install scripts. Without the variable, releases go to this
+repository.
 
 ## Layout
 
