@@ -34,6 +34,8 @@ public:
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): the record button, the level and the probe's status, the take, and Mode (no capture band: probr records the track itself)
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
