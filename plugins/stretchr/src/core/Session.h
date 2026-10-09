@@ -4,6 +4,8 @@
 // message, so both components must run in one process (the plug-in is not distributable).
 #pragma once
 
+#include "pluginkit/Capture.h"
+
 #include "Clip.h"
 #include "Params.h"
 #include "Render.h"
@@ -26,6 +28,7 @@ class Session
 {
 public:
     Session ();
+    pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }
     void release ()
     {
