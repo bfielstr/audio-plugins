@@ -45,7 +45,7 @@ cmake --build build
 - Releasing: bump the root `CMakeLists.txt` VERSION, every `plugins/*/CMakeLists.txt` VERSION
   (`x.y.z.0`) and the README's "The current version is" line in the pull request. Merging it to main
   tags `vX.Y.Z` and runs the release (`.github/workflows/release-tag.yml`). Do not push tags.
-  The repository is private: releases publish to the public `bfielstr/audio-plugins-releases`
+  Releases publish to the downloads repository `bfielstr/audio-plugins-releases`
   (Actions variable `RELEASES_REPO`, secret `RELEASES_TOKEN`), so download links point there.
 
 ## Conventions

@@ -380,8 +380,7 @@ with the plug-ins that use them (`scripts/ci-changed-plugins.py`); a change outs
 of them. Pushes to main and releases always build every plug-in. The screenshots in `docs/<plug-in>/`
 come from the macOS host tests.
 
-Because the repository is private, Actions minutes count (macOS 10 times, Windows twice), so a pull
-request and a push to main build on Linux only. A pull request that raises the version (a release)
+To keep builds quick, a pull request and a push to main build on Linux only. A pull request that raises the version (a release)
 builds on macOS, Linux and Windows, and so does one with the label `full-ci` (add it to run the macOS
 host tests before merging). Release tags and manual runs always build on all three.
 
@@ -397,7 +396,7 @@ To release a version:
 
 Pushing a `v*` tag by hand still works the same way.
 
-The source repository is private. Releases are published to the public downloads repository
+Releases are published to the downloads repository
 [bfielstr/audio-plugins-releases](https://github.com/bfielstr/audio-plugins-releases), named by the
 Actions variable `RELEASES_REPO` and written with the secret `RELEASES_TOKEN` (a fine-grained token
 with Contents read and write on that repository). Each release also refreshes its README (made from
