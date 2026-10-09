@@ -325,7 +325,8 @@ constexpr const char* kSweepView =
 constexpr const char* kGestureView =
     "The gesture: one row per lane, named by its target, its curve across the gesture (up is the top of the lane's "
     "range), the beats it plays over, and while it runs one playhead through every lane (they share one clock) with "
-    "each lane's value now.";
+    "each lane's value now. With Loop Lock on, the shaded band is the segment it holds (with no gesture, on a ruler of "
+    "Position's 16 beats).";
 
 constexpr const char* kGestureFile =
     "Picks a gesture file (JSON, a lane per target) from the Gestures folder beside your moistr presets and sets "
