@@ -4720,6 +4720,107 @@ TEST (loop_lock_smooth)
     CHECK (off < 1e-3, "a tempo change: the region keeps time with the song (%.1e)", off);
 }
 
+TEST (loop_depth)
+{
+    // Loop Depth: 0 % is Loop Lock as it was (bit for bit); 100 % takes a short region's movement over each modulator's
+    // whole range (the bells from their Low to their High, Wobble all the way down and up), and the loop's seams stay
+    // as smooth as without Loop Lock
+    auto setup = [&] (double depth, double start, double end) {
+        auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+        e->setParam (kLoopLock, 1.0);
+        e->setParam (kLoopStart, start);
+        e->setParam (kLoopEnd, end);
+        e->setParam (kLoopLength, 4);
+        e->setParam (kWobbleAmount, 0.6);
+        if (depth >= 0.0)
+            e->setParam (kLoopDepth, depth);
+        e->reset ();
+        return e;
+    };
+    {
+        const auto x = bassB1 (3.0);
+        auto a = setup (-1.0, 0.4375, 0.5625), b = setup (0.0, 0.4375, 0.5625);
+        CHECK (play (*a, x, 140.0) == play (*b, x, 140.0), "Loop Depth 0 %%: Loop Lock as before, bit for bit");
+    }
+    // how much of each bell's range (log Hz, Low .. High) and of Wobble's (1 - Amount .. 1) passes 4 and 5 of the region
+    // go through (the host stopped: 1 bar at 120 BPM a pass)
+    auto covered = [&] (double depth, double start, double end, double* worstTick) {
+        auto e = setup (depth, start, end);
+        const int perLoop = (int)(2.0 * kSr) / 16;
+        double lo[kNumBells + 1], hi[kNumBells + 1], prev[kNumBells] {}, step = 0.0;
+        std::fill (lo, lo + kNumBells + 1, 1e30);
+        std::fill (hi, hi + kNumBells + 1, -1e30);
+        ticks (*e, 6 * perLoop, [&] (int t) {
+            for (int b = 0; b < kNumBells; ++b)
+            {
+                const double v = std::log2 (e->sweepStage ().bellHz (b));
+                if (t > 0)
+                    step = std::max (step, std::fabs (v - prev[b]));
+                prev[b] = v;
+                if (t >= 3 * perLoop && t < 5 * perLoop)
+                {
+                    lo[b] = std::min (lo[b], v);
+                    hi[b] = std::max (hi[b], v);
+                }
+            }
+        });
+        if (worstTick)
+            *worstTick = step;
+        double least = 1.0;
+        for (int b = 0; b < kNumBells; ++b)
+        {
+            const double full = std::log2 (e->param (bellId (b, kBellHigh)) / e->param (bellId (b, kBellLow)));
+            if (e->param (bellOnId (b)) >= 0.5 && e->param (bellId (b, kBellGain)) != 0.0 && std::fabs (full) > 0.1)
+                least = std::min (least, (hi[b] - lo[b]) / std::fabs (full));
+        }
+        // Wobble (Amount 60 %, no gesture on it: Ocean's settings) over a region a fifth of its cycle long
+        auto w = fresh ();
+        w->setParam (kWobbleAmount, 0.6);
+        w->setParam (kLoopLock, 1.0);
+        w->setParam (kLoopStart, 0.5);
+        w->setParam (kLoopLength, 4);
+        w->setParam (kLoopDepth, depth);
+        w->reset ();
+        w->setParam (kLoopEnd, 0.5 + 0.1 / w->loopWindowBeats ()); // (a tenth of a beat: a fifth of its cycle)
+        w->reset ();
+        ticks (*w, 6 * perLoop, [&] (int t) {
+            if (t >= 3 * perLoop && t < 5 * perLoop)
+            {
+                lo[kNumBells] = std::min (lo[kNumBells], w->wobbleGainNow ());
+                hi[kNumBells] = std::max (hi[kNumBells], w->wobbleGainNow ());
+            }
+        });
+        return std::array<double, 2> {least, (hi[kNumBells] - lo[kNumBells]) / 0.6};
+    };
+    double tick0 = 0.0, tick1 = 0.0;
+    const auto none = covered (0.0, 0.4375, 0.5625, &tick0), full = covered (1.0, 0.4375, 0.5625, &tick1);
+    const auto half = covered (0.5, 0.4375, 0.5625, nullptr), shortest = covered (1.0, 0.0, 0.03, nullptr);
+    std::printf ("    a 1/8 region: the bells cover %.2f of their range at 0 %%, %.2f at 50 %%, %.2f at 100 %% (1/32: %.2f); Wobble %.2f / "
+                 "%.2f / %.2f; the bells' largest step per tick %.4f / %.4f octaves\n",
+                 none[0], half[0], full[0], shortest[0], none[1], half[1], full[1], tick0, tick1);
+    CHECK (none[0] < 0.6 && full[0] > 0.97 && half[0] > none[0] && half[0] < full[0], "100 %%: every bell over its whole range (%.2f)", full[0]);
+    CHECK (full[1] > 0.97 && none[1] < 0.9, "100 %%: Wobble all the way (%.2f)", full[1]);
+    CHECK (shortest[0] > 0.9, "a very short region too (%.2f)", shortest[0]);
+    CHECK (tick1 < 0.05, "no jumps in the bells (%.4f octaves a tick)", tick1);
+    // the output at the loop's seams: no step larger than without Loop Lock (Wrap and Bounce, and End dragged)
+    const auto x = bassB1 (8.0);
+    auto render = [&] (bool lock, int shape) {
+        auto e = setup (1.0, 0.4375, 0.5625);
+        e->setParam (kLoopLock, lock ? 1.0 : 0.0);
+        e->setParam (kLoopShape, shape);
+        e->reset ();
+        return play (*e, x, 140.0, nullptr, nullptr, [&] (size_t a, double&) {
+            const double t = (double)a / kSr;
+            if (t > 4.0 && t < 5.0)
+                e->setParam (kLoopEnd, 0.5625 + 0.3 * (t - 4.0)); // (End dragged out)
+        });
+    };
+    const auto free = render (false, kLoopWrap), wrap = render (true, kLoopWrap), bounce = render (true, kLoopBounce);
+    std::printf ("    output steps: Wrap %.3f, Bounce %.3f (free %.3f)\n", maxStep (wrap), maxStep (bounce), maxStep (free));
+    CHECK (finite (wrap) && finite (bounce), "finite");
+    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (bounce) < 1.25 * maxStep (free), "no step larger than without Loop Lock");
+}
+
 TEST (para_split)
 {
     // PARA: LR4 low-pass and high-pass paths in parallel. Meeting at one corner with nothing moving: flat (an all-pass)
@@ -4830,6 +4931,7 @@ TEST (new_controls_off_change_nothing)
             e->setParam (kSubGuardFreq, 180.0);
             e->setParam (kSubFloor, -12.0);
             e->setParam (kGuardBells, 1.0);
+            e->setParam (kLoopDepth, 1.0);
         }
         e->reset ();
         std::vector<float> r;

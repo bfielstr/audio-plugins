@@ -131,6 +131,7 @@
 #include "Dsp.h"
 #include "Gesture.h"
 #include "Lab.h"
+#include "LoopDepth.h"
 #include "LoopWindow.h"
 #include "Movement.h"
 #include "ParaSplit.h"
@@ -481,6 +482,10 @@ private:
     bool natValid = false;
     int64_t natPass = 0;
     int64_t loopIndex = -1;
+    // Loop Depth (LoopDepth.h): every modulated value through it (mutable: the lifts are worked out in const functions);
+    // whether a pass has started since Loop Lock came on (the first one is cut short: not a range)
+    mutable LoopDepth loopDepth;
+    bool depthPrimed = false;
     // PARA (0.30)
     ParaSplit para;
     // Sub Guard (0.30): its fade, corner (log2, gliding; g at the tick's start and end), Sub Floor's share (gliding), the

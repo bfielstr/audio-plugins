@@ -528,6 +528,15 @@ window (its length and what sets it in the title), every modulator's curve acros
   16th (12 to 60 ms; with **Natural**, 60 ms after it), a raised cosine: every moving value goes back
   smoothly, so the loop never clicks. **Bounce** plays it forward over the first half of **Length** and
   back over the second, with no return at all.
+- **Depth** (Loop Depth, 0 to 100 %, 0 % by default): a short region moves each modulator only a little
+  (a bell over part of its sweep). **Depth** stretches each one's movement inside the region toward its
+  full range: at 100 % the lowest to the highest point of every modulated value in the region (each bell,
+  the shelf's corner and gain, the bands' rise and fall and their crossovers, **Liquid**, the gesture's
+  lanes, **Wobble**, **PARA**'s paths) becomes that modulator's whole range (a bell from its **Low** to
+  its **High**), at 0 % the region plays as it is. moistr learns each value's range in the region from
+  one pass of it, so a new region or setting takes a pass to come in fully, and the ranges and **Depth**
+  glide (50 ms): nothing steps. The same values drive both channels, and **Sub Guard** still holds the
+  lows.
 
 While the host is stopped the region keeps playing at the last tempo. A tempo change keeps it in time with
 the song; the free clocks' tempo glides (200 ms).

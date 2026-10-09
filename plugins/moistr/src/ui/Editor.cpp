@@ -490,8 +490,8 @@ std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
 
 void Editor::buildRow6 (CViewContainer* root)
 {
-    // (0.30) INPUT: the level going in
-    auto* input = new Panel (CRect (kInputLeft, kRow6, kInputRight, kRow6 + kRowH), "INPUT");
+    // (0.30) INPUT: the level going in (row 7)
+    auto* input = new Panel (CRect (kInputLeft, kRow7, kInputRight, kRow7 + kRowH), "INPUT");
     root->addView (input);
     {
         const double x = centredLeft (kInputRight - kInputLeft, 1);
@@ -511,13 +511,13 @@ void Editor::buildRow6 (CViewContainer* root)
         }
     };
     auto rowRect = [] (double top) { return CRect (kSwitchLeft, top, kSwitchLeft + kSwitchW, top + kSwitchH); };
-    // LOOP LOCK: on, Shape and Length; Position and Window
+    // LOOP LOCK: on, Shape and Length; Start, End and Depth
     auto* loop = new Panel (CRect (kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH), "LOOP LOCK");
     root->addView (loop);
     column (loop, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kLoopLock, "Loop Lock"));
     loopControls.push_back (column (loop, kColTop2, new Segmented (rowRect (kColTop2), this, kLoopShape, {"Wrap", "Bounce"})));
     loopControls.push_back (column (loop, kColTop3, new pk::Choice (rowRect (kColTop3), this, kLoopLength)));
-    knobsFrom (loop, {kLoopStart, kLoopEnd}, loopControls);
+    knobsFrom (loop, {kLoopStart, kLoopEnd, kLoopDepth}, loopControls);
     // PARA: on, Rate and Mix; the paths' corners and how they move
     auto* para = new Panel (CRect (kParaLeft, kRow6, kParaRight, kRow6 + kRowH), "PARA");
     root->addView (para);
@@ -876,10 +876,10 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"lab-high", "", {kLabLeft + kLabStep, kRow5, kLabLeft + kLabStep + kLabW, kRow5 + kLabRowH}, 4},
         {"lab-air", "", {kLabLeft + 2 * kLabStep, kRow5, kLabLeft + 2 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
         {"lab-post", "", {kLabLeft + 3 * kLabStep, kRow5, kLabLeft + 3 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
-        {"input", "", {kInputLeft, kRow6, kInputRight, kRow6 + kRowH}, 5},
         {"looplock", "", {kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH}, 5},
         {"para", "", {kParaLeft, kRow6, kParaRight, kRow6 + kRowH}, 5},
         {"subguard", "", {kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH}, 5},
+        {"input", "", {kInputLeft, kRow7, kInputRight, kRow7 + kRowH}, 6},
         {"drift", "", {kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH}, 6},
         {"loopview", "loop", {kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH}, 6, -1, true},
         {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 7, -1, true},

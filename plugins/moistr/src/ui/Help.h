@@ -140,6 +140,10 @@ inline const char* forParam (uint32_t id)
                    "little apart, drawn from this seed: the same seed is the same every time. 0: off, everything exactly as set.";
         case kStartDrift: return "How far each modulator's start may move, up to a whole cycle of it (with Drift Seed on).";
         case kSpeedDrift: return "How much faster or slower each modulator may run, up to 10 %, fixed per seed (with Drift Seed on).";
+        case kLoopDepth:
+            return "With Loop Lock: stretches each modulator's movement inside the loop region toward its full range, so a "
+                   "short region still sweeps all the way. 0 %: the region as it is; 100 %: the region's lowest to highest "
+                   "point of each modulator becomes that modulator's whole range.";
         case kDrive: return "Light saturation before the sound is split into bands (after SWEEP). 0 leaves the input untouched.";
         case kSweep:
             return "Switches the SWEEP stage on: eight sweeping bell EQs, a High Shelf going round in a slow orbit, then a "

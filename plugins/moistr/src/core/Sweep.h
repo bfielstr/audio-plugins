@@ -75,6 +75,7 @@
 #pragma once
 
 #include "Dsp.h"
+#include "LoopDepth.h"
 #include "Params.h"
 
 #include <cmath>
@@ -148,6 +149,8 @@ public:
         lockBeats = beats;
         lockBpm = bpm > 1.0 ? bpm : 120.0;
     }
+    // Loop Depth (LoopDepth.h): the bells' sweeps and the shelf's orbit through it (nullptr: as they are)
+    void setLoopDepth (LoopDepth* d) { loopDepth = d; }
     // Drift (LoopWindow.h): each clock's phase used as theta x factor + offset (per bell, then the shelf); off: as set
     void setDrift (bool on, const double* factor, const double* offset)
     {
@@ -240,6 +243,7 @@ private:
     // Loop Lock: the clocks from the motion clock's beats; Guard Bells: its fade, its corner (log2, gliding; g at the
     // tick's start and end) and its two splits (the input's lows, the bells' output's highs)
     bool lockOn = false, driftOn = false;
+    LoopDepth* loopDepth = nullptr;
     double driftF[kFilters] {}, driftO[kFilters] {};
     double phaseOf (int b) const { return driftOn ? theta[b] * driftF[b] + driftO[b] : theta[b]; }
     double lockBeats = 0.0, lockBpm = 120.0;

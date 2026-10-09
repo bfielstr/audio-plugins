@@ -204,6 +204,8 @@ enum ParamId : uint32_t
     kDriftSeed,    // 0 .. 128 (0: off, every modulator exactly as set)
     kStartDrift,   // 0 .. 1: each modulator's start moved by up to this much of its cycle
     kSpeedDrift,   // 0 .. 0.1: each modulator's rate changed by up to +- this much (fixed per seed)
+    // Loop Depth (LoopDepth.h): with Loop Lock, each modulator's movement in the region stretched toward its full range
+    kLoopDepth,    // 0 .. 1 (0: as the region plays it)
     kNumParams
 };
 
@@ -279,8 +281,9 @@ static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopStart == 1933 && kLoo
                    kLoopShape == 1936 && kParaOn == 1937 && kParaLpFreq == 1938 && kParaHpFreq == 1939 && kParaLpMove == 1940 &&
                    kParaHpMove == 1941 && kParaHpLevelMove == 1942 && kParaRate == 1943 && kParaMix == 1944 && kSubGuard == 1945 &&
                    kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kDriftSeed == 1949 && kStartDrift == 1950 &&
-                   kSpeedDrift == 1951 && kNumParams == 1952,
-               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948, Drift at 1949 .. 1951");
+                   kSpeedDrift == 1951 && kLoopDepth == 1952 && kNumParams == 1953,
+               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948, Drift at 1949 .. 1951, "
+               "Loop Depth at 1952");
 constexpr int kMaxDriftSeed = 128;
 constexpr double kSpeedDriftMax = 0.1;
 // Loop Lock: Length's choices (beats: 1/16 .. 4 bars; then Natural, LoopWindow.h)

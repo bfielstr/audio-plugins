@@ -222,6 +222,7 @@ const ParamTable& paramTable ()
         v.push_back (integer (kDriftSeed, "Drift Seed", "Drift Seed", 0, kMaxDriftSeed, 0, Disp::Plain));
         v.push_back (percent (kStartDrift, "Start Drift", "Start Drift", 0.25));
         v.push_back (real (kSpeedDrift, "Speed Drift", "Speed Drift", 0.0, kSpeedDriftMax, 0.02, Curve::Linear, Disp::Percent));
+        v.push_back (percent (kLoopDepth, "Loop Depth", "Depth", 0.0));
         return v;
     }());
     return t;

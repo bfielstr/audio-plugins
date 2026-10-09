@@ -243,7 +243,9 @@ void Sweep::targets (const double* p, bool snap)
     // the bells
     for (int b = 0; b < kNumBells; ++b)
     {
-        const double m = 0.5 - 0.5 * std::cos (kTwoPi * (phaseOf (b) + phaseDeg[b] / 360.0));
+        double m = 0.5 - 0.5 * std::cos (kTwoPi * (phaseOf (b) + phaseDeg[b] / 360.0));
+        if (loopDepth)
+            m = (*loopDepth) (LoopDepth::kChBell + b, m);
         hz[b] = clampSr (std::exp2 (logLo[b] + (logHi[b] - logLo[b]) * m), sr);
         const double q = std::exp2 (logQ[b]);
         double gDb = gainDb[b];
@@ -267,6 +269,11 @@ void Sweep::targets (const double* p, bool snap)
             const double w = 0.5 - 0.5 * std::cos (dsp::kPi * orbitFade);
             u = uo + (u - uo) * w;
             v = vo + (v - vo) * w;
+        }
+        if (loopDepth)
+        {
+            u = (*loopDepth) (LoopDepth::kChShelfU, u);
+            v = (*loopDepth) (LoopDepth::kChShelfV, v);
         }
         uNow = u;
         vNow = v;

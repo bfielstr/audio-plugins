@@ -32,10 +32,11 @@ public:
     static constexpr double kRow4 = kRow3 + kRowH + 8.0;
     // the LAB's row (0.30): a row of knobs with a row of switches under them
     static constexpr double kLabRowH = 128.0, kRow5 = kRow4 + kRowH + 8.0;
-    // a row of INPUT, LOOP LOCK, PARA and SUB GUARD (0.30), Loop Lock's window across (LoopView), then the end saturator
+    // a row of LOOP LOCK, PARA and SUB GUARD (0.30), INPUT, DRIFT and Loop Lock's window (LoopView), then the end saturator
     static constexpr double kRow6 = kRow5 + kLabRowH + 8.0, kRow7 = kRow6 + kRowH + 8.0, kLoopViewH = 116.0;
-    // row 7: DRIFT (Drift Seed, Start Drift, Speed Drift) and Loop Lock's window (LoopView)
-    static constexpr double kDriftLeft = 8.0, kDriftRight = 224.0, kLoopViewLeft = 232.0, kLoopViewRight = 1124.0;
+    // row 7: INPUT (Input), DRIFT (Drift Seed, Start Drift, Speed Drift) and Loop Lock's window (LoopView)
+    static constexpr double kInputLeft = 8.0, kInputRight = 88.0;
+    static constexpr double kDriftLeft = 96.0, kDriftRight = 312.0, kLoopViewLeft = 320.0, kLoopViewRight = 1124.0;
     static constexpr double kTailTop = kRow7 + kLoopViewH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
@@ -77,13 +78,11 @@ public:
     // Time, Up, Down), kLabW wide from kLabLeft, kLabStep apart; the switches' row (panel coordinates)
     static constexpr double kLabLeft = 8.0, kLabW = 273.0, kLabStep = kLabW + 8.0, kLabSwitchTop = 100.0, kLabSwitchH = 18.0;
     static_assert (kLabLeft + 3 * kLabStep + kLabW == kWidth - 8.0, "the LAB's four panels fill the row");
-    // row 6 (0.30): INPUT (Input), LOOP LOCK (Loop Lock, Shape and Length over each other; Start, End), PARA (Split,
-    // Rate and Mix over each other; LP Freq, HP Freq, LP Move, HP Move, HP Level), SUB GUARD (Sub Guard, Guard Bells;
-    // Freq, Floor)
-    static constexpr double kInputLeft = 8.0, kInputRight = 88.0;
-    static constexpr double kLoopLeft = 96.0, kLoopRight = 366.0;
-    static constexpr double kParaLeft = 374.0, kParaRight = 836.0;
-    static constexpr double kGuardLeft = 844.0, kGuardRight = 1124.0;
+    // row 6 (0.30): LOOP LOCK (Loop Lock, Shape and Length over each other; Start, End, Depth), PARA (Split, Rate and
+    // Mix over each other; LP Freq, HP Freq, LP Move, HP Move, HP Level), SUB GUARD (Sub Guard, Guard Bells; Freq, Floor)
+    static constexpr double kLoopLeft = 8.0, kLoopRight = 342.0;
+    static constexpr double kParaLeft = 350.0, kParaRight = 812.0;
+    static constexpr double kGuardLeft = 820.0, kGuardRight = 1124.0;
     static constexpr double kColTop2 = 56.0, kColTop3 = 82.0; // (a switch column's second and third rows)
     // a switch at the top left of its panel (Bands in SPLIT, Sync in MOVEMENT, Passes in GLUE; panel coordinates)
     static constexpr double kSwitchLeft = 14.0, kSwitchTop = 30.0, kSwitchW = 110.0, kSwitchH = 20.0;
