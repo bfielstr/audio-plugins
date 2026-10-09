@@ -1,5 +1,6 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
 #include "pluginkit/vst/Presets.h"
 
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -146,6 +147,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     engine.process (data.inputs[0].channelBuffers32[0], data.inputs[0].channelBuffers32[1],
                     data.outputs[0].channelBuffers32[0], data.outputs[0].channelBuffers32[1], n);
     data.outputs[0].silenceFlags = 0;
+    pk::captureOutput (shared->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

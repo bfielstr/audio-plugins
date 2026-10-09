@@ -1,8 +1,10 @@
 // End-to-end test of the built Moistr.vst3. usage: moistr_hosttest <Moistr.vst3> <output dir>
 #include "Engine.h"
 #include "Params.h"
+#include "plugin/Controller.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
+#include "pluginkit/ui/BasicView.h"
 #include "ui/Editor.h"
 
 #include "public.sdk/source/common/memorystream.h"
@@ -82,7 +84,7 @@ int main (int argc, char** argv)
         if (gFail)
             return finish ("moistr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
-        CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
+        CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
@@ -369,6 +371,19 @@ int main (int argc, char** argv)
             pump (0.05);
             CHECK (std::fabs (plainOf (rig, kDepth) - depthDefault) < 1e-6, "Depth back to %.0f dB: %.2f", depthDefault,
                    plainOf (rig, kDepth));
+            // (0.30) Loop Lock in LOOP LOCK and Sub Guard in SUB GUARD (row 6): on and off again, off and on again
+            const double ly = Editor::kRow6 + Editor::kSwitchTop + Editor::kSwitchH / 2;
+            const double lx = Editor::kLoopLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2, gx = Editor::kGuardLeft + Editor::kSwitchLeft + Editor::kSwitchW / 2;
+            const bool lock0 = plainOf (rig, kLoopLock) >= 0.5, guard0 = plainOf (rig, kSubGuard) >= 0.5;
+            win.click (lx, ly);
+            pump (0.05);
+            win.click (gx, ly);
+            pump (0.05);
+            CHECK ((plainOf (rig, kLoopLock) >= 0.5) != lock0 && (plainOf (rig, kSubGuard) >= 0.5) != guard0, "Loop Lock and Sub Guard clicked");
+            win.click (lx, ly);
+            win.click (gx, ly);
+            pump (0.05);
+            CHECK ((plainOf (rig, kLoopLock) >= 0.5) == lock0 && (plainOf (rig, kSubGuard) >= 0.5) == guard0, "and back");
 
             for (int i = 0; i < 20; ++i)
             {
@@ -380,6 +395,42 @@ int main (int argc, char** argv)
             // Classic, Wide and Classic again: knobs found and turned in each (Wide's screenshot)
             checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix, (uint32_t)kIntensity},
                           outDir + "/ui_moistr_wide.png");
+        }
+        // the Basic page (pluginkit/ui/BasicView.h): Input, Drive, Movement, Loop Lock, Position, Sub Guard, Mix and Output
+        // found where it puts them, the rest not; Input turns there; the capture band's buffer has every frame; the
+        // Advanced switch shows every control
+        {
+            EditorWindow win (rig.controller, "default", "Classic", false);
+            CHECK (win.ok (), "editor (Basic)");
+            CHECK (std::fabs (win.width () - pk::basic::kWidth) < 1, "the Basic page's width: %.0f", win.width ());
+            ControlRect r;
+            for (uint32_t id : {(uint32_t)moistr::kInput, (uint32_t)kSweepDrive, (uint32_t)kMovement, (uint32_t)kLoopLock, (uint32_t)kLoopPosition,
+                                (uint32_t)kSubGuard, (uint32_t)kMix, (uint32_t)moistr::kOutput})
+                CHECK (findControl (rig.controller, id, r) && r.right <= win.width () + 0.5 && r.bottom <= win.height () + 0.5,
+                       "Basic: the control of parameter %u is shown", id);
+            CHECK (!findControl (rig.controller, kXoverMid, r) && !findControl (rig.controller, kParaLpFreq, r), "Basic: the Advanced view's controls are not");
+            if (findControl (rig.controller, moistr::kInput, r))
+            {
+                rig.param (moistr::kInput, toNormalized (moistr::kInput, -12.0));
+                win.drag (r.cx (), r.cy (), r.cx (), r.cy () - 30.0);
+                pump (0.05);
+                CHECK (plainOf (rig, moistr::kInput) > -11.5, "Basic: Input turns (%.1f dB)", plainOf (rig, moistr::kInput));
+                rig.param (moistr::kInput, toNormalized (moistr::kInput, 0.0));
+            }
+            if (auto* c = static_cast<Controller*> (rig.controller.get ()); c->getShared ()) // (static_cast: the plug-in is a bundle here)
+            {
+                const uint64_t before = c->getShared ()->capture.written ();
+                std::vector<float> cap;
+                rig.render (0.5, cap, nullptr, reese ());
+                CHECK (c->getShared ()->capture.written () - before == cap.size (), "the capture buffer has every frame (%llu of %zu)",
+                       (unsigned long long)(c->getShared ()->capture.written () - before), cap.size ());
+                pump (0.1);
+            }
+            CHECK (win.savePng (outDir + "/ui_moistr_basic.png"), "screenshot, Basic");
+            const auto hr = pk::basic::headerRight (pk::basic::kWidth);
+            win.click (hr.advanced.getCenter ().x, hr.advanced.getCenter ().y);
+            pump (0.2);
+            CHECK (findControl (rig.controller, kXoverMid, r) && findControl (rig.controller, kParaLpFreq, r), "the Advanced switch: every control");
         }
         rig.stop ();
         return finish ("moistr host test");

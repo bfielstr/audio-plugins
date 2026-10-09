@@ -99,6 +99,45 @@ inline const char* forParam (uint32_t id)
         return t;
     switch (id)
     {
+        case kInput:
+            return "The level going in (dB), at the very start: turn it down when the SWEEP stage's saturator crunches too hard. "
+                   "Its make-up follows the level, so the output stays about as loud while the crunch eases.";
+        case kLoopLock:
+            return "Locks every movement (the bells, the bands, the gesture, Wobble, PARA) to one moment of it: the segment from "
+                   "Position, Window long, played again every Length in time with the song and stretched or squeezed to fit.";
+        case kLoopPosition:
+            return "Where on the movement's timeline the locked segment starts (beats, over 16). Slide it to scan through the "
+                   "movement for the moment you want; it glides, so it never clicks.";
+        case kLoopWindow:
+            return "How much of the movement the segment holds (beats): Window equal to Length plays it at its own speed, less "
+                   "slows it down to fill Length, more speeds it up.";
+        case kLoopLength:
+            return "How long the segment takes in the song, 1/16 to 4 bars. Stopped, it keeps going at the last tempo.";
+        case kLoopShape:
+            return "Wrap: the segment plays forward, then glides back to its start over its last 16th (no click). Bounce: "
+                   "forward over the first half, back over the second.";
+        case kParaOn:
+            return "Switches PARA on: the sound split into a low-pass and a high-pass path in parallel (as para does), the "
+                   "low-pass path moving in and out, the high-pass path moving up and down and in and out. Before Drive and the "
+                   "bands, so the movement feeds the grit.";
+        case kParaLpFreq: return "The low-pass path's corner (Hz): what is below it moves in and out with LP Move.";
+        case kParaHpFreq:
+            return "The high-pass path's lowest corner (Hz): it moves up from here by HP Move. Above LP Freq there is a hollow "
+                   "between the two paths; at LP Freq they meet flat.";
+        case kParaLpMove: return "How far the low-pass path's level moves out (100 %: all the way out, in the middle of each cycle).";
+        case kParaHpMove: return "How far the high-pass path's corner moves up and back (octaves), a quarter cycle ahead of the low-pass path.";
+        case kParaHpLevelMove: return "How far the high-pass path's level moves out, against the low-pass path: one is in while the other is out.";
+        case kParaRate: return "One cycle of PARA's movement in bars or beats, in time with the song (or with Loop Lock's segment).";
+        case kParaMix: return "PARA against the dry sound: 100 % only the two paths.";
+        case kSubGuard:
+            return "Keeps the sub steady while everything above it moves: the lows below Freq take no dips (the bands, the "
+                   "gesture's level lanes, Wobble, PARA, the LAB, the Glue and the end saturator pressed by the rest). The "
+                   "SWEEP stage's bells still move them (Guard Bells keeps those off too).";
+        case kSubGuardFreq: return "Below this (Hz) Sub Guard holds the level steady; above it everything moves as before.";
+        case kSubFloor: return "How far the guarded lows may still dip at most (dB): 0 not at all, -12 lets some of the movement through.";
+        case kGuardBells:
+            return "With Sub Guard: the SWEEP stage's bells (and its saturator's response to them) stay off the lows too, so "
+                   "the sub is steady under the whole sound. Off, the bells move the low end on purpose.";
         case kDrive: return "Light saturation before the sound is split into bands (after SWEEP). 0 leaves the input untouched.";
         case kSweep:
             return "Switches the SWEEP stage on: eight sweeping bell EQs, a High Shelf going round in a slow orbit, then a "

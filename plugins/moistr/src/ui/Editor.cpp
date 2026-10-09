@@ -166,6 +166,9 @@ void Editor::onClose ()
         labAll[c].clear ();
     }
     sceneControls.clear ();
+    loopControls.clear ();
+    paraControls.clear ();
+    guardControls.clear ();
     sceneSpeed = nullptr;
     wobbleKnobs.clear ();
     gestureView = nullptr;
@@ -430,24 +433,99 @@ void Editor::buildUI (CFrame* f)
     root->addView (wobble);
     wobbleKnobs = knobs (wobble, kWobbleRight - kWobbleLeft, {{kWobbleRate}, {kWobbleAmount}});
 
-    gestureView = new GestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH)), this,
-                                   [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
-                                   [c = ctl] { return c->userScene (); }, [c = ctl] { return c->userSceneData ().name; });
-    pk::setHelp (gestureView, "Gesture", help::kGestureView);
-    root->addView (gestureView);
+    root->addView (makeGestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH))));
 
     buildLab (root);
+    buildRow6 (root);
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     pickBell (pickedBell);
     updateLooks ();
     idle ();
+}
+
+GestureView* Editor::makeGestureView (const CRect& r)
+{
+    gestureView = new GestureView (r, this, [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
+                                   [c = ctl] { return c->userScene (); }, [c = ctl] { return c->userSceneData ().name; });
+    pk::setHelp (gestureView, "Gesture", help::kGestureView);
+    return gestureView;
+}
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (), [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+void Editor::buildRow6 (CViewContainer* root)
+{
+    // (0.30) INPUT: the level going in
+    auto* input = new Panel (CRect (kInputLeft, kRow6, kInputRight, kRow6 + kRowH), "INPUT");
+    root->addView (input);
+    {
+        const double x = centredLeft (kInputRight - kInputLeft, 1);
+        bind (input, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, kInput));
+    }
+    auto column = [&] (Panel* panel, double top, pk::ParamView* v) {
+        (void)top;
+        bind (panel, v);
+        return v;
+    };
+    auto knobsFrom = [&] (Panel* panel, std::initializer_list<uint32_t> ids, std::vector<pk::ParamView*>& group) {
+        int i = 0;
+        for (uint32_t id : ids)
+        {
+            const double x = kKnobBeside + kKnobStep * i++;
+            group.push_back (bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id)));
+        }
+    };
+    auto rowRect = [] (double top) { return CRect (kSwitchLeft, top, kSwitchLeft + kSwitchW, top + kSwitchH); };
+    // LOOP LOCK: on, Shape and Length; Position and Window
+    auto* loop = new Panel (CRect (kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH), "LOOP LOCK");
+    root->addView (loop);
+    column (loop, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kLoopLock, "Loop Lock"));
+    loopControls.push_back (column (loop, kColTop2, new Segmented (rowRect (kColTop2), this, kLoopShape, {"Wrap", "Bounce"})));
+    loopControls.push_back (column (loop, kColTop3, new pk::Choice (rowRect (kColTop3), this, kLoopLength)));
+    knobsFrom (loop, {kLoopPosition, kLoopWindow}, loopControls);
+    // PARA: on, Rate and Mix; the paths' corners and how they move
+    auto* para = new Panel (CRect (kParaLeft, kRow6, kParaRight, kRow6 + kRowH), "PARA");
+    root->addView (para);
+    column (para, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kParaOn, "Split"));
+    paraControls.push_back (column (para, kColTop2, new pk::Choice (rowRect (kColTop2), this, kParaRate)));
+    para->addView (new Label (CRect (kSwitchLeft, kColTop3 + 2.0, kSwitchLeft + 30.0, kColTop3 + 18.0), "Mix", 9.5));
+    paraControls.push_back (column (para, kColTop3, new pk::NumberBox (CRect (kSwitchLeft + 32.0, kColTop3, kSwitchLeft + kSwitchW, kColTop3 + kSwitchH), this, kParaMix)));
+    knobsFrom (para, {kParaLpFreq, kParaHpFreq, kParaLpMove, kParaHpMove, kParaHpLevelMove}, paraControls);
+    // SUB GUARD: on, Guard Bells; Freq and Floor
+    auto* guard = new Panel (CRect (kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH), "SUB GUARD");
+    root->addView (guard);
+    column (guard, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kSubGuard, "Sub Guard"));
+    guardControls.push_back (column (guard, kColTop2, new Toggle (rowRect (kColTop2), this, kGuardBells, "Guard Bells")));
+    knobsFrom (guard, {kSubGuardFreq, kSubFloor}, guardControls);
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // Input (the level into the saturator: its crunch), Drive (the SWEEP stage's: how hard it crunches) and Movement (how
+    // far the bands move); Loop Lock, Position (which moment of the movement it holds) and Sub Guard (the sub steady); Mix
+    // and Output. The display: the gesture with Loop Lock's segment on it.
+    using namespace pk::basic;
+    Spec s;
+    s.title = "moistr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 150;
+    s.display = [this] (const CRect& r) -> CView* { return makeGestureView (r); };
+    s.rows = {{knob (kInput), knob (kSweepDrive), knob (kMovement)}, {toggle (kLoopLock, "Loop Lock"), knob (kLoopPosition), toggle (kSubGuard, "Sub Guard")}};
+    s.output = {knob (kMix), knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (440, 6, 524, 28);
+    return s;
 }
 
 void Editor::buildLab (CViewContainer* root)
@@ -576,7 +654,7 @@ bool Editor::affectsLooks (uint32_t id)
     if (isGestureParam (id) || (isLabSlotParam (id) && labFieldOf (id) == kLabType))
         return true;
     if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
-        id == kCleanSub || id == kSubBoost)
+        id == kCleanSub || id == kSubBoost || id == kLoopLock || id == kParaOn || id == kSubGuard)
         return true;
     for (int b = 0; b < kNumBells; ++b)
         if (id == bellOnId (b) || id == bellId (b, kBellSync))
@@ -624,6 +702,12 @@ void Editor::updateLooks ()
     }
     for (Knob* k : wobbleKnobs)
         k->setEnabledLook (wobbleDriven);
+    for (pk::ParamView* v : loopControls)
+        v->setEnabledLook (plainValue (kLoopLock) >= 0.5);
+    for (pk::ParamView* v : paraControls)
+        v->setEnabledLook (plainValue (kParaOn) >= 0.5);
+    for (pk::ParamView* v : guardControls)
+        v->setEnabledLook (plainValue (kSubGuard) >= 0.5);
     // the LAB: a slot's knobs while it holds the kind they show; the Air chain with 4 bands only (with 3 Air goes into
     // the High chain)
     for (int c = 0; c <= kNumBandChains; ++c)
@@ -662,7 +746,7 @@ void Editor::paramChanged (uint32_t id)
         sweepView->idle ();
         sweepView->invalid ();
     }
-    if (gestureView && isGestureParam (id))
+    if (gestureView && (isGestureParam (id) || (id >= kLoopLock && id <= kLoopShape)))
         gestureView->invalid ();
     if (isLabParam (id))
         for (pk::ParamView* v : labViews)
@@ -732,8 +816,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST) and
-    // the end saturator in a row of its own at the bottom
+    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST), a row of
+    // input, loop lock, para and sub guard, and the end saturator in a row of its own at the bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
         {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
@@ -760,7 +844,11 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"lab-high", "", {kLabLeft + kLabStep, kRow5, kLabLeft + kLabStep + kLabW, kRow5 + kLabRowH}, 4},
         {"lab-air", "", {kLabLeft + 2 * kLabStep, kRow5, kLabLeft + 2 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
         {"lab-post", "", {kLabLeft + 3 * kLabStep, kRow5, kLabLeft + 3 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 5, -1, true},
+        {"input", "", {kInputLeft, kRow6, kInputRight, kRow6 + kRowH}, 5},
+        {"looplock", "", {kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH}, 5},
+        {"para", "", {kParaLeft, kRow6, kParaRight, kRow6 + kRowH}, 5},
+        {"subguard", "", {kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH}, 5},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 6, -1, true},
     };
     return s;
 }
