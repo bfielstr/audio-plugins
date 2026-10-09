@@ -142,9 +142,7 @@ void Editor::buildUI (CFrame* f)
     lpDriveKnob = bind (outP, new Knob (knobRect (676, 22), this, kLpDrive, "LP Drive"));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kRow2Top + 108, 752, kRow2Top + 108 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -163,6 +161,41 @@ void Editor::updateLooks ()
         lpDriveKnob->setEnabledLook (lpOn);
     if (drivePosView)
         drivePosView->setEnabledLook (hpOn || lpOn);
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // the two filters' cutoffs (HP Freq, LP Freq: drag their handles on the display too, the gains go
+    // through the locks as in the Advanced view) and how they move (Movement); Dry/Wet and Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "para";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        view = new FilterView (r, lockHost.get (), [c = ctl] () -> Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        pk::setHelp (view, "Filter Response", help::kDisplay);
+        return view;
+    };
+    s.rows = {{knob (kHpFreq, "HP Freq"), knob (kLpFreq, "LP Freq"), segmented (kMovement, "Movement", {"Free", "Vocal"}, 168)}};
+    s.output = {knob (kDryWet), knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (348, 6, 432, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)
