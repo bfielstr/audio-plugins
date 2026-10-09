@@ -1,5 +1,7 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
+
 #include "Cids.h"
 #include "State.h"
 
@@ -173,6 +175,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         }
     }
     data.outputs[0].silenceFlags = 0;
+    pk::captureOutput (shared->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

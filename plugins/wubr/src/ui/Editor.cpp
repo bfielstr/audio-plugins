@@ -134,16 +134,7 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (832, kShapeTop + 80), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (
-        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-        [c = ctl] {
-            auto* s = c->getShared ();
-            return s ? s->sampleRate.load () : 48000.0;
-        },
-        [c = ctl] () -> const smacheratr::Meters* {
-            auto* s = c->getShared ();
-            return s ? &s->tailMeters : nullptr;
-        });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, 448, 892, 448 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -184,6 +175,49 @@ void Editor::updateLooks ()
         v->setEnabledLook (envelope);
     if (sensView)
         sensView->setEnabledLook (envelope && std::lround (plainValue (kTrigger)) == kTransient);
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+        [c = ctl] {
+            auto* s = c->getShared ();
+            return s ? s->sampleRate.load () : 48000.0;
+        },
+        [c = ctl] () -> const smacheratr::Meters* {
+            auto* s = c->getShared ();
+            return s ? &s->tailMeters : nullptr;
+        });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // what moves the bands (Mode: an LFO or the envelope) and how far each one moves (its Depth; the bands
+    // themselves are dragged on the display); Dry/Wet and Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "wubr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        bands = new BandView (r, this, [c = ctl] () -> const Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        pk::setHelp (bands, "Bands", help::kBandDisplay);
+        bands->onBandPicked = [this] (int b) { showBand (b); };
+        bands->selected = shown;
+        return bands;
+    };
+    s.rows = {{segmented (kMode, "Mode", {"LFO", "Envelope"})}, {knob (bandParam (0, kDepth), "Band 1 Depth", true), knob (bandParam (1, kDepth), "Band 2 Depth", true)}};
+    s.output = {knob (kDryWet), knob (kOutput)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (484, 6, 572, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)
