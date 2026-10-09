@@ -20,18 +20,6 @@ namespace moistr {
 using namespace Steinberg;
 using namespace Steinberg::Vst;
 
-tresult PLUGIN_API Controller::initialize (FUnknown* context)
-{
-    const tresult r = pk::ControllerBase::initialize (context);
-    if (r != kResultOk)
-        return r;
-    // (the saved default, when there is one, was applied; the recipe touches none of Menu > Defaults' parameters)
-    if (!hasDefault ())
-        for (const auto& [id, n] : newInstanceValues ())
-            setParamNormalized (id, n);
-    return kResultOk;
-}
-
 tresult PLUGIN_API Controller::terminate ()
 {
     unwatchLatency ();

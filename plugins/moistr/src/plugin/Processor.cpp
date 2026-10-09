@@ -1,6 +1,5 @@
 #include "Processor.h"
 
-#include "pluginkit/PresetStore.h"
 #include "pluginkit/vst/Presets.h"
 
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -12,7 +11,6 @@
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 
 #include <cstring>
-#include <filesystem>
 
 namespace moistr {
 
@@ -56,13 +54,7 @@ tresult PLUGIN_API Processor::initialize (FUnknown* context)
         return r;
     addAudioInput (STR16 ("Stereo In"), SpeakerArr::kStereo);
     addAudioOutput (STR16 ("Stereo Out"), SpeakerArr::kStereo);
-    // a new instance: the Neuro recipe, unless the user saved a default (as the controller decides: hasDefault); then
     // Save as Default, then Menu > Defaults (a project's setState comes after)
-    std::error_code ec;
-    const std::string saved = pk::presets::defaultPresetPath ("Moistr");
-    if (saved.empty () || !std::filesystem::is_regular_file (saved, ec))
-        for (const auto& [id, n] : newInstanceValues ())
-            normMirror[id].store (n);
     pk::presets::applyDefault (*this, kProcessorUID, "Moistr", kGentlrIds, [this] (uint32_t id, double n) { normMirror[id].store (n); });
     return kResultOk;
 }

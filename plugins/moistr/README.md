@@ -31,8 +31,7 @@ sweep alone; turn them up to layer the movement on. A **gesture** (see [Gestures
 controls together in time with the song on the bands above the low end: band fades and swells, stutters, a
 wobble, a closing filter, a dirty crossfade, all on one timeline. The **LAB** (see [LAB](#lab)) puts
 effect chains on the bands above the low end: each band hits its own distortion and OTT, with one more OTT
-on their sum. A new instance starts from the **Neuro** recipe, which uses all of it: dense, dirty and
-moving, with the sub clean. Install instructions are in the [top-level README](../../README.md).
+on their sum. The **Neuro** preset uses all of it: dense, dirty and moving, with the sub clean. Install instructions are in the [top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
 
@@ -333,8 +332,8 @@ OTT's own ratios). Turning one of these on an empty slot loads the effect there.
 is a parameter, for automation; editing the whole rack in the editor comes later.
 
 In **Init** and in every project from before 0.30 every slot is Empty and every chain at 0 dB: the LAB does
-not run and moistr sounds exactly as it did. A new instance (with no saved default) starts from the
-**Neuro** recipe: 4 bands above a low Low X (**Seed** 2: 146 Hz), each chain smacheratr driven into its
+not run and moistr sounds exactly as it did. A new instance keeps that sound (Ocean); the preset
+*Neuro/Neuro* is the **Neuro** recipe: 4 bands above a low Low X (**Seed** 2: 146 Hz), each chain smacheratr driven into its
 hard clip (2x oversampling, its gentlr off) and a one-band multidyn OTT (the three chains together make a
 three-band OTT), an OTT and a hard clipper in POST, the bands moving every two beats and a quarter-note
 **Wobble** at 85 %. On a detuned saw at 140 BPM it has much more harmonic fill and level movement between
@@ -535,8 +534,8 @@ Gentle, Wide Bump, High Shelf 5k, Sweep + Bands; *Moist*: Bar Pulse, Chop, Class
 Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Subtle*: Gentle Drift;
 *Gestures* (the Ocean sweep with one gesture each): Reese Cell (the Reese Cell gesture), Stutter Wobble
 (Stutter Cell over a steady wobble, 4 bands), Talking Reese (Talking Cell with **Liquid** up), Crossover
-Scan (Crossover Walk walking back and forth at half speed, 4 bands); *Neuro* (the LAB): Neuro (a new
-instance's sound), Neuro Heavy (more drive and OTT, faster movement, an 8th-note Wobble), Neuro Gesture
+Scan (Crossover Walk walking back and forth at half speed, 4 bands); *Neuro* (the LAB): Neuro (the
+recipe above), Neuro Heavy (more drive and OTT, faster movement, an 8th-note Wobble), Neuro Gesture
 (Neuro with the Reese Cell gesture: its lanes move the bands into their chains), Dirty Mids (only the Mid
 chain dirty, High and Air clean and lower). Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the

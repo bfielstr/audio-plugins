@@ -86,20 +86,31 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
-        // a new instance starts from the Neuro recipe (the LAB on), and reports the LAB's latency with the end saturator's,
-        // as the engine has it with those settings
+        // a new instance keeps the defaults (the Ocean sound, the LAB empty); with the Neuro recipe (the LAB on) it reports
+        // the LAB's latency with the end saturator's, as the engine has it with those settings
         {
             int differ = 0;
-            for (const auto& [id, n] : newInstanceValues ())
-                differ += std::fabs (rig.controller->getParamNormalized (id) - n) > 1e-9;
-            CHECK (differ == 0, "a new instance: the Neuro recipe (%d values differ)", differ);
+            for (uint32_t id = 0; id < kNumParams; ++id)
+                if (id != kTailBase + pk::kTailOn && id != kTailExtBase + pk::kTailExtClarity && id != kTailExt3Base + pk::kTailExt3Slope &&
+                    id != kTailExt2Base + pk::kTailExt2Advanced)
+                    differ += std::fabs (rig.controller->getParamNormalized (id) - defaultNormalized (id)) > 1e-9;
+            CHECK (differ == 0, "a new instance: the defaults, the Ocean sound (%d values differ)", differ);
+            State neuro;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                neuro.norm[id] = defaultNormalized (id);
+                neuro.has[id] = true;
+            }
+            for (const auto& [id, n] : neuroRecipe ())
+                neuro.norm[id] = n;
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, neuro); }), "setState: Neuro");
             Engine ref;
-            for (const auto& [id, n] : newInstanceValues ())
+            for (const auto& [id, n] : neuroRecipe ())
                 ref.setParam (id, toPlain (id, n));
             ref.prepare (48000.0, 512);
             CHECK (rig.start (), "start");
             const uint32 neuroLatency = rig.processor->getLatencySamples ();
-            CHECK ((int)neuroLatency == ref.latency () && ref.labLatency () > 0, "a new instance's latency %u: the engine's %d (the LAB's %d)",
+            CHECK ((int)neuroLatency == ref.latency () && ref.labLatency () > 0, "Neuro's latency %u: the engine's %d (the LAB's %d)",
                    neuroLatency, ref.latency (), ref.labLatency ());
             rig.stop ();
         }

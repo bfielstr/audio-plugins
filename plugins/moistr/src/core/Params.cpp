@@ -169,8 +169,8 @@ const ParamTable& paramTable ()
         v.push_back (percent (kScenePosition, "Gesture Position", "Position", 0.0));
         v.push_back (percent (kSceneSmooth, "Gesture Smooth", "Smooth", 0.0));
         v.push_back (percent (kSceneAmount, "Gesture Amount", "Amount", 1.0));
-        // 0.30: the LAB. Every chain at 0 dB and every slot Empty: moistr as 0.29 (a new instance gets the Neuro
-        // recipe instead: newInstanceValues). A slot's block is stored normalized (its kind reads it through its own
+        // 0.30: the LAB. Every chain at 0 dB and every slot Empty: moistr as 0.29 (a new instance too: the Neuro
+        // recipe is a preset, neuroRecipe). A slot's block is stored normalized (its kind reads it through its own
         // table, as in a smemplr rack slot); its defaults are those of the kind the slot is meant for (labSlotKind),
         // so loading that kind into it starts from the kind's defaults.
         for (int c = 0; c < kNumChains; ++c)
@@ -246,7 +246,7 @@ void labKind (Values& v, int slot, int kind, std::initializer_list<std::pair<uin
 }
 } // namespace
 
-std::vector<std::pair<uint32_t, double>> newInstanceValues ()
+std::vector<std::pair<uint32_t, double>> neuroRecipe ()
 {
     Values v;
     auto set = [&] (uint32_t id, double plain) { v.emplace_back (id, toNormalized (id, plain)); };

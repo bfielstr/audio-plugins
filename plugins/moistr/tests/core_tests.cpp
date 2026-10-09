@@ -2535,7 +2535,7 @@ TEST (sweep_old_states_keep_their_sound)
 
 TEST (sweep_ocean_preset_is_init)
 {
-    // Sweep/Ocean is Init's sound (a new instance's up to 0.30): over Init it sets nothing that differs
+    // Sweep/Ocean is Init's sound (and a new instance's): over Init it sets nothing that differs
     std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / "Sweep/Ocean.txt");
     std::stringstream ss;
     ss << in.rdbuf ();
@@ -4310,20 +4310,20 @@ std::unique_ptr<Engine> withValues (const std::vector<std::pair<uint32_t, double
 
 TEST (neuro_recipe)
 {
-    // a new instance's recipe (newInstanceValues) is the factory preset Neuro/Neuro, value for value
+    // the Neuro recipe (neuroRecipe) is the factory preset Neuro/Neuro, value for value
     std::array<double, kNumParams> fromPreset {}, fromRecipe {};
     for (uint32_t id = 0; id < kNumParams; ++id)
         fromPreset[id] = fromRecipe[id] = defaultNormalized (id);
     for (const auto& [id, n] : presetValues ("Neuro/Neuro.txt"))
         fromPreset[id] = n;
-    for (const auto& [id, n] : newInstanceValues ())
+    for (const auto& [id, n] : neuroRecipe ())
         fromRecipe[id] = n;
     int differ = 0;
     for (uint32_t id = 0; id < kNumParams; ++id)
         differ += std::fabs (fromPreset[id] - fromRecipe[id]) > 1e-7;
-    CHECK (differ == 0, "Neuro/Neuro is the new instance's recipe (%d values differ)", differ);
+    CHECK (differ == 0, "Neuro/Neuro is the Neuro recipe (%d values differ)", differ);
     // and it has the LAB on: smacheratr and multidyn in the chains, multidyn and smacheratr in POST, nothing in chain 4
-    auto e = withValues (newInstanceValues ());
+    auto e = withValues (neuroRecipe ());
     const Lab& lab = e->labStage ();
     CHECK (lab.active () && lab.kind (chainSlot (0, 0)) == smemplr::kFxSmacheratr && lab.kind (chainSlot (2, 1)) == smemplr::kFxMultidyn &&
                lab.kind (postSlot (0)) == smemplr::kFxMultidyn && lab.kind (postSlot (1)) == smemplr::kFxSmacheratr &&
@@ -4386,7 +4386,7 @@ TEST (lab_gesture_targets)
            "four lanes, by name");
     const double lo = targetNorm (kTargetMidGrit, 0.0), hi = targetNorm (kTargetMidGrit, 36.0);
     CHECK (std::fabs (lo - 0.5) < 1e-12 && std::fabs (hi - 1.0) < 1e-12, "Grit in dB of Drive (0 dB: halfway)");
-    auto e = withValues (newInstanceValues ());
+    auto e = withValues (neuroRecipe ());
     e->setParam (labSlotParam (chainSlot (2, 0), kLabType), 0.0); // (no smacheratr on Air: its lane does nothing)
     e->setUserScene (scene.get ());
     e->setParam (kScene, kSceneUser);
@@ -4415,7 +4415,7 @@ TEST (lab_gesture_targets)
 
 TEST (cpu_budget)
 {
-    // 10 s of a stereo Reese, the defaults, the heaviest settings and a new instance (the Neuro recipe, under 18 %) (4 bands, 2 passes, full movement at the
+    // 10 s of a stereo Reese, the defaults, the heaviest settings and the Neuro recipe (under 18 %) (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
     for (int which = 0; which < 5; ++which)
@@ -4425,7 +4425,7 @@ TEST (cpu_budget)
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
         {
-            auto e = ocean ? fresh () : neuro ? withValues (newInstanceValues ()) : engine ();
+            auto e = ocean ? fresh () : neuro ? withValues (neuroRecipe ()) : engine ();
             if (ocean)
             {
                 // a new instance (eight bells, Sub Boost, Tone, the end saturator) with Clean Sub on as well
@@ -4479,7 +4479,7 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     neuro ? "a new instance (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
+                     neuro ? "the Neuro preset (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
                      : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
                      : gestures ? "the new instance as above, with four slots (a level gate, Close, Wobble on a rate gesture, Dirt) and Reese Cell"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"

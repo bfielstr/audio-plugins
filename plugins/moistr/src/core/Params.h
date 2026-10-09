@@ -173,7 +173,7 @@ enum ParamId : uint32_t
     // all) for later. Then kNumLabSlots effects slots of kLabSlotFields IDs each (a Type, an On and a block, as a
     // smemplr rack slot: smemplr/src/core/FxSlot.h): kChainSlots per chain, chain by chain, then kPostSlots after
     // the bands' sum (POST). Every slot Empty and every chain at 0 dB in an older state and in Init (moistr as
-    // 0.30, bit for bit); a new instance starts from the Neuro recipe (newInstanceValues) ---
+    // 0.29, bit for bit), and in a new instance (the Ocean sound; the factory preset Neuro/Neuro: neuroRecipe) ---
     kChainBase = kSceneAmount + 1,
     kLabSlotBase = kChainBase + 4 * 8,
     kNumParams = kLabSlotBase + 19 * 88
@@ -381,12 +381,11 @@ double defaultNormalized025 (uint32_t id);
 std::string labSlotName (int slot);
 int labSlotKind (int slot);
 
-// The Neuro recipe (0.30): what a new instance starts from, over the defaults (normalized values by ID). Init and an
-// older state keep the defaults (the LAB empty: the Ocean sound); a new instance with no saved default gets these
-// (the factory preset Neuro/Neuro is the same). Four bands, each above Low driven into a hard-clipping smacheratr and
+// The Neuro recipe (0.30): the factory preset Neuro/Neuro, over the defaults (normalized values by ID; a new instance,
+// Init and an older state keep the defaults: the LAB empty, the Ocean sound). Four bands, each above Low driven into a hard-clipping smacheratr and
 // an OTT (multidyn) in its chain, an OTT and a hard clipper on their sum in POST, a quarter-note Wobble after it, the
 // bands moving in time with the song; the Low band (below 146 Hz, Seed 2) clean.
-std::vector<std::pair<uint32_t, double>> newInstanceValues ();
+std::vector<std::pair<uint32_t, double>> neuroRecipe ();
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
