@@ -87,8 +87,18 @@ void Editor::buildUI (CFrame* f)
     chr->addView (new Label (CRect (80, 46, 316, 62), "only when they get loud", 10.0));
 
     // the saturator before the limiter, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (
-        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
+    tail = makeTail ();
+    tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+
+    applyParamTooltips (&help::forParam);
+    idle ();
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
         [c = ctl] {
             auto* s = c->getShared ();
             return s ? s->sampleRate.load () : 48000.0;
@@ -97,10 +107,32 @@ void Editor::buildUI (CFrame* f)
             auto* s = c->getShared ();
             return s ? &s->tailMeters : nullptr;
         }, "smacheratr  (before the limiter)");
-    tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+}
 
-    applyParamTooltips (&help::forParam);
-    idle ();
+pk::basic::Spec Editor::basicSpec ()
+{
+    // how hard into the limiter (Input), how its bands share the work (Smooth), the low mids' dip
+    // (Character) and the release; the ceiling at the right (it is the output level)
+    using namespace pk::basic;
+    Spec s;
+    s.title = "smoothr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        history = new HistoryView (r, this, [c = ctl] () -> Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        pk::setHelp (history, "History", help::kDisplay);
+        return history;
+    };
+    s.rows = {{knob (kInput), knob (kSmooth), knob (kCharacter), knob (kRelease)}};
+    s.output = {knob (kCeiling)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (484, 6, 572, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)

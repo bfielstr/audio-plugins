@@ -28,6 +28,8 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): the history, Input, Smooth, Character and Release; Ceiling; the saturator in the extras
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
@@ -37,6 +39,8 @@ private:
 
     Controller* ctl;
     std::unique_ptr<smacheratr::TailPanel> tail;
+    std::unique_ptr<smacheratr::TailPanel> makeTail ();
+    static smacheratr::TailBases tailBases ();
     HistoryView* history = nullptr;
 };
 
