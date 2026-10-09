@@ -6,16 +6,18 @@ namespace smacheratr::help {
 
 // Gentlr's band Slope (Smacheratr's, Gentlr's own, the end saturators' and the rack's)
 inline constexpr const char* kGlue =
-    "Glue: two of Gentlr's bands held at a shared border. Drag a band's edge onto its neighbour's in the display (it "
-    "snaps within a few pixels) and the two glue: the border then moves as one (one band widens as the other narrows; "
-    "for the Sub and High bands their Freq is the border) and a band moved drags its neighbour's edge along. The link "
-    "icon on the border (lit cinnabar while glued) detaches them, or glues two bands that touch. Automation holds a "
-    "glued border too. Off by default.";
+    "Glue: two of Gentlr's bands held at a shared border. The link icon on the border of two bands that touch glues "
+    "them (lit cinnabar while glued; click it again to detach them). With Menu > Defaults > Glue Bands on Touch checked "
+    "(off by default), a band's edge dragged onto its neighbour's in the display snaps within a few pixels and the two "
+    "glue when you let go. Glued, the border moves as one (one band widens as the other narrows; for the Sub and High "
+    "bands their Freq is the border) and a band moved drags its neighbour's edge along. Automation holds a glued border "
+    "too. Off by default.";
 inline constexpr const char* kSlope =
     "Gentlr's Slope: the shape of its two bands (not the Sub and High bands), below / above each band. 12 / 12: 12 "
     "dB/oct on both sides, the cut exactly the Range at the band's centre. Signature (the default): 24 dB/oct below and "
     "12 above, a steeper floor under the band. Classic: 12 below and 6 above, the shape before the Slope (older "
-    "projects load with it, so they sound as they did).";
+    "projects load with it, so they sound as they did). Alt Signature: 36 dB/oct below and 12 above, the steepest "
+    "floor.";
 
 inline const char* forParam (uint32_t id)
 {
@@ -125,15 +127,16 @@ constexpr const char* kShaperDisplay =
     "Drag up/down to set Drive, double-click to reset it. Shift: fine.";
 
 constexpr const char* kColorDisplay =
-    "Two layers, picked with the Color | Gentlr switch above it: the one in front has its handles to drag and its "
-    "controls under the display, the other is drawn faint behind. "
+    "Two layers, picked with the Color | Gentlr switch above it (Gentlr in a new instance): the one in front has its "
+    "handles to drag and its controls under the display, the other is drawn faint behind. "
     "Color: the colour EQ applied before the curve (it is undone after it). Drag the left handle up/down for Amt Lo; drag "
     "the right handle up/down for Amt Hi or sideways for Freq. Double-click a handle to reset it. Mouse wheel on the right handle (held, or with Shift): Width. "
     "Gentlr (once it is on): its bands; the band selected (its handle grabbed, its button, or its Threshold slider with Advanced) "
     "has its handle and its slider lit. Drag a handle sideways for the frequency and down for the Range, an edge for the width, "
     "or hold Alt (Option) and drag a band sideways for its width (right: wider). The Sub and High bands (named in their readouts) "
     "have no width; like band 2 they sit flat at 0 dB until you pull them down. With No Overlap on, a band pushes its neighbours along. "
-    "Drag a band's edge onto its neighbour's (it snaps) and they glue: a link icon sits on the border near the bottom, lit "
-    "while glued; click it to detach them, or to glue two bands that touch. Shift: fine.";
+    "Where two bands touch, a link icon sits on the border near the bottom: click it to glue them (lit while glued) or "
+    "to detach them. With Menu > Defaults > Glue Bands on Touch, a band's edge dragged onto its neighbour's snaps and "
+    "they glue. Shift: fine.";
 
 } // namespace smacheratr::help

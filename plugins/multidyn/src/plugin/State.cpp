@@ -23,7 +23,10 @@ constexpr int32 kClassicSlope = 7;     // 7: the saturator's Gentlr Slope (Class
 constexpr int32 kOversamplingChoice = 8; // 8: the saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 constexpr int32 kNewDefaults = 9; // 9: the saturator and its Gentlr on by default, Gentlr's Slope Signature
                                  // (older states keep the old defaults where they lack them)
-static_assert (kStateVersion == kNewDefaults);
+// 10: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 10;
+static_assert (kStateVersion == kAltSignature);
 } // namespace
 
 bool writeState (IBStream* stream, const State& st, int32 version)
@@ -64,6 +67,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kSatExt3Base);
     // before Style: Multidyn's own sound, Character
     if (version < kStyleAdded)
     {

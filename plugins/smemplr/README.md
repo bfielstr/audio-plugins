@@ -251,7 +251,7 @@ The slots, named as the tabs show them:
   **Slope**, **No Overlap**, glue and Advanced mode, Mid/Side, colour, post clip and **Oversampling**
   (Off, 2x, 4x; a project saved before it keeps its Hi-Quality setting as 4x or Off). The **Color** |
   **Gentlr** switch above the colour display picks the layer in front (its handles, and its knobs at the
-  right); grabbing a gentlr band's handle, button or Threshold slider selects the band and lights them.
+  right; Gentlr in a new instance, kept with the project); grabbing a gentlr band's handle, button or Threshold slider selects the band and lights them.
 - **widr**: the stereo widener with its left and right voices. In the rack it works alone: sharing the
   stereo field needs widr's own plug-in instances.
 - **wubr**: wubr's two drawn bands.

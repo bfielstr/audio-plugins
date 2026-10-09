@@ -1,4 +1,5 @@
 // Headless tests for the Deepr DSP. Run: ./deepr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Params.h"
 
@@ -289,9 +290,9 @@ TEST (finite_and_cpu)
     for (int i = 0; i < 3; ++i)
     {
         auto e = make ();
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         out = run (*e, in, 333);
-        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
     }
     bool finite = true;
     for (size_t i = 0; i < n; ++i)

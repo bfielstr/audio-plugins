@@ -1,4 +1,5 @@
 // Headless tests for the Levlr DSP. Run: ./levlr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Params.h"
 
@@ -369,7 +370,7 @@ TEST (silence_after_a_burst)
         e->process (l.data (), r.data (), l.data (), r.data (), 512);
     }
     float last = 0.0f;
-    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+    const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     const int blocks = (int)(5.0 * kSr / 512);
     for (int b = 0; b < blocks; ++b)
     {
@@ -380,7 +381,7 @@ TEST (silence_after_a_burst)
             for (float v : l)
                 last = std::max (last, std::fabs (v));
     }
-    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+    const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
     std::printf ("    after 5 s of silence: %g at most; %.2f%% of real time\n", last, 100.0 * secs / 5.0);
     CHECK (last < 1e-20f, "silent: %g", last);
 }
@@ -427,7 +428,7 @@ TEST (fuzz_and_cpu)
         c.setParam (kTailBase + pk::kTailOn, 1.0);
         c.prepare (kSr, 512);
         const int blocks = (int)(10.0 * kSr / 512);
-        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
         for (int b = 0; b < blocks; ++b)
         {
             if (b % 8 == 0)
@@ -436,13 +437,13 @@ TEST (fuzz_and_cpu)
                 l[(size_t)i] = r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.3f;
             c.process (l.data (), r.data (), l.data (), r.data (), 512);
         }
-        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+        const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
         std::printf ("    %s, saturator on: %.2f%% of real time (stereo, 48 kHz)\n", kSlopeNames[s], 100.0 * secs / 10.0);
     }
     // and the crossovers alone
     {
         auto c = engine ([] (Engine& en) { en.setParam (kSlope, kSlope48); });
-        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
         const int blocks = (int)(10.0 * kSr / 512);
         for (int b = 0; b < blocks; ++b)
         {
@@ -450,7 +451,7 @@ TEST (fuzz_and_cpu)
                 l[(size_t)i] = r[(size_t)i] = (float)(rnd () * 2.0 - 1.0) * 0.3f;
             c->process (l.data (), r.data (), l.data (), r.data (), 512);
         }
-        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+        const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
         std::printf ("    48 dB/oct crossovers alone: %.2f%% of real time\n", 100.0 * secs / 10.0);
     }
 }
@@ -1130,9 +1131,9 @@ TEST (cpu_with_drives)
             std::vector<float> out;
             out.reserve ((size_t)(5.0 * kSr) + 512);
             long long t = 0;
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             run (c, tones (0.3), t, (int)(5.0 * kSr), out, nullptr, 512);
-            best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            best = std::min (best, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         return best / 5.0;
     };

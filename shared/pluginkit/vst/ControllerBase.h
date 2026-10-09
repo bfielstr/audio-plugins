@@ -126,10 +126,13 @@ public:
     // The end saturator's sections (smacheratr::TailPanel): which are open (kTailOpenSaturator,
     // kTailOpenGentlr; -1: not decided yet, so a new instance opens the saturator only when it is on), and
     // which layer of its colour display is in front (Smacheratr's own editor and Smemplr's rack page use it
-    // too: 0 Color, 1 Gentlr). Editor state, saved with the controller's (not parameters).
+    // too: 0 Color, 1 Gentlr). Editor state, saved with the controller's (not parameters). A new instance
+    // shows Gentlr (kNewColorLayer; Color up to 0.27); a state that saved its layer keeps it, and one saved
+    // before the view state was kept (it has no layer) shows Color, as it did (kLegacyColorLayer).
     static constexpr int kTailOpenSaturator = 1, kTailOpenGentlr = 2;
+    static constexpr int kNewColorLayer = 1, kLegacyColorLayer = 0;
     int uiTailOpen = -1;
-    int uiColorLayer = 0;
+    int uiColorLayer = kNewColorLayer;
     // The editor's layout (pluginkit/Layout.h): its text ("wide", "default" the Classic layout, or an
     // arrangement) and the name the Layout menu shows it by (a template's or a saved layout's; "" once it
     // is dragged out of shape). Editor state, saved with the controller's after the view state (an older

@@ -70,7 +70,8 @@ inline const char* forParam (uint32_t id)
             case kFreq: return "The band's centre (drag its handle in the display sideways).";
             case kWidth:
                 return "How wide the band is, in octaves between its edges (drag an edge in the display, or Alt-drag the "
-                       "band). Its slopes below and above are the Band Slope (Signature by default: 24 dB/oct below, 12 above).";
+                       "band). Its slopes below and above are the Band Slope (Signature by default: 24 dB/oct below, 12 above; Alt "
+                       "Signature: 36 below).";
             case kRange:
                 return "The most the band is turned down (drag its handle down). It cuts 3 dB for every 5 the band is over "
                        "its threshold, up to this. 0 dB: the band does nothing.";
@@ -89,9 +90,9 @@ constexpr const char* kDisplay =
     "Alt-drag the band, for its width (the Sub and High bands have none); the wheel on a handle (Shift) too. Double-click "
     "or right-click a handle resets the band. Click band 1's or band 2's readout at the top to switch it on or off. The Sub "
     "and High bands have no switch: they sit flat at 0 dB until you pull their handle down. With No Overlap on, a band "
-    "pushes its neighbours along. Drag a band's edge (or the Sub or High handle) onto its neighbour's edge (it snaps) and "
-    "the two glue: a link icon sits on the border at the bottom, lit while glued; click it to detach them, or to glue two "
-    "bands that touch. Grabbing any of a band's controls selects it: its handle lights, and so do its header and its "
+    "pushes its neighbours along. Where two bands touch, a link icon sits on the border at the bottom: click it to glue "
+    "them (lit while glued) or to detach them. With Menu > Defaults > Glue Bands on Touch, a band's edge (or the Sub or "
+    "High handle) dragged onto its neighbour's edge snaps and the two glue. Grabbing any of a band's controls selects it: its handle lights, and so do its header and its "
     "Threshold slider (Advanced).";
 
 constexpr const char* kSubThresholdSlider =

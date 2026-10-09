@@ -53,7 +53,8 @@ The Colour EQ display also shows gentlr's bands. The **Color** | **Gentlr** swit
 layer in front: only that layer's handles can be dragged and are drawn at full strength, the other is
 drawn faint behind it. The knobs under the display follow the switch too: with Color in front they are
 **Amt Lo**, **Amt Hi**, **Freq** and **Width**, with Gentlr in front the selected gentlr band's **Freq**,
-**Width** and **Range**. Color is in front in a new instance; the choice is kept with the project.
+**Width** and **Range**. Gentlr is in front in a new instance; the choice is kept with the project (a
+project saved before the choice was kept opens with Color in front, as it did).
 
 ## gentlr
 
@@ -92,6 +93,8 @@ their own shape) sets the shape of the two bands:
 - **Signature** (the default): 24 dB/oct below, 12 dB/oct above. A steeper floor under the band, so a band on the low
   mids leaves the bass under it alone.
 - **Classic**: 12 dB/oct below, 6 dB/oct above, the only shape before Slope existed.
+- **Alt Signature**: 36 dB/oct below, 12 dB/oct above. Signature with a steeper floor still, for a band
+  that must leave everything under it alone.
 
 Every band is scaled to peak at 0 dB, a band at an end of the spectrum is still a shelf there, and the
 display draws the shape selected. The end saturator in the other plug-ins has the same Slope (in its
@@ -104,10 +107,12 @@ kHz) the dragged band stops. Switched on, bands that overlap are split at the mi
 Automation that makes them overlap is kept apart the same way, and bands that do not overlap are left
 exactly as they are.
 
-**Glue** (nothing glued by default): drag a band's edge (or the Sub or High band's handle) onto its
-neighbour's edge in the display. Within a few pixels it snaps on, and when you let go the two are glued
-at that border. A small link icon sits on the border near the bottom of the display: copper where two
-bands only touch, lit cinnabar while they are glued. While glued, dragging the shared border moves both
+**Glue** (nothing glued by default): a small link icon sits on the border of two bands that touch,
+near the bottom of the display: copper where they only touch, lit cinnabar while they are glued. Click
+it to glue them. With **Menu > Defaults > Glue Bands on Touch** checked (off by default), dragging a
+band's edge (or the Sub or High band's handle) onto its neighbour's edge glues them too: within a few
+pixels it snaps on, and when you let go the two are glued at that border. Unchecked, edges move freely
+past each other and nothing glues by itself (pairs already glued stay glued). While glued, dragging the shared border moves both
 edges (one band gets wider as the other narrows; for the Sub and High bands their Freq is the border),
 and moving one band drags its neighbour's edge along. Click the link icon to detach them (they stay
 where they are), or click it on two bands that touch to glue them. Band 1 and Band 2, Sub and either
@@ -151,8 +156,8 @@ Each part folds away to its strip and opens on its own: click its strip, or swit
 off folds it). A new instance opens the saturator only while it is on (as it is by default: fold it to make the
 window compact); the
 window gets shorter while a part is folded and taller when it opens (a host that does not let plug-ins
-resize their window keeps the space). What you open and fold, and the layer in front, are kept with the
-project.
+resize their window keeps the space). What you open and fold, and the layer in front (Gentlr in a new
+instance), are kept with the project.
 
 ## Presets
 

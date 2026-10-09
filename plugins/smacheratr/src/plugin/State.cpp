@@ -13,13 +13,16 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x534D5452; // 'SMTR'
-constexpr int32 kVersion = 8; // 2: the Analog-only parameter layout (version 1 states are ignored)
+constexpr int32 kVersion = 9; // 2: the Analog-only parameter layout (version 1 states are ignored)
 constexpr int32 kClarityFullRange = 3; // 3: Clarity Frequency 20 Hz - 20 kHz
 constexpr int32 kClarityOneButton = 4; // 4: one Clarity button (a band works while its Range is above 0)
 constexpr int32 kSubHighRange = 5;     // 5: no Sub and High buttons (those bands work while their Range is above 0)
 constexpr int32 kClassicSlope = 6;     // 6: Gentlr's band Slope (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 7; // 7: Oversampling Off / 2x / 4x (the Hi-Quality switch before: on 4x, off Off)
 constexpr int32 kNewDefaults = 8;      // 8: Gentlr on and its Slope Signature by default (off and 12 / 12 before)
+// 9: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 9;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -59,6 +62,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // Gentlr's Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        slopeFromThreeChoices (st.norm, st.has, kClaritySlope);
     // one Clarity button: a state from before, made to mean the same
     if (version < kClarityOneButton)
     {

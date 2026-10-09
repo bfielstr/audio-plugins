@@ -15,6 +15,8 @@
 
 #include "pluginkit/TailParams.h"
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -177,6 +179,30 @@ inline void tailSlopeToClassic (Norm& norm, Has& has, uint32_t ext3Base)
 
 // Gentlr's band Slope's default up to 0.24 (12 / 12; Signature since), normalized.
 inline double oldDefaultSlopeNorm () { return toNormalized (kClaritySlope, kSlope12); }
+
+// Gentlr's band Slope had three choices (12 / 12, Signature, Classic) before Alt Signature was appended,
+// and states store it normalized: 0, 0.5 and 1 then, 0, 1/3 and 2/3 now. A value saved with three
+// choices, as the same choice now (normalized).
+inline double slopeNormFromThreeChoices (double n)
+{
+    const double index = std::round (std::clamp (n, 0.0, 1.0) * (kSlopesBeforeAltSignature - 1));
+    return toNormalized (kClaritySlope, index);
+}
+// The same for a state's Slope (parameter id of a plug-in's state, by its IDs), where the state has it. A
+// state's own values only: before the conversions that set the Slope (tailSlopeToClassic, tailOldDefaults,
+// which set it as it is now).
+template <class Norm, class Has>
+inline void slopeFromThreeChoices (Norm& norm, const Has& has, uint32_t id)
+{
+    if (has[id])
+        norm[id] = slopeNormFromThreeChoices (norm[id]);
+}
+// The same for a plug-in's end saturator (its fourth block at ext3Base).
+template <class Norm, class Has>
+inline void tailSlopeFromThreeChoices (Norm& norm, const Has& has, uint32_t ext3Base)
+{
+    slopeFromThreeChoices (norm, has, ext3Base + pk::kTailExt3Slope);
+}
 
 // The defaults up to 0.24 for a state saved by one of those versions: the end saturator was off by default
 // (on where a plug-in asked for it: onBefore), its Gentlr off and Gentlr's Slope 12 / 12. A new instance

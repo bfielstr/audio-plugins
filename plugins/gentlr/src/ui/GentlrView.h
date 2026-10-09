@@ -14,7 +14,8 @@
 //   the band's readout at the top             switches the band (Sub, High) on or off
 //   a band edge (or the Sub or High handle) dragged onto a neighbour's edge (within a few pixels it
 //   snaps)                        the two are glued at that border when the drag ends: a link icon sits
-//                                 on it, at the bottom of the display
+//                                 on it, at the bottom of the display (with Menu > Defaults > Glue Bands
+//                                 on Touch checked: smacheratr::touchSnapOctaves)
 //   link icon, click              detaches the two (lit cinnabar: glued), or glues two that touch (copper)
 //   a glued border dragged        both edges move: one band widens as the other narrows (for the Sub and
 //                                 High bands their Freq is the border); a glued band moved drags its

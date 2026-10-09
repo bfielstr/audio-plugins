@@ -1,6 +1,6 @@
 # Notes for coding agents
 
-16 VST3 plug-ins in `plugins/<name>/` (`src/core` DSP without any framework, `src/plugin` VST3,
+18 VST3 plug-ins in `plugins/<name>/` (`src/core` DSP without any framework, `src/plugin` VST3,
 `src/ui` VSTGUI, `tests`, `presets`), shared code in `shared/pluginkit`, CMake helpers in
 `cmake/PluginKit.cmake`. The VST3 SDK lives in `external/vst3sdk` (fetched on the first configure; in a
 second worktree, symlink `external` to the main checkout's and never commit the link).
@@ -16,7 +16,7 @@ cmake --build build
 
 - One plug-in only (`orbitr`; the bundle target is capitalised):
   `cmake --build build --target orbitr_tests Orbitr` (add `orbitr_state_tests` where it exists:
-  ciphr, dropr, gentlr, moistr, smacheratr, smeezr, smemplr, widr; `orbitr_drawbench` with the draw bench).
+  ciphr, dropr, gentlr, moistr, probr, smacheratr, smeezr, smemplr, widr; `orbitr_drawbench` with the draw bench).
   Then `ctest --test-dir build -R '^orbitr_' --output-on-failure`.
 - A smaller build tree: `-DPK_ONLY_PLUGINS="orbitr;ciphr"` configures only those plug-ins (plus the
   libraries of the ones they use, tests disabled); empty means all.

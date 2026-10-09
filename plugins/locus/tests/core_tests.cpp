@@ -1,4 +1,5 @@
 // Headless tests for the Locus DSP. Run: ./locus_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Params.h"
 
@@ -348,9 +349,9 @@ TEST (performance)
         auto e = engine ();
         e->setParam (kContrast, 0.8);
         e->setParam (kHighFreq, 1000.0);
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, in);
-        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
     }
     std::printf ("    CPU: %.2f%% of one core (stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");

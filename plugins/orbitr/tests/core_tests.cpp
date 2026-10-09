@@ -1,5 +1,6 @@
 // Headless tests for the Orbitr DSP. Run: ./orbitr_tests [filter]
 // The Motion tests are Detonatr's (its Motion stage is Orbitr's effect), then the engine around it.
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Motion.h"
 #include "OrbGeometry.h"
@@ -621,9 +622,9 @@ TEST (finite_and_cpu)
         for (int i = 0; i < 3; ++i)
         {
             auto e = make (most);
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = sig::run (*e, in, 333, &r);
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         bool finite = true;
         for (size_t i = 0; i < n; ++i)
@@ -963,9 +964,9 @@ TEST (grains_finite_and_cpu)
                 e->setParam (kGrainDensity, 8.0);
             }
             e->reset ();
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = sig::run (*e, in, 333, &r);
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         bool finite = true;
         for (size_t i = 0; i < n; ++i)

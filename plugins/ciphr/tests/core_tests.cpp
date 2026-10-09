@@ -3,6 +3,7 @@
 // the processor (taps, diffusion, Length, the feedback and its frequency shifter), Variant and Drift,
 // the input bus, the wave sets and Stretch, Disperse (the band reveal), the factory presets and the CPU
 // budget.
+#include "pluginkit/testing/CpuClock.h"
 #include "Disperse.h"
 #include "Dsp.h"
 #include "Engine.h"
@@ -1517,9 +1518,9 @@ TEST (cpu_budget)
         for (int i = 0; i < 3; ++i)
         {
             auto e = make (mode);
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = render (*e, 10.0, &r, 512, {}, &in);
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
             CHECK (e->activeVoices () == kVoices, "8 voices held");
         }
         bool ok = finite (l) && finite (r);
@@ -1539,10 +1540,10 @@ TEST (cpu_budget)
         {
             Disperse d = bank (32, 1.0);
             std::vector<float> l = in, r = in;
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             for (size_t a = 0; a < n; a += 512)
                 d.process (l.data () + a, r.data () + a, (int)std::min<size_t> (512, n - a));
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
             CHECK (finite (l), "finite");
         }
         std::printf ("    CPU: %.2f%% of one core (Disperse alone, 32 bands stereo, every band sounding)\n", 100.0 * secs / 10.0);

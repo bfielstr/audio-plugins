@@ -12,13 +12,16 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x50454544; // 'DEEP'
-constexpr int32 kVersion = 5;
+constexpr int32 kVersion = 6;
 constexpr int32 kSubHighRange = 2; // 2: the end saturator's Sub and High bands work while their Range is above 0 dB
 constexpr int32 kClassicSlope = 3; // 3: the end saturator's Gentlr Slope (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 4; // 4: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
 // 5: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
 // old defaults where they lack them)
 constexpr int32 kNewDefaults = 5;
+// 6: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 6;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -58,6 +61,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // the end saturator's Sub and High bands had a button each (off by default) and Ranges of 8 and 6 dB
     // by default: a band that was off gets Range 0, one that was on keeps its Range (the same sound)
     if (version < kSubHighRange)

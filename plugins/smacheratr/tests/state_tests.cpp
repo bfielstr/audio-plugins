@@ -123,12 +123,12 @@ int main ()
         State v4;
         CHECK (readOld (4, {{kClarity, 1.0}}, v4) && std::lround (plain (v4, kClaritySlope)) == kSlopeClassic, "version 4: Classic too");
         State now;
-        CHECK (readOld (6, {{kClaritySlope, toNormalized (kClaritySlope, kSlopeSignature)}}, now) &&
+        CHECK (readOld (6, {{kClaritySlope, 0.5}}, now) && // (Signature, of the three choices then)
                    std::lround (plain (now, kClaritySlope)) == kSlopeSignature,
                "version 6: as saved");
         State none;
         CHECK (readOld (6, {{kClarity, 1.0}}, none) && std::lround (plain (none, kClaritySlope)) == kSlope12, "version 6, not saved: 12 / 12");
-        CHECK (defaultNormalized (kClaritySlope) == 0.5, "a new instance: Signature");
+        CHECK (defaultNormalized (kClaritySlope) == toNormalized (kClaritySlope, kSlopeSignature), "a new instance: Signature");
     }
     // Oversampling (version 7) was the Hi-Quality switch: on -> 4x, off -> Off, a value in between on the
     // end the switch read it as; a state of version 7 keeps 2x; a new instance (and a state without it) 4x
@@ -151,7 +151,7 @@ int main ()
         CHECK (readOld (7, {{kDrive, toNormalized (kDrive, 6.0)}}, old), "read");
         CHECK (plain (old, kClarity) == 0.0 && std::lround (plain (old, kClaritySlope)) == kSlope12 && old.has[kClarity] && old.has[kClaritySlope],
                "version 7 without them: Gentlr off, 12 / 12");
-        CHECK (readOld (7, {{kClarity, 1.0}, {kClaritySlope, toNormalized (kClaritySlope, kSlopeClassic)}}, saved) &&
+        CHECK (readOld (7, {{kClarity, 1.0}, {kClaritySlope, 1.0}}, saved) && // (Classic, of the three choices then)
                    plain (saved, kClarity) == 1.0 && std::lround (plain (saved, kClaritySlope)) == kSlopeClassic,
                "version 7 with them: as saved");
         CHECK (readOld (8, {{kClarity, 0.0}, {kClaritySlope, 0.0}}, now) && plain (now, kClarity) == 0.0 &&
@@ -170,7 +170,43 @@ int main ()
         CHECK (writeState (&s, st), "write");
         s.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
-        CHECK (readState (&s, back) && back.norm[kClarity] == 1.0 && back.norm[kClaritySlope] == 0.5, "a new instance's state: on, Signature");
+        CHECK (readState (&s, back) && back.norm[kClarity] == 1.0 && back.norm[kClaritySlope] == toNormalized (kClaritySlope, kSlopeSignature),
+               "a new instance's state: on, Signature");
+    }
+    // Alt Signature (version 9), the Slope's fourth choice: a state saved before has the Slope over three
+    // choices (0, 0.5, 1: 12 / 12, Signature, Classic) and loads the same choice, so it sounds as it did;
+    // one of version 9 loads as saved, Alt Signature too
+    {
+        const double saved[3] = {0.0, 0.5, 1.0};
+        const int was[3] = {kSlope12, kSlopeSignature, kSlopeClassic};
+        for (int32 version : {6, 7, 8})
+            for (int i = 0; i < 3; ++i)
+            {
+                State back;
+                CHECK (readOld (version, {{kClarity, 1.0}, {kClaritySlope, saved[i]}}, back) &&
+                           std::lround (plain (back, kClaritySlope)) == was[i] && back.has[kClaritySlope],
+                       "version %d, Slope saved at %.1f: %s (%s)", version, saved[i], paramTable ().toText (kClaritySlope, was[i]).c_str (),
+                       paramTable ().toText (kClaritySlope, plain (back, kClaritySlope)).c_str ());
+            }
+        for (int s = 0; s < kNumSlopes; ++s)
+        {
+            State back;
+            CHECK (readOld (9, {{kClaritySlope, toNormalized (kClaritySlope, s)}}, back) && std::lround (plain (back, kClaritySlope)) == s,
+                   "version 9: %s as saved", paramTable ().toText (kClaritySlope, s).c_str ());
+        }
+        // what this version writes, it reads back: Alt Signature
+        State st;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            st.norm[id] = defaultNormalized (id);
+            st.has[id] = true;
+        }
+        st.norm[kClaritySlope] = toNormalized (kClaritySlope, kSlopeAltSignature);
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && std::lround (plain (back, kClaritySlope)) == kSlopeAltSignature, "Alt Signature: a round trip");
     }
     std::printf ("smacheratr state: %d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

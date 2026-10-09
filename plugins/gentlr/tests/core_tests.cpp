@@ -1048,14 +1048,60 @@ TEST (slope)
     CHECK (aboveClassic < above12 - 1.0 && std::fabs (above12 - aboveSig) < 1.0, "above the band: Classic cuts more there, the other two alike");
     CHECK (std::fabs (belowSig) < std::fabs (below12) && std::fabs (belowSig) < 0.3, "below the band: Signature leaves it more alone (%.2f / %.2f)",
            belowSig, below12);
+    // Alt Signature (36 dB/oct below) leaves the tone under the band alone too, and above it is Signature's 12
+    const double aboveAlt = drop (smacheratr::kSlopeAltSignature, 1600.0), belowAlt = drop (smacheratr::kSlopeAltSignature, 50.0);
+    std::printf ("    Alt Signature: an octave over the band %.2f dB, two octaves under %.2f dB\n", aboveAlt, belowAlt);
+    CHECK (std::fabs (belowAlt) < 0.3 && std::fabs (aboveAlt - aboveSig) < 1.0, "Alt Signature: below the band alone, above as Signature (%.2f, %.2f)",
+           belowAlt, aboveAlt);
+
+    // each slope's band as the engine runs it: the band cut to its whole Range (a loud tone at its centre,
+    // edges 200 and 800 Hz), what it takes away from quiet tones one and two octaves past each edge is
+    // (1 - g) times the band there, so the band's slope is the difference between the two
+    auto bandSlopes = [] (int slope, double& below, double& above) {
+        auto e = engine ([slope] (Engine& en) {
+            en.setParam (kSlope, slope);
+            en.setParam (bandParam (0, kFreq), 400.0);
+            en.setParam (bandParam (0, kWidth), 2.0);
+            en.setParam (bandParam (0, kRange), 24.0);
+            en.setParam (bandParam (0, kThreshold), -60.0);
+            en.setParam (bandParam (1, kOn), 0.0);
+            en.setParam (kAdvanced, 1.0);
+        });
+        const Sig in = tones ({{400.0, -6.0}, {100.0, -20.0}, {50.0, -20.0}, {1600.0, -20.0}, {3200.0, -20.0}}, 1.0);
+        const Sig out = run (*e, in);
+        const size_t lat = (size_t)e->latency ();
+        std::vector<float> taken (in.l.size (), 0.0f);
+        for (size_t i = lat; i < in.l.size (); ++i)
+            taken[i] = in.l[i - lat] - out.l[i];
+        auto bandDb = [&] (double hz) { return toneDb (taken, hz, 24000) - toneDb (in.l, hz, 24000); };
+        below = bandDb (100.0) - bandDb (50.0);
+        above = bandDb (1600.0) - bandDb (3200.0);
+    };
+    const int measured[4] = {smacheratr::kSlope12, smacheratr::kSlopeSignature, smacheratr::kSlopeClassic, smacheratr::kSlopeAltSignature};
+    const double wantBelow[4] = {12.0, 24.0, 12.0, 36.0}, wantAbove[4] = {12.0, 12.0, 6.0, 12.0};
+    for (int i = 0; i < 4; ++i)
+    {
+        double below = 0.0, above = 0.0;
+        bandSlopes (measured[i], below, above);
+        const std::string name = paramTable ().toText (kSlope, measured[i]);
+        std::printf ("    %-13s the band in the engine: %.1f dB/oct below, %.1f above\n", name.c_str (), below, above);
+        CHECK (std::fabs (below - wantBelow[i]) < 1.5 && std::fabs (above - wantAbove[i]) < 1.5, "%s: %.0f / %.0f dB/oct (%.1f / %.1f)",
+               name.c_str (), wantBelow[i], wantAbove[i], below, above);
+    }
 
     // Classic renders bit for bit what Gentlr rendered before the Slope (the hash taken from the engine
     // before it, 0.11; pinned for the Linux x86-64 GCC build, see smacheratr's test of the same)
-    const uint64_t classic = slopeRenderHash (smacheratr::kSlopeClassic), twelve = slopeRenderHash (smacheratr::kSlope12);
-    std::printf ("    Classic %016llx, 12 / 12 %016llx\n", (unsigned long long)classic, (unsigned long long)twelve);
-    CHECK (classic != twelve, "each slope sounds its own");
+    const uint64_t classic = slopeRenderHash (smacheratr::kSlopeClassic), twelve = slopeRenderHash (smacheratr::kSlope12),
+                   signature = slopeRenderHash (smacheratr::kSlopeSignature), alt = slopeRenderHash (smacheratr::kSlopeAltSignature);
+    std::printf ("    Classic %016llx, 12 / 12 %016llx, Signature %016llx, Alt Signature %016llx\n", (unsigned long long)classic,
+                 (unsigned long long)twelve, (unsigned long long)signature, (unsigned long long)alt);
+    CHECK (classic != twelve && alt != classic && alt != twelve && alt != signature, "each slope sounds its own");
 #if defined(__linux__) && defined(__x86_64__) && defined(__GNUC__) && !defined(__clang__)
     CHECK (classic == 0x9737d2db291ffcddull, "Classic: Gentlr before the Slope, bit for bit (%016llx)", (unsigned long long)classic);
+    // 12 / 12 and Signature as Gentlr rendered them before Alt Signature (0.25), bit for bit
+    CHECK (twelve == 0x4c55d15dd6cbd671ull && signature == 0x26bd17e267bd4406ull,
+           "12 / 12 and Signature: Gentlr before Alt Signature, bit for bit (%016llx, %016llx)", (unsigned long long)twelve,
+           (unsigned long long)signature);
 #endif
 }
 

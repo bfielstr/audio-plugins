@@ -1,4 +1,5 @@
 // Headless tests for the Wubr DSP. Run: ./wubr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Params.h"
 #include "Shape.h"
@@ -377,7 +378,7 @@ TEST (fuzz_and_cpu)
     auto e = engine ();
     std::vector<float> l (256), r (256);
     bool finite = true;
-    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+    const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     for (int blk = 0; blk < 2000; ++blk)
     {
         if (blk % 20 == 0)
@@ -396,7 +397,7 @@ TEST (fuzz_and_cpu)
         for (float v : l)
             finite &= std::isfinite (v) && std::fabs (v) < 100.0f;
     }
-    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+    const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
     std::printf ("    %.1f%% of real time\n", 100.0 * secs / (2000.0 * 256 / kSr));
     CHECK (finite, "finite and bounded");
 }

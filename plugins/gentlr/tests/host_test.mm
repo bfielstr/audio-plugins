@@ -2,6 +2,7 @@
 #include "Engine.h"
 #include "Params.h"
 #include "plugin/State.h"
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
 #include "ui/GentlrView.h"
@@ -265,8 +266,10 @@ int main (int argc, char** argv)
                 rig.param (id, defaultNormalized (id));
 
             // glue on touch: band 1 (250 Hz, 2 octaves: 125 - 500 Hz) and band 2 at 1 kHz, an octave wide
-            // (707 - 1414 Hz). Band 1's high edge dragged to 3 px short of band 2's low edge snaps onto it, and
-            // when the drag ends the two are glued (the link icon on the border, the switch on)
+            // (707 - 1414 Hz). With Menu > Defaults > Glue Bands on Touch checked (the suite's preference, in
+            // the rig's preset folder), band 1's high edge dragged to 3 px short of band 2's low edge snaps onto
+            // it, and when the drag ends the two are glued (the link icon on the border, the switch on);
+            // unchecked (the default) it stays where it was dragged and nothing glues
             {
                 rig.param (bandParam (1, kFreq), toNormalized (bandParam (1, kFreq), 1000.0));
                 rig.param (bandParam (1, kWidth), toNormalized (bandParam (1, kWidth), 1.0));
@@ -275,6 +278,14 @@ int main (int argc, char** argv)
                 auto edge2 = [&] { return plainOf (rig, bandParam (1, kFreq)) / std::exp2 (0.5 * plainOf (rig, bandParam (1, kWidth))); };
                 const double ey = yOfDb (-20.0); // (under the readouts, away from the handles)
                 CHECK (plainOf (rig, kGlue12) < 0.5, "nothing glued by default");
+                CHECK (!pk::glueOnTouch (), "Glue Bands on Touch: off by default");
+                win.drag (xOfHz (edge1 ()), ey, xOfHz (edge2 ()) - 3.0, ey);
+                pump (0.05);
+                CHECK (plainOf (rig, kGlue12) < 0.5 && std::log2 (edge2 () / edge1 ()) > 1e-3, "off: no snap, no glue (%.1f / %.1f Hz)", edge1 (),
+                       edge2 ());
+                rig.param (bandParam (0, kWidth), defaultNormalized (bandParam (0, kWidth)));
+                pump (0.05);
+                CHECK (pk::writeGlueOnTouch (true), "Glue Bands on Touch checked");
                 win.drag (xOfHz (edge1 ()), ey, xOfHz (edge2 ()) - 3.0, ey);
                 pump (0.05);
                 CHECK (plainOf (rig, kGlue12) >= 0.5, "band 1's edge dragged onto band 2's: glued");
@@ -298,6 +309,7 @@ int main (int argc, char** argv)
                 win.click (xOfHz (edge1 ()), Editor::kViewBottom - 16.0 - 10.0);
                 pump (0.05);
                 CHECK (plainOf (rig, kGlue12) >= 0.5, "clicked again: glued");
+                pk::writeGlueOnTouch (false);
                 for (uint32_t id : {(uint32_t)kGlue12, bandParam (0, kFreq), bandParam (0, kWidth), bandParam (1, kFreq), bandParam (1, kWidth)})
                     rig.param (id, defaultNormalized (id));
             }

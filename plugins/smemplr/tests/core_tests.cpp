@@ -1,4 +1,5 @@
 // Headless tests for the Smemplr DSP core. Run: ./smemplr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Fft.h"
 #include "Filter.h"
@@ -2362,9 +2363,9 @@ TEST (playheads_cpu)
         e->setParam (kHeadSpread, 0.7);
         for (int i = 0; i < voices; ++i)
             e->noteOn (40 + i, 0.8f);
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, (int)kHostSr * 4);
-        return 100.0 * (double)(std::clock () - t0) / CLOCKS_PER_SEC / 4.0;
+        return 100.0 * (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec / 4.0;
     };
     auto timeIt = [&] (int voices, int heads, bool warp) {
         double best = 1e9;
@@ -3697,9 +3698,9 @@ TEST (far_transpose_cpu_and_memory)
         double best = 1e9;
         for (int k = 0; k < 3; ++k)
         {
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             run (*e, (int)kHostSr * 2);
-            best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            best = std::min (best, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         return 100.0 * best / 2.0; // % of one core in real time
     };
@@ -3710,7 +3711,7 @@ TEST (far_transpose_cpu_and_memory)
     double old48;
     {
         const double rate = 16.0 * 44100.0 / kHostSr;
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         float sink = 0.0f;
         for (int v = 0; v < 32; ++v)
         {
@@ -3725,7 +3726,7 @@ TEST (far_transpose_cpu_and_memory)
                     pos -= s->length;
             }
         }
-        old48 = 100.0 * (double)(std::clock () - t0) / CLOCKS_PER_SEC / 2.0;
+        old48 = 100.0 * (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec / 2.0;
         if (sink == 12345.0f)
             std::printf ("-");
     }
@@ -4434,9 +4435,9 @@ TEST (performance)
         e->setParam (kWarpMode, warpMode);
         for (int i = 0; i < voices; ++i)
             e->noteOn (40 + i, 0.8f);
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, (int)kHostSr * 4);
-        const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+        const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
         return 100.0 * secs / 4.0; // % of one core in real time
     };
     auto timeIt = [&] (int voices, int warpMode, bool warp) {

@@ -98,6 +98,12 @@ void migrateSubHighInSlots (std::array<double, kNumParams>& norm, std::array<boo
 // by the migrations before this one). Same sound; a new slot gets Signature (12 / 12 up to 0.24).
 void migrateSlopeInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
+// States from before version 24: Gentlr's band Slope had three choices (12 / 12, Signature, Classic) before
+// Alt Signature, stored normalized over those: the Slope a rack's Smacheratr or Gentlr has in the state, as
+// the same choice now (smacheratr::slopeNormFromThreeChoices). Before the migrations that set the Slope
+// (they set it as it is now).
+void migrateSlopeChoicesInSlots (std::array<double, kNumParams>& norm, const std::array<bool, kNumParams>& has, int version);
+
 // States from before version 21: the rack's Smacheratrs and Gentlrs had no glue; their glue switches get
 // off, their default (the places held nothing that was used). Same sound.
 void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);

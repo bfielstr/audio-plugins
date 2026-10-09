@@ -105,8 +105,10 @@ public:
     // must ignore picks from sub-menus (pickedInSubMenu). The Defaults sub-menu (addDefaultsMenu) follows it.
     void addLayoutMenu (VSTGUI::COptionMenu* menu);
     // The Defaults sub-menu (GentlrDefaults.h): Gentlr On by Default (where the plug-in has an end saturator
-    // or a Gentlr switch) and Advanced On by Default, checked as the file beside the presets says; a pick
-    // writes the file at once and applies to new instances only. None for a plug-in without GentlrIds.
+    // or a Gentlr switch) and Advanced On by Default (where it has GentlrIds), checked as the file beside the
+    // presets says; a pick writes the file at once and applies to new instances only. Then, in every
+    // plug-in, Glue Bands on Touch (off by default): the suite's editor preference (pk::glueOnTouch), for
+    // every Gentlr display at once.
     void addDefaultsMenu (VSTGUI::COptionMenu* menu);
     static bool pickedInSubMenu (VSTGUI::COptionMenu* menu);
     // Where the control bound to a parameter is shown, in window pixels (the zoom and the margins

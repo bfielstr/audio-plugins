@@ -6,6 +6,7 @@
 // for bit), Link and Liquid (0.23: off, 0.22's sound bit for bit; the Liquid preset's statistics on a detuned
 // bass, pinned), the gestures (0.27: the curves, Loop and Walk, the transport, every target and none of them
 // touching the Low band, Wobble's phase, the files; off: 0.26's sound bit for bit) and the CPU budget.
+#include "pluginkit/testing/CpuClock.h"
 #include "Dsp.h"
 #include "Engine.h"
 #include "Gesture.h"
@@ -3731,9 +3732,9 @@ TEST (cpu_budget)
                 e->setParam (kLiquidRes, 0.8);
             }
             e->reset ();
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = run (*e, x, nullptr, 512);
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,

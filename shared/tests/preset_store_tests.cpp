@@ -6,6 +6,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -275,6 +276,64 @@ static void gentlrDefaultsFile ()
     fs::remove_all (dir, ec);
 }
 
+// Glue Bands on Touch: the suite's own file (<suite folder>/.defaults.txt), off until it is set; set, it
+// is read back (another instance, a new session); the file's other lines are kept, and the plug-ins' own
+// Defaults files are not touched
+static void glueOnTouchPreference ()
+{
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path () /
+                         ("pk_glue_on_touch_" + std::to_string ((long long)fs::file_time_type::clock::now ().time_since_epoch ().count ()));
+    const char* was = std::getenv ("PK_PRESETS_DIR");
+    const std::string before = was ? was : "";
+#if defined(_WIN32)
+    _putenv_s ("PK_PRESETS_DIR", dir.string ().c_str ());
+#else
+    setenv ("PK_PRESETS_DIR", dir.string ().c_str (), 1);
+#endif
+    CHECK (presets::suiteFolder () == dir.string (), "the suite's folder: %s", presets::suiteFolder ().c_str ());
+    CHECK (!glueOnTouch (), "no file: off");
+    // the key, parsed and written like the others
+    CHECK (parseGentlrDefaults ("Glue On Touch = ON").glueOnTouch == true && parseGentlrDefaults ("glue on touch = off").glueOnTouch == false &&
+               !parseGentlrDefaults ("gentlr = on").glueOnTouch.has_value (),
+           "parsed");
+    GentlrDefaults d;
+    d.glueOnTouch = true;
+    CHECK (gentlrDefaultsText (d).find ("glue on touch = on") != std::string::npos, "written: %s", gentlrDefaultsText (d).c_str ());
+    // saved and read back
+    CHECK (writeGlueOnTouch (true) && fs::exists (dir / ".defaults.txt") && glueOnTouch (), "on: saved, read back");
+    {
+        std::ofstream f (dir / ".defaults.txt", std::ios::binary | std::ios::app);
+        f << "future = 3\n";
+    }
+    CHECK (writeGlueOnTouch (false) && !glueOnTouch (), "off: saved, read back");
+    const GentlrDefaults back = readGentlrDefaults (dir.string ());
+    CHECK (back.glueOnTouch == false && back.other.size () == 1 && back.other[0].first == "future", "the file's other lines kept");
+    CHECK (writeGlueOnTouch (true) && glueOnTouch (), "on again");
+    // a plug-in's own Defaults (its folder in the suite's) do not hold it
+    const std::string plugin = presets::userFolder ("Gentlr");
+    GentlrDefaults own;
+    own.advancedOn = false;
+    CHECK (writeGentlrDefaults (plugin, own) && glueOnTouch () && !readGentlrDefaults (plugin).glueOnTouch.has_value (),
+           "the plug-in's file apart from it");
+    // a corrupt value: off
+    {
+        std::ofstream f (dir / ".defaults.txt", std::ios::binary | std::ios::trunc);
+        f << "glue on touch = maybe\n";
+    }
+    CHECK (!glueOnTouch (), "not understood: off");
+#if defined(_WIN32)
+    _putenv_s ("PK_PRESETS_DIR", before.c_str ());
+#else
+    if (was)
+        setenv ("PK_PRESETS_DIR", before.c_str (), 1);
+    else
+        unsetenv ("PK_PRESETS_DIR");
+#endif
+    std::error_code ec;
+    fs::remove_all (dir, ec);
+}
+
 static void gentlrDefaultValuesPerPlugin ()
 {
     using V = std::vector<std::pair<uint32_t, double>>;
@@ -343,7 +402,7 @@ int main ()
         {"namesAreChecked", namesAreChecked},               {"tagFilter", tagFilter},
         {"menuLayout", menuLayout},                         {"menuFilteredByTag", menuFilteredByTag},
         {"gentlrDefaultsFile", gentlrDefaultsFile},         {"gentlrDefaultValuesPerPlugin", gentlrDefaultValuesPerPlugin},
-        {"hostedFactoryPresets", hostedFactoryPresets},
+        {"hostedFactoryPresets", hostedFactoryPresets},     {"glueOnTouchPreference", glueOnTouchPreference},
     };
     for (const auto& t : tests)
     {

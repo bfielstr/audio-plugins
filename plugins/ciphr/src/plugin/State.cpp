@@ -14,10 +14,13 @@ namespace {
 constexpr int32 kMagic = 0x52485043; // 'CPHR'
 // 1: the first. A later version that changes what a saved value means converts older states in
 // readState (as the other plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 2;
+constexpr int32 kVersion = 3;
 // 2: the end saturator and its Gentlr on by default, Gentlr's Slope Signature (older states keep the
 // old defaults where they lack them)
 constexpr int32 kNewDefaults = 2;
+// 3: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 3;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -57,6 +60,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
     // then keeps them where it lacks them
     if (version < kNewDefaults)

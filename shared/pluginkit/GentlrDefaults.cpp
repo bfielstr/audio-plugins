@@ -1,5 +1,7 @@
 #include "pluginkit/GentlrDefaults.h"
 
+#include "pluginkit/PresetStore.h"
+
 #include <cctype>
 #include <filesystem>
 #include <fstream>
@@ -12,6 +14,7 @@ namespace fs = std::filesystem;
 namespace {
 constexpr const char* kGentlrKey = "gentlr";
 constexpr const char* kAdvancedKey = "advanced";
+constexpr const char* kGlueOnTouchKey = "glue on touch";
 
 std::string trim (const std::string& s)
 {
@@ -62,6 +65,8 @@ GentlrDefaults parseGentlrDefaults (const std::string& text)
             d.gentlrOn = switchValue (value);
         else if (key == kAdvancedKey)
             d.advancedOn = switchValue (value);
+        else if (key == kGlueOnTouchKey)
+            d.glueOnTouch = switchValue (value);
         else
             d.other.emplace_back (key, value);
     }
@@ -75,6 +80,8 @@ std::string gentlrDefaultsText (const GentlrDefaults& d)
         out += std::string (kGentlrKey) + " = " + (*d.gentlrOn ? "on" : "off") + "\n";
     if (d.advancedOn)
         out += std::string (kAdvancedKey) + " = " + (*d.advancedOn ? "on" : "off") + "\n";
+    if (d.glueOnTouch)
+        out += std::string (kGlueOnTouchKey) + " = " + (*d.glueOnTouch ? "on" : "off") + "\n";
     for (const auto& [k, v] : d.other)
         out += k + " = " + v + "\n";
     return out;
@@ -125,6 +132,16 @@ std::vector<std::pair<uint32_t, double>> gentlrDefaultValues (const GentlrIds& i
     if (d.advancedOn && ids.advanced >= 0)
         out.emplace_back ((uint32_t)ids.advanced, *d.advancedOn ? 1.0 : 0.0);
     return out;
+}
+
+bool glueOnTouch () { return readGentlrDefaults (presets::suiteFolder ()).glueOnTouch.value_or (false); }
+
+bool writeGlueOnTouch (bool on)
+{
+    const std::string folder = presets::suiteFolder ();
+    GentlrDefaults d = readGentlrDefaults (folder);
+    d.glueOnTouch = on;
+    return writeGentlrDefaults (folder, d);
 }
 
 } // namespace pk

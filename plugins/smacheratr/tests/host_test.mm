@@ -1,6 +1,7 @@
 // End-to-end test of the built Smacheratr.vst3. usage: smacheratr_hosttest <Smacheratr.vst3> <output dir>
 #include "Params.h"
 #include "plugin/State.h"
+#include "pluginkit/GentlrDefaults.h"
 #include "pluginkit/testing/HostRig.h"
 #include "ui/Editor.h"
 #include "ui/ThresholdSlider.h"
@@ -169,10 +170,14 @@ int main (int argc, char** argv)
             CHECK (win.savePng (outDir + "/ui_smacheratr_prelimit.png"), "pre-limit screenshot");
 
             // Gentlr (called Clarity before): its band appears in the colour display, with Gentlr's layer in front
-            // (the Color | Gentlr switch above the display; Color, the default, has it faint behind)
+            // (the Color | Gentlr switch above the display: Gentlr by default; Color has it faint behind)
             const double layerY = Editor::kLayerTop + 9.0;
             const double colorLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.25, gentlrLayerX = Editor::kLayerLeft + Editor::kLayerW * 0.75;
             const double gentlrX = Editor::kGentlrButtonX, gentlrY = Editor::kGentlrTop + 40;
+            {
+                auto* ctl = static_cast<pk::ControllerBase*> (rig.controller.get ()); // (always a ControllerBase here; dynamic_cast needs typeinfo the macOS link does not export)
+                CHECK (ctl && ctl->uiColorLayer == 1, "a new instance: Gentlr's layer in front");
+            }
             win.click (gentlrX, gentlrY);
             CHECK (plainOf (rig, kClarity) >= 0.5, "Gentlr switched on from the editor");
             win.click (gentlrLayerX, layerY);
@@ -268,6 +273,14 @@ int main (int argc, char** argv)
                 auto edge1 = [&] { return plainOf (rig, kClarityFreq) * std::exp2 (0.5 * plainOf (rig, kClarityWidth)); };
                 auto edge2 = [&] { return plainOf (rig, kClarity2Freq) / std::exp2 (0.5 * plainOf (rig, kClarity2Width)); };
                 CHECK (plainOf (rig, kClarityGlue12) < 0.5, "nothing glued by default");
+                CHECK (!pk::glueOnTouch (), "Glue Bands on Touch: off by default");
+                win.drag (gx (edge1 ()), gy, gx (edge2 ()) - 3.0, gy);
+                pump (0.05);
+                CHECK (plainOf (rig, kClarityGlue12) < 0.5 && std::log2 (edge2 () / edge1 ()) > 1e-3, "off: no snap, no glue (%.1f / %.1f Hz)",
+                       edge1 (), edge2 ());
+                rig.param (kClarityWidth, defaultNormalized (kClarityWidth));
+                pump (0.05);
+                CHECK (pk::writeGlueOnTouch (true), "Glue Bands on Touch checked");
                 win.drag (gx (edge1 ()), gy, gx (edge2 ()) - 3.0, gy);
                 pump (0.05);
                 CHECK (plainOf (rig, kClarityGlue12) >= 0.5, "band 1's edge dragged onto band 2's: glued");
@@ -278,6 +291,7 @@ int main (int argc, char** argv)
                 pump (0.05);
                 CHECK (plainOf (rig, kClarityGlue12) < 0.5 && plainOf (rig, kClarityFreq) == f1 && plainOf (rig, kClarity2Freq) == f2,
                        "the link icon clicked: detached, the bands where they were");
+                pk::writeGlueOnTouch (false);
                 for (uint32_t id : {(uint32_t)kClarityFreq, (uint32_t)kClarityWidth, (uint32_t)kClarity2Freq, (uint32_t)kClarity2Width})
                     rig.param (id, defaultNormalized (id));
             }

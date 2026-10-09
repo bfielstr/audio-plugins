@@ -6,6 +6,8 @@
 #include "Params.h"
 #include "plugin/State.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "base/source/fstreamer.h"
 #include "public.sdk/source/common/memorystream.h"
 
@@ -30,6 +32,13 @@ static int gFailures = 0, gChecks = 0;
             std::printf ("\n");                                            \
         }                                                                  \
     } while (0)
+
+// What a value an older state stored reads as: itself, but the end saturator's Gentlr Slope, stored over
+// its three choices before Alt Signature (version 7): the same choice now
+static double keptAs (uint32_t id, double saved)
+{
+    return id == kTailExt3Base + pk::kTailExt3Slope ? smacheratr::slopeNormFromThreeChoices (saved) : saved;
+}
 
 int main ()
 {
@@ -105,7 +114,7 @@ int main ()
         int kept = 0, defaults = 0;
         for (uint32_t id = 0; id < kNumParams; ++id)
             if (id < old)
-                kept += back.has[id] && back.norm[id] == std::fmod (0.311 * (id + 1), 1.0);
+                kept += back.has[id] && back.norm[id] == keptAs (id, std::fmod (0.311 * (id + 1), 1.0));
             else
                 defaults += !back.has[id] && back.norm[id] == legacyDefaultNormalized (id);
         CHECK (back.norm[kSweep] == 0.0, "a 0.18 state: Sweep off");
@@ -122,7 +131,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 6 && count == (int32)kNumParams, "saved as version 6 (%d) with %d values", version, count);
+        CHECK (version == 7 && count == (int32)kNumParams, "saved as version 7 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
@@ -147,7 +156,7 @@ int main ()
         int kept = 0, rest = 0;
         for (uint32_t id = 0; id < kNumParams; ++id)
             if (id < old)
-                kept += back.has[id] && back.norm[id] == std::fmod (0.173 * (id + 1), 1.0);
+                kept += back.has[id] && back.norm[id] == keptAs (id, std::fmod (0.173 * (id + 1), 1.0));
             else
                 rest += !back.has[id] && back.norm[id] == defaultNormalizedForVersion (id, version);
         CHECK (kept == (int)old && rest == (int)(kNumParams - old), "version %d: %d values kept, %d at their defaults", version, kept,
@@ -177,7 +186,7 @@ int main ()
         CHECK (readState (&s, back), "a version %d state reads", version);
         int kept = 0;
         for (uint32_t id = 0; id < old; ++id)
-            kept += back.has[id] && back.norm[id] == std::fmod (0.191 * (id + 1), 1.0);
+            kept += back.has[id] && back.norm[id] == keptAs (id, std::fmod (0.191 * (id + 1), 1.0));
         CHECK (kept == (int)old, "version %d: every stored value kept (%d of %u)", version, kept, old);
         const bool before = version < 5;
         int bellsOn = 0;
@@ -211,7 +220,7 @@ int main ()
         CHECK (readState (&s, back), "a 0.26 state reads");
         int kept = 0, off = 0;
         for (uint32_t id = 0; id < old; ++id)
-            kept += back.has[id] && back.norm[id] == std::fmod (0.227 * (id + 1), 1.0);
+            kept += back.has[id] && back.norm[id] == keptAs (id, std::fmod (0.227 * (id + 1), 1.0));
         for (int g = 0; g < kNumGestureSlots; ++g)
         {
             const uint32_t id = gestureId (g, kGestureTarget);

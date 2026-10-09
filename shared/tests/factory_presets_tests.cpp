@@ -2,7 +2,8 @@
 // known parameter names, values the parameter accepts and inside its range, unique names. Also
 // `factory_presets_tests --dump <plugin>` lists a plug-in's parameters (names, ranges, defaults,
 // choices) for writing presets. And a new instance of every plug-in runs through its end saturator with
-// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them).
+// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them; probr,
+// which passes the sound untouched, has none).
 #include "pluginkit/PresetStore.h"
 
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
@@ -16,6 +17,7 @@
 #define PK_WITH_locus
 #define PK_WITH_moistr
 #define PK_WITH_smeezr
+#define PK_WITH_probr
 #define PK_WITH_multidyn
 #define PK_WITH_orbitr
 #define PK_WITH_para
@@ -50,6 +52,9 @@
 #endif
 #ifdef PK_WITH_smeezr
 #include "smeezr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_probr
+#include "probr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
@@ -130,6 +135,9 @@ const Plugin kPlugins[] = {
 #endif
 #ifdef PK_WITH_smeezr
     {"smeezr", smeezr::paramTable},
+#endif
+#ifdef PK_WITH_probr
+    {"probr", probr::paramTable},
 #endif
 #ifdef PK_WITH_orbitr
     {"orbitr", orbitr::paramTable},
@@ -214,13 +222,20 @@ void checkNewInstance (const Plugin& p)
     }
     if (n == "gentlr")
         expect ("Slope", "Signature");
+    if (n == "probr")
+    {
+        // an analysis probe: the sound passes untouched, so it has no end saturator; it starts off
+        expect ("Record", "Off");
+        return;
+    }
 #ifdef PK_WITH_smemplr
     if (n == "smemplr")
     {
         // its rack's first slot is a Smacheratr with its own defaults (Smacheratr's IDs are its block
         // positions); the old saturator after the rack stays off (only old projects use it)
         const uint32_t block = smemplr::slotBlockParam (0, 0);
-        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) == 0.5,
+        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) ==
+                                                                                 smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature),
                "smemplr: the first slot's Smacheratr has Gentlr on, Signature");
         check (t.defaultNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0, "smemplr: the old saturator after the rack off");
         return;

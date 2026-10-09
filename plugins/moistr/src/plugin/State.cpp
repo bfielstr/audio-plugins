@@ -33,10 +33,13 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    An older state reads the gestures off (every Target Off, Wobble Amount 0: defaultNormalizedForVersion) and
 //    no user gestures, so it sounds as it did. (An older build reads a version 6 state's parameters and stops
 //    before the gestures' block.)
-constexpr int32 kVersion = 6;
+constexpr int32 kVersion = 7;
 constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
 constexpr int32 kMaxNameBytes = 1024;
 constexpr int32 kNewDefaults = 4;
+// 7: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
+// the same choice
+constexpr int32 kAltSignature = 7;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -90,6 +93,10 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    // as the same choice (first: the conversions below set the Slope as it is now)
+    if (version < kAltSignature)
+        smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
     // then keeps them where it lacks them
     if (version < kNewDefaults)

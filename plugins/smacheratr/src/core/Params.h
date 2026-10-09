@@ -83,16 +83,23 @@ enum ParamId : uint32_t
 static_assert (kClaritySlope == 36 && kClarityGlue12 == 37 && kClarityGlue2High == 41 && kNumParams == 42,
                "the IDs are persisted: the glue switches were appended after the Slope");
 
-// Gentlr's band slopes (kClaritySlope's choices, in this order: persisted), below / above the band:
-// 12 / 12 dB per octave (the default up to 0.24), Signature 24 / 12 (the default) and Classic 12 / 6 (the
-// only shape before).
+// Gentlr's band slopes (kClaritySlope's choices, in this order: persisted, only ever appended), below /
+// above the band: 12 / 12 dB per octave (the default up to 0.24), Signature 24 / 12 (the default),
+// Classic 12 / 6 (the only shape before) and Alt Signature 36 / 12. States store the choice normalized,
+// so appending one moved the normalized values of the others: a value saved while there were three
+// choices is read back as the same choice (slopeNormFromThreeChoices, TailExt.h).
 enum ClaritySlope : int
 {
     kSlope12 = 0,
     kSlopeSignature,
     kSlopeClassic,
+    kSlopeAltSignature,
     kNumSlopes
 };
+static_assert (kSlope12 == 0 && kSlopeSignature == 1 && kSlopeClassic == 2 && kSlopeAltSignature == 3 && kNumSlopes == 4,
+               "the Slope's choices are persisted: only ever appended");
+// the choices there were before Alt Signature (states saved then hold 0, 0.5 or 1)
+constexpr int kSlopesBeforeAltSignature = 3;
 // the Slope a plain value picks
 inline int claritySlopeOf (double plain) { return std::clamp ((int)std::lround (plain), 0, kNumSlopes - 1); }
 

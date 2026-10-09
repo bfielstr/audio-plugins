@@ -14,7 +14,8 @@
 //   wheel on a handle (held, or with Shift)   the colour peak's width / Gentlr's width
 //   double-click or right-click a handle      reset its parameters
 //   a band edge dragged onto a neighbour's (within a few pixels it snaps)   the two are glued at that
-//                                 border when the drag ends: a link icon sits on it, near the bottom
+//                                 border when the drag ends (with Menu > Defaults > Glue Bands on
+//                                 Touch checked: touchSnapOctaves): a link icon sits on it, near the bottom
 //   link icon, click              detaches the two (lit cinnabar: glued), or glues two that touch (copper)
 //   a glued border dragged        both edges move: one band widens as the other narrows (for the Sub and
 //                                 High bands their Freq is the border); a glued band moved drags its

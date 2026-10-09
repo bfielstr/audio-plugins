@@ -444,6 +444,53 @@ int main ()
                "%s", b.ctrl->presetPath ().c_str ());
     }
 
+    std::printf ("colorLayerInTheControllerState\n");
+    {
+        // a new instance: Gentlr's layer in front (Color up to 0.27)
+        Instance n (host);
+        CHECK (n.ctrl->uiColorLayer == 1, "a new instance: Gentlr in front (%d)", n.ctrl->uiColorLayer);
+        // a state that saved its layer keeps it, Color or Gentlr
+        for (int layer : {0, 1})
+        {
+            Instance a (host);
+            a.ctrl->uiColorLayer = layer;
+            MemoryStream st;
+            CHECK (a.ctrl->getState (&st) == kResultOk, "get");
+            st.seek (0, IBStream::kIBSeekSet, nullptr);
+            Instance b (host);
+            CHECK (b.ctrl->setState (&st) == kResultOk && b.ctrl->uiColorLayer == layer, "saved with %s: kept (%d)", layer ? "Gentlr" : "Color",
+                   b.ctrl->uiColorLayer);
+        }
+        // a state from before the view state (it ends after the preset reference): Color, as it showed then
+        MemoryStream old;
+        {
+            IBStreamer s (&old, kLittleEndian);
+            s.writeDouble (1.0);
+            s.writeBool (true);
+            s.writeStr8 ("Old project");
+            s.writeStr8 ("0:");
+        }
+        old.seek (0, IBStream::kIBSeekSet, nullptr);
+        Instance c (host);
+        CHECK (c.ctrl->setState (&old) == kResultOk && c.ctrl->uiColorLayer == 0, "no view state: Color (%d)", c.ctrl->uiColorLayer);
+        // one with the view state's first value only (no layer): Color too
+        MemoryStream one;
+        {
+            IBStreamer s (&one, kLittleEndian);
+            s.writeDouble (1.0);
+            s.writeBool (true);
+            s.writeStr8 ("Old project");
+            s.writeStr8 ("0:");
+            s.writeInt32 (0x56575354); // 'VWST'
+            s.writeInt32 (1);
+            s.writeInt32 (-1);
+        }
+        one.seek (0, IBStream::kIBSeekSet, nullptr);
+        Instance d (host);
+        CHECK (d.ctrl->setState (&one) == kResultOk && d.ctrl->uiColorLayer == 0, "a view state without the layer: Color (%d)",
+               d.ctrl->uiColorLayer);
+    }
+
     std::printf ("layoutInTheControllerState\n");
     {
         // a new instance (no layouts file): Wide

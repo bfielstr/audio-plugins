@@ -1,6 +1,6 @@
 // Gentlr: Smacheratr's Gentlr on its own, without the saturation curve around it. Up to two bands
 // (smacheratr/src/core/ClarityBand.h, around each band's frequency: 12 dB/oct below and above, or
-// with the Slope Signature 24 / 12 or Classic 12 / 6), the Sub band (a shelf from the very bottom up to where its cut starts to let go:
+// with the Slope Signature 24 / 12, Classic 12 / 6 or Alt Signature 36 / 12), the Sub band (a shelf from the very bottom up to where its cut starts to let go:
 // smacheratr::subBand) and the High band (its mirror, a shelf from where its cut starts to let go up
 // to the very top: smacheratr::highBand), each a gentle compressor on its region: when the band's level goes over the
 // threshold (-18 dB, or the band's Threshold with Advanced on) the band is turned down, 3 dB for every
@@ -102,6 +102,7 @@ private:
     {
         smacheratr::Biquad hp[kAllBands], lp[kAllBands]; // the bands (Sub, High: their filters as smacheratr::ClarityBand has them)
         smacheratr::Biquad hp2[kAllBands];               // a band's second section below (Signature's 24 dB/oct: hp2On)
+        smacheratr::Biquad hp3[kAllBands];               // its third (Alt Signature's 36 dB/oct: hp3On)
         smacheratr::Oversampler os;                // the region Drive
         Delay dryDelay, wetDelay;
         void reset ();
@@ -123,6 +124,7 @@ private:
     double bandFreq[kAllBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kAllBands] = {-1.0, -1.0, -1.0, -1.0};
     int bandSlope[kAllBands] = {-1, -1, -1, -1};             // the Slope each band was designed with
     bool hp2On[kAllBands] = {false, false, false, false};    // runs its second section below
+    bool hp3On[kAllBands] = {false, false, false, false};    // and its third
     float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f, 1.0f};
     // a band runs while it works (on, Range above 0) and, after it stops, until its cut has let go
     bool running[kAllBands] = {false, false, false, false};

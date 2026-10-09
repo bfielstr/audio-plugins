@@ -51,7 +51,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     Hi-Quality switch before: on 4x, off Off), and in a Levlr slot's drives (4x, as they always ran)
 // 23: a new Smemplr's first slot (Smacheratr with its own defaults) has Gentlr on and its Slope Signature
 //     (off and 12 / 12 before: a state without them keeps those)
-constexpr int32 kVersion = 23;
+// 24: Gentlr's band Slope has a fourth choice, Alt Signature, in the rack's Smacheratrs and Gentlrs (a Slope
+//     saved before, over three choices, is read as the same choice)
+constexpr int32 kVersion = 24;
 constexpr int32 kNewDefaults = 23;
 constexpr int32 kModsSince = 18;
 
@@ -272,6 +274,9 @@ bool readState (IBStream* stream, PluginState& st)
                 st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
+    // Gentlr's Slope over its three choices before Alt Signature (24): as the same choice now (first: the
+    // migrations below set the Slope as it is now)
+    migrateSlopeChoicesInSlots (st.norm, st.has, version);
     // Gentlr's Advanced mode (11), Sub band (12), High band and No Overlap (17) in the rack's Smacheratrs, and the
     // last two in its Gentlrs: defaults (off: the same sound)
     migrateGentlrInSlots (st.norm, st.has, version);
