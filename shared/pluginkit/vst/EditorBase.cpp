@@ -1127,7 +1127,29 @@ void EditorBase::buildBasic ()
     }
     if (basicPage.display && !g.display.isEmpty ())
         if (CView* v = basicPage.display (g.display))
-            root->addView (v);
+        {
+            // a display of several views in a pk::Group: its views straight into the page, where the
+            // group put them (a cached layer nested in an offset container drew a few edge pixels
+            // unlike direct drawing at 150 %: widr's stage)
+            if (auto* group = dynamic_cast<Group*> (v))
+            {
+                std::vector<CView*> kids;
+                group->forEachChild ([&] (CView* k) { kids.push_back (k); });
+                const CPoint o = group->getViewSize ().getTopLeft ();
+                for (CView* k : kids)
+                {
+                    group->removeView (k, false); // (the reference the group adopted goes over to the page)
+                    CRect r = k->getViewSize ();
+                    r.offset (o.x, o.y);
+                    k->setViewSize (r);
+                    k->setMouseableArea (r);
+                    root->addView (k);
+                }
+                group->forget ();
+            }
+            else
+                root->addView (v);
+        }
     auto control = [this] (CViewContainer* in, const Control& c, const CRect& r) {
         const char* label = c.label.empty () ? nullptr : c.label.c_str ();
         switch (c.kind)
