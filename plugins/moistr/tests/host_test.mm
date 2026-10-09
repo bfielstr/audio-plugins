@@ -393,7 +393,7 @@ int main (int argc, char** argv)
             }
             CHECK (win.savePng (outDir + "/ui_moistr.png"), "screenshot");
             // Classic, Wide and Classic again: knobs found and turned in each (Wide's screenshot)
-            checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix, (uint32_t)kIntensity},
+            checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix, (uint32_t)kSceneAmount},
                           outDir + "/ui_moistr_wide.png");
         }
         // the Basic page (pluginkit/ui/BasicView.h): Input, Drive, Movement, Loop Lock, Position, Sub Guard, Mix and Output

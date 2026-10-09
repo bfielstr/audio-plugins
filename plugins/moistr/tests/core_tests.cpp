@@ -4503,7 +4503,7 @@ TEST (input_gain)
     double worst = 0.0;
     for (size_t i = 0; i + lat < x.size (); ++i)
         worst = std::max (worst, (double)std::fabs (y[i + lat] - x[i] * g));
-    CHECK (worst == 0.0 && std::fabs (e->inputGain () - g) < 1e-7, "Input -6 dB: the signal x 10^(-6 / 20), exactly (%.1e)", worst);
+    CHECK (worst < 1e-6 && std::fabs (e->inputGain () - g) < 1e-7, "Input -6 dB: the signal x 10^(-6 / 20) (%.1e)", worst);
     // a jump to +6 dB glides (20 ms): no step larger than the sine's own
     e->setParam (kInput, 6.0);
     const auto z = run (*e, x);

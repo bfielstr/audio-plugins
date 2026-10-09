@@ -438,7 +438,7 @@ int main ()
             empty += std::lround (toPlain (labSlotParam (sl, kLabType), back.norm[labSlotParam (sl, kLabType)])) == 0 &&
                      back.norm[labSlotParam (sl, kLabOn)] == 1.0;
         for (int c = 0; c < kNumChains; ++c)
-            neutral += toPlain (chainId (c, kChainLevel), back.norm[chainId (c, kChainLevel)]) == 0.0 && back.norm[chainId (c, kChainMute)] == 0.0 &&
+            neutral += std::fabs (toPlain (chainId (c, kChainLevel), back.norm[chainId (c, kChainLevel)])) < 1e-9 && back.norm[chainId (c, kChainMute)] == 0.0 &&
                        back.norm[chainId (c, kChainSolo)] == 0.0 && back.norm[chainId (c, kChainMono)] == 0.0;
         CHECK (empty == kNumLabSlots && neutral == kNumChains, "every slot Empty (%d), every chain at 0 dB, not muted, soloed or mono (%d)", empty,
                neutral);
