@@ -66,10 +66,14 @@ Engine::Engine ()
 {
     for (auto& d : dryDelay)
         d.assign ((size_t)Lab::kMaxLatency, 0.0f);
+    for (auto& d : subDelay)
+        d.assign ((size_t)Lab::kMaxLatency, 0.0);
     flatGesture.flat (1.0);
     drive.maxDb = 18.0;
     for (auto& s : state)
         s.grit.maxDb = 24.0;
+    for (auto& g : subGrit)
+        g.maxDb = 24.0;
     applyPattern (false);
 }
 
@@ -82,8 +86,20 @@ void Engine::prepare (double sampleRate, int maxBlock)
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     for (auto& s : state)
         s.glue.prepare (sr);
+    for (auto& g : subGlue)
+        g.prepare (sr);
     tail.prepare (sr, std::max (1, maxBlock));
+    tailSub.prepare (sr, std::max (1, maxBlock));
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        subOut[ch].assign ((size_t)std::max (1, maxBlock), 0.0f);
+        subThru[ch].assign ((size_t)std::max (1, maxBlock), 0.0f);
+        tailDelay[ch].assign ((size_t)kGuardDelay, 0.0f);
+    }
+    for (auto* v : {&guardG, &guardMix, &guardShare})
+        v->assign ((size_t)std::max (1, maxBlock), 0.0);
     lab.prepare (sr);
+    para.prepare (sr);
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParam (id, p[id]);
     reset ();
@@ -236,6 +252,56 @@ double Engine::cycleSeconds () const
     return sync ? beats * 60.0 / bpm : 1.0 / std::max (p[kRate], 1e-3);
 }
 
+double Engine::thetaAtBeats (double beats) const
+{
+    // (Loop Lock: the band movement's phase as a pure function of the motion clock)
+    if (p[kSync] >= 0.5)
+        return beats / kSyncBeats[std::clamp ((int)std::lround (p[kSyncRate]), 0, kNumSyncRates - 1)];
+    return beats * 60.0 / lockBpm * std::max (p[kRate], 1e-3);
+}
+
+double Engine::loopMotionAt (double songBeats) const
+{
+    const double length = kLoopLengthBeats[std::clamp ((int)std::lround (p[kLoopLength]), 0, kNumLoopLengths - 1)];
+    const double v = songBeats / length, u = v - std::floor (v);
+    double f;
+    if (std::lround (p[kLoopShape]) == kLoopPingPong)
+        f = u < 0.5 ? 2.0 * u : 2.0 - 2.0 * u; // (forward over the first half, back over the second)
+    else
+    {
+        // Wrap: forward over the segment, then back to its start over its last part (a 16th of it, 12 .. 60 ms; a raised
+        // cosine), so the motion clock never jumps
+        const double sec = length * 60.0 / lockBpm, back = std::clamp (sec / 16.0, 0.012, 0.06);
+        const double e = std::min (back / sec, 0.25);
+        f = u < 1.0 - e ? u / (1.0 - e) : 0.5 + 0.5 * std::cos (dsp::kPi * (u - (1.0 - e)) / e);
+    }
+    return loopPos + std::exp2 (logWindow) * f;
+}
+
+void Engine::subAllpass (int pass, int m, const double* g1, bool still)
+{
+    PassState& s = state[pass];
+    double(*x)[kTick] = pass == 0 ? subLow : subLow2;
+    dsp::SvfCoefs c[kMaxXovers];
+    if (still)
+        for (int k = 0; k < kMaxXovers; ++k)
+            c[k].set (g1[k], dsp::kSqrt2);
+    for (int i = 0; i < m; ++i)
+    {
+        const double t = (double)(i + 1) / m;
+        if (!still)
+            for (int k = 0; k < kMaxXovers; ++k)
+                c[k].set (s.gNow[k] + (g1[k] - s.gNow[k]) * t, dsp::kSqrt2);
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            double v = x[ch][i];
+            for (int k = 0; k < kMaxXovers; ++k)
+                v = subAp[pass][k][ch].tick (v, c[k]);
+            x[ch][i] = v;
+        }
+    }
+}
+
 void Engine::reset ()
 {
     // every smoothed setting at its value
@@ -270,6 +336,16 @@ void Engine::reset ()
     secPerCycle = cycleSeconds ();
     theta = 0.0;
     wasPlaying = false;
+    // Input, the motion clock and Loop Lock (0.30) at their values
+    inGain = dbToGain (p[kInput]);
+    locked = p[kLoopLock] >= 0.5;
+    loopPos = std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax);
+    logWindow = std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax));
+    lockBpm = bpm;
+    motionNow = locked ? loopMotionAt (0.0) : 0.0;
+    motionStep = 0.0;
+    if (locked)
+        theta = thetaAtBeats (motionNow);
     // the gestures at the start, every one at its value
     gBeats = gBeatsNow = 0.0;
     logWobRate = std::log2 (std::clamp (p[kWobbleRate], kWobbleRateMin, kWobbleRateMax));
@@ -282,8 +358,41 @@ void Engine::reset ()
         closeLp[c].reset ();
         auxSplit[c].reset ();
     }
-    gestureTick (0, 0.0, true);
+    gestureTick (0, motionNow, true);
     sweep.reset (p.data ());
+    sweep.setLock (locked, motionNow, lockBpm);
+    para.reset (p.data (), motionNow / kParaRateBeats[std::clamp ((int)std::lround (p[kParaRate]), 0, kNumParaRates - 1)]);
+    // Sub Guard (0.30)
+    guardFade = p[kSubGuard] >= 0.5 ? 1.0 : 0.0;
+    logGuard = std::log2 (std::clamp (p[kSubGuardFreq], kGuardFreqMin, kGuardFreqMax));
+    guardGPrev = guardGNow = std::tan (dsp::kPi * std::exp2 (logGuard) / sr);
+    floorShare = std::pow (10.0, std::clamp (p[kSubFloor], kSubFloorMin, 0.0) / 20.0);
+    for (int k = 0; k < kMaxPasses; ++k)
+    {
+        subGlue[k].reset ();
+        subGrit[k].reset ();
+    }
+    subGainPrev = subGainNow = 1.0;
+    for (int c = 0; c < 2; ++c)
+    {
+        guardTap[c].reset ();
+        guardWet[c].reset ();
+        for (auto& pass : subAp)
+            for (auto& x : pass)
+                x[c].reset ();
+        std::fill (subDelay[c].begin (), subDelay[c].end (), 0.0);
+    }
+    subW = 0;
+    guardRun = false;
+    guardBlock = guardFade > 0.0;
+    for (int c = 0; c < 2; ++c)
+    {
+        guardDry[c].reset ();
+        std::fill (tailDelay[c].begin (), tailDelay[c].end (), 0.0f);
+    }
+    tailW = 0;
+    tailInMs = tailOutMs = 0.0;
+    tailSub.reset ();
     drive.reset ();
     for (int k = 0; k < kMaxPasses; ++k)
     {
@@ -322,16 +431,17 @@ void Engine::setParam (uint32_t id, double plain)
         applyPattern (true);
     if (id >= kBandCount)
         return; // (the split's: read where they are used)
-    if (id >= kTailExt4Base)
-        tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
-    else if (id >= kTailExt3Base)
-        tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-    else if (id >= kTailExt2Base)
-        tail.setParam (smacheratr::kTailExt2First + (id - kTailExt2Base), plain);
-    else if (id >= kTailExtBase)
-        tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-    else if (id >= kTailBase)
-        tail.setParam (id - kTailBase, plain);
+    if (id >= kTailBase)
+    {
+        // (the end saturator, and Sub Guard's own for the steady lows)
+        const uint32_t field = id >= kTailExt4Base   ? smacheratr::kTailExt4First + (id - kTailExt4Base)
+                               : id >= kTailExt3Base ? smacheratr::kTailExt3First + (id - kTailExt3Base)
+                               : id >= kTailExt2Base ? smacheratr::kTailExt2First + (id - kTailExt2Base)
+                               : id >= kTailExtBase  ? pk::kTailFields + (id - kTailExtBase)
+                                                     : id - kTailBase;
+        tail.setParam (field, plain);
+        tailSub.setParam (field, plain);
+    }
     else
         switch (id)
         {
@@ -339,10 +449,14 @@ void Engine::setParam (uint32_t id, double plain)
             case kGlue:
                 for (auto& s : state)
                     s.glue.setAmount (plain);
+                for (auto& g : subGlue)
+                    g.setAmount (plain);
                 break;
             case kGrit:
                 for (auto& s : state)
                     s.grit.setAmount (plain);
+                for (auto& g : subGrit)
+                    g.setAmount (plain);
                 break;
             case kSeed: applyPattern (true); break;
             default: break; // (the rest are read where they are used; the 0.18 filters' are not used)
@@ -698,8 +812,11 @@ void Engine::gestureTick (int m, double beats, bool snap)
         if (snap)
             wobAmtPrev = wobAmt;
         wobPhasePrev = wobPhase;
-        wobPhase += wobRate * (double)m * gBpm / 60.0 / sr;
-        if (wobPhase >= 1.0)
+        if (locked)
+            wobPhase += wobRate * motionStep; // (Loop Lock: the integral over the motion clock, back and forth)
+        else
+            wobPhase += wobRate * (double)m * gBpm / 60.0 / sr;
+        if (wobPhase >= 1.0 || wobPhase < 0.0)
         {
             const double whole = std::floor (wobPhase);
             wobPhase -= whole;
@@ -875,12 +992,21 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
             s.split[1].tick (r[i], c, band);
             r[i] = gain[0] * band[0] + gain[1] * band[1] + gain[2] * band[2] + gain[3] * band[3];
         }
+    if (guardRun)
+        subAllpass (pass, m, g1, still); // (Sub Guard: the steady lows through the same corners)
     for (int x = 0; x < kMaxXovers; ++x)
         s.gNow[x] = g1[x];
     for (int b = 0; b < kMaxBands; ++b)
         s.gainNow[b] = gain1[b];
     s.glue.process (l, r, m);
     s.grit.process (l, r, m);
+    if (guardRun)
+    {
+        // (Sub Guard: the steady lows through a Glue and Grit of their own: the gain they have on the lows alone)
+        double(*x)[kTick] = pass == 0 ? subLow : subLow2;
+        subGlue[pass].process (x[0], x[1], m);
+        subGrit[pass].process (x[0], x[1], m);
+    }
 }
 
 void Engine::runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still,
@@ -995,6 +1121,15 @@ void Engine::runLab (PassState& s, double* l, double* r, int m, const double* g1
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
 {
     const pk::NoDenormals guard;
+    if ((size_t)n > guardG.size ())
+    {
+        for (auto& v : subOut)
+            v.assign ((size_t)n, 0.0f);
+        for (auto& v : subThru)
+            v.assign ((size_t)n, 0.0f);
+        for (auto* v : {&guardG, &guardMix, &guardShare})
+            v->assign ((size_t)n, 0.0);
+    }
     running = true;
     const bool sync = p[kSync] >= 0.5;
     const double beats = kSyncBeats[std::clamp ((int)std::lround (p[kSyncRate]), 0, kNumSyncRates - 1)];
@@ -1002,20 +1137,33 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const bool relocate = playing && (!wasPlaying || std::fabs (songPpq - expectPpq) > 1e-3);
     // the gestures' clock: the song position while the host plays, else running on at the last tempo; Wobble's
     // phase set from it when playback starts (so a render from the same place is the same)
+    const bool lockNow = p[kLoopLock] >= 0.5;
+    if (lockNow && !locked)
+    {
+        // (Loop Lock switched on: Position, Window and the tempo from where they are)
+        loopPos = std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax);
+        logWindow = std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax));
+        lockBpm = gBpm;
+    }
+    locked = lockNow;
     if (playing)
     {
         gBeats = songPpq;
         if (!wasPlaying)
         {
-            const double ph = songPpq * wobRate;
+            const double ph = (locked ? loopMotionAt (songPpq) : songPpq) * wobRate;
             wobPhase = wobPhasePrev = ph - std::floor (ph);
         }
     }
     const double beatsPerSample = gBpm / 60.0 / sr;
+    if (locked)
+        sweep.setLock (true, loopMotionAt (gBeats), lockBpm);
+    else
+        sweep.setLock (false, 0.0, bpm);
     sweep.beginBlock (p.data (), playing, relocate, songPpq, bpm);
     // where the movement is: on the song's timeline while the host plays (synced: locked to it; free: set
     // from it when playback starts or jumps, then running at Rate), else running on its own
-    if (playing)
+    if (playing && !locked)
     {
         if (sync)
             theta = songPpq / beats;
@@ -1023,6 +1171,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             theta = songPpq * 60.0 / bpm * rate;
         expectPpq = songPpq + n * bpm / 60.0 / sr;
     }
+    if (playing && locked)
+        expectPpq = songPpq + n * bpm / 60.0 / sr;
     wasPlaying = playing;
     const double dTheta = sync ? bpm / 60.0 / beats / sr : rate / sr;
     secPerCycle = cycleSeconds ();
@@ -1046,16 +1196,29 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
 
     float dryL[kTick], dryR[kTick];
     double wl[kTick], wr[kTick], ql[kTick], qr[kTick];
+    // Input (0.30): not run at 0 dB
+    const float inT = dbToGain (p[kInput]);
+    const bool guardOn = p[kSubGuard] >= 0.5;
+    const double lockGlide = 1.0 - std::exp (-(double)kTick / (0.08 * sr)), bpmGlide = 1.0 - std::exp (-(double)kTick / (0.2 * sr));
     // (the LAB's latency: its kinds change between blocks)
     const int labLat = lab.latency ();
     for (int a = 0; a < n; a += kTick)
     {
         const int m = std::min (kTick, n - a);
         float peak = 0.0f;
+        const bool inputOn = inT != 1.0f || inGain != 1.0f;
         for (int i = 0; i < m; ++i)
         {
             dryL[i] = xl[a + i];
             dryR[i] = xr[a + i];
+            if (inputOn)
+            {
+                inGain += (inT - inGain) * smooth;
+                if (std::fabs (inT - inGain) < 1e-6f)
+                    inGain = inT;
+                dryL[i] *= inGain;
+                dryR[i] *= inGain;
+            }
             wl[i] = dryL[i];
             wr[i] = dryR[i];
             peak = std::max (peak, std::max (std::fabs (dryL[i]), std::fabs (dryR[i])));
@@ -1111,10 +1274,80 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (logLiqLo, std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0)), tickSmooth);
         glide (logLiqHi, std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0)), tickSmooth);
 
+        // the motion clock at this tick's end: the song position, or (Loop Lock) its place in the segment
+        const double songEnd = gBeats + (double)(a + m) * beatsPerSample;
+        if (locked)
+        {
+            glide (loopPos, std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax), lockGlide * m / kTick);
+            glide (logWindow, std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax)), lockGlide * m / kTick);
+            glide (lockBpm, gBpm, bpmGlide * m / kTick);
+            const double mb = loopMotionAt (songEnd);
+            motionStep = mb - motionNow;
+            motionNow = mb;
+            sweep.setLock (true, mb, lockBpm);
+        }
+        else
+        {
+            motionStep = songEnd - motionNow;
+            motionNow = songEnd;
+        }
         // the gestures at this tick's end
-        gestureTick (m, gBeats + (double)(a + m) * beatsPerSample, false);
+        gestureTick (m, locked ? motionNow : songEnd, false);
+        if (locked)
+        {
+            // Loop Lock: Wobble's phase (the integral of its rate) back where it was at the segment's start each time the
+            // segment starts again (its rate, smoothed, is not quite the same on the way back: no drift from loop to loop),
+            // while Position, Window and Length stay as they were
+            const double length = kLoopLengthBeats[std::clamp ((int)std::lround (p[kLoopLength]), 0, kNumLoopLengths - 1)];
+            const int64_t loop = (int64_t)std::floor (songEnd / length);
+            if (loop != loopIndex)
+            {
+                loopIndex = loop;
+                // (the phase at the segment's very start: back from here by the rate over the motion beats since)
+                const double atStart = wobPhase - wobRate * (motionNow - loopPos);
+                if (anchorValid && anchorPos == loopPos && anchorWindow == logWindow && anchorLength == length)
+                {
+                    double d = anchorPhase - atStart;
+                    d -= std::floor (d + 0.5);
+                    wobPhase += d;
+                    wobPhasePrev += d;
+                    wobGain = 1.0 - wobAmt * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * wobPhase));
+                }
+                else
+                {
+                    anchorPhase = atStart;
+                    anchorPos = loopPos;
+                    anchorWindow = logWindow;
+                    anchorLength = length;
+                    anchorValid = true;
+                }
+            }
+        }
+        else
+            anchorValid = false;
         const bool tapping = gestActive && (pullDirt > 0.0 || pullDirtPrev > 0.0 || pullBells > 0.0 || pullBellsPrev > 0.0);
         sweep.tick (p.data (), wl, wr, m, tapping ? &taps : nullptr); // (off: not run)
+        // Sub Guard (0.30): whether it runs this tick; its tap is the SWEEP stage's output (before PARA), with Guard Bells
+        // the stage's steady tap (Sweep.h: its movement kept out of the lows too)
+        const double guard0 = guardFade;
+        guardFade = std::clamp (guardFade + (guardOn ? fadeStep : -fadeStep) * m / kTick, 0.0, 1.0);
+        guardRun = guardFade > 0.0 || guard0 > 0.0;
+        double tap[2][kTick];
+        if (guardRun)
+        {
+            std::copy (wl, wl + m, tap[0]);
+            std::copy (wr, wr + m, tap[1]);
+            if (sweep.steadyTapped ())
+            {
+                const double b0 = guardBellsTap, b1 = sweep.guardBellsAmount ();
+                guardBellsTap = b1;
+                for (int ch = 0; ch < 2; ++ch)
+                    for (int i = 0; i < m; ++i)
+                        tap[ch][i] += (sweep.steadyTap ()[ch][i] - tap[ch][i]) * (b0 + (b1 - b0) * (double)(i + 1) / m);
+            }
+            else
+                guardBellsTap = 0.0;
+        }
         if (tapping)
         {
             // Dirt and Bells: what takes the stage's output to the clean and bare taps (split in pass 1)
@@ -1126,10 +1359,63 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 aux[1][i] = pd * (taps.clean[1][i] - wr[i]) + pb * (taps.bare[1][i] - wr[i]);
             }
         }
+        // PARA (0.30): its movement on the motion clock, the gestures' pulls on it
+        if (para.running (p.data ()))
+        {
+            ParaSplit::Shape sh = ParaSplit::shapeAt (p.data (), motionNow / kParaRateBeats[std::clamp ((int)std::lround (p[kParaRate]), 0, kNumParaRates - 1)]);
+            if (gestActive)
+            {
+                if (targeted (kTargetParaLp))
+                    sh.lpLevel = std::clamp (pulled (kTargetParaLp, sh.lpLevel), 0.0, 1.0);
+                if (targeted (kTargetParaHpFreq))
+                    sh.hpPos = std::clamp (pulled (kTargetParaHpFreq, sh.hpPos), 0.0, 1.0);
+                if (targeted (kTargetParaHpLevel))
+                    sh.hpLevel = std::clamp (pulled (kTargetParaHpLevel, sh.hpLevel), 0.0, 1.0);
+            }
+            para.tick (p.data (), wl, wr, m, sh, p[kSubGuardFreq], guardOn);
+        }
         drive.process (wl, wr, m);
-        const double thetaEnd = theta + dTheta * m;
+        // Sub Guard: the steady lows, the tap below the guard's corner
+        if (guardRun)
+        {
+            const double target = std::log2 (std::clamp (p[kSubGuardFreq], kGuardFreqMin, kGuardFreqMax));
+            if (guard0 <= 0.0)
+                logGuard = target;
+            else
+                glide (logGuard, target, tickSmooth);
+            guardGPrev = guardGNow;
+            guardGNow = std::tan (dsp::kPi * std::exp2 (logGuard) / sr);
+            if (guard0 <= 0.0)
+                guardGPrev = guardGNow;
+            for (int i = 0; i < m; ++i)
+            {
+                dsp::SvfCoefs cg[2];
+                dsp::Lr8Split::coefs (guardGPrev + (guardGNow - guardGPrev) * (double)(i + 1) / m, cg);
+                subLow[0][i] = guardTap[0].low (tap[0][i], cg);
+                subLow[1][i] = guardTap[1].low (tap[1][i], cg);
+            }
+        }
+        const double thetaEnd = locked ? thetaAtBeats (motionNow) : theta + dTheta * m;
         const bool runSecond = twoPasses || pass2 > 0.0;
         runPass (0, wl, wr, m, thetaEnd);
+        if (guardRun)
+        {
+            // (the steady lows delayed with the LAB's Low band)
+            const bool delayed = labRun && labLat > 0;
+            for (int i = 0; i < m; ++i)
+            {
+                for (int ch = 0; ch < 2; ++ch)
+                {
+                    subDelay[ch][(size_t)subW] = subLow[ch][i];
+                    if (delayed)
+                        subLow[ch][i] = subDelay[ch][(size_t)((subW - labLat) & (Lab::kMaxLatency - 1))];
+                }
+                subW = (subW + 1) & (Lab::kMaxLatency - 1);
+            }
+            if (runSecond)
+                for (int ch = 0; ch < 2; ++ch)
+                    std::copy (subLow[ch], subLow[ch] + m, subLow2[ch]);
+        }
         if (runSecond)
         {
             // the second pass takes the first one's result; switching Passes crossfades over 20 ms
@@ -1143,13 +1429,47 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 const double f = from + (pass2 - from) * (double)(i + 1) / m;
                 wl[i] += (ql[i] - wl[i]) * f;
                 wr[i] += (qr[i] - wr[i]) * f;
+                if (guardRun)
+                    for (int ch = 0; ch < 2; ++ch)
+                        subLow[ch][i] += (subLow2[ch][i] - subLow[ch][i]) * f;
             }
             if (pass2 <= 0.0)
             {
                 state[1].resetFilters ();
                 state[1].glue.reset ();
                 state[1].grit.reset ();
+                for (auto& x : subAp[1])
+                    for (auto& f : x)
+                        f.reset ();
             }
+        }
+        if (guardRun)
+        {
+            // Sub Guard: the wet signal's lows replaced by the steady ones, at the Low band's Level (per pass), none while a LAB
+            // chain is soloed; Sub Floor's share of them (the rest the wet lows)
+            const bool lowOff = p[kLowLevel] <= kLevelOffDb && levelDb[0] <= kOffTarget + 1.0;
+            const double g1 = lowOff ? 0.0 : std::pow (10.0, levelDb[0] / 20.0);
+            const double g2 = g1 * g1;
+            subGainPrev = subGainNow;
+            subGainNow = (g1 + (g2 - g1) * pass2) * (labRun ? lab.lowGainNow () : 1.0);
+            if (guard0 <= 0.0)
+                subGainPrev = subGainNow;
+            const double share0 = floorShare;
+            glide (floorShare, std::pow (10.0, std::clamp (p[kSubFloor], kSubFloorMin, 0.0) / 20.0), tickSmooth);
+            // (what the replacement after the end saturator needs, sample by sample: the guard's corner, fade and share, and
+            // the steady lows at their gain; Mix and Output are applied to them below)
+            for (int i = 0; i < m; ++i)
+            {
+                const double t = (double)(i + 1) / m;
+                const size_t k = (size_t)(a + i);
+                guardG[k] = guardGPrev + (guardGNow - guardGPrev) * t;
+                guardMix[k] = guard0 + (guardFade - guard0) * t;
+                guardShare[k] = share0 + (floorShare - share0) * t;
+                const double gs = subGainPrev + (subGainNow - subGainPrev) * t;
+                subLow[0][i] *= gs;
+                subLow[1][i] *= gs;
+            }
+            guardBlock = true;
         }
         theta = thetaEnd;
         if (shiftFade <= 0.0 && shiftFadePrev > 0.0)
@@ -1183,7 +1503,35 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             const float wetL = (float)wl[i], wetR = (float)wr[i];
             yl[a + i] = (dryL[i] + (wetL - dryL[i]) * mix) * out;
             yr[a + i] = (dryR[i] + (wetR - dryR[i]) * mix) * out;
+            if (guardRun)
+            {
+                // Sub Guard: the steady lows as the output has them (the dry signal's lows for the rest of Mix)
+                const size_t k = (size_t)(a + i);
+                dsp::SvfCoefs cg[2];
+                dsp::Lr8Split::coefs (guardG[k], cg);
+                const double dl = guardDry[0].low (dryL[i], cg), dr = guardDry[1].low (dryR[i], cg);
+                subOut[0][k] = (float)((dl + (subLow[0][i] - dl) * mix) * out);
+                subOut[1][k] = (float)((dr + (subLow[1][i] - dr) * mix) * out);
+            }
+            else if (guardBlock)
+            {
+                const size_t k = (size_t)(a + i);
+                subOut[0][k] = subOut[1][k] = 0.0f;
+                guardMix[k] = 0.0;
+                guardG[k] = guardGNow;
+                guardShare[k] = floorShare;
+            }
         }
+        if (guardRun && guardFade <= 0.0)
+            for (int c = 0; c < 2; ++c)
+            {
+                // (faded out: off, and ready to start clean)
+                guardTap[c].reset ();
+                guardDry[c].reset ();
+                for (auto& pass : subAp)
+                    for (auto& x : pass)
+                        x[c].reset ();
+            }
     }
 
     gBeats += (double)n * beatsPerSample; // (while the host plays, the next block's song position replaces it)
@@ -1241,9 +1589,69 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->sweepAmount.store ((float)sweep.amount (), rx);
         meters->shelfAmount.store ((float)sweep.shelfAmount (), rx);
         meters->labLatency.store (lab.latency (), rx);
+        meters->loopOn.store (locked, rx);
+        meters->loopStart.store ((float)loopPos, rx);
+        meters->loopWindow.store ((float)std::exp2 (logWindow), rx);
+        meters->motionBeats.store ((float)motionNow, rx);
+        meters->paraAmount.store ((float)para.amount (), rx);
+        meters->paraLp.store ((float)para.lpGain (), rx);
+        meters->paraHp.store ((float)para.hpGain (), rx);
+        meters->paraHpHz.store ((float)para.hpHz (), rx);
+        meters->guardAmount.store ((float)guardFade, rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
     tail.process (yl, yr, n);
+    if (guardBlock)
+    {
+        // Sub Guard: the output's lows (after the end saturator) replaced by the steady ones, delayed as the end saturator
+        // delays, at the gain it has on them alone (an end saturator of their own, the same settings: its output's slow RMS
+        // against its input's; only the level is taken from it, so its harmonics of the lows are not doubled)
+        const int tailLat = std::min (tail.latency (), kGuardDelay - 1);
+        double inE = 0.0, outE = 0.0;
+        for (int ch = 0; ch < 2; ++ch)
+            std::copy (subOut[ch].begin (), subOut[ch].begin () + n, subThru[ch].begin ());
+        tailSub.process (subThru[0].data (), subThru[1].data (), n);
+        for (int i = 0; i < n; ++i)
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                tailDelay[ch][(size_t)tailW] = subOut[ch][(size_t)i];
+                subOut[ch][(size_t)i] = tailDelay[ch][(size_t)((tailW - tailLat) & (kGuardDelay - 1))];
+                if (ch == 1)
+                    tailW = (tailW + 1) & (kGuardDelay - 1);
+                inE += (double)subOut[ch][(size_t)i] * subOut[ch][(size_t)i];
+                outE += (double)subThru[ch][(size_t)i] * subThru[ch][(size_t)i];
+            }
+        if (inE > 2.0 * n * 1e-10)
+        {
+            const double c = 1.0 - std::exp (-(double)n / (kGuardTailSec * sr));
+            tailInMs += (inE / (2.0 * n) - tailInMs) * c;
+            tailOutMs += (outE / (2.0 * n) - tailOutMs) * c;
+        }
+        const double tailGain = tailInMs > 1e-20 ? std::min (std::sqrt (tailOutMs / tailInMs), 4.0) : 1.0;
+        for (int i = 0; i < n; ++i)
+        {
+            const double gf = guardMix[(size_t)i];
+            dsp::SvfCoefs cg[2];
+            dsp::Lr8Split::coefs (guardG[(size_t)i], cg);
+            float* io[2] = {yl + i, yr + i};
+            for (int ch = 0; ch < 2; ++ch)
+            {
+                double lo, hi;
+                guardWet[ch].tick (*io[ch], cg, lo, hi);
+                const double a2 = guardShare[(size_t)i];
+                const double guarded = hi + lo * (1.0 - a2) + a2 * tailGain * subOut[ch][(size_t)i];
+                *io[ch] = (float)(*io[ch] + (guarded - *io[ch]) * gf);
+            }
+        }
+        if (guardFade <= 0.0)
+        {
+            guardBlock = false;
+            for (auto& w : guardWet)
+                w.reset ();
+            tailSub.reset ();
+            tailInMs = tailOutMs = 0.0;
+        }
+    }
 }
 
 } // namespace moistr

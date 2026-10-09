@@ -11,6 +11,7 @@ add_library(moistr_core STATIC
     src/core/Gesture.cpp
     src/core/GestureFile.cpp
     src/core/Lab.cpp
+    src/core/ParaSplit.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core smemplr_fxslot) # (the LAB's slots: smemplr's)

@@ -164,7 +164,7 @@ std::vector<float> reese (double seconds)
 // tests written before 0.24 start from here; a state saved before 0.24 reads these too)
 void legacy (Engine& e)
 {
-    for (uint32_t id : {kDrive, kMovement, kGlue, kGrit, kSweep})
+    for (uint32_t id : {kDrive, kMovement, kGlue, kGrit, kSweep, kSubGuard}) // (and 0.30's Sub Guard off)
         e.setParam (id, toPlain (id, legacyDefaultNormalized (id)));
 }
 std::unique_ptr<Engine> engine (int block = 512)
@@ -2519,6 +2519,7 @@ TEST (sweep_old_states_keep_their_sound)
             auto e = fresh ();
             for (uint32_t id = 0; id < kNumParams; ++id)
                 e->setParam (id, toPlain (id, old ? defaultNormalized025 (id) : defaultNormalized (id)));
+            e->setParam (kSubGuard, 0.0); // (0.30's Sub Guard, on over Init, off: the rest is what is checked)
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
             e->reset ();
@@ -2770,6 +2771,7 @@ TEST (sweep_old_presets_unchanged)
             auto e = fresh ();
             for (uint32_t id = 0; id < kNumParams; ++id)
                 e->setParam (id, toPlain (id, legacyBase ? legacyDefaultNormalized (id) : defaultNormalized (id)));
+            e->setParam (kSubGuard, 0.0); // (0.30's Sub Guard, on over Init, off: the rest is what is checked)
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
             e->reset ();
@@ -4119,7 +4121,7 @@ TEST (lab_empty_is_029)
         b->reset ();
         CHECK (b->labStage ().active () && b->labLatency () > 0, "set up: running, with a latency");
         // (a 0.29 state: every LAB parameter at what such a state reads)
-        for (uint32_t id = kChainBase; id < kNumParams; ++id)
+        for (uint32_t id = kChainBase; id < kLabEnd; ++id)
             b->setParam (id, toPlain (id, defaultNormalizedForVersion (id, 7)));
         a->reset ();
         b->reset ();
@@ -4413,14 +4415,497 @@ TEST (lab_gesture_targets)
     CHECK (lab.pulledTo (0, false) < 0.0 && lab.pulledTo (3, true) < 0.0, "Gesture None: every pull let go");
 }
 
+// ---- 0.30: Input, Loop Lock, PARA and Sub Guard
+namespace {
+// a detuned saw on B1 (61.7 Hz), the left and right a little apart. The detuned saws leave out their fundamental, so the
+// input's own sub is steady (two fundamentals that close would beat: the input's movement, not moistr's)
+std::vector<float> bassB1 (double seconds, std::vector<float>* right = nullptr)
+{
+    const size_t n = (size_t)(seconds * kSr);
+    std::vector<float> l (n), r (n);
+    double p1 = 0.0, p2 = 0.3, p3 = 0.6;
+    for (size_t i = 0; i < n; ++i)
+    {
+        p1 += 61.74 / kSr;
+        p2 += 61.74 * 1.006 / kSr;
+        p3 += 61.74 * 0.994 / kSr;
+        p1 -= std::floor (p1);
+        p2 -= std::floor (p2);
+        p3 -= std::floor (p3);
+        // (a saw 2 p - 1 is - 2 / pi sum sin (2 pi k p) / k: its fundamental is - 2 / pi sin (2 pi p))
+        const double d2 = 2.0 * p2 - 1.0 + 2.0 / kPi * std::sin (2.0 * kPi * p2), d3 = 2.0 * p3 - 1.0 + 2.0 / kPi * std::sin (2.0 * kPi * p3);
+        l[i] = (float)(0.25 * ((2.0 * p1 - 1.0) + d2));
+        r[i] = (float)(0.25 * ((2.0 * p1 - 1.0) + d3));
+    }
+    if (right)
+        *right = r;
+    return l;
+}
+// renders x (and xr, or x again) while the host plays from beat 0 at `bpm` (at: before each block, may change the tempo)
+std::vector<float> play (Engine& e, const std::vector<float>& x, double bpm, std::vector<float>* right = nullptr,
+                         const std::vector<float>* xr = nullptr, const std::function<void (size_t, double&)>& at = {})
+{
+    const int block = 256;
+    std::vector<float> l (x.size ()), r (x.size ());
+    double ppq = 0.0;
+    for (size_t a = 0; a < x.size (); a += (size_t)block)
+    {
+        if (at)
+            at (a, bpm);
+        const int m = (int)std::min ((size_t)block, x.size () - a);
+        e.setTransport (bpm, ppq, true);
+        e.process (x.data () + a, (xr ? xr->data () : x.data ()) + a, l.data () + a, r.data () + a, m);
+        ppq += m * bpm / 60.0 / kSr;
+    }
+    if (right)
+        *right = r;
+    return l;
+}
+// the RMS (dB) of y in windows of `win` samples from `from`
+std::vector<double> windowsDb (const std::vector<double>& y, size_t from, size_t win)
+{
+    std::vector<double> e;
+    for (size_t a = from; a + 2 * win <= y.size (); a += win) // (the last window left out: the band-pass's edge)
+    {
+        double s = 0.0;
+        for (size_t i = a; i < a + win; ++i)
+            s += y[i] * y[i];
+        e.push_back (db (std::sqrt (s / (double)win)));
+    }
+    return e;
+}
+double spread (const std::vector<double>& v) { return *std::max_element (v.begin (), v.end ()) - *std::min_element (v.begin (), v.end ()); }
+std::vector<double> both (const std::vector<double>& l, const std::vector<double>& r)
+{
+    std::vector<double> s (l.size ());
+    for (size_t i = 0; i < l.size (); ++i)
+        s[i] = 0.5 * (l[i] + r[i]);
+    return s;
+}
+std::vector<float> toFloat (const std::vector<double>& v) { return std::vector<float> (v.begin (), v.end ()); }
+} // namespace
+
+TEST (input_gain)
+{
+    // Input: the gain at the very start, exact (the dry signal for Mix has it too); 0 dB is not run; a change glides
+    const auto x = sine (220.0, 0.5, 0.5);
+    auto e = engine ();
+    tailNeutral (*e);
+    e->setParam (kMix, 0.0);
+    e->setParam (kInput, -6.0);
+    e->reset ();
+    const auto y = run (*e, x);
+    const float g = (float)std::pow (10.0, -6.0 / 20.0);
+    const size_t lat = (size_t)e->latency (); // (the end saturator, off, still delays)
+    double worst = 0.0;
+    for (size_t i = 0; i + lat < x.size (); ++i)
+        worst = std::max (worst, (double)std::fabs (y[i + lat] - x[i] * g));
+    CHECK (worst == 0.0 && std::fabs (e->inputGain () - g) < 1e-7, "Input -6 dB: the signal x 10^(-6 / 20), exactly (%.1e)", worst);
+    // a jump to +6 dB glides (20 ms): no step larger than the sine's own
+    e->setParam (kInput, 6.0);
+    const auto z = run (*e, x);
+    CHECK (maxStep (z) < 2.0 * 2.0 * kPi * 220.0 / kSr * 0.5 * 2.0 + 1e-3, "a change of Input glides (step %.4f)", maxStep (z));
+    CHECK (std::fabs (db (rms (z, z.size () / 2, z.size ())) - db (rms (x, x.size () / 2, x.size ())) - 6.0) < 0.01, "then +6 dB");
+    // on the Ocean sound, the SWEEP stage's make-up keeps the level about the same while the crunch falls
+    auto loud = fresh (), soft = fresh ();
+    soft->setParam (kInput, -12.0);
+    soft->reset ();
+    const auto b = bassB1 (2.0);
+    const auto yl = run (*loud, b), ys = run (*soft, b);
+    const double hl = db (rms (toFloat (bandPass (yl, 2000.0, 8000.0)), 48000, yl.size ())) - db (rms (yl, 48000, yl.size ()));
+    const double hs = db (rms (toFloat (bandPass (ys, 2000.0, 8000.0)), 48000, ys.size ())) - db (rms (ys, 48000, ys.size ()));
+    std::printf ("    Ocean, Input 0 / -12 dB: out %.1f / %.1f dBFS, 2 .. 8 kHz against the whole %.1f / %.1f dB\n", db (rms (yl, 48000, yl.size ())),
+                 db (rms (ys, 48000, ys.size ())), hl, hs);
+    CHECK (finite (ys) && db (rms (ys, 48000, ys.size ())) < db (rms (yl, 48000, yl.size ())) - 3.0, "Ocean with Input down: quieter into the saturator");
+}
+
+TEST (loop_lock_motion_clock)
+{
+    // the motion clock under Loop Lock: Position + Window x shape (frac (song beats / Length)); Wrap glides back over the
+    // segment's last part (a 16th, 12 .. 60 ms), Ping-Pong goes forward then back
+    auto e = fresh ();
+    e->setParam (kLoopLock, 1.0);
+    e->setParam (kLoopPosition, 3.0);
+    e->setParam (kLoopWindow, 2.0);
+    e->setParam (kLoopLength, 4); // (1 bar)
+    e->reset ();
+    const double sec = 4.0 * 60.0 / 120.0, eShare = std::min (std::clamp (sec / 16.0, 0.012, 0.06) / sec, 0.25);
+    double worst = 0.0;
+    for (double b : {0.0, 0.5, 1.0, 2.0, 3.0, 3.5, 3.9, 3.99, 4.2, 9.1, 15.97})
+    {
+        const double u = b / 4.0 - std::floor (b / 4.0);
+        const double f = u < 1.0 - eShare ? u / (1.0 - eShare) : 0.5 + 0.5 * std::cos (kPi * (u - (1.0 - eShare)) / eShare);
+        worst = std::max (worst, std::fabs (e->loopMotionAt (b) - (3.0 + 2.0 * f)));
+    }
+    CHECK (worst < 1e-12, "Wrap: Position + Window x the segment's place (%.1e)", worst);
+    e->setParam (kLoopShape, kLoopPingPong);
+    CHECK (std::fabs (e->loopMotionAt (1.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (2.0) - 5.0) < 1e-12 &&
+               std::fabs (e->loopMotionAt (3.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (4.0) - 3.0) < 1e-12,
+           "Ping-Pong: forward over the first half, back over the second");
+    e->setParam (kLoopShape, kLoopWrap);
+    // every moving part reads it: the band movement (synced), a synced bell, the gestures, PARA
+    e->setParam (kSync, 1.0);
+    e->setParam (kMovement, 0.8);
+    e->setParam (bellId (2, kBellSync), 1.0);
+    e->setParam (kScene, kSceneReeseCell + 1);
+    e->setParam (kParaOn, 1.0);
+    e->reset ();
+    const auto x = bassB1 (4.0);
+    int checked = 0;
+    double off = 0.0;
+    size_t samples = 0;
+    play (*e, x, 120.0, nullptr, nullptr, [&] (size_t a, double&) {
+        if (a == 0)
+            return;
+        samples = a;
+        const double song = (double)a / kSr * 2.0, mb = e->loopMotionAt (song);
+        const double syncBeats = kSyncBeats[std::lround (e->param (kSyncRate))];
+        const double bellBeats = kSyncBeats[std::lround (e->param (bellId (2, kBellSyncRate)))];
+        off = std::max ({off, std::fabs (e->motionBeats () - mb), std::fabs (e->phase () - mb / syncBeats), std::fabs (e->gestureBeats () - mb),
+                         std::fabs (e->sweepStage ().clock (2) - mb / bellBeats)});
+        ++checked;
+    });
+    CHECK (off < 1e-6 && checked > 100, "the motion clock, the bands' phase, the gestures and a synced bell at Loop Lock's place (%.1e)", off);
+    (void)samples;
+}
+
+TEST (loop_lock_repeats)
+{
+    // with Loop Lock every moving value comes round again each Length: the bands' gains, the bells' centres, the
+    // gestures' pull on the bands, Wobble, PARA's paths (silence in, the host stopped: the clock runs on at its tempo)
+    auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+    e->setParam (kLoopLock, 1.0);
+    e->setParam (kLoopPosition, 2.0);
+    e->setParam (kLoopWindow, 4.0);
+    e->setParam (kLoopLength, 4);
+    e->setParam (kParaOn, 1.0);
+    e->setParam (kWobbleAmount, 0.6);
+    e->reset ();
+    const int perLoop = (int)(2.0 * kSr) / 16; // (1 bar at 120 BPM)
+    std::vector<std::array<double, 16>> seen;
+    ticks (*e, 5 * perLoop, [&] (int) {
+        std::array<double, 16> v {};
+        for (int b = 0; b < 4; ++b)
+            v[(size_t)b] = e->bandGainDb (0, b);
+        for (int b = 0; b < 8; ++b)
+            v[(size_t)(4 + b)] = e->sweepStage ().bellHz (b);
+        v[12] = e->gestureGain (kBandMid);
+        v[13] = e->wobbleGainNow ();
+        v[14] = e->paraStage ().lpGain ();
+        v[15] = e->paraStage ().hpHz ();
+        seen.push_back (v);
+    });
+    double worst = 0.0, moved = 0.0;
+    size_t which = 0;
+    for (int k = 0; k < perLoop; ++k)
+        for (size_t j = 0; j < 16; ++j)
+        {
+            const double a = seen[(size_t)(2 * perLoop + k)][j], b = seen[(size_t)(4 * perLoop + k)][j];
+            if (std::fabs (a - b) / std::max (1.0, std::fabs (a)) > worst)
+                which = j;
+            worst = std::max (worst, std::fabs (a - b) / std::max (1.0, std::fabs (a)));
+            moved = std::max (moved, std::fabs (a - seen[(size_t)(2 * perLoop)][j]) / std::max (1.0, std::fabs (a)));
+        }
+    std::printf ("    loops 3 and 5: %.1e apart (value %zu); within a loop the values move by %.2f\n", worst, which, moved);
+    CHECK (worst < 1e-6 && moved > 0.1, "every moving value repeats each Length (%.1e)", worst);
+}
+
+TEST (loop_lock_smooth)
+{
+    // the motion clock never jumps: not at the segment's end (Wrap glides back), not while Position and Window are
+    // slid, not at a tempo change; the output stays finite and its steps no larger than without Loop Lock
+    const auto x = bassB1 (8.0);
+    auto render = [&] (bool lock, double* clockStep, int shape) {
+        auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+        e->setParam (kLoopLock, lock ? 1.0 : 0.0);
+        e->setParam (kLoopShape, shape);
+        e->setParam (kLoopPosition, 1.0);
+        e->setParam (kLoopWindow, 4.0);
+        e->setParam (kLoopLength, 4);
+        e->reset ();
+        double last = e->motionBeats (), step = 0.0;
+        auto y = play (*e, x, 140.0, nullptr, nullptr, [&] (size_t a, double& bpm) {
+            const double t = (double)a / kSr;
+            if (t > 2.0 && t < 3.0)
+                e->setParam (kLoopPosition, 1.0 + 7.0 * (t - 2.0)); // (slid)
+            if (t > 3.5 && t < 3.52)
+                e->setParam (kLoopPosition, 12.0); // (jumped: it glides)
+            if (t > 4.0 && t < 4.02)
+                e->setParam (kLoopWindow, 1.0);
+            if (t > 6.0)
+                bpm = 100.0; // (a tempo change)
+            step = std::max (step, std::fabs (e->motionBeats () - last));
+            last = e->motionBeats ();
+        });
+        if (clockStep)
+            *clockStep = step;
+        return y;
+    };
+    double wrapStep = 0.0, pingStep = 0.0;
+    const auto free = render (false, nullptr, kLoopWrap);
+    const auto wrap = render (true, &wrapStep, kLoopWrap);
+    const auto ping = render (true, &pingStep, kLoopPingPong);
+    std::printf ("    the motion clock's largest step per block: Wrap %.3f, Ping-Pong %.3f beats (the segment: 4 beats); output steps %.3f / %.3f "
+                 "(free %.3f)\n",
+                 wrapStep, pingStep, maxStep (wrap), maxStep (ping), maxStep (free));
+    CHECK (finite (wrap) && finite (ping), "finite");
+    CHECK (wrapStep < 0.6 && pingStep < 0.6, "the motion clock glides (%.3f, %.3f beats per block)", wrapStep, pingStep);
+    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (ping) < 1.25 * maxStep (free), "no step larger than without Loop Lock");
+    // after the tempo change the segment still follows the song: at song beats b, the clock is loopMotionAt (b)
+    auto e = fresh ();
+    e->setParam (kLoopLock, 1.0);
+    e->reset ();
+    double off = 0.0, song = 0.0;
+    play (*e, bassB1 (3.0), 140.0, nullptr, nullptr, [&] (size_t a, double& bpm) {
+        if (a > 0 && song / 4.0 - std::floor (song / 4.0) < 0.9) // (away from the glide back, whose length follows the tempo)
+            off = std::max (off, std::fabs (e->motionBeats () - e->loopMotionAt (song)));
+        if (a >= (size_t)kSr)
+            bpm = 90.0;
+        song += 256.0 * bpm / 60.0 / kSr;
+    });
+    CHECK (off < 1e-6, "a tempo change: the segment keeps time with the song (%.1e)", off);
+}
+
+TEST (para_split)
+{
+    // PARA: LR4 low-pass and high-pass paths in parallel. Meeting at one corner with nothing moving: flat (an all-pass)
+    auto still = [] (Engine& e) {
+        e.setParam (kParaOn, 1.0);
+        e.setParam (kParaLpFreq, 300.0);
+        e.setParam (kParaHpFreq, 300.0);
+        e.setParam (kParaLpMove, 0.0);
+        e.setParam (kParaHpMove, 0.0);
+        e.setParam (kParaHpLevelMove, 0.0);
+    };
+    double worst = 0.0;
+    for (double hz : {50.0, 150.0, 300.0, 600.0, 2000.0, 8000.0})
+    {
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        still (*e);
+        e->reset ();
+        const auto x = sine (hz, 0.25, 1.0);
+        const auto y = run (*e, x);
+        worst = std::max (worst, std::fabs (db (rms (y, 24000, y.size ())) - db (rms (x, 24000, x.size ()))));
+    }
+    CHECK (worst < 0.05, "still, LP Freq = HP Freq: flat (%.3f dB)", worst);
+    // the low-pass path's level moves in and out (LP Move 100 %: all the way), the high-pass path's corner up HP Move
+    // octaves and back, its level in and out; both channels the same
+    auto e = engine ();
+    tailNeutral (*e);
+    plain (*e);
+    still (*e);
+    e->setParam (kParaLpMove, 1.0);
+    e->setParam (kParaHpMove, 2.0);
+    e->setParam (kParaHpLevelMove, 1.0);
+    e->setParam (kParaRate, 2); // (1 bar)
+    e->reset ();
+    std::vector<float> xr;
+    const auto x = bassB1 (4.0, &xr);
+    std::vector<float> lo (x.size ());
+    double hzMin = 1e9, hzMax = 0.0, lpMin = 1.0, hpMin = 1.0;
+    std::vector<float> r;
+    const auto l = play (*e, x, 120.0, &r, &xr, [&] (size_t a, double&) {
+        if (a < 24000)
+            return;
+        hzMin = std::min (hzMin, e->paraStage ().hpHz ());
+        hzMax = std::max (hzMax, e->paraStage ().hpHz ());
+        lpMin = std::min (lpMin, e->paraStage ().lpGain ());
+        hpMin = std::min (hpMin, e->paraStage ().hpGain ());
+    });
+    std::printf ("    HP corner %.0f .. %.0f Hz, LP level down to %.3f, HP level down to %.3f\n", hzMin, hzMax, lpMin, hpMin);
+    CHECK (hzMin < 310.0 && hzMax > 1150.0 && hzMax < 1210.0, "the high-pass path's corner: HP Freq .. 2 octaves up");
+    CHECK (lpMin < 0.01 && hpMin < 0.01, "both levels move all the way out");
+    const auto sub = windowsDb (bandPass (l, 40.0, 80.0), 24000, 2400);
+    CHECK (spread (sub) > 20.0, "the lows move in and out with the low-pass path (%.1f dB)", spread (sub));
+    // a mono input stays mono
+    auto m = engine ();
+    still (*m);
+    m->setParam (kParaLpMove, 1.0);
+    m->setParam (kParaHpLevelMove, 1.0);
+    m->setParam (kLoopLock, 1.0);
+    m->setParam (kInput, -3.0);
+    m->setParam (kGuardBells, 1.0);
+    m->setParam (kSubGuard, 1.0);
+    m->setParam (kSweep, 1.0);
+    m->reset ();
+    std::vector<float> mr;
+    const auto ml = play (*m, x, 120.0, &mr);
+    CHECK (ml == mr, "a mono input stays mono (PARA, Loop Lock, Input, Sub Guard and Guard Bells on)");
+    // with Sub Guard the low-pass path's level moves only above Sub Guard Freq
+    auto g = engine ();
+    tailNeutral (*g);
+    plain (*g);
+    still (*g);
+    g->setParam (kParaLpMove, 1.0);
+    g->setParam (kSubGuard, 1.0);
+    g->reset ();
+    const auto gl = play (*g, x, 120.0);
+    const auto gsub = windowsDb (bandPass (gl, 40.0, 70.0), 24000, 2400), gmid = windowsDb (bandPass (gl, 150.0, 250.0), 24000, 2400);
+    std::printf ("    Sub Guard: 40 .. 70 Hz moves %.2f dB, 150 .. 250 Hz %.1f dB\n", spread (gsub), spread (gmid));
+    CHECK (spread (gsub) < 1.0 && spread (gmid) > 10.0, "with Sub Guard the lows stay, above the guard the path moves");
+}
+
+TEST (new_controls_off_change_nothing)
+{
+    // Input 0 dB, Loop Lock, Split On and Sub Guard off (an older state): whatever their other settings, bit for bit the
+    // same render (the cross-build check against 0.29.0 itself, every factory preset, Init and random states, playing and
+    // stopped, is run by hand)
+    const auto x = reese (1.5);
+    auto render = [&] (bool wild) {
+        auto e = fresh ();
+        e->setParam (kSubGuard, 0.0);
+        e->setParam (kMovement, 0.7);
+        e->setParam (kScene, kSceneReeseCell + 1);
+        e->setParam (kWobbleAmount, 0.4);
+        if (wild)
+        {
+            e->setParam (kLoopPosition, 7.0);
+            e->setParam (kLoopWindow, 0.5);
+            e->setParam (kLoopLength, 1);
+            e->setParam (kLoopShape, kLoopPingPong);
+            e->setParam (kParaLpFreq, 90.0);
+            e->setParam (kParaHpFreq, 3000.0);
+            e->setParam (kParaLpMove, 1.0);
+            e->setParam (kParaHpMove, 4.0);
+            e->setParam (kParaRate, 6);
+            e->setParam (kParaMix, 0.3);
+            e->setParam (kSubGuardFreq, 180.0);
+            e->setParam (kSubFloor, -12.0);
+            e->setParam (kGuardBells, 1.0);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = play (*e, x, 128.0, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    CHECK (render (false) == render (true), "their settings change nothing while they are off (bit for bit)");
+}
+
+TEST (sub_guard_holds_the_sub)
+{
+    // On the heaviest moving presets the output below 70 Hz stays within 1.5 dB from one 16th note to the next (at 140
+    // BPM, a steady B1 bass in), while the 200 Hz .. 6 kHz movement keeps at least 90 % of its range: Sub Guard alone on
+    // the presets that move only the bands (the SWEEP stage off); on those over the Ocean sound (its bells A and B sweep
+    // 20 .. 300 Hz at +-23 dB: the low end moving on purpose, which Sub Guard leaves) with Guard Bells too. (The movement's
+    // range: its 2nd to 98th percentile, as the guard's crossover turns the mids' phase a little, which moves a window's
+    // edge against a fast rise.)
+    std::vector<float> xr;
+    const auto x = bassB1 (7.0, &xr);
+    const size_t from = (size_t)(1.5 * kSr), win = (size_t)(0.25 * 60.0 / 140.0 * kSr); // (16th notes at 140 BPM)
+    struct Case
+    {
+        const char* file;
+        bool bells;
+    };
+    int checked = 0;
+    for (const Case& c : {Case {"Moist/Chop.txt", false}, Case {"Moist/Fast Flicker.txt", false}, Case {"Moist/Bar Pulse.txt", false},
+                          Case {"Moist/Low Push.txt", false}, Case {"Neuro/Neuro Gesture.txt", true},
+                          Case {"Neuro/Neuro Heavy.txt", true}, Case {"Neuro/Neuro.txt", true}, Case {"Gestures/Stutter Wobble.txt", true},
+                          Case {"Gestures/Reese Cell.txt", true}})
+    {
+        double subRange[3] {}, midRange[3] {}, subSd[3] {};
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            auto e = withValues (presetValues (c.file));
+            e->setParam (kSubGuard, mode > 0 ? 1.0 : 0.0);
+            e->setParam (kGuardBells, mode > 1 ? 1.0 : 0.0);
+            e->reset ();
+            std::vector<float> r;
+            const auto l = play (*e, x, 140.0, &r, &xr);
+            const auto sub = windowsDb (both (bandPass (l, 20.0, 70.0), bandPass (r, 20.0, 70.0)), from, win);
+            const auto mid = windowsDb (both (bandPass (l, 200.0, 6000.0), bandPass (r, 200.0, 6000.0)), from, win);
+            subRange[mode] = spread (sub);
+            subSd[mode] = stdDev (sub);
+            midRange[mode] = percentile (mid, 98.0) - percentile (mid, 2.0); // (robust: the guard's crossover shifts the mids' phase)
+        }
+        std::printf ("    %-28s below 70 Hz: range %5.2f / %5.2f / %5.2f dB (SD %4.2f / %4.2f / %4.2f); 200 Hz .. 6 kHz range %5.2f / %5.2f / %5.2f dB "
+                     "(off / Sub Guard / and Guard Bells)\n",
+                     c.file, subRange[0], subRange[1], subRange[2], subSd[0], subSd[1], subSd[2], midRange[0], midRange[1], midRange[2]);
+        const int k = c.bells ? 2 : 1;
+        CHECK (subRange[k] < 1.5, "%s: the sub within %.2f dB (%s)", c.file, subRange[k], c.bells ? "Sub Guard, Guard Bells" : "Sub Guard");
+        CHECK (midRange[k] > 0.9 * midRange[0] && midRange[1] > 0.9 * midRange[0], "%s: the movement above kept (%.1f of %.1f dB)", c.file,
+               midRange[k], midRange[0]);
+        ++checked;
+    }
+    CHECK (checked == 9, "%d presets", checked);
+}
+
+TEST (sub_guard_floor_and_bells)
+{
+    // Sub Floor: the guarded lows are the steady ones x 10^(Floor / 20) plus the wet ones x the rest, so a band dropping
+    // out entirely takes them down to Sub Floor at most. Guard Bells: a bell cutting at 40 Hz leaves the lows alone, one at
+    // 1 kHz still cuts there
+    const auto lowSine = sine (45.0, 0.3, 1.5);
+    auto dropped = [&] (bool guard, double floorDb) {
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        e->setParam (kLowLevel, kLevelOffDb); // (the Low band off: as if it had dipped all the way)
+        e->setParam (kSubGuard, guard ? 1.0 : 0.0);
+        e->setParam (kSubFloor, floorDb);
+        e->reset ();
+        const auto y = run (*e, lowSine);
+        return db (rms (y, 24000, y.size ())) - db (rms (lowSine, 24000, lowSine.size ()));
+    };
+    // (the Low band's own Level is a setting, not a dip: the steady lows follow it, so with it off they are off too)
+    CHECK (dropped (true, 0.0) < -60.0, "the Low band switched off: the guarded lows follow its Level (%.1f dB)", dropped (true, 0.0));
+    auto dip = [&] (double floorDb) {
+        // a gesture lane can not take the Low band down; Low Dip can: 6 dB, with Sub Guard held to Sub Floor
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kLowDip, 6.0);
+        e->setParam (kSpeed, 16.0);
+        e->setParam (kDensity, 8.0);
+        e->setParam (kSubGuard, floorDb > 0.0 ? 0.0 : 1.0);
+        e->setParam (kSubFloor, std::min (floorDb, 0.0));
+        e->reset ();
+        const auto y = run (*e, lowSine);
+        const auto w = windowsDb (bandPass (y, 20.0, 70.0), 24000, (size_t)(kSr * 8.0 / 45.0)); // (8 cycles a window)
+        return *std::min_element (w.begin (), w.end ()) - *std::max_element (w.begin (), w.end ());
+    };
+    const double unguarded = dip (1.0), held = dip (0.0), floor6 = dip (-6.0);
+    std::printf ("    Low Dip 6 dB at 45 Hz: %.2f dB unguarded, %.2f with Sub Guard, %.2f with Sub Floor -6 dB\n", unguarded, held, floor6);
+    CHECK (unguarded < -2.0 && held > -0.5 && floor6 < held - 0.5 && floor6 > unguarded, "Low Dip held off the sub, Sub Floor lets it part of the way");
+    auto bell = [&] (double centre, bool guardBells, double hz) {
+        auto e = fresh ();
+        tailNeutral (*e);
+        for (int b = 0; b < kNumBells; ++b)
+            e->setParam (bellOnId (b), b == 1 ? 1.0 : 0.0);
+        e->setParam (bellId (1, kBellLow), centre);
+        e->setParam (bellId (1, kBellHigh), centre);
+        e->setParam (bellId (1, kBellGain), -24.0);
+        e->setParam (kSweepDrive, 0.0);
+        e->setParam (kSubBoost, 0.0);
+        e->setParam (kToneOn, 0.0);
+        e->setParam (kGuardBells, guardBells ? 1.0 : 0.0);
+        e->reset ();
+        const auto x = sine (hz, 0.1, 1.0);
+        const auto y = run (*e, x);
+        return db (rms (y, 24000, y.size ())) - db (rms (x, 24000, x.size ()));
+    };
+    std::printf ("    bell B at 40 Hz, -24 dB: %.1f dB at 40 Hz, %.1f with Guard Bells; at 1 kHz: %.1f, %.1f with Guard Bells\n", bell (40.0, false, 40.0),
+                 bell (40.0, true, 40.0), bell (1000.0, false, 1000.0), bell (1000.0, true, 1000.0));
+    // (the SWEEP stage's make-up lifts the level back up after the bells' cut: what counts is the lows against the rest)
+    CHECK (bell (40.0, true, 40.0) - bell (1000.0, true, 1000.0) > 20.0 && bell (40.0, false, 40.0) - bell (1000.0, false, 1000.0) < 20.0 &&
+               std::fabs (bell (40.0, true, 40.0)) < 1.5,
+           "Guard Bells: a cut at 40 Hz leaves the lows (at their level, the make-up following)");
+    CHECK (std::fabs (bell (1000.0, true, 1000.0) - bell (1000.0, false, 1000.0)) < 1.0, "Guard Bells: a cut at 1 kHz as it was");
+}
+
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults, the heaviest settings and the Neuro recipe (under 18 %) (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
-    for (int which = 0; which < 5; ++which)
+    for (int which = 0; which < 6; ++which)
     {
-        const bool heavy = which == 1, ocean = which == 2 || which == 3, gestures = which == 3, neuro = which == 4;
+        const bool heavy = which == 1, ocean = which == 2 || which == 3, gestures = which == 3, neuro = which == 4 || which == 5,
+                   all030 = which == 5;
         double secs = 1e9;
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
@@ -4443,6 +4928,16 @@ TEST (cpu_budget)
                 e->setParam (kWobbleAmount, 0.8);
                 // and the one gesture's six lanes on top
                 sceneOn (*e, kSceneReeseCell);
+            }
+            if (all030)
+            {
+                // and 0.30's: Input, Loop Lock, PARA, Sub Guard with Guard Bells
+                e->setParam (kInput, -6.0);
+                e->setParam (kLoopLock, 1.0);
+                e->setParam (kParaOn, 1.0);
+                e->setParam (kSubGuard, 1.0);
+                e->setParam (kGuardBells, 1.0);
+                e->setParam (kPasses, kPasses2);
             }
             if (heavy)
             {
@@ -4479,12 +4974,13 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     neuro ? "the Neuro preset (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
+                     all030 ? "the Neuro preset with two passes, Input, Loop Lock, PARA, Sub Guard and Guard Bells"
+                     : neuro ? "the Neuro preset (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
                      : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
                      : gestures ? "the new instance as above, with four slots (a level gate, Close, Wobble on a rate gesture, Dirt) and Reese Cell"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
                              : "the bands alone (Sweep off)");
-        CHECK (secs / 10.0 < (neuro ? 0.18 : heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
+        CHECK (secs / 10.0 < (all030 ? 0.25 : neuro ? 0.22 : heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
     }
 }
 

@@ -87,6 +87,43 @@
 // and POST on their sum, before Liquid, Close, Wobble and the shifter. The Low band is delayed to line up and never
 // goes through them.
 //
+// 0.30, Input, the motion clock and Loop Lock, PARA and Sub Guard (Input 0 dB, Loop Lock and Split On off by default and
+// in older states, Sub Guard off in older states: the engine is then as without them, bit for bit):
+//   input -> Input -> SWEEP -> [the guard's tap] -> PARA -> Drive -> pass 1 -> [pass 2] -> Mix -> Output -> Smacheratr
+//         -> [Sub Guard]
+//   Input       a gain at the very start (gliding over 20 ms; the dry signal for Mix has it too). Not run at 0 dB.
+//   the motion clock  everything that moves reads its time from one clock, in beats: the bells' and the shelf's clocks,
+//               the bands' movement (theta) and Liquid, the gestures (slots and the one gesture: every lane, so the
+//               Close, Dirt, Bells, Shift, Seed Blend, X and LAB targets too), Wobble's phase and PARA. With Loop Lock off
+//               it is the song position while the host plays (running on at the last tempo while stopped) and each part
+//               reads it as before (the bells, the shelf, the bands and Wobble run on from it, bit for bit). The
+//               frequency shifter's oscillator is not movement (it is the shift itself) and runs on.
+//   Loop Lock   the motion clock is a segment of itself, played in time with the song: with u = frac (song beats /
+//               Length), motion beats = Position + Window x shape (u), and every part is a pure function of them (a
+//               synced clock: beats / its cycle's beats; a free one: beats x 60 / tempo x its rate; Wobble's phase the
+//               integral of its rate over the motion beats, so a gesture moving its rate stays smooth). The segment's
+//               movement is time-scaled to Length: Window / Length x as fast. shape: Wrap runs forward over the segment and
+//               glides back to its start over its last 1/16 (12 .. 60 ms, a raised cosine: everything moves back smoothly,
+//               no jump); Ping-Pong runs forward over the first half and back over the second (no return at all).
+//               Position and Window glide (80 ms), so sliding them is smooth; the tempo the free clocks use glides
+//               (200 ms). Stopped, the song beats run on at the last tempo, so the segment keeps playing.
+//   PARA        ParaSplit.h, before Drive and the bands: its movement feeds Drive, the Glue, Grit and the LAB's clippers;
+//               after the SWEEP stage, whose make-up follows its input's slow level (a moving input would pump it)
+//   Sub Guard   no level movement reaches the lows below Sub Guard Freq. The steady lows: the SWEEP stage's output
+//               (with Guard Bells its steady tap, Sweep.h), low-passed at the corner (Linkwitz-Riley 8th order), sent
+//               through the passes' all-passes only (the same corners, every band at unity: in phase with what the passes
+//               do to the lows), through a Glue and Grit of their own (their gain on the lows alone), delayed with the LAB's
+//               Low band, at the Low band's Level (none while a LAB chain is soloed), then Mix (the dry signal's lows for
+//               the rest) and Output, and delayed as the end saturator delays, at the gain it has on them alone (an end
+//               saturator of their own, the same settings: only its level is used). After the end saturator the output's
+//               lows (the low side of the same split) are replaced by them, its band above the corner kept as it is. So no
+//               dip after the tap reaches the lows (the bands' fall and Drop Out, Low Dip, the gestures' level lanes,
+//               Wobble, the LAB chains, the Glue's pumping, the end saturator pressed by the rest), and PARA's low-pass path
+//               moves only above the corner (ParaSplit.h). Low Push (a swell) is held too. The SWEEP stage's bells move
+//               the lows on purpose and are kept, unless Guard Bells. Sub Floor: the guarded lows are a blend, the steady
+//               ones x 10^(Floor / 20) and the wet ones x the rest, so they may dip at most to Sub Floor. Switching fades
+//               over 20 ms; off it is not run (the engine is then as without it, bit for bit).
+//
 // The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too) and the end
 // saturator's (always in the path).
 #pragma once
@@ -95,6 +132,7 @@
 #include "Gesture.h"
 #include "Lab.h"
 #include "Movement.h"
+#include "ParaSplit.h"
 #include "Params.h"
 #include "Sweep.h"
 
@@ -154,6 +192,11 @@ struct Meters
     // the LAB (0.30): its latency now (samples; -1 before the first block: a controller watching it tells the host,
     // pk::ControllerBase::watchLatency)
     std::atomic<int> labLatency {-1};
+    // Loop Lock (0.30): on, the segment's start and length on the motion clock (beats) and the motion clock now (beats)
+    std::atomic<bool> loopOn {false};
+    std::atomic<float> loopStart {0.0f}, loopWindow {4.0f}, motionBeats {0.0f};
+    // PARA and Sub Guard (0.30): how far each is faded in, the paths' levels and the high-pass path's corner now
+    std::atomic<float> paraAmount {0.0f}, paraLp {1.0f}, paraHp {1.0f}, paraHpHz {250.0f}, guardAmount {0.0f};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -164,6 +207,9 @@ constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLi
 // (kGestureLevelDb, kCloseOctaves and kCloseOpenHz: Gesture.h)
 constexpr double kLevelFadeShare = 16.0, kCloseQ = 5.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
+// Sub Guard: the end saturator's gain on the steady lows follows them over this (s); its delay line's length (samples)
+constexpr double kGuardTailSec = 0.3;
+constexpr int kGuardDelay = 1 << 12;
 
 class Engine
 {
@@ -258,6 +304,17 @@ public:
     double laneValue (int i) const { return lane[i].s; }
     double laneTargetValue (int i) const { return lane[i].shaped; }
 
+    // 0.30: the motion clock now (beats: the song position, or Loop Lock's place in its segment) and whether Loop Lock
+    // holds it; Input's gain now; PARA; Sub Guard (how far it is faded in, the steady lows' gain now)
+    double motionBeats () const { return motionNow; }
+    bool loopLocked () const { return locked; }
+    // where Loop Lock puts the motion clock at song beats `songBeats` (with Position and Window as they are now)
+    double loopMotionAt (double songBeats) const;
+    double inputGain () const { return inGain; }
+    const ParaSplit& paraStage () const { return para; }
+    double guardAmount () const { return guardFade; }
+    double guardSubGain () const { return subGainNow; }
+
 private:
     struct PassState
     {
@@ -302,6 +359,10 @@ private:
     void runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still, bool shifting,
                  bool liquidOn, bool auxOn, bool closeOn, bool wobbleOn);
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
+    // the band movement's phase at motion beats (Loop Lock)
+    double thetaAtBeats (double beats) const;
+    // Sub Guard: the steady lows through pass `pass`'s all-passes (its corners from gNow to g1, as the split has them)
+    void subAllpass (int pass, int m, const double* g1, bool still);
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
     // then what they do this tick
     void gestureTick (int m, double beats, bool snap);
@@ -390,6 +451,40 @@ private:
     bool labRun = false;
     std::vector<float> dryDelay[2];
     int dryW = 0;
+    // Input (0.30): its gain now (gliding)
+    float inGain = 1.0f;
+    // the motion clock and Loop Lock (0.30): on, its Position and Window (log2) gliding, the tempo its free clocks use
+    // (gliding), the motion clock at the tick's end and how far it moved in the tick
+    bool locked = false;
+    double loopPos = 0.0, logWindow = 2.0, lockBpm = 120.0, motionNow = 0.0, motionStep = 0.0;
+    // (Wobble's phase at the segment's start, for the segment as it was then; the segment count of the song)
+    double anchorPhase = 0.0, anchorPos = 0.0, anchorWindow = 0.0, anchorLength = 0.0;
+    bool anchorValid = false;
+    int64_t loopIndex = -1;
+    // PARA (0.30)
+    ParaSplit para;
+    // Sub Guard (0.30): its fade, corner (log2, gliding; g at the tick's start and end), Sub Floor's share (gliding), the
+    // steady lows' gain at the tick's start and end and their level match; the tap's split, the steady lows (this tick)
+    // and their all-passes per pass and corner, their delay to the LAB's latency, and the wet signal's split
+    double guardFade = 0.0, logGuard = 0.0, guardGPrev = 0.0, guardGNow = 0.0, floorShare = 1.0, subGainPrev = 1.0, subGainNow = 1.0;
+    dsp::Glue subGlue[kMaxPasses];
+    dsp::Saturator subGrit[kMaxPasses];
+    double guardBellsTap = 0.0; // (the SWEEP stage's steady tap's share: Guard Bells' fade)
+    // the replacement after the end saturator: whether this block has one, per sample the guard's corner (g), fade and Sub
+    // Floor's share, the steady lows at the output (then through tailSub); the dry signal's lows (for Mix)
+    bool guardBlock = false;
+    std::vector<double> guardG, guardMix, guardShare;
+    std::vector<float> subOut[2], subThru[2], tailDelay[2];
+    int tailW = 0;
+    double tailInMs = 0.0, tailOutMs = 0.0;
+    dsp::Lr8Split guardDry[2];
+    smacheratr::Tail tailSub;
+    dsp::Lr8Split guardTap[2], guardWet[2];
+    dsp::Lr4Allpass subAp[kMaxPasses][kMaxXovers][2];
+    double subLow[2][kTick] {}, subLow2[2][kTick] {};
+    std::vector<double> subDelay[2];
+    int subW = 0;
+    bool guardRun = false; // (this tick)
 };
 
 } // namespace moistr

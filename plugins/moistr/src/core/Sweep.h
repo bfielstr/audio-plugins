@@ -58,6 +58,20 @@
 //          (10^(-average bells' gain / 20): about as loud as the saturated sound)
 //   bare   the saturator (and Tone) without the bells and the shelf, at its make-up for flat bells
 // Clean Sub and Sub Boost (the lows) are left out of both: the taps are only used above the Low crossover.
+//
+// Loop Lock (0.30, Engine.h: the motion clock): while it is on (setLock), every clock is a pure function of the motion
+// clock's beats instead of running on: a synced bell's theta = beats / its Sync Rate's beats, a free one's (and the
+// shelf's) beats x 60 / the tempo x its Rate. Off, the clocks run on exactly as before (bit for bit).
+// Guard Bells (0.30, with Sub Guard): no bell moves the lows below Sub Guard Freq. The bells' output above the guard's
+// corner plus the stage's input below it, through a Linkwitz-Riley 8th-order pair (each side a 4th-order Butterworth
+// squared: they add up to an all-pass, flat where the bells are flat; steep, so a bell's large boost near the corner
+// hardly leaks under it), and each bell's gain fades to flat as its centre comes down to the corner, from an octave
+// above it (guardedBellDb: a smoothstep over that octave). A bell higher up acts as before. The saturator's make-up
+// follows (bellsAverageDb with the guard). It fades in and out over 20 ms; off it is not run.
+// With Guard Bells the stage also gives Sub Guard its tap (steadyTap): the saturator's input at the gain the saturator
+// has on the lows alone (satLowGain: tanh (g x) x make-up against x, x the stage's input below the corner, its RMS over
+// kSatLowSec), so the saturator's own movement (its knee pressed harder as the bells rise above the corner) stays out
+// of the lows too; with Clean Sub at the gain its lows go around it at; Sub Boost's lows added as they are.
 #pragma once
 
 #include "Dsp.h"
@@ -97,6 +111,12 @@ struct ShelfOrbit
     void at (double th, double wander, double& u, double& v) const;
 };
 
+// Guard Bells: the saturator's gain on the lows alone follows them over this (s)
+constexpr double kSatLowSec = 0.3;
+// Guard Bells: a bell's gain (dB) at a centre (Hz): flat at the guard's corner and below, all of it from an octave above
+double guardedBellDb (double gainDb, double centre, double guardHz);
+
+
 // the taps' samples for one tick (both channels)
 struct SweepTaps
 {
@@ -120,6 +140,14 @@ public:
     void beginBlock (const double* p, bool playing, bool relocate, double songPpq, double bpm);
     // one tick of m <= kTick samples, in place (taps: also the clean and bare versions, else nullptr)
     void tick (const double* p, double* l, double* r, int m, SweepTaps* taps = nullptr);
+    // Loop Lock: the clocks at the motion clock's beats (and the tempo it turns them into seconds with) from the next tick
+    // on, or (off) running on by themselves
+    void setLock (bool on, double beats, double bpm)
+    {
+        lockOn = on;
+        lockBeats = beats;
+        lockBpm = bpm > 1.0 ? bpm : 120.0;
+    }
     // run at all (on, or fading out): when false, tick does nothing
     bool running (const double* p) const { return p[kSweep] >= 0.5 || fade > 0.0; }
 
@@ -141,6 +169,12 @@ public:
     double boostAmount () const { return boostFade; } // 0 .. 1: Sub Boost faded in
     double boostUnit () const { return boostNow; }     // Sub Boost's gain at Sub Level 1 now (the RMS match)
     double toneAmount () const { return toneFade; } // 0 .. 1: Tone faded in
+    // Sub Guard's tap with Guard Bells (whether the stage made one this tick: running, Guard Bells faded in) and the
+    // saturator's gain on the lows alone now
+    bool steadyTapped () const { return steadyNow; }
+    const double (&steadyTap () const)[2][kTick] { return steady; }
+    double satLowGain () const { return satLow; }
+    double guardBellsAmount () const { return guardFade; } // 0 .. 1: Guard Bells faded in
     double compensationNow () const { return compNow; }
     double driveGainNow () const { return gNow; } // the saturator's input gain (Drive on its Curve)
     double inputLevel () const { return levelMs > 0.0 ? std::sqrt (levelMs) : 0.0; } // the make-up's input RMS
@@ -149,7 +183,9 @@ public:
     static double compensation (double driveDb, double avgDb, double inRms = kSweepRefRms);
     // n bells' average gain (dB) on a bass: their gain at kAvgRefHz (power, weighted by kAvgRefWeight),
     // averaged in power over their sweeps (lo, hi: Hz; q: Width). A bell at 0 dB is flat and left out.
-    static double bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q, int n = 2);
+    // guardHz (> 0, Guard Bells): each bell's gain as guardedBellDb has it at each place of its sweep
+    static double bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q, int n = 2, double guardHz = 0.0);
+
 
 private:
     struct Coefs
@@ -191,6 +227,14 @@ private:
     dsp::AdaaTanh satBare[2]; // (the taps: bare's saturator, and Tone for clean and bare)
     dsp::Svf toneClean[2], toneBare[2];
     ShelfOrbit orbit, oldOrbit; // (oldOrbit: fading out after a Seed change while orbitFade < 1)
+    // Loop Lock: the clocks from the motion clock's beats; Guard Bells: its fade, its corner (log2, gliding; g at the
+    // tick's start and end) and its two splits (the input's lows, the bells' output's highs)
+    bool lockOn = false;
+    double lockBeats = 0.0, lockBpm = 120.0;
+    double guardFade = 0.0, logGuard = 0.0, guardGPrev = 0.0, guardGNow = 0.0;
+    dsp::Lr8Split guardIn[2], guardOut[2]; // (only their low and high sides are run)
+    double steady[2][kTick] {}, satLow = 1.0, satLowIn = 0.0, satLowOut = 0.0, satLowCoef = 0.01;
+    bool steadyNow = false;
     double orbitFade = 1.0, lastBpm = 120.0;
 };
 

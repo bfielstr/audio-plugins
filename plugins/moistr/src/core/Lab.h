@@ -80,6 +80,7 @@ public:
     void releasePulls ();
     double pulledTo (int chain, bool ott) const { return pulls[(size_t)chain][ott ? 1 : 0]; } // (-1: none)
     double chainGain (int chain) const { return gain[(size_t)chain]; } // now, with its fades (0 .. )
+    double lowGainNow () const { return lowGain; } // the Low band's gain now (0 while a chain is soloed; gliding)
 
 private:
     struct Delay
