@@ -2349,7 +2349,7 @@ TEST (playheads_spread_and_channels)
 
 TEST (playheads_cpu)
 {
-    // CPU scales with the playheads: four of them in every voice stay real-time (best of three)
+    // CPU scales with the playheads: four of them in every voice stay real-time (best of five)
     auto s = sine (220.0, 4.0, 44100.0, true);
     auto timeOnce = [&] (int voices, int heads, bool warp) {
         std::unique_ptr<Engine> e (makeEngine (s));
@@ -2369,7 +2369,7 @@ TEST (playheads_cpu)
     };
     auto timeIt = [&] (int voices, int heads, bool warp) {
         double best = 1e9;
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < 5; ++i)
             best = std::min (best, timeOnce (voices, heads, warp));
         return best;
     };
@@ -3694,9 +3694,9 @@ TEST (far_transpose_cpu_and_memory)
         e->setParam (kWarpMode, std::max (0, warpMode));
         for (int i = 0; i < voices; ++i)
             e->noteOn (48 + i % 12, 0.8f);
-        // CPU time (other programs running do not count), the best of three renders
+        // CPU time (other programs running do not count), the best of five renders (one shared CI machine slowed a single render to 2.5 times its usual time)
         double best = 1e9;
-        for (int k = 0; k < 3; ++k)
+        for (int k = 0; k < 5; ++k)
         {
             const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             run (*e, (int)kHostSr * 2);
@@ -4424,7 +4424,7 @@ TEST (loop_beat_restarts_on_the_beat)
 TEST (performance)
 {
     auto s = sine (220.0, 4.0, 44100.0, true);
-    // CPU time (other programs running do not count), the best of three renders
+    // CPU time (other programs running do not count), the best of five renders (one shared CI machine slowed a single render to 2.5 times its usual time)
     auto timeOnce = [&] (int voices, int warpMode, bool warp) {
         std::unique_ptr<Engine> e (makeEngine (s));
         e->setParam (kVoices, 14); // 32
@@ -4442,7 +4442,7 @@ TEST (performance)
     };
     auto timeIt = [&] (int voices, int warpMode, bool warp) {
         double best = 1e9;
-        for (int i = 0; i < 3; ++i)
+        for (int i = 0; i < 5; ++i)
             best = std::min (best, timeOnce (voices, warpMode, warp));
         return best;
     };
