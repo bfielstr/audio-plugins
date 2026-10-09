@@ -22,7 +22,7 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
-    // The Basic page (pluginkit/ui/BasicView.h): the display, Depth, Dip Freq, Threshold and Sub Gain; Mix and Output; the end saturator in the extras
+    // The Basic page (pluginkit/ui/BasicView.h): the display, Depth, Dip, Thresh and Sub; Mix and Output; the end saturator in the extras
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
