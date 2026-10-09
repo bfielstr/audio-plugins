@@ -46,6 +46,8 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): the Analog curve and the colour display, Drive, Post Clip, Color and Gentlr; Output and Dry/Wet
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
