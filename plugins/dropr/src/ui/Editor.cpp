@@ -192,9 +192,7 @@ void Editor::idle ()
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
-            char buf[64];
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", s->latency.load ());
-            latencyLabel->setText (buf);
+            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ()));
         }
 }
 

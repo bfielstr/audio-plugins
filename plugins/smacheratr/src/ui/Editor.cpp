@@ -346,11 +346,13 @@ void Editor::idle ()
     if (status)
         if (auto* s = ctl->getShared ())
         {
-            char buf[96];
+            // (shorter versions where the line has no room)
             const int f = oversamplingFactor (plainValue (kOversampling));
-            std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples", f == 4 ? "4x oversampling" : f == 2 ? "2x oversampling" : "Oversampling off",
-                           plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", std::max (0, s->meters.latency.load ()));
-            status->setText (buf);
+            const bool ms = plainValue (kMidSide) >= 0.5;
+            const std::string lat = std::to_string (std::max (0, s->meters.latency.load ()));
+            const std::string os = f == 4 ? "4x" : f == 2 ? "2x" : "1x";
+            status->setTexts ({(f > 1 ? os + " oversampling" : std::string ("Oversampling off")) + (ms ? ", Mid/Side" : "") + ", latency " + lat + " samples",
+                               os + (ms ? ", Mid/Side" : "") + ", latency " + lat, os + (ms ? ", M/S" : "") + ", " + lat + " smp"});
         }
 }
 

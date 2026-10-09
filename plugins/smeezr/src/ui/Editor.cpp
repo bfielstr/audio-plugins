@@ -171,10 +171,8 @@ void Editor::idle ()
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
-            char buf[64];
             const int tailNow = s->tailMeters.latency.load (); // (the end saturator's is all of it; -1: not known yet)
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 ? tailNow : s->latency.load ());
-            latencyLabel->setText (buf);
+            latencyLabel->setTexts (pk::latencyTexts (tailNow >= 0 ? tailNow : s->latency.load ()));
         }
 }
 

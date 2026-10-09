@@ -197,13 +197,11 @@ void Editor::idle ()
     {
         const int latency = ctl->getShared () ? ctl->getShared ()->latency.load () : 0;
         const int n = stage ? stage->groupSize () : 0;
-        char buf[96];
-        if (n <= 1)
-            std::snprintf (buf, sizeof (buf), "Latency %d samples \xC2\xB7 Alone", latency);
-        else
-            std::snprintf (buf, sizeof (buf), "Latency %d samples \xC2\xB7 %d in group %d", latency, n,
-                           (int)std::lround (plainValue (kGroup)));
-        statusLabel->setText (buf);
+        // (shorter versions where the line has no room: the latency abbreviated, then left to the tooltip)
+        const std::string dot = " \xC2\xB7 ", lat = std::to_string (latency);
+        const std::string group = n <= 1 ? std::string ("Alone")
+                                         : std::to_string (n) + " in group " + std::to_string ((int)std::lround (plainValue (kGroup)));
+        statusLabel->setTexts ({"Latency " + lat + " samples" + dot + group, "Latency " + lat + dot + group, lat + " smp" + dot + group, group});
     }
 }
 

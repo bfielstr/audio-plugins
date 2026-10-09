@@ -430,26 +430,28 @@ void Editor::idle ()
     }
     if (status)
     {
-        std::string t;
+        // (shorter versions where the line has no room: without the start, then without the clip's name;
+        // the whole line is the tooltip)
+        std::vector<std::string> t;
         if (errorTicks > 0)
         {
             --errorTicks;
-            t = lastError;
+            t = {lastError, "Error (point here for the message)", "Error"};
         }
         else if (s->hasClip ())
         {
             const Clip c = s->clip ();
             const double speed = s->settings ().speed;
             const double outLen = TimeMap (c.markers, 1.0 / std::max (speed, 1e-3)).outLength ();
-            char buf[256];
-            std::snprintf (buf, sizeof (buf), "%s   %.2f s -> %.2f s   starts at %s   %s", c.name.c_str (),
-                           c.srcLength (), outLen, clock (c.start).c_str (),
-                           s->rendering.load () ? "rendering..." : (s->upToDate () ? "ready" : "waiting"));
-            t = buf;
+            const char* state = s->rendering.load () ? "rendering..." : (s->upToDate () ? "ready" : "waiting");
+            char times[64];
+            std::snprintf (times, sizeof (times), "%.2f s -> %.2f s", c.srcLength (), outLen);
+            t = {c.name + "   " + times + "   starts at " + clock (c.start) + "   " + state, c.name + "   " + times + "   " + state,
+                 std::string (times) + "   " + state, state};
         }
         else
-            t = "No clip";
-        status->setText (t);
+            t = {"No clip"};
+        status->setTexts (t);
     }
 }
 
