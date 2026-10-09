@@ -31,7 +31,14 @@ sweep alone; turn them up to layer the movement on. A **gesture** (see [Gestures
 controls together in time with the song on the bands above the low end: band fades and swells, stutters, a
 wobble, a closing filter, a dirty crossfade, all on one timeline. The **LAB** (see [LAB](#lab)) puts
 effect chains on the bands above the low end: each band hits its own distortion and OTT, with one more OTT
-on their sum. The **Neuro** preset uses all of it: dense, dirty and moving, with the sub clean. Install instructions are in the [top-level README](../../README.md).
+on their sum. The **Neuro** preset uses all of it: dense, dirty and moving, with the sub clean.
+
+**Input** sets the level going in, **Loop Lock** holds all of the movement on one moment of it and plays
+that moment again in time with the song, **PARA** splits the sound into a low-pass and a high-pass path
+that move against each other, and **Sub Guard** (on in a new instance) keeps the sub steady while
+everything above it moves (see [Input, Loop Lock, PARA and Sub Guard](#input-loop-lock-para-and-sub-guard)).
+The window opens on a **Basic** page of the main controls; **Advanced** shows every one (see
+[The Basic page](#the-basic-page)). Install instructions are in the [top-level README](../../README.md).
 
 ![moistr](../../docs/moistr/ui_moistr.png)
 
@@ -73,9 +80,12 @@ on their own timing, is moistr's second stage (the moving bands).
 ## Signal flow
 
 ```
-input -> SWEEP: bells A .. H -> High Shelf -> saturator (level matched; Clean Sub: the lows around it)
+input -> Input -> SWEEP: bells A .. H -> High Shelf -> saturator (level matched; Clean Sub: the lows around it)
                [+ Sub Boost: the saturator's input, low-passed] -> Tone
-      -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> smacheratr (the end saturator)
+      -> [PARA: low-pass path + high-pass path, moving] -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet)
+      -> Output -> smacheratr (the end saturator) -> [Sub Guard: the lows below Freq replaced by the steady ones]
+motion clock: the song position, or (Loop Lock) Position + Window x where the song is in Length: every
+          clock below reads it (the bells, the shelf, the bands, Liquid, the gesture, Wobble, PARA)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
          -> [LAB, pass 1: Mid, High, Air each through its chain -> their sum through POST; Low delayed]
          -> [Liquid: the bands above Low only] -> [Shift: the bands above Low only] -> Low + the others
@@ -485,6 +495,86 @@ their `"candidate"`), so you can swap them by editing `"target"`. What has no ta
 out for all of them. Copy the file into the **Gestures** folder and pick it with **File**. Your files stay
 on your computer; nothing is sent anywhere.
 
+## Input, Loop Lock, PARA and Sub Guard
+
+The row above the end saturator (all four new in 0.30; a project saved before keeps its sound: **Input** at
+0 dB, **Loop Lock** and **Split** off, **Sub Guard** off).
+
+**INPUT**: **Input** (-24 to +12 dB, 0 dB by default) is the level going in, at the very start of the
+chain (the dry signal for **Mix** has it too). The SWEEP stage's saturator follows the input's level for
+its make-up, so turning **Input** down eases the crunch while the output stays about as loud.
+
+**LOOP LOCK** holds the movement on one moment of it. Everything that moves in moistr reads its time from
+one motion clock: the bells and the High Shelf, the bands' rise and fall and their crossovers, **Liquid**,
+the gesture and every lane of it (so **Close**, **Dirt**, **Bells**, **Shift**, the LAB's targets and the
+rest), **Wobble** and **PARA**. With **Loop Lock** off that clock is the song position (running on at the
+last tempo while the host is stopped) and everything moves exactly as before. With **Loop Lock** on the
+clock plays a segment of itself, in time with the song:
+
+- **Position**: where on the movement's timeline the segment starts (0 to 16 beats). Slide it to scan for
+  the moment you want; it glides (80 ms), so sliding never clicks.
+- **Window**: how much movement the segment holds (1/8 beat to 16 beats, 4 by default). Beats are the
+  movement's own time, at the song's tempo, so a synced cycle and a free one (in Hz) are both in it.
+- **Length**: how long the segment takes in the song: 1/16, 1/8, 1/4, 1/2, 1, 2 or 4 bars. Every Length
+  the segment starts again. Its movement is time-scaled to fit: **Window** equal to **Length** (4 beats
+  and 1 bar) plays it at its own speed, a smaller **Window** slows it down to fill **Length**, a larger one
+  speeds it up. A bell, a band's rise and fall, a lane and **Wobble** all follow (motion beats = Position +
+  Window x where the song is in Length).
+- **Shape**: **Wrap** (the default) plays the segment forward, then glides back to its start over its last
+  16th (12 to 60 ms, a raised cosine): every moving value goes back smoothly instead of jumping, so the
+  loop never clicks. **Bounce** plays it forward over the first half of **Length** and back over the
+  second, with no return at all.
+
+While the host is stopped the segment keeps playing at the last tempo. A tempo change keeps the segment in
+time with the song; the free clocks' tempo glides (200 ms). The gesture display marks the segment on the
+gesture's timeline (with no gesture, on a ruler of **Position**'s 16 beats with the clock's place), and
+its footer gives it in beats.
+
+**PARA** splits the sound as para does: a low-pass path and a high-pass path in parallel (each a
+Linkwitz-Riley 4th-order filter: with **LP Freq** and **HP Freq** the same and nothing moving they add up
+flat; with **HP Freq** above **LP Freq** there is a hollow between them), after the SWEEP stage and before
+**Drive** and the bands, so their movement feeds the grit after it (**Drive**, the **Glue**, **Grit** and
+the LAB's clippers) while the SWEEP stage's make-up stays steady. Over each cycle of **Rate** (4 bars to
+1/16, in time with the motion clock, so **Loop Lock** holds it too):
+
+- the low-pass path moves in and out: **LP Move** is how far out (100 %: all the way, in the middle of the
+  cycle);
+- the high-pass path's corner moves up from **HP Freq** by **HP Move** octaves and back, a quarter cycle
+  ahead, and its level moves out by **HP Level** as the low-pass path comes in (one is in while the other
+  is out);
+- **Mix** sets the two paths against the dry sound.
+
+Gesture lanes can move them too (targets Split LP, Split HP Freq and Split HP Level). Both channels go
+through the same filters: the stereo image stays.
+
+**SUB GUARD** keeps the sub steady while everything above it moves. With **Sub Guard** on (in a new
+instance, Init and the factory presets) no level movement reaches the lows below **Freq** (40 to 200 Hz,
+90 Hz by default): the bands' fall and **Drop Out**, **Low Dip**, the gesture's level lanes, **Wobble**,
+**PARA**'s low-pass path, the LAB's chains, the **Glue**'s pumping and the end saturator pressed by the
+rest. moistr takes the lows from the SWEEP stage's output (a Linkwitz-Riley 8th-order split at **Freq**:
+steep, so what moves above it hardly reaches below), sends them through the bands' crossovers with every
+band at its rest level (so they stay in phase with the rest), a **Glue**, **Grit** and end saturator of
+their own (the gain those have on the lows alone), and puts them in place of the output's lows after the
+end saturator. **Floor** (0 to -12 dB, 0 by default) lets some of the movement through: the lows may dip
+at most that far. The SWEEP stage's bells move the low end on purpose (bells A and B sweep 20 to 300 Hz at
++-23 dB in the Ocean recipe) and keep doing so; **Guard Bells** keeps them off the lows too: each bell acts
+above **Freq** only (an 8th-order split, its gain fading out as its centre comes down to **Freq**), and the
+stage's saturator's own movement is left out of the lows (they go through it at the gain it has on them
+alone). On a steady bass at 140 BPM the output below 70 Hz then stays within 0.2 to 0.8 dB from one 16th
+note to the next on the most moving presets (2 to 4 dB without **Sub Guard** on the *Moist* presets, 26 dB
+without **Guard Bells** on those over the Ocean sound), while the movement above 200 Hz keeps its range.
+Switching fades over 20 ms; off, it is not run.
+
+## The Basic page
+
+The window opens on the Basic page (the layout every plug-in here shares): the output's scope across the
+top (hold it with **Freeze**, drag it out as audio or as a wavetable), the gesture display with **Loop
+Lock**'s segment, then **Input**, **Drive** (the SWEEP stage's) and **Movement**; **Loop Lock**,
+**Position** and **Sub Guard**; **Mix** and **Output** at the right; the end saturator in the strip at the
+bottom (**Extras**). Those are the controls that change the most: how hard it crunches (**Input** into
+**Drive**), how much the bands move (**Movement**), which moment of the movement plays (**Loop Lock** and
+**Position**) and whether the sub stays put (**Sub Guard**). **Advanced** shows every control.
+
 ## The displays
 
 The sweep display (beside **HIGH SHELF**) shows the stage now from 20 Hz to 5 kHz: the curve of each bell
@@ -537,7 +627,10 @@ Band, Liquid, Low Push, Seed Blend, Shifted Highs, Slow Swells, Wide Hollow; *Su
 Scan (Crossover Walk walking back and forth at half speed, 4 bands); *Neuro* (the LAB): Neuro (the
 recipe above), Neuro Heavy (more drive and OTT, faster movement, an 8th-note Wobble), Neuro Gesture
 (Neuro with the Reese Cell gesture: its lanes move the bands into their chains), Dirty Mids (only the Mid
-chain dirty, High and Air clean and lower). Save your own with **Save As...** (a category and tags are
+chain dirty, High and Air clean and lower), Locked Swell (Neuro Gesture under **Loop Lock**: 2 beats of the
+gesture from beat 4 stretched over a bar), Guarded Reese (Neuro Heavy under **Sub Guard** at 100 Hz with
+**Guard Bells**, **Input** at -6 dB); and *Sweep* Para Split (**PARA** on the Ocean sound). The factory
+presets play with **Sub Guard** on (as Init); a project saved with one before 0.30 keeps it off. Save your own with **Save As...** (a category and tags are
 optional), filter the menu by tag, and use **Save as Default** to make every new moistr start from the
 current settings. The menu is described in the [top-level README](../../README.md#presets).
 
@@ -548,7 +641,8 @@ by sample), except for the **LAB** while one of its slots holds an effect: then 
 the slowest chain plus POST, plus 64 samples (the effects run 64 samples at a time), and the total is
 reported to the host; the dry signal for **Mix** is delayed to match. The Neuro recipe's LAB takes 495
 samples at 48 kHz. The end
-saturator is always in the path, so switching it on or off never changes the latency, and its latency is
+saturator is always in the path, so switching it on or off never changes the latency (nor does **Sub
+Guard**, whose own end saturator runs beside it), and its latency is
 reported to the host for automatic compensation: 85 samples at 48 kHz at 4x **Oversampling** (the
 default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host
 is told.
