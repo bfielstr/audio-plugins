@@ -1,6 +1,8 @@
 // The engine's analyser feed and crossovers, shared from the processor to the editor (same process only).
 #pragma once
 
+#include "pluginkit/Capture.h"
+
 #include "Engine.h"
 
 #include <atomic>
@@ -12,6 +14,7 @@ struct SharedMeters
     Meters meters;
     std::atomic<double> sampleRate {48000.0};
     smacheratr::Meters tailMeters; // the saturator at the end of the chain
+    pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }
     void release ()
     {
