@@ -103,18 +103,15 @@ inline const char* forParam (uint32_t id)
             return "The level going in (dB), at the very start: turn it down when the SWEEP stage's saturator crunches too hard. "
                    "Its make-up follows the level, so the output stays about as loud while the crunch eases.";
         case kLoopLock:
-            return "Locks every movement (the bells, the bands, the gesture, Wobble, PARA) to one moment of it: the segment from "
-                   "Position, Window long, played again every Length in time with the song and stretched or squeezed to fit.";
-        case kLoopPosition:
-            return "Where on the movement's timeline the locked segment starts (beats, over 16). Slide it to scan through the "
-                   "movement for the moment you want; it glides, so it never clicks.";
-        case kLoopWindow:
-            return "How much of the movement the segment holds (beats): Window equal to Length plays it at its own speed, less "
-                   "slows it down to fill Length, more speeds it up.";
+            return "Retriggers all of the movement (the bells, the bands, the gesture, Wobble, PARA) together, in time with the "
+                   "song: the loop region of the window (the slowest cycle of what moves) plays again every Length.";
+        case kLoopStart: return "Where the loop region starts in the window (0 %: the window's start, where every movement starts together).";
+        case kLoopEnd: return "Where the loop region ends in the window (100 %: the whole slowest cycle).";
         case kLoopLength:
-            return "How long the segment takes in the song, 1/16 to 4 bars. Stopped, it keeps going at the last tempo.";
+            return "How long a pass of the region takes in the song, 1/16 to 4 bars (the region time-scaled to fit), or Natural: "
+                   "its own speed, again from the next 16th of a beat after it ends. Stopped, it keeps going at the last tempo.";
         case kLoopShape:
-            return "Wrap: the segment plays forward, then glides back to its start over its last 16th (no click). Bounce: "
+            return "Wrap: the region plays forward, then glides back to its start over a few milliseconds (no click). Bounce: "
                    "forward over the first half, back over the second.";
         case kParaOn:
             return "Switches PARA on: the sound split into a low-pass and a high-pass path in parallel (as para does), the "
@@ -138,6 +135,11 @@ inline const char* forParam (uint32_t id)
         case kGuardBells:
             return "With Sub Guard: the SWEEP stage's bells (and its saturator's response to them) stay off the lows too, so "
                    "the sub is steady under the whole sound. Off, the bells move the low end on purpose.";
+        case kDriftSeed:
+            return "Starts and runs every modulator (the bells, the shelf, the bands' pattern, the gesture, Wobble, PARA) a "
+                   "little apart, drawn from this seed: the same seed is the same every time. 0: off, everything exactly as set.";
+        case kStartDrift: return "How far each modulator's start may move, up to a whole cycle of it (with Drift Seed on).";
+        case kSpeedDrift: return "How much faster or slower each modulator may run, up to 10 %, fixed per seed (with Drift Seed on).";
         case kDrive: return "Light saturation before the sound is split into bands (after SWEEP). 0 leaves the input untouched.";
         case kSweep:
             return "Switches the SWEEP stage on: eight sweeping bell EQs, a High Shelf going round in a slow orbit, then a "
@@ -325,8 +327,12 @@ constexpr const char* kSweepView =
 constexpr const char* kGestureView =
     "The gesture: one row per lane, named by its target, its curve across the gesture (up is the top of the lane's "
     "range), the beats it plays over, and while it runs one playhead through every lane (they share one clock) with "
-    "each lane's value now. With Loop Lock on, the shaded band is the segment it holds (with no gesture, on a ruler of "
-    "Position's 16 beats).";
+    "each lane's value now.";
+
+constexpr const char* kLoopView =
+    "Loop Lock's window: as long as the slowest cycle of everything that moves (named in the title), every curve across "
+    "it, and the loop region shaded. Drag its edges to set Start and End, drag inside it to slide it (its length kept), "
+    "double-click for the whole window. While Loop Lock runs, a line shows where the movement is.";
 
 constexpr const char* kGestureFile =
     "Picks a gesture file (JSON, a lane per target) from the Gestures folder beside your moistr presets and sets "

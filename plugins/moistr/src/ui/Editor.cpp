@@ -2,6 +2,7 @@
 
 #include "BandView.h"
 #include "GestureView.h"
+#include "LoopView.h"
 #include "Help.h"
 #include "SweepView.h"
 #include "plugin/Controller.h"
@@ -166,7 +167,9 @@ void Editor::onClose ()
         labAll[c].clear ();
     }
     sceneControls.clear ();
+    loopView = nullptr;
     loopControls.clear ();
+    driftKnobs.clear ();
     paraControls.clear ();
     guardControls.clear ();
     sceneSpeed = nullptr;
@@ -437,6 +440,21 @@ void Editor::buildUI (CFrame* f)
 
     buildLab (root);
     buildRow6 (root);
+    {
+        // DRIFT: every modulator a little apart, per seed
+        auto* drift = new Panel (CRect (kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH), "DRIFT");
+        root->addView (drift);
+        const double left = centredLeft (kDriftRight - kDriftLeft, 3);
+        int i = 0;
+        for (uint32_t id : {kDriftSeed, kStartDrift, kSpeedDrift})
+        {
+            const double x = left + kKnobStep * i++;
+            auto* k = bind (drift, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id, id == kDriftSeed ? "Seed" : id == kStartDrift ? "Start" : "Speed"));
+            if (id != kDriftSeed)
+                driftKnobs.push_back (k);
+        }
+    }
+    root->addView (makeLoopView (layoutRegion ("loopview", CRect (kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH))));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
     tail = makeTail ();
@@ -454,6 +472,14 @@ GestureView* Editor::makeGestureView (const CRect& r)
                                    [c = ctl] { return c->userScene (); }, [c = ctl] { return c->userSceneData ().name; });
     pk::setHelp (gestureView, "Gesture", help::kGestureView);
     return gestureView;
+}
+
+LoopView* Editor::makeLoopView (const CRect& r)
+{
+    loopView = new LoopView (r, this, [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
+                             [c = ctl] { return c->userScene (); });
+    pk::setHelp (loopView, "Loop", help::kLoopView);
+    return loopView;
 }
 
 std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
@@ -491,7 +517,7 @@ void Editor::buildRow6 (CViewContainer* root)
     column (loop, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kLoopLock, "Loop Lock"));
     loopControls.push_back (column (loop, kColTop2, new Segmented (rowRect (kColTop2), this, kLoopShape, {"Wrap", "Bounce"})));
     loopControls.push_back (column (loop, kColTop3, new pk::Choice (rowRect (kColTop3), this, kLoopLength)));
-    knobsFrom (loop, {kLoopPosition, kLoopWindow}, loopControls);
+    knobsFrom (loop, {kLoopStart, kLoopEnd}, loopControls);
     // PARA: on, Rate and Mix; the paths' corners and how they move
     auto* para = new Panel (CRect (kParaLeft, kRow6, kParaRight, kRow6 + kRowH), "PARA");
     root->addView (para);
@@ -511,15 +537,15 @@ void Editor::buildRow6 (CViewContainer* root)
 pk::basic::Spec Editor::basicSpec ()
 {
     // Input (the level into the saturator: its crunch), Drive (the SWEEP stage's: how hard it crunches) and Movement (how
-    // far the bands move); Loop Lock, Position (which moment of the movement it holds) and Sub Guard (the sub steady); Mix
-    // and Output. The display: the gesture with Loop Lock's segment on it.
+    // far the bands move); Loop Lock, Length (how long its region takes) and Sub Guard (the sub steady); Mix and Output.
+    // The display: Loop Lock's window, every curve over it, the region dragged there (which moment the loop holds).
     using namespace pk::basic;
     Spec s;
     s.title = "moistr";
     s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
     s.displayHeight = 150;
-    s.display = [this] (const CRect& r) -> CView* { return makeGestureView (r); };
-    s.rows = {{knob (kInput), knob (kSweepDrive), knob (kMovement)}, {toggle (kLoopLock, "Loop Lock"), knob (kLoopPosition), toggle (kSubGuard, "Sub Guard")}};
+    s.display = [this] (const CRect& r) -> CView* { return makeLoopView (r); };
+    s.rows = {{knob (kInput), knob (kSweepDrive), knob (kMovement)}, {toggle (kLoopLock, "Loop Lock"), choice (kLoopLength, "Length"), toggle (kSubGuard, "Sub Guard")}};
     s.output = {knob (kMix), knob (kOutput, {}, true)};
     smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
     s.menu = [this] (CPoint p) { showMenu (p); };
@@ -654,7 +680,7 @@ bool Editor::affectsLooks (uint32_t id)
     if (isGestureParam (id) || (isLabSlotParam (id) && labFieldOf (id) == kLabType))
         return true;
     if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
-        id == kCleanSub || id == kSubBoost || id == kLoopLock || id == kParaOn || id == kSubGuard)
+        id == kCleanSub || id == kSubBoost || id == kLoopLock || id == kParaOn || id == kSubGuard || id == kDriftSeed)
         return true;
     for (int b = 0; b < kNumBells; ++b)
         if (id == bellOnId (b) || id == bellId (b, kBellSync))
@@ -708,6 +734,8 @@ void Editor::updateLooks ()
         v->setEnabledLook (plainValue (kParaOn) >= 0.5);
     for (pk::ParamView* v : guardControls)
         v->setEnabledLook (plainValue (kSubGuard) >= 0.5);
+    for (pk::ParamView* v : driftKnobs)
+        v->setEnabledLook (plainValue (kDriftSeed) >= 0.5);
     // the LAB: a slot's knobs while it holds the kind they show; the Air chain with 4 bands only (with 3 Air goes into
     // the High chain)
     for (int c = 0; c <= kNumBandChains; ++c)
@@ -746,8 +774,10 @@ void Editor::paramChanged (uint32_t id)
         sweepView->idle ();
         sweepView->invalid ();
     }
-    if (gestureView && (isGestureParam (id) || (id >= kLoopLock && id <= kLoopShape)))
+    if (gestureView && isGestureParam (id))
         gestureView->invalid ();
+    if (loopView && (id < kChainBase || id >= kInput))
+        loopView->invalid ();
     if (isLabParam (id))
         for (pk::ParamView* v : labViews)
             v->invalid (); // (the slots' knobs show LAB parameters under their kinds' IDs)
@@ -768,6 +798,8 @@ void Editor::idle ()
         sweepView->idle ();
     if (gestureView)
         gestureView->idle ();
+    if (loopView)
+        loopView->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
@@ -848,7 +880,9 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"looplock", "", {kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH}, 5},
         {"para", "", {kParaLeft, kRow6, kParaRight, kRow6 + kRowH}, 5},
         {"subguard", "", {kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH}, 5},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 6, -1, true},
+        {"drift", "", {kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH}, 6},
+        {"loopview", "loop", {kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH}, 6, -1, true},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 7, -1, true},
     };
     return s;
 }

@@ -4,12 +4,8 @@
 // value now. The title names the gesture; the footer its mode and length, and whether 0.27 slots (from an older
 // project) play beside it.
 //
-// Loop Lock (0.30): the segment the motion clock is locked to, a band across the lanes from Position over Window (on
-// the gesture's timeline; with Gesture None on a ruler of Position's range, 16 beats, with the motion clock's place),
-// and in the footer its Window, Position and Length.
-//
-// It repaints only when what it shows changed: the gesture, its settings, Loop Lock, or the playhead (in small steps);
-// with Gesture None and Loop Lock off it asks for no repaints.
+// It repaints only when what it shows changed: the gesture, its settings, or the playhead (in small steps); with
+// Gesture None it asks for no repaints. (Loop Lock's window and region: LoopView.)
 #pragma once
 
 #include "Engine.h"
@@ -55,8 +51,6 @@ private:
         bool slots = false;
         double pos = -1.0, pull = 0.0; // (rounded: the playhead's steps)
         std::array<float, kMaxSceneLanes> value {};
-        bool loop = false;
-        double loopStart = 0.0, loopWindow = 0.0, motion = 0.0; // (rounded)
         bool operator== (const Now& o) const = default;
     };
     Now now () const;

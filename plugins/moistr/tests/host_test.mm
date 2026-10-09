@@ -404,7 +404,7 @@ int main (int argc, char** argv)
             CHECK (win.ok (), "editor (Basic)");
             CHECK (std::fabs (win.width () - pk::basic::kWidth) < 1, "the Basic page's width: %.0f", win.width ());
             ControlRect r;
-            for (uint32_t id : {(uint32_t)moistr::kInput, (uint32_t)kSweepDrive, (uint32_t)kMovement, (uint32_t)kLoopLock, (uint32_t)kLoopPosition,
+            for (uint32_t id : {(uint32_t)moistr::kInput, (uint32_t)kSweepDrive, (uint32_t)kMovement, (uint32_t)kLoopLock, (uint32_t)kLoopLength,
                                 (uint32_t)kSubGuard, (uint32_t)kMix, (uint32_t)moistr::kOutput})
                 CHECK (findControl (rig.controller, id, r) && r.right <= win.width () + 0.5 && r.bottom <= win.height () + 0.5,
                        "Basic: the control of parameter %u is shown", id);

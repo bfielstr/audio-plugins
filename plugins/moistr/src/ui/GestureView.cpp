@@ -58,15 +58,6 @@ GestureView::Now GestureView::now () const
     n.user = user ? user () : nullptr;
     n.slots = slotsOn (host);
     const Meters* m = meters ? meters () : nullptr;
-    n.loop = host->plainValue (kLoopLock) >= 0.5;
-    if (n.loop)
-    {
-        // (the segment as the engine glides it, else as set)
-        const bool live = m && m->blocks.load (std::memory_order_acquire) > 0 && m->loopOn.load (std::memory_order_relaxed);
-        n.loopStart = std::round ((live ? m->loopStart.load (std::memory_order_relaxed) : host->plainValue (kLoopPosition)) * 50.0) / 50.0;
-        n.loopWindow = std::round ((live ? m->loopWindow.load (std::memory_order_relaxed) : host->plainValue (kLoopWindow)) * 50.0) / 50.0;
-        n.motion = live ? std::round (m->motionBeats.load (std::memory_order_relaxed) * 25.0) / 25.0 : -1.0;
-    }
     if (n.choice != kSceneNone && m && m->blocks.load (std::memory_order_acquire) > 0)
     {
         constexpr auto rx = std::memory_order_relaxed;
@@ -115,10 +106,7 @@ void GestureView::draw (CDrawContext* ctx)
     const double beats = lengthChoice == 0 ? (sc ? sc->length : 1.0) : kGestureLengthBeats[lengthChoice];
     const bool walk = std::lround (plain (kSceneMode)) == kModeWalk;
     char foot[160];
-    if (shown.loop)
-        std::snprintf (foot, sizeof (foot), "Loop Lock: %.2f beats from beat %.2f in %s", shown.loopWindow, shown.loopStart,
-                       host->valueText (kLoopLength).c_str ());
-    else if (!on)
+    if (!on)
         std::snprintf (foot, sizeof (foot), "%s", "");
     else if (walk)
         std::snprintf (foot, sizeof (foot), "Walk %s over %g beats", host->valueText (kSceneSpeed).c_str (), beats);
@@ -142,52 +130,6 @@ void GestureView::draw (CDrawContext* ctx)
         ctx->setFrameColor (whole ? theme::kGridMajor : theme::kGridMinor);
         const double x = std::round (xOf (b / beats)) + 0.5;
         ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
-    }
-    // Loop Lock's segment: on the gesture's timeline (Loop: Position and Window over its length, wrapping; Walk: from
-    // where Position puts it to where Position + Window does), else on a ruler of Position's range
-    if (shown.loop)
-    {
-        const double span = on ? beats : kLoopPositionMax;
-        double a = 0.0, b = 0.0;
-        bool whole = shown.loopWindow >= span;
-        if (on && walk)
-        {
-            const double speed = kGestureSpeeds[std::clamp ((int)std::lround (plain (kSceneSpeed)), 0, kNumGestureSpeeds - 1)];
-            a = gesturePosition (kModeWalk, shown.loopStart, beats, speed, std::clamp (plain (kScenePosition), 0.0, 1.0));
-            b = gesturePosition (kModeWalk, shown.loopStart + shown.loopWindow, beats, speed, std::clamp (plain (kScenePosition), 0.0, 1.0));
-            if (a > b)
-                std::swap (a, b);
-            whole = false;
-        }
-        else
-        {
-            const double off = on ? std::clamp (plain (kScenePosition), 0.0, 1.0) : 0.0;
-            a = shown.loopStart / span - off;
-            a -= std::floor (a);
-            b = a + shown.loopWindow / span;
-        }
-        ctx->setFillColor (theme::withAlpha (theme::kEnergyLive, 46));
-        ctx->setFrameColor (theme::withAlpha (theme::kEnergyLive, 190));
-        auto band = [&] (double x0, double x1) {
-            const CRect r (xOf (x0), p.top, xOf (x1), p.bottom);
-            ctx->drawRect (r, kDrawFilled);
-            ctx->drawRect (CRect (r.left, p.top, r.right, p.top + 2.0), kDrawFilled);
-        };
-        if (whole)
-            band (0.0, 1.0);
-        else if (b <= 1.0)
-            band (a, b);
-        else
-        {
-            band (a, 1.0);
-            band (0.0, b - 1.0);
-        }
-        if (!on && shown.motion >= 0.0)
-        {
-            const double x = std::round (xOf (shown.motion / span - std::floor (shown.motion / span))) + 0.5;
-            ctx->setFrameColor (theme::withAlpha (theme::kPlayhead, 200));
-            ctx->drawLine (CPoint (x, p.top), CPoint (x, p.bottom));
-        }
     }
     if (!on)
         return;

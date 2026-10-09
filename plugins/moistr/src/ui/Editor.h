@@ -15,6 +15,7 @@ class Controller;
 class BandView;
 class SweepView;
 class GestureView;
+class LoopView;
 
 class Editor : public pk::EditorBase
 {
@@ -31,9 +32,11 @@ public:
     static constexpr double kRow4 = kRow3 + kRowH + 8.0;
     // the LAB's row (0.30): a row of knobs with a row of switches under them
     static constexpr double kLabRowH = 128.0, kRow5 = kRow4 + kRowH + 8.0;
-    // a row of INPUT, LOOP LOCK, PARA and SUB GUARD (0.30), then the end saturator
-    static constexpr double kRow6 = kRow5 + kLabRowH + 8.0;
-    static constexpr double kTailTop = kRow6 + kRowH + 8.0;
+    // a row of INPUT, LOOP LOCK, PARA and SUB GUARD (0.30), Loop Lock's window across (LoopView), then the end saturator
+    static constexpr double kRow6 = kRow5 + kLabRowH + 8.0, kRow7 = kRow6 + kRowH + 8.0, kLoopViewH = 116.0;
+    // row 7: DRIFT (Drift Seed, Start Drift, Speed Drift) and Loop Lock's window (LoopView)
+    static constexpr double kDriftLeft = 8.0, kDriftRight = 224.0, kLoopViewLeft = 232.0, kLoopViewRight = 1124.0;
+    static constexpr double kTailTop = kRow7 + kLoopViewH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
     static constexpr double kSweepLeft = 8.0, kSweepRight = 258.0;          // sweep row 1: Sweep, Curve, Tone (on); Drive, Tone
@@ -74,7 +77,7 @@ public:
     // Time, Up, Down), kLabW wide from kLabLeft, kLabStep apart; the switches' row (panel coordinates)
     static constexpr double kLabLeft = 8.0, kLabW = 273.0, kLabStep = kLabW + 8.0, kLabSwitchTop = 100.0, kLabSwitchH = 18.0;
     static_assert (kLabLeft + 3 * kLabStep + kLabW == kWidth - 8.0, "the LAB's four panels fill the row");
-    // row 6 (0.30): INPUT (Input), LOOP LOCK (Loop Lock, Shape and Length over each other; Position, Window), PARA (Split,
+    // row 6 (0.30): INPUT (Input), LOOP LOCK (Loop Lock, Shape and Length over each other; Start, End), PARA (Split,
     // Rate and Mix over each other; LP Freq, HP Freq, LP Move, HP Move, HP Level), SUB GUARD (Sub Guard, Guard Bells;
     // Freq, Floor)
     static constexpr double kInputLeft = 8.0, kInputRight = 88.0;
@@ -105,8 +108,8 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
-    // The Basic page (pluginkit/ui/BasicView.h): the gesture display with Loop Lock's segment; Input, Drive (SWEEP's) and
-    // Movement; Loop Lock, Position and Sub Guard; Mix and Output; the end saturator in the extras
+    // The Basic page (pluginkit/ui/BasicView.h): Loop Lock's window (LoopView); Input, Drive (SWEEP's) and Movement; Loop
+    // Lock, Length and Sub Guard; Mix and Output; the end saturator in the extras
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
@@ -116,6 +119,8 @@ private:
     std::unique_ptr<smacheratr::TailPanel> makeTail ();
     static smacheratr::TailBases tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
     GestureView* makeGestureView (const VSTGUI::CRect& r);
+    LoopView* makeLoopView (const VSTGUI::CRect& r);
+    LoopView* loopView = nullptr;
     void buildRow6 (VSTGUI::CViewContainer* root);
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
@@ -148,7 +153,7 @@ private:
     std::vector<pk::Knob*> wobbleKnobs;
     GestureView* gestureView = nullptr;
     pk::Label* latencyLabel = nullptr;
-    std::vector<pk::ParamView*> loopControls, paraControls, guardControls; // (dimmed while their stage is off)
+    std::vector<pk::ParamView*> loopControls, paraControls, guardControls, driftKnobs; // (dimmed while their stage is off)
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;
     std::vector<pk::Knob*> liquidKnobs; // Res, Low, High
