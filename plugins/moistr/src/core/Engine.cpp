@@ -252,6 +252,30 @@ double Engine::cycleSeconds () const
     return sync ? beats * 60.0 / bpm : 1.0 / std::max (p[kRate], 1e-3);
 }
 
+double Engine::bandTheta (double th) const { return drift.on ? th * drift.factor[kDriftBands] + drift.offset[kDriftBands] : th; }
+
+void Engine::updateDrift ()
+{
+    const int seed = std::clamp ((int)std::lround (p[kDriftSeed]), 0, kMaxDriftSeed);
+    double start = std::clamp (p[kStartDrift], 0.0, 1.0), speed = std::clamp (p[kSpeedDrift], 0.0, kSpeedDriftMax);
+    if (seed > 0 && gestActive)
+    {
+        if (targeted (kTargetStartDrift))
+            start = std::clamp (pulled (kTargetStartDrift, start), 0.0, 1.0);
+        if (targeted (kTargetSpeedDrift))
+            speed = std::clamp (pulled (kTargetSpeedDrift, speed / kSpeedDriftMax), 0.0, 1.0) * kSpeedDriftMax;
+    }
+    if (seed != driftSeed || start != driftStart || speed != driftSpeed)
+    {
+        driftSeed = seed;
+        driftStart = start;
+        driftSpeed = speed;
+        drift = makeDrift (seed, start, speed);
+        wobOffset = drift.on ? drift.offset[kDriftWobble] : 0.0;
+    }
+    sweep.setDrift (drift.on, drift.factor + kDriftBell, drift.offset + kDriftBell);
+}
+
 double Engine::thetaAtBeats (double beats) const
 {
     // (Loop Lock: the band movement's phase as a pure function of the motion clock)
@@ -260,23 +284,32 @@ double Engine::thetaAtBeats (double beats) const
     return beats * 60.0 / lockBpm * std::max (p[kRate], 1e-3);
 }
 
+const Scene* Engine::sceneWanted () const
+{
+    const int choice = std::clamp ((int)std::lround (p[kScene]), 0, kSceneUser);
+    return choice == kSceneNone ? nullptr : choice == kSceneUser ? userScene : &factoryScene (choice - 1);
+}
+
+double Engine::windowNow () const
+{
+    return windowBeats (p.data (), lockBpm, sceneWanted (), &cur.a[0], blendBase > 0.0 ? &cur.b[0] : nullptr, &drift);
+}
+
 double Engine::loopMotionAt (double songBeats) const
 {
-    const double length = kLoopLengthBeats[std::clamp ((int)std::lround (p[kLoopLength]), 0, kNumLoopLengths - 1)];
-    const double v = songBeats / length, u = v - std::floor (v);
-    double f;
-    if (std::lround (p[kLoopShape]) == kLoopBounce)
-        f = u < 0.5 ? 2.0 * u : 2.0 - 2.0 * u; // (forward over the first half, back over the second)
-    else
-    {
-        // Wrap: forward over the segment, then back to its start over its last part (a 16th of it, 12 .. 60 ms; a raised
-        // cosine), so the motion clock never jumps
-        const double sec = length * 60.0 / lockBpm, back = std::clamp (sec / 16.0, 0.012, 0.06);
-        const double e = std::min (back / sec, 0.25);
-        f = u < 1.0 - e ? u / (1.0 - e) : 0.5 + 0.5 * std::cos (dsp::kPi * (u - (1.0 - e)) / e);
-    }
-    return loopPos + std::exp2 (logWindow) * f;
+    const int lc = std::clamp ((int)std::lround (p[kLoopLength]), 0, kLoopNatural);
+    if (lc == kLoopNatural && natValid && songBeats >= natStart && songBeats <= natStart + natLen)
+        return naturalMotion (songBeats - natStart, natLen, loopPos, loopEnd, std::exp2 (logWindow), (int)std::lround (p[kLoopShape]), lockBpm);
+    return regionMotion (songBeats, loopPos, loopEnd, std::exp2 (logWindow), std::clamp ((int)std::lround (p[kLoopLength]), 0, kLoopNatural),
+                         (int)std::lround (p[kLoopShape]), lockBpm);
 }
+
+double Engine::loopLengthNow () const
+{
+    return regionLength (loopPos, loopEnd, std::exp2 (logWindow), std::clamp ((int)std::lround (p[kLoopLength]), 0, kLoopNatural),
+                         (int)std::lround (p[kLoopShape]), lockBpm);
+}
+
 
 void Engine::subAllpass (int pass, int m, const double* g1, bool still)
 {
@@ -336,12 +369,17 @@ void Engine::reset ()
     secPerCycle = cycleSeconds ();
     theta = 0.0;
     wasPlaying = false;
+    driftSeed = -1;
+    updateDrift ();
     // Input, the motion clock and Loop Lock (0.30) at their values
     inGain = dbToGain (p[kInput]);
     locked = p[kLoopLock] >= 0.5;
-    loopPos = std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax);
-    logWindow = std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax));
     lockBpm = bpm;
+    natValid = false;
+    natPass = 0;
+    loopPos = std::clamp (p[kLoopStart], 0.0, 1.0 - kLoopMinRegion);
+    loopEnd = std::clamp (p[kLoopEnd], loopPos + kLoopMinRegion, 1.0);
+    logWindow = windowTarget = std::log2 (windowNow ());
     motionNow = locked ? loopMotionAt (0.0) : 0.0;
     motionStep = 0.0;
     if (locked)
@@ -400,10 +438,10 @@ void Engine::reset ()
         s.resetFilters ();
         s.glue.reset ();
         s.grit.reset ();
-        targets (k, theta, s.gNow, s.gainNow, true);
+        targets (k, bandTheta (theta), s.gNow, s.gainNow, true);
     }
     liqNow = {};
-    liquidTargets (theta, true);
+    liquidTargets (bandTheta (theta), true);
     pass2 = std::lround (p[kPasses]) == kPasses2 ? 1.0 : 0.0;
     mix = (float)std::clamp (p[kMix], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
@@ -694,7 +732,9 @@ void Engine::gestureTick (int m, double beats, bool snap)
             const double length = lengthChoice == 0 ? scene->length : kGestureLengthBeats[lengthChoice];
             const int speedChoice = std::clamp ((int)std::lround (p[kSceneSpeed]), 0, kNumGestureSpeeds - 1);
             const int mode = std::lround (p[kSceneMode]) == kModeWalk ? kModeWalk : kModeLoop;
-            scenePosNow = gesturePosition (mode, beats, length, kGestureSpeeds[speedChoice], std::clamp (p[kScenePosition], 0.0, 1.0));
+            // (Drift: the gesture's clock a little faster or slower, and started a little into it)
+            const double clockAt = drift.on ? (beats / length * drift.factor[kDriftGesture] + drift.offset[kDriftGesture]) * length : beats;
+            scenePosNow = gesturePosition (mode, clockAt, length, kGestureSpeeds[speedChoice], std::clamp (p[kScenePosition], 0.0, 1.0));
             const double at = scenePosNow * scene->length;
             const double smooth = std::clamp (p[kSceneSmooth], 0.0, 1.0);
             const double longest = std::max (kSmoothMaxBeats * 60.0 / gBpm, kSmoothMinSec);
@@ -812,17 +852,18 @@ void Engine::gestureTick (int m, double beats, bool snap)
         if (snap)
             wobAmtPrev = wobAmt;
         wobPhasePrev = wobPhase;
+        const double wr = drift.on ? wobRate * drift.factor[kDriftWobble] : wobRate; // (Drift: its rate a little apart)
         if (locked)
-            wobPhase += wobRate * motionStep; // (Loop Lock: the integral over the motion clock, back and forth)
+            wobPhase += wr * motionStep; // (Loop Lock: the integral over the motion clock, back and forth)
         else
-            wobPhase += wobRate * (double)m * gBpm / 60.0 / sr;
+            wobPhase += wr * (double)m * gBpm / 60.0 / sr;
         if (wobPhase >= 1.0 || wobPhase < 0.0)
         {
             const double whole = std::floor (wobPhase);
             wobPhase -= whole;
             wobPhasePrev -= whole;
         }
-        wobGain = 1.0 - wobAmt * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * wobPhase));
+        wobGain = 1.0 - wobAmt * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * (wobPhase + wobOffset)));
     }
     // Close: from Tone's corner (open) down kCloseOctaves, its Q rising with it
     closePrev = closeNow;
@@ -919,7 +960,7 @@ void Engine::runPass (int pass, double* l, double* r, int m, double thetaEnd)
             dsp::SvfCoefs cc;
             if (wobbleOn)
             {
-                const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
+                const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t + wobOffset, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
                 wob = 1.0 - a * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * ph));
             }
             if (closeOn)
@@ -1073,7 +1114,7 @@ void Engine::runLab (PassState& s, double* l, double* r, int m, const double* g1
         dsp::SvfCoefs cc;
         if (wobbleOn)
         {
-            const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
+            const double ph = wobPhasePrev + (wobPhase - wobPhasePrev) * t + wobOffset, a = wobAmtPrev + (wobAmt - wobAmtPrev) * t;
             wob = 1.0 - a * (0.5 - 0.5 * std::cos (2.0 * dsp::kPi * ph));
         }
         if (closeOn)
@@ -1141,9 +1182,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     if (lockNow && !locked)
     {
         // (Loop Lock switched on: Position, Window and the tempo from where they are)
-        loopPos = std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax);
-        logWindow = std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax));
         lockBpm = gBpm;
+        loopPos = std::clamp (p[kLoopStart], 0.0, 1.0 - kLoopMinRegion);
+        loopEnd = std::clamp (p[kLoopEnd], loopPos + kLoopMinRegion, 1.0);
+        logWindow = windowTarget = std::log2 (windowNow ());
     }
     locked = lockNow;
     if (playing)
@@ -1274,13 +1316,38 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         glide (logLiqLo, std::log2 (std::clamp (p[kLiquidLow], 20.0, 20000.0)), tickSmooth);
         glide (logLiqHi, std::log2 (std::clamp (p[kLiquidHigh], 20.0, 20000.0)), tickSmooth);
 
+        // Drift: from the seed and the amounts (a gesture may move them), worked out again only when they change
+        updateDrift ();
         // the motion clock at this tick's end: the song position, or (Loop Lock) its place in the segment
         const double songEnd = gBeats + (double)(a + m) * beatsPerSample;
         if (locked)
         {
-            glide (loopPos, std::clamp (p[kLoopPosition], 0.0, kLoopPositionMax), lockGlide * m / kTick);
-            glide (logWindow, std::log2 (std::clamp (p[kLoopWindow], kLoopWindowMin, kLoopWindowMax)), lockGlide * m / kTick);
+            glide (loopPos, std::clamp (p[kLoopStart], 0.0, 1.0 - kLoopMinRegion), lockGlide * m / kTick);
+            glide (loopEnd, std::clamp (p[kLoopEnd], loopPos + kLoopMinRegion, 1.0), lockGlide * m / kTick);
+            if (a == 0)
+                windowTarget = std::log2 (windowNow ()); // (once a block: the settings change between blocks)
+            glide (logWindow, windowTarget, lockGlide * m / kTick);
             glide (lockBpm, gBpm, bpmGlide * m / kTick);
+            if (std::clamp ((int)std::lround (p[kLoopLength]), 0, kLoopNatural) == kLoopNatural)
+            {
+                // Natural: a pass keeps its length until it ends (from the song's start: deterministic), then the next
+                // takes the region's length then; a jump in the song starts again where the song is
+                const double lenNow = loopLengthNow ();
+                if (!natValid || songEnd < natStart - 1e-9 || songEnd > natStart + 64.0 * natLen)
+                {
+                    natStart = std::floor (songEnd / lenNow) * lenNow;
+                    natLen = lenNow;
+                    natValid = true;
+                }
+                while (songEnd >= natStart + natLen)
+                {
+                    natStart += natLen;
+                    natLen = lenNow;
+                    ++natPass;
+                }
+            }
+            else
+                natValid = false;
             const double mb = loopMotionAt (songEnd);
             motionStep = mb - motionNow;
             motionNow = mb;
@@ -1298,14 +1365,14 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             // Loop Lock: Wobble's phase (the integral of its rate) back where it was at the segment's start each time the
             // segment starts again (its rate, smoothed, is not quite the same on the way back: no drift from loop to loop),
             // while Position, Window and Length stay as they were
-            const double length = kLoopLengthBeats[std::clamp ((int)std::lround (p[kLoopLength]), 0, kNumLoopLengths - 1)];
-            const int64_t loop = (int64_t)std::floor (songEnd / length);
+            const double length = natValid ? natLen : loopLengthNow ();
+            const int64_t loop = natValid ? natPass : (int64_t)std::floor (songEnd / length);
             if (loop != loopIndex)
             {
                 loopIndex = loop;
                 // (the phase at the segment's very start: back from here by the rate over the motion beats since)
-                const double atStart = wobPhase - wobRate * (motionNow - loopPos);
-                if (anchorValid && anchorPos == loopPos && anchorWindow == logWindow && anchorLength == length)
+                const double atStart = wobPhase - wobRate * (motionNow - loopPos * std::exp2 (logWindow));
+                if (anchorValid && anchorPos == loopPos && anchorEnd == loopEnd && anchorWindow == logWindow && anchorLength == length)
                 {
                     double d = anchorPhase - atStart;
                     d -= std::floor (d + 0.5);
@@ -1317,6 +1384,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 {
                     anchorPhase = atStart;
                     anchorPos = loopPos;
+                    anchorEnd = loopEnd;
                     anchorWindow = logWindow;
                     anchorLength = length;
                     anchorValid = true;
@@ -1362,7 +1430,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         // PARA (0.30): its movement on the motion clock, the gestures' pulls on it
         if (para.running (p.data ()))
         {
-            ParaSplit::Shape sh = ParaSplit::shapeAt (p.data (), motionNow / kParaRateBeats[std::clamp ((int)std::lround (p[kParaRate]), 0, kNumParaRates - 1)]);
+            const double cycles = motionNow / kParaRateBeats[std::clamp ((int)std::lround (p[kParaRate]), 0, kNumParaRates - 1)];
+            ParaSplit::Shape sh = ParaSplit::shapeAt (p.data (), drift.on ? cycles * drift.factor[kDriftPara] + drift.offset[kDriftPara] : cycles);
             if (gestActive)
             {
                 if (targeted (kTargetParaLp))
@@ -1397,7 +1466,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         const double thetaEnd = locked ? thetaAtBeats (motionNow) : theta + dTheta * m;
         const bool runSecond = twoPasses || pass2 > 0.0;
-        runPass (0, wl, wr, m, thetaEnd);
+        runPass (0, wl, wr, m, bandTheta (thetaEnd));
         if (guardRun)
         {
             // (the steady lows delayed with the LAB's Low band)
@@ -1421,7 +1490,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             // the second pass takes the first one's result; switching Passes crossfades over 20 ms
             std::copy (wl, wl + m, ql);
             std::copy (wr, wr + m, qr);
-            runPass (1, ql, qr, m, thetaEnd);
+            runPass (1, ql, qr, m, bandTheta (thetaEnd));
             const double from = pass2;
             pass2 = std::clamp (pass2 + (twoPasses ? fadeStep : -fadeStep), 0.0, 1.0);
             for (int i = 0; i < m; ++i)
@@ -1591,7 +1660,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->labLatency.store (lab.latency (), rx);
         meters->loopOn.store (locked, rx);
         meters->loopStart.store ((float)loopPos, rx);
-        meters->loopWindow.store ((float)std::exp2 (logWindow), rx);
+        meters->loopEnd.store ((float)loopEnd, rx);
+        meters->windowBeats.store ((float)(locked ? std::exp2 (logWindow) : windowNow ()), rx);
+        meters->tempo.store ((float)gBpm, rx);
         meters->motionBeats.store ((float)motionNow, rx);
         meters->paraAmount.store ((float)para.amount (), rx);
         meters->paraLp.store ((float)para.lpGain (), rx);

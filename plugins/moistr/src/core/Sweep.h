@@ -148,6 +148,16 @@ public:
         lockBeats = beats;
         lockBpm = bpm > 1.0 ? bpm : 120.0;
     }
+    // Drift (LoopWindow.h): each clock's phase used as theta x factor + offset (per bell, then the shelf); off: as set
+    void setDrift (bool on, const double* factor, const double* offset)
+    {
+        driftOn = on;
+        for (int b = 0; on && b < kFilters; ++b)
+        {
+            driftF[b] = factor[b];
+            driftO[b] = offset[b];
+        }
+    }
     // run at all (on, or fading out): when false, tick does nothing
     bool running (const double* p) const { return p[kSweep] >= 0.5 || fade > 0.0; }
 
@@ -229,7 +239,9 @@ private:
     ShelfOrbit orbit, oldOrbit; // (oldOrbit: fading out after a Seed change while orbitFade < 1)
     // Loop Lock: the clocks from the motion clock's beats; Guard Bells: its fade, its corner (log2, gliding; g at the
     // tick's start and end) and its two splits (the input's lows, the bells' output's highs)
-    bool lockOn = false;
+    bool lockOn = false, driftOn = false;
+    double driftF[kFilters] {}, driftO[kFilters] {};
+    double phaseOf (int b) const { return driftOn ? theta[b] * driftF[b] + driftO[b] : theta[b]; }
     double lockBeats = 0.0, lockBpm = 120.0;
     double guardFade = 0.0, logGuard = 0.0, guardGPrev = 0.0, guardGNow = 0.0;
     dsp::Lr8Split guardIn[2], guardOut[2]; // (only their low and high sides are run)

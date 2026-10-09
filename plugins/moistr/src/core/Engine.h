@@ -98,15 +98,15 @@
 //               it is the song position while the host plays (running on at the last tempo while stopped) and each part
 //               reads it as before (the bells, the shelf, the bands and Wobble run on from it, bit for bit). The
 //               frequency shifter's oscillator is not movement (it is the shift itself) and runs on.
-//   Loop Lock   the motion clock is a segment of itself, played in time with the song: with u = frac (song beats /
-//               Length), motion beats = Position + Window x shape (u), and every part is a pure function of them (a
-//               synced clock: beats / its cycle's beats; a free one: beats x 60 / tempo x its rate; Wobble's phase the
-//               integral of its rate over the motion beats, so a gesture moving its rate stays smooth). The segment's
-//               movement is time-scaled to Length: Window / Length x as fast. shape: Wrap runs forward over the segment and
-//               glides back to its start over its last 1/16 (12 .. 60 ms, a raised cosine: everything moves back smoothly,
-//               no jump); Bounce runs forward over the first half and back over the second (no return at all).
-//               Position and Window glide (80 ms), so sliding them is smooth; the tempo the free clocks use glides
-//               (200 ms). Stopped, the song beats run on at the last tempo, so the segment keeps playing.
+//   Loop Lock   the motion clock plays a region of the window (LoopWindow.h: as long as the slowest cycle of what
+//               moves, every modulator's phase measured from its start), again at every Length of the song: motion
+//               beats = window x (Start + (End - Start) x shape (u)), u = frac (song beats / Length) (Natural: the region
+//               at its own speed, a pass's length kept until it ends). Every part is a pure function of them (a synced
+//               clock: beats / its cycle's beats; a free one: beats x 60 / tempo x its rate; Wobble's phase the integral of
+//               its rate over the motion beats, put back at each pass's start). Wrap glides back over the last 1/16 of a
+//               pass (12 .. 60 ms; Natural: 60 ms after it), Bounce goes forward then back. Start, End and the window glide
+//               (80 ms), the tempo the free clocks use too (200 ms). Stopped, the song beats run on at the last tempo.
+//   Drift       (LoopWindow.h: makeDrift) each modulator's phase x its factor + its offset, from Drift Seed; seed 0: off
 //   PARA        ParaSplit.h, before Drive and the bands: its movement feeds Drive, the Glue, Grit and the LAB's clippers;
 //               after the SWEEP stage, whose make-up follows its input's slow level (a moving input would pump it)
 //   Sub Guard   no level movement reaches the lows below Sub Guard Freq. The steady lows: the SWEEP stage's output
@@ -131,6 +131,7 @@
 #include "Dsp.h"
 #include "Gesture.h"
 #include "Lab.h"
+#include "LoopWindow.h"
 #include "Movement.h"
 #include "ParaSplit.h"
 #include "Params.h"
@@ -194,7 +195,9 @@ struct Meters
     std::atomic<int> labLatency {-1};
     // Loop Lock (0.30): on, the segment's start and length on the motion clock (beats) and the motion clock now (beats)
     std::atomic<bool> loopOn {false};
-    std::atomic<float> loopStart {0.0f}, loopWindow {4.0f}, motionBeats {0.0f};
+    // (0.30, Loop Lock: the region's start and end in the window, the window (beats; the slowest cycle of what moves)
+    // and the tempo it is shown at)
+    std::atomic<float> loopStart {0.0f}, loopEnd {1.0f}, windowBeats {4.0f}, motionBeats {0.0f}, tempo {120.0f};
     // PARA and Sub Guard (0.30): how far each is faded in, the paths' levels and the high-pass path's corner now
     std::atomic<float> paraAmount {0.0f}, paraLp {1.0f}, paraHp {1.0f}, paraHpHz {250.0f}, guardAmount {0.0f};
 };
@@ -277,7 +280,8 @@ public:
     // what the gestures do now: the gain on Mid, High and Air (1: none), Wobble's phase (cycles), rate (cycles
     // per beat), amount and gain, Close's corner (Hz; 0 open) and the Dirt and Bells pulls (0 .. 1)
     double gestureGain (int band) const { return gLevel[band]; }
-    double wobblePhase () const { return wobPhase; }
+    double wobblePhase () const { return wobPhase + wobOffset; }
+    const MotionDrift& motionDrift () const { return drift; }
     double wobbleRate () const { return wobRate; }
     double wobbleAmount () const { return wobAmt; }
     double wobbleGainNow () const { return wobGain; }
@@ -308,8 +312,13 @@ public:
     // holds it; Input's gain now; PARA; Sub Guard (how far it is faded in, the steady lows' gain now)
     double motionBeats () const { return motionNow; }
     bool loopLocked () const { return locked; }
-    // where Loop Lock puts the motion clock at song beats `songBeats` (with Position and Window as they are now)
+    // where Loop Lock puts the motion clock at song beats `songBeats` (with the region and the window as they are now)
     double loopMotionAt (double songBeats) const;
+    // Loop Lock's window now (beats: the slowest cycle of what moves, LoopWindow.h) and a pass of its region (song beats)
+    double windowNow () const;
+    double loopWindowBeats () const { return std::exp2 (logWindow); }
+    double loopLengthNow () const;
+    const Scene* sceneWanted () const; // (the one gesture the Gesture choice picks)
     double inputGain () const { return inGain; }
     const ParaSplit& paraStage () const { return para; }
     double guardAmount () const { return guardFade; }
@@ -361,6 +370,9 @@ private:
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
     // the band movement's phase at motion beats (Loop Lock)
     double thetaAtBeats (double beats) const;
+    // Drift (LoopWindow.h): the bands' phase as they use it, and the drift worked out again when its settings change
+    double bandTheta (double th) const;
+    void updateDrift ();
     // Sub Guard: the steady lows through pass `pass`'s all-passes (its corners from gNow to g1, as the split has them)
     void subAllpass (int pass, int m, const double* g1, bool still);
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
@@ -453,13 +465,21 @@ private:
     int dryW = 0;
     // Input (0.30): its gain now (gliding)
     float inGain = 1.0f;
-    // the motion clock and Loop Lock (0.30): on, its Position and Window (log2) gliding, the tempo its free clocks use
+    // the motion clock and Loop Lock (0.30): on, its Start and End and the window (log2) gliding, the tempo its free clocks use
     // (gliding), the motion clock at the tick's end and how far it moved in the tick
     bool locked = false;
-    double loopPos = 0.0, logWindow = 2.0, lockBpm = 120.0, motionNow = 0.0, motionStep = 0.0;
+    double loopPos = 0.0, loopEnd = 1.0, logWindow = 2.0, windowTarget = 2.0, lockBpm = 120.0, motionNow = 0.0, motionStep = 0.0;
     // (Wobble's phase at the segment's start, for the segment as it was then; the segment count of the song)
-    double anchorPhase = 0.0, anchorPos = 0.0, anchorWindow = 0.0, anchorLength = 0.0;
+    double anchorPhase = 0.0, anchorPos = 0.0, anchorEnd = 0.0, anchorWindow = 0.0, anchorLength = 0.0;
     bool anchorValid = false;
+    // Drift: the modulators' factors and offsets, the settings they were made for, Wobble's offset (cycles)
+    MotionDrift drift;
+    int driftSeed = -1;
+    double driftStart = -1.0, driftSpeed = -1.0, wobOffset = 0.0;
+    // (Natural: the pass playing, its start in the song and its length, and a count of them)
+    double natStart = 0.0, natLen = 1.0;
+    bool natValid = false;
+    int64_t natPass = 0;
     int64_t loopIndex = -1;
     // PARA (0.30)
     ParaSplit para;

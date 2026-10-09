@@ -243,7 +243,7 @@ void Sweep::targets (const double* p, bool snap)
     // the bells
     for (int b = 0; b < kNumBells; ++b)
     {
-        const double m = 0.5 - 0.5 * std::cos (kTwoPi * (theta[b] + phaseDeg[b] / 360.0));
+        const double m = 0.5 - 0.5 * std::cos (kTwoPi * (phaseOf (b) + phaseDeg[b] / 360.0));
         hz[b] = clampSr (std::exp2 (logLo[b] + (logHi[b] - logLo[b]) * m), sr);
         const double q = std::exp2 (logQ[b]);
         double gDb = gainDb[b];
@@ -258,12 +258,12 @@ void Sweep::targets (const double* p, bool snap)
     // the shelf on its orbit
     {
         double u, v;
-        orbit.at (theta[kShelfIdx], wander, u, v);
+        orbit.at (phaseOf (kShelfIdx), wander, u, v);
         if (orbitFade < 1.0)
         {
             // (a new Seed: from the old orbit to the new one over kOrbitFadeSec, a raised cosine)
             double uo, vo;
-            oldOrbit.at (theta[kShelfIdx], wander, uo, vo);
+            oldOrbit.at (phaseOf (kShelfIdx), wander, uo, vo);
             const double w = 0.5 - 0.5 * std::cos (dsp::kPi * orbitFade);
             u = uo + (u - uo) * w;
             v = vo + (v - vo) * w;
@@ -542,7 +542,7 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 taps->bare[ch][i] = x + (bare - x) * f;
             }
             // the saturator: all of it, or (Clean Sub) the band above Split Freq with the lows around it
-            double whole = 0.0, parted = 0.0;
+            double whole = 0.0, parted = 0.0, partedHeld = 0.0;
             if (wholeRun)
                 whole = sat[ch].tick (g * y) * comp;
             if (splitRun)
@@ -552,17 +552,17 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 if (splitDriving)
                     low += (splitSat[ch].tick (splitDriveG * low) / splitDriveG - low) * splitDriveMix;
                 parted = satHigh[ch].tick (g * high) * comp + low * g * comp * splitLevel;
+                partedHeld = high * satLow + low * g * comp * splitLevel; // (Sub Guard's: Clean Sub's lows as they go around)
             }
             y = !splitRun ? whole : !wholeRun ? parted : whole + (parted - whole) * subF;
             double held = 0.0;
             if (guardRun)
             {
-                // Sub Guard's tap: the saturator's input at its gain on the lows alone (Clean Sub: the lows' own gain)
+                // Sub Guard's tap: the saturator's input at its gain on the lows alone (Clean Sub: its lows as they go around)
                 const double sat1 = std::tanh (g * below) * comp;
                 satInE += below * below;
                 satOutE += sat1 * sat1;
-                const double around = g * comp * splitLevel;
-                held = pre * (!splitRun ? satLow : !wholeRun ? around : satLow + (around - satLow) * subF);
+                held = !splitRun ? pre * satLow : !wholeRun ? partedHeld : pre * satLow + (partedHeld - pre * satLow) * subF;
             }
             if (boostRun)
             {

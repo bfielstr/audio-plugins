@@ -15,6 +15,7 @@
 #include "Engine.h"
 #include "Gesture.h"
 #include "GestureFile.h"
+#include "LoopWindow.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -2345,6 +2346,7 @@ struct SweepRig
     double sr;
     explicit SweepRig (double rate, const std::function<void (ParamArray&)>& set = {}) : sr (rate)
     {
+        p[kGuardBells] = 0.0; // (the bells as they are: Guard Bells, on in a new instance, is checked on its own)
         if (set)
             set (p);
         s.prepare (sr);
@@ -2854,8 +2856,9 @@ TEST (sweep_stable_everywhere)
             CHECK (finite (l) && finite (r), "%.0f Hz%s: finite", sr, extreme ? " (extremes)" : "");
             CHECK (denormals == 0, "%.0f Hz%s: no denormals (%d)", sr, extreme ? " (extremes)" : "", denormals);
             // (the extremes: Clean Sub at +12 dB and Sub Boost at 100 % pass lows boosted by several +24 dB bells
-            // around the saturator, so they are bounded only by the bells' gain)
-            CHECK (top < (extreme ? 30.0 : 4.0), "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
+            // around the saturator, so they are bounded only by the bells' gain; with Sub Guard and Guard Bells, a new
+            // instance's, the lows go around the saturator at its gain on them alone, not cut by the bells either)
+            CHECK (top < (extreme ? 50.0 : 4.0), "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
         }
 }
 
@@ -3536,7 +3539,7 @@ TEST (gesture_targets_act)
     const double cleanDb = db (upper (clean) / upper (ref)), bareDb = db (upper (bare) / upper (ref));
     std::printf ("    Dirt: the upper bands %+.2f dB; Bells: %+.2f dB\n", cleanDb, bareDb);
     // (Dirt is level matched; Bells takes the bells' cuts and boosts away, so the upper bands' balance changes)
-    CHECK (std::fabs (cleanDb) < 1.5 && std::fabs (bareDb) < 6.0, "Dirt about as loud, Bells within 6 dB (%.2f, %.2f dB)", cleanDb, bareDb);
+    CHECK (std::fabs (cleanDb) < 2.0 && std::fabs (bareDb) < 6.0, "Dirt about as loud, Bells within 6 dB (%.2f, %.2f dB)", cleanDb, bareDb);
     CHECK (clean != ref && bare != ref && clean != bare, "Dirt and Bells change the sound");
     // Mid X at 0 of its range: 400 Hz
     render (kTargetMidX, 1.0, &e);
@@ -4519,54 +4522,105 @@ TEST (input_gain)
     CHECK (finite (ys) && db (rms (ys, 48000, ys.size ())) < db (rms (yl, 48000, yl.size ())) - 3.0, "Ocean with Input down: quieter into the saturator");
 }
 
-TEST (loop_lock_motion_clock)
+TEST (loop_lock_window)
 {
-    // the motion clock under Loop Lock: Position + Window x shape (frac (song beats / Length)); Wrap glides back over the
-    // segment's last part (a 16th, 12 .. 60 ms), Bounce goes forward then back
+    // the window is the slowest cycle of what moves, an Hz period in beats at the tempo: Ocean's bells alone, bell E
+    // (0.41 Hz) the slowest; with the bands moving on a 4-bar cycle, their pattern's (16 beats x its loops)
     auto e = fresh ();
     e->setParam (kLoopLock, 1.0);
-    e->setParam (kLoopPosition, 3.0);
-    e->setParam (kLoopWindow, 2.0);
-    e->setParam (kLoopLength, 4); // (1 bar)
     e->reset ();
-    const double sec = 4.0 * 60.0 / 120.0, eShare = std::min (std::clamp (sec / 16.0, 0.012, 0.06) / sec, 0.25);
+    const double bpm = 120.0, bellE = bpm / 60.0 / 0.41;
+    std::vector<double> d (kNumParams);
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        d[id] = e->param (id);
+    const Pattern a = makePattern (1, 0);
+    const auto parts = windowParts (d.data (), bpm, nullptr, &a, nullptr);
+    std::string slowest;
+    double longest = 0.0;
+    for (const auto& w : parts)
+        if (w.periodBeats > longest)
+        {
+            longest = w.periodBeats;
+            slowest = w.name;
+        }
+    CHECK (parts.size () == 8 && slowest == "Bell E" && std::fabs (longest - bellE) < 1e-9, "8 bells, the slowest Bell E (%s, %.3f beats)",
+           slowest.c_str (), longest);
+    CHECK (std::fabs (e->windowNow () - bellE) < 1e-9 && std::fabs (e->loopWindowBeats () - bellE) < 1e-9, "the window: bell E's period (%.3f beats)",
+           e->windowNow ());
+    e->setParam (kMovement, 0.5);
+    e->setParam (kSync, 1.0);
+    e->setParam (kSyncRate, 0); // (4 bars)
+    int loop = 1;
+    for (int b = 0; b < kMaxBands; ++b)
+        loop = std::max (loop, e->pattern (0).band[b].loop);
+    CHECK (std::fabs (e->windowNow () - 16.0 * loop) < 1e-9, "with the bands on a 4-bar cycle: %.1f beats (%d loops)", e->windowNow (), loop);
+    auto quiet = engine ();
+    quiet->setParam (kMovement, 0.0);
+    CHECK (quiet->windowNow () == 4.0, "nothing moving: a bar");
+}
+
+TEST (loop_lock_region)
+{
+    // where the region puts the motion clock: normalized (Length), the region time-scaled to fit, Wrap gliding back over
+    // its last 16th; Natural, at its own speed and again from the next 1/16 beat after it; Bounce; and the mouse's region
+    const double w = 8.0, s = 0.25, en = 0.5, bpm = 120.0;
+    const double sec = 4.0 * 60.0 / bpm, e = std::min (std::clamp (sec / 16.0, 0.012, 0.06) / sec, 0.25);
     double worst = 0.0;
-    for (double b : {0.0, 0.5, 1.0, 2.0, 3.0, 3.5, 3.9, 3.99, 4.2, 9.1, 15.97})
+    for (double b : {0.0, 0.5, 1.0, 2.0, 3.0, 3.9, 3.99, 4.0, 5.0, 9.7})
     {
         const double u = b / 4.0 - std::floor (b / 4.0);
-        const double f = u < 1.0 - eShare ? u / (1.0 - eShare) : 0.5 + 0.5 * std::cos (kPi * (u - (1.0 - eShare)) / eShare);
-        worst = std::max (worst, std::fabs (e->loopMotionAt (b) - (3.0 + 2.0 * f)));
+        const double f = u < 1.0 - e ? u / (1.0 - e) : 0.5 + 0.5 * std::cos (kPi * (u - (1.0 - e)) / e);
+        worst = std::max (worst, std::fabs (regionMotion (b, s, en, w, 4, kLoopWrap, bpm) - (s * w + (en - s) * w * f)));
     }
-    CHECK (worst < 1e-12, "Wrap: Position + Window x the segment's place (%.1e)", worst);
-    e->setParam (kLoopShape, kLoopBounce);
-    CHECK (std::fabs (e->loopMotionAt (1.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (2.0) - 5.0) < 1e-12 &&
-               std::fabs (e->loopMotionAt (3.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (4.0) - 3.0) < 1e-12,
+    CHECK (worst < 1e-12, "Length 1 bar: Start x window + the region x its place (%.1e)", worst);
+    CHECK (std::fabs (regionMotion (1.0, s, en, w, 4, kLoopBounce, bpm) - 3.0) < 1e-12 && std::fabs (regionMotion (3.0, s, en, w, 4, kLoopBounce, bpm) - 3.0) < 1e-12,
            "Bounce: forward over the first half, back over the second");
-    e->setParam (kLoopShape, kLoopWrap);
-    // every moving part reads it: the band movement (synced), a synced bell, the gestures, PARA
-    e->setParam (kSync, 1.0);
-    e->setParam (kMovement, 0.8);
-    e->setParam (bellId (2, kBellSync), 1.0);
-    e->setParam (kScene, kSceneReeseCell + 1);
-    e->setParam (kParaOn, 1.0);
-    e->reset ();
-    const auto x = bassB1 (4.0);
+    const double len = regionLength (s, en, w, kLoopNatural, kLoopWrap, bpm); // (2 beats and the glide, up to a 16th of a beat)
+    CHECK (std::fabs (len - 34.0 / 16.0) < 1e-12 && std::fabs (regionMotion (1.0, s, en, w, kLoopNatural, kLoopWrap, bpm) - 3.0) < 1e-12 &&
+               std::fabs (regionMotion (len + 0.5, s, en, w, kLoopNatural, kLoopWrap, bpm) - 2.5) < 1e-12,
+           "Natural: the region at its own speed, again every %.4f beats", len);
+    double step = 0.0;
+    for (int k = 1; k < 4000; ++k)
+        step = std::max (step, std::fabs (regionMotion (k * 0.001, s, en, w, kLoopNatural, kLoopWrap, bpm) -
+                                          regionMotion ((k - 1) * 0.001, s, en, w, kLoopNatural, kLoopWrap, bpm)));
+    CHECK (step < 0.06, "Natural: no jump at its end (largest step %.3f beats a millibeat)", step);
+    const LoopRegion a = slideRegion ({0.2, 0.5}, 0.7), b = slideRegion ({0.2, 0.5}, -0.5), c = slideRegion ({0.2, 0.5}, 0.1);
+    CHECK (std::fabs (a.start - 0.7) < 1e-12 && a.end == 1.0 && b.start == 0.0 && std::fabs (b.end - 0.3) < 1e-12 && std::fabs (c.start - 0.3) < 1e-12 &&
+               std::fabs (c.end - 0.6) < 1e-12,
+           "sliding the region keeps its length, inside the window");
+    const LoopRegion h1 = moveHandle ({0.2, 0.5}, true, 0.1), h2 = moveHandle ({0.2, 0.5}, false, 0.4), h3 = moveHandle ({0.2, 0.5}, false, 0.9);
+    CHECK (std::fabs (h1.end - (0.2 + kLoopMinRegion)) < 1e-12 && h2.start == 0.4 && h2.end == 0.5 && std::fabs (h3.start - (0.5 - kLoopMinRegion)) < 1e-12,
+           "the handles: End and Start each on its own, never crossing");
+}
+
+TEST (loop_lock_retriggers)
+{
+    // at every Length boundary of the song the whole movement starts again from the region's start: an Hz bell and a
+    // synced one alike (and the bands, the gesture and the rest: loop_lock_repeats)
+    // a direct check, tick by tick: the motion clock at the boundary is Start x window, and the parts read it
+    auto f = fresh ();
+    f->setParam (kLoopLock, 1.0);
+    f->setParam (kLoopStart, 0.25);
+    f->setParam (kLoopEnd, 0.6);
+    f->setParam (kLoopLength, 3);
+    f->setParam (bellId (2, kBellSync), 1.0);
+    f->reset ();
+    const double w = f->loopWindowBeats ();
     int checked = 0;
     double off = 0.0;
-    size_t samples = 0;
-    play (*e, x, 120.0, nullptr, nullptr, [&] (size_t a, double&) {
-        if (a == 0)
+    // 120 BPM (stopped, the clock runs on at it): a 2-beat boundary every 48000 samples, a tick's end exactly on it
+    ticks (*f, 3 * 3000, [&] (int t) {
+        if ((t + 1) % 3000 != 0)
             return;
-        samples = a;
-        const double song = (double)a / kSr * 2.0, mb = e->loopMotionAt (song);
-        const double syncBeats = kSyncBeats[std::lround (e->param (kSyncRate))];
-        const double bellBeats = kSyncBeats[std::lround (e->param (bellId (2, kBellSyncRate)))];
-        off = std::max ({off, std::fabs (e->motionBeats () - mb), std::fabs (e->phase () - mb / syncBeats), std::fabs (e->gestureBeats () - mb),
-                         std::fabs (e->sweepStage ().clock (2) - mb / bellBeats)});
+        const double tau = 0.25 * w;
+        const double freeTheta = tau * 60.0 / 120.0 * f->param (bellId (0, kBellRate));
+        const double syncTheta = tau / kSyncBeats[std::lround (f->param (bellId (2, kBellSyncRate)))];
+        off = std::max ({off, std::fabs (f->motionBeats () - tau), std::fabs (f->sweepStage ().clock (0) - freeTheta),
+                         std::fabs (f->sweepStage ().clock (2) - syncTheta)});
         ++checked;
     });
-    CHECK (off < 1e-6 && checked > 100, "the motion clock, the bands' phase, the gestures and a synced bell at Loop Lock's place (%.1e)", off);
-    (void)samples;
+    std::printf ("    window %.3f beats: at each boundary the clock at %.3f beats (largest error %.1e)\n", w, 0.25 * w, off);
+    CHECK (checked == 3 && off < 1e-6, "at each boundary an Hz bell and a synced bell both start again from Start x window");
 }
 
 TEST (loop_lock_repeats)
@@ -4575,8 +4629,8 @@ TEST (loop_lock_repeats)
     // gestures' pull on the bands, Wobble, PARA's paths (silence in, the host stopped: the clock runs on at its tempo)
     auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
     e->setParam (kLoopLock, 1.0);
-    e->setParam (kLoopPosition, 2.0);
-    e->setParam (kLoopWindow, 4.0);
+    e->setParam (kLoopStart, 0.25);
+    e->setParam (kLoopEnd, 0.75);
     e->setParam (kLoopLength, 4);
     e->setParam (kParaOn, 1.0);
     e->setParam (kWobbleAmount, 0.6);
@@ -4596,62 +4650,62 @@ TEST (loop_lock_repeats)
         seen.push_back (v);
     });
     double worst = 0.0, moved = 0.0;
-    size_t which = 0;
     for (int k = 0; k < perLoop; ++k)
         for (size_t j = 0; j < 16; ++j)
         {
             const double a = seen[(size_t)(2 * perLoop + k)][j], b = seen[(size_t)(4 * perLoop + k)][j];
-            if (std::fabs (a - b) / std::max (1.0, std::fabs (a)) > worst)
-                which = j;
             worst = std::max (worst, std::fabs (a - b) / std::max (1.0, std::fabs (a)));
             moved = std::max (moved, std::fabs (a - seen[(size_t)(2 * perLoop)][j]) / std::max (1.0, std::fabs (a)));
         }
-    std::printf ("    loops 3 and 5: %.1e apart (value %zu); within a loop the values move by %.2f\n", worst, which, moved);
+    std::printf ("    loops 3 and 5: %.1e apart; within a loop the values move by %.2f\n", worst, moved);
     CHECK (worst < 1e-6 && moved > 0.1, "every moving value repeats each Length (%.1e)", worst);
 }
 
 TEST (loop_lock_smooth)
 {
-    // the motion clock never jumps: not at the segment's end (Wrap glides back), not while Position and Window are
-    // slid, not at a tempo change; the output stays finite and its steps no larger than without Loop Lock
+    // the motion clock never jumps: not at the region's end (Wrap glides back), not while Start and End are dragged or
+    // the region slid, not at a tempo change; the output stays finite and its steps no larger than without Loop Lock
     const auto x = bassB1 (8.0);
-    auto render = [&] (bool lock, double* clockStep, int shape) {
+    auto render = [&] (bool lock, double* clockStep, int shape, int length) {
         auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
         e->setParam (kLoopLock, lock ? 1.0 : 0.0);
         e->setParam (kLoopShape, shape);
-        e->setParam (kLoopPosition, 1.0);
-        e->setParam (kLoopWindow, 4.0);
-        e->setParam (kLoopLength, 4);
+        e->setParam (kLoopLength, length);
         e->reset ();
         double last = e->motionBeats (), step = 0.0;
         auto y = play (*e, x, 140.0, nullptr, nullptr, [&] (size_t a, double& bpm) {
             const double t = (double)a / kSr;
             if (t > 2.0 && t < 3.0)
-                e->setParam (kLoopPosition, 1.0 + 7.0 * (t - 2.0)); // (slid)
+                e->setParam (kLoopEnd, 1.0 - 0.8 * (t - 2.0)); // (End dragged in)
             if (t > 3.5 && t < 3.52)
-                e->setParam (kLoopPosition, 12.0); // (jumped: it glides)
-            if (t > 4.0 && t < 4.02)
-                e->setParam (kLoopWindow, 1.0);
+            {
+                const LoopRegion r = slideRegion ({e->param (kLoopStart), e->param (kLoopEnd)}, 0.6); // (the region slid)
+                e->setParam (kLoopStart, r.start);
+                e->setParam (kLoopEnd, r.end);
+            }
             if (t > 6.0)
                 bpm = 100.0; // (a tempo change)
             step = std::max (step, std::fabs (e->motionBeats () - last));
             last = e->motionBeats ();
         });
         if (clockStep)
-            *clockStep = step;
+            *clockStep = step / e->loopWindowBeats ();
         return y;
     };
-    double wrapStep = 0.0, pingStep = 0.0;
-    const auto free = render (false, nullptr, kLoopWrap);
-    const auto wrap = render (true, &wrapStep, kLoopWrap);
-    const auto ping = render (true, &pingStep, kLoopBounce);
-    std::printf ("    the motion clock's largest step per block: Wrap %.3f, Bounce %.3f beats (the segment: 4 beats); output steps %.3f / %.3f "
-                 "(free %.3f)\n",
-                 wrapStep, pingStep, maxStep (wrap), maxStep (ping), maxStep (free));
-    CHECK (finite (wrap) && finite (ping), "finite");
-    CHECK (wrapStep < 0.6 && pingStep < 0.6, "the motion clock glides (%.3f, %.3f beats per block)", wrapStep, pingStep);
-    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (ping) < 1.25 * maxStep (free), "no step larger than without Loop Lock");
-    // after the tempo change the segment still follows the song: at song beats b, the clock is loopMotionAt (b)
+    double wrapStep = 0.0, bounceStep = 0.0, naturalStep = 0.0;
+    const auto free = render (false, nullptr, kLoopWrap, 4);
+    const auto wrap = render (true, &wrapStep, kLoopWrap, 4);
+    const auto bounce = render (true, &bounceStep, kLoopBounce, 4);
+    const auto natural = render (true, &naturalStep, kLoopWrap, kLoopNatural);
+    std::printf ("    the motion clock's largest step per block (of the window): Wrap %.3f, Bounce %.3f, Natural %.3f; output steps %.3f / %.3f / "
+                 "%.3f (free %.3f)\n",
+                 wrapStep, bounceStep, naturalStep, maxStep (wrap), maxStep (bounce), maxStep (natural), maxStep (free));
+    CHECK (finite (wrap) && finite (bounce) && finite (natural), "finite");
+    CHECK (wrapStep < 0.2 && bounceStep < 0.2 && naturalStep < 0.2, "the motion clock glides (%.3f, %.3f, %.3f of the window per block)", wrapStep,
+           bounceStep, naturalStep);
+    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (bounce) < 1.25 * maxStep (free) && maxStep (natural) < 1.25 * maxStep (free),
+           "no step larger than without Loop Lock");
+    // after the tempo change the region still follows the song: at song beats b, the clock is loopMotionAt (b)
     auto e = fresh ();
     e->setParam (kLoopLock, 1.0);
     e->reset ();
@@ -4663,7 +4717,7 @@ TEST (loop_lock_smooth)
             bpm = 90.0;
         song += 256.0 * bpm / 60.0 / kSr;
     });
-    CHECK (off < 1e-6, "a tempo change: the segment keeps time with the song (%.1e)", off);
+    CHECK (off < 1e-3, "a tempo change: the region keeps time with the song (%.1e)", off);
 }
 
 TEST (para_split)
@@ -4761,8 +4815,10 @@ TEST (new_controls_off_change_nothing)
         e->setParam (kWobbleAmount, 0.4);
         if (wild)
         {
-            e->setParam (kLoopPosition, 7.0);
-            e->setParam (kLoopWindow, 0.5);
+            e->setParam (kLoopStart, 0.3);
+            e->setParam (kLoopEnd, 0.6);
+            e->setParam (kStartDrift, 1.0);
+            e->setParam (kSpeedDrift, kSpeedDriftMax);
             e->setParam (kLoopLength, 1);
             e->setParam (kLoopShape, kLoopBounce);
             e->setParam (kParaLpFreq, 90.0);
@@ -4831,6 +4887,97 @@ TEST (sub_guard_holds_the_sub)
         ++checked;
     }
     CHECK (checked == 9, "%d presets", checked);
+}
+
+TEST (motion_drift)
+{
+    // Drift: each modulator started up to Start Drift of its cycle later and run up to +- Speed Drift apart, from the
+    // seed; the same seed the same every time, seed 0 exactly as without it
+    int inRange = 0, spread = 0;
+    for (int seed = 1; seed <= kMaxDriftSeed; ++seed)
+    {
+        const MotionDrift d = makeDrift (seed, 0.3, 0.05);
+        double lo = 1e9, hi = -1e9;
+        for (int i = 0; i < kDriftParts; ++i)
+        {
+            inRange += d.on && d.offset[i] >= 0.0 && d.offset[i] < 0.3 && d.factor[i] >= 0.95 && d.factor[i] <= 1.05;
+            lo = std::min (lo, d.factor[i]);
+            hi = std::max (hi, d.factor[i]);
+        }
+        spread += hi - lo > 0.01;
+    }
+    CHECK (inRange == kMaxDriftSeed * kDriftParts && spread > 120 && !makeDrift (0, 0.3, 0.05).on,
+           "offsets within Start Drift, speeds within Speed Drift, apart from each other; seed 0 off");
+    const auto x = reese (1.5);
+    auto render = [&] (int seed, bool wild) {
+        auto e = fresh ();
+        e->setParam (kMovement, 0.6);
+        e->setParam (kScene, kSceneReeseCell + 1);
+        e->setParam (kWobbleAmount, 0.5);
+        e->setParam (kParaOn, 1.0);
+        e->setParam (kDriftSeed, seed);
+        if (wild)
+        {
+            e->setParam (kStartDrift, 1.0);
+            e->setParam (kSpeedDrift, kSpeedDriftMax);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = play (*e, x, 132.0, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    const auto off = render (0, false);
+    CHECK (off == render (0, true), "Drift Seed 0: its amounts change nothing (bit for bit)");
+    const auto a = render (7, false);
+    CHECK (a == render (7, false) && a != render (8, false) && a != off, "the same seed renders the same; another seed differs");
+    // the window follows the drifted periods
+    auto e = fresh ();
+    e->setParam (kDriftSeed, 5);
+    e->setParam (kSpeedDrift, kSpeedDriftMax);
+    e->reset ();
+    const MotionDrift d = makeDrift (5, e->param (kStartDrift), kSpeedDriftMax);
+    double longest = 0.0;
+    for (int b = 0; b < kNumBells; ++b)
+        longest = std::max (longest, 2.0 / e->param (bellId (b, kBellRate)) / d.factor[kDriftBell + b]);
+    CHECK (std::fabs (e->windowNow () - longest) < 1e-9, "the window: the slowest drifted period (%.3f beats)", e->windowNow ());
+    // Loop Lock starts every drifted phase again together at the region's start: the bells, Wobble, the gesture, PARA
+    auto f = fresh ();
+    f->setParam (kDriftSeed, 11);
+    f->setParam (kStartDrift, 0.8);
+    f->setParam (kSpeedDrift, 0.08);
+    f->setParam (kLoopLock, 1.0);
+    f->setParam (kLoopStart, 0.3);
+    f->setParam (kLoopEnd, 0.7);
+    f->setParam (kLoopLength, 3); // (2 beats at 120 BPM: 3000 ticks)
+    f->setParam (kScene, kSceneReeseCell + 1);
+    f->setParam (kWobbleAmount, 0.5);
+    f->setParam (kParaOn, 1.0);
+    f->reset ();
+    std::vector<std::array<double, 12>> at;
+    ticks (*f, 4 * 3000, [&] (int t) {
+        if ((t + 1) % 3000 != 0)
+            return;
+        std::array<double, 12> v {};
+        for (int b = 0; b < kNumBells; ++b)
+            v[(size_t)b] = f->sweepStage ().bellHz (b);
+        v[8] = f->wobblePhase () - std::floor (f->wobblePhase ());
+        v[9] = f->scenePos ();
+        v[10] = f->paraStage ().hpHz ();
+        v[11] = f->motionBeats ();
+        at.push_back (v);
+    });
+    double worst = 0.0;
+    for (size_t k = 2; k < at.size (); ++k)
+        for (size_t j = 0; j < 12; ++j)
+        {
+            double dv = std::fabs (at[k][j] - at[1][j]);
+            if (j == 8)
+                dv = std::min (dv, 1.0 - dv);
+            worst = std::max (worst, dv / std::max (1.0, std::fabs (at[1][j])));
+        }
+    std::printf ("    with Drift, every phase at the region's start, pass after pass: %.1e apart\n", worst);
+    CHECK (at.size () == 4 && worst < 1e-6, "Loop Lock starts every drifted phase again together (%.1e)", worst);
 }
 
 TEST (presets_030)

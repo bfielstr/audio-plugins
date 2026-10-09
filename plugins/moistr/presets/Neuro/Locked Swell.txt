@@ -1,6 +1,6 @@
 # moistr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: neuro, lab, bass, gestures, tempo, loop lock
-comment: Neuro Gesture held on one moment: Loop Lock takes 2 beats of the Reese Cell gesture from beat 4 (where the Mid band fades and the High band swells) and stretches them over a bar, so that swell comes round on every bar in time with the song, with Wobble, the bands and the bells all slowed to fit. Slide Position to pick another moment. Sub Guard with Guard Bells keeps the sub steady under it.
+comment: Neuro Gesture held on one moment: Loop Lock plays the third quarter of its window (the 8-beat Reese Cell gesture, where the Mid band fades and the High band swells) stretched over a bar, so that swell comes round on every bar in time with the song, with Wobble, the bands and the bells all slowed to fit. Slide the region in the Loop display to pick another moment. Sub Guard with Guard Bells keeps the sub steady under it.
 Bands = 4 Bands
 Seed = 2
 Mid X = 900 Hz
@@ -79,8 +79,8 @@ Post FX 2 Type = smacheratr
 #1766 = 50 %
 Gesture = Reese Cell
 Loop Lock = On
-Loop Position = 4 Beats
-Loop Window = 2 Beats
+Loop Start = 50 %
+Loop End = 75 %
 Loop Length = 1 Bar
 Sub Guard = On
 Guard Bells = On

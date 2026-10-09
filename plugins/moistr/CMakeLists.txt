@@ -12,6 +12,7 @@ add_library(moistr_core STATIC
     src/core/GestureFile.cpp
     src/core/Lab.cpp
     src/core/ParaSplit.cpp
+    src/core/LoopWindow.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
 target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core smemplr_fxslot) # (the LAB's slots: smemplr's)
@@ -55,6 +56,8 @@ pk_add_plugin(Moistr
         src/ui/SweepView.cpp
         src/ui/GestureView.h
         src/ui/GestureView.cpp
+        src/ui/LoopView.h
+        src/ui/LoopView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )

@@ -430,7 +430,7 @@ int main ()
             if (id < old)
                 kept += back.has[id] && back.norm[id] == keptAs (id, std::fmod (0.173 * (id + 1), 1.0));
             else
-                lab += !back.has[id] && back.norm[id] == (id == kSubGuard ? 0.0 : defaultNormalized (id)); // (Sub Guard off before 0.30)
+                lab += !back.has[id] && back.norm[id] == (id == kSubGuard || id == kGuardBells ? 0.0 : defaultNormalized (id)); // (Sub Guard off before 0.30)
         CHECK (kept == (int)old, "every stored value kept (%d of %u)", kept, old);
         CHECK (lab == (int)(kNumParams - old), "the LAB and the 0.30 controls at their defaults, Sub Guard off (%d of %u)", lab, kNumParams - old);
         int empty = 0, neutral = 0;

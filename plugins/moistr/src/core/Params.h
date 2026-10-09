@@ -182,9 +182,9 @@ enum ParamId : uint32_t
     kInput = kLabSlotBase + 19 * 88, // dB -24 .. +12: the gain at the very start (0 dB: untouched)
     // Loop Lock (Engine.h: the motion clock): the movement locked to a segment of itself, played in time with the song
     kLoopLock,     // Off / On
-    kLoopPosition, // beats 0 .. kLoopPositionMax: where on the motion clock the segment starts
-    kLoopWindow,   // beats kLoopWindowMin .. kLoopWindowMax: how much motion time the segment holds
-    kLoopLength,   // the segment's length in the song (choice: kLoopLengthBeats)
+    kLoopStart,    // 0 .. 1: where the loop region starts in the window (LoopWindow.h: the slowest cycle of what moves)
+    kLoopEnd,      // 0 .. 1: where it ends (the default region: the whole window)
+    kLoopLength,   // the region's length in the song (choice: kLoopLengthBeats, then Natural: its own speed)
     kLoopShape,    // Wrap (back to the start with a short glide) / Bounce (forward, then back)
     // PARA (ParaSplit.h): the signal into a low-pass and a high-pass path in parallel, each moving
     kParaOn,          // Off / On ("Split On")
@@ -200,6 +200,10 @@ enum ParamId : uint32_t
     kSubGuardFreq, // Hz 40 .. 200: the guard's Linkwitz-Riley 4th-order split
     kSubFloor,     // dB -12 .. 0: how far the lows may dip at most (0: not at all)
     kGuardBells,   // Off / On: the SWEEP stage's bells kept above Sub Guard Freq too
+    // Drift (LoopWindow.h: makeDrift): every modulator on the motion clock started and run a little apart, per seed
+    kDriftSeed,    // 0 .. 128 (0: off, every modulator exactly as set)
+    kStartDrift,   // 0 .. 1: each modulator's start moved by up to this much of its cycle
+    kSpeedDrift,   // 0 .. 0.1: each modulator's rate changed by up to +- this much (fixed per seed)
     kNumParams
 };
 
@@ -271,13 +275,15 @@ static_assert (labSlotParam (chainSlot (0, 0), kLabType) == 259 && labSlotParam 
                    labSlotParam (chainSlot (1, 0), kLabType) == 611 && labSlotParam (chainSlot (2, 0), kLabType) == 963 &&
                    labSlotParam (postSlot (0), kLabType) == 1667 && labBlockParam (postSlot (2), 85) == 1930,
                "saved IDs: the slots, kLabSlotFields each (Type, On, 86 block positions), chain by chain, then POST");
-static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopPosition == 1933 && kLoopWindow == 1934 && kLoopLength == 1935 &&
+static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopStart == 1933 && kLoopEnd == 1934 && kLoopLength == 1935 &&
                    kLoopShape == 1936 && kParaOn == 1937 && kParaLpFreq == 1938 && kParaHpFreq == 1939 && kParaLpMove == 1940 &&
                    kParaHpMove == 1941 && kParaHpLevelMove == 1942 && kParaRate == 1943 && kParaMix == 1944 && kSubGuard == 1945 &&
-                   kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kNumParams == 1949,
-               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948");
-// Loop Lock: Position's and Window's ranges (beats) and Length's choices (beats: 1/16 .. 4 bars)
-constexpr double kLoopPositionMax = 16.0, kLoopWindowMin = 0.125, kLoopWindowMax = 16.0, kLoopWindowDefault = 4.0;
+                   kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kDriftSeed == 1949 && kStartDrift == 1950 &&
+                   kSpeedDrift == 1951 && kNumParams == 1952,
+               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948, Drift at 1949 .. 1951");
+constexpr int kMaxDriftSeed = 128;
+constexpr double kSpeedDriftMax = 0.1;
+// Loop Lock: Length's choices (beats: 1/16 .. 4 bars; then Natural, LoopWindow.h)
 constexpr int kNumLoopLengths = 7;
 constexpr double kLoopLengthBeats[kNumLoopLengths] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
 enum LoopShape { kLoopWrap = 0, kLoopBounce };
@@ -344,6 +350,8 @@ enum GestureTarget
     kTargetParaLp,       // the low-pass path's level (1: in, 0: out)
     kTargetParaHpFreq,   // the high-pass path's corner over its travel (0: at HP Freq, 1: HP Move octaves up)
     kTargetParaHpLevel,  // the high-pass path's level (1: in, 0: out)
+    kTargetStartDrift,   // Start Drift over its range
+    kTargetSpeedDrift,   // Speed Drift over its range
     kNumTargets
 };
 constexpr int kNumSlotTargets = kTargetShift + 1; // the 0.27 slots' Target choice (its entries are saved: never more)
@@ -352,7 +360,7 @@ constexpr const char* kTargetNames[kNumTargets] = {"Off",        "Mid Level", "H
                                                    "Wobble Amount", "Close",  "Liquid Pos", "Dirt",      "Bells",
                                                    "Mid X",      "High X",    "Seed Blend", "Shift",
                                                    "Mid Grit",   "High Grit", "Air Grit",   "Mid OTT",   "High OTT",
-                                                   "Air OTT",    "Post OTT",  "Split LP",   "Split HP Freq", "Split HP Level"};
+                                                   "Air OTT",    "Post OTT",  "Split LP",   "Split HP Freq", "Split HP Level", "Start Drift", "Speed Drift"};
 enum GestureMode { kModeLoop = 0, kModeWalk };
 // Length: the gesture's own (0), else a loop's length in beats; Speed (Walk): Hold, then x1/8 .. x4
 constexpr int kNumGestureLengths = 8, kNumGestureSpeeds = 7;
@@ -416,7 +424,7 @@ double legacyDefaultNormalized (uint32_t id);
 // values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
 // from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized); before 0.30 the one gesture None (its
 // default), the LAB's defaults (every slot Empty, every chain at 0 dB: the sound before it), Input 0 dB, Loop Lock and
-// Split On off (their defaults) and Sub Guard off (on in a new instance).
+// Split On off (their defaults) and Sub Guard and Guard Bells off (on in a new instance).
 double defaultNormalizedForVersion (uint32_t id, int version);
 // The gestures as a state saved before 0.27 reads them: every Target Off, Wobble Amount 0 (the rest at the defaults)
 double gestureOffNormalized (uint32_t id);
