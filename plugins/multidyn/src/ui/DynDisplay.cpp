@@ -87,15 +87,15 @@ CRect DynDisplay::laneRect (int band) const
 CRect DynDisplay::graphRect (int band) const
 {
     CRect g = laneRect (band);
-    g.left += kLeftCol;
-    g.right -= kRightCol;
+    g.left += leftCol ();
+    g.right -= rightCol ();
     return g;
 }
 
 double DynDisplay::xOf (double db) const
 {
     const CRect r = getViewSize ();
-    const double left = r.left + kLeftCol, width = r.getWidth () - kLeftCol - kRightCol;
+    const double left = r.left + leftCol (), width = r.getWidth () - leftCol () - rightCol ();
     return left + (std::clamp (db, kMinDb, kMaxDb) - kMinDb) / (kMaxDb - kMinDb) * width;
 }
 
@@ -121,13 +121,16 @@ void DynDisplay::paintBase (CDrawContext* ctx)
     ctx->drawRect (all, kDrawFilled);
 
     // column headers and separators
-    const double gl = all.left + kLeftCol, gr = all.right - kRightCol;
-    text (ctx, "Below", CRect (all.left + 4, all.top, gl - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
-    text (ctx, "Above", CRect (gr + 4, all.top, gr + 76, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
-    text (ctx, "Att/Rel", CRect (gr + 84, all.top, all.right - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+    const double gl = all.left + leftCol (), gr = all.right - rightCol ();
     ctx->setLineWidth (1.0);
     ctx->setFrameColor (theme::kLineDim);
-    ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
+    if (valueColumns)
+    {
+        text (ctx, "Below", CRect (all.left + 4, all.top, gl - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+        text (ctx, "Above", CRect (gr + 4, all.top, gr + 76, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+        text (ctx, "Att/Rel", CRect (gr + 84, all.top, all.right - 4, all.top + kHeader), theme::kTextDim, 9.5, kLeftText, true);
+        ctx->drawLine (CPoint (gr + 80, all.top + 2), CPoint (gr + 80, all.bottom - kScaleHeight));
+    }
 
     const int n = bands ();
     for (int k = 0; k < lanes (); ++k) // the bands, then the Sub band
@@ -352,7 +355,7 @@ void DynDisplay::onMouseMoveEvent (MouseMoveEvent& e)
         if (edge)
         {
             // thresholds: follow the mouse horizontally in dB
-            const double dbPerPx = (kMaxDb - kMinDb) / (getViewSize ().getWidth () - kLeftCol - kRightCol);
+            const double dbPerPx = (kMaxDb - kMinDb) / (getViewSize ().getWidth () - leftCol () - rightCol ());
             const double v = t.start + (e.mousePosition.x - downPoint.x) * dbPerPx * fine;
             host->setNorm (t.id, host->table ().toNormalized (t.id, v));
         }

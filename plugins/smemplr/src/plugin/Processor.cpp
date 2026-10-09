@@ -229,7 +229,10 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     auto apply = [this] (const Ev& e) {
         switch (e.kind)
         {
-            case 0: engine.noteOn (e.note, e.value); break;
+            case 0:
+                engine.noteOn (e.note, e.value);
+                bridge->capture.noteOn (e.note); // (a wavetable's pitch when none is found in the audio)
+                break;
             case 1: engine.noteOff (e.note); break;
             case 2: engine.setSustain (e.value >= 0.5f); break;
             default: engine.setPitchBend (e.value * 2.0f - 1.0f); break;
@@ -279,6 +282,12 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     // the output scope and the effects' displays
     for (int i = 0; i < n; ++i)
         bridge->outScope.push (L[i], R[i]);
+    pk::CaptureBuffer::Transport transport;
+    transport.bpm = host.tempoValid ? host.bpm : 0.0;
+    transport.playing = host.playing;
+    transport.ppq = host.ppq;
+    transport.ppqValid = host.ppqValid;
+    bridge->capture.push (L, R, n, transport, processSetup.sampleRate);
     bridge->latency.store (engine.latency (), std::memory_order_relaxed);
 
     // silent only when it really is (the effects have tails)

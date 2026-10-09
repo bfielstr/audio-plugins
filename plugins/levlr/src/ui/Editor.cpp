@@ -170,12 +170,7 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 16), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (
-        this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
-        [c = ctl] () -> const smacheratr::Meters* {
-            auto* s = c->getShared ();
-            return s ? &s->tailMeters : nullptr;
-        });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -198,6 +193,45 @@ void Editor::updateBands ()
         if (driveType[b])
             driveType[b]->setEnabledLook (plainValue (driveParam (b, kDriveDb)) > 0.0);
     }
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+        [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+        [c = ctl] () -> const smacheratr::Meters* {
+            auto* s = c->getShared ();
+            return s ? &s->tailMeters : nullptr;
+        });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // how many bands (Bands) and each band's level (their crossovers are on the display); Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "levlr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        levels = new LevelView (r, this, [c = ctl] () -> const Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        pk::setHelp (levels, "Levels", help::kDisplay);
+        return levels;
+    };
+    s.rows = {{segmented (kBandCount, "Bands", {"1", "2", "3", "4"}, 240)},
+              {knob (bandParam (0, kGain), "Band 1", true), knob (bandParam (1, kGain), "Band 2", true), knob (bandParam (2, kGain), "Band 3", true),
+               knob (bandParam (3, kGain), "Band 4", true)}};
+    s.output = {knob (kOutput)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (484, 6, 572, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)

@@ -159,7 +159,7 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 140, 28), "stretchr", 14.0, true));
-    status = new Label (CRect (140, 6, 620, 28), "", 10.5);
+    status = new Label (CRect (140, 6, 530, 28), "", 10.5);
     root->addView (new pk::PresetBar (CRect (630, 6, 840, 28), ctl));
     status->setDim (true);
     root->addView (status);
@@ -283,9 +283,7 @@ void Editor::buildUI (CFrame* f)
 
     // OUTPUT
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, 600, 972, 600 + smacheratr::TailPanel::kOpenHeight)));
     auto* out = new Panel (CRect (844, 388, 972, 592), "OUTPUT");
     root->addView (out);
@@ -344,6 +342,60 @@ void Editor::updateAlgorithmControls ()
     look (kSourceBpm, follow);
 }
 
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getSession (); return s ? s->hostRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getSession (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // the clip (captured, loaded or dropped, dragged out again), how it is stretched (Algorithm), its
+    // pitch and speed, and whether it follows the host's tempo; Gain
+    using namespace pk::basic;
+    Spec s;
+    s.title = "stretchr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* ss = c->getSession (); return ss ? &ss->capture : nullptr; };
+    s.headerWidth = 276;
+    s.header = [this] (const CRect& r) -> CView* {
+        auto* g = new pk::Group (r);
+        captureBtn = new ActionButton (
+            CRect (0, 3, 96, 27), "Capture",
+            [this] {
+                if (auto* ss = ctl->getSession ())
+                    ss->setArmed (!ss->capturing ());
+            },
+            [this] { return ctl->getSession () && ctl->getSession ()->capturing (); });
+        captureBtn->setTooltipText (help::kCapture);
+        g->addView (captureBtn);
+        auto* load = new ActionButton (CRect (102, 3, 168, 27), "Load...", [this] { browseForFile (); });
+        load->setTooltipText (help::kLoad);
+        g->addView (load);
+        auto* dragOut = new DragOutButton (CRect (174, 3, 274, 27), this);
+        pk::setHelp (dragOut, "Drag Out", help::kDragOut);
+        g->addView (dragOut);
+        return g;
+    };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        clipView = new ClipView (r, ctl);
+        pk::setHelp (clipView, "Clip", help::kClipView);
+        clipView->onFileDropped = [this] (const std::string& p) { loadFile (p); };
+        clipView->onContextMenu = [this] (CPoint p) { showClipMenu (p); };
+        return clipView;
+    };
+    s.rows = {{choice (kAlgorithm, "Algorithm", 200), knob (kPitch, {}, true), knob (kSpeed), toggle (kFollowTempo, "Follow Tempo")}};
+    s.output = {knob (kGain, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (538, 6, 622, 28);
+    return s;
+}
+
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
@@ -378,26 +430,28 @@ void Editor::idle ()
     }
     if (status)
     {
-        std::string t;
+        // (shorter versions where the line has no room: without the start, then without the clip's name;
+        // the whole line is the tooltip)
+        std::vector<std::string> t;
         if (errorTicks > 0)
         {
             --errorTicks;
-            t = lastError;
+            t = {lastError, "Error (point here for the message)", "Error"};
         }
         else if (s->hasClip ())
         {
             const Clip c = s->clip ();
             const double speed = s->settings ().speed;
             const double outLen = TimeMap (c.markers, 1.0 / std::max (speed, 1e-3)).outLength ();
-            char buf[256];
-            std::snprintf (buf, sizeof (buf), "%s   %.2f s -> %.2f s   starts at %s   %s", c.name.c_str (),
-                           c.srcLength (), outLen, clock (c.start).c_str (),
-                           s->rendering.load () ? "rendering..." : (s->upToDate () ? "ready" : "waiting"));
-            t = buf;
+            const char* state = s->rendering.load () ? "rendering..." : (s->upToDate () ? "ready" : "waiting");
+            char times[64];
+            std::snprintf (times, sizeof (times), "%.2f s -> %.2f s", c.srcLength (), outLen);
+            t = {c.name + "   " + times + "   starts at " + clock (c.start) + "   " + state, c.name + "   " + times + "   " + state,
+                 std::string (times) + "   " + state, state};
         }
         else
-            t = "No clip";
-        status->setText (t);
+            t = {"No clip"};
+        status->setTexts (t);
     }
 }
 

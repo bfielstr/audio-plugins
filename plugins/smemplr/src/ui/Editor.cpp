@@ -305,6 +305,17 @@ void Editor::onClose ()
     headSpreadKnob = nullptr;
     headChannels.fill (nullptr);
     headLabels.fill (nullptr);
+    // (the Basic page builds only some of these: none may point at views of the last build)
+    nameLabel = bpmLabel = warpInfo = hostLabel = nullptr;
+    warpBeatsBox = nullptr;
+    classicGroup = oneShotGroup = sliceGroup = warpOnGroup = warpOffGroup = nullptr;
+    beatsGroup = tonesGroup = textureGroup = cproGroup = slicePolyGroup = nullptr;
+    sensKnob = divisionChoice = regionsChoice = manualHint = nullptr;
+    driveKnob = morphKnob = lfoRateHz = lfoRateSync = nullptr;
+    for (auto& t : envTabs)
+        t = nullptr;
+    ampLoopTime = ampLoopRate = nullptr;
+    tabButtons.clear ();
 }
 
 // --- building ---------------------------------------------------------------------
@@ -2240,7 +2251,7 @@ void Editor::idle ()
         scope->idle ();
     if (rackDirty)
         rebuildRack ();
-    else
+    else if (fxRow) // (the Basic page has no rack)
         for (int s = 0; s < kRackSlots; ++s)
             if (ctl->slotType (s) != shownTypes[(size_t)s])
             {
@@ -2547,6 +2558,93 @@ void Editor::showMenu (CPoint where)
         if (r >= 0 && r < (int32_t)shared->size () && (*shared)[(size_t)r])
             (*shared)[(size_t)r]();
     });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // The main things of a sampler: the sample (its waveform, to see it and set its flags and loop by hand,
+    // and Load in the header), how it plays (Mode), its pitch (Transpose), its tone (the filter's
+    // frequency) and its shape in time (the amp envelope's Attack and Release); its level (Volume) at the
+    // right. The rest (the sample row's controls, the filter's type and the other envelopes, the LFOs, the
+    // effects rack, the modulation) is in the Advanced view; the rack's effects still play.
+    using namespace pk::basic;
+    Spec s;
+    s.title = "smemplr";
+    s.rows = {
+        {segmented (kMode, "Mode", {"Classic", "One-Shot", "Slicing"})},
+        {knob (kTranspose, "Transpose", true), knob (kFilterFreq, "Filter Freq"), knob (kAmpA, "Amp Attack"), knob (kAmpR, "Amp Release")},
+    };
+    s.output = {knob (kVolume)};
+    s.headerWidth = 290;
+    s.header = [this] (const CRect& r) -> CView* {
+        auto* g = new Group (r);
+        auto* load = new ActionButton (CRect (0, 3, 52, 27), "Load", [this] { browseForSample (); });
+        load->setTooltipText (help::kLoad);
+        g->addView (load);
+        auto* prev = new ActionButton (CRect (56, 3, 78, 27), "<", [this] { stepSample (-1); });
+        prev->setTooltipText (help::kPrevNext);
+        g->addView (prev);
+        auto* next = new ActionButton (CRect (82, 3, 104, 27), ">", [this] { stepSample (1); });
+        next->setTooltipText (help::kPrevNext);
+        g->addView (next);
+        nameLabel = new Label (CRect (112, 3, r.getWidth (), 27), "No sample", 12.0, true);
+        pk::setHelp (nameLabel, "Sample", help::kBasicName);
+        g->addView (nameLabel);
+        lastName.clear ();
+        return g;
+    };
+    s.capture = [this] () -> const pk::CaptureBuffer* { return ctl->getBridge () ? &ctl->getBridge ()->capture : nullptr; };
+    s.displayHeight = 200;
+    s.display = [this] (const CRect& r) -> CView* {
+        waveform = new WaveformView (r, ctl, this);
+        waveform->onContextMenu = [this] (CPoint p) { showMenu (p); };
+        waveform->onFileDropped = [this] (const std::string& p) { loadFile (p); };
+        pk::setHelp (waveform, "Waveform", help::kWaveform);
+        return waveform;
+    };
+    // the output's level for the mini meter: the peak of the last 20 ms of the output scope's samples
+    auto buf = std::make_shared<std::vector<float>> (2 * 1024);
+    s.level = [this, buf] () -> float {
+        auto* b = ctl->getBridge ();
+        if (!b)
+            return 0.0f;
+        const int n = b->outScope.read (buf->data (), buf->data () + 1024, 1024);
+        float peak = 0.0f;
+        for (int i = 0; i < n; ++i)
+            peak = std::max ({peak, std::fabs ((*buf)[(size_t)i]), std::fabs ((*buf)[(size_t)(1024 + i)])});
+        return peak;
+    };
+    // (no panel title: the scope has its own)
+    s.extrasHeight = 200;
+    s.extras = [this] (const CRect& r) -> CView* {
+        scope = new pk::ScopeView (
+            r,
+            [this] (float* l, float* rr, int n) {
+                auto* b = ctl->getBridge ();
+                return b ? b->outScope.read (l, rr, n) : 0;
+            },
+            [this] {
+                auto* b = ctl->getBridge ();
+                return b ? b->sampleRate.load () : 48000.0;
+            },
+            Bridge::kScopeSize);
+        pk::setHelp (scope, "Output Scope", help::kScope);
+        return scope;
+    };
+    // the strip's line: the rack's effects, in chain order
+    s.summary = [this] () -> std::string {
+        std::string fx;
+        for (int slot = 0; slot < kRackSlots; ++slot)
+            if (const int t = ctl->slotType (slot); t != kFxEmpty)
+                fx += (fx.empty () ? "" : ", ") + std::string (fxName (t));
+        return fx.empty () ? "effects rack: empty (add effects in the Advanced view)" : "effects rack: " + fx;
+    };
+    s.summaryHelp = help::kBasicRack;
+    s.menu = [this] (CPoint where) { showMenu (where); };
+    s.help = &help::forParam;
+    // the Advanced view's switch: in the header over the modulation column, before ? and Menu
+    s.advancedSwitch = CRect (kWidth - 180, 6, kWidth - 96, 28);
+    return s;
 }
 
 pk::layout::Spec Editor::layoutSpec (bool) const

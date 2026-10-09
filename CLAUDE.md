@@ -45,13 +45,18 @@ cmake --build build
 - Releasing: bump the root `CMakeLists.txt` VERSION, every `plugins/*/CMakeLists.txt` VERSION
   (`x.y.z.0`) and the README's "The current version is" line in the pull request. Merging it to main
   tags `vX.Y.Z` and runs the release (`.github/workflows/release-tag.yml`). Do not push tags.
-  The repository is private: releases publish to the public `bfielstr/audio-plugins-releases`
+  Releases publish to the downloads repository `bfielstr/audio-plugins-releases`
   (Actions variable `RELEASES_REPO`, secret `RELEASES_TOKEN`), so download links point there.
 
 ## Conventions
 
 - Parameter IDs are saved in projects: only ever append to a plug-in's `ParamId` enum, and pin the
   numbers with `static_assert`s as the existing ones do (`src/core/Params.h`).
+- Basic page: an editor lists its main controls (3 to 6), display, output and extras in `basicSpec ()`
+  (`shared/pluginkit/ui/BasicView.h`); EditorBase builds the page and the Advanced switch, and
+  `<plugin>_drawbench --check-layouts` checks it. The capture band (scope, Freeze, drag out as WAV or
+  wavetable) is one line, `s.capture = [this] { return &<a pk::CaptureBuffer the processor pushes>; };`. Done: every plug-in but moistr (its UI is being rebuilt). An end saturator is one call,
+  `smacheratr::TailPanel::addToBasic`; a processor pushes its output with `pk::captureOutput`.
 - Docs and UI text: plug-in names in lowercase in prose (orbitr, smacheratr); controls named exactly
   as their UI labels; no em dashes; no "inspired by" wording.
 - Commits: one logical change each, subject `<plug-in or area>: what changed`.

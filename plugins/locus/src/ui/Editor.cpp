@@ -43,6 +43,7 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 void Editor::onClose ()
 {
     spectrum = nullptr;
+    latencyLabel = nullptr; // (the Basic page has none)
     tail.reset ();
 }
 
@@ -51,7 +52,7 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "locus", 14.0, true));
-    latencyLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
+    latencyLabel = new Label (CRect (200, 6, 340, 28), "", 10.5);
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     latencyLabel->setDim (true);
     root->addView (latencyLabel);
@@ -77,13 +78,43 @@ void Editor::buildUI (CFrame* f)
     bind (p, new Knob (CRect (600, 30, 656, 94), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, 440, 752, 440 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // the focus's character (Mode) and strength (Contrast), and the range it works on (Low Freq, High
+    // Freq); Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "locus";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        spectrum = new SpectrumView (r, this, ctl);
+        pk::setHelp (spectrum, "Spectrum", help::kSpectrum);
+        return spectrum;
+    };
+    s.rows = {{segmented (kMode, "Mode", {"Punchy", "Smooth"})}, {knob (kContrast, {}, true), knob (kLowFreq), knob (kHighFreq)}};
+    s.output = {knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (348, 6, 432, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)
@@ -104,9 +135,7 @@ void Editor::idle ()
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
-            char buf[64];
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", s->latency.load ());
-            latencyLabel->setText (buf);
+            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ()));
         }
 }
 

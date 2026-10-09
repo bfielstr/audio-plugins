@@ -1,5 +1,7 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
+
 #include "pluginkit/vst/Presets.h"
 
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -212,6 +214,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         prev.reset (); // still referenced by the session's graveyard: never frees here
     tail.process (outL, outR, n);
     data.outputs[0].silenceFlags = 0;
+    pk::captureOutput (session->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

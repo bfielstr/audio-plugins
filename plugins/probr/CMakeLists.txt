@@ -1,7 +1,7 @@
 # Probr: an analysis probe. Passes the audio through untouched and, while armed, records what passes (a
 # 32-bit float WAV per take), the host's transport (a time map in ppq) and the MIDI it gets, off the audio
 # thread, into one session folder shared by every probe (scripts/probr_align.py lines them up).
-project(Probr VERSION 0.28.0.0)
+project(Probr VERSION 0.29.0.0)
 
 add_library(probr_core STATIC
     src/core/Params.cpp

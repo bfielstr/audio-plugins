@@ -40,6 +40,8 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Band Slope, Attack and Release; Mix and Output; the end saturator in the extras
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
     // a gesture on one of a band's controls selects the band
@@ -55,6 +57,8 @@ private:
 
     Controller* ctl;
     std::unique_ptr<smacheratr::TailPanel> tail;
+    std::unique_ptr<smacheratr::TailPanel> makeTail ();
+    static smacheratr::TailBases tailBases ();
     std::unique_ptr<pk::MappedParamHost> sliderHost; // Smacheratr's Threshold sliders on Gentlr's Thresholds
     GentlrView* view = nullptr;
     smacheratr::ThresholdSlider* sliders[kAllBands] = {nullptr, nullptr, nullptr, nullptr}; // (ThresholdSlider::layout takes all four)

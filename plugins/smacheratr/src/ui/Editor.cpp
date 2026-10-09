@@ -69,7 +69,7 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "smacheratr", 14.0, true));
-    status = new Label (CRect (200, 6, 430, 28), "", 10.5);
+    status = new Label (CRect (120, 6, 344, 28), "", 10.5);
     root->addView (new pk::PresetBar (CRect (440, 6, 636, 28), ctl));
     status->setDim (true);
     root->addView (status);
@@ -239,6 +239,8 @@ void Editor::setLayer (int l)
 
 void Editor::layoutAdvanced ()
 {
+    if (basicView ()) // (the Basic page's colour display has no sliders: it keeps its place)
+        return;
     const bool advanced = plainValue (kClarityAdvanced) >= 0.5;
     ThresholdSlider::layout (color, thresholdSliders,
                              CRect (kColorLeft, kColorTop, kColorLeft + kColorViewWidth, kColorTop + kColorViewHeight), advanced);
@@ -271,6 +273,53 @@ void Editor::updateLooks ()
         advancedViews[1]->setEnabledLook (gentlr && plainValue (kClarityDrive) >= 0.5);
 }
 
+pk::basic::Spec Editor::basicSpec ()
+{
+    // how hard (Drive), what tames the peaks after the curve (Post Clip), the colour filters and Gentlr
+    // (on or off: their bands are set on the colour display); Output and Dry/Wet
+    using namespace pk::basic;
+    Spec s;
+    s.title = "smacheratr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 220;
+    s.display = [this] (const CRect& r) -> CView* {
+        auto* g = new pk::Group (r);
+        auto meters = [c = ctl] () -> const Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        };
+        shaper = new ShaperView (CRect (0, 0, 220, r.getHeight ()), this, meters);
+        pk::setHelp (shaper, "Analog Curve", help::kShaperDisplay);
+        g->addView (shaper);
+        color = new ColorView (
+            CRect (228, 0, r.getWidth (), r.getHeight ()), this,
+            [c = ctl] () {
+                auto* sh = c->getShared ();
+                return sh ? sh->sampleRate.load (std::memory_order_relaxed) : 48000.0;
+            },
+            meters);
+        color->setLayer (layer () == 1 ? ColorView::Layer::Gentlr : ColorView::Layer::Color);
+        pk::setHelp (color, "Colour EQ", help::kColorDisplay);
+        g->addView (color);
+        return g;
+    };
+    s.rows = {{knob (kDrive, {}, true), choice (kPostClip), toggle (kColorOn, "Color"), toggle (kClarity, "Gentlr")}};
+    s.output = {knob (kOutput), knob (kDryWet)};
+    // the strip's line: what the header says in the Advanced view (oversampling, M/S, latency)
+    s.summary = [this] () -> std::string {
+        auto* sh = ctl->getShared ();
+        const int f = oversamplingFactor (plainValue (kOversampling));
+        char buf[96];
+        std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples", f == 4 ? "4x oversampling" : f == 2 ? "2x oversampling" : "Oversampling off",
+                       plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", sh ? std::max (0, sh->meters.latency.load ()) : 0);
+        return buf;
+    };
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (348, 6, 432, 28);
+    return s;
+}
+
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
@@ -297,11 +346,13 @@ void Editor::idle ()
     if (status)
         if (auto* s = ctl->getShared ())
         {
-            char buf[96];
+            // (shorter versions where the line has no room)
             const int f = oversamplingFactor (plainValue (kOversampling));
-            std::snprintf (buf, sizeof (buf), "%s%s, latency %d samples", f == 4 ? "4x oversampling" : f == 2 ? "2x oversampling" : "Oversampling off",
-                           plainValue (kMidSide) >= 0.5 ? ", Mid/Side" : "", std::max (0, s->meters.latency.load ()));
-            status->setText (buf);
+            const bool ms = plainValue (kMidSide) >= 0.5;
+            const std::string lat = std::to_string (std::max (0, s->meters.latency.load ()));
+            const std::string os = f == 4 ? "4x" : f == 2 ? "2x" : "1x";
+            status->setTexts ({(f > 1 ? os + " oversampling" : std::string ("Oversampling off")) + (ms ? ", Mid/Side" : "") + ", latency " + lat + " samples",
+                               os + (ms ? ", Mid/Side" : "") + ", latency " + lat, os + (ms ? ", M/S" : "") + ", " + lat + " smp"});
         }
 }
 

@@ -267,6 +267,55 @@ void Editor::updateTexts ()
     }
 }
 
+pk::basic::Spec Editor::basicSpec ()
+{
+    // what a recorder needs at hand: the record button, the level and what the probe is doing, the take,
+    // and when it records (Mode). The Label, the Folder and the session are in the Advanced view. No
+    // capture band: probr records the track itself (and passes it untouched), so it would hold the same.
+    using namespace pk::basic;
+    Spec s;
+    s.title = "probr";
+    s.displayHeight = 96;
+    s.display = [this] (const CRect& r) -> CView* {
+        auto* g = new pk::Group (r);
+        record = bind (g, new RecordButton (CRect (0, 8, kRecordW, 8 + kRecordH), this, kRecord, [c = ctl] () -> int {
+                           if (auto* sh = c->getShared ())
+                               return sh->status.state.load (std::memory_order_relaxed);
+                           return c->getParamNormalized (kRecord) >= 0.5 ? kStateArmed : kStateOff;
+                       }));
+        takeLabel = new Label (CRect (0, 66, kRecordW + 100, 82), "", 10.5);
+        pk::setHelp (takeLabel, "Take", help::kTake);
+        g->addView (takeLabel);
+        meter = new LevelMeter (CRect (kRecordW + 24, 8, r.getWidth (), 30), [c = ctl] (float& l, float& rr) {
+            if (auto* sh = c->getShared ())
+            {
+                l = sh->status.peakL.exchange (0.0f, std::memory_order_relaxed);
+                rr = sh->status.peakR.exchange (0.0f, std::memory_order_relaxed);
+            }
+        });
+        pk::setHelp (meter, "Level", help::kMeter);
+        g->addView (meter);
+        message = new MessageText (CRect (kRecordW + 24, 38, r.getWidth (), 54));
+        pk::setHelp (message, "Status", help::kStatus);
+        g->addView (message);
+        freeLabel = new Label (CRect (kRecordW + 24, 58, r.getWidth (), 72), "", 10.5);
+        freeLabel->setDim (true);
+        pk::setHelp (freeLabel, "Status", help::kStatus);
+        g->addView (freeLabel);
+        return g;
+    };
+    s.rows = {{segmented (kMode, "Mode", {"While Playing", "Always"}, 260)}};
+    // the strip's line: where the takes go (chosen in the Advanced view)
+    s.summary = [this] () -> std::string {
+        return "folder: " + fitText (shortPath (ctl->folderShown ()) + (ctl->folder ().empty () ? "  (default)" : ""), 80);
+    };
+    s.summaryHelp = help::kFolder;
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (kWidth - 416, 6, kWidth - 328, 28);
+    return s;
+}
+
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);

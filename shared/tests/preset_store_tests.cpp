@@ -263,6 +263,13 @@ static void gentlrDefaultsFile ()
     CHECK (d.gentlrOn == true && d.advancedOn == false && d.other.size () == 1, "parsed (%zu other)", d.other.size ());
     CHECK (parseGentlrDefaults ("gentlr = yes\nadvanced = no").gentlrOn == true && parseGentlrDefaults ("advanced = false").advancedOn == false,
            "yes / no, true / false");
+    // Advanced View by Default: its own key, apart from Gentlr's Advanced
+    {
+        const GentlrDefaults v = parseGentlrDefaults ("Advanced View = on\nadvanced = off");
+        CHECK (v.advancedView == true && v.advancedOn == false && v.other.empty (), "advanced view parsed");
+        CHECK (gentlrDefaultsText (v).find ("advanced view = on") != std::string::npos, "and written");
+        CHECK (!parseGentlrDefaults ("advanced = on").advancedView.has_value (), "not set by Gentlr's Advanced");
+    }
     CHECK (writeGentlrDefaults (dir.string (), d), "write 3");
     const GentlrDefaults back = readGentlrDefaults (dir.string ());
     CHECK (back.gentlrOn == true && back.advancedOn == false && back.other.size () == 1 && back.other[0].first == "future" &&

@@ -55,8 +55,7 @@ jobs:
           # (the script writes plugins=... to $GITHUB_OUTPUT itself)
           plugins=$(scripts/ci-changed-plugins.py "$BASE" "$HEAD" | cut -d= -f2-)
           echo "Building: ${plugins:-every plug-in}" >> "$GITHUB_STEP_SUMMARY"
-      # The repository is private, so Actions minutes count (macOS 10x, Windows 2x). Tags and manual
-      # runs build on every system. A pull request builds on Linux only, unless it raises the version
+      # Tags and manual runs build on every system. A pull request builds on Linux only, unless it raises the version
       # (a release: merging it tags it, so it must pass everywhere first) or carries the label full-ci.
       # Pushes to main build on Linux only (the pull request already built them).
       - name: Pick the systems
@@ -345,7 +344,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     env:
-      # The source repository is private; releases go to the public downloads repository named by the
+      # Releases go to the downloads repository named by the
       # RELEASES_REPO variable (e.g. bfielstr/audio-plugins-releases), written with the RELEASES_TOKEN
       # secret (a fine-grained token with Contents read and write on that repository). Without the
       # variable they go to this repository as before.

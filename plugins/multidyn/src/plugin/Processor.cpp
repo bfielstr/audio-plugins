@@ -1,5 +1,7 @@
 #include "Processor.h"
 
+#include "pluginkit/vst/CaptureTransport.h"
+
 #include "pluginkit/vst/Presets.h"
 
 #include "pluginterfaces/vst/ivstmessage.h"
@@ -141,6 +143,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
         meters->outputDb[(size_t)b].store (m.outputDb, std::memory_order_relaxed);
         meters->gainDb[(size_t)b].store (m.gainDb, std::memory_order_relaxed);
     }
+    pk::captureOutput (meters->capture, data, processSetup.sampleRate);
     return kResultOk;
 }
 

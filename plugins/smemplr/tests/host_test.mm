@@ -8,6 +8,7 @@
 #include "Rack.h"
 #include "plugin/StateIO.h"
 #include "pluginkit/testing/HostRig.h"
+#include "plugin/Controller.h"
 #include "ui/Editor.h"
 
 #include "dr_wav.h"
@@ -923,6 +924,60 @@ int main (int argc, char** argv)
             rig.stop ();
         }
 
+        // the Basic page (pluginkit/ui/BasicView.h): its main controls are found where it puts them and turn
+        // there, the others are not on it; its Advanced switch shows every control (in a window that keeps the
+        // Basic page's size: zoomed to fit); the view is saved with the controller's state
+        {
+            applyState (rig, baseState (wav));
+            rig.start ();
+            EditorWindow win (rig.controller, "default", "Classic", false);
+            CHECK (win.ok (), "editor (Basic)");
+            CHECK (std::fabs (win.width () - pk::basic::kWidth) < 1, "the Basic page's width: %.0f", win.width ());
+            ControlRect r;
+            for (uint32_t id : {smemplr::kMode, smemplr::kTranspose, smemplr::kFilterFreq, smemplr::kAmpA, smemplr::kAmpR, smemplr::kVolume})
+                CHECK (findControl (rig.controller, id, r) && r.right <= win.width () + 0.5 && r.bottom <= win.height () + 0.5,
+                       "Basic: the control of parameter %u is shown", id);
+            CHECK (!findControl (rig.controller, smemplr::kFilterRes, r) && !findControl (rig.controller, smemplr::kLfoRate, r),
+                   "Basic: the Advanced view's controls are not");
+            const double v0 = rig.controller->getParamNormalized (smemplr::kFilterFreq);
+            if (findControl (rig.controller, smemplr::kFilterFreq, r))
+            {
+                rig.param (smemplr::kFilterFreq, 0.25);
+                win.drag (r.cx (), r.cy (), r.cx (), r.cy () - 30.0);
+                pump (0.05);
+                CHECK (rig.controller->getParamNormalized (smemplr::kFilterFreq) > 0.26, "Basic: Filter Freq turns (%.3f)",
+                       rig.controller->getParamNormalized (smemplr::kFilterFreq));
+                rig.param (smemplr::kFilterFreq, v0);
+            }
+            // the capture band's buffer: the processor's output, every frame
+            if (auto* c = static_cast<smemplr::Controller*> (rig.controller.get ()); c->getBridge ()) // (static_cast: the plug-in is a bundle here, its typeinfo is not linked in)
+            {
+                const uint64_t before = c->getBridge ()->capture.written ();
+                std::vector<float> cap;
+                rig.note (60, 0.9f);
+                rig.render (0.5, cap);
+                rig.note (60, 0.0f);
+                CHECK (c->getBridge ()->capture.written () - before == cap.size (), "the capture buffer has every frame (%llu of %zu)",
+                       (unsigned long long)(c->getBridge ()->capture.written () - before), cap.size ());
+                CHECK (std::fabs (c->getBridge ()->capture.noteHz () - 261.6256) < 0.01, "the last note");
+                pump (0.1);
+            }
+            CHECK (win.savePng (outDir + "/ui_smemplr_basic.png"), "screenshot, Basic");
+            auto savedAdvanced = [&] {
+                MemoryStream s;
+                rig.controller->getState (&s);
+                return static_cast<pk::ControllerBase*> (rig.controller.get ())->uiAdvanced;
+            };
+            CHECK (!savedAdvanced (), "Basic: in the controller's state");
+            const auto hr = pk::basic::headerRight (pk::basic::kWidth);
+            win.click (hr.advanced.getCenter ().x, hr.advanced.getCenter ().y);
+            pump (0.2);
+            CHECK (findControl (rig.controller, smemplr::kFilterRes, r) && findControl (rig.controller, smemplr::kLfoRate, r),
+                   "the Advanced switch: every control");
+            CHECK (savedAdvanced (), "Advanced: in the controller's state");
+            rig.stop ();
+        }
+
         // breakpoint envelope + loop-off screenshot
         {
             auto st5 = baseState (wav);
@@ -951,6 +1006,7 @@ int main (int argc, char** argv)
         // the window resizes freely: any shape within the zoom range is allowed (the UI keeps its own
         // shape inside it, zoomed to fit and centred), only sizes past the smallest and largest zoom
         // are clamped
+        setView (rig.controller, true); // (the Advanced view's size: the Classic layout's)
         if (IPlugView* v = rig.controller->createView (ViewType::kEditor))
         {
             const double w = smemplr::Editor::kWidth, h = smemplr::Editor::kHeight + pk::EditorBase::kInfoHeight;

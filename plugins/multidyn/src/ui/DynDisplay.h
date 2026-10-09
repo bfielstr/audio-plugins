@@ -42,6 +42,13 @@ public:
     void onMouseUpEvent (VSTGUI::MouseUpEvent& e) override;
     void onMouseExitEvent (VSTGUI::MouseExitEvent& e) override;
     void idle (); // animates the meters
+    // The value columns beside the graph (Below; Above and Att/Rel), where the editor puts each band's
+    // values: on by default; off (a Basic page, which has no value boxes) the graph takes the width.
+    void setValueColumns (bool on)
+    {
+        valueColumns = on;
+        invalid ();
+    }
 
     enum class Hit { None, BelowEdge, AboveEdge, BelowBlock, AboveBlock };
     VSTGUI::CRect laneRect (int band) const;  // the full-width lane (band: 0 .. bands() - 1, or kSubBand)
@@ -53,6 +60,9 @@ public:
     Hit hitTest (const VSTGUI::CPoint& p, int& band) const;
 
 private:
+    bool valueColumns = true;
+    double leftCol () const { return valueColumns ? kLeftCol : 4.0; }
+    double rightCol () const { return valueColumns ? kRightCol : 4.0; }
     struct Target
     {
         uint32_t id;

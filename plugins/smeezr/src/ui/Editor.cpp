@@ -58,7 +58,7 @@ void Editor::buildUI (CFrame* f)
     auto* root = new Background (CRect (0, 0, kWidth, kHeight));
     f->addView (root);
     root->addView (new Label (CRect (12, 6, 200, 28), "smeezr", 14.0, true));
-    latencyLabel = new Label (CRect (200, 6, 430, 28), "", 10.5);
+    latencyLabel = new Label (CRect (200, 6, 340, 28), "", 10.5);
     latencyLabel->setDim (true);
     root->addView (latencyLabel);
     const double hx = kWidth - 320; // the header's controls at the right, as in the other plug-ins
@@ -98,9 +98,7 @@ void Editor::buildUI (CFrame* f)
     bind (out, new Knob (CRect (kKnobLeft, kKnobTop, kKnobLeft + kKnobW, kKnobTop + kKnobH), this, kOutput, nullptr, true));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -124,6 +122,37 @@ void Editor::updateStage ()
     stageLabel->setText (buf);
 }
 
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // the one knob (Squeeze), how fast the pink stage follows (Speed), how much of it (Mix); Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "smeezr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 200;
+    s.display = [this] (const CRect& r) -> CView* {
+        display = new PinkView (r, [c = ctl] () -> const Meters* { auto* sh = c->getShared (); return sh ? &sh->meters : nullptr; });
+        pk::setHelp (display, "Pink balance", help::kPinkView);
+        return display;
+    };
+    s.rows = {{knob (kSqueeze, "Squeeze"), segmented (kSpeed, "Speed", {"Fast", "Slow"}, 140), knob (kMix)}};
+    s.output = {knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (348, 6, 432, 28);
+    return s;
+}
+
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
@@ -142,10 +171,8 @@ void Editor::idle ()
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
-            char buf[64];
             const int tailNow = s->tailMeters.latency.load (); // (the end saturator's is all of it; -1: not known yet)
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 ? tailNow : s->latency.load ());
-            latencyLabel->setText (buf);
+            latencyLabel->setTexts (pk::latencyTexts (tailNow >= 0 ? tailNow : s->latency.load ()));
         }
 }
 

@@ -8,6 +8,19 @@ single track can go from raw sample to finished sound. Install instructions are 
 
 ![smemplr](../../docs/smemplr/ui_classic.png)
 
+## Basic and Advanced
+
+smemplr opens on its **Basic** page: the capture band (a scope of the output to hold with **Freeze** and
+drag onto a track as audio, or into a wavetable synth as a wavetable: see the [top-level
+README](../../README.md#basic-and-advanced-views)), the waveform, then **Mode** (**Classic**, **One-Shot** or
+**Slicing**), **Transpose**, **Filter Freq** (the filter's frequency), **Amp Attack** and **Amp
+Release** (the amp envelope), and **Volume** at the right. **Load** and the arrows beside the sample's
+name load a sample, as in the Advanced view, and a file dropped on the waveform loads too. The strip at
+the bottom lists the effects in the rack (they keep playing), **Extras** opens the output scope, and
+the meter at its right shows the output level. **Advanced** in the header shows everything below: the
+sample row, the filter's type and the other envelopes, the LFOs, the effects rack and the modulation.
+The view is saved with the project (see the [top-level README](../../README.md#basic-and-advanced-views)).
+
 ## How to use it
 
 1. Put smemplr on an instrument track and **drop a sample** on the waveform: a clip dragged out of
@@ -310,7 +323,8 @@ clear the LFO mappings; the loaded sample stays.
 
 ## Layouts
 
-**Menu > Layout** switches between **Wide**, two long rows of about the same width for a DAW's device
+The layouts are the Advanced view's (the Basic page has one layout, and its Menu has no Layout
+sub-menu). **Menu > Layout** switches between **Wide**, two long rows of about the same width for a DAW's device
 area (a new smemplr opens in it), and **Classic** (the fixed layout smemplr had before, called Default
 then: the modulation column at the right, the rack under the instrument):
 

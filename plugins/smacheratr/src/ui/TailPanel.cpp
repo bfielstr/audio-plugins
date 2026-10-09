@@ -109,6 +109,33 @@ TailPanel::TailPanel (pk::EditorBase* ed, const TailBases& b, ColorView::RateSou
     });
 }
 
+void TailPanel::addToBasic (pk::basic::Spec& s, pk::EditorBase* editor, const TailBases& bases, std::unique_ptr<TailPanel>& slot,
+                            std::function<std::unique_ptr<TailPanel> ()> make)
+{
+    s.tailOn = bases.base + pk::kTailOn;
+    s.extrasHeight = kBasicHeight;
+    s.extrasTitle.clear (); // (the section has its own strips)
+    s.extras = [&slot, make] (const CRect& r) -> CView* {
+        slot = make ();
+        return slot ? slot->basicExtras (r) : nullptr;
+    };
+    s.summary = [editor, bases] () -> std::string {
+        const bool on = editor->plainValue (bases.base + pk::kTailOn) >= 0.5;
+        const int f = tailFieldOf (kClarity);
+        const bool gentlr = f >= 0 && editor->plainValue (tailParamOf ((uint32_t)f, bases)) >= 0.5;
+        return std::string ("smacheratr at the end: ") + (!on ? "off" : gentlr ? "on, gentlr on" : "on, gentlr off");
+    };
+    s.summaryHelp = "Whether smacheratr at the end of the chain is on, and its gentlr. Tail switches it; Extras shows all of "
+                    "its controls.";
+}
+
+VSTGUI::CView* TailPanel::basicExtras (const CRect& r)
+{
+    auto* g = new pk::Group (r);
+    add (g, CRect (0, 0, r.getWidth (), r.getHeight ()));
+    return g;
+}
+
 void TailPanel::add (CViewContainer* parent, const CRect& r)
 {
     area = CRect (r.left, r.top, r.right, r.top + kOpenHeight);

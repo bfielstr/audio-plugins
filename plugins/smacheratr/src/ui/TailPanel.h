@@ -60,6 +60,15 @@ public:
     // open). It must be the last thing in the editor's content: the content ends where it ends, plus the
     // gap under it as built.
     void add (VSTGUI::CViewContainer* parent, const VSTGUI::CRect& r);
+    // A Basic page's extras (pk::basic::Spec::extras, untitled: extrasHeight kBasicHeight): the section in a
+    // group of r's size, which the page adds. The page keeps its height when a part folds.
+    static constexpr double kBasicHeight = kOpenHeight + 16.0;
+    VSTGUI::CView* basicExtras (const VSTGUI::CRect& r);
+    // A Basic page's end saturator, in one call from a basicSpec: the strip's Tail switch (its On), the
+    // section as the extras (made by `make` into `slot`, the editor's), and the strip's line saying whether
+    // it and its Gentlr are on.
+    static void addToBasic (pk::basic::Spec& s, pk::EditorBase* editor, const TailBases& bases, std::unique_ptr<TailPanel>& slot,
+                            std::function<std::unique_ptr<TailPanel> ()> make);
     void idle ();
     void paramChanged (uint32_t id); // redraws when a tail parameter changes
     void closed ();                  // the editor closed: its views are gone

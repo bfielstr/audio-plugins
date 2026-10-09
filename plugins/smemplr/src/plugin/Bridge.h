@@ -8,6 +8,7 @@
 #include "Slices.h"
 
 #include "pluginkit/RtShared.h"
+#include "pluginkit/Capture.h"
 #include "pluginkit/ScopeBuffer.h"
 
 #include "Modulation.h"
@@ -94,6 +95,7 @@ public:
     std::atomic<int> latency {0};  // what the processor reports; the editor tells the host when it changes
     static constexpr int kScopeSize = 65536;
     pk::ScopeBuffer<kScopeSize> outScope; // the final output
+    pk::CaptureBuffer capture;            // the final output again, longer: the Basic page's capture band
     std::atomic<double> sampleRate {48000.0};
     // the modulation as it plays (audio thread -> editor): the LFOs' values and phases, each mapping's
     // offset (normalized; NaN while it does not work), and the mappings those are for (modsChanged's

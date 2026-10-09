@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.28.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.29.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -57,6 +57,14 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.28.0**
   info box is always there.
 - **Free resizing.** Drag the window corner to any shape. The interface keeps its proportions, zoomed
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
+- **Basic and Advanced views** (every plug-in but moistr, whose interface is being rebuilt). The window
+  opens on a **Basic** page with the plug-in's main controls only, large, its most useful display, the
+  output at the right and, across the top, a scope of the output to hold and drag onto a track as audio
+  or into a wavetable synth; **Advanced** in the header shows every control, in the layout you pick
+  (below), and switches back. A strip at the bottom of the Basic page holds the extras: **Extras** opens
+  them (smacheratr at the end, with all its controls), **Tail** switches it, and a small meter shows the
+  output level (see
+  [Basic and Advanced views](#basic-and-advanced-views)).
 - **Layouts.** **Menu > Layout** picks how the window is laid out: **Wide** (what a new instance
   opens in), a long, short strip for a DAW's device area, with the sections side by side as titled
   blocks in rows by purpose, or **Classic** (the fixed layout the plug-ins had before; see
@@ -183,9 +191,68 @@ levlr, gentlr or smoothr has a **Presets** control with that plug-in's menu, rea
 same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
 [smemplr README](plugins/smemplr/README.md#a-slots-presets).
 
+## Basic and Advanced views
+
+Every plug-in but moistr (its interface is being rebuilt) opens on its **Basic** page. Every Basic page
+has the same layout:
+
+- the header: the plug-in's name, the presets (the name opens the Presets menu, **<** and **>** load the
+  previous and the next preset in the menu's order), then **Advanced**, **?** and **Menu** at the right;
+- the capture band across the top, as wide as the window: a row with the length, **Freeze** and the two
+  drag handles over a scope of the plug-in's output over 1, 2 or 4 bars (synced to the
+  host's tempo while it plays, ending on the last bar line, so the capture loops; 1, 2 or 4 seconds
+  while it is stopped). **Freeze** holds what it shows. Drag the scope, or **Drag WAV**, onto a track in
+  your DAW to drop the audio there (a stereo 32-bit float WAV at the host's rate, written to a
+  `bfielstr captures` folder in your system's temporary folder first). **Drag Wavetable** drops it as a
+  wavetable instead: single cycles at the sound's pitch (found in the audio; in smemplr the last note
+  played when none is found), each resampled to 2048 samples, up to 256 of them evenly spaced, in a mono
+  WAV with the `clm` chunk that Serum, Vital and Ableton's Wavetable read. Right click the scope for
+  **Save Audio...** and **Save Wavetable...** to a file of your choice. The length is saved with the
+  project;
+- the main controls in the middle, three to six of them, large, under the plug-in's most useful display
+  (smemplr's waveform, a spectrum, a band display), and the output at the right (**OUTPUT**);
+- the extras strip at the bottom: **Extras** opens the extras under the main controls (smacheratr at the
+  end of the chain, all its controls; smemplr's output scope), **Tail** switches smacheratr at the end on
+  or off, a line says what is there, and a small meter shows the output level (-60 to +6 dB, the mark at
+  0 dB).
+
+The main controls of each Basic page:
+
+| plug-in | display | main controls | output |
+| --- | --- | --- | --- |
+| smemplr | waveform | Mode, Transpose, Filter Freq, Amp Attack, Amp Release | Volume |
+| ciphr | cluster and taps | Timbre, Character, Cutoff, Space | Blend, Output |
+| widr | stage and goniometer | Character, Width, Air, Mono Below, Cinema | Output |
+| multidyn | bands | Bands, Style, Amount, Time | Output |
+| smacheratr | Analog curve and colour display | Drive, Post Clip, Color, Gentlr | Output, Dry/Wet |
+| gentlr | bands | Band Slope, Attack, Release | Mix, Output |
+| smeezr | pink balance | Squeeze, Speed, Mix | Output |
+| dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
+| orbitr | orbs | Pattern, Orbs, Speed, Spread | Dry/Wet, Output |
+| para | filter response | HP Freq, LP Freq, Movement | Dry/Wet, Output |
+| levlr | levels | Bands, Band 1 to Band 4 | Output |
+| locus | spectrum | Mode, Contrast, Low, High | Output |
+| stretchr | clip (Capture, Load and Drag to DAW in the header) | Algorithm, Pitch, Speed, Follow Tempo | Gain |
+| deepr | display | Depth, Dip, Thresh, Sub | Mix, Output |
+| smoothr | history | Input, Smooth, Character, Release | Ceiling |
+| wubr | bands | Mode, Band 1 Depth, Band 2 Depth | Dry/Wet, Output |
+| probr | Record, the level and the status | Mode | (none; no capture band: probr records the track itself) |
+
+**Advanced** shows every control, in the layout of **Menu > Layout**; **Advanced** in its header
+(lit) goes back to the Basic page. The two views play the same sound: the controls the Basic page leaves
+out keep their settings, and the effects in smemplr's rack keep running. The view you pick, and whether
+the extras are open, is saved with the project; loading a preset does not change it. A new instance
+opens on the Basic page unless **Menu > Defaults > Advanced View by Default** is checked; a project
+saved before 0.29 opens in the same view as a new instance (its layout is kept for the Advanced view).
+The Layout sub-menu is in the Menu of the Advanced view only.
+
 ## Defaults for new instances
 
-Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. Every plug-in except
+Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. In a plug-in with a Basic
+page (all but moistr) it starts with **Advanced View by Default** (unchecked): checked, a new instance opens in
+the Advanced view instead of the Basic page (see [Basic and Advanced views](#basic-and-advanced-views)).
+It is saved in the same `.defaults.txt` as the items below and, like them, applies to new instances
+only. Every plug-in except
 smemplr has two items there for new instances:
 
 - **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end, and
@@ -313,8 +380,7 @@ with the plug-ins that use them (`scripts/ci-changed-plugins.py`); a change outs
 of them. Pushes to main and releases always build every plug-in. The screenshots in `docs/<plug-in>/`
 come from the macOS host tests.
 
-Because the repository is private, Actions minutes count (macOS 10 times, Windows twice), so a pull
-request and a push to main build on Linux only. A pull request that raises the version (a release)
+To keep builds quick, a pull request and a push to main build on Linux only. A pull request that raises the version (a release)
 builds on macOS, Linux and Windows, and so does one with the label `full-ci` (add it to run the macOS
 host tests before merging). Release tags and manual runs always build on all three.
 
@@ -330,7 +396,7 @@ To release a version:
 
 Pushing a `v*` tag by hand still works the same way.
 
-The source repository is private. Releases are published to the public downloads repository
+Releases are published to the downloads repository
 [bfielstr/audio-plugins-releases](https://github.com/bfielstr/audio-plugins-releases), named by the
 Actions variable `RELEASES_REPO` and written with the secret `RELEASES_TOKEN` (a fine-grained token
 with Contents read and write on that repository). Each release also refreshes its README (made from

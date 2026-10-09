@@ -13,17 +13,23 @@
 // the two renderings differ.
 // Linux only (the cairo backend draws offscreen without a display). Built with -DPK_DRAW_BENCH=ON:
 //   <plugin>_drawbench [ticks] [--all] [--quiet-rects] [--dump <dir>] [--compare <dir>] [--set <id>=<normalized>]...
+//                      [--view basic|advanced|extras] [--layout <text>] [--state <file>] [--check-layouts]
 // ticks: draws timed per figure (the median is shown). --all times every view, not only the large
 // displays; --quiet-rects lists the rectangles still repainted once the audio has stopped. --dump
 // writes the renderings (PNG to look at, .rgba to compare); --compare reports how far this build's
 // renderings at rest are from ones dumped by another build (before / after a change to a view). --set
 // gives a parameter a value (normalized, in the controller) before the editor is built (to look at a
-// state: an end saturator switched on, its section open).
+// state: an end saturator switched on, its section open). --view: the editor's view to time and dump: the
+// Advanced view (the default, so the figures compare with earlier ones), the Basic page, or the Basic page
+// with its extras open (pluginkit/ui/BasicView.h; an editor without a Basic page shows its Advanced view).
+// --state loads a component state (the processor's bytes, as a host saves them) before anything else: a
+// state to look at (smemplr's with a sample). --check-layouts checks the Advanced view's layouts, then the Basic page, open and closed (below).
 #include "pluginkit/ui/CachedLayer.h"
 #include "pluginkit/ui/LayoutCheck.h"
 #include "pluginkit/vst/ControllerBase.h"
 #include "pluginkit/vst/EditorBase.h"
 
+#include "public.sdk/source/common/memorystream.h"
 #include "public.sdk/source/vst/hosting/eventlist.h"
 #include "public.sdk/source/vst/hosting/hostclasses.h"
 #include "public.sdk/source/vst/hosting/module.h"
@@ -387,6 +393,8 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         ++failures;
     };
     ctl->uiLayout = pk::layout::kClassicText;
+    ctl->uiAdvanced = true; // (the layouts are the Advanced view's; the Basic page is checked after them)
+    ctl->uiExtrasOpen = false;
     auto view = Steinberg::owned (controller->createView (Vst::ViewType::kEditor));
     auto* editor = dynamic_cast<pk::EditorBase*> (view.get ());
     CFrame* frame = editor ? editor->openDetached (1.0) : nullptr;
@@ -514,6 +522,60 @@ int checkLayoutsOf (Vst::IEditController* controller, pk::ControllerBase* ctl, c
         fail ("the Classic layout after Wide draws differently");
     if (editor->arrangedLayout () || editor->fullWidth () != defW || editor->fullHeight () != defH)
         fail ("the Classic layout after Wide has another size");
+
+    // the Basic page (pluginkit/ui/BasicView.h), closed and with its extras open, built in the same editor as
+    // the Advanced switch builds it: its every control shown, inside the window, nothing overlapping or
+    // touching and no text spilling, as wide as every Basic page; then the Advanced view again draws as it
+    // did at first
+    if (editor->hasBasicView ())
+    {
+        const pk::basic::Spec bspec = editor->basicSpec ();
+        auto checkBasic = [&] (const char* tag, bool extras) {
+            editor->setAdvancedView (false, true);
+            editor->setExtrasOpen (extras, true);
+            render (frame, base (tag));
+            std::printf ("  %s: %.0f x %.0f\n", tag, editor->fullWidth (), editor->fullHeight ());
+            if (!editor->basicView ())
+            {
+                fail (std::string (tag) + ": not the Basic page");
+                return;
+            }
+            for (const auto& p : editor->layoutProblems ())
+                fail (std::string (tag) + ": " + p);
+            if (std::fabs (editor->fullWidth () - std::max (bspec.width, pk::basic::kWidth)) > 0.5)
+                fail (std::string (tag) + ": not as wide as a Basic page");
+            if (extras && bspec.extras && bspec.extrasHeight > 0 && editor->basicGeometry ().extras.isEmpty ())
+                fail (std::string (tag) + ": the extras are not open");
+            std::set<uint32> params;
+            visibleParams (frame, params);
+            for (uint32 id : bspec.params ())
+            {
+                CRect r;
+                if (!params.count (id) || !editor->findControl (id, r))
+                    fail (std::string (tag) + ": the control of parameter " + std::to_string (id) + " is not shown");
+                else if (r.left < 0 || r.top < 0 || r.right > editor->fullWidth () + 0.5 || r.bottom > editor->contentHeightNow () + 0.5)
+                    fail (std::string (tag) + ": the control of parameter " + std::to_string (id) + " is outside the window");
+            }
+            std::vector<std::string> clutter;
+            size_t spills = 0;
+            splitReport (pk::layoutReport (frame), clutter, spills);
+            for (const auto& l : clutter)
+                fail (std::string (tag) + ": " + l);
+            if (spills > 0)
+                for (const auto& l : pk::layoutReport (frame))
+                    if (l.rfind ("spill", 0) == 0)
+                        fail (std::string (tag) + ": " + l);
+        };
+        checkBasic ("basic", false);
+        checkBasic ("basic-extras", true);
+        editor->setExtrasOpen (false, true);
+        editor->setAdvancedView (true, true);
+        const Pixels advanced = render (frame, base ("advanced-again"));
+        const Diff a = compare (first, advanced);
+        std::printf ("  advanced again: %ld px differ from the first (largest channel difference %d)\n", a.count, a.maxDelta);
+        if (a.count != 0 || editor->basicView ())
+            fail ("the Advanced view after the Basic page draws differently");
+    }
     view->removed ();
     std::printf ("%s: %d failures\n", name.c_str (), failures);
     return failures ? 1 : 0;
@@ -527,6 +589,8 @@ int main (int argc, char** argv)
     std::string dumpDir, compareDir;
     bool allViews = false, listQuiet = false, checkLayouts = false;
     const char* layoutText = nullptr;
+    std::string viewName = "advanced";
+    std::string stateFile;
     std::vector<std::pair<uint32, double>> sets;
     for (int i = 1; i < argc; ++i)
     {
@@ -548,6 +612,10 @@ int main (int argc, char** argv)
             listQuiet = true;
         else if (!std::strcmp (argv[i], "--layout") && i + 1 < argc)
             layoutText = argv[++i];
+        else if (!std::strcmp (argv[i], "--state") && i + 1 < argc)
+            stateFile = argv[++i];
+        else if (!std::strcmp (argv[i], "--view") && i + 1 < argc)
+            viewName = argv[++i];
         else if (!std::strcmp (argv[i], "--check-layouts"))
             checkLayouts = true;
         else
@@ -582,6 +650,26 @@ int main (int argc, char** argv)
         }
         audio.component = audio.provider->getComponentPtr ();
         audio.controller = audio.provider->getControllerPtr ();
+        if (!stateFile.empty () && audio.component && audio.controller)
+        {
+            std::vector<char> bytes;
+            if (FILE* f = std::fopen (stateFile.c_str (), "rb"))
+            {
+                char chunk[4096];
+                size_t got;
+                while ((got = std::fread (chunk, 1, sizeof (chunk), f)) > 0)
+                    bytes.insert (bytes.end (), chunk, chunk + got);
+                std::fclose (f);
+            }
+            MemoryStream ms (bytes.data (), (TSize)bytes.size ());
+            const bool ok = !bytes.empty () && audio.component->setState (&ms) == kResultOk;
+            ms.seek (0, IBStream::kIBSeekSet, nullptr);
+            if (!ok || audio.controller->setComponentState (&ms) != kResultOk)
+            {
+                std::printf ("FAIL: the state in %s does not load\n", stateFile.c_str ());
+                return 1;
+            }
+        }
         if (!audio.component || !audio.controller || !audio.start ())
         {
             std::printf ("FAIL: the plug-in does not start\n");
@@ -592,6 +680,11 @@ int main (int argc, char** argv)
         auto* ctlBase = dynamic_cast<pk::ControllerBase*> (audio.controller.get ());
         if (ctlBase && layoutText)
             ctlBase->uiLayout = layoutText;
+        if (ctlBase)
+        {
+            ctlBase->uiAdvanced = viewName == "advanced";
+            ctlBase->uiExtrasOpen = viewName == "extras";
+        }
         if (checkLayouts)
         {
             result = ctlBase ? checkLayoutsOf (audio.controller, ctlBase, pluginName, dumpDir, compareDir) : 1;
@@ -723,6 +816,7 @@ int main (int argc, char** argv)
             {
                 audio.play (33.0);
                 recorder->rects.clear ();
+                editor->tickBasic ();
                 editor->idle ();
                 const std::vector<CRect> dirty = recorder->take ();
                 if (i < 10)
@@ -766,6 +860,7 @@ int main (int argc, char** argv)
             for (int i = 0; i < 180; ++i)
             {
                 audio.play (33.0, true);
+                editor->tickBasic ();
                 editor->idle ();
             }
             recorder->rects.clear ();
@@ -774,6 +869,7 @@ int main (int argc, char** argv)
             for (int i = 0; i < 30; ++i)
             {
                 audio.play (33.0, true);
+                editor->tickBasic ();
                 editor->idle ();
                 for (const CRect& r : recorder->take ())
                 {

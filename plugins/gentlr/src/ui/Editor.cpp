@@ -212,11 +212,7 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 24), this, kOutput));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}, rateOf,
-                                                    [c = ctl] () -> const smacheratr::Meters* {
-                                                        auto* s = c->getShared ();
-                                                        return s ? &s->tailMeters : nullptr;
-                                                    });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
@@ -247,6 +243,8 @@ void Editor::selectBand (int band)
 
 void Editor::layoutAdvanced ()
 {
+    if (basicView ()) // (the Basic page's display has no sliders: it keeps its place)
+        return;
     const bool advanced = plainValue (kAdvanced) >= 0.5;
     const CRect area (kViewLeft, kViewTop, kViewRight, kViewBottom);
     // the sliders take a strip at the right of the display (the display itself is Gentlr's, so it is
@@ -277,6 +275,45 @@ void Editor::updateLooks ()
     }
     if (driveAmount)
         driveAmount->setEnabledLook (plainValue (kDrive) >= 0.5);
+}
+
+smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
+                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* {
+                                                        auto* s = c->getShared ();
+                                                        return s ? &s->tailMeters : nullptr;
+                                                    });
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // the bands themselves on the display (drag a handle: its frequency and how far it cuts), how steep
+    // they are (Band Slope), how fast it follows and lets go (Attack, Release); Mix and Output
+    using namespace pk::basic;
+    Spec s;
+    s.title = "gentlr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 240;
+    s.display = [this] (const CRect& r) -> CView* {
+        view = new GentlrView (r, this, [c = ctl] () -> const Meters* {
+            auto* sh = c->getShared ();
+            return sh ? &sh->meters : nullptr;
+        });
+        view->setTooltipText (help::kDisplay);
+        view->setSelectedBand (selectedBand);
+        return view;
+    };
+    s.rows = {{choice (kSlope, "Band Slope", 160), knob (kAttack), knob (kRelease)}};
+    s.output = {knob (kMix), knob (kOutput)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (544, 6, 632, 28);
+    return s;
 }
 
 void Editor::paramChanged (uint32_t id)

@@ -249,6 +249,11 @@ constexpr const char* kHelpButton = "Show or hide the floating help tooltips (th
 constexpr const char* kLoad = "Load a sample (WAV, AIFF, FLAC or MP3). You can also drop a file on the waveform.";
 constexpr const char* kPrevNext = "Load the previous / next audio file in the same folder.";
 constexpr const char* kMenu = "Sample menu: normalize, reverse, crop, loop fade type, show the file, interface size.";
+// the Basic page (pluginkit/ui/BasicView.h): its strip's line and its extras
+constexpr const char* kBasicRack =
+    "The effects in the rack after the sampler, in chain order. They play on the Basic page too; to change, add or "
+    "move them, switch to the Advanced view.";
+constexpr const char* kBasicName = "The sample loaded. Load, the arrows or a file dropped on the waveform change it.";
 constexpr const char* kLfoHandle =
     "Drag this LFO onto any knob, slider or value of Smemplr (the effects' too) to modulate it: the control gets a "
     "ring (a line under it if it is not a knob) in the LFO's colour. Drag a knob's ring up or down to change the "

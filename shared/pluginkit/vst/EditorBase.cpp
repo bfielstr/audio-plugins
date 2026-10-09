@@ -74,7 +74,16 @@ bool PLUGIN_API EditorBase::open (void* parent, const PlatformType& platformType
 void EditorBase::buildContent ()
 {
     building = true;
-    buildUI (frame);
+    meters.clear ();
+    bands.clear ();
+    summaryLabel = nullptr;
+    if (showingBasic)
+        buildBasic ();
+    else
+    {
+        buildUI (frame);
+        addAdvancedSwitch ();
+    }
     building = false;
     if (arranged)
         arrangeViews ();
@@ -85,7 +94,8 @@ void EditorBase::buildContent ()
 tresult PLUGIN_API EditorBase::getSize (ViewRect* size)
 {
     // before the window opens, the layout in the controller's state decides the size it opens at
-    if (!frame && (!resolved || appliedLayout != controller->uiLayout))
+    if (!frame && (!resolved || appliedLayout != controller->uiLayout || appliedAdvanced != controller->uiAdvanced ||
+                   appliedExtras != controller->uiExtrasOpen))
     {
         resolveLayout ();
         ViewRect vr (0, 0, (int32)std::lround (baseWidth * scale), (int32)std::lround (baseHeight * scale));
@@ -96,6 +106,9 @@ tresult PLUGIN_API EditorBase::getSize (ViewRect* size)
 
 bool EditorBase::setContentHeight (double h)
 {
+    // (the Basic page keeps its height: a section folding in its extras leaves its space)
+    if (showingBasic)
+        return true;
     if (arranged)
     {
         // the last section (the one that folds) is shorter by as much as the build's content would be:
@@ -135,8 +148,8 @@ bool EditorBase::resizeBase (double w, double contentH, bool keepIfRefused)
         // (the draw benchmark's frame: no window, the frame itself takes the size; the Classic one's is the
         // size openDetached gives it, every section open, so it draws as it did before)
         if (frame)
-            frame->setSize ((arranged ? baseWidth : madeWidth) * frame->getZoom (),
-                            (arranged ? baseHeight : madeHeight + kInfoHeight) * frame->getZoom ());
+            frame->setSize ((arranged || showingBasic ? baseWidth : madeWidth) * frame->getZoom (),
+                            (arranged || showingBasic ? baseHeight : madeHeight + kInfoHeight) * frame->getZoom ());
         placeInfoStrip ();
         return true;
     }
@@ -219,6 +232,9 @@ void PLUGIN_API EditorBase::close ()
         overlays.clear ();
         headerRight.clear ();
         dropMark = nullptr;
+        meters.clear ();
+    bands.clear ();
+        summaryLabel = nullptr;
         frame->forget ();
         frame = nullptr;
     }
@@ -259,8 +275,8 @@ void EditorBase::writeLayoutReport ()
         auto lines = layoutReport (frame);
         for (const auto& p : problems)
             lines.push_back ("unplaced: " + p);
-        std::fprintf (f, "== %s%s%s: %zu\n", typeName (typeid (*this)).c_str (), arranged ? " " : "", arranged ? appliedLayout.c_str () : "",
-                      lines.size ());
+        std::fprintf (f, "== %s%s%s: %zu\n", typeName (typeid (*this)).c_str (), arranged || showingBasic ? " " : "",
+                      showingBasic ? "basic" : arranged ? appliedLayout.c_str () : "", lines.size ());
         for (const auto& l : lines)
             std::fprintf (f, "%s\n", l.c_str ());
         std::fclose (f);
@@ -340,12 +356,15 @@ CMessageResult EditorBase::notify (CBaseObject* sender, const char* message)
 {
     if (message == CVSTGUITimer::kMsgTimer && frame)
     {
-        // another layout picked (the menu, a project loaded): built again in it, between two ticks
-        if (!building && (rebuildPending || appliedLayout != controller->uiLayout))
+        // another layout or view picked (the menu, the Advanced switch, a project loaded): built again in it,
+        // between two ticks
+        const bool viewChanged = hasBasic && (appliedAdvanced != controller->uiAdvanced || (showingBasic && appliedExtras != controller->uiExtrasOpen));
+        if (!building && (rebuildPending || appliedLayout != controller->uiLayout || viewChanged))
         {
             rebuildPending = false;
             relayout ();
         }
+        tickBasic ();
         idle ();
         controller->checkLatency ();
     }
@@ -436,10 +455,32 @@ void EditorBase::resolveLayout ()
     // layouts, pixel for pixel. Any other is an arrangement of the editor's panels (none: Classic).
     resolved = true;
     appliedLayout = controller->uiLayout;
+    appliedAdvanced = controller->uiAdvanced;
+    appliedExtras = controller->uiExtrasOpen;
+    // the Basic page, when the editor has one and the instance shows it (no layouts there: it has one)
+    basicPage = basicSpec ();
+    hasBasic = !basicPage.empty ();
+    // the mini meter's level: the capture buffer's last 1024 frames when the page gives none
+    if (!basicPage.level && basicPage.capture)
+    {
+        auto buf = std::make_shared<std::vector<float>> (2048);
+        basicPage.level = [src = basicPage.capture, buf] () -> float {
+            const CaptureBuffer* c = src ();
+            if (!c)
+                return 0.0f;
+            c->read (c->written (), 1024, buf->data (), buf->data () + 1024);
+            float peak = 0.0f;
+            for (float v : *buf)
+                peak = std::max (peak, std::fabs (v));
+            return peak;
+        };
+    }
+    showingBasic = hasBasic && !appliedAdvanced;
+    basicPlace = showingBasic ? basic::place (basicPage, appliedExtras) : basic::Geometry {};
     arranged = false;
     arrangement = {};
     spec = {};
-    if (!layout::isClassic (appliedLayout))
+    if (!showingBasic && !layout::isClassic (appliedLayout))
     {
         spec = layoutSpec (true);
         if (spec.width <= 0)
@@ -462,8 +503,8 @@ void EditorBase::resolveLayout ()
             r.right = r.left + b->content.width ();
         regions[p.id] = r;
     }
-    baseWidth = arranged ? geometry.width : madeWidth;
-    fullContentHeight = arranged ? geometry.height : madeHeight;
+    baseWidth = showingBasic ? basicPlace.width : arranged ? geometry.width : madeWidth;
+    fullContentHeight = showingBasic ? basicPlace.height : arranged ? geometry.height : madeHeight;
     contentHeight = fullContentHeight;
     baseHeight = contentHeight + kInfoHeight;
 }
@@ -634,6 +675,9 @@ void EditorBase::relayout ()
     onClose ();
     hoverWatch.hovered = nullptr;
     info = nullptr;
+    meters.clear ();
+    bands.clear ();
+    summaryLabel = nullptr;
     boxes.clear ();
     framed.clear ();
     overlays.clear ();
@@ -648,7 +692,7 @@ void EditorBase::relayout ()
     frame->enableTooltips (controller->uiShowTips, 600);
     // (refused: an arranged layout is zoomed to fit the window; the Classic one keeps its full content
     // height, as open () leaves it, with a folded section's space empty)
-    if (!resizeBase (baseWidth, contentHeight, arranged) && !arranged)
+    if (!resizeBase (baseWidth, contentHeight, arranged || showingBasic) && !arranged && !showingBasic)
     {
         contentHeight = fullContentHeight;
         baseHeight = contentHeight + kInfoHeight;
@@ -800,6 +844,21 @@ void EditorBase::addDefaultsMenu (COptionMenu* menu)
     const GentlrDefaults d = controller->gentlrDefaults ();
     const auto factoryOn = [this] (int32_t id) { return controller->table ().defaultNormalized ((uint32_t)id) >= 0.5; };
     auto sub = makeOwned<COptionMenu> ();
+    // the view a new instance opens in (pluginkit/ui/BasicView.h): the Basic page unless this is on
+    if (hasBasic)
+    {
+        const bool checked = d.advancedView.value_or (false);
+        addCommand (
+            sub, "Advanced View by Default",
+            [this, checked] {
+                GentlrDefaults now = controller->gentlrDefaults ();
+                now.advancedView = !checked;
+                controller->writeGentlrDefaults (now);
+            },
+            checked);
+        addCommand (sub, "(New instances open in the Advanced view; projects keep theirs)", {}, false, false);
+        sub->addSeparator ();
+    }
     if (ids.gentlr >= 0)
     {
         const bool checked = d.gentlrOn.value_or (factoryOn (ids.gentlr) && (ids.saturator < 0 || factoryOn (ids.saturator)));
@@ -846,9 +905,9 @@ void EditorBase::addLayoutMenu (COptionMenu* menu)
 {
     if (!menu)
         return;
-    if (layoutSpec (true).empty ())
+    if (layoutSpec (true).empty () || showingBasic)
     {
-        // (no Layout: the Defaults after a separator of their own)
+        // (no Layout, or the Basic page, which has one layout: the Defaults after a separator of their own)
         menu->addSeparator ();
         addDefaultsMenu (menu);
         return;
@@ -959,6 +1018,220 @@ std::vector<std::pair<std::string, CRect>> EditorBase::layoutBlocks () const
     for (auto* box : boxes)
         out.emplace_back (box->panelId (), box->getViewSize ());
     return out;
+}
+
+} // namespace pk
+
+// ---- the Basic page (pluginkit/ui/BasicView.h) -----------------------------------------------------------
+namespace pk {
+
+namespace {
+// the page's window: ground, its header band (taller than the Advanced view's) and the frame
+class BasicBackground : public CViewContainer
+{
+public:
+    using CViewContainer::CViewContainer;
+    void drawBackgroundRect (CDrawContext* ctx, const CRect&) override
+    {
+        draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), basic::kHeader);
+    }
+};
+} // namespace
+
+void EditorBase::setAdvancedView (bool on, bool now)
+{
+    if (controller->uiAdvanced != on)
+    {
+        controller->uiAdvanced = on;
+        controller->markDirty ();
+    }
+    // (from a button: at the next tick, the button is built again with the rest)
+    if (now && frame && !building && hasBasic && appliedAdvanced != on)
+        relayout ();
+}
+
+void EditorBase::setExtrasOpen (bool open, bool now)
+{
+    if (controller->uiExtrasOpen != open)
+    {
+        controller->uiExtrasOpen = open;
+        controller->markDirty ();
+    }
+    if (now && frame && !building && showingBasic && appliedExtras != open)
+        relayout ();
+}
+
+void EditorBase::addAdvancedSwitch ()
+{
+    // the Advanced view's way back to the Basic page: lit (this is the Advanced view), in the header where
+    // the editor keeps room for it
+    if (!hasBasic || basicPage.advancedSwitch.isEmpty () || !frame || frame->getNbViews () == 0)
+        return;
+    auto* root = frame->getView (0)->asViewContainer ();
+    if (!root)
+        return;
+    auto* b = new ActionButton (basicPage.advancedSwitch, "Advanced", [this] { setAdvancedView (false); }, [] { return true; });
+    setHelp (b, "Advanced", basic::kAdvancedHelp);
+    root->addView (b);
+}
+
+void EditorBase::buildBasic ()
+{
+    using namespace basic;
+    const Geometry& g = basicPlace;
+    for (const auto& p : g.problems)
+        problems.push_back ("basic page: " + p);
+    auto* root = new BasicBackground (CRect (0, 0, g.width, g.height));
+    frame->addView (root);
+
+    // ---- the header: the title, the plug-in's views, the presets and their arrows; Advanced, ?, Menu
+    root->addView (new Label (g.title, basicPage.title, kTitleSize, true));
+    if (basicPage.header && !g.headerViews.isEmpty ())
+        if (CView* v = basicPage.header (g.headerViews))
+            root->addView (v);
+    root->addView (new PresetBar (g.presets, controller));
+    auto* prev = new ActionButton (g.presetPrev, "<", [this] { controller->stepPreset (-1); });
+    auto* next = new ActionButton (g.presetNext, ">", [this] { controller->stepPreset (1); });
+    setHelp (prev, "Previous Preset", kPresetStepHelp);
+    setHelp (next, "Next Preset", kPresetStepHelp);
+    root->addView (prev);
+    root->addView (next);
+    auto* adv = new ActionButton (g.advanced, "Advanced", [this] { setAdvancedView (true); });
+    setHelp (adv, "Advanced", kAdvancedHelp);
+    root->addView (adv);
+    auto* tips = new ActionButton (g.help, "?", [this] { setTooltipsEnabled (!controller->uiShowTips); }, [this] { return controller->uiShowTips; });
+    setHelp (tips, "Tooltips", "Shows or hides the floating tooltips. The box at the bottom shows the same help either way.");
+    root->addView (tips);
+    const CPoint menuAt (g.menu.left, g.menu.bottom);
+    auto* menu = new ActionButton (g.menu, "Menu", [this, menuAt] {
+        if (basicPage.menu)
+            basicPage.menu (menuAt);
+    });
+    setHelp (menu, "Menu", "The plug-in's menu: copy and paste settings, the interface size, the defaults for new instances.");
+    root->addView (menu);
+
+    // ---- the capture band, the display, the main controls, the output
+    if (basicPage.capture && !g.capture.isEmpty ())
+    {
+        auto* band = new CaptureBand (
+            g.capture, basicPage.capture, captureHold, basicPage.title, [this] { return controller->uiCaptureLength; },
+            [this] (int c) {
+                if (controller->uiCaptureLength != c)
+                {
+                    controller->uiCaptureLength = c;
+                    controller->markDirty ();
+                }
+            });
+        root->addView (band);
+        bands.push_back (band);
+    }
+    if (basicPage.display && !g.display.isEmpty ())
+        if (CView* v = basicPage.display (g.display))
+        {
+            // a display of several views in a pk::Group: its views straight into the page, where the
+            // group put them (a cached layer nested in an offset container drew a few edge pixels
+            // unlike direct drawing at 150 %: widr's stage)
+            if (auto* group = dynamic_cast<Group*> (v))
+            {
+                std::vector<CView*> kids;
+                group->forEachChild ([&] (CView* k) { kids.push_back (k); });
+                const CPoint o = group->getViewSize ().getTopLeft ();
+                for (CView* k : kids)
+                {
+                    group->removeView (k, false); // (the reference the group adopted goes over to the page)
+                    CRect r = k->getViewSize ();
+                    r.offset (o.x, o.y);
+                    k->setViewSize (r);
+                    k->setMouseableArea (r);
+                    root->addView (k);
+                }
+                group->forget ();
+            }
+            else
+                root->addView (v);
+        }
+    auto control = [this] (CViewContainer* in, const Control& c, const CRect& r) {
+        const char* label = c.label.empty () ? nullptr : c.label.c_str ();
+        switch (c.kind)
+        {
+            case Control::Kind::Knob:
+            {
+                auto* k = bind (in, new Knob (r, this, c.id, label, c.bipolar));
+                k->setTextSizes (kLabelSize, kValueSize);
+                break;
+            }
+            case Control::Kind::Toggle:
+                bind (in, new Toggle (r, this, c.id, label ? label : table ().info (c.id).shortName));
+                break;
+            case Control::Kind::Choice: bind (in, new Choice (r, this, c.id, label ? label : table ().info (c.id).shortName)); break;
+            case Control::Kind::Segmented:
+            {
+                const std::string caption = label ? c.label : std::string (table ().info (c.id).shortName);
+                in->addView (new Label (CRect (r.left, r.top, r.right, r.top + kCaption), caption, 11.0, false, 1));
+                bind (in, new Segmented (CRect (r.left, r.top + kCaption + 4, r.right, r.bottom), this, c.id, c.segments));
+                break;
+            }
+        }
+    };
+    auto* mainPanel = new Panel (g.main);
+    root->addView (mainPanel);
+    for (size_t i = 0; i < basicPage.rows.size () && i < g.rows.size (); ++i)
+        for (size_t k = 0; k < basicPage.rows[i].size () && k < g.rows[i].size (); ++k)
+            control (mainPanel, basicPage.rows[i][k], g.rows[i][k]);
+    if (!g.side.isEmpty ())
+    {
+        auto* side = new Panel (g.side, "OUTPUT");
+        root->addView (side);
+        for (size_t i = 0; i < basicPage.output.size () && i < g.output.size (); ++i)
+            control (side, basicPage.output[i], g.output[i]);
+    }
+
+    // ---- the extras (open) and the strip
+    if (!g.extras.isEmpty () && basicPage.extras)
+    {
+        auto* ex = new Panel (g.extras, basicPage.extrasTitle);
+        root->addView (ex);
+        if (CView* v = basicPage.extras (CRect (8, basicPage.extrasTitle.empty () ? 8 : 24, g.extras.getWidth () - 8, g.extras.getHeight () - 8)))
+            ex->addView (v);
+    }
+    auto* strip = new Panel (g.strip);
+    root->addView (strip);
+    if (!g.expand.isEmpty ())
+    {
+        auto* b = new ActionButton (g.expand, "Extras", [this] { setExtrasOpen (!controller->uiExtrasOpen); },
+                                    [this] { return controller->uiExtrasOpen; });
+        setHelp (b, "Extras", kExtrasHelp);
+        strip->addView (b);
+    }
+    if (!g.tail.isEmpty () && basicPage.tailOn >= 0)
+    {
+        auto* t = bind (strip, new Toggle (g.tail, this, (uint32_t)basicPage.tailOn, "Tail"));
+        setHelp (t, "Tail", kTailHelp);
+    }
+    summaryLabel = new Label (g.summary, basicPage.summary ? basicPage.summary () : std::string (), 11.0, false, 0);
+    summaryLabel->setDim (true);
+    if (basicPage.summaryHelp)
+        setHelp (summaryLabel, "Extras", basicPage.summaryHelp);
+    strip->addView (summaryLabel);
+    if (!g.meter.isEmpty () && basicPage.level)
+    {
+        auto* m = new MiniMeter (g.meter, basicPage.level);
+        setHelp (m, "Output Level", kMeterHelp);
+        strip->addView (m);
+        meters.push_back (m);
+    }
+    if (basicPage.help)
+        applyParamTooltips (basicPage.help);
+}
+
+void EditorBase::tickBasic ()
+{
+    for (auto* m : meters)
+        m->idle ();
+    for (auto* b : bands)
+        b->idle ();
+    if (summaryLabel && basicPage.summary)
+        summaryLabel->setText (basicPage.summary ());
 }
 
 } // namespace pk
