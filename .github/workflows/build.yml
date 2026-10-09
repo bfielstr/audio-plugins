@@ -170,7 +170,10 @@ jobs:
           CCACHE_MAXSIZE: 1G
         shell: bash
         run: |
-          cmake --build build --config Release --parallel
+          # as many jobs as cores: a bare --parallel lets make on Linux start every compile at once, which ran
+          # the 16 GB runner out of memory ("lost communication with the server") once the suite grew
+          JOBS=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo "${NUMBER_OF_PROCESSORS:-4}")
+          cmake --build build --config Release --parallel "$JOBS"
           if [ "$RUNNER_OS" != "Windows" ]; then ccache --show-stats; fi
 
       - name: Test
