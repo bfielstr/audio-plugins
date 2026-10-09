@@ -1156,10 +1156,13 @@ void EditorBase::buildBasic ()
     for (size_t i = 0; i < basicPage.rows.size () && i < g.rows.size (); ++i)
         for (size_t k = 0; k < basicPage.rows[i].size () && k < g.rows[i].size (); ++k)
             control (mainPanel, basicPage.rows[i][k], g.rows[i][k]);
-    auto* side = new Panel (g.side, "OUTPUT");
-    root->addView (side);
-    for (size_t i = 0; i < basicPage.output.size () && i < g.output.size (); ++i)
-        control (side, basicPage.output[i], g.output[i]);
+    if (!g.side.isEmpty ())
+    {
+        auto* side = new Panel (g.side, "OUTPUT");
+        root->addView (side);
+        for (size_t i = 0; i < basicPage.output.size () && i < g.output.size (); ++i)
+            control (side, basicPage.output[i], g.output[i]);
+    }
 
     // ---- the extras (open) and the strip
     if (!g.extras.isEmpty () && basicPage.extras)

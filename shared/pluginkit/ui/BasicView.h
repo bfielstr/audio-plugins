@@ -92,7 +92,7 @@ struct Spec
 {
     std::string title;                      // the plug-in's name, lowercase ("smemplr")
     std::vector<std::vector<Control>> rows; // the main controls, row by row (3 to 6 in all is the idea)
-    std::vector<Control> output;            // the output column's controls, top to bottom
+    std::vector<Control> output;            // the output column's controls, top to bottom (none: no column)
     Factory display;                        // the most useful display, above the controls (optional)
     double displayHeight = 0;               // (0: no display)
     Factory header;                         // the plug-in's own views in the header, after the title (optional)

@@ -99,8 +99,10 @@ Geometry place (const Spec& spec, bool extrasOpen)
 
     // ---- the output column at the right, the display and the main controls left of it
     const double y0 = kHeader + 12;
+    // (no output controls: no output column, the main controls as wide as the page)
+    const bool hasSide = !spec.output.empty ();
     const double sideLeft = w - kMargin - kSideW;
-    const double left = kMargin, right = sideLeft - kGap;
+    const double left = kMargin, right = hasSide ? sideLeft - kGap : w - kMargin;
     double y = y0;
     // the capture band: the page's whole width, over the display and the output column
     double sideTop = y0;
@@ -156,10 +158,11 @@ Geometry place (const Spec& spec, bool extrasOpen)
     // both as tall as the taller (the controls' panel at least as tall as the column beside the display)
     const double mainH = std::max (ry - kGap + 12, 60.0);
     g.main = CRect (left, y, right, y + mainH);
-    const double sideBottom = std::max (g.main.bottom, sideTop + oy - kGap + 12);
+    const double sideBottom = hasSide ? std::max (g.main.bottom, sideTop + oy - kGap + 12) : g.main.bottom;
     if (sideBottom > g.main.bottom)
         g.main.bottom = sideBottom;
-    g.side = CRect (sideLeft, sideTop, w - kMargin, g.main.bottom);
+    if (hasSide)
+        g.side = CRect (sideLeft, sideTop, w - kMargin, g.main.bottom);
     y = g.main.bottom + kGap;
 
     // ---- the extras (open), then the strip
