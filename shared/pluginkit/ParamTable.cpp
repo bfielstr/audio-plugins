@@ -162,6 +162,8 @@ std::string ParamTable::toText (uint32_t id, double v) const
         }
         case Disp::Beats:
         {
+            if (std::fabs (v - std::round (v)) > 0.005) // (a fraction of a beat)
+                return fmt (v < 10.0 ? "%.2f Beats" : "%.1f Beats", v);
             int beats = (int)std::lround (v);
             if (beats % 4 == 0)
                 return std::to_string (beats / 4) + (beats == 4 ? " Bar" : " Bars");
