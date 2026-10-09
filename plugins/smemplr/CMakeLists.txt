@@ -1,5 +1,5 @@
 # Smemplr: a sampler modelled on Ableton Live's Simpler.
-project(Smemplr VERSION 0.29.0.0)
+project(Smemplr VERSION 0.30.0.0)
 
 # One effects slot (src/core/FxSlot.h): the suite's effects as a slot's kinds, their tables and the slot's
 # engines. Smemplr's rack is a row of them; moistr's lab uses them too (as "smemplr/src/core/FxSlot.h").
