@@ -43,10 +43,13 @@ private:
     {
         Gesture g[kNumGestureSlots];
         bool has[kNumGestureSlots] {};
+        Scene scene; // the one gesture's (0.30)
+        bool hasScene = false;
     };
     void publishUser ();
     std::mutex userMutex;
     std::array<GestureData, kNumGestureSlots> userData;
+    SceneData sceneData;
     pk::RtShared<UserBank> userBank;
     std::shared_ptr<const UserBank> userNow; // (the audio thread's)
     uint32_t userGen = 0;

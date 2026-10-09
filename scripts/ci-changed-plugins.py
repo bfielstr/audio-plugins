@@ -9,9 +9,9 @@ means build everything.
   and docs/ (the workflow's paths-ignore: they build nothing).
 - Anything outside plugins/<name>/ (shared/, cmake/, the root CMakeLists.txt, .github/, installer/,
   scripts/, third_party/, ...) builds everything.
-- Otherwise the changed plug-ins, plus every plug-in that uses one of them (links its <name>_core or
-  <name>_ui, includes its headers, or compiles its files), again and again until nothing new turns up.
-  Should that be every plug-in, everything is built.
+- Otherwise the changed plug-ins, plus every plug-in that uses one of them (links its <name>_core,
+  <name>_ui or <name>_fxslot, includes its headers, or compiles its files), again and again until
+  nothing new turns up. Should that be every plug-in, everything is built.
 """
 import os
 import re
@@ -42,7 +42,7 @@ def uses(user, names):
     """The plug-ins whose code `user` builds on (its CMakeLists.txt and its sources)."""
     found = set()
     others = [n for n in names if n != user]
-    link = re.compile(r"(?<![a-z_])(" + "|".join(others) + r")_(core|ui)(?![a-z_])")
+    link = re.compile(r"(?<![a-z_])(" + "|".join(others) + r")_(core|ui|fxslot)(?![a-z_])")
     path = re.compile(r"(?:plugins/|#include\s+\"(?:\.\./)*)(" + "|".join(others) + r")/")
     for dirpath, _, files in os.walk(os.path.join(PLUGINS_DIR, user)):
         for f in files:

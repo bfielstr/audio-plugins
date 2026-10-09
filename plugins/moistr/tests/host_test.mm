@@ -1,4 +1,5 @@
 // End-to-end test of the built Moistr.vst3. usage: moistr_hosttest <Moistr.vst3> <output dir>
+#include "Engine.h"
 #include "Params.h"
 #include "plugin/State.h"
 #include "pluginkit/testing/HostRig.h"
@@ -85,12 +86,29 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // a new instance starts from the Neuro recipe (the LAB on), and reports the LAB's latency with the end saturator's,
+        // as the engine has it with those settings
+        {
+            int differ = 0;
+            for (const auto& [id, n] : newInstanceValues ())
+                differ += std::fabs (rig.controller->getParamNormalized (id) - n) > 1e-9;
+            CHECK (differ == 0, "a new instance: the Neuro recipe (%d values differ)", differ);
+            Engine ref;
+            for (const auto& [id, n] : newInstanceValues ())
+                ref.setParam (id, toPlain (id, n));
+            ref.prepare (48000.0, 512);
+            CHECK (rig.start (), "start");
+            const uint32 neuroLatency = rig.processor->getLatencySamples ();
+            CHECK ((int)neuroLatency == ref.latency () && ref.labLatency () > 0, "a new instance's latency %u: the engine's %d (the LAB's %d)",
+                   neuroLatency, ref.latency (), ref.labLatency ());
+            rig.stop ();
+        }
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
-        CHECK (latency < 200, "latency reported %u (the end saturator's)", latency);
+        CHECK (latency < 200, "latency reported %u (the end saturator's: the LAB empty)", latency);
 
         // Mix 0 %: the tone passes at its level
         rig.param (kMix, 0.0);
@@ -169,6 +187,45 @@ int main (int argc, char** argv)
             CHECK (readState (&back, b) && b.user[0].name == "Host Gate" && b.user[0].points == g.user[0].points && b.user[1].empty (),
                    "the user gesture saved with the state");
             CHECK (std::lround (plainOf (rig, gestureId (0, kGestureTarget))) == kTargetMidLevel, "the controller has slot 1's Target");
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "back to the base state");
+        }
+
+        // the one gesture (0.30): a user gesture of two lanes (a gate on Mid Level, Close) through the state (version
+        // 7) plays and comes back with getState
+        {
+            State g = baseState ();
+            g.norm[kScene] = toNormalized (kScene, kSceneUser);
+            g.scene.name = "Host Scene";
+            g.scene.length = 1.0;
+            SceneLaneData gate, close;
+            gate.target = "Mid Level";
+            gate.points = {{0.0, 1.0}, {0.5, 1.0}, {0.5, 0.0}, {1.0, 0.0}};
+            close.target = "Close";
+            close.hasMin = true;
+            close.min = 2000.0;
+            close.points = {{0.0, 1.0}, {1.0, 0.5}};
+            g.scene.lanes = {gate, close};
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, g); }), "setState with a gesture of lanes");
+            std::vector<float> gl, gr;
+            rig.render (0.1, gl, nullptr, tone ());
+            gl.clear ();
+            rig.render (2.0, gl, &gr, tone ());
+            CHECK (allFinite (gl) && gl == gr, "the gesture: finite, mono in mono out");
+            double lo = 1e9, hi = 0.0;
+            for (size_t w = 24000; w + 2400 <= gl.size (); w += 2400)
+            {
+                const double r = rms (gl, w, w + 2400);
+                lo = std::min (lo, r);
+                hi = std::max (hi, r);
+            }
+            CHECK (hi > 3.0 * lo, "the gesture's gate on the Mid band moves the level (%.4f .. %.4f RMS)", lo, hi);
+            MemoryStream back;
+            CHECK (rig.component->getState (&back) == kResultOk, "getState with a gesture of lanes");
+            back.seek (0, IBStream::kIBSeekSet, nullptr);
+            State b;
+            CHECK (readState (&back, b) && b.scene.name == "Host Scene" && b.scene.lanes.size () == 2 && b.scene.lanes[0].points == gate.points,
+                   "the gesture saved with the state");
+            CHECK (std::lround (plainOf (rig, kScene)) == kSceneUser, "the controller has Gesture User");
             CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "back to the base state");
         }
 
@@ -266,26 +323,20 @@ int main (int argc, char** argv)
             win.click (ex, ey);
             pump (0.05);
             CHECK (plainOf (rig, kDropOut) < 0.5, "Drop Out clicked off");
-            // GESTURES (row 4): slot 2 picked, its Mode clicked to Walk (slot 1's untouched), back to Loop and slot 1
-            const double slotY = Editor::kRow4 + Editor::kSlotTop + Editor::kSlotRowH / 2;
-            auto slotX = [] (int g) { return Editor::kGesturesLeft + Editor::kSwitchLeft + Editor::kSlotCellW * g + Editor::kSlotCellW / 2 - 1; };
+            // GESTURE (row 4): with a gesture picked, its Mode clicked to Walk and back to Loop (the 0.27 slots untouched)
+            rig.param (kScene, toNormalized (kScene, kSceneReeseCell + 1));
+            pump (0.05);
+            const double modeY = Editor::kRow4 + Editor::kGestureTop + Editor::kGestureRowH / 2;
             const double walkX = Editor::kGesturesLeft + Editor::kGestureColLeft + (Editor::kGestureColRight - Editor::kGestureColLeft) * 3 / 4;
             const double loopX = Editor::kGesturesLeft + Editor::kGestureColLeft + (Editor::kGestureColRight - Editor::kGestureColLeft) / 4;
-            win.click (slotX (1), slotY);
+            win.click (walkX, modeY);
             pump (0.05);
-            win.click (walkX, slotY);
+            CHECK (std::lround (plainOf (rig, kSceneMode)) == kModeWalk && std::lround (plainOf (rig, gestureId (0, kGestureMode))) == kModeLoop,
+                   "the gesture's Mode clicked to Walk (the slots untouched)");
+            win.click (loopX, modeY);
             pump (0.05);
-            CHECK (std::lround (plainOf (rig, gestureId (1, kGestureMode))) == kModeWalk && std::lround (plainOf (rig, gestureId (0, kGestureMode))) == kModeLoop,
-                   "slot 2's Mode clicked to Walk (slot 1's untouched)");
-            win.click (loopX, slotY);
-            pump (0.05);
-            CHECK (std::lround (plainOf (rig, gestureId (1, kGestureMode))) == kModeLoop, "slot 2's Mode back to Loop");
-            win.click (slotX (0), slotY);
-            pump (0.05);
-            win.click (walkX, slotY);
-            pump (0.05);
-            CHECK (std::lround (plainOf (rig, gestureId (0, kGestureMode))) == kModeWalk, "slot 1 picked again: its Mode clicked to Walk");
-            win.click (loopX, slotY);
+            CHECK (std::lround (plainOf (rig, kSceneMode)) == kModeLoop, "the gesture's Mode back to Loop");
+            rig.param (kScene, toNormalized (kScene, kSceneNone));
             pump (0.05);
             // Mid X's knob (the second beside SPLIT's switch): a double-click puts it back to its default
             const double midXDefault = toPlain (kXoverMid, defaultNormalized (kXoverMid));

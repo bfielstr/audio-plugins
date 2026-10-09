@@ -76,11 +76,24 @@
 //                            Seed Blend's own value)
 // Both channels share every gain and coefficient: a mono input stays mono.
 //
-// The latency is the end saturator's (always in the path).
+// 0.30, the one gesture (Gesture.h: a Scene; None by default and in older states, so the engine is then 0.27's,
+// bit for bit). One clock (Loop or Walk, Length, Speed, Position, as a slot's) places every lane of the scene at
+// the same point of its timeline; each lane pulls its target as a slot does, towards lo + (hi - lo) x its curve
+// (its range, in the target's own 0 .. 1), by Amount (gliding). Lanes come after the slots (a 0.27 project's
+// slots still play). Changing the gesture fades the old one out (20 ms), then the new one in.
+//
+// 0.30, the LAB (Lab.h; every slot Empty and every chain at 0 dB by default and in older states, so the engine is then
+// 0.29's, bit for bit): effects chains on the Mid, High and Air bands of the first pass, after their moving gains,
+// and POST on their sum, before Liquid, Close, Wobble and the shifter. The Low band is delayed to line up and never
+// goes through them.
+//
+// The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too) and the end
+// saturator's (always in the path).
 #pragma once
 
 #include "Dsp.h"
 #include "Gesture.h"
+#include "Lab.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -91,6 +104,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <vector>
 
 namespace moistr {
 
@@ -133,6 +147,13 @@ struct Meters
     // how far it pulls now (0: off)
     std::array<std::atomic<float>, kNumGestureSlots> gesturePos {}, gestureValue {}, gesturePull {};
     std::atomic<float> wobbleGain {1.0f}; // Wobble's gain now (1: none)
+    // the one gesture (0.30): where in it the clock is (0 .. 1), how far it pulls now (0: none) and each lane's
+    // value there (its curve, smoothed)
+    std::atomic<float> scenePos {0.0f}, scenePull {0.0f};
+    std::array<std::atomic<float>, kMaxSceneLanes> laneValue {};
+    // the LAB (0.30): its latency now (samples; -1 before the first block: a controller watching it tells the host,
+    // pk::ControllerBase::watchLatency)
+    std::atomic<int> labLatency {-1};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -140,7 +161,8 @@ struct Meters
 constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
 // the gestures: a level target's range (dB) before it fades to silence (over its last 1 / kLevelFadeShare); Close's
 // travel (octaves) and Q at its most; Smooth's shortest (s) and longest (beats) glide
-constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 6.0, kCloseQ = 5.0, kCloseOpenHz = 20000.0;
+// (kGestureLevelDb, kCloseOctaves and kCloseOpenHz: Gesture.h)
+constexpr double kLevelFadeShare = 16.0, kCloseQ = 5.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
 
 class Engine
@@ -153,7 +175,10 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return lab.latency () + tail.latency (); } // the LAB's, then the end saturator's
+    int labLatency () const { return lab.latency (); }
+    const Lab& labStage () const { return lab; }
+    Lab& labStage () { return lab; }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
@@ -217,6 +242,22 @@ public:
     // the gesture a slot plays now (its Gesture choice: a factory one, or its user gesture)
     const Gesture& gestureOf (int g) const;
 
+    // The one gesture (0.30). The user's (the Gesture choice's User): the engine keeps the pointer (nullptr: none);
+    // the caller keeps it alive and unchanged while it is set. (A new one playing in its place takes over at once.)
+    void setUserScene (const Scene* s)
+    {
+        if (scene == userScene)
+            scene = s;
+        userScene = s;
+    }
+    // the scene playing now (nullptr: none), where in it the clock is (0 .. 1), how far it pulls (Amount, gliding;
+    // 0 while it fades out to change) and a lane's curve value now (smoothed, 0 .. 1) and where it pulls its target to
+    const Scene* scenePlaying () const { return scene; }
+    double scenePos () const { return scenePosNow; }
+    double scenePull () const { return sceneK; }
+    double laneValue (int i) const { return lane[i].s; }
+    double laneTargetValue (int i) const { return lane[i].shaped; }
+
 private:
     struct PassState
     {
@@ -256,13 +297,21 @@ private:
     // the targets at theta th for a pass: g per corner and gain per band (snap: no smoothing)
     void targets (int pass, double th, double* g, double* gain, bool snap);
     void runPass (int pass, double* l, double* r, int m, double thetaEnd);
+    // the first pass with the LAB (labRun): the split and the bands' gains, the chains and POST (Lab::run), then what
+    // runPass does on the bands above Low (Liquid, Close, Wobble, the shifter) on their sum, and the Low band back
+    void runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still, bool shifting,
+                 bool liquidOn, bool auxOn, bool closeOn, bool wobbleOn);
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
     // then what they do this tick
     void gestureTick (int m, double beats, bool snap);
-    // a target pulled by every slot on it (in slot order), from `base`; targeted: some slot pulls it now
+    // a target pulled by every slot on it (in slot order), then every lane of the one gesture, from `base`;
+    // targeted: some slot or lane pulls it now. (Mid X and High X: the lanes pull in log2 Hz, after the slots:
+    // pulledX.)
     double pulled (int target, double base) const;
     bool targeted (int target) const;
+    bool slotTargeted (int target) const;
+    double pulledX (int target, double log2Hz) const;
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -296,6 +345,12 @@ private:
         bool primed = false;     // (s has a value)
     };
     SlotRun slot[kNumGestureSlots];
+    // the one gesture (0.30): its lanes (as slots: lane i pulls the scene's lane i's target; shaped is where, in
+    // the target's own 0 .. 1), the scene playing, the user's, how far it pulls and the clock's place
+    SlotRun lane[kMaxSceneLanes];
+    const Scene* scene = nullptr;
+    const Scene* userScene = nullptr;
+    double sceneK = 0.0, scenePosNow = 0.0;
     const Gesture* user[kNumGestureSlots] {};
     Gesture flatGesture;
     double gBeats = 0.0, gBeatsNow = 0.0, gBpm = 120.0; // (the beats at the block's start; free-running while stopped)
@@ -329,6 +384,12 @@ private:
     int quiet = 0; // samples since the input was last heard
     Meters* meters = nullptr;
     smacheratr::Tail tail;
+    // the LAB (0.30), whether it runs this tick (Lab::active), and the dry signal's delay to its latency (always
+    // written, read only while it has one)
+    Lab lab;
+    bool labRun = false;
+    std::vector<float> dryDelay[2];
+    int dryW = 0;
 };
 
 } // namespace moistr

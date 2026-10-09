@@ -10,9 +10,10 @@ add_library(moistr_core STATIC
     src/core/Sweep.cpp
     src/core/Gesture.cpp
     src/core/GestureFile.cpp
+    src/core/Lab.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core)
+target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core smemplr_fxslot) # (the LAB's slots: smemplr's)
 pk_dsp_settings(moistr_core)
 
 add_executable(moistr_tests tests/core_tests.cpp)
@@ -21,6 +22,13 @@ target_link_libraries(moistr_tests PRIVATE moistr_core)
 target_compile_definitions(moistr_tests PRIVATE MOISTR_PRESETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/presets")
 add_test(NAME moistr_core COMMAND moistr_tests)
 pk_cpu_test(moistr_core) # times the DSP against a CPU budget
+
+# scripts/als_extract.py --moistr on a synthetic Live set (made by the test): Ableton lanes to one gesture of lanes
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME moistr_als_extract
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/als_extract_test.py ${CMAKE_SOURCE_DIR}/scripts/als_extract.py)
+endif()
 
 if(NOT PK_BUILD_PLUGINS)
     return()

@@ -14,5 +14,8 @@ constexpr const char* kSharedAttr = "ptr";
 constexpr const char* kGestureMessageId = "MoistrGesture";
 constexpr const char* kGestureSlotAttr = "slot";
 constexpr const char* kGestureJsonAttr = "json";
+// the one gesture's user gesture (0.30), from the controller to the processor: "json" (binary: the gesture's
+// JSON, GestureFile.h: sceneJson; empty: none)
+constexpr const char* kSceneMessageId = "MoistrScene";
 
 } // namespace moistr

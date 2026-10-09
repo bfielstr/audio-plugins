@@ -1,20 +1,23 @@
-// Moistr's gesture display: the picked slot's curve over its whole gesture (0 .. 1 across, its value up), the
-// beat grid of the length it plays at, and while it runs the playhead (where in the gesture it is) with a dot
-// at the value the target is pulled towards. The title names the slot, its gesture and its target.
+// Moistr's gesture display (0.30): the one gesture's lanes stacked, one row per lane (its target named at the
+// left, its curve across the gesture, 0 at the bottom of its row and 1 at the top), the beat grid of the length it
+// plays at, and while it runs one playhead through every lane (they share one clock) with a dot at each lane's
+// value now. The title names the gesture; the footer its mode and length, and whether 0.27 slots (from an older
+// project) play beside it.
 //
-// It repaints only when what it shows changed: the slot, its settings, the gesture, or the playhead (in small
-// steps); with the slot's Target Off it asks for no repaints.
+// It repaints only when what it shows changed: the gesture, its settings, or the playhead (in small steps); with
+// Gesture None it asks for no repaints.
 #pragma once
 
 #include "Engine.h"
-#include "GestureFile.h"
 #include "Params.h"
 
 #include "pluginkit/ui/Widgets.h"
 
 #include "vstgui/lib/cview.h"
 
+#include <array>
 #include <functional>
+#include <string>
 
 namespace moistr {
 
@@ -22,12 +25,12 @@ class GestureView : public VSTGUI::CView
 {
 public:
     using MeterSource = std::function<const Meters* ()>;
-    using SlotSource = std::function<int ()>;                  // the picked slot
-    using UserSource = std::function<const GestureData* (int)>; // a slot's user gesture (nullptr: none)
-    GestureView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters, SlotSource slot, UserSource user);
+    using UserSource = std::function<const Scene* ()>; // the user gesture as the engine plays it (nullptr: none)
+    using NameSource = std::function<std::string ()>;  // the user gesture's name
+    GestureView (const VSTGUI::CRect& r, pk::ParamHost* host, MeterSource meters, UserSource user, NameSource userName);
     void draw (VSTGUI::CDrawContext* ctx) override;
     void idle ();
-    // a short note in its footer (a gesture file that could not be read) until the slot or its gesture changes
+    // a short note in its footer (a gesture file that could not be read) until the gesture changes
     void setNote (const std::string& text)
     {
         note = text;
@@ -35,22 +38,26 @@ public:
         invalid ();
     }
 
-    // the curve the picked slot plays (a factory gesture's points, or its user gesture's) and its name
-    static GestureData curveOf (pk::ParamHost* host, int slot, const GestureData* user);
+    // the gesture the Gesture choice picks (nullptr: None, or User with none loaded)
+    static const Scene* sceneOf (pk::ParamHost* host, const Scene* user);
+    // whether any 0.27 slot plays (its Target is not Off)
+    static bool slotsOn (pk::ParamHost* host);
 
 private:
     struct Now
     {
-        int slot = 0, target = 0, choice = 0;
-        double pos = -1.0, value = 0.0, pull = 0.0; // (rounded: the playhead's steps)
-        size_t userPoints = 0;
+        int choice = 0;
+        const Scene* user = nullptr;
+        bool slots = false;
+        double pos = -1.0, pull = 0.0; // (rounded: the playhead's steps)
+        std::array<float, kMaxSceneLanes> value {};
         bool operator== (const Now& o) const = default;
     };
     Now now () const;
     pk::ParamHost* host;
     MeterSource meters;
-    SlotSource slot;
     UserSource user;
+    NameSource userName;
     Now shown, noteFor;
     std::string note;
 };

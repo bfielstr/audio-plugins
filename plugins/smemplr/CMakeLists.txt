@@ -1,6 +1,13 @@
 # Smemplr: a sampler modelled on Ableton Live's Simpler.
 project(Smemplr VERSION 0.29.0.0)
 
+# One effects slot (src/core/FxSlot.h): the suite's effects as a slot's kinds, their tables and the slot's
+# engines. Smemplr's rack is a row of them; moistr's lab uses them too (as "smemplr/src/core/FxSlot.h").
+add_library(smemplr_fxslot STATIC src/core/FxSlot.cpp)
+target_include_directories(smemplr_fxslot PUBLIC ${CMAKE_SOURCE_DIR}/plugins PRIVATE src/core)
+target_link_libraries(smemplr_fxslot PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core wubr_core levlr_core smoothr_core gentlr_core)
+pk_dsp_settings(smemplr_fxslot)
+
 add_library(smemplr_core STATIC
     src/core/Params.cpp
     src/core/SampleData.cpp
@@ -13,7 +20,7 @@ add_library(smemplr_core STATIC
 )
 # Other plug-ins reuse the warp engines as "smemplr/src/core/Warp.h"; Smemplr's own code includes src/core directly.
 target_include_directories(smemplr_core PUBLIC ${CMAKE_SOURCE_DIR}/plugins ${CMAKE_SOURCE_DIR}/third_party/dr_libs PRIVATE src/core)
-target_link_libraries(smemplr_core PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core wubr_core levlr_core smoothr_core gentlr_core) # the rack
+target_link_libraries(smemplr_core PUBLIC smemplr_fxslot) # the rack (and through it the effects' cores)
 pk_dsp_settings(smemplr_core)
 
 add_executable(smemplr_tests tests/core_tests.cpp)
