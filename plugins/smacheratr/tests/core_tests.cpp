@@ -1,4 +1,5 @@
 // Headless tests for the Smacheratr DSP. Run: ./smacheratr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Color.h"
 #include "ClarityBand.h"
 #include "Engine.h"
@@ -1181,9 +1182,9 @@ TEST (performance)
         e->setParam (kPreLimit, 1.0);
         e->setParam (kPostClip, kPostSoft);
         e->setParam (kDrive, 12.0);
-        const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
         run (*e, in);
-        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
     }
     std::printf ("    CPU: %.2f%% of one core (stereo, 4x oversampling)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");

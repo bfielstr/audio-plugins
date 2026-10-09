@@ -3,6 +3,7 @@
 // towards pink and leaves pink noise alone (loudness kept, near-silent bands not boosted), the OTT stage
 // lifts quiet parts and pulls peaks down, the knob is continuous through 50 % and fast automation is
 // clean, Mix, Output and Speed, and the CPU budget.
+#include "pluginkit/testing/CpuClock.h"
 #include "Dsp.h"
 #include "Engine.h"
 #include "Params.h"
@@ -750,9 +751,9 @@ TEST (cpu_budget)
             if (heavy)
                 e->setParam (kTailBase + pk::kTailOn, 1.0);
             e->reset ();
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = run (*e, x, nullptr, 512);
-            secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0, heavy ? "100 %, the end saturator on" : "the defaults");

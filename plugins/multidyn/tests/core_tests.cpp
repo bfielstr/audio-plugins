@@ -1,4 +1,5 @@
 // Headless tests for the Multidyn DSP. Run: ./multidyn_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "smacheratr/src/core/Engine.h"
 #include "Params.h"
@@ -1650,12 +1651,12 @@ TEST (silence_costs_no_more)
     double sound = 1e9, silence = 1e9;
     for (int k = 0; k < 3; ++k)
     {
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, in, &in);
-        sound = std::min (sound, (double)(std::clock () - t0) / CLOCKS_PER_SEC / 2.0);
-        const std::clock_t t1 = std::clock ();
+        sound = std::min (sound, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec / 2.0);
+        const pk::testing::CpuClock t1 = pk::testing::cpuClock ();
         run (*e, quiet, &quiet);
-        silence = std::min (silence, (double)(std::clock () - t1) / CLOCKS_PER_SEC / 4.0);
+        silence = std::min (silence, (double)(pk::testing::cpuClock () - t1) / pk::testing::kCpuClocksPerSec / 4.0);
     }
     std::printf ("    CPU: %.2f%% with sound, %.2f%% in the silence after it\n", 100.0 * sound, 100.0 * silence);
     CHECK (silence < 2.0 * sound + 0.01, "silence costs %.2f%%, sound %.2f%%", 100.0 * silence, 100.0 * sound);
@@ -1671,9 +1672,9 @@ TEST (performance)
         e->setParam (bandParam (b, kBelowRatio), 0.7);
     }
     auto in = sine (440.0, -12.0, 10.0);
-    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+    const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     run (*e, in, &in);
-    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+    const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
     std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow"); // 4 bands plus the 4x oversampled saturator (about 1.4 % here)
     // four bands with the side-chain, the new parts one by one, up to the heaviest: the brickwall with
@@ -1700,9 +1701,9 @@ TEST (performance)
         for (int k = 0; k < 3; ++k)
         {
             e->reset ();
-            const std::clock_t t1 = std::clock ();
+            const pk::testing::CpuClock t1 = pk::testing::cpuClock ();
             run (*e, in, &in);
-            heaviest = std::min (heaviest, (double)(std::clock () - t1) / CLOCKS_PER_SEC / 10.0);
+            heaviest = std::min (heaviest, (double)(pk::testing::cpuClock () - t1) / pk::testing::kCpuClocksPerSec / 10.0);
         }
         std::printf ("    CPU: %.2f%% of one core (4 bands + side-chain: %s)\n", 100.0 * heaviest, s.name);
         if (s.slope == kXoverBrickwall && !s.sub && !s.color)

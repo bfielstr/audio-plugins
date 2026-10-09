@@ -1,4 +1,5 @@
 // Headless tests for the Para DSP. Run: ./para_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Oversampler.h"
 #include "Params.h"
@@ -1346,9 +1347,9 @@ TEST (performance)
                 e->setParam (kHpDrive, 12.0);
                 e->setParam (kLpDrive, 12.0);
             }
-            const std::clock_t t0 = std::clock ();
+            const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             run (*e, in);
-            best = std::min (best, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+            best = std::min (best, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         return best;
     };

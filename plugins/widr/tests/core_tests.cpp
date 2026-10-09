@@ -1,4 +1,5 @@
 // Headless tests for the Widr DSP. Run: ./widr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Mix.h"
 #include "Params.h"
@@ -813,9 +814,9 @@ TEST (performance)
     e->setParam (kBeyond, 0.5);
     e->reset ();
     auto in = pink (10.0, true);
-    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+    const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     run (*e, in);
-    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+    const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
     std::printf ("    CPU: %.2f%% of one core (stereo)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
 }
@@ -1465,9 +1466,9 @@ TEST (cinema_performance)
     e->setParam (kDepth, 1.0);
     e->reset ();
     auto in = pink (10.0, true);
-    const std::clock_t t0 = std::clock (); // CPU time: other programs running do not count
+    const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     run (*e, in);
-    const double secs = (double)(std::clock () - t0) / CLOCKS_PER_SEC;
+    const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
     std::printf ("    CPU: %.2f%% of one core (stereo, Cinema 100 %%)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.12, "too slow"); // (about 7 % here: the classic chain's 3.5 %, the lanes' STFT 2 %, the hall and the rest 1.5 %)
 }

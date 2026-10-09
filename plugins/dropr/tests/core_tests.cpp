@@ -1,4 +1,5 @@
 // Headless tests for the Dropr DSP. Run: ./dropr_tests [filter]
+#include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Gain.h"
 #include "Params.h"
@@ -617,9 +618,9 @@ TEST (cpu)
     for (int i = 0; i < 3; ++i)
     {
         auto e = engine ();
-        const std::clock_t t0 = std::clock ();
+        const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, in, 333);
-        secs = std::min (secs, (double)(std::clock () - t0) / CLOCKS_PER_SEC);
+        secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
     }
     std::printf ("    CPU: %.2f%% of one core (6 bands, stereo, 48 kHz, saturator on)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.10, "too slow");
