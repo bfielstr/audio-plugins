@@ -200,6 +200,25 @@ const ParamTable& paramTable ()
                                    Curve::Linear, Disp::Percent));
             }
         }
+        // 0.30: Input, Loop Lock, PARA and Sub Guard (Sub Guard on: a state saved before reads it off)
+        v.push_back (real (kInput, "Input", "Input", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kLoopLock, "Loop Lock", "Loop Lock", false));
+        v.push_back (real (kLoopPosition, "Loop Position", "Position", 0.0, kLoopPositionMax, 0.0, Curve::Linear, Disp::Beats));
+        v.push_back (real (kLoopWindow, "Loop Window", "Window", kLoopWindowMin, kLoopWindowMax, kLoopWindowDefault, Curve::Log, Disp::Beats));
+        v.push_back (choice (kLoopLength, "Loop Length", "Length", {"1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars"}, 4));
+        v.push_back (choice (kLoopShape, "Loop Shape", "Shape", {"Wrap", "Ping-Pong"}, kLoopWrap));
+        v.push_back (toggle (kParaOn, "Split On", "Split", false));
+        v.push_back (real (kParaLpFreq, "LP Freq", "LP Freq", kParaLpMin, kParaLpMax, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kParaHpFreq, "HP Freq", "HP Freq", kParaHpMin, kParaHpMax, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (percent (kParaLpMove, "LP Move", "LP Move", 0.5));
+        v.push_back (real (kParaHpMove, "HP Move", "HP Move", 0.0, kParaHpMoveMax, 2.0, Curve::Linear, Disp::Number));
+        v.push_back (percent (kParaHpLevelMove, "HP Level Move", "HP Level", 0.5));
+        v.push_back (choice (kParaRate, "Split Rate", "Rate", {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8", "1/16"}, 2));
+        v.push_back (percent (kParaMix, "Split Mix", "Mix", 1.0));
+        v.push_back (toggle (kSubGuard, "Sub Guard", "Sub Guard", true));
+        v.push_back (real (kSubGuardFreq, "Sub Guard Freq", "Freq", kGuardFreqMin, kGuardFreqMax, kGuardFreqDefault, Curve::Log, Disp::Hz));
+        v.push_back (real (kSubFloor, "Sub Floor", "Floor", kSubFloorMin, 0.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kGuardBells, "Guard Bells", "Guard Bells", false));
         return v;
     }());
     return t;
@@ -303,7 +322,8 @@ double defaultNormalized025 (uint32_t id)
         case kSweepCurve: return toNormalized (id, kCurveHard);
         case kToneOn:
         case kCleanSub:
-        case kSubBoost: return 0.0;
+        case kSubBoost:
+        case kSubGuard: return 0.0; // (0.30's Sub Guard off: the sound kept)
         default: break;
     }
     for (int b = 2; b < kNumBells; ++b)
@@ -324,6 +344,8 @@ double defaultNormalizedForVersion (uint32_t id, int version)
 {
     if (isLabParam (id))
         return defaultNormalized (id); // (before 0.30 there was no LAB: every slot Empty, every chain at 0 dB)
+    if (id == kSubGuard)
+        return version < kStateSubGuard ? 0.0 : defaultNormalized (id); // (on in a new instance; off before: the sound kept)
     if (isGestureParam (id))
         return version < 6 ? gestureOffNormalized (id) : defaultNormalized (id);
     return version < 3 ? legacyDefaultNormalized (id) : version < 5 ? defaultNormalized025 (id) : defaultNormalized (id);
@@ -338,6 +360,7 @@ double legacyDefaultNormalized (uint32_t id)
         case kGlue: return toNormalized (kGlue, 0.4);
         case kGrit: return toNormalized (kGrit, 0.2);
         case kSweep: return 0.0; // (off: the sound before 0.24)
+        case kSubGuard: return 0.0; // (off: the sound before 0.30)
         default: return defaultNormalized025 (id);
     }
 }

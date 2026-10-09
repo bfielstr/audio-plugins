@@ -176,7 +176,31 @@ enum ParamId : uint32_t
     // 0.29, bit for bit), and in a new instance (the Ocean sound; the factory preset Neuro/Neuro: neuroRecipe) ---
     kChainBase = kSceneAmount + 1,
     kLabSlotBase = kChainBase + 4 * 8,
-    kNumParams = kLabSlotBase + 19 * 88
+    // --- added in 0.30 (append only): Input, Loop Lock, the para split (PARA) and Sub Guard. Input 0 dB, Loop Lock
+    // and Split On off in a new instance and in an older state (moistr as without them, bit for bit); Sub Guard on in a
+    // new instance and off in a state saved before (defaultNormalizedForVersion), so an older project sounds as it did ---
+    kInput = kLabSlotBase + 19 * 88, // dB -24 .. +12: the gain at the very start (0 dB: untouched)
+    // Loop Lock (Engine.h: the motion clock): the movement locked to a segment of itself, played in time with the song
+    kLoopLock,     // Off / On
+    kLoopPosition, // beats 0 .. kLoopPositionMax: where on the motion clock the segment starts
+    kLoopWindow,   // beats kLoopWindowMin .. kLoopWindowMax: how much motion time the segment holds
+    kLoopLength,   // the segment's length in the song (choice: kLoopLengthBeats)
+    kLoopShape,    // Wrap (back to the start with a short glide) / Ping-Pong (forward, then back)
+    // PARA (ParaSplit.h): the signal into a low-pass and a high-pass path in parallel, each moving
+    kParaOn,          // Off / On ("Split On")
+    kParaLpFreq,      // Hz: the low-pass path's corner (Linkwitz-Riley 4th order)
+    kParaHpFreq,      // Hz: the high-pass path's lowest corner (it moves up from here)
+    kParaLpMove,      // 0 .. 1: how far the low-pass path's level moves out (1: all the way)
+    kParaHpMove,      // octaves 0 .. 4: how far the high-pass path's corner moves up
+    kParaHpLevelMove, // 0 .. 1: how far the high-pass path's level moves out
+    kParaRate,        // a cycle's length in beats (choice: kParaRateBeats)
+    kParaMix,         // 0 .. 1: the split against the dry signal
+    // Sub Guard: no level movement reaches the lows below Sub Guard Freq
+    kSubGuard,     // Off / On
+    kSubGuardFreq, // Hz 40 .. 200: the guard's Linkwitz-Riley 4th-order split
+    kSubFloor,     // dB -12 .. 0: how far the lows may dip at most (0: not at all)
+    kGuardBells,   // Off / On: the SWEEP stage's bells kept above Sub Guard Freq too
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
@@ -232,12 +256,13 @@ constexpr int postSlot (int k) { return kNumChains * kChainSlots + k; }        /
 constexpr uint32_t labSlotParam (int slot, uint32_t field) { return kLabSlotBase + kLabSlotFields * (uint32_t)slot + field; }
 constexpr uint32_t labBlockParam (int slot, uint32_t j) { return labSlotParam (slot, kLabBlock + j); }
 constexpr bool isChainParam (uint32_t id) { return id >= kChainBase && id < kLabSlotBase; }
-constexpr bool isLabSlotParam (uint32_t id) { return id >= kLabSlotBase && id < kNumParams; }
-constexpr bool isLabParam (uint32_t id) { return id >= kChainBase && id < kNumParams; }
+constexpr uint32_t kLabEnd = kInput; // (the LAB's IDs end here)
+constexpr bool isLabSlotParam (uint32_t id) { return id >= kLabSlotBase && id < kLabEnd; }
+constexpr bool isLabParam (uint32_t id) { return id >= kChainBase && id < kLabEnd; }
 constexpr int labSlotOf (uint32_t id) { return (int)((id - kLabSlotBase) / kLabSlotFields); }   // (a lab slot parameter)
 constexpr uint32_t labFieldOf (uint32_t id) { return (id - kLabSlotBase) % kLabSlotFields; }   // (a lab slot parameter)
 constexpr bool isChainSpare (uint32_t id) { return isChainParam (id) && (id - kChainBase) % kChainFields >= kChainSource; }
-static_assert (kChainBase == 227 && kChainFields == 8 && kLabSlotBase == 259 && kNumLabSlots == 19 && kNumParams == 1931,
+static_assert (kChainBase == 227 && kChainFields == 8 && kLabSlotBase == 259 && kNumLabSlots == 19 && kLabEnd == 1931,
                "saved IDs: the LAB's chains at 227 .. 258, its slots at 259 .. 1930");
 static_assert (chainId (0, kChainLevel) == 227 && chainId (0, kChainMono) == 230 && chainId (1, kChainLevel) == 235 &&
                    chainId (2, kChainLevel) == 243 && chainId (3, kChainSpare3) == 258,
@@ -246,6 +271,24 @@ static_assert (labSlotParam (chainSlot (0, 0), kLabType) == 259 && labSlotParam 
                    labSlotParam (chainSlot (1, 0), kLabType) == 611 && labSlotParam (chainSlot (2, 0), kLabType) == 963 &&
                    labSlotParam (postSlot (0), kLabType) == 1667 && labBlockParam (postSlot (2), 85) == 1930,
                "saved IDs: the slots, kLabSlotFields each (Type, On, 86 block positions), chain by chain, then POST");
+static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopPosition == 1933 && kLoopWindow == 1934 && kLoopLength == 1935 &&
+                   kLoopShape == 1936 && kParaOn == 1937 && kParaLpFreq == 1938 && kParaHpFreq == 1939 && kParaLpMove == 1940 &&
+                   kParaHpMove == 1941 && kParaHpLevelMove == 1942 && kParaRate == 1943 && kParaMix == 1944 && kSubGuard == 1945 &&
+                   kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kNumParams == 1949,
+               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948");
+// Loop Lock: Position's and Window's ranges (beats) and Length's choices (beats: 1/16 .. 4 bars)
+constexpr double kLoopPositionMax = 16.0, kLoopWindowMin = 0.125, kLoopWindowMax = 16.0, kLoopWindowDefault = 4.0;
+constexpr int kNumLoopLengths = 7;
+constexpr double kLoopLengthBeats[kNumLoopLengths] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
+enum LoopShape { kLoopWrap = 0, kLoopPingPong };
+// PARA: Rate's choices (a cycle in beats: 4 bars .. 1/16), the corners' ranges (Hz) and HP Move's (octaves)
+constexpr int kNumParaRates = 7;
+constexpr double kParaRateBeats[kNumParaRates] = {16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25};
+constexpr double kParaLpMin = 40.0, kParaLpMax = 2000.0, kParaHpMin = 100.0, kParaHpMax = 8000.0, kParaHpMoveMax = 4.0;
+// Sub Guard: its corner's range (Hz) and Sub Floor's (dB)
+constexpr double kGuardFreqMin = 40.0, kGuardFreqMax = 200.0, kGuardFreqDefault = 90.0, kSubFloorMin = -12.0;
+// the state version that has Sub Guard (State.cpp): a state saved before reads it off
+constexpr int kStateSubGuard = 9;
 // a slot's Type: Empty, then smemplr's kinds (smemplr::FxType, in its order), with room for kinds still to come (their
 // names "Kind 10" .. are placeholders; the engine runs them as Empty). The choice's length is saved: never change it.
 constexpr int kLabKinds = 32;
@@ -297,6 +340,10 @@ enum GestureTarget
     kTargetHighOtt,      // the High chain's
     kTargetAirOtt,       // the Air chain's
     kTargetPostOtt,      // POST's OTT: the Amount of its first multidyn
+    // (0.30: PARA's, for the one gesture's lanes)
+    kTargetParaLp,       // the low-pass path's level (1: in, 0: out)
+    kTargetParaHpFreq,   // the high-pass path's corner over its travel (0: at HP Freq, 1: HP Move octaves up)
+    kTargetParaHpLevel,  // the high-pass path's level (1: in, 0: out)
     kNumTargets
 };
 constexpr int kNumSlotTargets = kTargetShift + 1; // the 0.27 slots' Target choice (its entries are saved: never more)
@@ -305,7 +352,7 @@ constexpr const char* kTargetNames[kNumTargets] = {"Off",        "Mid Level", "H
                                                    "Wobble Amount", "Close",  "Liquid Pos", "Dirt",      "Bells",
                                                    "Mid X",      "High X",    "Seed Blend", "Shift",
                                                    "Mid Grit",   "High Grit", "Air Grit",   "Mid OTT",   "High OTT",
-                                                   "Air OTT",    "Post OTT"};
+                                                   "Air OTT",    "Post OTT",  "Split LP",   "Split HP Freq", "Split HP Level"};
 enum GestureMode { kModeLoop = 0, kModeWalk };
 // Length: the gesture's own (0), else a loop's length in beats; Speed (Walk): Hold, then x1/8 .. x4
 constexpr int kNumGestureLengths = 8, kNumGestureSpeeds = 7;
@@ -368,7 +415,8 @@ double legacyDefaultNormalized (uint32_t id);
 // High Shelf on, A and B at Width 0.71 and Phase 0, so before the Ocean recipe) with the 0.26 parameters at the
 // values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
 // from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized); before 0.30 the one gesture None (its
-// default); before 0.30 the LAB's defaults (every slot Empty, every chain at 0 dB: the sound before it).
+// default), the LAB's defaults (every slot Empty, every chain at 0 dB: the sound before it), Input 0 dB, Loop Lock and
+// Split On off (their defaults) and Sub Guard off (on in a new instance).
 double defaultNormalizedForVersion (uint32_t id, int version);
 // The gestures as a state saved before 0.27 reads them: every Target Off, Wobble Amount 0 (the rest at the defaults)
 double gestureOffNormalized (uint32_t id);
