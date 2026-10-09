@@ -72,6 +72,33 @@ struct Lr4Split
     }
 };
 
+// A Linkwitz-Riley 8th-order split (48 dB/oct; Sub Guard's): each side a 4th-order Butterworth (two sections, Q 0.54 and
+// 1.31) twice. Both are -6 dB at the corner and add up to an all-pass (flat), and a component an octave below the corner
+// is only 0.4 % in the high side (0.69 x the corner: 5 %), so what moves above it hardly reaches below.
+struct Lr8Split
+{
+    static void coefs (double g, SvfCoefs* c) // (c[0], c[1]: the two sections)
+    {
+        c[0].set (g, 1.0 / 0.54119610014619698);
+        c[1].set (g, 1.0 / 1.3065629648763766);
+    }
+    Svf lo[4], hi[4];
+    void reset ()
+    {
+        for (auto& f : lo)
+            f.reset ();
+        for (auto& f : hi)
+            f.reset ();
+    }
+    inline double low (double x, const SvfCoefs* c) { return lo[3].tick (lo[2].tick (lo[1].tick (lo[0].tick (x, c[0]).lp, c[1]).lp, c[0]).lp, c[1]).lp; }
+    inline double high (double x, const SvfCoefs* c) { return hi[3].tick (hi[2].tick (hi[1].tick (hi[0].tick (x, c[0]).hp, c[1]).hp, c[0]).hp, c[1]).hp; }
+    inline void tick (double x, const SvfCoefs* c, double& l, double& h)
+    {
+        l = low (x, c);
+        h = high (x, c);
+    }
+};
+
 // The all-pass an Lr4Split's two sides add up to: x - 2 k (band-pass).
 struct Lr4Allpass
 {
@@ -257,6 +284,7 @@ public:
     }
     double amountNow () const { return amount; }
     double gainReductionDb () const { return grDb; }
+    double gainDbNow () const { return amount > 0.0 ? makeup - grDb : 0.0; } // the gain it applies now (makeup - reduction)
     // In place, n samples (the gain is worked out at the block's start from the detector and glides to it).
     void process (double* l, double* r, int n)
     {

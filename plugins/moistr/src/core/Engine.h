@@ -76,12 +76,65 @@
 //                            Seed Blend's own value)
 // Both channels share every gain and coefficient: a mono input stays mono.
 //
-// The latency is the end saturator's (always in the path).
+// 0.30, the one gesture (Gesture.h: a Scene; None by default and in older states, so the engine is then 0.27's,
+// bit for bit). One clock (Loop or Walk, Length, Speed, Position, as a slot's) places every lane of the scene at
+// the same point of its timeline; each lane pulls its target as a slot does, towards lo + (hi - lo) x its curve
+// (its range, in the target's own 0 .. 1), by Amount (gliding). Lanes come after the slots (a 0.27 project's
+// slots still play). Changing the gesture fades the old one out (20 ms), then the new one in.
+//
+// 0.30, the LAB (Lab.h; every slot Empty and every chain at 0 dB by default and in older states, so the engine is then
+// 0.29's, bit for bit): effects chains on the Mid, High and Air bands of the first pass, after their moving gains,
+// and POST on their sum, before Liquid, Close, Wobble and the shifter. The Low band is delayed to line up and never
+// goes through them.
+//
+// 0.30, Input, the motion clock and Loop Lock, PARA and Sub Guard (Input 0 dB, Loop Lock and Split On off by default and
+// in older states, Sub Guard off in older states: the engine is then as without them, bit for bit):
+//   input -> Input -> SWEEP -> [the guard's tap] -> PARA -> Drive -> pass 1 -> [pass 2] -> Mix -> Output -> Smacheratr
+//         -> [Sub Guard]
+//   Input       a gain at the very start (gliding over 20 ms; the dry signal for Mix has it too). Not run at 0 dB.
+//   the motion clock  everything that moves reads its time from one clock, in beats: the bells' and the shelf's clocks,
+//               the bands' movement (theta) and Liquid, the gestures (slots and the one gesture: every lane, so the
+//               Close, Dirt, Bells, Shift, Seed Blend, X and LAB targets too), Wobble's phase and PARA. With Loop Lock off
+//               it is the song position while the host plays (running on at the last tempo while stopped) and each part
+//               reads it as before (the bells, the shelf, the bands and Wobble run on from it, bit for bit). The
+//               frequency shifter's oscillator is not movement (it is the shift itself) and runs on.
+//   Loop Lock   the motion clock plays a region of the window (LoopWindow.h: as long as the slowest cycle of what
+//               moves, every modulator's phase measured from its start), again at every Length of the song: motion
+//               beats = window x (Start + (End - Start) x shape (u)), u = frac (song beats / Length) (Natural: the region
+//               at its own speed, a pass's length kept until it ends). Every part is a pure function of them (a synced
+//               clock: beats / its cycle's beats; a free one: beats x 60 / tempo x its rate; Wobble's phase the integral of
+//               its rate over the motion beats, put back at each pass's start). Wrap glides back over the last 1/16 of a
+//               pass (12 .. 60 ms; Natural: 60 ms after it), Bounce goes forward then back. Start, End and the window glide
+//               (80 ms), the tempo the free clocks use too (200 ms). Stopped, the song beats run on at the last tempo.
+//   Drift       (LoopWindow.h: makeDrift) each modulator's phase x its factor + its offset, from Drift Seed; seed 0: off
+//   PARA        ParaSplit.h, before Drive and the bands: its movement feeds Drive, the Glue, Grit and the LAB's clippers;
+//               after the SWEEP stage, whose make-up follows its input's slow level (a moving input would pump it)
+//   Sub Guard   no level movement reaches the lows below Sub Guard Freq. The steady lows: the SWEEP stage's output
+//               (with Guard Bells its steady tap, Sweep.h), low-passed at the corner (Linkwitz-Riley 8th order), sent
+//               through the passes' all-passes only (the same corners, every band at unity: in phase with what the passes
+//               do to the lows), through a Glue and Grit of their own (their gain on the lows alone), delayed with the LAB's
+//               Low band, at the Low band's Level (none while a LAB chain is soloed), then Mix (the dry signal's lows for
+//               the rest) and Output, and delayed as the end saturator delays, at the gain it has on them alone (an end
+//               saturator of their own, the same settings: only its level is used). After the end saturator the output's
+//               lows (the low side of the same split) are replaced by them, its band above the corner kept as it is. So no
+//               dip after the tap reaches the lows (the bands' fall and Drop Out, Low Dip, the gestures' level lanes,
+//               Wobble, the LAB chains, the Glue's pumping, the end saturator pressed by the rest), and PARA's low-pass path
+//               moves only above the corner (ParaSplit.h). Low Push (a swell) is held too. The SWEEP stage's bells move
+//               the lows on purpose and are kept, unless Guard Bells. Sub Floor: the guarded lows are a blend, the steady
+//               ones x 10^(Floor / 20) and the wet ones x the rest, so they may dip at most to Sub Floor. Switching fades
+//               over 20 ms; off it is not run (the engine is then as without it, bit for bit).
+//
+// The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too) and the end
+// saturator's (always in the path).
 #pragma once
 
 #include "Dsp.h"
 #include "Gesture.h"
+#include "Lab.h"
+#include "LoopDepth.h"
+#include "LoopWindow.h"
 #include "Movement.h"
+#include "ParaSplit.h"
 #include "Params.h"
 #include "Sweep.h"
 
@@ -91,6 +144,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <vector>
 
 namespace moistr {
 
@@ -133,6 +187,20 @@ struct Meters
     // how far it pulls now (0: off)
     std::array<std::atomic<float>, kNumGestureSlots> gesturePos {}, gestureValue {}, gesturePull {};
     std::atomic<float> wobbleGain {1.0f}; // Wobble's gain now (1: none)
+    // the one gesture (0.30): where in it the clock is (0 .. 1), how far it pulls now (0: none) and each lane's
+    // value there (its curve, smoothed)
+    std::atomic<float> scenePos {0.0f}, scenePull {0.0f};
+    std::array<std::atomic<float>, kMaxSceneLanes> laneValue {};
+    // the LAB (0.30): its latency now (samples; -1 before the first block: a controller watching it tells the host,
+    // pk::ControllerBase::watchLatency)
+    std::atomic<int> labLatency {-1};
+    // Loop Lock (0.30): on, the segment's start and length on the motion clock (beats) and the motion clock now (beats)
+    std::atomic<bool> loopOn {false};
+    // (0.30, Loop Lock: the region's start and end in the window, the window (beats; the slowest cycle of what moves)
+    // and the tempo it is shown at)
+    std::atomic<float> loopStart {0.0f}, loopEnd {1.0f}, windowBeats {4.0f}, motionBeats {0.0f}, tempo {120.0f};
+    // PARA and Sub Guard (0.30): how far each is faded in, the paths' levels and the high-pass path's corner now
+    std::atomic<float> paraAmount {0.0f}, paraLp {1.0f}, paraHp {1.0f}, paraHpHz {250.0f}, guardAmount {0.0f};
 };
 
 // Liquid: the peaks' height at Liquid 100 % (dB), Liquid Res's Q range, and with Link the share of F1's
@@ -140,8 +208,12 @@ struct Meters
 constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLiquidQMax = 12.0, kLinkFollow = 0.5;
 // the gestures: a level target's range (dB) before it fades to silence (over its last 1 / kLevelFadeShare); Close's
 // travel (octaves) and Q at its most; Smooth's shortest (s) and longest (beats) glide
-constexpr double kGestureLevelDb = 48.0, kLevelFadeShare = 16.0, kCloseOctaves = 6.0, kCloseQ = 5.0, kCloseOpenHz = 20000.0;
+// (kGestureLevelDb, kCloseOctaves and kCloseOpenHz: Gesture.h)
+constexpr double kLevelFadeShare = 16.0, kCloseQ = 5.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
+// Sub Guard: the end saturator's gain on the steady lows follows them over this (s); its delay line's length (samples)
+constexpr double kGuardTailSec = 0.3;
+constexpr int kGuardDelay = 1 << 12;
 
 class Engine
 {
@@ -153,7 +225,10 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return lab.latency () + tail.latency (); } // the LAB's, then the end saturator's
+    int labLatency () const { return lab.latency (); }
+    const Lab& labStage () const { return lab; }
+    Lab& labStage () { return lab; }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
@@ -206,7 +281,8 @@ public:
     // what the gestures do now: the gain on Mid, High and Air (1: none), Wobble's phase (cycles), rate (cycles
     // per beat), amount and gain, Close's corner (Hz; 0 open) and the Dirt and Bells pulls (0 .. 1)
     double gestureGain (int band) const { return gLevel[band]; }
-    double wobblePhase () const { return wobPhase; }
+    double wobblePhase () const { return wobPhase + wobOffset; }
+    const MotionDrift& motionDrift () const { return drift; }
     double wobbleRate () const { return wobRate; }
     double wobbleAmount () const { return wobAmt; }
     double wobbleGainNow () const { return wobGain; }
@@ -216,6 +292,38 @@ public:
     bool gesturesRunning () const { return gestActive; }
     // the gesture a slot plays now (its Gesture choice: a factory one, or its user gesture)
     const Gesture& gestureOf (int g) const;
+
+    // The one gesture (0.30). The user's (the Gesture choice's User): the engine keeps the pointer (nullptr: none);
+    // the caller keeps it alive and unchanged while it is set. (A new one playing in its place takes over at once.)
+    void setUserScene (const Scene* s)
+    {
+        if (scene == userScene)
+            scene = s;
+        userScene = s;
+    }
+    // the scene playing now (nullptr: none), where in it the clock is (0 .. 1), how far it pulls (Amount, gliding;
+    // 0 while it fades out to change) and a lane's curve value now (smoothed, 0 .. 1) and where it pulls its target to
+    const Scene* scenePlaying () const { return scene; }
+    double scenePos () const { return scenePosNow; }
+    double scenePull () const { return sceneK; }
+    double laneValue (int i) const { return lane[i].s; }
+    double laneTargetValue (int i) const { return lane[i].shaped; }
+
+    // 0.30: the motion clock now (beats: the song position, or Loop Lock's place in its segment) and whether Loop Lock
+    // holds it; Input's gain now; PARA; Sub Guard (how far it is faded in, the steady lows' gain now)
+    double motionBeats () const { return motionNow; }
+    bool loopLocked () const { return locked; }
+    // where Loop Lock puts the motion clock at song beats `songBeats` (with the region and the window as they are now)
+    double loopMotionAt (double songBeats) const;
+    // Loop Lock's window now (beats: the slowest cycle of what moves, LoopWindow.h) and a pass of its region (song beats)
+    double windowNow () const;
+    double loopWindowBeats () const { return std::exp2 (logWindow); }
+    double loopLengthNow () const;
+    const Scene* sceneWanted () const; // (the one gesture the Gesture choice picks)
+    double inputGain () const { return inGain; }
+    const ParaSplit& paraStage () const { return para; }
+    double guardAmount () const { return guardFade; }
+    double guardSubGain () const { return subGainNow; }
 
 private:
     struct PassState
@@ -256,13 +364,28 @@ private:
     // the targets at theta th for a pass: g per corner and gain per band (snap: no smoothing)
     void targets (int pass, double th, double* g, double* gain, bool snap);
     void runPass (int pass, double* l, double* r, int m, double thetaEnd);
+    // the first pass with the LAB (labRun): the split and the bands' gains, the chains and POST (Lab::run), then what
+    // runPass does on the bands above Low (Liquid, Close, Wobble, the shifter) on their sum, and the Low band back
+    void runLab (PassState& s, double* l, double* r, int m, const double* g1, const double* gain1, dsp::SvfCoefs* c, bool still, bool shifting,
+                 bool liquidOn, bool auxOn, bool closeOn, bool wobbleOn);
     void liquidTargets (double th, bool snap); // Liquid's filters at th (after pass 0's targets)
+    // the band movement's phase at motion beats (Loop Lock)
+    double thetaAtBeats (double beats) const;
+    // Drift (LoopWindow.h): the bands' phase as they use it, and the drift worked out again when its settings change
+    double bandTheta (double th) const;
+    void updateDrift ();
+    // Sub Guard: the steady lows through pass `pass`'s all-passes (its corners from gNow to g1, as the split has them)
+    void subAllpass (int pass, int m, const double* g1, bool still);
     // the gestures: every slot at the song position `beats` (the end of a tick of m samples; snap: no gliding),
     // then what they do this tick
     void gestureTick (int m, double beats, bool snap);
-    // a target pulled by every slot on it (in slot order), from `base`; targeted: some slot pulls it now
+    // a target pulled by every slot on it (in slot order), then every lane of the one gesture, from `base`;
+    // targeted: some slot or lane pulls it now. (Mid X and High X: the lanes pull in log2 Hz, after the slots:
+    // pulledX.)
     double pulled (int target, double base) const;
     bool targeted (int target) const;
+    bool slotTargeted (int target) const;
+    double pulledX (int target, double log2Hz) const;
 
     ParamArray p = defaultParams ();
     double sr = 48000.0;
@@ -296,6 +419,12 @@ private:
         bool primed = false;     // (s has a value)
     };
     SlotRun slot[kNumGestureSlots];
+    // the one gesture (0.30): its lanes (as slots: lane i pulls the scene's lane i's target; shaped is where, in
+    // the target's own 0 .. 1), the scene playing, the user's, how far it pulls and the clock's place
+    SlotRun lane[kMaxSceneLanes];
+    const Scene* scene = nullptr;
+    const Scene* userScene = nullptr;
+    double sceneK = 0.0, scenePosNow = 0.0;
     const Gesture* user[kNumGestureSlots] {};
     Gesture flatGesture;
     double gBeats = 0.0, gBeatsNow = 0.0, gBpm = 120.0; // (the beats at the block's start; free-running while stopped)
@@ -329,6 +458,58 @@ private:
     int quiet = 0; // samples since the input was last heard
     Meters* meters = nullptr;
     smacheratr::Tail tail;
+    // the LAB (0.30), whether it runs this tick (Lab::active), and the dry signal's delay to its latency (always
+    // written, read only while it has one)
+    Lab lab;
+    bool labRun = false;
+    std::vector<float> dryDelay[2];
+    int dryW = 0;
+    // Input (0.30): its gain now (gliding)
+    float inGain = 1.0f;
+    // the motion clock and Loop Lock (0.30): on, its Start and End and the window (log2) gliding, the tempo its free clocks use
+    // (gliding), the motion clock at the tick's end and how far it moved in the tick
+    bool locked = false;
+    double loopPos = 0.0, loopEnd = 1.0, logWindow = 2.0, windowTarget = 2.0, lockBpm = 120.0, motionNow = 0.0, motionStep = 0.0;
+    // (Wobble's phase at the segment's start, for the segment as it was then; the segment count of the song)
+    double anchorPhase = 0.0, anchorPos = 0.0, anchorEnd = 0.0, anchorWindow = 0.0, anchorLength = 0.0;
+    bool anchorValid = false;
+    // Drift: the modulators' factors and offsets, the settings they were made for, Wobble's offset (cycles)
+    MotionDrift drift;
+    int driftSeed = -1;
+    double driftStart = -1.0, driftSpeed = -1.0, wobOffset = 0.0;
+    // (Natural: the pass playing, its start in the song and its length, and a count of them)
+    double natStart = 0.0, natLen = 1.0;
+    bool natValid = false;
+    int64_t natPass = 0;
+    int64_t loopIndex = -1;
+    // Loop Depth (LoopDepth.h): every modulated value through it (mutable: the lifts are worked out in const functions);
+    // whether a pass has started since Loop Lock came on (the first one is cut short: not a range)
+    mutable LoopDepth loopDepth;
+    bool depthPrimed = false;
+    // PARA (0.30)
+    ParaSplit para;
+    // Sub Guard (0.30): its fade, corner (log2, gliding; g at the tick's start and end), Sub Floor's share (gliding), the
+    // steady lows' gain at the tick's start and end and their level match; the tap's split, the steady lows (this tick)
+    // and their all-passes per pass and corner, their delay to the LAB's latency, and the wet signal's split
+    double guardFade = 0.0, logGuard = 0.0, guardGPrev = 0.0, guardGNow = 0.0, floorShare = 1.0, subGainPrev = 1.0, subGainNow = 1.0;
+    dsp::Glue subGlue[kMaxPasses];
+    dsp::Saturator subGrit[kMaxPasses];
+    double guardBellsTap = 0.0; // (the SWEEP stage's steady tap's share: Guard Bells' fade)
+    // the replacement after the end saturator: whether this block has one, per sample the guard's corner (g), fade and Sub
+    // Floor's share, the steady lows at the output (then through tailSub); the dry signal's lows (for Mix)
+    bool guardBlock = false;
+    std::vector<double> guardG, guardMix, guardShare;
+    std::vector<float> subOut[2], subThru[2], tailDelay[2];
+    int tailW = 0;
+    double tailInMs = 0.0, tailOutMs = 0.0;
+    dsp::Lr8Split guardDry[2];
+    smacheratr::Tail tailSub;
+    dsp::Lr8Split guardTap[2], guardWet[2];
+    dsp::Lr4Allpass subAp[kMaxPasses][kMaxXovers][2];
+    double subLow[2][kTick] {}, subLow2[2][kTick] {};
+    std::vector<double> subDelay[2];
+    int subW = 0;
+    bool guardRun = false; // (this tick)
 };
 
 } // namespace moistr

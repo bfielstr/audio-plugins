@@ -2,9 +2,12 @@
 
 #include "BandView.h"
 #include "GestureView.h"
+#include "LoopView.h"
 #include "Help.h"
 #include "SweepView.h"
 #include "plugin/Controller.h"
+
+#include "smemplr/src/core/FxSlot.h"
 
 #include "pluginkit/ui/Theme.h"
 #include "pluginkit/vst/Clipboard.h"
@@ -15,7 +18,17 @@
 
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <spawn.h>
+#include <sys/wait.h>
+extern char** environ;
+#endif
 
 namespace moistr {
 
@@ -37,6 +50,86 @@ public:
         // the ground, the header band and the copper window frame (docs/THEME.md, "Window")
         pk::draw::window (ctx, CRect (0, 0, getViewSize ().getWidth (), getViewSize ().getHeight ()), 34);
     }
+};
+
+// A LAB slot's values through its kind's own table and units (the kind the LAB shows there): a control on it edits the
+// slot's value; turned while the slot holds another kind (Empty), it loads the kind there first (from the block's
+// values, the kind's defaults until they are changed).
+class LabSlotHost : public pk::ParamHost
+{
+public:
+    LabSlotHost (pk::ParamHost* host, Controller* c, int s, int k) : in (host), ctl (c), slot (s), kind (k) {}
+    const pk::ParamTable& table () override { return smemplr::fxTable (kind); }
+    double norm (uint32_t id) override { return in->norm (idOf (id)); }
+    double plainValue (uint32_t id) override { return table ().toPlain (id, norm (id)); }
+    void beginEdit (uint32_t id) override
+    {
+        load ();
+        in->beginEdit (idOf (id));
+    }
+    void setNorm (uint32_t id, double v) override { in->setNorm (idOf (id), v); }
+    void endEdit (uint32_t id) override { in->endEdit (idOf (id)); }
+    std::string valueText (uint32_t id) override { return table ().toText (id, plainValue (id)); }
+    int64_t sourceParam (uint32_t id) override { return idOf (id); }
+
+protected:
+    uint32_t idOf (uint32_t id) const { return labBlockParam (slot, (uint32_t)smemplr::fxBlockOf (kind, id)); }
+    void load ()
+    {
+        if (ctl->labKind (slot) != kind)
+            in->setOnce (labSlotParam (slot, kLabType), paramTable ().toNormalized (labSlotParam (slot, kLabType), kind));
+    }
+    pk::ParamHost* in;
+    Controller* ctl;
+    int slot, kind;
+};
+
+// POST's OTT Up and Down (ids 0 and 1, 0 .. 100 %) on its multidyn's bands' Below and Above ratios: 100 % at OTT's own
+// ratios (multidyn's defaults), 0 % at 1:1 (no upward or downward compression), in between the strength (1 - 1/r)
+// that multidyn's OTT style reads, scaled. Every band moves together; the first band's ratio is what they show.
+class OttRatioHost : public LabSlotHost
+{
+public:
+    OttRatioHost (pk::ParamHost* host, Controller* c, int s) : LabSlotHost (host, c, s, smemplr::kFxMultidyn) {}
+    const pk::ParamTable& table () override
+    {
+        using namespace pk::make;
+        static const pk::ParamTable t (std::vector<pk::ParamInfo> {percent (0, "OTT Up", "Up", 1.0), percent (1, "OTT Down", "Down", 1.0)});
+        return t;
+    }
+    double norm (uint32_t id) override
+    {
+        const uint32_t f = field (id);
+        const double r = multidyn::toPlain (multidyn::bandParam (0, f), in->norm (ratioId (0, f)));
+        return std::clamp ((1.0 - 1.0 / std::max (r, 1e-3)) / (1.0 - 1.0 / own (0, f)), 0.0, 1.0);
+    }
+    void beginEdit (uint32_t id) override
+    {
+        load ();
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+            in->beginEdit (ratioId (b, field (id)));
+    }
+    void setNorm (uint32_t id, double v) override
+    {
+        const uint32_t f = field (id);
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+        {
+            const double r = 1.0 / std::max (1e-6, 1.0 - std::clamp (v, 0.0, 1.0) * (1.0 - 1.0 / own (b, f)));
+            in->setNorm (ratioId (b, f), multidyn::toNormalized (multidyn::bandParam (b, f), r));
+        }
+    }
+    void endEdit (uint32_t id) override
+    {
+        for (int b = 0; b < multidyn::kMaxBands; ++b)
+            in->endEdit (ratioId (b, field (id)));
+    }
+    std::string valueText (uint32_t id) override { return table ().toText (id, norm (id)); }
+    int64_t sourceParam (uint32_t id) override { return ratioId (0, field (id)); }
+
+private:
+    static uint32_t field (uint32_t id) { return id == 0 ? (uint32_t)multidyn::kBelowRatio : (uint32_t)multidyn::kAboveRatio; }
+    static double own (int b, uint32_t f) { return multidyn::paramTable ().info (multidyn::bandParam (b, (int)f)).def; }
+    uint32_t ratioId (int b, uint32_t f) const { return idOf (multidyn::bandParam (b, (int)f)); }
 };
 
 // a panel's knobs in a row (bipolar: drawn from the centre)
@@ -66,12 +159,20 @@ void Editor::onClose ()
         bellKnobs[b].clear ();
     }
     liquidKnobs.clear ();
-    for (int g = 0; g < kNumGestureSlots; ++g)
+    labViews.clear ();
+    for (int c = 0; c <= kNumBandChains; ++c)
     {
-        slotViews[g].clear ();
-        slotControls[g].clear ();
-        speedViews[g] = nullptr;
+        labSat[c].clear ();
+        labOtt[c].clear ();
+        labAll[c].clear ();
     }
+    sceneControls.clear ();
+    loopView = nullptr;
+    loopControls.clear ();
+    driftKnobs.clear ();
+    paraControls.clear ();
+    guardControls.clear ();
+    sceneSpeed = nullptr;
     wobbleKnobs.clear ();
     gestureView = nullptr;
     latencyLabel = nullptr;
@@ -300,59 +401,34 @@ void Editor::buildUI (CFrame* f)
     root->addView (out);
     knobs (out, kOutRight - kOutLeft, {{kMix}, {kOutput, true}});
 
-    // the gestures: a slot picker (1 .. 4) and File (a user gesture for the picked slot); the picked slot's
-    // Gesture and Target, Mode, Length and Speed, Position, Smooth and Depth; Intensity for all of them
-    auto* gestures = new Panel (CRect (kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH), "GESTURES");
+    // the gesture (0.30): ONE gesture moving many targets together. Gesture and File (a user gesture from the
+    // Gestures folder); Mode, Length and Speed; Position, Smooth and Amount
+    auto* gestures = new Panel (CRect (kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH), "GESTURE");
     root->addView (gestures);
-    for (int g = 0; g < kNumGestureSlots; ++g)
     {
-        static const char* const numbers[kNumGestureSlots] = {"1", "2", "3", "4"};
-        const double x = kSwitchLeft + kSlotCellW * g, xr = x + kSlotCellW - 2.0;
-        auto* pick = new ActionButton (CRect (x, kSlotTop, xr, kSlotTop + kSlotRowH), numbers[g], [this, g] { pickSlot (g); },
-                                       [this, g] { return pickedSlot == g; });
-        pk::setHelp (pick, "Slot", help::kGestureSlots);
-        gestures->addView (pick);
-        auto keep = [&] (pk::ParamView* v, bool dims = true) {
-            slotViews[g].push_back (v);
-            if (dims)
-                slotControls[g].push_back (v);
-            return v;
-        };
-        auto label = [&] (double x0, double y, double w, const char* t) {
-            auto* l = new Label (CRect (x0, y + 3.0, x0 + w, y + 3.0 + 14.0), t, 9.5);
-            gestures->addView (l);
-            slotViews[g].push_back (l);
-        };
-        label (kSwitchLeft, kGestureMenuTop, kGestureLabelW, "Gesture");
-        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureMenuTop, kGestureMenuRight, kGestureMenuTop + kSwitchH),
-                                              this, gestureId (g, kGestureChoice))));
-        label (kSwitchLeft, kGestureTargetTop, kGestureLabelW, "Target");
-        keep (bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureTargetTop, kGestureMenuRight, kGestureTargetTop + kSwitchH),
-                                              this, gestureId (g, kGestureTarget))),
-              false);
-        keep (bind (gestures, new Segmented (CRect (kGestureColLeft, kSlotTop, kGestureColRight, kSlotTop + kSlotRowH), this, gestureId (g, kGestureMode),
-                                             {"Loop", "Walk"})));
-        label (kGestureColLeft, kGestureMenuTop, kGestureColLabelW, "Length");
-        keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureMenuTop, kGestureColRight, kGestureMenuTop + kSwitchH),
-                                              this, gestureId (g, kGestureLength))));
-        label (kGestureColLeft, kGestureTargetTop, kGestureColLabelW, "Speed");
-        speedViews[g] = keep (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureTargetTop, kGestureColRight,
-                                                                     kGestureTargetTop + kSwitchH),
-                                                              this, gestureId (g, kGestureSpeed))));
+        auto label = [&] (double x0, double y, double w, const char* t) { gestures->addView (new Label (CRect (x0, y + 3.0, x0 + w, y + 17.0), t, 9.5)); };
+        label (kSwitchLeft, kGestureTop, kGestureLabelW, "Gesture");
+        bind (gestures, new pk::Choice (CRect (kSwitchLeft + kGestureLabelW, kGestureTop, kGestureMenuRight, kGestureTop + kGestureRowH), this, kScene));
+        auto* file = new ActionButton (CRect (kSwitchLeft, kGestureFileTop, kGestureMenuRight, kGestureFileTop + kGestureRowH), "File",
+                                       [this] { showGestureFiles (layoutPoint (CPoint (kGesturesLeft + kSwitchLeft, kRow4 + kGestureFileTop + kGestureRowH))); });
+        pk::setHelp (file, "File", help::kGestureFile);
+        gestures->addView (file);
+        sceneControls.push_back (bind (gestures, new Segmented (CRect (kGestureColLeft, kGestureTop, kGestureColRight, kGestureTop + kGestureRowH), this,
+                                                                kSceneMode, {"Loop", "Walk"})));
+        label (kGestureColLeft, kGestureLengthTop, kGestureColLabelW, "Length");
+        sceneControls.push_back (bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureLengthTop, kGestureColRight,
+                                                                        kGestureLengthTop + kGestureRowH),
+                                                                 this, kSceneLength)));
+        label (kGestureColLeft, kGestureSpeedTop, kGestureColLabelW, "Speed");
+        sceneSpeed = bind (gestures, new pk::Choice (CRect (kGestureColLeft + kGestureColLabelW, kGestureSpeedTop, kGestureColRight,
+                                                            kGestureSpeedTop + kGestureRowH),
+                                                     this, kSceneSpeed));
         int i = 0;
-        for (GestureField f : {kGesturePosition, kGestureSmooth, kGestureDepth})
+        for (uint32_t id : {kScenePosition, kSceneSmooth, kSceneAmount})
         {
             const double kx = kGestureKnobLeft + kKnobStep * i++;
-            keep (bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, gestureId (g, f), nullptr, f == kGestureDepth)));
+            sceneControls.push_back (bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, id)));
         }
-    }
-    auto* file = new ActionButton (CRect (kGestureFileLeft, kSlotTop, kGestureMenuRight, kSlotTop + kSlotRowH), "File",
-                                   [this] { showGestureFiles (layoutPoint (CPoint (kGesturesLeft + kGestureFileLeft, kRow4 + kSlotTop + kSlotRowH))); });
-    pk::setHelp (file, "File", help::kGestureFile);
-    gestures->addView (file);
-    {
-        const double kx = kGestureKnobLeft + kKnobStep * 3;
-        bind (gestures, new Knob (CRect (kx, kKnobTop, kx + kKnobW, kKnobTop + kKnobH), this, kIntensity));
     }
 
     // Wobble: the tremolo on the bands above Low (its rate in cycles per beat, how deep)
@@ -360,24 +436,181 @@ void Editor::buildUI (CFrame* f)
     root->addView (wobble);
     wobbleKnobs = knobs (wobble, kWobbleRight - kWobbleLeft, {{kWobbleRate}, {kWobbleAmount}});
 
-    gestureView = new GestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH)), this,
-                                   [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
-                                   [this] { return pickedSlot; },
-                                   [c = ctl] (int g) -> const GestureData* { return &c->userGesture (g); });
-    pk::setHelp (gestureView, "Gesture", help::kGestureView);
-    root->addView (gestureView);
+    root->addView (makeGestureView (layoutRegion ("gestureview", CRect (kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH))));
+
+    buildLab (root);
+    buildRow6 (root);
+    {
+        // DRIFT: every modulator a little apart, per seed
+        auto* drift = new Panel (CRect (kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH), "DRIFT");
+        root->addView (drift);
+        const double left = centredLeft (kDriftRight - kDriftLeft, 3);
+        int i = 0;
+        for (uint32_t id : {kDriftSeed, kStartDrift, kSpeedDrift})
+        {
+            const double x = left + kKnobStep * i++;
+            auto* k = bind (drift, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id, id == kDriftSeed ? "Seed" : id == kStartDrift ? "Start" : "Speed"));
+            if (id != kDriftSeed)
+                driftKnobs.push_back (k);
+        }
+    }
+    root->addView (makeLoopView (layoutRegion ("loopview", CRect (kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH))));
 
     // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = std::make_unique<smacheratr::TailPanel> (this, smacheratr::TailBases {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base},
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+    tail = makeTail ();
     tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     pickBell (pickedBell);
-    pickSlot (pickedSlot);
     updateLooks ();
     idle ();
+}
+
+GestureView* Editor::makeGestureView (const CRect& r)
+{
+    gestureView = new GestureView (r, this, [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
+                                   [c = ctl] { return c->userScene (); }, [c = ctl] { return c->userSceneData ().name; });
+    pk::setHelp (gestureView, "Gesture", help::kGestureView);
+    return gestureView;
+}
+
+LoopView* Editor::makeLoopView (const CRect& r)
+{
+    loopView = new LoopView (r, this, [c = ctl] () -> const Meters* { auto* s = c->getShared (); return s ? &s->meters : nullptr; },
+                             [c = ctl] { return c->userScene (); });
+    pk::setHelp (loopView, "Loop", help::kLoopView);
+    return loopView;
+}
+
+std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
+{
+    return std::make_unique<smacheratr::TailPanel> (this, tailBases (), [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
+                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
+}
+
+void Editor::buildRow6 (CViewContainer* root)
+{
+    // (0.30) INPUT: the level going in (row 7)
+    auto* input = new Panel (CRect (kInputLeft, kRow7, kInputRight, kRow7 + kRowH), "INPUT");
+    root->addView (input);
+    {
+        const double x = centredLeft (kInputRight - kInputLeft, 1);
+        bind (input, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, kInput));
+    }
+    auto column = [&] (Panel* panel, double top, pk::ParamView* v) {
+        (void)top;
+        bind (panel, v);
+        return v;
+    };
+    auto knobsFrom = [&] (Panel* panel, std::initializer_list<uint32_t> ids, std::vector<pk::ParamView*>& group) {
+        int i = 0;
+        for (uint32_t id : ids)
+        {
+            const double x = kKnobBeside + kKnobStep * i++;
+            group.push_back (bind (panel, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, id)));
+        }
+    };
+    auto rowRect = [] (double top) { return CRect (kSwitchLeft, top, kSwitchLeft + kSwitchW, top + kSwitchH); };
+    // LOOP LOCK: on, Shape and Length; Start, End and Depth
+    auto* loop = new Panel (CRect (kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH), "LOOP LOCK");
+    root->addView (loop);
+    column (loop, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kLoopLock, "Loop Lock"));
+    loopControls.push_back (column (loop, kColTop2, new Segmented (rowRect (kColTop2), this, kLoopShape, {"Wrap", "Bounce"})));
+    loopControls.push_back (column (loop, kColTop3, new pk::Choice (rowRect (kColTop3), this, kLoopLength)));
+    knobsFrom (loop, {kLoopStart, kLoopEnd, kLoopDepth}, loopControls);
+    // PARA: on, Rate and Mix; the paths' corners and how they move
+    auto* para = new Panel (CRect (kParaLeft, kRow6, kParaRight, kRow6 + kRowH), "PARA");
+    root->addView (para);
+    column (para, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kParaOn, "Split"));
+    paraControls.push_back (column (para, kColTop2, new pk::Choice (rowRect (kColTop2), this, kParaRate)));
+    para->addView (new Label (CRect (kSwitchLeft, kColTop3 + 2.0, kSwitchLeft + 30.0, kColTop3 + 18.0), "Mix", 9.5));
+    paraControls.push_back (column (para, kColTop3, new pk::NumberBox (CRect (kSwitchLeft + 32.0, kColTop3, kSwitchLeft + kSwitchW, kColTop3 + kSwitchH), this, kParaMix)));
+    knobsFrom (para, {kParaLpFreq, kParaHpFreq, kParaLpMove, kParaHpMove, kParaHpLevelMove}, paraControls);
+    // SUB GUARD: on, Guard Bells; Freq and Floor
+    auto* guard = new Panel (CRect (kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH), "SUB GUARD");
+    root->addView (guard);
+    column (guard, kSwitchTop, new Toggle (rowRect (kSwitchTop), this, kSubGuard, "Sub Guard"));
+    guardControls.push_back (column (guard, kColTop2, new Toggle (rowRect (kColTop2), this, kGuardBells, "Guard Bells")));
+    knobsFrom (guard, {kSubGuardFreq, kSubFloor}, guardControls);
+}
+
+pk::basic::Spec Editor::basicSpec ()
+{
+    // Input (the level into the saturator: its crunch), Drive (the SWEEP stage's: how hard it crunches) and Movement (how
+    // far the bands move); Loop Lock, Length (how long its region takes) and Sub Guard (the sub steady); Mix and Output.
+    // The display: Loop Lock's window, every curve over it, the region dragged there (which moment the loop holds).
+    using namespace pk::basic;
+    Spec s;
+    s.title = "moistr";
+    s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
+    s.displayHeight = 150;
+    s.display = [this] (const CRect& r) -> CView* { return makeLoopView (r); };
+    s.rows = {{knob (kInput), knob (kSweepDrive), knob (kMovement)}, {toggle (kLoopLock, "Loop Lock"), choice (kLoopLength, "Length"), toggle (kSubGuard, "Sub Guard")}};
+    s.output = {knob (kMix), knob (kOutput, {}, true)};
+    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.menu = [this] (CPoint p) { showMenu (p); };
+    s.help = &help::forParam;
+    s.advancedSwitch = CRect (440, 6, 524, 28);
+    return s;
+}
+
+void Editor::buildLab (CViewContainer* root)
+{
+    // the LAB (0.30): per chain (MID, HIGH, AIR) its first slot's smacheratr (Grit: Drive, Curve: Post Clip), its second
+    // slot's multidyn (OTT: Amount) and its Level, with Mute, Solo and Mono under them; POST's first slot's multidyn
+    // (Depth: Amount, Time, Up, Down). A slot's knobs show its kind's own values (the hosts map them onto the slot).
+    static const char* const titles[kNumBandChains + 1] = {"MID", "HIGH", "AIR", "POST"};
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        const double left = kLabLeft + kLabStep * c;
+        auto* panel = new Panel (CRect (left, kRow5, left + kLabW, kRow5 + kLabRowH), titles[c]);
+        root->addView (panel);
+        const double x0 = centredLeft (kLabW, 4);
+        auto at = [&] (int i) { return CRect (x0 + kKnobStep * i, kKnobTop, x0 + kKnobStep * i + kKnobW, kKnobTop + kKnobH); };
+        auto slotKnob = [&] (pk::ParamHost* h, int i, uint32_t id, const char* label, const char* help, std::vector<pk::ParamView*>& group) {
+            auto* k = new Knob (at (i), h, id, label);
+            pk::setHelp (k, label, help);
+            panel->addView (k);
+            labViews.push_back (k);
+            group.push_back (k);
+            labAll[c].push_back (k);
+            return k;
+        };
+        auto own = [&] (pk::ParamView* v, const char* title) {
+            bind (panel, v);
+            labViews.push_back (v);
+            labAll[c].push_back (v);
+            (void)title;
+        };
+        if (c < kNumBandChains)
+        {
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, chainSlot (c, 0), smemplr::kFxSmacheratr));
+            pk::ParamHost* sat = labHosts.back ().get ();
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, chainSlot (c, 1), smemplr::kFxMultidyn));
+            pk::ParamHost* ott = labHosts.back ().get ();
+            slotKnob (sat, 0, smacheratr::kDrive, "Grit", help::kLabGrit, labSat[c]);
+            slotKnob (sat, 1, smacheratr::kPostClip, "Curve", help::kLabCurve, labSat[c]);
+            slotKnob (ott, 2, multidyn::kAmount, "OTT", help::kLabOtt, labOtt[c]);
+            own (new Knob (at (3), this, chainId (c, kChainLevel), "Level", true), "Level");
+            const ChainField switches[3] = {kChainMute, kChainSolo, kChainMono};
+            static const char* const names[3] = {"Mute", "Solo", "Mono"};
+            for (int i = 0; i < 3; ++i)
+                own (new Toggle (CRect (x0 + kKnobStep * i, kLabSwitchTop, x0 + kKnobStep * i + kKnobW, kLabSwitchTop + kLabSwitchH), this,
+                                 chainId (c, switches[i]), names[i]),
+                     names[i]);
+        }
+        else
+        {
+            labHosts.push_back (std::make_unique<LabSlotHost> (this, ctl, postSlot (0), smemplr::kFxMultidyn));
+            pk::ParamHost* ott = labHosts.back ().get ();
+            labHosts.push_back (std::make_unique<OttRatioHost> (this, ctl, postSlot (0)));
+            pk::ParamHost* ratios = labHosts.back ().get ();
+            slotKnob (ott, 0, multidyn::kAmount, "Depth", help::kPostDepth, labOtt[c]);
+            slotKnob (ott, 1, multidyn::kTime, "Time", help::kPostTime, labOtt[c]);
+            slotKnob (ratios, 2, 0, "Up", help::kPostUp, labOtt[c]);
+            slotKnob (ratios, 3, 1, "Down", help::kPostDown, labOtt[c]);
+        }
+    }
 }
 
 void Editor::pickBell (int b)
@@ -386,18 +619,6 @@ void Editor::pickBell (int b)
     for (int i = 0; i < kNumBells; ++i)
         for (CView* v : bellViews[i])
             v->setVisible (i == pickedBell);
-    if (frame)
-        frame->invalid ();
-}
-
-void Editor::pickSlot (int g)
-{
-    pickedSlot = std::clamp (g, 0, kNumGestureSlots - 1);
-    for (int i = 0; i < kNumGestureSlots; ++i)
-        for (CView* v : slotViews[i])
-            v->setVisible (i == pickedSlot);
-    if (gestureView)
-        gestureView->invalid ();
     if (frame)
         frame->invalid ();
 }
@@ -413,30 +634,53 @@ void Editor::showGestureFiles (CPoint where)
     if (files.empty ())
         menu->addEntry ("No gesture files in the Gestures folder", -1, CMenuItem::kDisabled);
     menu->addSeparator ();
-    const int slot = pickedSlot;
-    const bool loaded = !ctl->userGesture (slot).empty ();
+    const bool loaded = !ctl->userSceneData ().empty ();
     menu->addEntry ("Clear the User Gesture", -1, loaded ? CMenuItem::kNoFlags : CMenuItem::kDisabled);
-    menu->popup (frame, where, [this, files, slot] (COptionMenu* m) {
+    menu->addEntry ("Open Gestures Folder");
+    const int32_t clearAt = (int32_t)std::max<size_t> (files.size (), 1) + 1;
+    menu->popup (frame, where, [this, files, clearAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (r >= 0 && r < (int32_t)files.size ())
         {
             std::string error;
-            if (!ctl->loadUserGesture (slot, files[(size_t)r].path, error) && gestureView)
+            if (!ctl->loadUserScene (files[(size_t)r].path, error) && gestureView)
                 gestureView->setNote (files[(size_t)r].name + ": " + error);
         }
-        else if (r == (int32_t)std::max<size_t> (files.size (), 1) + 1)
-            ctl->clearUserGesture (slot);
+        else if (r == clearAt)
+            ctl->clearUserScene ();
+        else if (r == clearAt + 1)
+            openGestureFolder ();
         if (gestureView)
             gestureView->invalid ();
     });
 }
 
+void Editor::openGestureFolder ()
+{
+    const std::string folder = ctl->makeGestureFolder ();
+    if (folder.empty ())
+        return;
+#if defined(_WIN32)
+    const std::wstring path = std::filesystem::path (folder).wstring ();
+    ShellExecuteW (nullptr, L"open", path.c_str (), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+#if defined(__APPLE__)
+    const char* argv[] = {"/usr/bin/open", folder.c_str (), nullptr};
+#else
+    const char* argv[] = {"xdg-open", folder.c_str (), nullptr};
+#endif
+    pid_t pid;
+    if (posix_spawnp (&pid, argv[0], nullptr, nullptr, const_cast<char**> (argv), environ) == 0)
+        waitpid (pid, nullptr, WNOHANG);
+#endif
+}
+
 bool Editor::affectsLooks (uint32_t id)
 {
-    if (isGestureParam (id))
+    if (isGestureParam (id) || (isLabSlotParam (id) && labFieldOf (id) == kLabType))
         return true;
     if (id == kBandCount || id == kShiftOn || id == kSeedBlend || id == kLiquid || id == kSweep || id == kShelf || id == kToneOn ||
-        id == kCleanSub || id == kSubBoost)
+        id == kCleanSub || id == kSubBoost || id == kLoopLock || id == kParaOn || id == kSubGuard || id == kDriftSeed)
         return true;
     for (int b = 0; b < kNumBells; ++b)
         if (id == bellOnId (b) || id == bellId (b, kBellSync))
@@ -471,17 +715,41 @@ void Editor::updateLooks ()
         v->setEnabledLook (sweeping && plainValue (kSubBoost) >= 0.5);
     bool wobbleDriven = plainValue (kWobbleAmount) > 0.0;
     for (int g = 0; g < kNumGestureSlots; ++g)
+        wobbleDriven = wobbleDriven || std::lround (plainValue (gestureId (g, kGestureTarget))) == kTargetWobbleAmount;
     {
-        const int target = (int)std::lround (plainValue (gestureId (g, kGestureTarget)));
-        const bool on = target != kTargetOff, walk = std::lround (plainValue (gestureId (g, kGestureMode))) == kModeWalk;
-        wobbleDriven = wobbleDriven || target == kTargetWobbleAmount;
-        for (pk::ParamView* v : slotControls[g])
+        const Scene* sc = GestureView::sceneOf (this, ctl->userScene ());
+        const bool on = sc && sc->count > 0, walk = std::lround (plainValue (kSceneMode)) == kModeWalk;
+        for (pk::ParamView* v : sceneControls)
             v->setEnabledLook (on);
-        if (speedViews[g])
-            speedViews[g]->setEnabledLook (on && walk);
+        if (sceneSpeed)
+            sceneSpeed->setEnabledLook (on && walk);
+        for (int i = 0; on && i < sc->count; ++i)
+            wobbleDriven = wobbleDriven || sc->lane[i].target == kTargetWobbleAmount;
     }
     for (Knob* k : wobbleKnobs)
         k->setEnabledLook (wobbleDriven);
+    for (pk::ParamView* v : loopControls)
+        v->setEnabledLook (plainValue (kLoopLock) >= 0.5);
+    for (pk::ParamView* v : paraControls)
+        v->setEnabledLook (plainValue (kParaOn) >= 0.5);
+    for (pk::ParamView* v : guardControls)
+        v->setEnabledLook (plainValue (kSubGuard) >= 0.5);
+    for (pk::ParamView* v : driftKnobs)
+        v->setEnabledLook (plainValue (kDriftSeed) >= 0.5);
+    // the LAB: a slot's knobs while it holds the kind they show; the Air chain with 4 bands only (with 3 Air goes into
+    // the High chain)
+    for (int c = 0; c <= kNumBandChains; ++c)
+    {
+        const bool heard = c != 2 || four;
+        for (pk::ParamView* v : labAll[c])
+            v->setEnabledLook (heard);
+        const bool sat = c < kNumBandChains && ctl->labKind (chainSlot (c, 0)) == smemplr::kFxSmacheratr;
+        const bool ott = ctl->labKind (c < kNumBandChains ? chainSlot (c, 1) : postSlot (0)) == smemplr::kFxMultidyn;
+        for (pk::ParamView* v : labSat[c])
+            v->setEnabledLook (heard && sat);
+        for (pk::ParamView* v : labOtt[c])
+            v->setEnabledLook (heard && ott);
+    }
     for (int b = 0; b < kNumBells; ++b)
     {
         const bool on = sweeping && plainValue (bellOnId (b)) >= 0.5, synced = plainValue (bellId (b, kBellSync)) >= 0.5;
@@ -508,6 +776,11 @@ void Editor::paramChanged (uint32_t id)
     }
     if (gestureView && isGestureParam (id))
         gestureView->invalid ();
+    if (loopView && (id < kChainBase || id >= kInput))
+        loopView->invalid ();
+    if (isLabParam (id))
+        for (pk::ParamView* v : labViews)
+            v->invalid (); // (the slots' knobs show LAB parameters under their kinds' IDs)
     if (display && BandView::shows (id))
     {
         display->idle (); // (the snapshot: levels, crossovers, bands)
@@ -525,12 +798,15 @@ void Editor::idle ()
         sweepView->idle ();
     if (gestureView)
         gestureView->idle ();
+    if (loopView)
+        loopView->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
             char buf[64];
-            const int tailNow = s->tailMeters.latency.load (); // (the end saturator's is all of it; -1: not known yet)
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 ? tailNow : s->latency.load ());
+            // (the LAB's and the end saturator's; -1: not known yet)
+            const int tailNow = s->tailMeters.latency.load (), labNow = s->meters.labLatency.load ();
+            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 && labNow >= 0 ? tailNow + labNow : s->latency.load ());
             latencyLabel->setText (buf);
         }
 }
@@ -547,9 +823,12 @@ void Editor::showMenu (CPoint where)
         std::snprintf (buf, sizeof (buf), "Interface Size %d%%", (int)std::lround (s * 100));
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
+    menu->addSeparator ();
+    const int32_t folderAt = (int32_t)sizes.size () + 1;
+    menu->addEntry ("Open Gestures Folder");
     const int settingsAt = pk::addSettingsMenuEntries (menu);
     addLayoutMenu (menu);
-    menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
+    menu->popup (frame, where, [this, sizes, menu, settingsAt, folderAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
             return;
@@ -557,6 +836,8 @@ void Editor::showMenu (CPoint where)
             return;
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
+        else if (r == folderAt)
+            openGestureFolder ();
     });
 }
 
@@ -567,8 +848,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // a row of the gestures (gestures, wobble, the gesture display) and the end saturator in a row of its own at the
-    // bottom
+    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST), a row of
+    // input, loop lock, para and sub guard, and the end saturator in a row of its own at the bottom
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
         {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
@@ -591,7 +872,17 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"gestures", "", {kGesturesLeft, kRow4, kGesturesRight, kRow4 + kRowH}, 3},
         {"wobble", "", {kWobbleLeft, kRow4, kWobbleRight, kRow4 + kRowH}, 3},
         {"gestureview", "gesture", {kGestureViewLeft, kRow4, kGestureViewRight, kRow4 + kRowH}, 3, -1, true},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 4, -1, true},
+        {"lab-mid", "", {kLabLeft, kRow5, kLabLeft + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-high", "", {kLabLeft + kLabStep, kRow5, kLabLeft + kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-air", "", {kLabLeft + 2 * kLabStep, kRow5, kLabLeft + 2 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"lab-post", "", {kLabLeft + 3 * kLabStep, kRow5, kLabLeft + 3 * kLabStep + kLabW, kRow5 + kLabRowH}, 4},
+        {"looplock", "", {kLoopLeft, kRow6, kLoopRight, kRow6 + kRowH}, 5},
+        {"para", "", {kParaLeft, kRow6, kParaRight, kRow6 + kRowH}, 5},
+        {"subguard", "", {kGuardLeft, kRow6, kGuardRight, kRow6 + kRowH}, 5},
+        {"input", "", {kInputLeft, kRow7, kInputRight, kRow7 + kRowH}, 6},
+        {"drift", "", {kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH}, 6},
+        {"loopview", "loop", {kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH}, 6, -1, true},
+        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 7, -1, true},
     };
     return s;
 }

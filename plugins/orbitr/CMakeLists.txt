@@ -1,6 +1,6 @@
 # Orbitr: Detonatr's Motion stage on its own, a Doppler swarm in the spirit of Tonsturm SpinTracer
 # (not affiliated), "Liquid Debris"-like by default.
-project(Orbitr VERSION 0.29.0.0)
+project(Orbitr VERSION 0.30.0.0)
 
 add_library(orbitr_core STATIC
     src/core/Params.cpp

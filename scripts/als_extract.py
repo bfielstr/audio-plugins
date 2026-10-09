@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """List and export automation lanes from an Ableton Live .als project.
 
-usage: als_extract.py PROJECT.als [--group "Bass"] [--out DIR] [--no-tree]
-                      [--moistr DIR --beats START END]
+usage: als_extract.py PROJECT.als [--group "Bass"] [--out DIR] [--no-tree] [--list]
+                      [--moistr OUT.json --beats START END]
 
 Prints the device chain of every track in the group (racks, chains, devices, signal flow) and every
 automated parameter with a full path
@@ -20,14 +20,35 @@ automated parameter with a full path
 Arrangement lanes and arrangement clip envelopes use arrangement beats (clip envelopes are unrolled
 over the clip's placement and loop); session clip envelopes use clip-local beats.
 
-With --moistr DIR --beats START END, cuts every lane to the beats START .. END (the value at START, the
-points in between, the value just before END) and writes it into DIR as a moistr gesture:
+With --list, prints only the lanes (no device chains), each with the moistr target it would map to.
 
-    {name, length_beats, points:[[beat, value], ...], source_min, source_max}
+With --moistr OUT.json --beats START END, writes ONE moistr gesture: every automated lane that moves between
+beats START and END (the value at START, the points in between, the value just before END), each mapped to a
+moistr target by its type, all on the one timeline (beats from START):
 
-beats from START, values normalised to 0 .. 1 over the lane's range in that window. Lanes that do not move
-in the window are left out. Copy the files into moistr's Gestures folder (<presets>/bfielstr/Moistr/Gestures)
-and pick them with File in moistr's GESTURES row.
+    {name, length_beats, lanes:[{target, source, min, max, points:[[beat, value 0 .. 1], ...]}, ...],
+     skipped:[{source, reason}], extracted:{beats, tempo}}
+
+min and max are the lane's range in the target's units (Level in dB from the band's Level, Close and the
+crossovers in Hz, Wobble Rate in cycles per beat at the project's tempo, the rest 0 .. 1). The mapping:
+
+    upper-band chain or track volume   Mid / High / Air Level: by the chain's EQ Eight cuts (a low cut under
+                                       350 Hz or none: Mid; under 2 kHz: High; above: Air) or its name (MID;
+                                       HIGH, AUTO, TOP; AIR, NOISE: a name wins); LOW, SUB and low-split
+                                       chains are left out (moistr keeps the low band steady)
+    a chain named DIST, DIRT, DRIVE...  Dirt (CLEAN or DRY: Dirt the other way round); a volume of a chain
+                                       with a distortion and no band: Dirt
+    EQ Eight high cut frequency        Close (its Q is tied to Close's resonance, so the Q lane is left out)
+    an EQ cut that moves a split       Mid X (under 2 kHz) or High X (a high cut in the low chain or a low cut
+                                       in the high chain of a rack that splits by frequency)
+    Auto Pan LFO rate (Hz) / amount    Wobble Rate / Wobble Amount
+    Simpler Sample Start (or a macro on it)   Seed Blend
+
+Lanes that hardly move (under 1 dB, under 5 %) are left out. Per target a lane with the band in its name,
+then the one with the most points, plays; the others stay in the file as "target": "Off" lanes (with
+their "candidate") and everything unmapped is listed in "skipped" and in the table this prints. Edit any
+lane's "target" by hand to change the mapping. Copy the file into moistr's Gestures folder (Menu > Open
+Gestures Folder) and pick it with File in the GESTURE section.
 
 The file is parsed as data only (gzip + ElementTree); nothing in it is executed.
 """
@@ -138,6 +159,8 @@ class Index:
         self.macro_maps = []  # (rack path, macro index, target path, param, min, max)
         self.flow = []      # printable device chain lines
         tname = tname or track_name(track)
+        # the chain a parameter sits in (innermost rack chain, else the track): what --moistr maps it by
+        self.ctx = [dict(kind="track", name=tname, lc=None, hc=None, dist=False, role=None)]
         dc = track.find("DeviceChain")
         mixer = dc.find("Mixer") if dc is not None else None
         if mixer is not None:
@@ -219,7 +242,7 @@ class Index:
 
     def _register(self, at, path, pname, kind):
         if at is not None and at.get("Id"):
-            self.targets[at.get("Id")] = dict(path=list(path), parameter=pname, kind=kind)
+            self.targets[at.get("Id")] = dict(path=list(path), parameter=pname, kind=kind, chain=dict(self.ctx[-1]))
 
     def _params(self, dev, path, label, root, rack_stack):
         """Register every AutomationTarget/ModulationTarget under `root` (not entering Branches)."""
@@ -284,6 +307,7 @@ class Index:
                 self.flow.append(f"{ind}{arrow} {label}{off}  (splits into {len(branches)} parallel chains, summed)")
                 rstack = rack_stack + [(path + [label], dev)]
                 self._params(dev, path, label, dev, rstack)
+                ctxs = branch_contexts(branches)
                 for bi, br in enumerate(branches):
                     bl = branch_label(br, bi)
                     bpath = path + [label, bl]
@@ -292,13 +316,64 @@ class Index:
                     spk = val(mix, "Speaker/Manual", "true")
                     voltxt = f"vol {lin_to_db(vol)}" if vol is not None else ""
                     self.flow.append(f"{ind}     || {bl}  [{voltxt}{'' if spk == 'true' else ', muted'}]")
+                    self.ctx.append(ctxs[bi])
                     if mix is not None:
                         self._params(mix, bpath, "Chain Mixer", mix, rstack)
                     self._chain(child_devices(br.find("DeviceChain")) or [], bpath, depth + 3, rstack)
+                    self.ctx.pop()
             else:
                 extra = device_summary(dev)
                 self.flow.append(f"{ind}{arrow} {label}{off}{'  ' + extra if extra else ''}")
                 self._params(dev, path, label, dev, rack_stack)
+
+
+DIST_DEVICES = {"Saturator", "Overdrive", "Pedal", "Erosion", "Redux2", "Redux", "Vinyl", "Amp", "DrumBuss", "Tube"}
+DIST_PLUGIN = re.compile(r"trash|saturat|distort|decapitator|drive|crush|clip|fuzz|destroy", re.I)
+
+
+def eq_cuts(dev):
+    """An EQ Eight's static cuts (switched-on bands): the highest low cut and the lowest high cut (Hz, or None)."""
+    lc = hc = None
+    for b in range(8):
+        pa = dev.find(f"Bands.{b}/ParameterA")
+        if pa is None or val(pa, "IsOn/Manual") != "true":
+            continue
+        try:
+            m, f = int(val(pa, "Mode/Manual", "3")), float(val(pa, "Freq/Manual"))
+        except (TypeError, ValueError):
+            continue
+        if m in (0, 1):
+            lc = f if lc is None else max(lc, f)
+        elif m in (6, 7):
+            hc = f if hc is None else min(hc, f)
+    return lc, hc
+
+
+def branch_contexts(branches):
+    """Per rack chain: its name, the static cuts of the EQ Eights directly in it (a cut counts below 8 kHz for a high
+    cut, above 30 Hz for a low cut), whether it distorts, and its role when the rack splits by frequency (some chain
+    only high-cut below 2 kHz: "low"; a chain with a low cut: "high")."""
+    out = []
+    for br in branches:
+        name = val(br, "Name/UserName") or val(br, "Name/EffectiveName") or "Chain"
+        lc = hc = None
+        dist = False
+        for d in child_devices(br.find("DeviceChain")) or []:
+            if d.tag == "Eq8" and val(d, "On/Manual", "true") == "true":
+                l, h = eq_cuts(d)
+                lc = l if l is not None and l > 30 and (lc is None or l > lc) else lc
+                hc = h if h is not None and h < 8000 and (hc is None or h < hc) else hc
+            if d.tag in DIST_DEVICES or (d.tag == "PluginDevice" and DIST_PLUGIN.search(plugin_name(d) or "")):
+                dist = True
+        out.append(dict(kind="chain", name=name, lc=lc, hc=hc, dist=dist, role=None))
+    low = [c for c in out if c["hc"] is not None and c["lc"] is None and c["hc"] < 2000]
+    high = [c for c in out if c["lc"] is not None]
+    if low and high:
+        for c in low:
+            c["role"] = "low"
+        for c in high:
+            c["role"] = "high"
+    return out
 
 
 def lin_to_db(v):
@@ -423,11 +498,14 @@ def lane_dict(als, track, info, pts, extra=None):
     if extra:
         src.update(extra)
     full = " > ".join(info["path"] + [info["parameter"]])
-    return dict(name=full, source=src, time_unit="beats",
+    return dict(name=full, source=src, time_unit="beats", chain=info.get("chain"),
                 points=[[round(t, 6), round(x, 6)] for t, x in pts], min=min(v), max=max(v))
 
 
-MOISTR_MAX_POINTS = 512  # (moistr's kMaxGesturePoints)
+MOISTR_MAX_POINTS = 512  # (moistr's kMaxGesturePoints, per lane)
+MOISTR_MAX_LANES = 16    # (moistr's kMaxSceneLanes: lanes with a target)
+LEVEL_FLOOR_DB = -48.0   # (moistr: a level lane's silence)
+LOG_TARGETS = {"Close", "Wobble Rate", "Mid X", "High X"}
 
 
 def value_at(pts, t, before=False):
@@ -444,24 +522,183 @@ def value_at(pts, t, before=False):
     return prev[1] if prev else 0.0
 
 
-def moistr_gesture(lane, start, end):
-    """The lane cut to start .. end as a moistr gesture (None when it does not move there)."""
+def window(lane, start, end):
+    """The lane cut to start .. end: (beat from start, raw value), the value at start, the points in between and
+    the value just before end."""
     pts = sorted(((float(t), float(v)) for t, v in lane["points"]), key=lambda p: p[0])
     if not pts or end <= start:
-        return None
-    window = [(0.0, value_at(pts, start))]
-    window += [(t - start, v) for t, v in pts if start < t < end]
-    window.append((end - start, value_at(pts, end, before=True)))
-    lo, hi = min(v for _, v in window), max(v for _, v in window)
-    if hi - lo <= 1e-9 * max(1.0, abs(hi)):
-        return None
-    if len(window) > MOISTR_MAX_POINTS:
-        print(f"  {lane['name']}: {len(window)} points in the window (moistr takes {MOISTR_MAX_POINTS}): left out",
-              file=sys.stderr)
-        return None
-    return dict(name=lane["source"].get("parameter", lane["name"]), length_beats=round(end - start, 6),
-                points=[[round(t, 6), round((v - lo) / (hi - lo), 6)] for t, v in window],
-                source_min=lo, source_max=hi)
+        return []
+    out = [(0.0, value_at(pts, start))]
+    out += [(t - start, v) for t, v in pts if start < t < end]
+    out.append((end - start, value_at(pts, end, before=True)))
+    return out
+
+
+def has_word(name, *words):
+    return re.search(r"(?<![A-Za-z])(" + "|".join(words) + r")", name or "", re.I) is not None
+
+
+def classify(lane):
+    """moistr's target for a lane, by its type: (target, how) or (None, why not). how: "level" (a gain to dB from its
+    top), "dirt" / "dirt-inverted" (a gain as a crossfade), "hz", "rate" (Hz to cycles per beat), "unit" (0 .. 1 over
+    the window)."""
+    info = lane["source"]
+    par = info.get("parameter", "")
+    path = info.get("path", "")
+    ch = lane.get("chain") or {}
+    cname = ch.get("name", "")
+    device = path.split(" > ")[-1] if path else ""
+    if par in ("Device On", "Chain Active", "Track Activator", "Chain Mixer On") or "Pan" in par or par.startswith("Send "):
+        return None, "a switch, pan or send"
+    volume = par in ("Chain Volume", "Track Volume") or (par == "Gain" and device.startswith("Utility"))
+    if volume:
+        if has_word(cname, "dist", "dirt", "drive", "sat", "crush", "trash", "fuzz"):
+            return "Dirt", "dirt"
+        if has_word(cname, "clean", "dry"):
+            return "Dirt", "dirt-inverted"
+        if ch.get("role") == "low" or has_word(cname, "low", "sub", "bass"):
+            return None, "the low band (moistr keeps it steady)"
+        # (a band named in the chain's name: "level-named", which wins over one found by its EQ cuts)
+        if has_word(cname, "mid"):
+            return "Mid Level", "level-named"
+        if has_word(cname, "high", "auto", "top"):
+            return "High Level", "level-named"
+        if has_word(cname, "air", "noise", "fizz"):
+            return "Air Level", "level-named"
+        lc, hc = ch.get("lc"), ch.get("hc")
+        if lc is not None or hc is not None:
+            if lc is None and hc is not None and hc <= 200:
+                return None, "the low band (moistr keeps it steady)"
+            if lc is None or lc < 350:
+                return "Mid Level", "level"
+            return ("High Level" if lc < 2000 else "Air Level"), "level"
+        if ch.get("dist"):
+            return "Dirt", "dirt"
+        return None, "a volume with no band to it (no EQ cut, no band in its name)"
+    m = re.match(r"Band \d+ (Freq|Q)(?: \(B: R/Side\))?(?: \[(.*)\])?$", par)
+    if m:
+        kind, mode = m.group(1), m.group(2) or ""
+        if "Cut" not in mode:
+            return None, "an EQ band that is not a cut"
+        if kind == "Q":
+            return None, "a cut's Q: tied to Close's resonance" if "High Cut" in mode else "a low cut's Q"
+        if "High Cut" in mode:
+            return ("crossover", "hz") if ch.get("role") == "low" else ("Close", "hz")
+        if ch.get("role") == "high":
+            return "crossover", "hz"
+        return None, "a low cut outside a split"
+    if par == "LFO Rate (Hz)":
+        return "Wobble Rate", "rate"
+    if par == "LFO Amount":
+        return "Wobble Amount", "unit"
+    if "Sample Start" in par:
+        return "Seed Blend", "unit"
+    return None, "no moistr target for this parameter"
+
+
+def to_lane(lane, target, how, start, end, tempo):
+    """The lane as a moistr lane over the window: (lane dict, None) or (None, why not)."""
+    w = window(lane, start, end)
+    if not w:
+        return None, "no points"
+    if len(w) > MOISTR_MAX_POINTS:
+        return None, f"{len(w)} points in the window (moistr takes {MOISTR_MAX_POINTS})"
+    raw = [v for _, v in w]
+    if max(raw) - min(raw) <= 1e-9 * max(1.0, abs(max(raw))):
+        return None, "does not move in the window"
+    import math
+
+    def db(g):
+        return 20 * math.log10(g) if g > 0 else -1e9
+
+    if how in ("level", "level-named"):
+        u = [db(v) for v in raw]
+        top = max(u)
+        u = [max(x - top, LEVEL_FLOOR_DB) for x in u]
+        lo, hi = max(min(u), LEVEL_FLOOR_DB), 0.0
+        if lo > -1.0:
+            return None, "moves less than 1 dB"
+    elif how in ("dirt", "dirt-inverted"):
+        u = [max(db(v), LEVEL_FLOOR_DB) for v in raw]
+        lo, hi = min(u), max(u)
+        if hi - lo < 1.0:
+            return None, "moves less than 1 dB"
+        u = [(x - lo) / (hi - lo) if hi > lo else 1.0 for x in u]
+        if how == "dirt-inverted":
+            u = [1.0 - x for x in u]
+        lo, hi = 0.0, 1.0
+    elif how == "rate":
+        u = [min(max(v * 60.0 / tempo, 1.0), 40.0) for v in raw]
+        lo, hi = min(u), max(u)
+        if hi < lo * 1.05:
+            return None, "moves less than 5 %"
+    elif how == "hz":
+        u = [max(v, 1.0) for v in raw]
+        lo, hi = min(u), max(u)
+        if hi < lo * 1.05:
+            return None, "moves less than 5 %"
+        if target == "crossover":
+            target = "Mid X" if math.sqrt(lo * hi) < 2000 else "High X"
+    else:
+        lo, hi = min(raw), max(raw)
+        u = [(x - lo) / (hi - lo) for x in raw]
+        if target == "Wobble Amount":
+            u = [lo + (hi - lo) * x for x in u]
+        else:
+            lo, hi = 0.0, 1.0
+    if hi - lo <= 1e-12:
+        return None, "does not move in the window"
+    if target in LOG_TARGETS and lo > 0:
+        vals = [math.log(x / lo) / math.log(hi / lo) for x in u]
+    else:
+        vals = [(x - lo) / (hi - lo) for x in u]
+    return dict(target=target, source=lane["name"], min=round(lo, 6), max=round(hi, 6),
+                points=[[round(t, 6), round(min(max(v, 0.0), 1.0), 6)] for (t, _), v in zip(w, vals)],
+                rank=2 if how == "level-named" else 1), None
+
+
+def moistr_scene(lanes, start, end, tempo, name):
+    """ONE moistr gesture of lanes from every lane that moves in start .. end (beats): each auto-mapped to a target
+    by its type; per target the busiest lane plays, the others are kept as "Off" lanes (with their "candidate"
+    target) to swap in by hand; the rest is listed in "skipped". Returns (gesture, rows for the mapping table)."""
+    mapped, skipped, rows = [], [], []
+    for lane in lanes:
+        target, how = classify(lane)
+        if target is None:
+            if window(lane, start, end) and len({v for _, v in window(lane, start, end)}) > 1:
+                skipped.append(dict(source=lane["name"], reason=how))
+                rows.append((lane["name"], "-", how))
+            continue
+        out, why = to_lane(lane, target, how, start, end, tempo)
+        if out is None:
+            if why not in ("does not move in the window", "no points"):
+                skipped.append(dict(source=lane["name"], reason=why))
+                rows.append((lane["name"], "-", why))
+            continue
+        mapped.append(out)
+    # per target the lane with a band in its name, then the one with the most points in the window plays
+    best = {}
+    for m in mapped:
+        b = best.get(m["target"])
+        if b is None or (m["rank"], len(m["points"])) > (b["rank"], len(b["points"])):
+            best[m["target"]] = m
+    order = ["Mid Level", "High Level", "Air Level", "Close", "Wobble Rate", "Wobble Amount", "Liquid Pos", "Dirt", "Bells",
+             "Mid X", "High X", "Seed Blend", "Shift"]
+    playing = sorted(best.values(), key=lambda m: order.index(m["target"]))[:MOISTR_MAX_LANES]
+    for m in mapped:
+        m.pop("rank", None)
+    out_lanes = []
+    for m in playing:
+        out_lanes.append(m)
+        rows.append((m["source"], m["target"], f"{m['min']:g} .. {m['max']:g}"))
+    for m in mapped:
+        if m not in playing:
+            spare = dict(m, candidate=m["target"], target="Off")
+            out_lanes.append(spare)
+            rows.append((m["source"], f"Off ({m['target']}: another lane plays it)", f"{m['min']:g} .. {m['max']:g}"))
+    g = dict(name=name, length_beats=round(end - start, 6), lanes=out_lanes, skipped=skipped,
+             extracted=dict(beats=[start, end], tempo=tempo))
+    return g, rows
 
 
 def main():
@@ -470,10 +707,13 @@ def main():
     ap.add_argument("--group", help="only tracks inside this group track (by name), group included")
     ap.add_argument("--out", help="directory for one JSON file per lane")
     ap.add_argument("--no-tree", action="store_true", help="do not print the device chains")
-    ap.add_argument("--moistr", metavar="DIR", help="write each lane's window (--beats) as a moistr gesture into DIR")
+    ap.add_argument("--list", action="store_true", help="print the lanes and the moistr target each maps to (no device chains)")
+    ap.add_argument("--moistr", metavar="OUT.json", help="write the window (--beats) as ONE moistr gesture of lanes")
     ap.add_argument("--beats", nargs=2, type=float, metavar=("START", "END"),
                     help="the window --moistr cuts, in beats (arrangement beats; clip-local for session clips)")
     a = ap.parse_args()
+    if a.list:
+        a.no_tree = True
     if a.moistr and not a.beats:
         ap.error("--moistr needs --beats START END")
     with gzip.open(a.als) as f:
@@ -500,6 +740,10 @@ def main():
 
     als = os.path.basename(a.als)
     tempo = val(root, "LiveSet/MasterTrack/DeviceChain/Mixer/Tempo/Manual", "?")
+    try:
+        bpm = float(tempo)
+    except (TypeError, ValueError):
+        bpm = 120.0
     sel = [t for t in tracks if in_group(t)]
     if a.group and not sel:
         sys.exit(f"no group track named {a.group!r}")
@@ -546,10 +790,15 @@ def main():
     print(f"\ntempo {tempo} bpm; {len(sel)} tracks; {len(lanes)} lanes "
           f"({sum(1 for l in lanes if l['source']['kind'] == 'arrangement')} arrangement, "
           f"{sum(1 for l in lanes if l['source']['kind'] != 'arrangement')} clip envelopes)")
-    for l in lanes:
+    for i, l in enumerate(lanes):
         b = [p[0] for p in l["points"]]
         k = "" if l["source"]["kind"] == "arrangement" else " [clip]"
-        print(f"{len(b):5d} pts | beats {min(b):7.2f}-{max(b):7.2f} | {l['min']:9.3f}..{l['max']:9.3f} | {l['name']}{k}")
+        if a.list:
+            target, how = classify(l)
+            to = target if target else f"- ({how})"
+            print(f"{i:3d} {len(b):5d} pts | beats {min(b):7.2f}-{max(b):7.2f} | {l['min']:9.3f}..{l['max']:9.3f} | {l['name']}{k} -> {to}")
+        else:
+            print(f"{len(b):5d} pts | beats {min(b):7.2f}-{max(b):7.2f} | {l['min']:9.3f}..{l['max']:9.3f} | {l['name']}{k}")
     if maps:
         print("\nmacro mappings:")
         for m in maps:
@@ -562,22 +811,27 @@ def main():
         for i, l in enumerate(lanes):
             slug = re.sub(r"[^A-Za-z0-9]+", "_", l["name"]).strip("_")[:150]
             with open(os.path.join(a.out, f"{i:03d}_{slug}.json"), "w") as f:
-                json.dump(l, f)
+                json.dump({k: v for k, v in l.items() if k != "chain"}, f)
         with open(os.path.join(a.out, "macro_mappings.json"), "w") as f:
             json.dump(maps, f, indent=1)
     if a.moistr:
         start, end = a.beats
-        os.makedirs(a.moistr, exist_ok=True)
-        written = 0
-        for i, l in enumerate(lanes):
-            g = moistr_gesture(l, start, end)
-            if g is None:
-                continue
-            slug = re.sub(r"[^A-Za-z0-9]+", "_", l["name"]).strip("_")[-80:]
-            with open(os.path.join(a.moistr, f"{i:03d}_{slug}.json"), "w") as f:
-                json.dump(g, f)
-            written += 1
-        print(f"\n{written} moistr gestures (beats {start:g} .. {end:g}) written to {a.moistr}")
+        stem = os.path.splitext(als)[0]
+        name = f"{a.group or stem} {start:g}-{end:g}"
+        g, rows = moistr_scene(lanes, start, end, bpm, name)
+        folder = os.path.dirname(os.path.abspath(a.moistr))
+        os.makedirs(folder, exist_ok=True)
+        with open(a.moistr, "w") as f:
+            json.dump(g, f, indent=1)
+        playing = sum(1 for l in g["lanes"] if l["target"] != "Off")
+        print(f"\nmoistr gesture '{name}': beats {start:g} .. {end:g} ({end - start:g} beats at {bpm:g} bpm), "
+              f"{playing} lanes playing, {len(g['lanes']) - playing} spare (Off), {len(g['skipped'])} skipped")
+        width = min(max((len(r[0]) for r in rows), default=10), 110)
+        print(f"{'lane':{width}} | moistr target | range")
+        for src, target, rng in sorted(rows, key=lambda r: (r[1] == "-", r[1].startswith("Off"), r[1], r[0])):
+            short = src if len(src) <= width else "..." + src[-(width - 3):]
+            print(f"{short:{width}} | {target} | {rng}")
+        print(f"written to {a.moistr}")
 
 
 if __name__ == "__main__":

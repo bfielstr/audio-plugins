@@ -2,6 +2,8 @@
 // IDs are persisted in presets/projects: only ever append new IDs.
 #pragma once
 
+#include "FxSlot.h"
+
 #include "pluginkit/ParamTable.h"
 #include "pluginkit/TailParams.h"
 
@@ -16,11 +18,11 @@ namespace smemplr {
 
 // The effects rack after the sampler: kRackSlots slots, each Empty or one of the suite's effects, in
 // any order (the same effect may sit in several). A slot is a Type, an On and a block of kSlotBlock
-// parameters that the slot's effect reads through its own table (Rack.h: fxTable), so the IDs stay
+// parameters that the slot's effect reads through its own table (FxSlot.h: fxTable), so the IDs stay
 // the same whatever is loaded where. An effect with more parameters than that (Wubr) uses the slot's
 // extension too: kSlotExt more positions per slot, in a block of their own after the end saturator's
 // (block positions kSlotBlock and up; slotBlockParam finds either).
-enum FxType { kFxEmpty = 0, kFxPara, kFxMultidyn, kFxMsEq, kFxSmacheratr, kFxWidr, kFxWubr, kFxLevlr, kFxGentlr, kFxSmoothr, kNumFxTypes };
+// (FxType, the slot's block and its fields: FxSlot.h)
 // the slot types before Wubr (states before version 8 stored the type over this many)
 constexpr int kFxTypesBeforeWubr = 6;
 // ... and before Levlr (states 8 and 9)
@@ -31,13 +33,9 @@ constexpr int kRackSlots = 8;
 // A new Smemplr's first slot (with the effect's own defaults; the other slots start empty). Before 0.9
 // a Smacheratr sat after the rack instead (kTailBase: kept for old projects, see StateIO.cpp).
 constexpr int kDefaultSlotType = kFxSmacheratr;
-constexpr uint32_t kSlotBlock = 62; // the largest effect's parameter count (Multidyn, see fxBlockTable)
 // Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
 constexpr uint32_t kLegacyMdParams = 62;
-enum SlotField : uint32_t { kSlotType = 0, kSlotOn, kSlotParams };
 constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
-constexpr uint32_t kSlotExt = 24;                         // more block positions per slot (after the end saturator's block)
-constexpr uint32_t kSlotBlockAll = kSlotBlock + kSlotExt; // every block position of a slot
 
 enum ParamId : uint32_t
 {

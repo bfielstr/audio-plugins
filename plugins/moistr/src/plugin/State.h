@@ -15,6 +15,8 @@ struct State
     std::array<bool, kNumParams> has {};
     // (version 6) each gesture slot's user gesture (empty: none), so a project plays it without the file
     std::array<GestureData, kNumGestureSlots> user {};
+    // (version 7) the one gesture's user gesture (the Gesture choice's User; empty: none)
+    SceneData scene;
 };
 
 bool writeState (Steinberg::IBStream* stream, const State& s);

@@ -103,7 +103,13 @@ double Sweep::compensation (double driveDb, double avgDb, double inRms)
     return rms > 1e-12 ? inRms / rms : 1.0;
 }
 
-double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q, int n)
+double guardedBellDb (double gainDb, double centre, double guardHz)
+{
+    const double t = std::clamp (std::log2 (centre / guardHz), 0.0, 1.0);
+    return gainDb * t * t * (3.0 - 2.0 * t);
+}
+
+double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* gainDb, const double* q, int n, double guardHz)
 {
     // the analog peaking EQ's magnitude: |(1 - w^2 + j w A / Q) / (1 - w^2 + j w / (A Q))|, w = f / centre
     constexpr int kSteps = 16;
@@ -119,9 +125,16 @@ double Sweep::bellsAverageDb (const double* lo, const double* hi, const double* 
             {
                 if (gainDb[b] == 0.0)
                     continue; // (flat: its factor would be exactly 1)
-                const double centre = lo[b] * std::pow (hi[b] / lo[b], m), w = kAvgRefHz[f] / centre, a = std::pow (10.0, gainDb[b] / 40.0);
+                const double centre = lo[b] * std::pow (hi[b] / lo[b], m), w = kAvgRefHz[f] / centre;
+                const double a = std::pow (10.0, (guardHz > 0.0 ? guardedBellDb (gainDb[b], centre, guardHz) : gainDb[b]) / 40.0);
                 const double re = 1.0 - w * w, num = w * a / q[b], den = w / (a * q[b]);
                 gain *= (re * re + num * num) / (re * re + den * den);
+            }
+            if (guardHz > 0.0)
+            {
+                // (Guard Bells: below the corner the input, above it the bells; the pair's sides add up in phase)
+                const double r8 = std::pow (kAvgRefHz[f] / guardHz, 8.0), low = 1.0 / (1.0 + r8), amp = low + (1.0 - low) * std::sqrt (gain);
+                gain = amp * amp;
             }
             power += gain;
         }
@@ -138,6 +151,7 @@ void Sweep::prepare (double sampleRate)
     fadeStep = (double)kTick / (0.02 * sr);
     levelCoef = 1.0 - std::exp (-(double)kTick / (kLevelSec * sr));
     boostCoef = 1.0 - std::exp (-(double)kTick / (kSubSec * sr));
+    satLowCoef = 1.0 - std::exp (-(double)kTick / (kSatLowSec * sr));
 }
 
 void Sweep::reset (const double* p)
@@ -168,6 +182,17 @@ void Sweep::reset (const double* p)
     subFade = p[kCleanSub] >= 0.5 ? 1.0 : 0.0;
     boostFade = p[kSubBoost] >= 0.5 ? 1.0 : 0.0;
     toneFade = p[kToneOn] >= 0.5 ? 1.0 : 0.0;
+    guardFade = p[kSubGuard] >= 0.5 && p[kGuardBells] >= 0.5 ? 1.0 : 0.0;
+    logGuard = std::log2 (std::clamp (p[kSubGuardFreq], kGuardFreqMin, kGuardFreqMax));
+    guardGPrev = guardGNow = std::tan (dsp::kPi * clampSr (std::exp2 (logGuard), sr) / sr);
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        guardIn[ch].reset ();
+        guardOut[ch].reset ();
+    }
+    satLow = 1.0;
+    satLowIn = satLowOut = 0.0;
+    steadyNow = false;
     logSplit = std::log2 (std::clamp (p[kSplitFreq], 10.0, 20000.0));
     splitLevelDb = std::clamp (p[kSplitLevel], -60.0, 24.0);
     splitDriveDb = std::clamp (p[kSplitDrive], 0.0, kSplitDriveMax);
@@ -200,8 +225,8 @@ void Sweep::reset (const double* p)
 void Sweep::beginBlock (const double* p, bool playing, bool relocate, double songPpq, double bpm)
 {
     lastBpm = bpm > 1.0 ? bpm : 120.0;
-    if (!playing)
-        return;
+    if (!playing || lockOn)
+        return; // (Loop Lock: the clocks come from the motion clock, tick by tick)
     for (int b = 0; b < kFilters; ++b)
     {
         if (b < kNumBells && p[bellId (b, kBellSync)] >= 0.5)
@@ -218,9 +243,15 @@ void Sweep::targets (const double* p, bool snap)
     // the bells
     for (int b = 0; b < kNumBells; ++b)
     {
-        const double m = 0.5 - 0.5 * std::cos (kTwoPi * (theta[b] + phaseDeg[b] / 360.0));
+        double m = 0.5 - 0.5 * std::cos (kTwoPi * (phaseOf (b) + phaseDeg[b] / 360.0));
+        if (loopDepth)
+            m = (*loopDepth) (LoopDepth::kChBell + b, m);
         hz[b] = clampSr (std::exp2 (logLo[b] + (logHi[b] - logLo[b]) * m), sr);
-        const double a = std::pow (10.0, gainDb[b] / 40.0), q = std::exp2 (logQ[b]);
+        const double q = std::exp2 (logQ[b]);
+        double gDb = gainDb[b];
+        if (guardFade > 0.0 && gDb != 0.0) // (Guard Bells: the gain scaled down near and below the guard's corner)
+            gDb += (guardedBellDb (gDb, hz[b], std::exp2 (logGuard)) - gDb) * guardFade;
+        const double a = std::pow (10.0, gDb / 40.0);
         Coefs& c = now[b];
         c.g = std::tan (dsp::kPi * hz[b] / sr);
         c.k = 1.0 / (q * a);
@@ -229,15 +260,20 @@ void Sweep::targets (const double* p, bool snap)
     // the shelf on its orbit
     {
         double u, v;
-        orbit.at (theta[kShelfIdx], wander, u, v);
+        orbit.at (phaseOf (kShelfIdx), wander, u, v);
         if (orbitFade < 1.0)
         {
             // (a new Seed: from the old orbit to the new one over kOrbitFadeSec, a raised cosine)
             double uo, vo;
-            oldOrbit.at (theta[kShelfIdx], wander, uo, vo);
+            oldOrbit.at (phaseOf (kShelfIdx), wander, uo, vo);
             const double w = 0.5 - 0.5 * std::cos (dsp::kPi * orbitFade);
             u = uo + (u - uo) * w;
             v = vo + (v - vo) * w;
+        }
+        if (loopDepth)
+        {
+            u = (*loopDepth) (LoopDepth::kChShelfU, u);
+            v = (*loopDepth) (LoopDepth::kChShelfV, v);
         }
         uNow = u;
         vNow = v;
@@ -272,7 +308,7 @@ void Sweep::targets (const double* p, bool snap)
         key[4 + 4 * b] = gainDb[b];
         key[5 + 4 * b] = logQ[b];
     }
-    key[kKeySize - 1] = 0.0;
+    key[kKeySize - 1] = guardFade > 0.0 ? guardFade + logGuard : 0.0; // (Guard Bells)
     if (!std::equal (key, key + kKeySize, compKey))
     {
         std::copy (key, key + kKeySize, compKey);
@@ -284,6 +320,8 @@ void Sweep::targets (const double* p, bool snap)
             q[b] = std::exp2 (logQ[b]);
         }
         avgNow = bellsAverageDb (lo, hi, gainDb, q, kNumBells);
+        if (guardFade > 0.0)
+            avgNow += (bellsAverageDb (lo, hi, gainDb, q, kNumBells, std::exp2 (logGuard)) - avgNow) * guardFade;
         compNow = compensation (drive, avgNow, std::sqrt (levelMs));
         bareNow = compensation (drive, 0.0, std::sqrt (levelMs));
         cleanNow = std::pow (10.0, -avgNow / 20.0);
@@ -327,7 +365,15 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
             taps->clean[1][i] = taps->bare[1][i] = r[i];
         }
     // the clocks run on (off too, so the sweep is where it should be when it comes back)
-    for (int b = 0; b < kFilters; ++b)
+    for (int b = 0; lockOn && b < kFilters; ++b)
+    {
+        // (Loop Lock: a pure function of the motion clock)
+        if (b < kNumBells && p[bellId (b, kBellSync)] >= 0.5)
+            theta[b] = lockBeats / kSyncBeats[std::clamp ((int)std::lround (p[bellId (b, kBellSyncRate)]), 0, kNumSyncRates - 1)];
+        else
+            theta[b] = lockBeats * 60.0 / lockBpm * std::clamp (p[rateId (b)], 1e-3, 100.0);
+    }
+    for (int b = 0; !lockOn && b < kFilters; ++b)
     {
         double perSample;
         if (b < kNumBells && p[bellId (b, kBellSync)] >= 0.5)
@@ -339,6 +385,7 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
             theta[b] -= std::floor (theta[b]); // (the bells repeat every cycle; the orbit's curves wrap far later)
     }
     const bool on = p[kSweep] >= 0.5;
+    steadyNow = false;
     if (!on && fade <= 0.0)
         return;
     const int seed = std::clamp ((int)std::lround (p[kSeed]), kMinSeed, kMaxSeed);
@@ -374,6 +421,21 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
     glide (logBoost, std::log2 (std::clamp (p[kSubFreq], 10.0, 20000.0)), tickSmooth);
     glide (boostLevel, std::clamp (p[kSubLevel], 0.0, 1.0), tickSmooth);
     glide (logTone, std::log2 (std::clamp (p[kTone], 10.0, 40000.0)), tickSmooth);
+    // Guard Bells: no bell moves the lows below Sub Guard Freq (with Sub Guard on)
+    const double guard0 = guardFade;
+    guardFade = std::clamp (guardFade + (p[kSubGuard] >= 0.5 && p[kGuardBells] >= 0.5 ? fadeStep : -fadeStep), 0.0, 1.0);
+    const bool guardRun = guardFade > 0.0 || guard0 > 0.0;
+    {
+        const double target = std::log2 (std::clamp (p[kSubGuardFreq], kGuardFreqMin, kGuardFreqMax));
+        if (guard0 <= 0.0)
+            logGuard = target;
+        else
+            glide (logGuard, target, tickSmooth);
+        guardGPrev = guardGNow;
+        guardGNow = std::tan (dsp::kPi * clampSr (std::exp2 (logGuard), sr) / sr);
+        if (guard0 <= 0.0)
+            guardGPrev = guardGNow;
+    }
     // the input's level (both channels, this tick), held through silence
     bool heard = false;
     {
@@ -411,7 +473,7 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
     // Split Drive: its gain, and how far it is blended in (0 dB: clean, not run)
     const bool splitDriving = splitRun && splitDriveDb > 0.0;
     const double splitDriveG = std::pow (10.0, splitDriveDb / 20.0), splitDriveMix = std::min (1.0, splitDriveDb / kSplitDriveBlendDb);
-    double lowEnergy = 0.0, outEnergy = 0.0;
+    double lowEnergy = 0.0, outEnergy = 0.0, satInE = 0.0, satOutE = 0.0;
     for (int i = 0; i < m; ++i)
     {
         const double t = (double)(i + 1) / m;
@@ -439,6 +501,15 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
         if (toneRun)
             cTone.set (toneGPrev + (toneGNow - toneGPrev) * t, dsp::kSqrt2);
         const double splitLevel = splitLevelPrev + (splitLevelNow - splitLevelPrev) * t;
+        dsp::SvfCoefs cGuard[2];
+        double gb = 0.0;
+        if (guardRun)
+        {
+            const double gg = guardGPrev + (guardGNow - guardGPrev) * t;
+            dsp::Lr8Split::coefs (gg, cGuard);
+            gb = guard0 + (guardFade - guard0) * t;
+        }
+
         const double boost = (boostPrev + (boostNow - boostPrev) * t) * boostF;
         double* io[2] = {l + i, r + i};
         for (int ch = 0; ch < 2; ++ch)
@@ -450,6 +521,15 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 const int b = run[k];
                 y += m1[b] * filt[b][ch].tick (y, c[b]).bp;
             }
+            double below = 0.0;
+            if (guardRun)
+            {
+                // Guard Bells: the bells' output above Sub Guard Freq, the input below it
+                below = guardIn[ch].low (x, cGuard);
+                const double guarded = below + guardOut[ch].high (y, cGuard);
+                y += (guarded - y) * gb;
+            }
+
             if (shelfRun)
             {
                 const dsp::Svf::Out o = filt[s][ch].tick (y, c[s]);
@@ -469,7 +549,7 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 taps->bare[ch][i] = x + (bare - x) * f;
             }
             // the saturator: all of it, or (Clean Sub) the band above Split Freq with the lows around it
-            double whole = 0.0, parted = 0.0;
+            double whole = 0.0, parted = 0.0, partedHeld = 0.0;
             if (wholeRun)
                 whole = sat[ch].tick (g * y) * comp;
             if (splitRun)
@@ -479,8 +559,18 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 if (splitDriving)
                     low += (splitSat[ch].tick (splitDriveG * low) / splitDriveG - low) * splitDriveMix;
                 parted = satHigh[ch].tick (g * high) * comp + low * g * comp * splitLevel;
+                partedHeld = high * satLow + low * g * comp * splitLevel; // (Sub Guard's: Clean Sub's lows as they go around)
             }
             y = !splitRun ? whole : !wholeRun ? parted : whole + (parted - whole) * subF;
+            double held = 0.0;
+            if (guardRun)
+            {
+                // Sub Guard's tap: the saturator's input at its gain on the lows alone (Clean Sub: its lows as they go around)
+                const double sat1 = std::tanh (g * below) * comp;
+                satInE += below * below;
+                satOutE += sat1 * sat1;
+                held = !splitRun ? pre * satLow : !wholeRun ? partedHeld : pre * satLow + (partedHeld - pre * satLow) * subF;
+            }
             if (boostRun)
             {
                 // Sub Boost: the lows before the saturator, added after it (at the saturated signal's RMS x Sub Level)
@@ -488,10 +578,25 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
                 lowEnergy += low * low;
                 outEnergy += y * y;
                 y += low * boost;
+                held += low * boost;
             }
             if (toneRun)
                 y += (tone[ch].tick (y, cTone).lp - y) * toneF;
             *io[ch] = x + (y - x) * f;
+            if (guardRun)
+                steady[ch][i] = x + (held - x) * f;
+        }
+    }
+    if (guardRun)
+    {
+        steadyNow = true;
+        // the saturator's gain on the lows alone: the slow RMS of its output against its input, held through silence
+        if (satInE > 2.0 * m * kLevelGateRms * kLevelGateRms)
+        {
+            satLowIn += (satInE / (2.0 * m) - satLowIn) * satLowCoef * m / kTick;
+            satLowOut += (satOutE / (2.0 * m) - satLowOut) * satLowCoef * m / kTick;
+            if (satLowIn > 1e-20)
+                satLow = std::sqrt (satLowOut / satLowIn);
         }
     }
     // Sub Boost's level match: the slow RMS of its lows and of the saturated signal, held through silence
@@ -532,6 +637,13 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
     }
     if (boostFade <= 0.0 && boost0 > 0.0)
         boostPrimed = false;
+    if (guardFade <= 0.0 && guard0 > 0.0)
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            guardIn[ch].reset ();
+            guardOut[ch].reset ();
+        }
+
     if (fade <= 0.0)
     {
         // (faded out: off, and ready to start clean)
@@ -550,6 +662,8 @@ void Sweep::tick (const double* p, double* l, double* r, int m, SweepTaps* taps)
             toneBare[ch].reset ();
             for (auto& f : boostLp[ch])
                 f.reset ();
+            guardIn[ch].reset ();
+            guardOut[ch].reset ();
         }
         boostPrimed = false;
     }

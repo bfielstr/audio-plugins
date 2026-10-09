@@ -5,6 +5,7 @@
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <memory>
 
 namespace moistr {
 
@@ -33,13 +34,27 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    An older state reads the gestures off (every Target Off, Wobble Amount 0: defaultNormalizedForVersion) and
 //    no user gestures, so it sounds as it did. (An older build reads a version 6 state's parameters and stops
 //    before the gestures' block.)
-constexpr int32 kVersion = 7;
+// 7: 0.29, Gentlr's Slope with a fourth choice, Alt Signature (kAltSignature below: an older Slope is read as the same
+//    choice). (Builds of the one gesture before 0.30 also wrote 7, with its block after the slots' one, below, and the
+//    Slope's three choices: such a state is told by that block.)
+// 8: builds of the LAB before 0.30 (the one gesture and the LAB as in 9, the Slope's three choices).
+// 9: 0.30, the one gesture (IDs 220 .. 226 appended: Gesture, its Mode, Length, Speed, Position, Smooth and Amount) and,
+//    after the slots' block, its user gesture: 'SCNE', the length in bytes and the gesture's JSON (GestureFile.h:
+//    sceneJson; 0 bytes: none); the LAB (IDs 227 .. 1930 appended: four chains' Level, Mute, Solo, Mono and four kept
+//    for later, then 19 effects slots of 88: Type, On and a block). An older state reads Gesture None and every LAB
+//    slot Empty, every chain at 0 dB (their defaults: defaultNormalizedForVersion) and keeps its slots, which still
+//    play, so a 0.29 project sounds as it did, bit for bit. (A 0.29 build reads a version 9 state's first 220
+//    parameters and its slots and stops before the new block.)
+constexpr int32 kVersion = 9;
 constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
+constexpr int32 kSceneMagic = 0x454E4353;   // 'SCNE'
+constexpr int32 kMaxSceneBytes = 4 << 20;
 constexpr int32 kMaxNameBytes = 1024;
 constexpr int32 kNewDefaults = 4;
 // 7: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
 // the same choice
 constexpr int32 kAltSignature = 7;
+constexpr int32 kLabBuilds = 8;
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -66,8 +81,78 @@ bool writeState (IBStream* stream, const State& st)
         for (const auto& [beat, value] : g.points)
             ok = ok && s.writeDouble (beat) && s.writeDouble (value);
     }
+    // the one gesture's user gesture
+    const std::string scene = st.scene.empty () ? std::string () : sceneJson (st.scene);
+    ok = ok && s.writeInt32 (kSceneMagic) && s.writeInt32 ((int32)scene.size ()) &&
+         (scene.empty () || s.writeRaw (scene.data (), (int32)scene.size ()) == (int32)scene.size ());
     return ok;
 }
+
+namespace {
+// the one gesture's user gesture (none when the block is missing or damaged); whether the block is there
+bool readScene (IBStreamer& s, State& st)
+{
+    int32 magic = 0, bytes = 0;
+    if (!s.readInt32 (magic) || magic != kSceneMagic || !s.readInt32 (bytes))
+        return false;
+    if (bytes <= 0 || bytes > kMaxSceneBytes)
+        return true;
+    std::string text ((size_t)bytes, '\0');
+    if (s.readRaw (text.data (), bytes) != bytes)
+        return true;
+    SceneData d;
+    std::string error;
+    auto check = std::make_unique<Scene> ();
+    if (parseSceneJson (text, "User", d, error) && toScene (d, *check)) // (one the engine cannot play is left out)
+        st.scene = std::move (d);
+    return true;
+}
+
+// the user gestures (version 6; a state without the block has none; a damaged block is left out whole) and the one
+// gesture's (from 7); whether the one gesture's block is there
+bool readGestures (IBStreamer& s, State& st, int32 version)
+{
+    for (GestureData& g : st.user)
+        g = {};
+    st.scene = {};
+    int32 magic2 = 0, slots = 0;
+    if (version < 6 || !s.readInt32 (magic2) || magic2 != kGestureMagic || !s.readInt32 (slots) || slots < 0 || slots > 64)
+        return false;
+    std::array<GestureData, kNumGestureSlots> user {};
+    for (int32 k = 0; k < slots; ++k)
+    {
+        int32 has = 0;
+        if (!s.readInt32 (has))
+            return false;
+        if (!has)
+            continue;
+        int32 nameBytes = 0, n = 0;
+        if (!s.readInt32 (nameBytes) || nameBytes < 0 || nameBytes > kMaxNameBytes)
+            return false;
+        std::string name ((size_t)nameBytes, '\0');
+        if (nameBytes > 0 && s.readRaw (name.data (), nameBytes) != nameBytes)
+            return false;
+        double length = 0.0;
+        if (!s.readDouble (length) || !s.readInt32 (n) || n < 1 || n > kMaxGesturePoints || !(length > 0.0))
+            return false;
+        GestureData g;
+        g.name = name;
+        g.length = length;
+        for (int32 i = 0; i < n; ++i)
+        {
+            double b = 0.0, v = 0.0;
+            if (!s.readDouble (b) || !s.readDouble (v))
+                return false;
+            g.points.emplace_back (b, v);
+        }
+        Gesture check;
+        if (k < kNumGestureSlots && toGesture (g, check)) // (one the engine cannot play is left out)
+            user[(size_t)k] = std::move (g);
+    }
+    st.user = std::move (user);
+    return version >= 7 && readScene (s, st);
+}
+} // namespace
 
 bool readState (IBStream* stream, State& st)
 {
@@ -93,52 +178,16 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
-    // the end saturator's Gentlr Slope had three choices before Alt Signature: a value saved then is read
+    const bool sceneBlock = readGestures (s, st, version);
+    // the end saturator's Gentlr Slope had three choices before Alt Signature (and in the builds of the one gesture and
+    // the LAB before 0.30: a version 7 state with the one gesture's block, a version 8 one): a value saved then is read
     // as the same choice (first: the conversions below set the Slope as it is now)
-    if (version < kAltSignature)
+    if (version < kAltSignature || version == kLabBuilds || (version == kAltSignature && sceneBlock))
         smacheratr::tailSlopeFromThreeChoices (st.norm, st.has, kTailExt3Base);
     // the defaults were the end saturator off, its Gentlr off and Gentlr's Slope 12 / 12: a state saved
     // then keeps them where it lacks them
     if (version < kNewDefaults)
         smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
-    // the user gestures (version 6; a state without the block has none). A damaged block is left out whole.
-    for (GestureData& g : st.user)
-        g = {};
-    int32 magic2 = 0, slots = 0;
-    if (version < 6 || !s.readInt32 (magic2) || magic2 != kGestureMagic || !s.readInt32 (slots) || slots < 0 || slots > 64)
-        return true;
-    std::array<GestureData, kNumGestureSlots> user {};
-    for (int32 k = 0; k < slots; ++k)
-    {
-        int32 has = 0;
-        if (!s.readInt32 (has))
-            return true;
-        if (!has)
-            continue;
-        int32 nameBytes = 0, n = 0;
-        if (!s.readInt32 (nameBytes) || nameBytes < 0 || nameBytes > kMaxNameBytes)
-            return true;
-        std::string name ((size_t)nameBytes, '\0');
-        if (nameBytes > 0 && s.readRaw (name.data (), nameBytes) != nameBytes)
-            return true;
-        double length = 0.0;
-        if (!s.readDouble (length) || !s.readInt32 (n) || n < 1 || n > kMaxGesturePoints || !(length > 0.0))
-            return true;
-        GestureData g;
-        g.name = name;
-        g.length = length;
-        for (int32 i = 0; i < n; ++i)
-        {
-            double b = 0.0, v = 0.0;
-            if (!s.readDouble (b) || !s.readDouble (v))
-                return true;
-            g.points.emplace_back (b, v);
-        }
-        Gesture check;
-        if (k < kNumGestureSlots && toGesture (g, check)) // (one the engine cannot play is left out)
-            user[(size_t)k] = std::move (g);
-    }
-    st.user = std::move (user);
     return true;
 }
 

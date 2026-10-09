@@ -6,7 +6,7 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(AudioPlugins
-    VERSION 0.29.0
+    VERSION 0.30.0
     DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr, Moistr, Smeezr and Probr VST3 plug-ins"
     LANGUAGES C CXX
 )
@@ -58,7 +58,7 @@ if(PK_ONLY_PLUGINS)
             message(FATAL_ERROR "PK_ONLY_PLUGINS: no plug-in called '${p}' (known: ${PK_ALL_PLUGINS})")
         endif()
     endforeach()
-    # the plug-ins whose <name>_core or <name>_ui targets a needed plug-in's CMakeLists.txt names, until
+    # the plug-ins whose <name>_core, <name>_ui or <name>_fxslot targets a needed plug-in's CMakeLists.txt names, until
     # nothing new turns up
     set(_pk_needed ${PK_ONLY_PLUGINS})
     set(_pk_todo ${PK_ONLY_PLUGINS})
@@ -66,7 +66,7 @@ if(PK_ONLY_PLUGINS)
         list(POP_FRONT _pk_todo p)
         file(READ "${CMAKE_CURRENT_SOURCE_DIR}/plugins/${p}/CMakeLists.txt" _pk_text)
         foreach(q IN LISTS PK_ALL_PLUGINS)
-            if(NOT q IN_LIST _pk_needed AND _pk_text MATCHES "(^|[^a-z_])${q}_(core|ui)([^a-z_]|$)")
+            if(NOT q IN_LIST _pk_needed AND _pk_text MATCHES "(^|[^a-z_])${q}_(core|ui|fxslot)([^a-z_]|$)")
                 list(APPEND _pk_needed ${q})
                 list(APPEND _pk_todo ${q})
             endif()

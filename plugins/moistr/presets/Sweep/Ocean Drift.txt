@@ -1,0 +1,7 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, drift, bass
+comment: The Ocean sound with Drift Seed 7: every bell starts somewhere else in its sweep and runs a few percent faster or slower than set, the gently moving bands too, so the waves roll against each other in a new way. The same seed sounds the same every time; try another one.
+Movement = 30 %
+Drift Seed = 7
+Start Drift = 60 %
+Speed Drift = 4 %

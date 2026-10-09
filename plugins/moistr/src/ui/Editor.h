@@ -15,20 +15,29 @@ class Controller;
 class BandView;
 class SweepView;
 class GestureView;
+class LoopView;
 
 class Editor : public pk::EditorBase
 {
 public:
     // Classic: two rows of the SWEEP stage at the top (SWEEP, BELLS, SUB over HIGH SHELF and the sweep display),
     // the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
-    // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gestures (GESTURES,
-    // WOBBLE and the gesture display), the end saturator's section at the bottom
+    // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gesture (GESTURE,
+    // WOBBLE and the gesture display), a row of the LAB (MID, HIGH, AIR chains and POST), the end saturator's
+    // section at the bottom
     static constexpr double kWidth = 1132.0;
     static constexpr double kRowH = 116.0;
     static constexpr double kSweepRow1 = 40.0, kSweepRow2 = kSweepRow1 + kRowH + 8.0;
     static constexpr double kRow1 = kSweepRow2 + kRowH + 8.0 + 198.0, kRow2 = kRow1 + kRowH + 8.0, kRow3 = kRow2 + kRowH + 8.0;
     static constexpr double kRow4 = kRow3 + kRowH + 8.0;
-    static constexpr double kTailTop = kRow4 + kRowH + 8.0;
+    // the LAB's row (0.30): a row of knobs with a row of switches under them
+    static constexpr double kLabRowH = 128.0, kRow5 = kRow4 + kRowH + 8.0;
+    // a row of LOOP LOCK, PARA and SUB GUARD (0.30), INPUT, DRIFT and Loop Lock's window (LoopView), then the end saturator
+    static constexpr double kRow6 = kRow5 + kLabRowH + 8.0, kRow7 = kRow6 + kRowH + 8.0, kLoopViewH = 116.0;
+    // row 7: INPUT (Input), DRIFT (Drift Seed, Start Drift, Speed Drift) and Loop Lock's window (LoopView)
+    static constexpr double kInputLeft = 8.0, kInputRight = 88.0;
+    static constexpr double kDriftLeft = 96.0, kDriftRight = 312.0, kLoopViewLeft = 320.0, kLoopViewRight = 1124.0;
+    static constexpr double kTailTop = kRow7 + kLoopViewH + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
     static constexpr double kSweepLeft = 8.0, kSweepRight = 258.0;          // sweep row 1: Sweep, Curve, Tone (on); Drive, Tone
@@ -57,15 +66,24 @@ public:
     static constexpr double kLowLeft = 298.0, kLowRight = 470.0;            // row 3: Push, Dip (the Low band's)
     static constexpr double kExtremeLeft = 478.0, kExtremeRight = 770.0;    // row 3: Drop Out, Density, Speed (centred)
     static constexpr double kLiquidLeft = 778.0, kLiquidRight = 1124.0;     // row 3: Liquid, Res, Low, High
-    static constexpr double kGesturesLeft = 8.0, kGesturesRight = 600.0;    // row 4: the slot picker, File, Gesture, Target; Mode, Length, Speed; Position, Smooth, Depth, Intensity
-    static constexpr double kWobbleLeft = 608.0, kWobbleRight = 752.0;      // row 4: Wobble's Rate and Amount
-    static constexpr double kGestureViewLeft = 760.0, kGestureViewRight = 1124.0; // row 4: the gesture display
-    // GESTURES (panel coordinates): the slot picker (a cell per slot from kSwitchLeft) and File beside it, then
-    // the Gesture and Target menus under them (each with its label); the column of Mode, Length and Speed from
-    // kGestureColLeft; the knobs (Position, Smooth, Depth, Intensity) from kGestureKnobLeft
-    static constexpr double kSlotCellW = 30.0, kSlotTop = 28.0, kSlotRowH = 20.0, kGestureFileLeft = 142.0, kGestureMenuRight = 206.0;
-    static constexpr double kGestureMenuTop = 54.0, kGestureTargetTop = 80.0, kGestureLabelW = 46.0;
+    static constexpr double kGesturesLeft = 8.0, kGesturesRight = 530.0;    // row 4: Gesture, File; Mode, Length, Speed; Position, Smooth, Amount
+    static constexpr double kWobbleLeft = 538.0, kWobbleRight = 682.0;      // row 4: Wobble's Rate and Amount
+    static constexpr double kGestureViewLeft = 690.0, kGestureViewRight = 1124.0; // row 4: the gesture display (its lanes)
+    // GESTURE (panel coordinates): the Gesture menu (with its label) at kGestureTop, File under it; the column of
+    // Mode, Length and Speed from kGestureColLeft; the knobs (Position, Smooth, Amount) from kGestureKnobLeft
+    static constexpr double kGestureTop = 28.0, kGestureRowH = 20.0, kGestureFileTop = 54.0, kGestureMenuRight = 206.0, kGestureLabelW = 46.0;
+    static constexpr double kGestureLengthTop = 54.0, kGestureSpeedTop = 80.0;
     static constexpr double kGestureColLeft = 214.0, kGestureColRight = 318.0, kGestureColLabelW = 40.0, kGestureKnobLeft = 330.0;
+    // the LAB (row 5): MID, HIGH, AIR (a chain each: Grit, Curve, OTT, Level over Mute, Solo, Mono) and POST (Depth,
+    // Time, Up, Down), kLabW wide from kLabLeft, kLabStep apart; the switches' row (panel coordinates)
+    static constexpr double kLabLeft = 8.0, kLabW = 273.0, kLabStep = kLabW + 8.0, kLabSwitchTop = 100.0, kLabSwitchH = 18.0;
+    static_assert (kLabLeft + 3 * kLabStep + kLabW == kWidth - 8.0, "the LAB's four panels fill the row");
+    // row 6 (0.30): LOOP LOCK (Loop Lock, Shape and Length over each other; Start, End, Depth), PARA (Split, Rate and
+    // Mix over each other; LP Freq, HP Freq, LP Move, HP Move, HP Level), SUB GUARD (Sub Guard, Guard Bells; Freq, Floor)
+    static constexpr double kLoopLeft = 8.0, kLoopRight = 342.0;
+    static constexpr double kParaLeft = 350.0, kParaRight = 812.0;
+    static constexpr double kGuardLeft = 820.0, kGuardRight = 1124.0;
+    static constexpr double kColTop2 = 56.0, kColTop3 = 82.0; // (a switch column's second and third rows)
     // a switch at the top left of its panel (Bands in SPLIT, Sync in MOVEMENT, Passes in GLUE; panel coordinates)
     static constexpr double kSwitchLeft = 14.0, kSwitchTop = 30.0, kSwitchW = 110.0, kSwitchH = 20.0;
     // SHIFT's On switch: a knob wide, in the first knob's place (its knobs follow it from kKnobLeft + kKnobStep)
@@ -89,11 +107,20 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
+    // The Basic page (pluginkit/ui/BasicView.h): Loop Lock's window (LoopView); Input, Drive (SWEEP's) and Movement; Loop
+    // Lock, Length and Sub Guard; Mix and Output; the end saturator in the extras
+    pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
 private:
     std::unique_ptr<smacheratr::TailPanel> tail;
+    std::unique_ptr<smacheratr::TailPanel> makeTail ();
+    static smacheratr::TailBases tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
+    GestureView* makeGestureView (const VSTGUI::CRect& r);
+    LoopView* makeLoopView (const VSTGUI::CRect& r);
+    LoopView* loopView = nullptr;
+    void buildRow6 (VSTGUI::CViewContainer* root);
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
     // High X, Air Level and Air Move dimmed with 3 Bands; Shift and Shift Mix while it is off; Seed B at Blend 0;
@@ -102,10 +129,10 @@ private:
     // off, its Rate while its Sync is on and its Sync Rate while it is off
     void updateLooks ();
     static bool affectsLooks (uint32_t id);
-    // BELLS shows one bell's controls at a time; GESTURES one slot's
+    // BELLS shows one bell's controls at a time
     void pickBell (int b);
-    void pickSlot (int g);
-    void showGestureFiles (VSTGUI::CPoint where); // File: the gesture files for the picked slot
+    void showGestureFiles (VSTGUI::CPoint where); // File: the gesture files (the one gesture's User)
+    void openGestureFolder ();                    // (made when it is missing)
     VSTGUI::CRect displayRect (bool arranged) const;
 
     Controller* ctl;
@@ -119,17 +146,23 @@ private:
     std::vector<pk::ParamView*> bellKnobs[kNumBells];
     pk::ParamView *rateViews[kNumBells] {}, *syncRateViews[kNumBells] {};
     int pickedBell = 0;
-    // per gesture slot: every control GESTURES shows for it, the ones dimmed while its Target is Off, and its Speed
-    std::vector<VSTGUI::CView*> slotViews[kNumGestureSlots];
-    std::vector<pk::ParamView*> slotControls[kNumGestureSlots];
-    pk::ParamView* speedViews[kNumGestureSlots] {};
+    // GESTURE: the controls dimmed with Gesture None, and Speed (dimmed in Loop)
+    std::vector<pk::ParamView*> sceneControls;
+    pk::ParamView* sceneSpeed = nullptr;
     std::vector<pk::Knob*> wobbleKnobs;
     GestureView* gestureView = nullptr;
-    int pickedSlot = 0;
     pk::Label* latencyLabel = nullptr;
+    std::vector<pk::ParamView*> loopControls, paraControls, guardControls, driftKnobs; // (dimmed while their stage is off)
     pk::Knob *highXKnob = nullptr, *airLevelKnob = nullptr, *airMoveKnob = nullptr, *shiftKnob = nullptr, *shiftMixKnob = nullptr,
               *seedBKnob = nullptr;
     std::vector<pk::Knob*> liquidKnobs; // Res, Low, High
+    // the LAB: the hosts its knobs show slots' values through (a slot's kind's table; POST's OTT Up and Down), every
+    // control in it (repainted when a LAB parameter moves), and per chain (MID, HIGH, AIR; then POST) the controls of its
+    // smacheratr, its multidyn and all of them (dimmed: the slot not holding that kind; Air with 3 bands)
+    std::vector<std::unique_ptr<pk::ParamHost>> labHosts;
+    std::vector<pk::ParamView*> labViews;
+    std::vector<pk::ParamView*> labSat[kNumBandChains + 1], labOtt[kNumBandChains + 1], labAll[kNumBandChains + 1];
+    void buildLab (VSTGUI::CViewContainer* root);
 };
 
 } // namespace moistr

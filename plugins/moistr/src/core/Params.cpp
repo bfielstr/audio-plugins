@@ -4,6 +4,7 @@
 #include "Gesture.h"
 
 #include "smacheratr/src/core/TailExt.h"
+#include "smemplr/src/core/FxSlot.h"
 
 #include <string>
 #include <vector>
@@ -138,8 +139,7 @@ const ParamTable& paramTable ()
         for (int g = 0; g < kNumFactoryGestures; ++g)
             gestures.push_back (factoryGestureName (g));
         gestures.push_back ("User");
-        const std::vector<const char*> targets {"Off", "Mid Level", "High Level", "Air Level", "Wobble Rate", "Wobble Amount", "Close",
-                                                "Liquid Pos", "Dirt", "Bells", "Mid X", "High X", "Seed Blend", "Shift"};
+        const std::vector<const char*> targets (std::begin (kTargetNames), std::begin (kTargetNames) + kNumSlotTargets);
         // (a different gesture in each slot to start from)
         static const int firstGesture[kNumGestureSlots] = {kGestureCellFade, kGestureStutter16, kGestureRateRise, kGestureResonantClose};
         for (int g = 0; g < kNumGestureSlots; ++g)
@@ -157,9 +157,157 @@ const ParamTable& paramTable ()
         v.push_back (percent (kIntensity, "Intensity", "Intensity", 1.0));
         v.push_back (real (kWobbleRate, "Wobble Rate", "Rate", kWobbleRateMin, kWobbleRateMax, 2.0, Curve::Log, Disp::Number));
         v.push_back (percent (kWobbleAmount, "Wobble Amount", "Amount", 0.0));
+        // 0.30: the one gesture (a Scene: many lanes on one clock). None by default: moistr as 0.27.
+        std::vector<const char*> scenes {"None"};
+        for (int g = 0; g < kNumFactoryScenes; ++g)
+            scenes.push_back (factorySceneName (g));
+        scenes.push_back ("User");
+        v.push_back (choice (kScene, "Gesture", "Gesture", scenes, kSceneNone));
+        v.push_back (choice (kSceneMode, "Gesture Mode", "Mode", {"Loop", "Walk"}, kModeLoop));
+        v.push_back (choice (kSceneLength, "Gesture Length", "Length", {"Own", "1/2", "1", "2", "4", "8", "16", "32"}, 0));
+        v.push_back (choice (kSceneSpeed, "Gesture Speed", "Speed", {"Hold", "x1/8", "x1/4", "x1/2", "x1", "x2", "x4"}, 4));
+        v.push_back (percent (kScenePosition, "Gesture Position", "Position", 0.0));
+        v.push_back (percent (kSceneSmooth, "Gesture Smooth", "Smooth", 0.0));
+        v.push_back (percent (kSceneAmount, "Gesture Amount", "Amount", 1.0));
+        // 0.30: the LAB. Every chain at 0 dB and every slot Empty: moistr as 0.29 (a new instance too: the Neuro
+        // recipe is a preset, neuroRecipe). A slot's block is stored normalized (its kind reads it through its own
+        // table, as in a smemplr rack slot); its defaults are those of the kind the slot is meant for (labSlotKind),
+        // so loading that kind into it starts from the kind's defaults.
+        for (int c = 0; c < kNumChains; ++c)
+        {
+            auto name = [&] (const char* what) { return keep (std::string (kChainNames[c]) + " Chain " + what); };
+            v.push_back (real (chainId (c, kChainLevel), name ("Level"), "Level", kLevelOffDb, 12.0, 0.0, Curve::Linear, Disp::Db));
+            v.push_back (toggle (chainId (c, kChainMute), name ("Mute"), "Mute", false));
+            v.push_back (toggle (chainId (c, kChainSolo), name ("Solo"), "Solo", false));
+            v.push_back (toggle (chainId (c, kChainMono), name ("Mono"), "Mono", false));
+            v.push_back (toggle (chainId (c, kChainSource), name ("Source"), "Source", false)); // (kept for later)
+            for (int k = 1; k <= 3; ++k)
+                v.push_back (toggle (chainId (c, (ChainField)(kChainSource + k)), name (keep ("Spare " + std::to_string (k))), "Spare", false));
+        }
+        std::vector<const char*> kinds;
+        for (int t = 0; t < kLabKinds; ++t)
+            kinds.push_back (t == 0 ? "Empty" : t < smemplr::kNumFxTypes ? smemplr::fxName (t) : keep ("Kind " + std::to_string (t)));
+        for (int s = 0; s < kNumLabSlots; ++s)
+        {
+            const std::string fx = labSlotName (s);
+            v.push_back (choice (labSlotParam (s, kLabType), keep (fx + " Type"), keep (fx), kinds, smemplr::kFxEmpty));
+            v.push_back (toggle (labSlotParam (s, kLabOn), keep (fx + " On"), keep (fx + " On"), true));
+            const auto& t = smemplr::fxBlockTable (labSlotKind (s));
+            for (uint32_t j = 0; j < smemplr::kSlotBlockAll; ++j)
+            {
+                const std::string n = fx + " " + std::to_string (j + 1);
+                v.push_back (real (labBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, j < t.size () ? t.defaultNormalized (j) : 0.0,
+                                   Curve::Linear, Disp::Percent));
+            }
+        }
+        // 0.30: Input, Loop Lock, PARA and Sub Guard (Sub Guard on: a state saved before reads it off)
+        v.push_back (real (kInput, "Input", "Input", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kLoopLock, "Loop Lock", "Loop Lock", false));
+        v.push_back (percent (kLoopStart, "Loop Start", "Start", 0.0));
+        v.push_back (percent (kLoopEnd, "Loop End", "End", 1.0));
+        v.push_back (choice (kLoopLength, "Loop Length", "Length", {"1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars", "Natural"}, 4));
+        v.push_back (choice (kLoopShape, "Loop Shape", "Shape", {"Wrap", "Bounce"}, kLoopWrap));
+        v.push_back (toggle (kParaOn, "Split On", "Split", false));
+        v.push_back (real (kParaLpFreq, "LP Freq", "LP Freq", kParaLpMin, kParaLpMax, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (real (kParaHpFreq, "HP Freq", "HP Freq", kParaHpMin, kParaHpMax, 250.0, Curve::Log, Disp::Hz));
+        v.push_back (percent (kParaLpMove, "LP Move", "LP Move", 0.5));
+        v.push_back (real (kParaHpMove, "HP Move", "HP Move", 0.0, kParaHpMoveMax, 2.0, Curve::Linear, Disp::Number));
+        v.push_back (percent (kParaHpLevelMove, "HP Level Move", "HP Level", 0.5));
+        v.push_back (choice (kParaRate, "Split Rate", "Rate", {"4 Bars", "2 Bars", "1 Bar", "1/2", "1/4", "1/8", "1/16"}, 2));
+        v.push_back (percent (kParaMix, "Split Mix", "Mix", 1.0));
+        v.push_back (toggle (kSubGuard, "Sub Guard", "Sub Guard", true));
+        v.push_back (real (kSubGuardFreq, "Sub Guard Freq", "Freq", kGuardFreqMin, kGuardFreqMax, kGuardFreqDefault, Curve::Log, Disp::Hz));
+        v.push_back (real (kSubFloor, "Sub Floor", "Floor", kSubFloorMin, 0.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (toggle (kGuardBells, "Guard Bells", "Guard Bells", true));
+        v.push_back (integer (kDriftSeed, "Drift Seed", "Drift Seed", 0, kMaxDriftSeed, 0, Disp::Plain));
+        v.push_back (percent (kStartDrift, "Start Drift", "Start Drift", 0.25));
+        v.push_back (real (kSpeedDrift, "Speed Drift", "Speed Drift", 0.0, kSpeedDriftMax, 0.02, Curve::Linear, Disp::Percent));
+        v.push_back (percent (kLoopDepth, "Loop Depth", "Depth", 0.0));
         return v;
     }());
     return t;
+}
+
+static_assert (kLabType == smemplr::kSlotType && kLabOn == smemplr::kSlotOn && kLabBlock == smemplr::kSlotParams &&
+                   kLabSlotFields == smemplr::kSlotFields && smemplr::kNumFxTypes <= kLabKinds,
+               "a lab slot is a smemplr rack slot: a Type, an On and its block");
+
+std::string labSlotName (int slot)
+{
+    if (slot >= postSlot (0))
+        return "Post FX " + std::to_string (slot - postSlot (0) + 1);
+    return std::string (kChainNames[slot / kChainSlots]) + " FX " + std::to_string (slot % kChainSlots + 1);
+}
+
+int labSlotKind (int slot)
+{
+    if (slot == postSlot (0))
+        return smemplr::kFxMultidyn;
+    if (slot == postSlot (1))
+        return smemplr::kFxSmacheratr;
+    if (slot >= postSlot (0))
+        return smemplr::kFxEmpty;
+    const int k = slot % kChainSlots;
+    return k == 0 ? smemplr::kFxSmacheratr : k == 1 ? smemplr::kFxMultidyn : smemplr::kFxEmpty;
+}
+
+namespace {
+using Values = std::vector<std::pair<uint32_t, double>>;
+// a LAB slot holding `kind`, some of the kind's own parameters (its IDs, plain values) set; a kind the slot is not meant
+// for (labSlotKind) gets its own defaults in the block first, as the editor loads a kind
+void labKind (Values& v, int slot, int kind, std::initializer_list<std::pair<uint32_t, double>> plain)
+{
+    v.emplace_back (labSlotParam (slot, kLabType), toNormalized (labSlotParam (slot, kLabType), kind));
+    const auto& t = smemplr::fxBlockTable (kind);
+    if (kind != labSlotKind (slot))
+        for (uint32_t j = 0; j < t.size (); ++j)
+            if (t.defaultNormalized (j) != defaultNormalized (labBlockParam (slot, j)))
+                v.emplace_back (labBlockParam (slot, j), t.defaultNormalized (j));
+    for (const auto& [id, x] : plain)
+        if (const int64_t j = smemplr::fxBlockOf (kind, id); j >= 0)
+            v.emplace_back (labBlockParam (slot, (uint32_t)j), t.toNormalized ((uint32_t)j, x));
+}
+} // namespace
+
+std::vector<std::pair<uint32_t, double>> neuroRecipe ()
+{
+    Values v;
+    auto set = [&] (uint32_t id, double plain) { v.emplace_back (id, toNormalized (id, plain)); };
+    // four bands above a low Low X (Seed 2: 146 Hz), moving in time with the song; a quarter-note Wobble on the top
+    set (kBandCount, kBands4);
+    set (kSeed, 2.0);
+    set (kXoverMid, 900.0);
+    set (kXoverHigh, 3500.0);
+    set (kMovement, 0.55);
+    set (kSync, 1.0);
+    set (kSyncRate, 3.0); // (1/2)
+    set (kDensity, 2.0);
+    set (kMidMove, 0.6);
+    set (kHighMove, 1.0);
+    set (kAirMove, 1.0);
+    set (kDepth, 18.0);
+    set (kWobbleRate, 1.0);
+    set (kWobbleAmount, 0.85);
+    // each band's chain: smacheratr driven into its hard clip (Drive, Output; at 2x, its Gentlr off: a band alone needs
+    // neither), then an OTT (Amount) of one band: the chain is the band (with the three chains, a three-band OTT)
+    struct ChainRecipe
+    {
+        double driveDb, outputDb, ott;
+    };
+    static constexpr ChainRecipe chains[kNumBandChains] = {{22.0, -10.0, 0.6}, {18.0, -10.0, 0.7}, {12.0, -8.0, 0.5}};
+    for (int c = 0; c < kNumBandChains; ++c)
+    {
+        labKind (v, chainSlot (c, 0), smemplr::kFxSmacheratr,
+                 {{smacheratr::kOversampling, smacheratr::kOs2x}, {smacheratr::kClarity, 0.0}, {smacheratr::kDrive, chains[c].driveDb},
+                  {smacheratr::kPostClip, smacheratr::kPostHard}, {smacheratr::kOutput, chains[c].outputDb}});
+        labKind (v, chainSlot (c, 1), smemplr::kFxMultidyn, {{multidyn::kBands, 0.0}, {multidyn::kAmount, chains[c].ott}});
+    }
+    // POST: an OTT on the chains' sum, then a hard clipper (Gentlr and the pre-limiter off)
+    labKind (v, postSlot (0), smemplr::kFxMultidyn, {{multidyn::kAmount, 0.4}});
+    labKind (v, postSlot (1), smemplr::kFxSmacheratr,
+             {{smacheratr::kDrive, 27.0}, {smacheratr::kPostClip, smacheratr::kPostHard}, {smacheratr::kClarity, 0.0}, {smacheratr::kPreLimit, 0.0},
+              {smacheratr::kOutput, -18.0}});
+    return v;
 }
 
 double defaultNormalized025 (uint32_t id)
@@ -178,7 +326,9 @@ double defaultNormalized025 (uint32_t id)
         case kSweepCurve: return toNormalized (id, kCurveHard);
         case kToneOn:
         case kCleanSub:
-        case kSubBoost: return 0.0;
+        case kSubBoost:
+        case kSubGuard:
+        case kGuardBells: return 0.0; // (0.30's Sub Guard off: the sound kept)
         default: break;
     }
     for (int b = 2; b < kNumBells; ++b)
@@ -197,6 +347,10 @@ double gestureOffNormalized (uint32_t id)
 
 double defaultNormalizedForVersion (uint32_t id, int version)
 {
+    if (isLabParam (id))
+        return defaultNormalized (id); // (before 0.30 there was no LAB: every slot Empty, every chain at 0 dB)
+    if (id == kSubGuard || id == kGuardBells)
+        return version < kStateSubGuard ? 0.0 : defaultNormalized (id); // (on in a new instance; off before: the sound kept)
     if (isGestureParam (id))
         return version < 6 ? gestureOffNormalized (id) : defaultNormalized (id);
     return version < 3 ? legacyDefaultNormalized (id) : version < 5 ? defaultNormalized025 (id) : defaultNormalized (id);
@@ -211,6 +365,8 @@ double legacyDefaultNormalized (uint32_t id)
         case kGlue: return toNormalized (kGlue, 0.4);
         case kGrit: return toNormalized (kGrit, 0.2);
         case kSweep: return 0.0; // (off: the sound before 0.24)
+        case kSubGuard:
+        case kGuardBells: return 0.0; // (off: the sound before 0.30)
         default: return defaultNormalized025 (id);
     }
 }

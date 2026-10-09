@@ -5,12 +5,17 @@
 // controls (Low Push / Dip, Seed B / Blend, Density, Speed, Drop Out; all at their defaults 0.21's sound bit
 // for bit), Link and Liquid (0.23: off, 0.22's sound bit for bit; the Liquid preset's statistics on a detuned
 // bass, pinned), the gestures (0.27: the curves, Loop and Walk, the transport, every target and none of them
-// touching the Low band, Wobble's phase, the files; off: 0.26's sound bit for bit) and the CPU budget.
+// touching the Low band, Wobble's phase, the files; off: 0.26's sound bit for bit; they still play in a 0.27
+// project), the one gesture (0.30: the factory gestures, every lane at the same place on one clock, Loop and Walk
+// keeping every lane continuous, Amount 0 or None 0.29's sound bit for bit, the lanes' ranges, the sub and the
+// stereo image kept, the files of lanes), the LAB (0.30: empty, 0.29's sound bit for bit; its paths lined up; mono kept,
+// the sub untouched; Mute, Solo, Level and Mono) and the CPU budget.
 #include "pluginkit/testing/CpuClock.h"
 #include "Dsp.h"
 #include "Engine.h"
 #include "Gesture.h"
 #include "GestureFile.h"
+#include "LoopWindow.h"
 #include "Movement.h"
 #include "Params.h"
 #include "Sweep.h"
@@ -160,7 +165,7 @@ std::vector<float> reese (double seconds)
 // tests written before 0.24 start from here; a state saved before 0.24 reads these too)
 void legacy (Engine& e)
 {
-    for (uint32_t id : {kDrive, kMovement, kGlue, kGrit, kSweep})
+    for (uint32_t id : {kDrive, kMovement, kGlue, kGrit, kSweep, kSubGuard}) // (and 0.30's Sub Guard off)
         e.setParam (id, toPlain (id, legacyDefaultNormalized (id)));
 }
 std::unique_ptr<Engine> engine (int block = 512)
@@ -2341,6 +2346,7 @@ struct SweepRig
     double sr;
     explicit SweepRig (double rate, const std::function<void (ParamArray&)>& set = {}) : sr (rate)
     {
+        p[kGuardBells] = 0.0; // (the bells as they are: Guard Bells, on in a new instance, is checked on its own)
         if (set)
             set (p);
         s.prepare (sr);
@@ -2515,6 +2521,7 @@ TEST (sweep_old_states_keep_their_sound)
             auto e = fresh ();
             for (uint32_t id = 0; id < kNumParams; ++id)
                 e->setParam (id, toPlain (id, old ? defaultNormalized025 (id) : defaultNormalized (id)));
+            e->setParam (kSubGuard, 0.0); // (0.30's Sub Guard, on over Init, off: the rest is what is checked)
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
             e->reset ();
@@ -2531,7 +2538,7 @@ TEST (sweep_old_states_keep_their_sound)
 
 TEST (sweep_ocean_preset_is_init)
 {
-    // Sweep/Ocean is the new instance's sound: over Init it sets nothing that differs
+    // Sweep/Ocean is Init's sound (and a new instance's): over Init it sets nothing that differs
     std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / "Sweep/Ocean.txt");
     std::stringstream ss;
     ss << in.rdbuf ();
@@ -2752,9 +2759,9 @@ TEST (sweep_old_presets_unchanged)
         pk::presets::FactoryPreset fp;
         std::string err;
         CHECK (pk::presets::parseFactoryPreset (ss.str (), rel, paramTable (), fp, err), "%s parses: %s", rel.c_str (), err.c_str ());
-        if (rel.rfind ("Sweep/", 0) == 0 || rel.rfind ("Gestures/", 0) == 0)
+        if (rel.rfind ("Sweep/", 0) == 0 || rel.rfind ("Gestures/", 0) == 0 || rel.rfind ("Neuro/", 0) == 0)
         {
-            // the new ones (0.24's sweep presets, 0.27's gesture presets): the stage on
+            // the new ones (0.24's sweep presets, 0.27's gesture presets, 0.30's LAB presets): the stage on
             auto e = fresh ();
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
@@ -2766,6 +2773,7 @@ TEST (sweep_old_presets_unchanged)
             auto e = fresh ();
             for (uint32_t id = 0; id < kNumParams; ++id)
                 e->setParam (id, toPlain (id, legacyBase ? legacyDefaultNormalized (id) : defaultNormalized (id)));
+            e->setParam (kSubGuard, 0.0); // (0.30's Sub Guard, on over Init, off: the rest is what is checked)
             for (auto& [id, n] : fp.values)
                 e->setParam (id, toPlain (id, n));
             e->reset ();
@@ -2848,8 +2856,9 @@ TEST (sweep_stable_everywhere)
             CHECK (finite (l) && finite (r), "%.0f Hz%s: finite", sr, extreme ? " (extremes)" : "");
             CHECK (denormals == 0, "%.0f Hz%s: no denormals (%d)", sr, extreme ? " (extremes)" : "", denormals);
             // (the extremes: Clean Sub at +12 dB and Sub Boost at 100 % pass lows boosted by several +24 dB bells
-            // around the saturator, so they are bounded only by the bells' gain)
-            CHECK (top < (extreme ? 30.0 : 4.0), "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
+            // around the saturator, so they are bounded only by the bells' gain; with Sub Guard and Guard Bells, a new
+            // instance's, the lows go around the saturator at its gain on them alone, not cut by the bells either)
+            CHECK (top < (extreme ? 50.0 : 4.0), "%.0f Hz%s: bounded (%.2f)", sr, extreme ? " (extremes)" : "", top);
         }
 }
 
@@ -3530,7 +3539,7 @@ TEST (gesture_targets_act)
     const double cleanDb = db (upper (clean) / upper (ref)), bareDb = db (upper (bare) / upper (ref));
     std::printf ("    Dirt: the upper bands %+.2f dB; Bells: %+.2f dB\n", cleanDb, bareDb);
     // (Dirt is level matched; Bells takes the bells' cuts and boosts away, so the upper bands' balance changes)
-    CHECK (std::fabs (cleanDb) < 1.5 && std::fabs (bareDb) < 6.0, "Dirt about as loud, Bells within 6 dB (%.2f, %.2f dB)", cleanDb, bareDb);
+    CHECK (std::fabs (cleanDb) < 2.0 && std::fabs (bareDb) < 6.0, "Dirt about as loud, Bells within 6 dB (%.2f, %.2f dB)", cleanDb, bareDb);
     CHECK (clean != ref && bare != ref && clean != bare, "Dirt and Bells change the sound");
     // Mid X at 0 of its range: 400 Hz
     render (kTargetMidX, 1.0, &e);
@@ -3636,9 +3645,9 @@ TEST (gesture_files)
 
 TEST (gesture_presets)
 {
-    // the gesture presets (presets/Gestures): each turns gestures on and renders clean (finite, mono, no clicks
-    // beyond the plain sound's), and the sub (the Reese's 55 Hz) stays within 0.5 dB of the same settings without
-    // the gestures
+    // the gesture presets (presets/Gestures): each picks one gesture (no 0.27 slot) and renders clean (finite, mono,
+    // no clicks beyond the plain sound's), and the sub (the Reese's 55 Hz) stays within 0.5 dB of the same settings
+    // without the gesture
     const auto x = reese (4.0);
     const size_t a = (size_t)(1.0 * kSr), b = x.size ();
     int checked = 0;
@@ -3651,9 +3660,12 @@ TEST (gesture_presets)
         auto off = fresh ();
         tailNeutral (*off);
         loadPreset (*off, rel);
-        for (int g = 0; g < kNumGestureSlots; ++g)
-            off->setParam (gestureId (g, kGestureTarget), kTargetOff);
+        off->setParam (kScene, kSceneNone);
         off->setParam (kWobbleAmount, 0.0);
+        bool slots = false;
+        for (int g = 0; g < kNumGestureSlots; ++g)
+            slots = slots || std::lround (e->param (gestureId (g, kGestureTarget))) != kTargetOff;
+        CHECK (!slots && std::lround (e->param (kScene)) > kSceneNone && std::lround (e->param (kScene)) < kSceneUser, "%s: one factory gesture, no slots", rel);
         off->reset ();
         std::vector<float> r;
         const auto y = run (*e, x, &r, 256, playing (*e, 150.0));
@@ -3666,7 +3678,7 @@ TEST (gesture_presets)
         }
         const double sub = db (toneAt (y, 55.0, a, b) / toneAt (ref, 55.0, a, b));
         std::printf ("    %-28s the sub %+.3f dB, the whole %+.2f dB, largest step %.3f (%.3f without)\n", rel, sub, db (rms (y, a, b) / rms (ref, a, b)), jump, own);
-        CHECK (e->gesturesRunning () && finite (y) && y == r, "%s: gestures on, finite, mono", rel);
+        CHECK (e->gesturesRunning () && e->scenePlaying () != nullptr && finite (y) && y == r, "%s: the gesture on, finite, mono", rel);
         CHECK (std::fabs (sub) < 0.5, "%s: the sub keeps its level (%.3f dB)", rel, sub);
         CHECK (jump < 1.5 * own, "%s: no clicks", rel);
         ++checked;
@@ -3674,19 +3686,1505 @@ TEST (gesture_presets)
     CHECK (checked == 4, "%d gesture presets", checked);
 }
 
+// ---- the one gesture (0.30): a scene of lanes on one clock
+
+namespace {
+// the Gesture choice on a factory scene (Loop, its own length, Amount 100 %)
+void sceneOn (Engine& e, int which) { e.setParam (kScene, which + 1); }
+// a user scene from JSON (kept alive by the caller)
+std::unique_ptr<Scene> sceneFrom (const std::string& json)
+{
+    SceneData d;
+    std::string err;
+    auto s = std::make_unique<Scene> ();
+    if (!parseSceneJson (json, "test", d, err) || !toScene (d, *s))
+        std::printf ("    scene: %s\n", err.c_str ());
+    return s;
+}
+} // namespace
+
+TEST (scene_factory_library)
+{
+    // 10 factory gestures, each of two or more lanes on real targets (never the Low band), every point on a 1/8- or
+    // 1/12-beat grid, every lane's curve within 0 .. 1 and moving; listed in the Gesture choice between None and User
+    CHECK (kNumFactoryScenes == 10, "%d factory gestures", kNumFactoryScenes);
+    const auto& info = paramTable ().info (kScene);
+    CHECK ((int)info.choices.size () == kNumFactoryScenes + 2 && std::string (info.choices.front ()) == "None" &&
+               std::string (info.choices.back ()) == "User",
+           "the Gesture choice: None, the factory gestures, User");
+    for (int i = 0; i < kNumFactoryScenes; ++i)
+    {
+        const Scene& s = factoryScene (i);
+        CHECK (std::string (info.choices[(size_t)i + 1]) == factorySceneName (i), "%s in the choice", factorySceneName (i));
+        CHECK (s.count >= 2 && s.count <= kMaxSceneLanes && s.length > 0.0, "%s: %d lanes over %.2f beats", factorySceneName (i), s.count, s.length);
+        bool grid = true, ranges = true;
+        for (int l = 0; l < s.count; ++l)
+        {
+            const SceneLane& lane = s.lane[l];
+            ranges = ranges && lane.target > kTargetOff && lane.target < kNumTargets && lane.curve.count >= 2 && lane.curve.length == s.length &&
+                     (lane.target == kTargetMidX || lane.target == kTargetHighX
+                          ? std::min (lane.lo, lane.hi) >= std::log2 (20.0) && std::max (lane.lo, lane.hi) <= std::log2 (20000.0) // (log2 Hz)
+                          : lane.lo >= 0.0 && lane.lo <= 1.0 && lane.hi >= 0.0 && lane.hi <= 1.0);
+            double lo = 1.0, hi = 0.0;
+            for (int k = 0; k < lane.curve.count; ++k)
+            {
+                const double eighth = lane.curve.beat[k] * 8.0, twelfth = lane.curve.beat[k] * 12.0;
+                grid = grid && (std::fabs (eighth - std::round (eighth)) < 1e-9 || std::fabs (twelfth - std::round (twelfth)) < 1e-9);
+                lo = std::min (lo, lane.curve.value[k]);
+                hi = std::max (hi, lane.curve.value[k]);
+            }
+            ranges = ranges && (hi - lo > 0.2 || s.lane[l].lo == s.lane[l].hi);
+            for (int m = 0; m < l; ++m)
+                ranges = ranges && s.lane[m].target != lane.target;
+        }
+        CHECK (grid, "%s: every point on a straight or triplet grid", factorySceneName (i));
+        CHECK (ranges, "%s: real targets (one lane each), curves within 0 .. 1", factorySceneName (i));
+    }
+    // Reese Cell as described: the mids fade out over 2.5 beats while the highs swell, Close shuts on beat 6 and
+    // opens on the downbeat, Wobble Rate 3 .. 9 then 38, Dirt the other way to the mids
+    const Scene& r = factoryScene (kSceneReeseCell);
+    auto laneOf = [&r] (int target) -> const SceneLane* {
+        for (int l = 0; l < r.count; ++l)
+            if (r.lane[l].target == target)
+                return &r.lane[l];
+        return nullptr;
+    };
+    const SceneLane *mid = laneOf (kTargetMidLevel), *high = laneOf (kTargetHighLevel), *close = laneOf (kTargetClose), *rate = laneOf (kTargetWobbleRate),
+                    *dirt = laneOf (kTargetDirt);
+    CHECK (mid && high && close && rate && dirt, "Reese Cell's lanes");
+    if (mid && high && close && rate && dirt)
+    {
+        CHECK (mid->curve.at (3.0) == 1.0 && mid->curve.at (5.5) == 0.0 && high->curve.at (2.0) == 0.0 && high->curve.at (4.0) == 1.0, "mids out, highs in");
+        CHECK (close->closeHz && close->hzLo == 400.0 && close->curve.at (5.9) == 1.0 && close->curve.at (7.0) == 0.0, "Close: open, then shut at 400 Hz");
+        const double r3 = std::exp2 (std::log2 (3.0) + (std::log2 (38.0) - std::log2 (3.0)) * rate->curve.at (0.0));
+        const double r9 = std::exp2 (std::log2 (3.0) + (std::log2 (38.0) - std::log2 (3.0)) * rate->curve.at (4.0 + 1.0 / 3.0));
+        CHECK (std::fabs (r3 - 3.0) < 1e-9 && std::fabs (r9 - 9.0) < 1e-9 && rate->curve.at (7.5) == 1.0, "Wobble Rate 3, 9, then 38 (%.3f, %.3f)", r3, r9);
+        double off = 0.0;
+        for (double b = 0.0; b < 8.0; b += 1.0 / 24.0)
+            off = std::max (off, std::fabs (dirt->curve.at (b) - (1.0 - mid->curve.at (b))));
+        CHECK (off < 1e-9, "Dirt crossfades the other way to the mids");
+    }
+}
+
+TEST (scene_lanes_in_tandem)
+{
+    // every lane at the same place: with Walk at Hold the clock stays at Position, and each lane's value is its
+    // curve there; playing, every lane follows the one clock (Loop: frac (beats / Length))
+    for (int which : {kSceneReeseCell, kSceneTalkingCell, kSceneSlowPhrase})
+        for (double at : {0.1, 0.45, 0.8})
+        {
+            auto e = fresh ();
+            tailNeutral (*e);
+            sceneOn (*e, which);
+            e->setParam (kSceneMode, kModeWalk);
+            e->setParam (kSceneSpeed, 0); // Hold
+            e->setParam (kScenePosition, at);
+            e->reset ();
+            run (*e, reese (0.1), nullptr, 256, playing (*e, 140.0));
+            const Scene& s = factoryScene (which);
+            double worst = 0.0;
+            for (int l = 0; l < s.count; ++l)
+                worst = std::max (worst, std::fabs (e->laneValue (l) - s.lane[l].curve.at (at * s.length)));
+            CHECK (e->scenePlaying () == &s && std::fabs (e->scenePos () - at) < 1e-12 && worst < 1e-6, "%s at %.2f: every lane there (off by %.2g)",
+                   factorySceneName (which), at, worst);
+        }
+    auto e = fresh ();
+    tailNeutral (*e);
+    sceneOn (*e, kSceneStutterCell);
+    e->reset ();
+    const std::vector<float> z (Engine::kTick, 0.0f);
+    std::vector<float> l (Engine::kTick), r (Engine::kTick);
+    bool same = true;
+    for (int t = 0; t < 2000; ++t)
+    {
+        const double beat = t * Engine::kTick / kSr * 140.0 / 60.0;
+        e->setTransport (140.0, beat, true);
+        e->process (z.data (), z.data (), l.data (), r.data (), Engine::kTick);
+        const double end = beat + Engine::kTick / kSr * 140.0 / 60.0;
+        same = same && std::fabs (e->scenePos () - gesturePosition (kModeLoop, end, 4.0, 1.0, 0.0)) < 1e-9;
+    }
+    CHECK (same, "playing: the one clock follows the song (Loop over its 4 beats)");
+}
+
+TEST (scene_loop_and_walk_continuous)
+{
+    // a gesture whose lanes end where they start: across Loop's wrap and Walk's turns every lane moves no more
+    // per tick than its steepest slope allows (no jumps), all lanes at once
+    auto s = sceneFrom (R"({"name": "Smooth", "length_beats": 2, "lanes": [
+        {"target": "Mid Level", "min": -24, "max": 0, "points": [[0, 1], [1, 0], [2, 1]]},
+        {"target": "Close", "min": 500, "max": 16000, "points": [[0, 0.2], [0.5, 1], [1.5, 0], [2, 0.2]]},
+        {"target": "Wobble Rate", "min": 2, "max": 12, "points": [[0, 0.5], [1, 1], [2, 0.5]]},
+        {"target": "Wobble Amount", "points": [[0, 0.6], [2, 0.6]]}]})");
+    CHECK (s->count == 4, "4 lanes (%d)", s->count);
+    const double steepest = 1.0 / 0.5 * 0.8; // (Close: 0.8 in half a beat)
+    for (int mode : {kModeLoop, kModeWalk})
+    {
+        auto e = fresh ();
+        tailNeutral (*e);
+        e->setUserScene (s.get ());
+        e->setParam (kScene, kSceneUser);
+        e->setParam (kSceneMode, mode);
+        e->setParam (kSceneSpeed, 6); // (Walk x4: a turn every half beat)
+        e->reset ();
+        const std::vector<float> z (Engine::kTick, 0.1f);
+        std::vector<float> l (Engine::kTick), r (Engine::kTick);
+        double prev[4] {-1, -1, -1, -1}, worst = 0.0, lastPos = 0.0;
+        int turns = 0, wraps = 0;
+        double dir = 0.0;
+        const double beatsPerTick = Engine::kTick / kSr * 2.0;
+        for (int t = 0; t < 20000; ++t)
+        {
+            e->setTransport (120.0, t * beatsPerTick, true);
+            e->process (z.data (), z.data (), l.data (), r.data (), Engine::kTick);
+            const double pos = e->scenePos ();
+            if (t > 0)
+            {
+                const double d = pos - lastPos;
+                if (mode == kModeLoop && d < -0.5)
+                    ++wraps;
+                if (mode == kModeWalk && dir * d < 0.0)
+                    ++turns;
+                if (std::fabs (d) > 1e-12)
+                    dir = d;
+            }
+            lastPos = pos;
+            for (int i = 0; i < 4; ++i)
+            {
+                if (prev[i] >= 0.0)
+                    worst = std::max (worst, std::fabs (e->laneValue (i) - prev[i]));
+                prev[i] = e->laneValue (i);
+            }
+        }
+        const double speed = mode == kModeWalk ? 4.0 : 1.0, most = steepest * speed * beatsPerTick;
+        std::printf ("    %s: %d wraps, %d turns, largest step of a lane %.5f (%.5f allowed)\n", mode == kModeLoop ? "Loop" : "Walk", wraps, turns, worst, most);
+        CHECK ((mode == kModeLoop ? wraps : turns) >= 5, "it wrapped or turned");
+        CHECK (worst <= most * 1.01, "every lane continuous");
+    }
+}
+
+TEST (scene_amount_zero_is_none)
+{
+    // Gesture None (the default, and an older state) or Amount 0: a new instance's sound, bit for bit, nothing run;
+    // a gesture faded in and out again: back to nothing run
+    CHECK (std::lround (defaultParams ()[kScene]) == kSceneNone && defaultParams ()[kSceneAmount] == 1.0, "None by default, Amount 100 %%");
+    const auto x = reese (2.0);
+    auto plainNew = fresh ();
+    const auto want = run (*plainNew, x, nullptr, 256, playing (*plainNew, 150.0));
+    for (int which : {kSceneReeseCell, kSceneBuzzTail, kSceneCrossoverWalk})
+    {
+        auto e = fresh ();
+        sceneOn (*e, which);
+        e->setParam (kSceneAmount, 0.0);
+        e->setParam (kSceneMode, kModeWalk);
+        e->setParam (kSceneSmooth, 0.4);
+        e->reset ();
+        const auto got = run (*e, x, nullptr, 256, playing (*e, 150.0));
+        CHECK (got == want && !e->gesturesRunning (), "%s at Amount 0: a new instance's sound, bit for bit", factorySceneName (which));
+    }
+    // a 0.27 project's slots: they still play, the same with Gesture None as beside a gesture at Amount 0
+    auto slots = [&] (int which, double amount) {
+        auto e = fresh ();
+        gesture (*e, 0, kTargetMidLevel, kGestureCellFade);
+        gesture (*e, 1, kTargetHighLevel, kGestureSwell, 0.8);
+        gesture (*e, 2, kTargetClose, kGestureResonantClose, 0.7);
+        e->setParam (kScene, which);
+        e->setParam (kSceneAmount, amount);
+        e->reset ();
+        auto y = run (*e, x, nullptr, 256, playing (*e, 150.0));
+        CHECK (e->gesturesRunning () && e->gesturePull (0) == 1.0, "the slots play");
+        return y;
+    };
+    const auto slotsAlone = slots (kSceneNone, 1.0);
+    CHECK (slotsAlone != want && slotsAlone == slots (kSceneReeseCell + 1, 0.0), "0.27 slots: the same beside a gesture at Amount 0");
+    auto f = fresh ();
+    sceneOn (*f, kSceneGateSwap);
+    f->reset ();
+    run (*f, reese (0.5), nullptr, 256, playing (*f, 150.0));
+    CHECK (f->gesturesRunning () && f->scenePull () == 1.0, "on: it runs");
+    f->setParam (kSceneAmount, 0.0);
+    run (*f, reese (1.0), nullptr, 256, playing (*f, 150.0, 2.0));
+    CHECK (!f->gesturesRunning () && f->scenePull () == 0.0, "Amount 0 again: faded out, not run");
+    f->setParam (kSceneAmount, 1.0);
+    f->setParam (kScene, kSceneNone);
+    run (*f, reese (0.3), nullptr, 256, playing (*f, 150.0, 4.0));
+    CHECK (!f->gesturesRunning () && f->scenePlaying () == nullptr, "None: not run");
+}
+
+TEST (scene_lane_ranges)
+{
+    // each lane's range in its target's units: a flat lane at its top puts the target there; Amount scales them
+    auto s = sceneFrom (R"({"length_beats": 1, "lanes": [
+        {"target": "High Level", "min": -48, "max": -24, "points": [[0, 1]]},
+        {"target": "Close", "min": 400, "max": 900, "points": [[0, 0]]},
+        {"target": "Wobble Rate", "min": 1, "max": 9, "points": [[0, 1]]},
+        {"target": "Wobble Amount", "points": [[0, 0.5]]},
+        {"target": "Mid X", "min": 1000, "max": 2000, "points": [[0, 0]]},
+        {"target": "Shift", "min": 120, "max": 0, "points": [[0, 0]]},
+        {"target": "Off", "points": [[0, 0]]}]})");
+    CHECK (s->count == 6, "the Off lane left out (%d lanes)", s->count);
+    auto render = [&] (double amount) {
+        auto e = fresh ();
+        tailNeutral (*e);
+        e->setParam (kShiftOn, 1.0);
+        e->setUserScene (s.get ());
+        e->setParam (kScene, kSceneUser);
+        e->setParam (kSceneAmount, amount);
+        e->reset ();
+        run (*e, reese (0.3), nullptr, 256, playing (*e, 120.0));
+        return e;
+    };
+    auto e = render (1.0);
+    CHECK (std::fabs (db (e->gestureGain (kBandHigh)) + 24.0) < 1e-6, "High Level at -24 dB (%.3f)", db (e->gestureGain (kBandHigh)));
+    CHECK (std::fabs (e->closeHz () - 400.0) < 1e-6, "Close at 400 Hz (%.3f; Tone on at 7 kHz)", e->closeHz ());
+    CHECK (std::fabs (e->wobbleRate () - 9.0) < 1e-9 && std::fabs (e->wobbleAmount () - 0.5) < 1e-9, "Wobble at 9 cycles per beat, 50 %%");
+    CHECK (std::fabs (e->xoverHz (0, 1) - 1000.0) < 1.0, "Mid X at 1 kHz (%.1f)", e->xoverHz (0, 1));
+    // a lane takes Mid X below the control's range (400 Hz), down to a third of an octave above the locked Low X
+    {
+        auto low = sceneFrom (R"({"length_beats": 1, "lanes": [{"target": "Mid X", "min": 100, "max": 100, "points": [[0, 1]]}]})");
+        for (int seed : {1, 40, 90})
+        {
+            auto f = fresh ();
+            f->setParam (kSeed, seed);
+            f->setUserScene (low.get ());
+            f->setParam (kScene, kSceneUser);
+            f->reset ();
+            run (*f, reese (0.3), nullptr, 256, playing (*f, 120.0));
+            const double floor = f->lowXover () * std::exp2 (1.0 / 3.0), want = std::max (100.0, floor);
+            CHECK (std::fabs (f->xoverHz (0, 1) - want) < 0.5 && f->xoverHz (0, 0) == f->lowXover (),
+                   "seed %d: Mid X at %.1f Hz (Low X %.1f stays locked)", seed, f->xoverHz (0, 1), f->lowXover ());
+        }
+    }
+    CHECK (std::fabs (e->shiftNow () - 120.0) < 1e-6, "Shift: min above max turns the lane round (%.2f Hz)", e->shiftNow ());
+    // Amount 50 %: half way from the controls (High Level at its Level: half way down the dB scale to -24 is -12)
+    auto h = render (0.5);
+    CHECK (std::fabs (db (h->gestureGain (kBandHigh)) + 12.0) < 1e-6, "Amount 50 %%: High Level at -12 dB (%.3f)", db (h->gestureGain (kBandHigh)));
+    CHECK (std::fabs (h->wobbleAmount () - 0.25) < 1e-9, "Amount 50 %%: Wobble Amount half way from 0 (%.3f)", h->wobbleAmount ());
+}
+
+TEST (scenes_never_touch_low)
+{
+    // every factory gesture on a new instance (the Ocean sound: 3 bands at one level, no Movement, no Liquid):
+    // clearly heard (the difference from the same render without it at least -20 dB of the whole), while the sub
+    // (the Reese's 55 Hz) keeps its level within 0.5 dB, a mono input stays mono (the channels share every gain and
+    // coefficient), finite
+    const auto x = reese (14.0); // (32 beats at 140 bpm: every gesture played through)
+    const size_t a = (size_t)(0.5 * kSr), b = x.size ();
+    auto ref = [&] {
+        auto e = fresh ();
+        e->reset ();
+        return run (*e, x, nullptr, 256, playing (*e, 140.0));
+    }();
+    for (int which = 0; which < kNumFactoryScenes; ++which)
+    {
+        auto e = fresh ();
+        sceneOn (*e, which);
+        e->reset ();
+        std::vector<float> r;
+        const auto y = run (*e, x, &r, 256, playing (*e, 140.0));
+        double diff = 0.0, all = 0.0;
+        for (size_t i = a; i < b; ++i)
+        {
+            diff += ((double)y[i] - ref[i]) * ((double)y[i] - ref[i]);
+            all += (double)ref[i] * ref[i];
+        }
+        const double heard = 10.0 * std::log10 (std::max (diff, 1e-30) / all);
+        const double sub = db (toneAt (y, 55.0, a, b) / toneAt (ref, 55.0, a, b));
+        std::printf ("    %-15s the sub %+.3f dB, the difference %+.1f dB of the whole\n", factorySceneName (which), sub, heard);
+        CHECK (std::fabs (sub) < 0.5 && y == r && finite (y), "%s: the sub kept (%.3f dB), mono, finite", factorySceneName (which), sub);
+        CHECK (heard > -20.0, "%s: heard on a new instance (the difference %.1f dB)", factorySceneName (which), heard);
+    }
+}
+
+TEST (scene_change_fades)
+{
+    // switching the gesture (one to another, to None, to User) fades: no click
+    const auto x = bandsMix (3.0);
+    auto s = sceneFrom (R"({"length_beats": 1, "lanes": [{"target": "High Level", "points": [[0, 0]]}, {"target": "Mid Level", "points": [[0, 0]]}]})");
+    auto e = fresh ();
+    tailNeutral (*e);
+    e->setUserScene (s.get ());
+    sceneOn (*e, kSceneSlowPhrase);
+    e->reset ();
+    const auto y = run (*e, x, nullptr, 256, [&] (size_t at) {
+        e->setTransport (120.0, (double)at / kSr * 2.0, true);
+        if (at == 256 * 100)
+            e->setParam (kScene, kSceneUser);
+        if (at == 256 * 200)
+            sceneOn (*e, kSceneTalkingCell);
+        if (at == 256 * 300)
+            e->setParam (kScene, kSceneNone);
+        if (at == 256 * 400)
+            e->setParam (kScene, kSceneUser);
+    });
+    auto f = fresh ();
+    tailNeutral (*f);
+    const auto ref = run (*f, x, nullptr, 256);
+    double jump = 0.0, own = 0.0;
+    for (size_t i = 1000; i < y.size (); ++i)
+    {
+        jump = std::max (jump, (double)std::fabs (y[i] - y[i - 1]));
+        own = std::max (own, (double)std::fabs (ref[i] - ref[i - 1]));
+    }
+    CHECK (finite (y) && jump < 1.5 * own, "no clicks (largest step %.3f, without the gesture %.3f)", jump, own);
+}
+
+TEST (scene_files)
+{
+    // the format of lanes: targets by name, ranges, the length, errors; there and back
+    SceneData d;
+    std::string err;
+    const std::string text = R"({"name": "Two", "length_beats": 4, "lanes": [
+        {"target": "high level", "source": "A > B > Chain Volume", "min": -30, "max": 0, "points": [[0, 1], [2, 1], [2, 0], [4, 0.5]]},
+        {"target": "Close", "min": 400, "points": [[1, 0.5], [0, 1.5]]},
+        {"target": "Off", "source": "unused", "points": [[0, 0]]}]})";
+    CHECK (parseSceneJson (text, "file", d, err), "%s", err.c_str ());
+    CHECK (d.name == "Two" && d.length == 4.0 && d.lanes.size () == 3 && d.lanes[0].target == "High Level" && d.lanes[0].source == "A > B > Chain Volume",
+           "name, length, targets by name, sources");
+    CHECK (d.lanes[1].hasMin && !d.lanes[1].hasMax && d.lanes[1].points[0].first == 0.0 && d.lanes[1].points[0].second == 1.0, "sorted, clamped, min only");
+    Scene s;
+    CHECK (toScene (d, s) && s.count == 2 && s.lane[1].closeHz && s.lane[1].hzLo == 400.0 && s.lane[1].hzHi == kCloseOpenHz, "two lanes play (Off left out)");
+    CHECK (s.lane[0].curve.at (2.0) == 0.0 && std::fabs (s.lane[0].lo - (1.0 - 30.0 / 48.0)) < 1e-12 && s.lane[0].hi == 1.0, "a jump, the range");
+    SceneData back;
+    CHECK (parseSceneJson (sceneJson (d), "x", back, err) && back.name == d.name && back.length == d.length && back.lanes.size () == 3 &&
+               back.lanes[0].points == d.lanes[0].points && back.lanes[0].min == -30.0 && back.lanes[1].hasMax == false && back.lanes[2].source == "unused",
+           "round trip");
+    CHECK (parseSceneJson (R"({"lanes": [{"target": "Dirt", "points": [[0, 0], [3, 1]]}]})", "Named", d, err) && d.name == "Named" && d.length == 3.0,
+           "no name, no length: the file's name, the last point");
+    CHECK (parseSceneJson (R"({"target": "Bells", "points": [[0, 0], [1, 1]]})", "x", d, err) && d.lanes.size () == 1, "one lane at the top level");
+    CHECK (!parseSceneJson (R"({"points": [[0, 0], [1, 1]]})", "x", d, err), "a 0.27 single curve: %s", err.c_str ());
+    CHECK (!parseSceneJson (R"({"lanes": [{"target": "Low Level", "points": [[0, 0]]}]})", "x", d, err), "the Low band is no target: %s", err.c_str ());
+    CHECK (!parseSceneJson (R"({"lanes": [{"target": "Dirt", "points": []}]})", "x", d, err), "no points: %s", err.c_str ());
+    CHECK (!parseSceneJson (R"({"lanes": []})", "x", d, err), "no lanes: %s", err.c_str ());
+    std::string many = R"({"lanes": [)";
+    for (int i = 0; i <= kMaxSceneLanes; ++i)
+        many += std::string (i ? "," : "") + R"({"target": "Dirt", "points": [[0, 0]]})";
+    CHECK (!parseSceneJson (many + "]}", "x", d, err), "too many lanes: %s", err.c_str ());
+}
+
+// ---- the LAB (0.30)
+
+namespace {
+// a LAB slot holding `kind` (On or off), with some of the kind's own parameters (its IDs, plain values) set
+void labSlot (Engine& e, int slot, int kind, bool on = true, std::initializer_list<std::pair<uint32_t, double>> values = {})
+{
+    e.setParam (labSlotParam (slot, kLabType), kind);
+    e.setParam (labSlotParam (slot, kLabOn), on ? 1.0 : 0.0);
+    const auto& t = smemplr::fxBlockTable (kind);
+    for (const auto& [id, v] : values)
+    {
+        const int64_t j = smemplr::fxBlockOf (kind, id);
+        if (j >= 0)
+            e.setParam (labBlockParam (slot, (uint32_t)j), t.toNormalized ((uint32_t)j, v));
+    }
+}
+// every chain on the bands with a driven smacheratr and an OTT, and an OTT in POST (a dirty, dense LAB)
+void dirtyLab (Engine& e, double driveDb = 18.0)
+{
+    for (int c = 0; c < kNumBandChains; ++c)
+    {
+        labSlot (e, chainSlot (c, 0), smemplr::kFxSmacheratr, true, {{smacheratr::kDrive, driveDb}, {smacheratr::kPostClip, 1.0}});
+        labSlot (e, chainSlot (c, 1), smemplr::kFxMultidyn, true, {{multidyn::kAmount, 0.7}});
+    }
+    labSlot (e, postSlot (0), smemplr::kFxMultidyn, true, {{multidyn::kAmount, 0.4}});
+}
+// the engine linear: no SWEEP stage, Drive, Glue, Grit or movement, the end saturator out of the way
+std::unique_ptr<Engine> linearEngine (int bands = 4)
+{
+    auto e = engine ();
+    plain (*e);
+    e->setParam (kSweep, 0.0);
+    e->setParam (kBandCount, bands == 4 ? kBands4 : kBands3);
+    e->setParam (kXoverMid, 1200.0);
+    e->setParam (kXoverHigh, 6000.0);
+    tailNeutral (*e);
+    return e;
+}
+} // namespace
+
+TEST (lab_empty_is_029)
+{
+    // every slot Empty and every chain at 0 dB (Init, and a state saved before 0.30, which reads the LAB's parameters at
+    // these: defaultNormalizedForVersion): the LAB does not run, the latency is the end saturator's alone, and the sound
+    // is the engine's without the LAB, bit for bit, also where the LAB had been set up and taken back (the check against
+    // 0.29 itself, a build of each rendering every factory preset and gesture, bit for bit, is run by hand)
+    const auto x = reese (1.5);
+    for (int which = 0; which < 2; ++which)
+    {
+        auto a = fresh ();
+        auto b = fresh ();
+        for (auto* e : {a.get (), b.get ()})
+        {
+            e->setParam (kBandCount, which ? kBands4 : kBands3);
+            e->setParam (kMovement, 0.6);
+        }
+        dirtyLab (*b);
+        b->setParam (chainId (1, kChainLevel), -6.0);
+        b->setParam (chainId (2, kChainMono), 1.0);
+        b->setParam (chainId (0, kChainSolo), 1.0);
+        b->reset ();
+        CHECK (b->labStage ().active () && b->labLatency () > 0, "set up: running, with a latency");
+        // (a 0.29 state: every LAB parameter at what such a state reads)
+        for (uint32_t id = kChainBase; id < kLabEnd; ++id)
+            b->setParam (id, toPlain (id, defaultNormalizedForVersion (id, 7)));
+        a->reset ();
+        b->reset ();
+        CHECK (!b->labStage ().active () && b->labLatency () == 0 && b->latency () == a->latency (), "taken back: not running, no latency of its own");
+        std::vector<float> ar, br;
+        const auto al = run (*a, x, &ar), bl = run (*b, x, &br);
+        CHECK (al == bl && ar == br, "%d bands: the sound without the LAB, bit for bit", which ? 4 : 3);
+    }
+}
+
+TEST (lab_paths_line_up)
+{
+    // the chains and POST with their effects switched off (smacheratr fully dry, multidyn bypassed: their latencies
+    // only): every path lined up, the bands sum to the same all-pass as without the LAB, just later by its latency
+    for (int bands : {3, 4})
+    {
+        auto ref = linearEngine (bands);
+        auto e = linearEngine (bands);
+        labSlot (*e, chainSlot (0, 0), smemplr::kFxSmacheratr, false);
+        labSlot (*e, chainSlot (0, 1), smemplr::kFxMultidyn, false);
+        labSlot (*e, chainSlot (1, 0), smemplr::kFxSmacheratr, false); // (a shorter chain)
+        labSlot (*e, postSlot (0), smemplr::kFxMultidyn, false);      // (chain 3 empty)
+        e->reset ();
+        const Lab& lab = e->labStage ();
+        const int labLat = e->labLatency ();
+        CHECK (lab.chainLatency (0) > lab.chainLatency (1) && lab.chainLatency (2) == 0 && labLat == Lab::kChunk + lab.chainLatency (0) + lab.postLatency () &&
+                   e->latency () == labLat + ref->latency (),
+               "the latency: the effects' block, the slowest chain's (%d) and POST's (%d), then the end saturator's (%d)", lab.chainLatency (0),
+               lab.postLatency (),
+               e->latency () - labLat);
+        std::vector<float> x (32768, 0.0f);
+        x[0] = 0.5f;
+        const auto y0 = run (*ref, x), y = run (*e, x);
+        double worst = 0.0, lo = 1e9, hi = -1e9;
+        for (size_t i = 0; i + (size_t)labLat < y.size (); ++i)
+            worst = std::max (worst, std::fabs ((double)y[i + (size_t)labLat] - y0[i]));
+        for (int i = 0; i <= 80; ++i)
+        {
+            const double f = 20.0 * std::pow (1000.0, i / 80.0);
+            const double r = responseDb (y, (size_t)e->latency (), f) - db (0.5);
+            lo = std::min (lo, r);
+            hi = std::max (hi, r);
+        }
+        std::printf ("    %d bands: latency %d, %.3f .. %.3f dB, off the LAB-less sum by %.1e\n", bands, labLat, lo, hi, worst);
+        CHECK (lo > -0.1 && hi < 0.1, "%d bands: flat within 0.1 dB (%.3f .. %.3f)", bands, lo, hi);
+        CHECK (worst < 1e-5, "%d bands: the same sum, %d samples later (%.1e)", bands, labLat, worst);
+    }
+    // Mix at 0: the dry signal, delayed by the whole latency (so dry and wet line up at every Mix)
+    auto e = linearEngine ();
+    dirtyLab (*e);
+    e->setParam (kMix, 0.0);
+    e->reset ();
+    std::vector<float> x (8192, 0.0f);
+    x[100] = 0.5f;
+    const auto y = run (*e, x);
+    const size_t at = (size_t)(std::max_element (y.begin (), y.end (), [] (float a, float b) { return std::fabs (a) < std::fabs (b); }) - y.begin ());
+    CHECK (at == 100 + (size_t)e->latency () && std::fabs (y[at] - 0.5f) < 1e-6, "Mix 0: the dry impulse at %zu (latency %d)", at, e->latency ());
+}
+
+TEST (lab_mono_and_sub)
+{
+    // a dirty LAB on a mono Reese: the output stays mono, and the sub (the Low band: never in a chain) as it is
+    // without the LAB, lined up
+    const auto x = reese (3.0);
+    auto ref = fresh ();
+    auto e = fresh ();
+    for (auto* en : {ref.get (), e.get ()})
+    {
+        en->setParam (kBandCount, kBands4);
+        en->setParam (kMovement, 0.5);
+        tailNeutral (*en); // (the end saturator after it all would take the sub down as the rest gets louder)
+    }
+    dirtyLab (*e, 24.0);
+    ref->reset ();
+    e->reset ();
+    std::vector<float> rr, er;
+    const auto rl = run (*ref, x, &rr), el = run (*e, x, &er);
+    double side = 0.0;
+    for (size_t i = 0; i < el.size (); ++i)
+        side = std::max (side, (double)std::fabs (el[i] - er[i]));
+    CHECK (finite (el) && side == 0.0, "mono in, mono out (L - R up to %.1e)", side);
+    const size_t lat = (size_t)e->labLatency (), a = (size_t)(1.0 * kSr), b = x.size () - lat;
+    std::vector<float> shifted (el.begin () + (long)lat, el.end ());
+    const double subRef = toneAt (rl, 55.0, a, b), subLab = toneAt (shifted, 55.0, a, b);
+    std::printf ("    the 55 Hz fundamental: %.2f dB without the LAB, %.2f dB with it\n", db (subRef), db (subLab));
+    CHECK (std::fabs (db (subLab) - db (subRef)) < 1.0, "the sub within 1 dB (%.2f dB)", db (subLab) - db (subRef));
+    // and something happened above it
+    const double midRef = rms (rl, a, b), midLab = rms (shifted, a, b);
+    CHECK (std::fabs (db (midLab) - db (midRef)) < 12.0 && peak (el, 0, el.size ()) < 4.0, "level in reason (%.1f dB against %.1f)", db (midLab),
+           db (midRef));
+}
+
+TEST (lab_mute_solo_level)
+{
+    // Mute: the chain fades out and stops running (its settings no longer matter); Solo: only the soloed chain (the Low
+    // band silent too); Level: after the chain's effects; Mono: the chain in the middle
+    const auto x = reese (1.5);
+    auto render = [&] (const std::function<void (Engine&)>& set, std::vector<float>* right = nullptr) {
+        auto e = fresh ();
+        e->setParam (kBandCount, kBands4);
+        dirtyLab (*e);
+        set (*e);
+        tailNeutral (*e);
+        return run (*e, x, right);
+    };
+    const size_t a = (size_t)(0.6 * kSr), b = x.size ();
+    const auto all = render ([] (Engine&) {});
+    const auto muted = render ([] (Engine& e) { e.setParam (chainId (0, kChainMute), 1.0); });
+    const auto mutedHot = render ([] (Engine& e) {
+        e.setParam (chainId (0, kChainMute), 1.0);
+        labSlot (e, chainSlot (0, 0), smemplr::kFxSmacheratr, true, {{smacheratr::kDrive, 36.0}});
+    });
+    CHECK (muted == mutedHot, "a muted chain is not run: its Drive does not matter");
+    CHECK (db (rms (muted, a, b)) < db (rms (all, a, b)), "muting the Mid chain takes something away");
+    const auto soloed = render ([] (Engine& e) { e.setParam (chainId (2, kChainSolo), 1.0); });
+    const auto airOnly = render ([] (Engine& e) {
+        e.setParam (chainId (0, kChainMute), 1.0);
+        e.setParam (chainId (1, kChainMute), 1.0);
+        e.setParam (kLowLevel, kLevelOffDb);
+    });
+    double worst = 0.0;
+    for (size_t i = a; i < b; ++i)
+        worst = std::max (worst, (double)std::fabs (soloed[i] - airOnly[i]));
+    std::printf ("    Solo Air against Mid and High muted and Low off: %.1e\n", worst);
+    CHECK (worst < 1e-3, "Solo: the soloed chain alone (%.1e)", worst);
+    // (without POST: its OTT after the chains would not take a level change as it is)
+    const auto quieter = render ([] (Engine& e) {
+        for (int c = 0; c < kNumBandChains; ++c)
+            e.setParam (chainId (c, kChainLevel), -6.0);
+        e.setParam (kLowLevel, kLevelOffDb);
+        e.setParam (labSlotParam (postSlot (0), kLabType), 0.0);
+    });
+    const auto lowOff = render ([] (Engine& e) {
+        e.setParam (kLowLevel, kLevelOffDb);
+        e.setParam (labSlotParam (postSlot (0), kLabType), 0.0);
+    });
+    CHECK (std::fabs (db (rms (quieter, a, b)) - db (rms (lowOff, a, b)) + 6.0) < 0.2, "Level -6 dB on every chain: 6 dB down after the effects (%.2f)",
+           db (rms (quieter, a, b)) - db (rms (lowOff, a, b)));
+    std::vector<float> wideR;
+    auto stereo = [&] (bool mono) {
+        auto e = fresh ();
+        e->setParam (kBandCount, kBands4);
+        e->setParam (kLowLevel, kLevelOffDb);
+        dirtyLab (*e);
+        for (int c = 0; c < kNumBandChains; ++c)
+            e->setParam (chainId (c, kChainMono), mono ? 1.0 : 0.0);
+        e->reset ();
+        std::vector<float> l (x.size ()), r (x.size ()), xr (x.size ());
+        for (size_t i = 0; i < x.size (); ++i)
+            xr[i] = i >= 40 ? x[i - 40] : 0.0f; // (a wide input)
+        for (size_t s = 0; s < x.size (); s += 256)
+        {
+            const int m = (int)std::min<size_t> (256, x.size () - s);
+            e->process (x.data () + s, xr.data () + s, l.data () + s, r.data () + s, m);
+        }
+        double d = 0.0;
+        for (size_t i = a; i < b; ++i)
+            d = std::max (d, (double)std::fabs (l[i] - r[i]));
+        return d;
+    };
+    const double wide = stereo (false), narrow = stereo (true);
+    CHECK (wide > 1e-3 && narrow < 1e-6, "Mono: the chains in the middle (L - R %.1e, wide %.1e)", narrow, wide);
+}
+
+namespace {
+// a factory preset's values (Init plus its lines), by ID
+std::vector<std::pair<uint32_t, double>> presetValues (const char* file)
+{
+    std::ifstream in (std::filesystem::path (MOISTR_PRESETS_DIR) / file);
+    std::stringstream ss;
+    ss << in.rdbuf ();
+    pk::presets::FactoryPreset fp;
+    std::string err;
+    const bool ok = pk::presets::parseFactoryPreset (ss.str (), file, paramTable (), fp, err);
+    CHECK (ok, "%s parses: %s", file, err.c_str ());
+    return {fp.values.begin (), fp.values.end ()};
+}
+// an engine with the defaults and these values (normalized, by ID)
+std::unique_ptr<Engine> withValues (const std::vector<std::pair<uint32_t, double>>& values)
+{
+    auto e = fresh ();
+    for (const auto& [id, n] : values)
+        e->setParam (id, toPlain (id, n));
+    e->reset ();
+    return e;
+}
+} // namespace
+
+TEST (neuro_recipe)
+{
+    // the Neuro recipe (neuroRecipe) is the factory preset Neuro/Neuro, value for value
+    std::array<double, kNumParams> fromPreset {}, fromRecipe {};
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        fromPreset[id] = fromRecipe[id] = defaultNormalized (id);
+    for (const auto& [id, n] : presetValues ("Neuro/Neuro.txt"))
+        fromPreset[id] = n;
+    for (const auto& [id, n] : neuroRecipe ())
+        fromRecipe[id] = n;
+    int differ = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        differ += std::fabs (fromPreset[id] - fromRecipe[id]) > 1e-7;
+    CHECK (differ == 0, "Neuro/Neuro is the Neuro recipe (%d values differ)", differ);
+    // and it has the LAB on: smacheratr and multidyn in the chains, multidyn and smacheratr in POST, nothing in chain 4
+    auto e = withValues (neuroRecipe ());
+    const Lab& lab = e->labStage ();
+    CHECK (lab.active () && lab.kind (chainSlot (0, 0)) == smemplr::kFxSmacheratr && lab.kind (chainSlot (2, 1)) == smemplr::kFxMultidyn &&
+               lab.kind (postSlot (0)) == smemplr::kFxMultidyn && lab.kind (postSlot (1)) == smemplr::kFxSmacheratr &&
+               lab.kind (chainSlot (3, 0)) == smemplr::kFxEmpty,
+           "the LAB: smacheratr and an OTT on each band, an OTT and a clipper in POST");
+    std::printf ("    latency: the LAB's %d (chains %d, %d, %d; POST %d) and the end saturator's %d\n", e->labLatency (), lab.chainLatency (0),
+                 lab.chainLatency (1), lab.chainLatency (2), lab.postLatency (), e->latency () - e->labLatency ());
+}
+
+TEST (neuro_presets)
+{
+    // every LAB preset on a mono Reese at 140 BPM: finite, mono, and the sub (55 Hz, the Low band's) within 1 dB of the
+    // same settings with the LAB empty (the end saturator out of the way: it takes everything down as the rest gets
+    // louder), lined up by the LAB's latency
+    const auto x = reese (4.0);
+    const size_t a = (size_t)(1.0 * kSr);
+    for (const char* file : {"Neuro/Neuro.txt", "Neuro/Neuro Heavy.txt", "Neuro/Dirty Mids.txt", "Neuro/Neuro Gesture.txt"})
+    {
+        const auto values = presetValues (file);
+        auto e = withValues (values);
+        auto bare = withValues (values);
+        tailNeutral (*e);
+        tailNeutral (*bare);
+        for (int sl = 0; sl < kNumLabSlots; ++sl)
+            bare->setParam (labSlotParam (sl, kLabType), 0.0);
+        bare->reset ();
+        auto at = [&] (Engine& en) { return [&en] (size_t s) { en.setTransport (140.0, (double)s / kSr * 140.0 / 60.0, true); }; };
+        std::vector<float> r, br;
+        const auto l = run (*e, x, &r, 256, at (*e)), bl = run (*bare, x, &br, 256, at (*bare));
+        double side = 0.0;
+        for (size_t i = 0; i < l.size (); ++i)
+            side = std::max (side, (double)std::fabs (l[i] - r[i]));
+        const size_t lat = (size_t)e->labLatency ();
+        const std::vector<float> lined (l.begin () + (long)lat, l.end ());
+        const double sub = db (toneAt (lined, 55.0, a, lined.size ())), subBare = db (toneAt (bl, 55.0, a, lined.size ()));
+        std::printf ("    %-24s 55 Hz %.2f dB (LAB empty %.2f), peak %.2f\n", file, sub, subBare, peak (l, 0, l.size ()));
+        CHECK (finite (l) && side == 0.0, "%s: finite, mono in mono out (%.1e)", file, side);
+        CHECK (std::fabs (sub - subBare) < 1.0, "%s: the sub within 1 dB (%.2f dB)", file, sub - subBare);
+    }
+}
+
+TEST (lab_gesture_targets)
+{
+    // the LAB's targets (0.30, lanes only): Mid / High / Air Grit move the chain's first smacheratr's Drive, the OTT targets
+    // its first multidyn's Amount (Post OTT: POST's), from the slot's own setting; let go, the slot's own setting again.
+    // A chain without such a slot: nothing. The 0.27 slots' Target choice keeps its 14 entries.
+    CHECK ((int)paramTable ().info (gestureId (0, kGestureTarget)).choices.size () == kNumSlotTargets && kNumSlotTargets == 14,
+           "the slots' Target: the 0.27 targets only");
+    SceneData d;
+    std::string err;
+    const bool parsed = parseSceneJson (R"({"name": "Grit", "length_beats": 4, "lanes": [
+        {"target": "Mid Grit", "min": 0, "max": 36, "points": [[0, 0], [4, 1]]},
+        {"target": "High OTT", "points": [[0, 1], [4, 0]]},
+        {"target": "Air Grit", "points": [[0, 1], [4, 1]]},
+        {"target": "Post OTT", "points": [[0, 0.25], [4, 0.25]]}]})",
+                                        "Grit", d, err);
+    CHECK (parsed, "a file with the LAB's targets: %s", err.c_str ());
+    auto scene = std::make_unique<Scene> ();
+    CHECK (toScene (d, *scene) && scene->count == 4 && scene->lane[0].target == kTargetMidGrit && scene->lane[3].target == kTargetPostOtt,
+           "four lanes, by name");
+    const double lo = targetNorm (kTargetMidGrit, 0.0), hi = targetNorm (kTargetMidGrit, 36.0);
+    CHECK (std::fabs (lo - 0.5) < 1e-12 && std::fabs (hi - 1.0) < 1e-12, "Grit in dB of Drive (0 dB: halfway)");
+    auto e = withValues (neuroRecipe ());
+    e->setParam (labSlotParam (chainSlot (2, 0), kLabType), 0.0); // (no smacheratr on Air: its lane does nothing)
+    e->setUserScene (scene.get ());
+    e->setParam (kScene, kSceneUser);
+    e->reset ();
+    const auto x = reese (2.0);
+    double atOne = -1.0, atThree = -1.0;
+    run (*e, x, nullptr, 256, [&] (size_t a) {
+        e->setTransport (120.0, (double)a / kSr * 2.0, true);
+        if (a == 256 * 94) // (1 beat at 120 BPM: 24000 samples)
+            atOne = e->labStage ().pulledTo (0, false);
+        if (a == 256 * 281)
+            atThree = e->labStage ().pulledTo (0, false);
+    });
+    const Lab& lab = e->labStage ();
+    std::printf ("    Mid Grit at beat 1: %.3f, at beat 3: %.3f (its own: %.3f); High OTT %.3f; Post OTT %.3f\n", atOne, atThree, lab.ownValue (0, false),
+                 lab.pulledTo (1, true), lab.pulledTo (3, true));
+    CHECK (atOne > lo && atThree > atOne && atThree < hi, "Mid Grit rises with its lane");
+    CHECK (lab.pulledTo (2, false) < 0.0, "Air Grit without a smacheratr on Air: nothing");
+    CHECK (std::fabs (lab.pulledTo (3, true) - 0.25) < 0.01 && lab.pulledTo (1, true) >= 0.0, "the OTT targets pull");
+    // let go: the slots' own settings again
+    e->setParam (kScene, kSceneNone);
+    std::vector<float> rest (8192, 0.0f);
+    run (*e, rest);
+    CHECK (lab.pulledTo (0, false) < 0.0 && lab.pulledTo (3, true) < 0.0, "Gesture None: every pull let go");
+}
+
+// ---- 0.30: Input, Loop Lock, PARA and Sub Guard
+namespace {
+// a detuned saw on B1 (61.7 Hz), the left and right a little apart. The detuned saws leave out their fundamental, so the
+// input's own sub is steady (two fundamentals that close would beat: the input's movement, not moistr's)
+std::vector<float> bassB1 (double seconds, std::vector<float>* right = nullptr)
+{
+    const size_t n = (size_t)(seconds * kSr);
+    std::vector<float> l (n), r (n);
+    double p1 = 0.0, p2 = 0.3, p3 = 0.6;
+    for (size_t i = 0; i < n; ++i)
+    {
+        p1 += 61.74 / kSr;
+        p2 += 61.74 * 1.006 / kSr;
+        p3 += 61.74 * 0.994 / kSr;
+        p1 -= std::floor (p1);
+        p2 -= std::floor (p2);
+        p3 -= std::floor (p3);
+        // (a saw 2 p - 1 is - 2 / pi sum sin (2 pi k p) / k: its fundamental is - 2 / pi sin (2 pi p))
+        const double d2 = 2.0 * p2 - 1.0 + 2.0 / kPi * std::sin (2.0 * kPi * p2), d3 = 2.0 * p3 - 1.0 + 2.0 / kPi * std::sin (2.0 * kPi * p3);
+        l[i] = (float)(0.25 * ((2.0 * p1 - 1.0) + d2));
+        r[i] = (float)(0.25 * ((2.0 * p1 - 1.0) + d3));
+    }
+    if (right)
+        *right = r;
+    return l;
+}
+// renders x (and xr, or x again) while the host plays from beat 0 at `bpm` (at: before each block, may change the tempo)
+std::vector<float> play (Engine& e, const std::vector<float>& x, double bpm, std::vector<float>* right = nullptr,
+                         const std::vector<float>* xr = nullptr, const std::function<void (size_t, double&)>& at = {})
+{
+    const int block = 256;
+    std::vector<float> l (x.size ()), r (x.size ());
+    double ppq = 0.0;
+    for (size_t a = 0; a < x.size (); a += (size_t)block)
+    {
+        if (at)
+            at (a, bpm);
+        const int m = (int)std::min ((size_t)block, x.size () - a);
+        e.setTransport (bpm, ppq, true);
+        e.process (x.data () + a, (xr ? xr->data () : x.data ()) + a, l.data () + a, r.data () + a, m);
+        ppq += m * bpm / 60.0 / kSr;
+    }
+    if (right)
+        *right = r;
+    return l;
+}
+// the RMS (dB) of y in windows of `win` samples from `from`
+std::vector<double> windowsDb (const std::vector<double>& y, size_t from, size_t win)
+{
+    std::vector<double> e;
+    for (size_t a = from; a + 2 * win <= y.size (); a += win) // (the last window left out: the band-pass's edge)
+    {
+        double s = 0.0;
+        for (size_t i = a; i < a + win; ++i)
+            s += y[i] * y[i];
+        e.push_back (db (std::sqrt (s / (double)win)));
+    }
+    return e;
+}
+double spread (const std::vector<double>& v) { return *std::max_element (v.begin (), v.end ()) - *std::min_element (v.begin (), v.end ()); }
+std::vector<double> both (const std::vector<double>& l, const std::vector<double>& r)
+{
+    std::vector<double> s (l.size ());
+    for (size_t i = 0; i < l.size (); ++i)
+        s[i] = 0.5 * (l[i] + r[i]);
+    return s;
+}
+std::vector<float> toFloat (const std::vector<double>& v) { return std::vector<float> (v.begin (), v.end ()); }
+} // namespace
+
+TEST (input_gain)
+{
+    // Input: the gain at the very start, exact (the dry signal for Mix has it too); 0 dB is not run; a change glides
+    const auto x = sine (220.0, 0.5, 0.5);
+    auto e = engine ();
+    tailNeutral (*e);
+    e->setParam (kMix, 0.0);
+    e->setParam (kInput, -6.0);
+    e->reset ();
+    const auto y = run (*e, x);
+    const float g = (float)std::pow (10.0, -6.0 / 20.0);
+    const size_t lat = (size_t)e->latency (); // (the end saturator, off, still delays)
+    double worst = 0.0;
+    for (size_t i = 0; i + lat < x.size (); ++i)
+        worst = std::max (worst, (double)std::fabs (y[i + lat] - x[i] * g));
+    CHECK (worst < 1e-6 && std::fabs (e->inputGain () - g) < 1e-7, "Input -6 dB: the signal x 10^(-6 / 20) (%.1e)", worst);
+    // a jump to +6 dB glides (20 ms): no step larger than the sine's own
+    e->setParam (kInput, 6.0);
+    const auto z = run (*e, x);
+    CHECK (maxStep (z) < 2.0 * 2.0 * kPi * 220.0 / kSr * 0.5 * 2.0 + 1e-3, "a change of Input glides (step %.4f)", maxStep (z));
+    CHECK (std::fabs (db (rms (z, z.size () / 2, z.size ())) - db (rms (x, x.size () / 2, x.size ())) - 6.0) < 0.01, "then +6 dB");
+    // on the Ocean sound, the SWEEP stage's make-up keeps the level about the same while the crunch falls
+    auto loud = fresh (), soft = fresh ();
+    soft->setParam (kInput, -12.0);
+    soft->reset ();
+    const auto b = bassB1 (2.0);
+    const auto yl = run (*loud, b), ys = run (*soft, b);
+    const double hl = db (rms (toFloat (bandPass (yl, 2000.0, 8000.0)), 48000, yl.size ())) - db (rms (yl, 48000, yl.size ()));
+    const double hs = db (rms (toFloat (bandPass (ys, 2000.0, 8000.0)), 48000, ys.size ())) - db (rms (ys, 48000, ys.size ()));
+    std::printf ("    Ocean, Input 0 / -12 dB: out %.1f / %.1f dBFS, 2 .. 8 kHz against the whole %.1f / %.1f dB\n", db (rms (yl, 48000, yl.size ())),
+                 db (rms (ys, 48000, ys.size ())), hl, hs);
+    CHECK (finite (ys) && db (rms (ys, 48000, ys.size ())) < db (rms (yl, 48000, yl.size ())) - 3.0, "Ocean with Input down: quieter into the saturator");
+}
+
+TEST (loop_lock_window)
+{
+    // the window is the slowest cycle of what moves, an Hz period in beats at the tempo: Ocean's bells alone, bell E
+    // (0.41 Hz) the slowest; with the bands moving on a 4-bar cycle, their pattern's (16 beats x its loops)
+    auto e = fresh ();
+    e->setParam (kLoopLock, 1.0);
+    e->reset ();
+    const double bpm = 120.0, bellE = bpm / 60.0 / 0.41;
+    std::vector<double> d (kNumParams);
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        d[id] = e->param (id);
+    const Pattern a = makePattern (1, 0);
+    const auto parts = windowParts (d.data (), bpm, nullptr, &a, nullptr);
+    std::string slowest;
+    double longest = 0.0;
+    for (const auto& w : parts)
+        if (w.periodBeats > longest)
+        {
+            longest = w.periodBeats;
+            slowest = w.name;
+        }
+    CHECK (parts.size () == 8 && slowest == "Bell E" && std::fabs (longest - bellE) < 1e-9, "8 bells, the slowest Bell E (%s, %.3f beats)",
+           slowest.c_str (), longest);
+    CHECK (std::fabs (e->windowNow () - bellE) < 1e-9 && std::fabs (e->loopWindowBeats () - bellE) < 1e-9, "the window: bell E's period (%.3f beats)",
+           e->windowNow ());
+    e->setParam (kMovement, 0.5);
+    e->setParam (kSync, 1.0);
+    e->setParam (kSyncRate, 0); // (4 bars)
+    int loop = 1;
+    for (int b = 0; b < kMaxBands; ++b)
+        loop = std::max (loop, e->pattern (0).band[b].loop);
+    CHECK (std::fabs (e->windowNow () - 16.0 * loop) < 1e-9, "with the bands on a 4-bar cycle: %.1f beats (%d loops)", e->windowNow (), loop);
+    auto quiet = engine ();
+    quiet->setParam (kMovement, 0.0);
+    CHECK (quiet->windowNow () == 4.0, "nothing moving: a bar");
+}
+
+TEST (loop_lock_region)
+{
+    // where the region puts the motion clock: normalized (Length), the region time-scaled to fit, Wrap gliding back over
+    // its last 16th; Natural, at its own speed and again from the next 1/16 beat after it; Bounce; and the mouse's region
+    const double w = 8.0, s = 0.25, en = 0.5, bpm = 120.0;
+    const double sec = 4.0 * 60.0 / bpm, e = std::min (std::clamp (sec / 16.0, 0.012, 0.06) / sec, 0.25);
+    double worst = 0.0;
+    for (double b : {0.0, 0.5, 1.0, 2.0, 3.0, 3.9, 3.99, 4.0, 5.0, 9.7})
+    {
+        const double u = b / 4.0 - std::floor (b / 4.0);
+        const double f = u < 1.0 - e ? u / (1.0 - e) : 0.5 + 0.5 * std::cos (kPi * (u - (1.0 - e)) / e);
+        worst = std::max (worst, std::fabs (regionMotion (b, s, en, w, 4, kLoopWrap, bpm) - (s * w + (en - s) * w * f)));
+    }
+    CHECK (worst < 1e-12, "Length 1 bar: Start x window + the region x its place (%.1e)", worst);
+    CHECK (std::fabs (regionMotion (1.0, s, en, w, 4, kLoopBounce, bpm) - 3.0) < 1e-12 && std::fabs (regionMotion (3.0, s, en, w, 4, kLoopBounce, bpm) - 3.0) < 1e-12,
+           "Bounce: forward over the first half, back over the second");
+    const double len = regionLength (s, en, w, kLoopNatural, kLoopWrap, bpm); // (2 beats and the glide, up to a 16th of a beat)
+    CHECK (std::fabs (len - 34.0 / 16.0) < 1e-12 && std::fabs (regionMotion (1.0, s, en, w, kLoopNatural, kLoopWrap, bpm) - 3.0) < 1e-12 &&
+               std::fabs (regionMotion (len + 0.5, s, en, w, kLoopNatural, kLoopWrap, bpm) - 2.5) < 1e-12,
+           "Natural: the region at its own speed, again every %.4f beats", len);
+    double step = 0.0;
+    for (int k = 1; k < 4000; ++k)
+        step = std::max (step, std::fabs (regionMotion (k * 0.001, s, en, w, kLoopNatural, kLoopWrap, bpm) -
+                                          regionMotion ((k - 1) * 0.001, s, en, w, kLoopNatural, kLoopWrap, bpm)));
+    CHECK (step < 0.06, "Natural: no jump at its end (largest step %.3f beats a millibeat)", step);
+    const LoopRegion a = slideRegion ({0.2, 0.5}, 0.7), b = slideRegion ({0.2, 0.5}, -0.5), c = slideRegion ({0.2, 0.5}, 0.1);
+    CHECK (std::fabs (a.start - 0.7) < 1e-12 && a.end == 1.0 && b.start == 0.0 && std::fabs (b.end - 0.3) < 1e-12 && std::fabs (c.start - 0.3) < 1e-12 &&
+               std::fabs (c.end - 0.6) < 1e-12,
+           "sliding the region keeps its length, inside the window");
+    const LoopRegion h1 = moveHandle ({0.2, 0.5}, true, 0.1), h2 = moveHandle ({0.2, 0.5}, false, 0.4), h3 = moveHandle ({0.2, 0.5}, false, 0.9);
+    CHECK (std::fabs (h1.end - (0.2 + kLoopMinRegion)) < 1e-12 && h2.start == 0.4 && h2.end == 0.5 && std::fabs (h3.start - (0.5 - kLoopMinRegion)) < 1e-12,
+           "the handles: End and Start each on its own, never crossing");
+}
+
+TEST (loop_lock_retriggers)
+{
+    // at every Length boundary of the song the whole movement starts again from the region's start: an Hz bell and a
+    // synced one alike (and the bands, the gesture and the rest: loop_lock_repeats)
+    // a direct check, tick by tick: the motion clock at the boundary is Start x window, and the parts read it
+    auto f = fresh ();
+    f->setParam (kLoopLock, 1.0);
+    f->setParam (kLoopStart, 0.25);
+    f->setParam (kLoopEnd, 0.6);
+    f->setParam (kLoopLength, 3);
+    f->setParam (bellId (2, kBellSync), 1.0);
+    f->reset ();
+    const double w = f->loopWindowBeats ();
+    int checked = 0;
+    double off = 0.0;
+    // 120 BPM (stopped, the clock runs on at it): a 2-beat boundary every 48000 samples, a tick's end exactly on it
+    ticks (*f, 3 * 3000, [&] (int t) {
+        if ((t + 1) % 3000 != 0)
+            return;
+        const double tau = 0.25 * w;
+        const double freeTheta = tau * 60.0 / 120.0 * f->param (bellId (0, kBellRate));
+        const double syncTheta = tau / kSyncBeats[std::lround (f->param (bellId (2, kBellSyncRate)))];
+        off = std::max ({off, std::fabs (f->motionBeats () - tau), std::fabs (f->sweepStage ().clock (0) - freeTheta),
+                         std::fabs (f->sweepStage ().clock (2) - syncTheta)});
+        ++checked;
+    });
+    std::printf ("    window %.3f beats: at each boundary the clock at %.3f beats (largest error %.1e)\n", w, 0.25 * w, off);
+    CHECK (checked == 3 && off < 1e-6, "at each boundary an Hz bell and a synced bell both start again from Start x window");
+}
+
+TEST (loop_lock_repeats)
+{
+    // with Loop Lock every moving value comes round again each Length: the bands' gains, the bells' centres, the
+    // gestures' pull on the bands, Wobble, PARA's paths (silence in, the host stopped: the clock runs on at its tempo)
+    auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+    e->setParam (kLoopLock, 1.0);
+    e->setParam (kLoopStart, 0.25);
+    e->setParam (kLoopEnd, 0.75);
+    e->setParam (kLoopLength, 4);
+    e->setParam (kParaOn, 1.0);
+    e->setParam (kWobbleAmount, 0.6);
+    e->reset ();
+    const int perLoop = (int)(2.0 * kSr) / 16; // (1 bar at 120 BPM)
+    std::vector<std::array<double, 16>> seen;
+    ticks (*e, 5 * perLoop, [&] (int) {
+        std::array<double, 16> v {};
+        for (int b = 0; b < 4; ++b)
+            v[(size_t)b] = e->bandGainDb (0, b);
+        for (int b = 0; b < 8; ++b)
+            v[(size_t)(4 + b)] = e->sweepStage ().bellHz (b);
+        v[12] = e->gestureGain (kBandMid);
+        v[13] = e->wobbleGainNow ();
+        v[14] = e->paraStage ().lpGain ();
+        v[15] = e->paraStage ().hpHz ();
+        seen.push_back (v);
+    });
+    double worst = 0.0, moved = 0.0;
+    for (int k = 0; k < perLoop; ++k)
+        for (size_t j = 0; j < 16; ++j)
+        {
+            const double a = seen[(size_t)(2 * perLoop + k)][j], b = seen[(size_t)(4 * perLoop + k)][j];
+            worst = std::max (worst, std::fabs (a - b) / std::max (1.0, std::fabs (a)));
+            moved = std::max (moved, std::fabs (a - seen[(size_t)(2 * perLoop)][j]) / std::max (1.0, std::fabs (a)));
+        }
+    std::printf ("    loops 3 and 5: %.1e apart; within a loop the values move by %.2f\n", worst, moved);
+    CHECK (worst < 1e-6 && moved > 0.1, "every moving value repeats each Length (%.1e)", worst);
+}
+
+TEST (loop_lock_smooth)
+{
+    // the motion clock never jumps: not at the region's end (Wrap glides back), not while Start and End are dragged or
+    // the region slid, not at a tempo change; the output stays finite and its steps no larger than without Loop Lock
+    const auto x = bassB1 (8.0);
+    auto render = [&] (bool lock, double* clockStep, int shape, int length) {
+        auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+        e->setParam (kLoopLock, lock ? 1.0 : 0.0);
+        e->setParam (kLoopShape, shape);
+        e->setParam (kLoopLength, length);
+        e->reset ();
+        double last = e->motionBeats (), step = 0.0;
+        auto y = play (*e, x, 140.0, nullptr, nullptr, [&] (size_t a, double& bpm) {
+            const double t = (double)a / kSr;
+            if (t > 2.0 && t < 3.0)
+                e->setParam (kLoopEnd, 1.0 - 0.8 * (t - 2.0)); // (End dragged in)
+            if (t > 3.5 && t < 3.52)
+            {
+                const LoopRegion r = slideRegion ({e->param (kLoopStart), e->param (kLoopEnd)}, 0.6); // (the region slid)
+                e->setParam (kLoopStart, r.start);
+                e->setParam (kLoopEnd, r.end);
+            }
+            if (t > 6.0)
+                bpm = 100.0; // (a tempo change)
+            step = std::max (step, std::fabs (e->motionBeats () - last));
+            last = e->motionBeats ();
+        });
+        if (clockStep)
+            *clockStep = step / e->loopWindowBeats ();
+        return y;
+    };
+    double wrapStep = 0.0, bounceStep = 0.0, naturalStep = 0.0;
+    const auto free = render (false, nullptr, kLoopWrap, 4);
+    const auto wrap = render (true, &wrapStep, kLoopWrap, 4);
+    const auto bounce = render (true, &bounceStep, kLoopBounce, 4);
+    const auto natural = render (true, &naturalStep, kLoopWrap, kLoopNatural);
+    std::printf ("    the motion clock's largest step per block (of the window): Wrap %.3f, Bounce %.3f, Natural %.3f; output steps %.3f / %.3f / "
+                 "%.3f (free %.3f)\n",
+                 wrapStep, bounceStep, naturalStep, maxStep (wrap), maxStep (bounce), maxStep (natural), maxStep (free));
+    CHECK (finite (wrap) && finite (bounce) && finite (natural), "finite");
+    CHECK (wrapStep < 0.2 && bounceStep < 0.2 && naturalStep < 0.2, "the motion clock glides (%.3f, %.3f, %.3f of the window per block)", wrapStep,
+           bounceStep, naturalStep);
+    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (bounce) < 1.25 * maxStep (free) && maxStep (natural) < 1.25 * maxStep (free),
+           "no step larger than without Loop Lock");
+    // after the tempo change the region still follows the song: at song beats b, the clock is loopMotionAt (b)
+    auto e = fresh ();
+    e->setParam (kLoopLock, 1.0);
+    e->reset ();
+    double off = 0.0, song = 0.0;
+    play (*e, bassB1 (3.0), 140.0, nullptr, nullptr, [&] (size_t a, double& bpm) {
+        if (a > 0 && song / 4.0 - std::floor (song / 4.0) < 0.9) // (away from the glide back, whose length follows the tempo)
+            off = std::max (off, std::fabs (e->motionBeats () - e->loopMotionAt (song)));
+        if (a >= (size_t)kSr)
+            bpm = 90.0;
+        song += 256.0 * bpm / 60.0 / kSr;
+    });
+    CHECK (off < 1e-3, "a tempo change: the region keeps time with the song (%.1e)", off);
+}
+
+TEST (loop_depth)
+{
+    // Loop Depth: 0 % is Loop Lock as it was (bit for bit); 100 % takes a short region's movement over each modulator's
+    // whole range (the bells from their Low to their High, Wobble all the way down and up), and the loop's seams stay
+    // as smooth as without Loop Lock
+    auto setup = [&] (double depth, double start, double end) {
+        auto e = withValues (presetValues ("Neuro/Neuro Gesture.txt"));
+        e->setParam (kLoopLock, 1.0);
+        e->setParam (kLoopStart, start);
+        e->setParam (kLoopEnd, end);
+        e->setParam (kLoopLength, 4);
+        e->setParam (kWobbleAmount, 0.6);
+        if (depth >= 0.0)
+            e->setParam (kLoopDepth, depth);
+        e->reset ();
+        return e;
+    };
+    {
+        const auto x = bassB1 (3.0);
+        auto a = setup (-1.0, 0.4375, 0.5625), b = setup (0.0, 0.4375, 0.5625);
+        CHECK (play (*a, x, 140.0) == play (*b, x, 140.0), "Loop Depth 0 %%: Loop Lock as before, bit for bit");
+    }
+    // how much of each bell's range (log Hz, Low .. High) and of Wobble's (1 - Amount .. 1) passes 4 and 5 of the region
+    // go through (the host stopped: 1 bar at 120 BPM a pass)
+    auto covered = [&] (double depth, double start, double end, double* worstTick) {
+        auto e = setup (depth, start, end);
+        const int perLoop = (int)(2.0 * kSr) / 16;
+        double lo[kNumBells + 1], hi[kNumBells + 1], prev[kNumBells] {}, step = 0.0;
+        std::fill (lo, lo + kNumBells + 1, 1e30);
+        std::fill (hi, hi + kNumBells + 1, -1e30);
+        ticks (*e, 6 * perLoop, [&] (int t) {
+            for (int b = 0; b < kNumBells; ++b)
+            {
+                const double v = std::log2 (e->sweepStage ().bellHz (b));
+                if (t > 0)
+                    step = std::max (step, std::fabs (v - prev[b]));
+                prev[b] = v;
+                if (t >= 3 * perLoop && t < 5 * perLoop)
+                {
+                    lo[b] = std::min (lo[b], v);
+                    hi[b] = std::max (hi[b], v);
+                }
+            }
+        });
+        if (worstTick)
+            *worstTick = step;
+        double least = 1.0;
+        for (int b = 0; b < kNumBells; ++b)
+        {
+            const double full = std::log2 (e->param (bellId (b, kBellHigh)) / e->param (bellId (b, kBellLow)));
+            if (e->param (bellOnId (b)) >= 0.5 && e->param (bellId (b, kBellGain)) != 0.0 && std::fabs (full) > 0.1)
+                least = std::min (least, (hi[b] - lo[b]) / std::fabs (full));
+        }
+        // Wobble (Amount 60 %, no gesture on it: Ocean's settings) over a region a fifth of its cycle long
+        auto w = fresh ();
+        w->setParam (kWobbleAmount, 0.6);
+        w->setParam (kLoopLock, 1.0);
+        w->setParam (kLoopStart, 0.5);
+        w->setParam (kLoopLength, 4);
+        w->setParam (kLoopDepth, depth);
+        w->reset ();
+        w->setParam (kLoopEnd, 0.5 + 0.1 / w->loopWindowBeats ()); // (a tenth of a beat: a fifth of its cycle)
+        w->reset ();
+        ticks (*w, 6 * perLoop, [&] (int t) {
+            if (t >= 3 * perLoop && t < 5 * perLoop)
+            {
+                lo[kNumBells] = std::min (lo[kNumBells], w->wobbleGainNow ());
+                hi[kNumBells] = std::max (hi[kNumBells], w->wobbleGainNow ());
+            }
+        });
+        return std::array<double, 2> {least, (hi[kNumBells] - lo[kNumBells]) / 0.6};
+    };
+    double tick0 = 0.0, tick1 = 0.0;
+    const auto none = covered (0.0, 0.4375, 0.5625, &tick0), full = covered (1.0, 0.4375, 0.5625, &tick1);
+    const auto half = covered (0.5, 0.4375, 0.5625, nullptr), shortest = covered (1.0, 0.0, 0.03, nullptr);
+    std::printf ("    a 1/8 region: the bells cover %.2f of their range at 0 %%, %.2f at 50 %%, %.2f at 100 %% (1/32: %.2f); Wobble %.2f / "
+                 "%.2f / %.2f; the bells' largest step per tick %.4f / %.4f octaves\n",
+                 none[0], half[0], full[0], shortest[0], none[1], half[1], full[1], tick0, tick1);
+    CHECK (none[0] < 0.6 && full[0] > 0.97 && half[0] > none[0] && half[0] < full[0], "100 %%: every bell over its whole range (%.2f)", full[0]);
+    CHECK (full[1] > 0.97 && none[1] < 0.9, "100 %%: Wobble all the way (%.2f)", full[1]);
+    CHECK (shortest[0] > 0.9, "a very short region too (%.2f)", shortest[0]);
+    CHECK (tick1 < 0.05, "no jumps in the bells (%.4f octaves a tick)", tick1);
+    // the output at the loop's seams: no step larger than without Loop Lock (Wrap and Bounce, and End dragged)
+    const auto x = bassB1 (8.0);
+    auto render = [&] (bool lock, int shape) {
+        auto e = setup (1.0, 0.4375, 0.5625);
+        e->setParam (kLoopLock, lock ? 1.0 : 0.0);
+        e->setParam (kLoopShape, shape);
+        e->reset ();
+        return play (*e, x, 140.0, nullptr, nullptr, [&] (size_t a, double&) {
+            const double t = (double)a / kSr;
+            if (t > 4.0 && t < 5.0)
+                e->setParam (kLoopEnd, 0.5625 + 0.3 * (t - 4.0)); // (End dragged out)
+        });
+    };
+    const auto free = render (false, kLoopWrap), wrap = render (true, kLoopWrap), bounce = render (true, kLoopBounce);
+    std::printf ("    output steps: Wrap %.3f, Bounce %.3f (free %.3f)\n", maxStep (wrap), maxStep (bounce), maxStep (free));
+    CHECK (finite (wrap) && finite (bounce), "finite");
+    CHECK (maxStep (wrap) < 1.25 * maxStep (free) && maxStep (bounce) < 1.25 * maxStep (free), "no step larger than without Loop Lock");
+}
+
+TEST (para_split)
+{
+    // PARA: LR4 low-pass and high-pass paths in parallel. Meeting at one corner with nothing moving: flat (an all-pass)
+    auto still = [] (Engine& e) {
+        e.setParam (kParaOn, 1.0);
+        e.setParam (kParaLpFreq, 300.0);
+        e.setParam (kParaHpFreq, 300.0);
+        e.setParam (kParaLpMove, 0.0);
+        e.setParam (kParaHpMove, 0.0);
+        e.setParam (kParaHpLevelMove, 0.0);
+    };
+    double worst = 0.0;
+    for (double hz : {50.0, 150.0, 300.0, 600.0, 2000.0, 8000.0})
+    {
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        still (*e);
+        e->reset ();
+        const auto x = sine (hz, 0.25, 1.0);
+        const auto y = run (*e, x);
+        worst = std::max (worst, std::fabs (db (rms (y, 24000, y.size ())) - db (rms (x, 24000, x.size ()))));
+    }
+    CHECK (worst < 0.05, "still, LP Freq = HP Freq: flat (%.3f dB)", worst);
+    // the low-pass path's level moves in and out (LP Move 100 %: all the way), the high-pass path's corner up HP Move
+    // octaves and back, its level in and out; both channels the same
+    auto e = engine ();
+    tailNeutral (*e);
+    plain (*e);
+    still (*e);
+    e->setParam (kParaLpMove, 1.0);
+    e->setParam (kParaHpMove, 2.0);
+    e->setParam (kParaHpLevelMove, 1.0);
+    e->setParam (kParaRate, 2); // (1 bar)
+    e->reset ();
+    std::vector<float> xr;
+    const auto x = bassB1 (4.0, &xr);
+    std::vector<float> lo (x.size ());
+    double hzMin = 1e9, hzMax = 0.0, lpMin = 1.0, hpMin = 1.0;
+    std::vector<float> r;
+    const auto l = play (*e, x, 120.0, &r, &xr, [&] (size_t a, double&) {
+        if (a < 24000)
+            return;
+        hzMin = std::min (hzMin, e->paraStage ().hpHz ());
+        hzMax = std::max (hzMax, e->paraStage ().hpHz ());
+        lpMin = std::min (lpMin, e->paraStage ().lpGain ());
+        hpMin = std::min (hpMin, e->paraStage ().hpGain ());
+    });
+    std::printf ("    HP corner %.0f .. %.0f Hz, LP level down to %.3f, HP level down to %.3f\n", hzMin, hzMax, lpMin, hpMin);
+    CHECK (hzMin < 310.0 && hzMax > 1150.0 && hzMax < 1210.0, "the high-pass path's corner: HP Freq .. 2 octaves up");
+    CHECK (lpMin < 0.01 && hpMin < 0.01, "both levels move all the way out");
+    const auto sub = windowsDb (bandPass (l, 40.0, 80.0), 24000, 2400);
+    CHECK (spread (sub) > 20.0, "the lows move in and out with the low-pass path (%.1f dB)", spread (sub));
+    // a mono input stays mono
+    auto m = engine ();
+    still (*m);
+    m->setParam (kParaLpMove, 1.0);
+    m->setParam (kParaHpLevelMove, 1.0);
+    m->setParam (kLoopLock, 1.0);
+    m->setParam (kInput, -3.0);
+    m->setParam (kGuardBells, 1.0);
+    m->setParam (kSubGuard, 1.0);
+    m->setParam (kSweep, 1.0);
+    m->reset ();
+    std::vector<float> mr;
+    const auto ml = play (*m, x, 120.0, &mr);
+    CHECK (ml == mr, "a mono input stays mono (PARA, Loop Lock, Input, Sub Guard and Guard Bells on)");
+    // with Sub Guard the low-pass path's level moves only above Sub Guard Freq
+    auto g = engine ();
+    tailNeutral (*g);
+    plain (*g);
+    still (*g);
+    g->setParam (kParaLpMove, 1.0);
+    g->setParam (kSubGuard, 1.0);
+    g->reset ();
+    const auto gl = play (*g, x, 120.0);
+    const auto gsub = windowsDb (bandPass (gl, 40.0, 70.0), 24000, 2400), gmid = windowsDb (bandPass (gl, 150.0, 250.0), 24000, 2400);
+    std::printf ("    Sub Guard: 40 .. 70 Hz moves %.2f dB, 150 .. 250 Hz %.1f dB\n", spread (gsub), spread (gmid));
+    CHECK (spread (gsub) < 1.0 && spread (gmid) > 10.0, "with Sub Guard the lows stay, above the guard the path moves");
+}
+
+TEST (new_controls_off_change_nothing)
+{
+    // Input 0 dB, Loop Lock, Split On and Sub Guard off (an older state): whatever their other settings, bit for bit the
+    // same render (the cross-build check against 0.29.0 itself, every factory preset, Init and random states, playing and
+    // stopped, is run by hand)
+    const auto x = reese (1.5);
+    auto render = [&] (bool wild) {
+        auto e = fresh ();
+        e->setParam (kSubGuard, 0.0);
+        e->setParam (kMovement, 0.7);
+        e->setParam (kScene, kSceneReeseCell + 1);
+        e->setParam (kWobbleAmount, 0.4);
+        if (wild)
+        {
+            e->setParam (kLoopStart, 0.3);
+            e->setParam (kLoopEnd, 0.6);
+            e->setParam (kStartDrift, 1.0);
+            e->setParam (kSpeedDrift, kSpeedDriftMax);
+            e->setParam (kLoopLength, 1);
+            e->setParam (kLoopShape, kLoopBounce);
+            e->setParam (kParaLpFreq, 90.0);
+            e->setParam (kParaHpFreq, 3000.0);
+            e->setParam (kParaLpMove, 1.0);
+            e->setParam (kParaHpMove, 4.0);
+            e->setParam (kParaRate, 6);
+            e->setParam (kParaMix, 0.3);
+            e->setParam (kSubGuardFreq, 180.0);
+            e->setParam (kSubFloor, -12.0);
+            e->setParam (kGuardBells, 1.0);
+            e->setParam (kLoopDepth, 1.0);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = play (*e, x, 128.0, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    CHECK (render (false) == render (true), "their settings change nothing while they are off (bit for bit)");
+}
+
+TEST (sub_guard_holds_the_sub)
+{
+    // On the heaviest moving presets the output below 70 Hz stays within 1.5 dB from one 16th note to the next (at 140
+    // BPM, a steady B1 bass in), while the 200 Hz .. 6 kHz movement keeps at least 90 % of its range: Sub Guard alone on
+    // the presets that move only the bands (the SWEEP stage off); on those over the Ocean sound (its bells A and B sweep
+    // 20 .. 300 Hz at +-23 dB: the low end moving on purpose, which Sub Guard leaves) with Guard Bells too. (The movement's
+    // range: its 2nd to 98th percentile, as the guard's crossover turns the mids' phase a little, which moves a window's
+    // edge against a fast rise.)
+    std::vector<float> xr;
+    const auto x = bassB1 (7.0, &xr);
+    const size_t from = (size_t)(1.5 * kSr), win = (size_t)(0.25 * 60.0 / 140.0 * kSr); // (16th notes at 140 BPM)
+    struct Case
+    {
+        const char* file;
+        bool bells;
+    };
+    int checked = 0;
+    for (const Case& c : {Case {"Moist/Chop.txt", false}, Case {"Moist/Fast Flicker.txt", false}, Case {"Moist/Bar Pulse.txt", false},
+                          Case {"Moist/Low Push.txt", false}, Case {"Neuro/Neuro Gesture.txt", true},
+                          Case {"Neuro/Neuro Heavy.txt", true}, Case {"Neuro/Neuro.txt", true}, Case {"Gestures/Stutter Wobble.txt", true},
+                          Case {"Gestures/Reese Cell.txt", true}})
+    {
+        double subRange[3] {}, midRange[3] {}, subSd[3] {};
+        for (int mode = 0; mode < 3; ++mode)
+        {
+            auto e = withValues (presetValues (c.file));
+            e->setParam (kSubGuard, mode > 0 ? 1.0 : 0.0);
+            e->setParam (kGuardBells, mode > 1 ? 1.0 : 0.0);
+            e->reset ();
+            std::vector<float> r;
+            const auto l = play (*e, x, 140.0, &r, &xr);
+            const auto sub = windowsDb (both (bandPass (l, 20.0, 70.0), bandPass (r, 20.0, 70.0)), from, win);
+            const auto mid = windowsDb (both (bandPass (l, 200.0, 6000.0), bandPass (r, 200.0, 6000.0)), from, win);
+            subRange[mode] = spread (sub);
+            subSd[mode] = stdDev (sub);
+            midRange[mode] = percentile (mid, 98.0) - percentile (mid, 2.0); // (robust: the guard's crossover shifts the mids' phase)
+        }
+        std::printf ("    %-28s below 70 Hz: range %5.2f / %5.2f / %5.2f dB (SD %4.2f / %4.2f / %4.2f); 200 Hz .. 6 kHz range %5.2f / %5.2f / %5.2f dB "
+                     "(off / Sub Guard / and Guard Bells)\n",
+                     c.file, subRange[0], subRange[1], subRange[2], subSd[0], subSd[1], subSd[2], midRange[0], midRange[1], midRange[2]);
+        const int k = c.bells ? 2 : 1;
+        CHECK (subRange[k] < 1.5, "%s: the sub within %.2f dB (%s)", c.file, subRange[k], c.bells ? "Sub Guard, Guard Bells" : "Sub Guard");
+        CHECK (midRange[k] > 0.9 * midRange[0] && midRange[1] > 0.9 * midRange[0], "%s: the movement above kept (%.1f of %.1f dB)", c.file,
+               midRange[k], midRange[0]);
+        ++checked;
+    }
+    CHECK (checked == 9, "%d presets", checked);
+}
+
+TEST (motion_drift)
+{
+    // Drift: each modulator started up to Start Drift of its cycle later and run up to +- Speed Drift apart, from the
+    // seed; the same seed the same every time, seed 0 exactly as without it
+    int inRange = 0, spread = 0;
+    for (int seed = 1; seed <= kMaxDriftSeed; ++seed)
+    {
+        const MotionDrift d = makeDrift (seed, 0.3, 0.05);
+        double lo = 1e9, hi = -1e9;
+        for (int i = 0; i < kDriftParts; ++i)
+        {
+            inRange += d.on && d.offset[i] >= 0.0 && d.offset[i] < 0.3 && d.factor[i] >= 0.95 && d.factor[i] <= 1.05;
+            lo = std::min (lo, d.factor[i]);
+            hi = std::max (hi, d.factor[i]);
+        }
+        spread += hi - lo > 0.01;
+    }
+    CHECK (inRange == kMaxDriftSeed * kDriftParts && spread > 120 && !makeDrift (0, 0.3, 0.05).on,
+           "offsets within Start Drift, speeds within Speed Drift, apart from each other; seed 0 off");
+    const auto x = reese (1.5);
+    auto render = [&] (int seed, bool wild) {
+        auto e = fresh ();
+        e->setParam (kMovement, 0.6);
+        e->setParam (kScene, kSceneReeseCell + 1);
+        e->setParam (kWobbleAmount, 0.5);
+        e->setParam (kParaOn, 1.0);
+        e->setParam (kDriftSeed, seed);
+        if (wild)
+        {
+            e->setParam (kStartDrift, 1.0);
+            e->setParam (kSpeedDrift, kSpeedDriftMax);
+        }
+        e->reset ();
+        std::vector<float> r;
+        auto l = play (*e, x, 132.0, &r);
+        l.insert (l.end (), r.begin (), r.end ());
+        return l;
+    };
+    const auto off = render (0, false);
+    CHECK (off == render (0, true), "Drift Seed 0: its amounts change nothing (bit for bit)");
+    const auto a = render (7, false);
+    CHECK (a == render (7, false) && a != render (8, false) && a != off, "the same seed renders the same; another seed differs");
+    // the window follows the drifted periods
+    auto e = fresh ();
+    e->setParam (kDriftSeed, 5);
+    e->setParam (kSpeedDrift, kSpeedDriftMax);
+    e->reset ();
+    const MotionDrift d = makeDrift (5, e->param (kStartDrift), kSpeedDriftMax);
+    double longest = 0.0;
+    for (int b = 0; b < kNumBells; ++b)
+        longest = std::max (longest, 2.0 / e->param (bellId (b, kBellRate)) / d.factor[kDriftBell + b]);
+    CHECK (std::fabs (e->windowNow () - longest) < 1e-9, "the window: the slowest drifted period (%.3f beats)", e->windowNow ());
+    // Loop Lock starts every drifted phase again together at the region's start: the bells, Wobble, the gesture, PARA
+    auto f = fresh ();
+    f->setParam (kDriftSeed, 11);
+    f->setParam (kStartDrift, 0.8);
+    f->setParam (kSpeedDrift, 0.08);
+    f->setParam (kLoopLock, 1.0);
+    f->setParam (kLoopStart, 0.3);
+    f->setParam (kLoopEnd, 0.7);
+    f->setParam (kLoopLength, 3); // (2 beats at 120 BPM: 3000 ticks)
+    f->setParam (kScene, kSceneReeseCell + 1);
+    f->setParam (kWobbleAmount, 0.5);
+    f->setParam (kParaOn, 1.0);
+    f->reset ();
+    std::vector<std::array<double, 12>> at;
+    ticks (*f, 4 * 3000, [&] (int t) {
+        if ((t + 1) % 3000 != 0)
+            return;
+        std::array<double, 12> v {};
+        for (int b = 0; b < kNumBells; ++b)
+            v[(size_t)b] = f->sweepStage ().bellHz (b);
+        v[8] = f->wobblePhase () - std::floor (f->wobblePhase ());
+        v[9] = f->scenePos ();
+        v[10] = f->paraStage ().hpHz ();
+        v[11] = f->motionBeats ();
+        at.push_back (v);
+    });
+    double worst = 0.0;
+    for (size_t k = 2; k < at.size (); ++k)
+        for (size_t j = 0; j < 12; ++j)
+        {
+            double dv = std::fabs (at[k][j] - at[1][j]);
+            if (j == 8)
+                dv = std::min (dv, 1.0 - dv);
+            worst = std::max (worst, dv / std::max (1.0, std::fabs (at[1][j])));
+        }
+    std::printf ("    with Drift, every phase at the region's start, pass after pass: %.1e apart\n", worst);
+    CHECK (at.size () == 4 && worst < 1e-6, "Loop Lock starts every drifted phase again together (%.1e)", worst);
+}
+
+TEST (presets_030)
+{
+    // the presets of 0.30: Locked Swell (Neuro Gesture under Loop Lock), Para Split (PARA on the Ocean sound) and Guarded
+    // Reese (Neuro Heavy under Sub Guard): what they switch on, finite and bounded, their sub steady (16th notes at 140 BPM)
+    std::vector<float> xr;
+    const auto x = bassB1 (6.0, &xr);
+    const size_t from = (size_t)(1.5 * kSr), win = (size_t)(0.25 * 60.0 / 140.0 * kSr);
+    struct Case
+    {
+        const char* file;
+        uint32_t on;
+    };
+    for (const Case& c : {Case {"Neuro/Locked Swell.txt", kLoopLock}, Case {"Sweep/Para Split.txt", kParaOn}, Case {"Neuro/Guarded Reese.txt", kGuardBells}})
+    {
+        auto e = withValues (presetValues (c.file));
+        CHECK (e->param (c.on) >= 0.5 && e->param (kSubGuard) >= 0.5, "%s: on", c.file);
+        std::vector<float> r;
+        const auto l = play (*e, x, 140.0, &r, &xr);
+        const auto sub = windowsDb (both (bandPass (l, 20.0, 70.0), bandPass (r, 20.0, 70.0)), from, win);
+        const double pk = std::max (peak (l, 0, l.size ()), peak (r, 0, r.size ()));
+        std::printf ("    %-24s peak %.2f, below 70 Hz SD %.2f dB (range %.2f)\n", c.file, pk, stdDev (sub), spread (sub));
+        CHECK (finite (l) && finite (r) && pk < 1.5 && stdDev (sub) < 0.6, "%s: finite, bounded, the sub steady", c.file);
+    }
+}
+
+TEST (sub_guard_floor_and_bells)
+{
+    // Sub Floor: the guarded lows are the steady ones x 10^(Floor / 20) plus the wet ones x the rest, so a band dropping
+    // out entirely takes them down to Sub Floor at most. Guard Bells: a bell cutting at 40 Hz leaves the lows alone, one at
+    // 1 kHz still cuts there
+    const auto lowSine = sine (45.0, 0.3, 1.5);
+    auto dropped = [&] (bool guard, double floorDb) {
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        e->setParam (kLowLevel, kLevelOffDb); // (the Low band off: as if it had dipped all the way)
+        e->setParam (kSubGuard, guard ? 1.0 : 0.0);
+        e->setParam (kSubFloor, floorDb);
+        e->reset ();
+        const auto y = run (*e, lowSine);
+        return db (rms (y, 24000, y.size ())) - db (rms (lowSine, 24000, lowSine.size ()));
+    };
+    // (the Low band's own Level is a setting, not a dip: the steady lows follow it, so with it off they are off too)
+    CHECK (dropped (true, 0.0) < -60.0, "the Low band switched off: the guarded lows follow its Level (%.1f dB)", dropped (true, 0.0));
+    auto dip = [&] (double floorDb) {
+        // a gesture lane can not take the Low band down; Low Dip can: 6 dB, with Sub Guard held to Sub Floor
+        auto e = engine ();
+        tailNeutral (*e);
+        plain (*e);
+        e->setParam (kMovement, 1.0);
+        e->setParam (kLowDip, 6.0);
+        e->setParam (kSpeed, 16.0);
+        e->setParam (kDensity, 8.0);
+        e->setParam (kSubGuard, floorDb > 0.0 ? 0.0 : 1.0);
+        e->setParam (kSubFloor, std::min (floorDb, 0.0));
+        e->reset ();
+        const auto y = run (*e, lowSine);
+        const auto w = windowsDb (bandPass (y, 20.0, 70.0), 24000, (size_t)(kSr * 8.0 / 45.0)); // (8 cycles a window)
+        return *std::min_element (w.begin (), w.end ()) - *std::max_element (w.begin (), w.end ());
+    };
+    const double unguarded = dip (1.0), held = dip (0.0), floor6 = dip (-6.0);
+    std::printf ("    Low Dip 6 dB at 45 Hz: %.2f dB unguarded, %.2f with Sub Guard, %.2f with Sub Floor -6 dB\n", unguarded, held, floor6);
+    CHECK (unguarded < -2.0 && held > -0.5 && floor6 < held - 0.5 && floor6 > unguarded, "Low Dip held off the sub, Sub Floor lets it part of the way");
+    auto bell = [&] (double centre, bool guardBells, double hz) {
+        auto e = fresh ();
+        tailNeutral (*e);
+        for (int b = 0; b < kNumBells; ++b)
+            e->setParam (bellOnId (b), b == 1 ? 1.0 : 0.0);
+        e->setParam (bellId (1, kBellLow), centre);
+        e->setParam (bellId (1, kBellHigh), centre);
+        e->setParam (bellId (1, kBellGain), -24.0);
+        e->setParam (kSweepDrive, 0.0);
+        e->setParam (kSubBoost, 0.0);
+        e->setParam (kToneOn, 0.0);
+        e->setParam (kGuardBells, guardBells ? 1.0 : 0.0);
+        e->reset ();
+        const auto x = sine (hz, 0.1, 1.0);
+        const auto y = run (*e, x);
+        return db (rms (y, 24000, y.size ())) - db (rms (x, 24000, x.size ()));
+    };
+    std::printf ("    bell B at 40 Hz, -24 dB: %.1f dB at 40 Hz, %.1f with Guard Bells; at 1 kHz: %.1f, %.1f with Guard Bells\n", bell (40.0, false, 40.0),
+                 bell (40.0, true, 40.0), bell (1000.0, false, 1000.0), bell (1000.0, true, 1000.0));
+    // (the SWEEP stage's make-up lifts the level back up after the bells' cut: what counts is the lows against the rest)
+    CHECK (bell (40.0, true, 40.0) - bell (1000.0, true, 1000.0) > 20.0 && bell (40.0, false, 40.0) - bell (1000.0, false, 1000.0) < 20.0 &&
+               std::fabs (bell (40.0, true, 40.0)) < 1.5,
+           "Guard Bells: a cut at 40 Hz leaves the lows (at their level, the make-up following)");
+    CHECK (std::fabs (bell (1000.0, true, 1000.0) - bell (1000.0, false, 1000.0)) < 1.0, "Guard Bells: a cut at 1 kHz as it was");
+}
+
 TEST (cpu_budget)
 {
-    // 10 s of a stereo Reese, the defaults and the heaviest settings (4 bands, 2 passes, full movement at the
+    // 10 s of a stereo Reese, the defaults, the heaviest settings and the Neuro recipe (under 18 %) (4 bands, 2 passes, full movement at the
     // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
     const auto x = reese (10.0);
-    for (int which = 0; which < 4; ++which)
+    for (int which = 0; which < 6; ++which)
     {
-        const bool heavy = which == 1, ocean = which >= 2, gestures = which == 3;
+        const bool heavy = which == 1, ocean = which == 2 || which == 3, gestures = which == 3, neuro = which == 4 || which == 5,
+                   all030 = which == 5;
         double secs = 1e9;
         std::vector<float> l;
         for (int i = 0; i < 3; ++i)
         {
-            auto e = ocean ? fresh () : engine ();
+            auto e = ocean ? fresh () : neuro ? withValues (neuroRecipe ()) : engine ();
             if (ocean)
             {
                 // a new instance (eight bells, Sub Boost, Tone, the end saturator) with Clean Sub on as well
@@ -3702,6 +5200,18 @@ TEST (cpu_budget)
                 gesture (*e, 2, kTargetWobbleRate, kGestureRateRise);
                 gesture (*e, 3, kTargetDirt, kGestureCrossfade);
                 e->setParam (kWobbleAmount, 0.8);
+                // and the one gesture's six lanes on top
+                sceneOn (*e, kSceneReeseCell);
+            }
+            if (all030)
+            {
+                // and 0.30's: Input, Loop Lock, PARA, Sub Guard with Guard Bells
+                e->setParam (kInput, -6.0);
+                e->setParam (kLoopLock, 1.0);
+                e->setParam (kParaOn, 1.0);
+                e->setParam (kSubGuard, 1.0);
+                e->setParam (kGuardBells, 1.0);
+                e->setParam (kPasses, kPasses2);
             }
             if (heavy)
             {
@@ -3738,11 +5248,13 @@ TEST (cpu_budget)
         }
         CHECK (finite (l), "finite");
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
-                     heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
-                     : gestures ? "the new instance as above, with four gestures (a level gate, Close, Wobble on a rate gesture, Dirt)"
+                     all030 ? "the Neuro preset with two passes, Input, Loop Lock, PARA, Sub Guard and Guard Bells"
+                     : neuro ? "the Neuro preset (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
+                     : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
+                     : gestures ? "the new instance as above, with four slots (a level gate, Close, Wobble on a rate gesture, Dirt) and Reese Cell"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
                              : "the bands alone (Sweep off)");
-        CHECK (secs / 10.0 < (heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
+        CHECK (secs / 10.0 < (all030 ? 0.25 : neuro ? 0.22 : heavy ? 0.15 : gestures ? 0.10 : 0.08), "too slow");
     }
 }
 

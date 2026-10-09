@@ -5,6 +5,9 @@
 #include "pluginkit/TailParams.h"
 
 #include <cstdint>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace moistr {
 
@@ -154,6 +157,55 @@ enum ParamId : uint32_t
     kIntensity = kG4Gesture + 8, // 0 .. 1: scales every slot's Depth
     kWobbleRate,                 // cycles per beat 1 .. 40: the tremolo's rate
     kWobbleAmount,               // 0 .. 1: how deep (0: off, not run)
+    // --- added in 0.30 (append only): ONE gesture moving many targets together (Gesture.h: a Scene, one
+    // timeline in beats with a lane per target, all on one clock). Replaces the four slots in the editor; the
+    // slots (185 .. 217) stay and still play in a state that uses them (a 0.27 project sounds as it did). None in
+    // a new instance and in an older state (moistr as 0.27, bit for bit) ---
+    kScene = kWobbleAmount + 1, // "Gesture": None, the factory gestures, User (the file picked with File)
+    kSceneMode,                 // Loop / Walk
+    kSceneLength,               // Own, 1/2 .. 32 beats (as a slot's Length)
+    kSceneSpeed,                // Walk's speed: Hold, x1/8 .. x4
+    kScenePosition,             // 0 .. 1: where the loop starts (Loop), or where Walk holds
+    kSceneSmooth,               // 0 .. 1: 2 ms .. 1/16 beat glides
+    kSceneAmount,               // 0 .. 1: scales every lane (0: no gesture)
+    // --- added in 0.30 (append only): the LAB (Lab.h). Four chains, each kChainFields IDs (Level, Mute, Solo, Mono,
+    // Source and three kept for later): chains 1 .. 3 on the Mid, High and Air bands, chain 4 (in parallel on them
+    // all) for later. Then kNumLabSlots effects slots of kLabSlotFields IDs each (a Type, an On and a block, as a
+    // smemplr rack slot: smemplr/src/core/FxSlot.h): kChainSlots per chain, chain by chain, then kPostSlots after
+    // the bands' sum (POST). Every slot Empty and every chain at 0 dB in an older state and in Init (moistr as
+    // 0.29, bit for bit), and in a new instance (the Ocean sound; the factory preset Neuro/Neuro: neuroRecipe) ---
+    kChainBase = kSceneAmount + 1,
+    kLabSlotBase = kChainBase + 4 * 8,
+    // --- added in 0.30 (append only): Input, Loop Lock, the para split (PARA) and Sub Guard. Input 0 dB, Loop Lock
+    // and Split On off in a new instance and in an older state (moistr as without them, bit for bit); Sub Guard on in a
+    // new instance and off in a state saved before (defaultNormalizedForVersion), so an older project sounds as it did ---
+    kInput = kLabSlotBase + 19 * 88, // dB -24 .. +12: the gain at the very start (0 dB: untouched)
+    // Loop Lock (Engine.h: the motion clock): the movement locked to a segment of itself, played in time with the song
+    kLoopLock,     // Off / On
+    kLoopStart,    // 0 .. 1: where the loop region starts in the window (LoopWindow.h: the slowest cycle of what moves)
+    kLoopEnd,      // 0 .. 1: where it ends (the default region: the whole window)
+    kLoopLength,   // the region's length in the song (choice: kLoopLengthBeats, then Natural: its own speed)
+    kLoopShape,    // Wrap (back to the start with a short glide) / Bounce (forward, then back)
+    // PARA (ParaSplit.h): the signal into a low-pass and a high-pass path in parallel, each moving
+    kParaOn,          // Off / On ("Split On")
+    kParaLpFreq,      // Hz: the low-pass path's corner (Linkwitz-Riley 4th order)
+    kParaHpFreq,      // Hz: the high-pass path's lowest corner (it moves up from here)
+    kParaLpMove,      // 0 .. 1: how far the low-pass path's level moves out (1: all the way)
+    kParaHpMove,      // octaves 0 .. 4: how far the high-pass path's corner moves up
+    kParaHpLevelMove, // 0 .. 1: how far the high-pass path's level moves out
+    kParaRate,        // a cycle's length in beats (choice: kParaRateBeats)
+    kParaMix,         // 0 .. 1: the split against the dry signal
+    // Sub Guard: no level movement reaches the lows below Sub Guard Freq
+    kSubGuard,     // Off / On
+    kSubGuardFreq, // Hz 40 .. 200: the guard's Linkwitz-Riley 4th-order split
+    kSubFloor,     // dB -12 .. 0: how far the lows may dip at most (0: not at all)
+    kGuardBells,   // Off / On: the SWEEP stage's bells kept above Sub Guard Freq too
+    // Drift (LoopWindow.h: makeDrift): every modulator on the motion clock started and run a little apart, per seed
+    kDriftSeed,    // 0 .. 128 (0: off, every modulator exactly as set)
+    kStartDrift,   // 0 .. 1: each modulator's start moved by up to this much of its cycle
+    kSpeedDrift,   // 0 .. 0.1: each modulator's rate changed by up to +- this much (fixed per seed)
+    // Loop Depth (LoopDepth.h): with Loop Lock, each modulator's movement in the region stretched toward its full range
+    kLoopDepth,    // 0 .. 1 (0: as the region plays it)
     kNumParams
 };
 
@@ -185,8 +237,72 @@ static_assert (kSweepCurve == 119 && kToneOn == 120 && kTone == 121 && kCleanSub
                    kCWidth == 138 && kCPhase == 139 && kDOn == 140 && kEOn == 149 && kFOn == 158 && kGOn == 167 && kHOn == 176,
                "saved IDs: Curve, Tone, Clean Sub, Sub Boost, the bells' switches and bells C .. H at 119 .. 184");
 static_assert (kG1Gesture == 185 && kG2Gesture == 193 && kG3Gesture == 201 && kG4Gesture == 209 && kIntensity == 217 &&
-                   kWobbleRate == 218 && kWobbleAmount == 219 && kNumParams == 220,
+                   kWobbleRate == 218 && kWobbleAmount == 219,
                "saved IDs: the gestures at 185 .. 219");
+static_assert (kScene == 220 && kSceneMode == 221 && kSceneLength == 222 && kSceneSpeed == 223 && kScenePosition == 224 &&
+                   kSceneSmooth == 225 && kSceneAmount == 226,
+               "saved IDs: the one gesture (0.30) at 220 .. 226");
+
+// the LAB (0.30): its chains and its effects slots
+constexpr int kNumChains = 4;      // chains 1 .. 3 on Mid, High and Air; chain 4 kept for later (parallel)
+constexpr int kNumBandChains = 3;  // the chains that run now (on the Mid, High and Air bands)
+constexpr int kChainSlots = 4;     // effects slots per chain
+constexpr int kPostSlots = 3;      // effects slots after the bands' sum (POST)
+constexpr int kNumLabSlots = kNumChains * kChainSlots + kPostSlots;
+// a chain's parameters by field (offsets from its first): Level, Mute, Solo, Mono; Source and the spares are kept
+// for later (not shown, not used)
+enum ChainField : uint32_t { kChainLevel = 0, kChainMute, kChainSolo, kChainMono, kChainSource, kChainSpare1, kChainSpare2, kChainSpare3,
+                             kChainFields };
+// a lab slot's parameters by field: its Type, its On, then its block (kLabBlock + block position; smemplr's SlotField)
+constexpr uint32_t kLabType = 0, kLabOn = 1, kLabBlock = 2;
+constexpr uint32_t kLabSlotFields = 88; // (smemplr::kSlotFields: Params.cpp checks)
+constexpr uint32_t chainId (int chain, ChainField f) { return kChainBase + kChainFields * (uint32_t)chain + (uint32_t)f; }
+constexpr int chainSlot (int chain, int k) { return chain * kChainSlots + k; } // a chain's k-th slot
+constexpr int postSlot (int k) { return kNumChains * kChainSlots + k; }        // POST's k-th slot
+constexpr uint32_t labSlotParam (int slot, uint32_t field) { return kLabSlotBase + kLabSlotFields * (uint32_t)slot + field; }
+constexpr uint32_t labBlockParam (int slot, uint32_t j) { return labSlotParam (slot, kLabBlock + j); }
+constexpr bool isChainParam (uint32_t id) { return id >= kChainBase && id < kLabSlotBase; }
+constexpr uint32_t kLabEnd = kInput; // (the LAB's IDs end here)
+constexpr bool isLabSlotParam (uint32_t id) { return id >= kLabSlotBase && id < kLabEnd; }
+constexpr bool isLabParam (uint32_t id) { return id >= kChainBase && id < kLabEnd; }
+constexpr int labSlotOf (uint32_t id) { return (int)((id - kLabSlotBase) / kLabSlotFields); }   // (a lab slot parameter)
+constexpr uint32_t labFieldOf (uint32_t id) { return (id - kLabSlotBase) % kLabSlotFields; }   // (a lab slot parameter)
+constexpr bool isChainSpare (uint32_t id) { return isChainParam (id) && (id - kChainBase) % kChainFields >= kChainSource; }
+static_assert (kChainBase == 227 && kChainFields == 8 && kLabSlotBase == 259 && kNumLabSlots == 19 && kLabEnd == 1931,
+               "saved IDs: the LAB's chains at 227 .. 258, its slots at 259 .. 1930");
+static_assert (chainId (0, kChainLevel) == 227 && chainId (0, kChainMono) == 230 && chainId (1, kChainLevel) == 235 &&
+                   chainId (2, kChainLevel) == 243 && chainId (3, kChainSpare3) == 258,
+               "saved IDs: a chain's Level, Mute, Solo, Mono, Source and three spares");
+static_assert (labSlotParam (chainSlot (0, 0), kLabType) == 259 && labSlotParam (chainSlot (0, 1), kLabType) == 347 &&
+                   labSlotParam (chainSlot (1, 0), kLabType) == 611 && labSlotParam (chainSlot (2, 0), kLabType) == 963 &&
+                   labSlotParam (postSlot (0), kLabType) == 1667 && labBlockParam (postSlot (2), 85) == 1930,
+               "saved IDs: the slots, kLabSlotFields each (Type, On, 86 block positions), chain by chain, then POST");
+static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopStart == 1933 && kLoopEnd == 1934 && kLoopLength == 1935 &&
+                   kLoopShape == 1936 && kParaOn == 1937 && kParaLpFreq == 1938 && kParaHpFreq == 1939 && kParaLpMove == 1940 &&
+                   kParaHpMove == 1941 && kParaHpLevelMove == 1942 && kParaRate == 1943 && kParaMix == 1944 && kSubGuard == 1945 &&
+                   kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kDriftSeed == 1949 && kStartDrift == 1950 &&
+                   kSpeedDrift == 1951 && kLoopDepth == 1952 && kNumParams == 1953,
+               "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948, Drift at 1949 .. 1951, "
+               "Loop Depth at 1952");
+constexpr int kMaxDriftSeed = 128;
+constexpr double kSpeedDriftMax = 0.1;
+// Loop Lock: Length's choices (beats: 1/16 .. 4 bars; then Natural, LoopWindow.h)
+constexpr int kNumLoopLengths = 7;
+constexpr double kLoopLengthBeats[kNumLoopLengths] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
+enum LoopShape { kLoopWrap = 0, kLoopBounce };
+// PARA: Rate's choices (a cycle in beats: 4 bars .. 1/16), the corners' ranges (Hz) and HP Move's (octaves)
+constexpr int kNumParaRates = 7;
+constexpr double kParaRateBeats[kNumParaRates] = {16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25};
+constexpr double kParaLpMin = 40.0, kParaLpMax = 2000.0, kParaHpMin = 100.0, kParaHpMax = 8000.0, kParaHpMoveMax = 4.0;
+// Sub Guard: its corner's range (Hz) and Sub Floor's (dB)
+constexpr double kGuardFreqMin = 40.0, kGuardFreqMax = 200.0, kGuardFreqDefault = 90.0, kSubFloorMin = -12.0;
+// the state version that has Sub Guard (State.cpp): a state saved before reads it off
+constexpr int kStateSubGuard = 9;
+// a slot's Type: Empty, then smemplr's kinds (smemplr::FxType, in its order), with room for kinds still to come (their
+// names "Kind 10" .. are placeholders; the engine runs them as Empty). The choice's length is saved: never change it.
+constexpr int kLabKinds = 32;
+// the chains' names (their parameters' and the LAB's)
+constexpr const char* kChainNames[kNumChains] = {"Mid", "High", "Air", "Chain 4"};
 
 // the SWEEP stage's eight bells (A .. H, in series in that order). A and B keep their IDs from 0.24 (Rate ..
 // Phase at kARate / kBRate, their switches at kAOn / kBOn); C .. H are On, Rate .. Phase from kCOn.
@@ -205,7 +321,9 @@ enum GestureField { kGestureChoice = 0, kGestureTarget, kGestureMode, kGestureLe
                     kGestureDepth, kGestureFields };
 constexpr uint32_t gestureId (int slot, GestureField f) { return kG1Gesture + (uint32_t)kGestureFields * (uint32_t)slot + (uint32_t)f; }
 static_assert (gestureId (3, kGestureDepth) == kIntensity - 1, "the gesture slots' IDs");
-constexpr bool isGestureParam (uint32_t id) { return id >= kG1Gesture && id < kNumParams; }
+constexpr bool isGestureParam (uint32_t id) { return id >= kG1Gesture && id <= kSceneAmount; }
+constexpr bool isSlotParam (uint32_t id) { return id >= kG1Gesture && id <= kIntensity; } // (the 0.27 slots and Intensity)
+constexpr bool isSceneParam (uint32_t id) { return id >= kScene && id <= kSceneAmount; }
 // what a slot pulls (Target). The Low band is never a target: the sub stays steady.
 enum GestureTarget
 {
@@ -223,8 +341,29 @@ enum GestureTarget
     kTargetHighX,        // High X over its range
     kTargetSeedBlend,    // Seed Blend
     kTargetShift,        // Shift over its range (-500 .. +500 Hz; Shift On must be on)
+    // (0.30: the LAB's, for the one gesture's lanes; the 0.27 slots' Target choice keeps the 14 above)
+    kTargetMidGrit,      // the Mid chain's Grit: the Drive of its first smacheratr over its range (-36 .. +36 dB)
+    kTargetHighGrit,     // the High chain's
+    kTargetAirGrit,      // the Air chain's
+    kTargetMidOtt,       // the Mid chain's OTT: the Amount (OTT's Depth) of its first multidyn
+    kTargetHighOtt,      // the High chain's
+    kTargetAirOtt,       // the Air chain's
+    kTargetPostOtt,      // POST's OTT: the Amount of its first multidyn
+    // (0.30: PARA's, for the one gesture's lanes)
+    kTargetParaLp,       // the low-pass path's level (1: in, 0: out)
+    kTargetParaHpFreq,   // the high-pass path's corner over its travel (0: at HP Freq, 1: HP Move octaves up)
+    kTargetParaHpLevel,  // the high-pass path's level (1: in, 0: out)
+    kTargetStartDrift,   // Start Drift over its range
+    kTargetSpeedDrift,   // Speed Drift over its range
     kNumTargets
 };
+constexpr int kNumSlotTargets = kTargetShift + 1; // the 0.27 slots' Target choice (its entries are saved: never more)
+// the targets' names (the 0.27 Target choice's entries, the first kNumSlotTargets; a gesture file's lane "target")
+constexpr const char* kTargetNames[kNumTargets] = {"Off",        "Mid Level", "High Level", "Air Level", "Wobble Rate",
+                                                   "Wobble Amount", "Close",  "Liquid Pos", "Dirt",      "Bells",
+                                                   "Mid X",      "High X",    "Seed Blend", "Shift",
+                                                   "Mid Grit",   "High Grit", "Air Grit",   "Mid OTT",   "High OTT",
+                                                   "Air OTT",    "Post OTT",  "Split LP",   "Split HP Freq", "Split HP Level", "Start Drift", "Speed Drift"};
 enum GestureMode { kModeLoop = 0, kModeWalk };
 // Length: the gesture's own (0), else a loop's length in beats; Speed (Walk): Hold, then x1/8 .. x4
 constexpr int kNumGestureLengths = 8, kNumGestureSpeeds = 7;
@@ -282,16 +421,30 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // The default a parameter had before 0.24, for a state saved before then that lacks it (State.cpp): 0.24 made
 // the SWEEP stage the default sound (Sweep on) and the rest neutral (Drive, Movement, Glue and Grit at 0).
 double legacyDefaultNormalized (uint32_t id);
-// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26; 6 0.27) reads for a
+// What a state saved with a version (State.cpp's: 1, 2 before 0.24; 3, 4 0.24 and 0.25; 5 0.26; 6 0.27; 7 0.29; 9 0.30) reads for a
 // parameter it lacks: before 0.24 legacyDefaultNormalized; 0.24 and 0.25 their defaults (Sweep Drive 18 dB,
 // High Shelf on, A and B at Width 0.71 and Phase 0, so before the Ocean recipe) with the 0.26 parameters at the
 // values that leave the sound as it was (bells C .. H off, Curve Hard, Tone, Clean Sub and Sub Boost off);
-// from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized).
+// from 0.26 the defaults; before 0.27 the gestures off (gestureOffNormalized); before 0.30 the one gesture None (its
+// default), the LAB's defaults (every slot Empty, every chain at 0 dB: the sound before it), Input 0 dB, Loop Lock and
+// Split On off (their defaults) and Sub Guard and Guard Bells off (on in a new instance).
 double defaultNormalizedForVersion (uint32_t id, int version);
 // The gestures as a state saved before 0.27 reads them: every Target Off, Wobble Amount 0 (the rest at the defaults)
 double gestureOffNormalized (uint32_t id);
 // the defaults from 0.24 to 0.25 (the SWEEP stage before the Ocean recipe; the 0.26 parameters as above)
 double defaultNormalized025 (uint32_t id);
+
+// A lab slot's name ("Mid FX 1", "Post FX 2") and the kind it is meant for (smemplr::FxType: a chain's first slot
+// Smacheratr, its second Multidyn, POST's first Multidyn and its second Smacheratr, the others Empty): its block's
+// defaults are that kind's.
+std::string labSlotName (int slot);
+int labSlotKind (int slot);
+
+// The Neuro recipe (0.30): the factory preset Neuro/Neuro, over the defaults (normalized values by ID; a new instance,
+// Init and an older state keep the defaults: the LAB empty, the Ocean sound). Four bands, each above Low driven into a hard-clipping smacheratr and
+// an OTT (multidyn) in its chain, an OTT and a hard clipper on their sum in POST, a quarter-note Wobble after it, the
+// bands moving in time with the song; the Low band (below 146 Hz, Seed 2) clean.
+std::vector<std::pair<uint32_t, double>> neuroRecipe ();
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced

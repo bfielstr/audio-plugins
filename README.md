@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.29.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.30.0**.
 
 | Plug-in | What it does for you |
 |---|---|
@@ -57,7 +57,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.29.0**
   info box is always there.
 - **Free resizing.** Drag the window corner to any shape. The interface keeps its proportions, zoomed
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
-- **Basic and Advanced views** (every plug-in but moistr, whose interface is being rebuilt). The window
+- **Basic and Advanced views**. The window
   opens on a **Basic** page with the plug-in's main controls only, large, its most useful display, the
   output at the right and, across the top, a scope of the output to hold and drag onto a track as audio
   or into a wavetable synth; **Advanced** in the header shows every control, in the layout you pick
@@ -193,7 +193,7 @@ same folder, so presets (and the saved default) go both ways between a slot and 
 
 ## Basic and Advanced views
 
-Every plug-in but moistr (its interface is being rebuilt) opens on its **Basic** page. Every Basic page
+Every plug-in opens on its **Basic** page. Every Basic page
 has the same layout:
 
 - the header: the plug-in's name, the presets (the name opens the Presets menu, **<** and **>** load the

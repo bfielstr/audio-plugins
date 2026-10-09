@@ -1,7 +1,7 @@
 # Moistr: a SWEEP stage (eight sweeping bell EQs, a High Shelf on a slow orbit, a level-matched saturator), then
 # a split into a low band held steady and upper bands that rise and fall slowly (seeded, repeatable), glued back
 # together with a compressor and soft clipping; optionally a second pass through the bands.
-project(Moistr VERSION 0.29.0.0)
+project(Moistr VERSION 0.30.0.0)
 
 add_library(moistr_core STATIC
     src/core/Params.cpp
@@ -10,9 +10,12 @@ add_library(moistr_core STATIC
     src/core/Sweep.cpp
     src/core/Gesture.cpp
     src/core/GestureFile.cpp
+    src/core/Lab.cpp
+    src/core/ParaSplit.cpp
+    src/core/LoopWindow.cpp
 )
 target_include_directories(moistr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core)
+target_link_libraries(moistr_core PUBLIC pluginkit_core smacheratr_core smemplr_fxslot) # (the LAB's slots: smemplr's)
 pk_dsp_settings(moistr_core)
 
 add_executable(moistr_tests tests/core_tests.cpp)
@@ -21,6 +24,13 @@ target_link_libraries(moistr_tests PRIVATE moistr_core)
 target_compile_definitions(moistr_tests PRIVATE MOISTR_PRESETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/presets")
 add_test(NAME moistr_core COMMAND moistr_tests)
 pk_cpu_test(moistr_core) # times the DSP against a CPU budget
+
+# scripts/als_extract.py --moistr on a synthetic Live set (made by the test): Ableton lanes to one gesture of lanes
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME moistr_als_extract
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/als_extract_test.py ${CMAKE_SOURCE_DIR}/scripts/als_extract.py)
+endif()
 
 if(NOT PK_BUILD_PLUGINS)
     return()
@@ -46,6 +56,8 @@ pk_add_plugin(Moistr
         src/ui/SweepView.cpp
         src/ui/GestureView.h
         src/ui/GestureView.cpp
+        src/ui/LoopView.h
+        src/ui/LoopView.cpp
         src/ui/Editor.h
         src/ui/Editor.cpp
 )
