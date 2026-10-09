@@ -950,7 +950,7 @@ int main (int argc, char** argv)
                 rig.param (smemplr::kFilterFreq, v0);
             }
             // the capture band's buffer: the processor's output, every frame
-            if (auto* c = dynamic_cast<smemplr::Controller*> (rig.controller.get ()); c && c->getBridge ())
+            if (auto* c = static_cast<smemplr::Controller*> (rig.controller.get ()); c->getBridge ()) // (static_cast: the plug-in is a bundle here, its typeinfo is not linked in)
             {
                 const uint64_t before = c->getBridge ()->capture.written ();
                 std::vector<float> cap;
@@ -966,8 +966,7 @@ int main (int argc, char** argv)
             auto savedAdvanced = [&] {
                 MemoryStream s;
                 rig.controller->getState (&s);
-                auto* other = dynamic_cast<pk::ControllerBase*> (rig.controller.get ());
-                return other ? other->uiAdvanced : false;
+                return static_cast<pk::ControllerBase*> (rig.controller.get ())->uiAdvanced;
             };
             CHECK (!savedAdvanced (), "Basic: in the controller's state");
             const auto hr = pk::basic::headerRight (pk::basic::kWidth);

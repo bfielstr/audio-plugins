@@ -60,16 +60,6 @@ std::vector<uint32_t> Spec::params () const
     return out;
 }
 
-HeaderRight headerRight (double width)
-{
-    // the same places in every plug-in: Menu at the right edge, ? before it, Advanced before that
-    HeaderRight h;
-    const double top = 7, bottom = kHeader - 9;
-    h.menu = CRect (width - kMargin - 56, top, width - kMargin, bottom);
-    h.help = CRect (h.menu.left - 8 - 24, top, h.menu.left - 8, bottom);
-    h.advanced = CRect (h.help.left - 8 - 92, top, h.help.left - 8, bottom);
-    return h;
-}
 
 Geometry place (const Spec& spec, bool extrasOpen)
 {
