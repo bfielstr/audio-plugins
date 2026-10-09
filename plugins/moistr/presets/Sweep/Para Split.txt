@@ -1,0 +1,16 @@
+# moistr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sweep, para, bass, tempo
+comment: The Ocean sound split as para does: a low-pass path at 180 Hz moving in and out and a high-pass path from 400 Hz sweeping up two and a half octaves and back, out when the low-pass path is in, every half bar in time with the song. The bands move gently after it. Sub Guard keeps the lows below 90 Hz in, so only the low mids breathe.
+Split On = On
+LP Freq = 180 Hz
+HP Freq = 400 Hz
+LP Move = 80 %
+HP Move = 2.50
+HP Level Move = 60 %
+Split Rate = 1/2
+Split Mix = 100 %
+Movement = 30 %
+Sync = On
+Sync Rate = 1 Bar
+Sub Guard = On
+Guard Bells = On

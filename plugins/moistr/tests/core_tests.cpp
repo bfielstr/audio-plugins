@@ -4833,6 +4833,31 @@ TEST (sub_guard_holds_the_sub)
     CHECK (checked == 9, "%d presets", checked);
 }
 
+TEST (presets_030)
+{
+    // the presets of 0.30: Locked Swell (Neuro Gesture under Loop Lock), Para Split (PARA on the Ocean sound) and Guarded
+    // Reese (Neuro Heavy under Sub Guard): what they switch on, finite and bounded, their sub steady (16th notes at 140 BPM)
+    std::vector<float> xr;
+    const auto x = bassB1 (6.0, &xr);
+    const size_t from = (size_t)(1.5 * kSr), win = (size_t)(0.25 * 60.0 / 140.0 * kSr);
+    struct Case
+    {
+        const char* file;
+        uint32_t on;
+    };
+    for (const Case& c : {Case {"Neuro/Locked Swell.txt", kLoopLock}, Case {"Sweep/Para Split.txt", kParaOn}, Case {"Neuro/Guarded Reese.txt", kGuardBells}})
+    {
+        auto e = withValues (presetValues (c.file));
+        CHECK (e->param (c.on) >= 0.5 && e->param (kSubGuard) >= 0.5, "%s: on", c.file);
+        std::vector<float> r;
+        const auto l = play (*e, x, 140.0, &r, &xr);
+        const auto sub = windowsDb (both (bandPass (l, 20.0, 70.0), bandPass (r, 20.0, 70.0)), from, win);
+        const double pk = std::max (peak (l, 0, l.size ()), peak (r, 0, r.size ()));
+        std::printf ("    %-24s peak %.2f, below 70 Hz SD %.2f dB (range %.2f)\n", c.file, pk, stdDev (sub), spread (sub));
+        CHECK (finite (l) && finite (r) && pk < 1.5 && stdDev (sub) < 0.6, "%s: finite, bounded, the sub steady", c.file);
+    }
+}
+
 TEST (sub_guard_floor_and_bells)
 {
     // Sub Floor: the guarded lows are the steady ones x 10^(Floor / 20) plus the wet ones x the rest, so a band dropping
