@@ -361,12 +361,17 @@ public:
     Label (const VSTGUI::CRect& r, std::string text, double size = 11.0, bool bold = false, int align = 0);
     void setText (const std::string& t)
     {
-        if (t != text)
+        if (t != text || !variants.empty ())
         {
             text = t;
+            variants.clear ();
             invalid ();
         }
     }
+    // The text in versions from the longest to the shortest (a status line): it draws the first that fits
+    // its width (measured as drawn, at any zoom), so a line too long for its room is abbreviated rather
+    // than cut off mid-word; the longest is its tooltip. (The layout check measures the shortest.)
+    void setTexts (std::vector<std::string> longestFirst);
     const std::string& getText () const { return text; }
     void setDim (bool d)
     {
@@ -378,10 +383,14 @@ public:
 
 private:
     std::string text;
+    std::vector<std::string> variants; // (setTexts; text is the longest)
     double size;
     bool bold, dim = false;
     int align; // 0 left, 1 centre, 2 right
 };
+
+// A latency line in its versions for Label::setTexts: "Latency 64 samples", "Latency 64", "64 smp".
+std::vector<std::string> latencyTexts (int samples);
 
 // Container with a titled, rounded panel background. In an arranged layout a panel that is its block's
 // whole content grows to fill the block (EditorBase): its frame and title reach the block's sides and its

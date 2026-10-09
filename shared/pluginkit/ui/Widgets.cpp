@@ -764,10 +764,42 @@ Label::Label (const CRect& r, std::string t, double s, bool b, int a)
     setMouseEnabled (false);
 }
 
+std::vector<std::string> latencyTexts (int samples)
+{
+    const std::string n = std::to_string (samples);
+    return {"Latency " + n + " samples", "Latency " + n, n + " smp"};
+}
+
+void Label::setTexts (std::vector<std::string> longestFirst)
+{
+    if (longestFirst.empty ())
+        longestFirst.emplace_back ();
+    if (longestFirst == variants)
+        return;
+    variants = std::move (longestFirst);
+    text = variants.front ();
+    setTooltipText (variants.size () > 1 ? text.c_str () : nullptr);
+    invalid ();
+}
+
 void Label::draw (CDrawContext* ctx)
 {
     const CHoriTxtAlign al = align == 0 ? kLeftText : (align == 1 ? kCenterText : kRightText);
-    ::pk::text (ctx, text, getViewSize (), dim ? theme::kTextDim : theme::kText, size, bold, al);
+    const std::string* shown = &text;
+    if (variants.size () > 1)
+    {
+        // the first version that fits (the font's width as this context draws it)
+        ctx->setFont (theme::font (size, bold));
+        const double room = getViewSize ().getWidth () - 1;
+        shown = &variants.back ();
+        for (const auto& v : variants)
+            if (ctx->getStringWidth (v.c_str ()) <= room)
+            {
+                shown = &v;
+                break;
+            }
+    }
+    ::pk::text (ctx, *shown, getViewSize (), dim ? theme::kTextDim : theme::kText, size, bold, al);
 }
 
 //==============================================================================
@@ -907,6 +939,9 @@ std::vector<TextSpot> Choice::textSpots () const
     return out;
 }
 
-std::vector<TextSpot> Label::textSpots () const { return {{getViewSize (), text, size, bold, align, 0}}; }
+std::vector<TextSpot> Label::textSpots () const
+{
+    return {{getViewSize (), variants.empty () ? text : variants.back (), size, bold, align, 0}};
+}
 
 } // namespace pk
