@@ -104,7 +104,7 @@
 //               integral of its rate over the motion beats, so a gesture moving its rate stays smooth). The segment's
 //               movement is time-scaled to Length: Window / Length x as fast. shape: Wrap runs forward over the segment and
 //               glides back to its start over its last 1/16 (12 .. 60 ms, a raised cosine: everything moves back smoothly,
-//               no jump); Ping-Pong runs forward over the first half and back over the second (no return at all).
+//               no jump); Bounce runs forward over the first half and back over the second (no return at all).
 //               Position and Window glide (80 ms), so sliding them is smooth; the tempo the free clocks use glides
 //               (200 ms). Stopped, the song beats run on at the last tempo, so the segment keeps playing.
 //   PARA        ParaSplit.h, before Drive and the bands: its movement feeds Drive, the Glue, Grit and the LAB's clippers;

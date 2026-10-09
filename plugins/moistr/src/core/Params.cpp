@@ -206,7 +206,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kLoopPosition, "Loop Position", "Position", 0.0, kLoopPositionMax, 0.0, Curve::Linear, Disp::Beats));
         v.push_back (real (kLoopWindow, "Loop Window", "Window", kLoopWindowMin, kLoopWindowMax, kLoopWindowDefault, Curve::Log, Disp::Beats));
         v.push_back (choice (kLoopLength, "Loop Length", "Length", {"1/16", "1/8", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars"}, 4));
-        v.push_back (choice (kLoopShape, "Loop Shape", "Shape", {"Wrap", "Ping-Pong"}, kLoopWrap));
+        v.push_back (choice (kLoopShape, "Loop Shape", "Shape", {"Wrap", "Bounce"}, kLoopWrap));
         v.push_back (toggle (kParaOn, "Split On", "Split", false));
         v.push_back (real (kParaLpFreq, "LP Freq", "LP Freq", kParaLpMin, kParaLpMax, 250.0, Curve::Log, Disp::Hz));
         v.push_back (real (kParaHpFreq, "HP Freq", "HP Freq", kParaHpMin, kParaHpMax, 250.0, Curve::Log, Disp::Hz));

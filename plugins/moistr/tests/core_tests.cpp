@@ -4522,7 +4522,7 @@ TEST (input_gain)
 TEST (loop_lock_motion_clock)
 {
     // the motion clock under Loop Lock: Position + Window x shape (frac (song beats / Length)); Wrap glides back over the
-    // segment's last part (a 16th, 12 .. 60 ms), Ping-Pong goes forward then back
+    // segment's last part (a 16th, 12 .. 60 ms), Bounce goes forward then back
     auto e = fresh ();
     e->setParam (kLoopLock, 1.0);
     e->setParam (kLoopPosition, 3.0);
@@ -4538,10 +4538,10 @@ TEST (loop_lock_motion_clock)
         worst = std::max (worst, std::fabs (e->loopMotionAt (b) - (3.0 + 2.0 * f)));
     }
     CHECK (worst < 1e-12, "Wrap: Position + Window x the segment's place (%.1e)", worst);
-    e->setParam (kLoopShape, kLoopPingPong);
+    e->setParam (kLoopShape, kLoopBounce);
     CHECK (std::fabs (e->loopMotionAt (1.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (2.0) - 5.0) < 1e-12 &&
                std::fabs (e->loopMotionAt (3.0) - 4.0) < 1e-12 && std::fabs (e->loopMotionAt (4.0) - 3.0) < 1e-12,
-           "Ping-Pong: forward over the first half, back over the second");
+           "Bounce: forward over the first half, back over the second");
     e->setParam (kLoopShape, kLoopWrap);
     // every moving part reads it: the band movement (synced), a synced bell, the gestures, PARA
     e->setParam (kSync, 1.0);
@@ -4644,8 +4644,8 @@ TEST (loop_lock_smooth)
     double wrapStep = 0.0, pingStep = 0.0;
     const auto free = render (false, nullptr, kLoopWrap);
     const auto wrap = render (true, &wrapStep, kLoopWrap);
-    const auto ping = render (true, &pingStep, kLoopPingPong);
-    std::printf ("    the motion clock's largest step per block: Wrap %.3f, Ping-Pong %.3f beats (the segment: 4 beats); output steps %.3f / %.3f "
+    const auto ping = render (true, &pingStep, kLoopBounce);
+    std::printf ("    the motion clock's largest step per block: Wrap %.3f, Bounce %.3f beats (the segment: 4 beats); output steps %.3f / %.3f "
                  "(free %.3f)\n",
                  wrapStep, pingStep, maxStep (wrap), maxStep (ping), maxStep (free));
     CHECK (finite (wrap) && finite (ping), "finite");
@@ -4764,7 +4764,7 @@ TEST (new_controls_off_change_nothing)
             e->setParam (kLoopPosition, 7.0);
             e->setParam (kLoopWindow, 0.5);
             e->setParam (kLoopLength, 1);
-            e->setParam (kLoopShape, kLoopPingPong);
+            e->setParam (kLoopShape, kLoopBounce);
             e->setParam (kParaLpFreq, 90.0);
             e->setParam (kParaHpFreq, 3000.0);
             e->setParam (kParaLpMove, 1.0);

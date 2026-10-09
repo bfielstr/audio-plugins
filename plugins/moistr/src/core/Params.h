@@ -185,7 +185,7 @@ enum ParamId : uint32_t
     kLoopPosition, // beats 0 .. kLoopPositionMax: where on the motion clock the segment starts
     kLoopWindow,   // beats kLoopWindowMin .. kLoopWindowMax: how much motion time the segment holds
     kLoopLength,   // the segment's length in the song (choice: kLoopLengthBeats)
-    kLoopShape,    // Wrap (back to the start with a short glide) / Ping-Pong (forward, then back)
+    kLoopShape,    // Wrap (back to the start with a short glide) / Bounce (forward, then back)
     // PARA (ParaSplit.h): the signal into a low-pass and a high-pass path in parallel, each moving
     kParaOn,          // Off / On ("Split On")
     kParaLpFreq,      // Hz: the low-pass path's corner (Linkwitz-Riley 4th order)
@@ -280,7 +280,7 @@ static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopPosition == 1933 && k
 constexpr double kLoopPositionMax = 16.0, kLoopWindowMin = 0.125, kLoopWindowMax = 16.0, kLoopWindowDefault = 4.0;
 constexpr int kNumLoopLengths = 7;
 constexpr double kLoopLengthBeats[kNumLoopLengths] = {0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0};
-enum LoopShape { kLoopWrap = 0, kLoopPingPong };
+enum LoopShape { kLoopWrap = 0, kLoopBounce };
 // PARA: Rate's choices (a cycle in beats: 4 bars .. 1/16), the corners' ranges (Hz) and HP Move's (octaves)
 constexpr int kNumParaRates = 7;
 constexpr double kParaRateBeats[kNumParaRates] = {16.0, 8.0, 4.0, 2.0, 1.0, 0.5, 0.25};

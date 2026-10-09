@@ -265,7 +265,7 @@ double Engine::loopMotionAt (double songBeats) const
     const double length = kLoopLengthBeats[std::clamp ((int)std::lround (p[kLoopLength]), 0, kNumLoopLengths - 1)];
     const double v = songBeats / length, u = v - std::floor (v);
     double f;
-    if (std::lround (p[kLoopShape]) == kLoopPingPong)
+    if (std::lround (p[kLoopShape]) == kLoopBounce)
         f = u < 0.5 ? 2.0 * u : 2.0 - 2.0 * u; // (forward over the first half, back over the second)
     else
     {
