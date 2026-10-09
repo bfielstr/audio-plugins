@@ -217,6 +217,7 @@ pk::basic::Spec Editor::basicSpec ()
     s.displayHeight = 240;
     s.display = [this] (const CRect& r) -> CView* {
         display = new DynDisplay (r, this, [c = ctl] { return c->getMeters (); });
+        display->setValueColumns (false); // (no value boxes here: the bands' graph takes the width)
         pk::setHelp (display, "Bands", help::kDisplay);
         return display;
     };
