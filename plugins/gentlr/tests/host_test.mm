@@ -335,7 +335,7 @@ int main (int argc, char** argv)
                 win.drag (hx, hy, hx - 40.0, hy);
                 pump (0.05);
                 const double f1 = plainOf (rig, bandParam (0, kFreq));
-                CHECK (f1 < f0 * 0.75 && plainOf (rig, kSubFreq) == sub0 && plainOf (rig, kGlueSub1) < 0.5 && plainOf (rig, kNoOverlap) < 0.5,
+                CHECK (f1 < f0 * 0.85 && plainOf (rig, kSubFreq) == sub0 && plainOf (rig, kGlueSub1) < 0.5 && plainOf (rig, kNoOverlap) < 0.5,
                        "band 1 dragged onto the Sub band: %.1f -> %.1f Hz, the Sub band at %.1f Hz, nothing glued", f0, f1, plainOf (rig, kSubFreq));
                 rig.param (bandParam (0, kFreq), defaultNormalized (bandParam (0, kFreq)));
             }

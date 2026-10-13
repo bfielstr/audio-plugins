@@ -178,6 +178,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {gentlr::kHighOn, gentlr::kHighOn, "unused: the High band works while its Range is above 0"},
         {gentlr::kTailExt3Base, gentlr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {gentlr::kTailExt4Base, gentlr::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {gentlr::kBandShelves, gentlr::kBandShelves, "always on in a slot: the rack keeps 0.30.0's band shapes"},
     };
     // (its saturator's fourth block runs on into the slot's extension: not in the rack; its Slope and glue
     // switches after it are, in the extension too; its saturator's fifth block after those is not)
