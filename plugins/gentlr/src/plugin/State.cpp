@@ -12,7 +12,7 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x474E544C; // 'GNTL'
-constexpr int32 kVersion = 6;
+constexpr int32 kVersion = 7;
 constexpr int32 kSubHighRange = 2; // 2: the Sub and High bands (Gentlr's and the end saturator's) work while their Range is above 0 dB
 constexpr int32 kClassicSlope = 3; // 3: the bands' Slope, Gentlr's and the end saturator's (Classic for states from before it)
 constexpr int32 kOversamplingChoice = 4; // 4: the end saturator's Oversampling Off / 2x / 4x (its Hi-Quality switch before)
@@ -22,6 +22,18 @@ constexpr int32 kNewDefaults = 5;
 // 6: Gentlr's Slope has a fourth choice, Alt Signature: a Slope saved before (three choices) is read as
 // the same choice
 constexpr int32 kAltSignature = 6;
+// 7: every band's Threshold goes down to -90 dB (-60 before: a Threshold saved then keeps its dB), band 1
+// at 100 Hz, Range 20 dB, Threshold -82 dB for a new instance (250 Hz, 8 dB, -18 dB before: older states
+// keep those where they lack them), and Band Shelves (off for a new instance: on for older states)
+constexpr int32 kWideThresholds = 7;
+
+void keepOld (State& st, uint32 id, double plain)
+{
+    if (st.has[id])
+        return;
+    st.norm[id] = toNormalized (id, plain);
+    st.has[id] = true;
+}
 } // namespace
 
 bool writeState (IBStream* stream, const State& st)
@@ -61,6 +73,22 @@ bool readState (IBStream* stream, State& st)
             st.norm[id] = std::clamp (v, 0.0, 1.0);
             st.has[id] = true;
         }
+    }
+    // the Thresholds were -60 to 0 dB: each one saved is read as the dB it had (its normalized value on
+    // the old range, put on the new one; the end saturator's are Smacheratr's and kept that range); band 1's
+    // defaults were 250 Hz, Range 8 dB and Threshold -18 dB, and the bands turned into shelves at the ends
+    if (version < kWideThresholds)
+    {
+        for (int k = 0; k < kAllBands; ++k)
+        {
+            const uint32 id = thresholdParam (k);
+            if (st.has[id])
+                st.norm[id] = toNormalized (id, kThresholdMinBeforeDb + st.norm[id] * (kThresholdMaxDb - kThresholdMinBeforeDb));
+        }
+        keepOld (st, bandParam (0, kFreq), kBand1BeforeHz);
+        keepOld (st, bandParam (0, kRange), kBand1BeforeRangeDb);
+        keepOld (st, bandParam (0, kThreshold), smacheratr::kClarityThresholdDb);
+        keepOld (st, kBandShelves, 1.0);
     }
     // Gentlr's Slope (and the end saturator's) had three choices before Alt Signature: a value saved then is read
     // as the same choice (first: the conversions below set the Slope as it is now)

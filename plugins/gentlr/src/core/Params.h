@@ -3,7 +3,8 @@
 // them, at fixed numbers, and the end saturator's fourth block after those. That block grew by one
 // field (its Gentlr's Slope) while it was still the last; Gentlr's own Slope came after it, so it is
 // closed in now. Gentlr's glue switches came next, its own and then the end saturator's (a fifth
-// block, at the very end). Every ID below is pinned (static_asserts at the end of this file).
+// block), and Band Shelves after that, at the very end. Every ID below is pinned (static_asserts at the
+// end of this file).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -12,6 +13,7 @@
 #include "smacheratr/src/core/Params.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace gentlr {
 
@@ -37,7 +39,7 @@ enum BandField : uint32_t
     kFreq,      // Hz, the band's centre (20 Hz - 20 kHz)
     kWidth,     // octaves between the band's edges (0.5 - 4)
     kRange,     // dB, the most the band is turned down (0 - 24; 0 cuts nothing)
-    kThreshold, // dB, where the band starts cutting (Advanced; without it -18 dB, smacheratr::kClarityThresholdDb)
+    kThreshold, // dB, where the band starts cutting (-90 - 0; Advanced; without it -18 dB, smacheratr::kClarityThresholdDb)
     kBandBlock
 };
 
@@ -93,7 +95,12 @@ enum ParamId : uint32_t
     kGlue1High, // band 1 and the High band
     kGlue2High, // band 2 and the High band
     kTailExt4Base, // the end Smacheratr's Gentlr glue: pk::kTailExt4Fields entries (the last block)
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    // --- after the end saturator's fifth block ---
+    // Band Shelves: bands 1 and 2 turn into shelves where an edge reaches an end of the spectrum (20 Hz or
+    // 20 kHz: smacheratr::clarityBand), running flat out to that side. Off for a new instance (the bands
+    // stay bands wherever they are); State.cpp gives states from before it On, the way they sounded then.
+    kBandShelves = kTailExt4Base + pk::kTailExt4Fields,
+    kNumParams
 };
 // Gentlr's glue switches (smacheratr::GluePair's order)
 inline constexpr uint32_t kGlueIds[smacheratr::kGluePairs] = {kGlue12, kGlueSub1, kGlueSub2, kGlue1High, kGlue2High};
@@ -119,7 +126,7 @@ constexpr bool isHighParam (uint32_t id) { return id >= kHighOn && id <= kHighTh
 constexpr bool isBandParam (uint32_t id) { return (id >= kBandBase && id < kTailBase) || isHighParam (id); }
 constexpr bool isTailParam (uint32_t id)
 {
-    return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope) || (id >= kTailExt4Base && id < kNumParams);
+    return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope) || (id >= kTailExt4Base && id < kBandShelves);
 }
 // its field in smacheratr::Tail (the first three blocks are consecutive, the fourth and fifth come after
 // Gentlr's own)
@@ -130,7 +137,30 @@ constexpr uint32_t tailField (uint32_t id)
                                  : id - kTailBase;
 }
 
+// Every band's Threshold (bands 1 and 2, Sub, High): -90 to 0 dB (-60 to 0 up to 0.30.0, as Smacheratr's
+// still are: State.cpp converts older states, keeping each Threshold's dB)
+constexpr double kThresholdMinDb = -90.0, kThresholdMaxDb = 0.0, kThresholdMinBeforeDb = -60.0;
+// a new instance's band 1 (on the low end, cutting from far down) and band 2; up to 0.30.0 band 1 was
+// at 250 Hz with Range 8 dB and Threshold -18 dB (older states missing them keep those)
+constexpr double kBand1DefaultHz = 100.0, kBand1DefaultRangeDb = 20.0, kBand1DefaultThresholdDb = -82.0;
+constexpr double kBand1BeforeHz = 250.0, kBand1BeforeRangeDb = 8.0;
+
 const pk::ParamTable& paramTable ();
+// The table of a gentlr in the suite's racks (smemplr's effects rack, moistr's lab: smemplr::fxTable): the
+// one up to 0.30.0, so the racks' projects and sound stay as they were: the Thresholds -60 to 0 dB, band 1 at
+// 250 Hz, Range 8 dB, Threshold -18 dB, and Band Shelves on (the racks do not show it: their gentlr always
+// has shelves at the ends). rackFromPlugin and pluginFromRack convert every parameter's normalized value
+// (by gentlr's IDs) between the two tables (a gentlr preset in a rack slot and back): each Threshold keeps
+// its dB (within -60 to 0 in a rack), Band Shelves on; the others pass as they are. One parameter's, or
+// every one's (by ID).
+const pk::ParamTable& rackTable ();
+double rackFromPlugin (uint32_t id, double norm);
+double pluginFromRack (uint32_t id, double norm);
+void rackFromPlugin (std::vector<double>& norm);
+void pluginFromRack (std::vector<double>& norm);
+// Smacheratr's table with Gentlr's Thresholds in its Threshold entries (their range and default): the
+// table of the Threshold sliders' host (pk::MappedParamHost passes normalized values through)
+const pk::ParamTable& sliderTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
@@ -141,7 +171,8 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 inline bool bandWorks (int k, double on, double rangeDb) { return (!hasOn (k) || on >= 0.5) && rangeDb > 0.0; }
 
 // Gentlr's Threshold sliders are Smacheratr's (smacheratr::ThresholdSlider, bound to Smacheratr's
-// Threshold IDs): the Gentlr parameter behind Smacheratr parameter `id`, or -1.
+// Threshold IDs): the Gentlr parameter behind Smacheratr parameter `id`, or -1. Gentlr's Thresholds go
+// lower than Smacheratr's (kThresholdMinDb), so the sliders' host shows them with sliderTable ().
 inline int64_t fromSmacheratr (uint32_t id)
 {
     for (int k = 0; k < kAllBands; ++k)
@@ -169,8 +200,8 @@ static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "th
 static_assert (kHighOn == 54 && kHighFreq == 55 && kHighRange == 56 && kHighThreshold == 57 && kNoOverlap == 58,
                "the High band: 54 - 57, No Overlap 58");
 static_assert (kTailExt3Base == 59 && kSlope == 65, "the end saturator's fourth block 59 - 64, Slope 65");
-static_assert (kGlue12 == 66 && kGlue2High == 70 && kTailExt4Base == 71 && kNumParams == 76,
-               "the glue switches 66 - 70, the end saturator's fifth block 71 - 75: 76 parameters");
+static_assert (kGlue12 == 66 && kGlue2High == 70 && kTailExt4Base == 71, "the glue switches 66 - 70, the end saturator's fifth block 71 - 75");
+static_assert (kBandShelves == 76 && kNumParams == 77, "Band Shelves 76: 77 parameters");
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
 // Default set in a new instance: its own Advanced only (it is Gentlr: no Gentlr switch)

@@ -102,7 +102,9 @@ static int compareCarried (const std::vector<double>& rack, int slot, int type, 
         ++carried;
         const double slotPlain = bt.toPlain ((uint32_t)j, rack[slotBlockParam (slot, (uint32_t)j)]);
         const double plugPlain = pt.toPlain (id, plugin[id]);
-        if (slotPlain != plugPlain && bad++ < 3)
+        // (gentlr's Thresholds pass through its own range and back, rackio: to rounding)
+        const bool same = type == kFxGentlr ? std::fabs (slotPlain - plugPlain) <= 1e-9 * std::max (1.0, std::fabs (plugPlain)) : slotPlain == plugPlain;
+        if (!same && bad++ < 3)
             CHECK (false, "%s, %s slot %d: %s is %g in the slot, %g in the plug-in", what, fxName (type), slot, pt.info (id).name, slotPlain,
                    plugPlain);
     }
@@ -205,11 +207,24 @@ static void savedFromSlotReadsInThePlugin ()
         std::vector<double> back;
         CHECK (rackio::codecOf (type)->read (comp, back) && back.size () == hostedPlugin (type)->table->size (), "%s: the plug-in reads it",
                fxName (type));
+        if (type == kFxGentlr && back.size () == out.size ())
+        {
+            // the gentlr plug-in's Thresholds go lower than the rack's (-90 dB, not -60): it reads each at the
+            // slot's dB, and its Band Shelves on (the rack's gentlr has shelves)
+            int wrongDb = 0;
+            for (int k = 0; k < gentlr::kAllBands; ++k)
+            {
+                const uint32_t id = gentlr::thresholdParam (k);
+                wrongDb += std::fabs (gentlr::paramTable ().toPlain (id, back[id]) - gentlr::rackTable ().toPlain (id, out[id])) < 1e-9 ? 0 : 1;
+            }
+            CHECK (wrongDb == 0 && back[gentlr::kBandShelves] == 1.0, "gentlr: the plug-in reads the slot's Thresholds at their dB (%d not)", wrongDb);
+            gentlr::rackFromPlugin (back);
+        }
         if (back.size () == out.size ())
         {
             int diff = 0;
             for (size_t id = 0; id < out.size (); ++id)
-                diff += back[id] != out[id] ? 1 : 0;
+                diff += (type == kFxGentlr ? std::fabs (back[id] - out[id]) > 1e-12 : back[id] != out[id]) ? 1 : 0;
             CHECK (diff == 0, "%s: %d values differ after the round trip", fxName (type), diff);
             compareCarried (rack, slot, type, back, "saved from a slot");
         }

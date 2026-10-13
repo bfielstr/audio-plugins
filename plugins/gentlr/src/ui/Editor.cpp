@@ -85,8 +85,9 @@ public:
             edges = hzText (host->plainValue (kHighFreq)) + " - 20 k";
         else
         {
-            const smacheratr::ClarityBand b = smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)),
-                                                                       host->plainValue (bandParam (band, gentlr::kWidth)));
+            const smacheratr::ClarityBand b =
+                smacheratr::clarityBand (sampleRate (), host->plainValue (bandParam (band, kFreq)), host->plainValue (bandParam (band, gentlr::kWidth)),
+                                         smacheratr::kSlopeClassic, host->plainValue (kBandShelves) >= 0.5);
             edges = hzText (b.lowHz) + " - " + hzText (b.highHz);
         }
         ctx->drawString (edges.c_str (), CRect (r.left, r.top, r.right - 6, r.bottom), kRightText, true);
@@ -155,8 +156,9 @@ void Editor::buildUI (CFrame* f)
     view->setTooltipText (help::kDisplay);
     root->addView (view);
 
-    // the Threshold sliders are Smacheratr's, on Gentlr's Thresholds (the same range) and levels
-    sliderHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) { return fromSmacheratr (id); });
+    // the Threshold sliders are Smacheratr's, on Gentlr's Thresholds and levels (shown with Gentlr's
+    // Threshold ranges and defaults: sliderTable)
+    sliderHost = std::make_unique<pk::MappedParamHost> (this, sliderTable (), [] (uint32_t id) { return fromSmacheratr (id); });
     for (int k = 0; k < kAllBands; ++k)
     {
         sliders[k] = new smacheratr::ThresholdSlider (CRect (0, 0, 1, 1), sliderHost.get (), k, [c = ctl] () -> const smacheratr::Meters* {
@@ -362,14 +364,24 @@ void Editor::showMenu (CPoint where)
         std::snprintf (buf, sizeof (buf), "Interface Size %d%%", (int)std::lround (s * 100));
         menu->addEntry (buf, -1, std::fabs (currentScale () - s) < 0.01 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     }
+    // Band Shelves (a parameter, saved with the project): bands 1 and 2 turn into shelves at the ends of
+    // the spectrum
+    menu->addSeparator ();
+    const int32_t shelvesAt = menu->getNbEntries ();
+    menu->addEntry ("Band Shelves at the Ends", -1, plainValue (kBandShelves) >= 0.5 ? CMenuItem::kChecked : CMenuItem::kNoFlags);
     const int settingsAt = pk::addSettingsMenuEntries (menu);
     addLayoutMenu (menu);
-    menu->popup (frame, where, [this, sizes, menu, settingsAt] (COptionMenu* m) {
+    menu->popup (frame, where, [this, sizes, menu, settingsAt, shelvesAt] (COptionMenu* m) {
         const int32_t r = m->getLastResult ();
         if (pickedInSubMenu (m)) // (Layout: its entries act by themselves)
             return;
         if (settingsMenuPicked (r, settingsAt))
             return;
+        if (r == shelvesAt)
+        {
+            setOnce (kBandShelves, plainValue (kBandShelves) >= 0.5 ? 0.0 : 1.0);
+            return;
+        }
         if (r >= 0 && r < (int32_t)sizes.size ())
             resizeTo (sizes[(size_t)r]);
     });

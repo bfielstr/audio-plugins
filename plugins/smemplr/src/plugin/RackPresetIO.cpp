@@ -81,7 +81,11 @@ bool readValues (int type, const std::string& path, std::vector<double>& values)
     std::vector<char> component, controller;
     if (!pk::presets::read (path, c->classId, component, controller))
         return false;
-    return c->read (component, values);
+    if (!c->read (component, values))
+        return false;
+    if (type == kFxGentlr)
+        gentlr::rackFromPlugin (values); // (gentlr's Thresholds go lower than the rack's: each keeps its dB)
+    return true;
 }
 
 bool writeValues (int type, const std::string& path, const std::vector<double>& values, const pk::presets::Meta& meta)
@@ -91,7 +95,10 @@ bool writeValues (int type, const std::string& path, const std::vector<double>& 
     if (!c || !hp || path.empty ())
         return false;
     std::vector<char> component;
-    if (!c->write (values, component))
+    std::vector<double> own = values;
+    if (type == kFxGentlr)
+        gentlr::pluginFromRack (own);
+    if (!c->write (own, component))
         return false;
     std::error_code ec;
     fs::create_directories (fs::path (path).parent_path (), ec);

@@ -111,8 +111,16 @@ int main (int argc, char** argv)
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kSlope);
+        // a new instance's band 1 (0.30.1): on at 100 Hz, Range 20 dB, Threshold -82 dB (Advanced on), and the
+        // bands stay bands at the ends of the spectrum (Band Shelves off)
+        CHECK (plainOf (rig, bandParam (0, kOn)) == 1.0 && std::fabs (plainOf (rig, bandParam (0, kFreq)) - 100.0) < 0.01 &&
+                   std::fabs (plainOf (rig, bandParam (0, kRange)) - 20.0) < 1e-6 && std::fabs (plainOf (rig, bandParam (0, kThreshold)) + 82.0) < 1e-6 &&
+                   plainOf (rig, gentlr::kAdvanced) == 1.0 && plainOf (rig, kBandShelves) == 0.0,
+               "a new instance: band 1 at %.1f Hz, %.1f dB, Threshold %.1f dB, Advanced on, Band Shelves off", plainOf (rig, bandParam (0, kFreq)),
+               plainOf (rig, bandParam (0, kRange)), plainOf (rig, bandParam (0, kThreshold)));
         // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
-        // starts: the checks are about gentlr's own sound, its bands with the 12 / 12 Slope they were written for
+        // starts: the checks are about gentlr's own sound, its bands with the 12 / 12 Slope they were written for,
+        // band 1 as a new instance had it up to 0.30.0 (250 Hz, 8 dB, -18 dB)
         {
             State st;
             for (uint32_t id = 0; id < kNumParams; ++id)
@@ -124,6 +132,9 @@ int main (int argc, char** argv)
             st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
             st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
             st.norm[kSlope] = 0.0;
+            st.norm[bandParam (0, kFreq)] = toNormalized (bandParam (0, kFreq), kBand1BeforeHz);
+            st.norm[bandParam (0, kRange)] = toNormalized (bandParam (0, kRange), kBand1BeforeRangeDb);
+            st.norm[bandParam (0, kThreshold)] = toNormalized (bandParam (0, kThreshold), smacheratr::kClarityThresholdDb);
             CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
         }
         // the Sub and High bands have no On: a fresh instance has them at Range 0 (no cut)
@@ -212,7 +223,7 @@ int main (int argc, char** argv)
             pump (0.05);
             const double after = plainOf (rig, bandParam (0, kRange));
             CHECK (after > before + 2.0, "dragging band 1's handle down: Range %.1f -> %.1f dB", before, after);
-            rig.param (bandParam (0, kRange), defaultNormalized (bandParam (0, kRange)));
+            rig.param (bandParam (0, kRange), toNormalized (bandParam (0, kRange), kBand1BeforeRangeDb));
 
             // drag the Sub band's handle right 60 px (its Freq rises, up to 100 Hz) and down 30 px (its Range grows)
             const double sf0 = plainOf (rig, kSubFreq), sr0 = plainOf (rig, kSubRange);
@@ -314,6 +325,21 @@ int main (int argc, char** argv)
                     rig.param (id, defaultNormalized (id));
             }
 
+            // band 1 (100 Hz by default) dragged down into the Sub band's region (the Sub band at work, at
+            // 40 Hz) and on toward the display's left side: nothing snaps, glues or is pushed (No Overlap off,
+            // Glue Bands on Touch off), band 1 goes where it is dragged and the Sub band stays
+            {
+                pump (0.05);
+                const double sub0 = plainOf (rig, kSubFreq), f0 = plainOf (rig, bandParam (0, kFreq));
+                const double hx = xOfHz (f0), hy = yOfDb (-plainOf (rig, bandParam (0, kRange)));
+                win.drag (hx, hy, hx - 40.0, hy);
+                pump (0.05);
+                const double f1 = plainOf (rig, bandParam (0, kFreq));
+                CHECK (f1 < f0 * 0.85 && plainOf (rig, kSubFreq) == sub0 && plainOf (rig, kGlueSub1) < 0.5 && plainOf (rig, kNoOverlap) < 0.5,
+                       "band 1 dragged onto the Sub band: %.1f -> %.1f Hz, the Sub band at %.1f Hz, nothing glued", f0, f1, plainOf (rig, kSubFreq));
+                rig.param (bandParam (0, kFreq), defaultNormalized (bandParam (0, kFreq)));
+            }
+
             // Advanced: a Threshold per band on the sliders at the right of the display, the region Drive
             rig.param (gentlr::kAdvanced, 1.0);
             rig.param (kDrive, 1.0);
@@ -344,6 +370,14 @@ int main (int argc, char** argv)
             pump (0.05);
             const double u1 = plainOf (rig, kSubThreshold);
             CHECK (u1 < u0 - 5.0, "dragging the Sub Threshold slider down: %.1f -> %.1f dB", u0, u1);
+            // the sliders go down to -90 dB (gentlr's range, not Smacheratr's -60): a double-click puts band 1's
+            // at its default, -82 dB, and band 2's at -18 dB
+            const double b1x = sx - (smacheratr::ThresholdSlider::kWidth + smacheratr::ThresholdSlider::kGap);
+            win.click (b1x, sy, 2);
+            win.click (sx, sy, 2);
+            pump (0.05);
+            CHECK (std::fabs (plainOf (rig, bandParam (0, kThreshold)) + 82.0) < 1e-6 && std::fabs (plainOf (rig, bandParam (1, kThreshold)) + 18.0) < 1e-6,
+                   "double-clicks: band 1 at %.1f dB, band 2 at %.1f dB", plainOf (rig, bandParam (0, kThreshold)), plainOf (rig, bandParam (1, kThreshold)));
             // Menu > Layout: Wide (the display and the controls in a row, the end saturator under them) and
             // back to the Default; the controls found by parameter through the view tree
             checkLayouts (rig, win, {bandParam (0, kFreq), (uint32_t)kAttack, (uint32_t)kMix}, outDir + "/ui_gentlr_wide.png");

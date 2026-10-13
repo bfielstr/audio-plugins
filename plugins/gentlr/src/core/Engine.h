@@ -9,7 +9,9 @@
 // a band leaves the signal exactly as it was. Glued bands keep their shared border, and with No Overlap
 // on the working bands are kept apart, before they are designed (smacheratr::applyGlue and
 // resolveOverlaps: the editor writes both as the bands are dragged, so these only act on automation,
-// or a band switched on, that moves a glued border or makes bands overlap).
+// or a band switched on, that moves a glued border or makes bands overlap). Bands 1 and 2 stay bands
+// at the ends of the spectrum too; with Band Shelves on (states from before it) one whose edge reaches
+// 20 Hz or 20 kHz turns into a shelf there, as Smacheratr's do.
 //
 //   input -> [to mid / side] -> band 1 -> band 2 -> Sub -> High (each cut) -> [back to left / right] -> delay
 //                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added
@@ -123,6 +125,7 @@ private:
     float gTarget[2][kAllBands] {};
     double bandFreq[kAllBands] = {-1.0, -1.0, -1.0, -1.0}, bandWidth[kAllBands] = {-1.0, -1.0, -1.0, -1.0};
     int bandSlope[kAllBands] = {-1, -1, -1, -1};             // the Slope each band was designed with
+    int bandShelf[kAllBands] = {-1, -1, -1, -1};             // and Band Shelves (1: on)
     bool hp2On[kAllBands] = {false, false, false, false};    // runs its second section below
     bool hp3On[kAllBands] = {false, false, false, false};    // and its third
     float bandNorm[kAllBands] = {1.0f, 1.0f, 1.0f, 1.0f};

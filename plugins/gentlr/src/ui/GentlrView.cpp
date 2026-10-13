@@ -152,7 +152,8 @@ ClarityBand GentlrView::bandNow (int band) const
         return smacheratr::subBand (sampleRate (), l.freq[band]);
     if (band == kHigh)
         return smacheratr::highBand (sampleRate (), l.freq[band]);
-    return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band], smacheratr::claritySlopeOf (host->plainValue (kSlope)));
+    return smacheratr::clarityBand (sampleRate (), l.freq[band], l.width[band], smacheratr::claritySlopeOf (host->plainValue (kSlope)),
+                                    host->plainValue (kBandShelves) >= 0.5);
 }
 
 double GentlrView::xOfHz (double hz) const

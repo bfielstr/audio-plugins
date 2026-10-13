@@ -121,12 +121,15 @@ inline void clarityBandFilters (ClarityBand& b, double sr, int slope)
     b.lp = slope == kSlopeClassic ? lowPass1 (sr, b.highHz) : lowPass (sr, b.highHz, M_SQRT1_2);
 }
 
-inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int slope = kSlopeClassic)
+// `shelves` false: the band stays a band at the ends of the spectrum too (its edges past 20 Hz or 20 kHz
+// kept, within 5 Hz and 0.45 of the rate, as a band in the middle has them): gentlr's bands 1 and 2 for a
+// new instance (its Band Shelves off). Smacheratr and the end saturators always pass true.
+inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int slope = kSlopeClassic, bool shelves = true)
 {
     ClarityBand b;
     const double half = std::pow (2.0, 0.5 * std::clamp (widthOct, 0.1, 8.0));
-    b.lowShelf = centerHz / half <= kShelfLowHz;
-    b.highShelf = centerHz * half >= std::min (kShelfHighHz, 0.45 * sr);
+    b.lowShelf = shelves && centerHz / half <= kShelfLowHz;
+    b.highShelf = shelves && centerHz * half >= std::min (kShelfHighHz, 0.45 * sr);
     b.lowHz = b.lowShelf ? kShelfLowHz : std::clamp (centerHz / half, 5.0, 0.3 * sr);
     b.highHz = b.highShelf ? std::max (b.lowHz * 1.01, std::min (kShelfHighHz, 0.45 * sr)) : std::clamp (centerHz * half, b.lowHz * 1.01, 0.45 * sr);
     if (b.lowShelf || b.highShelf)
@@ -166,11 +169,11 @@ inline ClarityBand clarityBand (double sr, double centerHz, double widthOct, int
 
 // The band at another centre, keeping a peak scaling worked out before (the shape of the band on a
 // log axis does not change with its centre, away from Nyquist): cheap enough to retune often.
-inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, double norm, int slope = kSlopeClassic)
+inline ClarityBand clarityBandAt (double sr, double centerHz, double widthOct, double norm, int slope = kSlopeClassic, bool shelves = true)
 {
     ClarityBand b;
     const double half = std::pow (2.0, 0.5 * std::clamp (widthOct, 0.1, 8.0));
-    if (centerHz / half <= kShelfLowHz || centerHz * half >= std::min (kShelfHighHz, 0.45 * sr))
+    if (shelves && (centerHz / half <= kShelfLowHz || centerHz * half >= std::min (kShelfHighHz, 0.45 * sr)))
         return clarityBand (sr, centerHz, widthOct, slope); // a shelf: its own peak scaling
     b.lowHz = std::clamp (centerHz / half, 5.0, 0.3 * sr);
     b.highHz = std::clamp (centerHz * half, b.lowHz * 1.01, 0.45 * sr);
