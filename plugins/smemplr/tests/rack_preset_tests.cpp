@@ -210,14 +210,14 @@ static void savedFromSlotReadsInThePlugin ()
         if (type == kFxGentlr && back.size () == out.size ())
         {
             // the gentlr plug-in's Thresholds go lower than the rack's (-90 dB, not -60): it reads each at the
-            // slot's dB
+            // slot's dB, and its Band Shelves on (the rack's gentlr has shelves)
             int wrongDb = 0;
             for (int k = 0; k < gentlr::kAllBands; ++k)
             {
                 const uint32_t id = gentlr::thresholdParam (k);
                 wrongDb += std::fabs (gentlr::paramTable ().toPlain (id, back[id]) - gentlr::rackTable ().toPlain (id, out[id])) < 1e-9 ? 0 : 1;
             }
-            CHECK (wrongDb == 0, "gentlr: the plug-in reads the slot's Thresholds at their dB (%d not)", wrongDb);
+            CHECK (wrongDb == 0 && back[gentlr::kBandShelves] == 1.0, "gentlr: the plug-in reads the slot's Thresholds at their dB (%d not)", wrongDb);
             gentlr::rackFromPlugin (back);
         }
         if (back.size () == out.size ())

@@ -41,8 +41,11 @@ was, bit for bit.
 - **Band 2**: the upper mids, the harshness: 3 kHz, 2 octaves wide, Range 6 dB.
 - Each has **On**, **Freq** (20 Hz to 20 kHz), **Width** (0.5 to 4 octaves between the band's edges)
   and **Range** (0 to 24 dB; at 0 dB the band does nothing). The band's readout shows the edges of its
-  region now. A band whose edge reaches an end of the spectrum (20 Hz or 20 kHz) turns into a shelf
-  there: it runs flat past that end instead of dipping back up.
+  region now. Band 1 and Band 2 stay bands wherever they sit: a band whose edge reaches an end of the
+  spectrum (20 Hz or 20 kHz) keeps its slope there, so it never snaps out to the side of the display.
+  Check **Menu > Band Shelves at the Ends** to have such a band turn into a shelf there instead (it runs
+  flat past that end, as gentlr did up to 0.30.0 and smacheratr's gentlr still does). It is saved with
+  the project.
 - **Sub**: a shelf for the sub region, flat from the very bottom of the spectrum up to its **Freq** (20
   to 100 Hz, 40 Hz by default), where its cut starts to let go (within about 1 dB of the full cut there,
   about half of it at twice that, nearly none two octaves up). It has a **Range**, the same law, and no
@@ -69,8 +72,8 @@ bands keep their own shape):
 - **Alt Signature**: 36 dB/oct below, 12 dB/oct above. Signature with a steeper floor still, for a band
   that must leave everything under it alone.
 
-A band at an end of the spectrum is still a shelf there, keeping the slope of its other side, and the
-display draws the shape selected.
+With Band Shelves, a band at an end of the spectrum is still a shelf there, keeping the slope of its
+other side, and the display draws the shape selected.
 
 **Attack** (0.5 to 100 ms, 15 ms) and **Release** (20 ms to 2 s, 150 ms) set how fast a band's cut
 follows its level going up and lets go after it. The bands work one after the other (Band 1, Band 2,
@@ -179,9 +182,9 @@ Threshold slider in Advanced mode) selects the band: its handle lights, and so d
 Threshold slider.
 
 gentlr is also in smemplr's effects rack (and moistr's lab). There it keeps the settings it had up to
-0.30.0, so projects with it sound as they did: Thresholds from -60 to 0 dB, and Band 1 at 250 Hz with
-Range 8 dB and Threshold -18 dB for a new slot. A gentlr preset loaded into a slot keeps its Thresholds
-(one under -60 dB at -60).
+0.30.0, so projects with it sound as they did: Thresholds from -60 to 0 dB, Band 1 at 250 Hz with Range 8
+dB and Threshold -18 dB for a new slot, and bands that turn into shelves at the ends of the spectrum. A
+gentlr preset loaded into a slot keeps its Thresholds (one under -60 dB at -60).
 
 ## Presets
 
@@ -206,7 +209,7 @@ smacheratr at the end off with its gentlr off, where they did not set them. Proj
 saved while the Sub and High bands had On buttons sound the same: a band that was off loads with its
 Range at 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing glued.
 Projects and presets saved with 0.30.0 or earlier keep every Threshold at the dB it had (the range went
-from -60 to -90 dB in 0.30.1), and Band 1 at 250 Hz, Range 8 dB and Threshold -18 dB where they did not
-set them, so they sound as they did. Host automation of a Threshold recorded before
+from -60 to -90 dB in 0.30.1), Band 1 at 250 Hz, Range 8 dB and Threshold -18 dB where they did not set
+them, and **Band Shelves** on, so they sound as they did. Host automation of a Threshold recorded before
 0.30.1 is stored by the host on the old range and plays back lower (a lane drawn from -60 to 0 dB now
 reads -90 to 0 dB): redraw it if a project automates one.

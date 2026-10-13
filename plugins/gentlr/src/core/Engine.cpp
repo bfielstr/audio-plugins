@@ -168,14 +168,17 @@ void Engine::retune (bool force, const bool* works)
         const double f = layout.freq[k], w = layout.width[k];
         // (the Slope shapes bands 1 and 2, not the Sub and High shelves)
         const int slope = hasWidth (k) ? smacheratr::claritySlopeOf (p[kSlope]) : smacheratr::kSlopeClassic;
-        if (!force && f == bandFreq[k] && w == bandWidth[k] && slope == bandSlope[k])
+        // (Band Shelves: whether a band reaching an end of the spectrum turns into a shelf there)
+        const int shelf = hasWidth (k) && p[kBandShelves] >= 0.5 ? 1 : 0;
+        if (!force && f == bandFreq[k] && w == bandWidth[k] && slope == bandSlope[k] && shelf == bandShelf[k])
             continue;
         const smacheratr::ClarityBand b = k == kSub    ? smacheratr::subBand (sr, f)
                                           : k == kHigh ? smacheratr::highBand (sr, f)
-                                                       : smacheratr::clarityBand (sr, f, w, slope);
+                                                       : smacheratr::clarityBand (sr, f, w, slope, shelf == 1);
         bandFreq[k] = f;
         bandWidth[k] = w;
         bandSlope[k] = slope;
+        bandShelf[k] = shelf;
         bandNorm[k] = (float)b.norm;
         // the second and third sections come in from rest (they held whatever they had when last used)
         for (auto& c : chan)

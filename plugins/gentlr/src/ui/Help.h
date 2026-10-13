@@ -61,6 +61,10 @@ inline const char* forParam (uint32_t id)
         case kSubThreshold:
             return "Advanced: where the Sub band starts cutting (its peak level, dB). The slider shows the band's level: "
                    "brighter above the threshold, where it is being cut.";
+        case kBandShelves:
+            return "Band Shelves (Menu > Band Shelves at the Ends): band 1 or 2 whose edge reaches an end of the spectrum "
+                   "(20 Hz or 20 kHz) turns into a shelf there, running flat out to that side, as Smacheratr's Gentlr does. "
+                   "Off (a new gentlr) the bands stay bands wherever they sit. Projects from before 0.30.1 have it on.";
         default: break;
     }
     if (isBandParam (id) && !isSubParam (id) && !isHighParam (id))

@@ -76,7 +76,9 @@ std::vector<ParamInfo> buildTable (bool rack)
         v.push_back (like (kGlueIds[g], smacheratr::kClarityGlueIds[g], std::string (pi.name).substr (7), pi.shortName, 0.0));
     }
     smacheratr::addTailExt4Params (v, kTailExt4Base);
-    static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the end saturator's fifth block is the last");
+    static_assert (kBandShelves == kTailExt4Base + pk::kTailExt4Fields, "Band Shelves after the end saturator's fifth block");
+    v.push_back (toggle (kBandShelves, "Band Shelves", "Shelves", rack)); // (on for states from before it, and in the racks)
+    static_assert (kNumParams == kBandShelves + 1, "Band Shelves is the last");
     return v;
 }
 
@@ -126,12 +128,12 @@ bool differs (uint32_t id)
 
 double rackFromPlugin (uint32_t id, double norm)
 {
-    return differs (id) ? rackTable ().toNormalized (id, paramTable ().toPlain (id, norm)) : norm;
+    return id == kBandShelves ? 1.0 : differs (id) ? rackTable ().toNormalized (id, paramTable ().toPlain (id, norm)) : norm;
 }
 
 double pluginFromRack (uint32_t id, double norm)
 {
-    return differs (id) ? paramTable ().toNormalized (id, rackTable ().toPlain (id, norm)) : norm;
+    return id == kBandShelves ? 1.0 : differs (id) ? paramTable ().toNormalized (id, rackTable ().toPlain (id, norm)) : norm;
 }
 
 void rackFromPlugin (std::vector<double>& norm)

@@ -84,6 +84,8 @@ int64_t fxIdAt (int type, uint32_t j)
         if (j > multidyn::kSatPreLimit && j <= multidyn::kSatPreLimitThreshold)
             return -1;
     }
+    if (type == kFxGentlr && j == gentlr::kBandShelves)
+        return -1; // (not in the rack: its gentlr always has shelves at the ends, FxSlot::applyAll)
     return j < fxBlockTable (type).size () ? (int64_t)j : -1;
 }
 
@@ -102,6 +104,8 @@ int64_t fxBlockOf (int type, uint32_t id)
         if ((id >= multidyn::kSatOn && id <= multidyn::kSatPreLimitThreshold) || id >= multidyn::kSatExtBase)
             return -1; // its own saturator is not in the rack
     }
+    if (type == kFxGentlr && id == gentlr::kBandShelves)
+        return -1;
     return id < fxBlockTable (type).size () ? (int64_t)id : -1;
 }
 
@@ -340,6 +344,7 @@ void FxSlot::applyAll ()
 {
     for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         apply (j);
+    gentlr.setParam (gentlr::kBandShelves, 1.0); // (bands 1 and 2 turn into shelves at the ends, as up to 0.30.0)
     multidyn.setBypass (!on);
     switch (type)
     {

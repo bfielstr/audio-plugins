@@ -281,8 +281,9 @@ int main ()
                "Alt Signature: a round trip");
     }
     // version 7 (0.30.1): every Threshold -90 to 0 dB (-60 to 0 before), band 1 at 100 Hz, Range 20 dB,
-    // Threshold -82 dB for a new instance. An older state keeps every Threshold's dB and band 1's old
-    // defaults where it lacks them (250 Hz, 8 dB, -18 dB): it sounds as it did
+    // Threshold -82 dB, and Band Shelves (off) for a new instance. An older state keeps every Threshold's
+    // dB, band 1's old defaults where it lacks them (250 Hz, 8 dB, -18 dB) and has Band Shelves on: it
+    // sounds as it did
     {
         auto read = [] (int32 version, const std::vector<std::pair<uint32_t, double>>& values, State& back) {
             MemoryStream s;
@@ -317,6 +318,7 @@ int main ()
                        back.has[bandParam (0, kFreq)] && back.has[bandParam (0, kRange)],
                    "version %d without band 1's Frequency and Range: 250 Hz, 8 dB (%.2f, %.2f)", version, plain (back, bandParam (0, kFreq)),
                    plain (back, bandParam (0, kRange)));
+            CHECK (plain (back, kBandShelves) == 1.0 && back.has[kBandShelves], "version %d: Band Shelves on", version);
             // the end saturator's Thresholds are Smacheratr's (-60 to 0 dB) and stay as saved
         }
         {
@@ -335,11 +337,12 @@ int main ()
             CHECK (read (7, {{b2t, toNormalized (b2t, -75.0)}}, back), "read");
             CHECK (std::fabs (plain (back, b2t) + 75.0) < 1e-9, "version 7: -75 dB as saved");
             CHECK (std::fabs (plain (back, bandParam (0, kFreq)) - 100.0) < 1e-6 && std::fabs (plain (back, bandParam (0, kRange)) - 20.0) < 1e-9 &&
-                       std::fabs (plain (back, b1t) + 82.0) < 1e-9,
-                   "version 7 without them: band 1 at 100 Hz, 20 dB, -82 dB");
+                       std::fabs (plain (back, b1t) + 82.0) < 1e-9 && plain (back, kBandShelves) == 0.0,
+                   "version 7 without them: band 1 at 100 Hz, 20 dB, -82 dB; Band Shelves off");
         }
-        CHECK (std::fabs (toPlain (b1t, defaultNormalized (b1t)) + 82.0) < 1e-9 && std::fabs (toPlain (b2t, defaultNormalized (b2t)) + 18.0) < 1e-9,
-               "a new instance: band 1 at -82 dB, band 2 at -18 dB");
+        CHECK (std::fabs (toPlain (b1t, defaultNormalized (b1t)) + 82.0) < 1e-9 && std::fabs (toPlain (b2t, defaultNormalized (b2t)) + 18.0) < 1e-9 &&
+                   toPlain (kBandShelves, defaultNormalized (kBandShelves)) == 0.0,
+               "a new instance: band 1 at -82 dB, band 2 at -18 dB, Band Shelves off");
         // a round trip keeps a Threshold under -60 dB
         {
             State st;

@@ -1110,12 +1110,19 @@ TEST (sub_high_without_buttons_in_slots)
                !hidden (kFxGentlr, gentlr::kHighRange) && !hidden (kFxGentlr, gentlr::bandParam (0, gentlr::kOn)),
            "Gentlr: the Sub and High On hidden, the Ranges and band 1's On there");
     // gentlr in the rack keeps the table it had up to 0.30.0 (the gentlr plug-in's Thresholds went down to
-    // -90 dB and its band 1 moved in 0.30.1): the rack's projects and sound as they were
+    // -90 dB and its band 1 moved in 0.30.1): the rack's projects and sound as they were; Band Shelves is
+    // not in the rack (its gentlr always turns bands into shelves at the ends)
     const auto& gt = fxTable (kFxGentlr);
     CHECK (&gt == &gentlr::rackTable () && gt.info (gentlr::thresholdParam (0)).min == -60.0 && gt.info (gentlr::kHighThreshold).min == -60.0 &&
                gt.info (gentlr::bandParam (0, gentlr::kFreq)).def == 250.0 && gt.info (gentlr::bandParam (0, gentlr::kRange)).def == 8.0 &&
                gt.info (gentlr::bandParam (0, gentlr::kThreshold)).def == -18.0,
            "Gentlr in the rack: Thresholds -60 .. 0 dB, band 1 at 250 Hz, 8 dB, -18 dB");
+    CHECK (fxBlockOf (kFxGentlr, gentlr::kBandShelves) == -1 && fxIdAt (kFxGentlr, gentlr::kBandShelves) == -1, "Band Shelves not in the rack");
+    {
+        auto slot = std::make_unique<FxSlot> ();
+        slot->setType (kFxGentlr);
+        CHECK (slot->gentlr.param (gentlr::kBandShelves) == 1.0, "the rack's gentlr has shelves at the ends");
+    }
 }
 
 TEST (rack_order_and_widr)

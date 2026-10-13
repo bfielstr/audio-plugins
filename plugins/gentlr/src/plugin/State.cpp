@@ -24,7 +24,7 @@ constexpr int32 kNewDefaults = 5;
 constexpr int32 kAltSignature = 6;
 // 7: every band's Threshold goes down to -90 dB (-60 before: a Threshold saved then keeps its dB), band 1
 // at 100 Hz, Range 20 dB, Threshold -82 dB for a new instance (250 Hz, 8 dB, -18 dB before: older states
-// keep those where they lack them)
+// keep those where they lack them), and Band Shelves (off for a new instance: on for older states)
 constexpr int32 kWideThresholds = 7;
 
 void keepOld (State& st, uint32 id, double plain)
@@ -76,7 +76,7 @@ bool readState (IBStream* stream, State& st)
     }
     // the Thresholds were -60 to 0 dB: each one saved is read as the dB it had (its normalized value on
     // the old range, put on the new one; the end saturator's are Smacheratr's and kept that range); band 1's
-    // defaults were 250 Hz, Range 8 dB and Threshold -18 dB
+    // defaults were 250 Hz, Range 8 dB and Threshold -18 dB, and the bands turned into shelves at the ends
     if (version < kWideThresholds)
     {
         for (int k = 0; k < kAllBands; ++k)
@@ -88,6 +88,7 @@ bool readState (IBStream* stream, State& st)
         keepOld (st, bandParam (0, kFreq), kBand1BeforeHz);
         keepOld (st, bandParam (0, kRange), kBand1BeforeRangeDb);
         keepOld (st, bandParam (0, kThreshold), smacheratr::kClarityThresholdDb);
+        keepOld (st, kBandShelves, 1.0);
     }
     // Gentlr's Slope (and the end saturator's) had three choices before Alt Signature: a value saved then is read
     // as the same choice (first: the conversions below set the Slope as it is now)
