@@ -104,7 +104,8 @@ constexpr const char* kHighThresholdSlider =
     "the threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the band (its handle and header lit).";
 
 constexpr const char* kThresholdSlider =
-    "Advanced: the band's Threshold (drag; Shift: fine). The band's level rises beside it, bright where it is over the "
-    "threshold and being cut. Double-click or right-click: -18 dB. Grabbing it selects the band (its handle and header lit).";
+    "Advanced: the band's Threshold, -90 to 0 dB (drag; Shift: fine). The band's level rises beside it, bright where it is over "
+    "the threshold and being cut. Double-click or right-click: its default (band 1 -82 dB, band 2 -18). Grabbing it selects "
+    "the band (its handle and header lit).";
 
 } // namespace gentlr::help

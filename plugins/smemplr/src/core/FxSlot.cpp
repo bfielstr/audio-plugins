@@ -273,7 +273,7 @@ const pk::ParamTable& fxTable (int type)
         case kFxWubr: return wubr::paramTable ();
         case kFxLevlr: return levlr::paramTable ();
         case kFxSmoothr: return smoothr::paramTable ();
-        case kFxGentlr: return gentlr::paramTable ();
+        case kFxGentlr: return gentlr::rackTable (); // (gentlr as it was up to 0.30.0: the rack's projects stay as they were)
         default: return empty;
     }
 }

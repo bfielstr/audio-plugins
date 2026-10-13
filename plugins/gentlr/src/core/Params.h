@@ -12,6 +12,7 @@
 #include "smacheratr/src/core/Params.h"
 
 #include <cstdint>
+#include <vector>
 
 namespace gentlr {
 
@@ -37,7 +38,7 @@ enum BandField : uint32_t
     kFreq,      // Hz, the band's centre (20 Hz - 20 kHz)
     kWidth,     // octaves between the band's edges (0.5 - 4)
     kRange,     // dB, the most the band is turned down (0 - 24; 0 cuts nothing)
-    kThreshold, // dB, where the band starts cutting (Advanced; without it -18 dB, smacheratr::kClarityThresholdDb)
+    kThreshold, // dB, where the band starts cutting (-90 - 0; Advanced; without it -18 dB, smacheratr::kClarityThresholdDb)
     kBandBlock
 };
 
@@ -130,7 +131,29 @@ constexpr uint32_t tailField (uint32_t id)
                                  : id - kTailBase;
 }
 
+// Every band's Threshold (bands 1 and 2, Sub, High): -90 to 0 dB (-60 to 0 up to 0.30.0, as Smacheratr's
+// still are: State.cpp converts older states, keeping each Threshold's dB)
+constexpr double kThresholdMinDb = -90.0, kThresholdMaxDb = 0.0, kThresholdMinBeforeDb = -60.0;
+// a new instance's band 1 (on the low end, cutting from far down) and band 2; up to 0.30.0 band 1 was
+// at 250 Hz with Range 8 dB and Threshold -18 dB (older states missing them keep those)
+constexpr double kBand1DefaultHz = 100.0, kBand1DefaultRangeDb = 20.0, kBand1DefaultThresholdDb = -82.0;
+constexpr double kBand1BeforeHz = 250.0, kBand1BeforeRangeDb = 8.0;
+
 const pk::ParamTable& paramTable ();
+// The table of a gentlr in the suite's racks (smemplr's effects rack, moistr's lab: smemplr::fxTable): the
+// one up to 0.30.0, so the racks' projects and sound stay as they were: the Thresholds -60 to 0 dB, band 1 at
+// 250 Hz, Range 8 dB, Threshold -18 dB. rackFromPlugin and pluginFromRack convert every parameter's
+// normalized value (by gentlr's IDs) between the two tables (a gentlr preset in a rack slot and back): each
+// Threshold keeps its dB (within -60 to 0 in a rack); the others pass as they are. One parameter's, or
+// every one's (by ID).
+const pk::ParamTable& rackTable ();
+double rackFromPlugin (uint32_t id, double norm);
+double pluginFromRack (uint32_t id, double norm);
+void rackFromPlugin (std::vector<double>& norm);
+void pluginFromRack (std::vector<double>& norm);
+// Smacheratr's table with Gentlr's Thresholds in its Threshold entries (their range and default): the
+// table of the Threshold sliders' host (pk::MappedParamHost passes normalized values through)
+const pk::ParamTable& sliderTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
@@ -141,7 +164,8 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 inline bool bandWorks (int k, double on, double rangeDb) { return (!hasOn (k) || on >= 0.5) && rangeDb > 0.0; }
 
 // Gentlr's Threshold sliders are Smacheratr's (smacheratr::ThresholdSlider, bound to Smacheratr's
-// Threshold IDs): the Gentlr parameter behind Smacheratr parameter `id`, or -1.
+// Threshold IDs): the Gentlr parameter behind Smacheratr parameter `id`, or -1. Gentlr's Thresholds go
+// lower than Smacheratr's (kThresholdMinDb), so the sliders' host shows them with sliderTable ().
 inline int64_t fromSmacheratr (uint32_t id)
 {
     for (int k = 0; k < kAllBands; ++k)

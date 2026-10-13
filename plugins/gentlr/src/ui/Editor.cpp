@@ -155,8 +155,9 @@ void Editor::buildUI (CFrame* f)
     view->setTooltipText (help::kDisplay);
     root->addView (view);
 
-    // the Threshold sliders are Smacheratr's, on Gentlr's Thresholds (the same range) and levels
-    sliderHost = std::make_unique<pk::MappedParamHost> (this, smacheratr::paramTable (), [] (uint32_t id) { return fromSmacheratr (id); });
+    // the Threshold sliders are Smacheratr's, on Gentlr's Thresholds and levels (shown with Gentlr's
+    // Threshold ranges and defaults: sliderTable)
+    sliderHost = std::make_unique<pk::MappedParamHost> (this, sliderTable (), [] (uint32_t id) { return fromSmacheratr (id); });
     for (int k = 0; k < kAllBands; ++k)
     {
         sliders[k] = new smacheratr::ThresholdSlider (CRect (0, 0, 1, 1), sliderHost.get (), k, [c = ctl] () -> const smacheratr::Meters* {

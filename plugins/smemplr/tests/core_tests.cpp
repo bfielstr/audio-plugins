@@ -963,7 +963,7 @@ TEST (gentlr_sub_band_in_slots)
         for (uint32_t id = smacheratr::kClarityHigh; id <= smacheratr::kClarityNoOverlap; ++id)
             CHECK ((norm[slotBlockParam (0, id)] == smacheratr::defaultNormalized (id)) == migrated, "version %d: Smacheratr %u", version, id);
         for (uint32_t id = gentlr::kHighOn; id <= gentlr::kNoOverlap; ++id)
-            CHECK ((norm[slotBlockParam (1, id)] == gentlr::defaultNormalized (id)) == migrated, "version %d: Gentlr %u", version, id);
+            CHECK ((norm[slotBlockParam (1, id)] == gentlr::rackTable ().defaultNormalized (id)) == migrated, "version %d: Gentlr %u", version, id);
         CHECK (norm[slotBlockParam (0, smacheratr::kClaritySub)] == 1.0 && norm[slotBlockParam (1, gentlr::kSubOn)] == 1.0,
                "version %d: the Sub bands kept", version);
         if (migrated)
@@ -1109,6 +1109,13 @@ TEST (sub_high_without_buttons_in_slots)
     CHECK (hidden (kFxGentlr, gentlr::kSubOn) && hidden (kFxGentlr, gentlr::kHighOn) && !hidden (kFxGentlr, gentlr::kSubRange) &&
                !hidden (kFxGentlr, gentlr::kHighRange) && !hidden (kFxGentlr, gentlr::bandParam (0, gentlr::kOn)),
            "Gentlr: the Sub and High On hidden, the Ranges and band 1's On there");
+    // gentlr in the rack keeps the table it had up to 0.30.0 (the gentlr plug-in's Thresholds went down to
+    // -90 dB and its band 1 moved in 0.30.1): the rack's projects and sound as they were
+    const auto& gt = fxTable (kFxGentlr);
+    CHECK (&gt == &gentlr::rackTable () && gt.info (gentlr::thresholdParam (0)).min == -60.0 && gt.info (gentlr::kHighThreshold).min == -60.0 &&
+               gt.info (gentlr::bandParam (0, gentlr::kFreq)).def == 250.0 && gt.info (gentlr::bandParam (0, gentlr::kRange)).def == 8.0 &&
+               gt.info (gentlr::bandParam (0, gentlr::kThreshold)).def == -18.0,
+           "Gentlr in the rack: Thresholds -60 .. 0 dB, band 1 at 250 Hz, 8 dB, -18 dB");
 }
 
 TEST (rack_order_and_widr)

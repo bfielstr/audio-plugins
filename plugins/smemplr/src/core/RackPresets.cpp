@@ -15,7 +15,7 @@ const HostedPlugin* hostedPlugin (int type)
         {"Widr", "", &widr::pluginParamTable (), widr::kGentlrIds},
         {"Wubr", "", &wubr::paramTable (), wubr::kGentlrIds},
         {"Levlr", "", &levlr::paramTable (), levlr::kGentlrIds},
-        {"Gentlr", "Gently", &gentlr::paramTable (), gentlr::kGentlrIds},
+        {"Gentlr", "Gently", &gentlr::rackTable (), gentlr::kGentlrIds}, // (its values: RackPresetIO converts them)
         {"Smoothr", "", &smoothr::paramTable (), smoothr::kGentlrIds},
     };
     switch (type)

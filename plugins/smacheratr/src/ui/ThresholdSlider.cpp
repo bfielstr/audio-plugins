@@ -88,9 +88,11 @@ void ThresholdSlider::draw (CDrawContext* ctx)
             ctx->drawRect (CRect (bar.left, yLevel, bar.right, yThr), kDrawFilled);
         }
     }
-    // a tick every 12 dB
+    // a tick every 12 dB, between the ends of the range (Smacheratr's -60 .. 0: -48 to -12; gentlr's
+    // -90 .. 0: -84 to -12)
     ctx->setFrameColor (theme::kCopper);
-    for (double db = -48.0; db < 0.0; db += 12.0)
+    const auto& info = host->table ().info (param);
+    for (double db = std::ceil ((info.min + 1e-9) / 12.0) * 12.0; db < info.max; db += 12.0)
         ctx->drawLine (CPoint (t.left, yOfDb (db)), CPoint (t.left + 3, yOfDb (db)));
 
     // the threshold: a line across and a handle on it
@@ -173,7 +175,8 @@ void ThresholdSlider::onMouseWheelEvent (MouseWheelEvent& e)
     const double d = e.deltaY != 0.0 ? e.deltaY : e.deltaX;
     if (d == 0.0)
         return;
-    const double step = isFine (e.modifiers) ? 0.002 : 1.0 / 60.0; // 1 dB a notch over -60 .. 0 dB
+    const auto& info = host->table ().info (param);
+    const double step = isFine (e.modifiers) ? 0.002 : 1.0 / (info.max - info.min); // 1 dB a notch (over -60 .. 0 dB: 1 / 60)
     host->setOnce (param, std::clamp (host->norm (param) + (d > 0 ? step : -step), 0.0, 1.0));
     invalid ();
     e.consumed = true;

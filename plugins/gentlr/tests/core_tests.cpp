@@ -61,11 +61,16 @@ struct Sig
 
 // Gentlr alone (no end saturator), with `set` applied before it starts. Its bands with the 12 / 12 Slope
 // (the default up to 0.24; Signature now): the cuts the tests expect are that shape's, exactly the Range
-// at a band's centre (the Slopes have tests of their own).
+// at a band's centre (the Slopes have tests of their own). Band 1 as a new instance had it up to 0.30.0
+// (250 Hz, Range 8 dB, Threshold -18 dB: the tests below were written for it; new_band_1_defaults has
+// the new one).
 static std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& set = {}, double sr = kSr, Meters* meters = nullptr)
 {
     auto e = std::make_unique<Engine> (false);
     e->setParam (kSlope, smacheratr::kSlope12);
+    e->setParam (bandParam (0, kFreq), kBand1BeforeHz);
+    e->setParam (bandParam (0, kRange), kBand1BeforeRangeDb);
+    e->setParam (bandParam (0, kThreshold), smacheratr::kClarityThresholdDb);
     if (set)
         set (*e);
     e->setMeters (meters);
@@ -175,24 +180,75 @@ TEST (parameters_and_defaults)
     CHECK (t.info (kAdvanced).def == 1.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced on (the Thresholds show), Drive off (12 dB)");
     CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
     CHECK (t.info (kStereo).def == (double)kStereoLinked && t.info (kMix).def == 1.0 && t.info (kOutput).def == 0.0, "stereo, 100 %%, 0 dB");
-    CHECK (t.info (bandParam (0, kOn)).def == 1.0 && t.info (bandParam (0, kFreq)).def == 250.0 && t.info (bandParam (0, kRange)).def == 8.0 &&
-               t.info (bandParam (1, kOn)).def == 1.0 && t.info (bandParam (1, kFreq)).def == 3000.0 && t.info (bandParam (1, kRange)).def == 6.0,
-           "band 1 on the low mids, band 2 on the upper mids");
-    // the Thresholds share Smacheratr's range exactly (its sliders work on normalized values)
+    CHECK (t.info (bandParam (0, kOn)).def == 1.0 && t.info (bandParam (0, kFreq)).def == 100.0 && t.info (bandParam (0, kRange)).def == 20.0 &&
+               t.info (bandParam (0, kThreshold)).def == -82.0 && t.info (bandParam (1, kOn)).def == 1.0 &&
+               t.info (bandParam (1, kFreq)).def == 3000.0 && t.info (bandParam (1, kRange)).def == 6.0 &&
+               t.info (bandParam (1, kThreshold)).def == -18.0 && t.info (bandParam (0, kWidth)).def == 2.0,
+           "band 1 on at 100 Hz, Range 20 dB, Threshold -82 dB; band 2 on the upper mids");
+    // every Threshold -90 .. 0 dB (Smacheratr's stay -60 .. 0); the sliders (Smacheratr's, on normalized
+    // values) are shown with gentlr's ranges and defaults (sliderTable)
     const auto& sm = smacheratr::paramTable ();
-    for (int k = 0; k < kBands; ++k)
+    for (int k = 0; k < kAllBands; ++k)
     {
-        const auto& a = t.info (bandParam (k, kThreshold));
-        const auto& b = sm.info (smacheratr::kClarityThresholdIds[k]);
-        CHECK (a.min == b.min && a.max == b.max && a.def == b.def && a.curve == b.curve, "band %d's Threshold is Smacheratr's", k + 1);
-        CHECK (fromSmacheratr (smacheratr::kClarityThresholdIds[k]) == (int64_t)bandParam (k, kThreshold), "slider %d mapped", k + 1);
+        const auto& a = t.info (thresholdParam (k));
+        const auto& b = sm.info (smacheratr::kGentlrThresholdIds[k]);
+        CHECK (a.min == -90.0 && a.max == 0.0 && a.curve == b.curve && b.min == -60.0 && b.max == 0.0, "band %d's Threshold -90 .. 0 dB", k);
+        CHECK (fromSmacheratr (smacheratr::kGentlrThresholdIds[k]) == (int64_t)thresholdParam (k), "slider %d mapped", k);
+        const auto& s = sliderTable ().info (smacheratr::kGentlrThresholdIds[k]);
+        CHECK (s.min == a.min && s.max == a.max && s.def == a.def && s.curve == a.curve, "slider %d shows gentlr's range and default", k);
+        for (double db : {-90.0, -82.0, -60.0, -18.0, 0.0})
+            CHECK (std::fabs (sliderTable ().toPlain (smacheratr::kGentlrThresholdIds[k], t.toNormalized (thresholdParam (k), db)) - db) < 1e-9,
+                   "slider %d reads %.0f dB as %.0f dB", k, db, db);
+    }
+    CHECK (sliderTable ().size () == sm.size (), "the slider table is Smacheratr's");
+    for (uint32_t id = 0; id < sm.size (); ++id)
+    {
+        bool threshold = false;
+        for (uint32_t th : smacheratr::kGentlrThresholdIds)
+            threshold |= id == th;
+        if (!threshold)
+            CHECK (sliderTable ().info (id).min == sm.info (id).min && sliderTable ().info (id).max == sm.info (id).max &&
+                       sliderTable ().info (id).def == sm.info (id).def,
+                   "Smacheratr's %u as it is", id);
+    }
+    // the racks (smemplr, moistr) keep the table up to 0.30.0: -60 .. 0 dB Thresholds, band 1 at 250 Hz,
+    // 8 dB, -18 dB; everything else is gentlr's
+    const auto& rt = rackTable ();
+    CHECK (rt.size () == t.size (), "the rack table: every parameter");
+    for (uint32_t id = 0; id < t.size (); ++id)
+    {
+        const auto& a = t.info (id);
+        const auto& r = rt.info (id);
+        bool changed = id == bandParam (0, kFreq) || id == bandParam (0, kRange);
+        for (int k = 0; k < kAllBands; ++k)
+            changed |= id == thresholdParam (k);
+        if (!changed)
+            CHECK (a.min == r.min && a.max == r.max && a.def == r.def && a.curve == r.curve && std::string (a.name) == r.name, "%s as gentlr's", a.name);
+    }
+    for (int k = 0; k < kAllBands; ++k)
+        CHECK (rt.info (thresholdParam (k)).min == -60.0 && rt.info (thresholdParam (k)).def == -18.0, "rack: Threshold %d -60 .. 0, -18 dB", k);
+    CHECK (rt.info (bandParam (0, kFreq)).def == 250.0 && rt.info (bandParam (0, kRange)).def == 8.0, "rack: band 1 at 250 Hz, 8 dB");
+    // a gentlr preset in a rack slot and back: each Threshold keeps its dB (within the rack's -60)
+    {
+        std::vector<double> v (kNumParams);
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            v[id] = t.defaultNormalized (id);
+        v[bandParam (1, kThreshold)] = t.toNormalized (bandParam (1, kThreshold), -42.0);
+        rackFromPlugin (v);
+        CHECK (std::fabs (rt.toPlain (bandParam (1, kThreshold), v[bandParam (1, kThreshold)]) + 42.0) < 1e-9 &&
+                   rt.toPlain (bandParam (0, kThreshold), v[bandParam (0, kThreshold)]) == -60.0,
+               "into a rack: -42 dB kept, -82 at the rack's -60");
+        pluginFromRack (v);
+        CHECK (std::fabs (t.toPlain (bandParam (1, kThreshold), v[bandParam (1, kThreshold)]) + 42.0) < 1e-9 &&
+                   std::fabs (t.toPlain (kSubThreshold, v[kSubThreshold]) + 18.0) < 1e-9,
+               "back: -42 and -18 dB kept");
     }
     // the Sub band: Smacheratr's, its Range 0 by default (it cuts nothing until it gets one; no button)
     CHECK (t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == smacheratr::kSubDefaultHz && t.info (kSubRange).def == 0.0 &&
                t.info (kSubThreshold).def == smacheratr::kClarityThresholdDb,
            "Sub at Range 0, 40 Hz, -18 dB");
     CHECK (!hasOn (kSub) && !hasOn (kHigh) && hasOn (0) && hasOn (1), "Sub and High have no On of their own");
-    for (uint32_t id : {(uint32_t)kSubFreq, (uint32_t)kSubRange, (uint32_t)kSubThreshold})
+    for (uint32_t id : {(uint32_t)kSubFreq, (uint32_t)kSubRange})
     {
         const auto& a = t.info (id);
         const auto& b = sm.info (id == kSubFreq    ? smacheratr::kClaritySubFreq
@@ -1103,6 +1159,47 @@ TEST (slope)
            "12 / 12 and Signature: Gentlr before Alt Signature, bit for bit (%016llx, %016llx)", (unsigned long long)twelve,
            (unsigned long long)signature);
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// 0.30.1: band 1's new defaults, Thresholds down to -90 dB
+
+TEST (new_band_1_defaults)
+{
+    // a new instance (every parameter at its default, Advanced on): band 1 at 100 Hz, Range 20 dB, cutting
+    // from -82 dB, so even a quiet low tone is turned down by about its whole Range; band 2 as before
+    Meters m;
+    auto run1 = [&] (bool advanced, double hz, double db) {
+        auto e = std::make_unique<Engine> (false);
+        e->setParam (kAdvanced, advanced ? 1.0 : 0.0);
+        e->setMeters (&m);
+        e->prepare (kSr, 512);
+        const Sig in = tones ({{hz, db}}, 1.0);
+        const Sig out = run (*e, in);
+        return toneDb (out.l, hz, 24000) - toneDb (in.l, hz, 24000);
+    };
+    const double quiet = run1 (true, 100.0, -50.0);
+    const double meter = m.bands.clarityDb.load ();
+    std::printf ("    a -50 dB tone at 100 Hz: %.2f dB (band 1's cut %.2f dB)\n", quiet, meter);
+    // (the meter is the band's cut; the tone drops less, the Signature Slope's phase at the band's centre)
+    CHECK (std::fabs (meter + 20.0) < 0.05 && quiet < -2.0, "band 1 cuts its whole Range from -82 dB: %.2f dB (the tone %.2f)", meter, quiet);
+    CHECK (m.bands.clarity2Db.load () == 0.0f, "band 2 idle");
+    // Advanced off: every band from -18 dB (the Thresholds are kept but not used), so the quiet tone passes
+    const double plain = run1 (false, 100.0, -50.0);
+    CHECK (std::fabs (plain) < 0.01 && m.bands.clarityDb.load () == 0.0f, "Advanced off: -18 dB, the quiet tone untouched (%.3f dB)", plain);
+    // a Threshold under -60 dB works (the range goes to -90): a -70 dB tone is cut at -82, not at -60
+    auto low = [&] (double thresholdDb) {
+        auto e = engine ([thresholdDb] (Engine& en) {
+            en.setParam (bandParam (0, kThreshold), thresholdDb);
+            en.setParam (bandParam (0, kRange), 12.0);
+            en.setParam (bandParam (1, kOn), 0.0);
+        }, kSr, &m);
+        run (*e, tones ({{250.0, -70.0}}, 0.8));
+        return (double)m.bands.clarityDb.load ();
+    };
+    const double at82 = low (-82.0), at60 = low (-60.0), at90 = low (-90.0);
+    std::printf ("    a -70 dB tone, Threshold -90 / -82 / -60: %.2f / %.2f / %.2f dB\n", at90, at82, at60);
+    CHECK (at60 == 0.0 && at82 < -6.0 && at90 <= at82, "Thresholds under -60 dB cut (%.2f, %.2f, %.2f)", at90, at82, at60);
 }
 
 int main (int argc, char** argv)

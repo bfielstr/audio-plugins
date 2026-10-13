@@ -1204,7 +1204,10 @@ std::string Editor::slotSettingsText (int slot)
     {
         const int64_t j = fxBlockOf (type, id);
         if (j >= 0 && !rackHides (type, id))
-            v.emplace_back (id, norm (slotBlockParam (slot, (uint32_t)j)));
+        {
+            const double n = norm (slotBlockParam (slot, (uint32_t)j));
+            v.emplace_back (id, type == kFxGentlr ? gentlr::pluginFromRack (id, n) : n); // (as the gentlr plug-in has them)
+        }
     }
     return pk::settingsToText (fxName (type), v, &t);
 }
@@ -1223,8 +1226,9 @@ bool Editor::applySlotSettingsText (int slot, const std::string& text)
         if (j < 0 || id >= fxTable (type).size () || rackHides (type, id))
             continue;
         const uint32_t pid = slotBlockParam (slot, (uint32_t)j);
-        if (norm (pid) != n)
-            setOnce (pid, n);
+        const double rn = type == kFxGentlr ? gentlr::rackFromPlugin (id, n) : n; // (the gentlr plug-in's: its Thresholds go lower)
+        if (norm (pid) != rn)
+            setOnce (pid, rn);
     }
     if (frame)
         frame->invalid ();

@@ -162,13 +162,21 @@ int main ()
         s.seek (0, IBStream::kIBSeekSet, nullptr);
         State back;
         CHECK (readState (&s, back), "Gently's state read");
-        // (but the end saturator's Hi-Quality switch, now Oversampling: on the end the switch read it as)
+        // (but the end saturator's Hi-Quality switch, now Oversampling: on the end the switch read it as;
+        // and the Thresholds, -60 to 0 dB then: each at the dB it had)
         const uint32_t os = kTailExtBase + pk::kTailExtOversampling;
-        int wrong = 0;
+        int wrong = 0, wrongDb = 0;
         for (uint32_t id = 0; id < gentlyParams; ++id)
-            if (id != os)
-                wrong += back.has[id] && back.norm[id] == std::fmod (0.071 * (id + 3), 1.0) ? 0 : 1;
+        {
+            const double was = std::fmod (0.071 * (id + 3), 1.0);
+            const bool threshold = id == thresholdParam (0) || id == thresholdParam (1) || id == thresholdParam (kSub) || id == thresholdParam (kHigh);
+            if (threshold)
+                wrongDb += back.has[id] && std::fabs (toPlain (id, back.norm[id]) - (-60.0 + 60.0 * was)) < 1e-9 ? 0 : 1;
+            else if (id != os)
+                wrong += back.has[id] && back.norm[id] == was ? 0 : 1;
+        }
         CHECK (wrong == 0, "every value Gently saved, as it was (%d not)", wrong);
+        CHECK (wrongDb == 0, "its Thresholds at the dB they had (%d not)", wrongDb);
         CHECK (back.norm[os] == (std::fmod (0.071 * (os + 3), 1.0) >= 0.5 ? 1.0 : 0.0), "the end saturator's Hi-Quality as 4x or Off");
         // and its bands' Slope (and the end saturator's), which Gently did not have: Classic, the shape
         // its bands had, so the project sounds as it did
@@ -272,13 +280,90 @@ int main ()
                    slopeOf (altBack, tSlope) == smacheratr::kSlopeSignature,
                "Alt Signature: a round trip");
     }
+    // version 7 (0.30.1): every Threshold -90 to 0 dB (-60 to 0 before), band 1 at 100 Hz, Range 20 dB,
+    // Threshold -82 dB for a new instance. An older state keeps every Threshold's dB and band 1's old
+    // defaults where it lacks them (250 Hz, 8 dB, -18 dB): it sounds as it did
+    {
+        auto read = [] (int32 version, const std::vector<std::pair<uint32_t, double>>& values, State& back) {
+            MemoryStream s;
+            {
+                IBStreamer w (&s, kLittleEndian);
+                w.writeInt32 (0x474E544C);
+                w.writeInt32 (version);
+                w.writeInt32 ((int32)values.size ());
+                for (const auto& [id, v] : values)
+                {
+                    w.writeInt32u (id);
+                    w.writeDouble (v);
+                }
+            }
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            return readState (&s, back);
+        };
+        auto plain = [] (const State& st, uint32_t id) { return toPlain (id, st.norm[id]); };
+        const uint32_t b1t = bandParam (0, kThreshold), b2t = bandParam (1, kThreshold);
+        // the old range: normalized n was -60 + 60 n dB
+        for (int32 version : {1, 2, 5, 6})
+        {
+            State back;
+            CHECK (read (version, {{b1t, 0.0}, {b2t, 0.5}, {kSubThreshold, 0.7}, {kHighThreshold, 1.0}, {bandParam (1, kFreq), 0.25}}, back),
+                   "read");
+            CHECK (std::fabs (plain (back, b1t) + 60.0) < 1e-9 && std::fabs (plain (back, b2t) + 30.0) < 1e-9 &&
+                       std::fabs (plain (back, kSubThreshold) + 18.0) < 1e-9 && std::fabs (plain (back, kHighThreshold)) < 1e-9,
+                   "version %d: the Thresholds keep their dB (%.2f, %.2f, %.2f, %.2f)", version, plain (back, b1t), plain (back, b2t),
+                   plain (back, kSubThreshold), plain (back, kHighThreshold));
+            CHECK (back.norm[bandParam (1, kFreq)] == 0.25, "version %d: the rest as saved", version);
+            CHECK (std::fabs (plain (back, bandParam (0, kFreq)) - 250.0) < 1e-6 && std::fabs (plain (back, bandParam (0, kRange)) - 8.0) < 1e-9 &&
+                       back.has[bandParam (0, kFreq)] && back.has[bandParam (0, kRange)],
+                   "version %d without band 1's Frequency and Range: 250 Hz, 8 dB (%.2f, %.2f)", version, plain (back, bandParam (0, kFreq)),
+                   plain (back, bandParam (0, kRange)));
+            // the end saturator's Thresholds are Smacheratr's (-60 to 0 dB) and stay as saved
+        }
+        {
+            State back;
+            const uint32_t tThr = kTailExt2Base + pk::kTailExt2Threshold;
+            CHECK (read (6, {{tThr, 0.5}, {bandParam (0, kFreq), toNormalized (bandParam (0, kFreq), 400.0)}}, back), "read");
+            CHECK (back.norm[tThr] == 0.5 && std::fabs (toPlain (tThr, back.norm[tThr]) + 30.0) < 1e-9, "the end saturator's Threshold as saved");
+            CHECK (std::fabs (plain (back, bandParam (0, kFreq)) - 400.0) < 1e-6, "band 1's Frequency as saved");
+            CHECK (std::fabs (plain (back, b1t) + 18.0) < 1e-9 && back.has[b1t] && std::fabs (plain (back, b2t) + 18.0) < 1e-9 &&
+                       std::fabs (plain (back, kSubThreshold) + 18.0) < 1e-9 && std::fabs (plain (back, kHighThreshold) + 18.0) < 1e-9,
+                   "version 6 without the Thresholds: -18 dB, band 1's too (the old default)");
+        }
+        // version 7: as saved, and the new defaults where they are missing
+        {
+            State back;
+            CHECK (read (7, {{b2t, toNormalized (b2t, -75.0)}}, back), "read");
+            CHECK (std::fabs (plain (back, b2t) + 75.0) < 1e-9, "version 7: -75 dB as saved");
+            CHECK (std::fabs (plain (back, bandParam (0, kFreq)) - 100.0) < 1e-6 && std::fabs (plain (back, bandParam (0, kRange)) - 20.0) < 1e-9 &&
+                       std::fabs (plain (back, b1t) + 82.0) < 1e-9,
+                   "version 7 without them: band 1 at 100 Hz, 20 dB, -82 dB");
+        }
+        CHECK (std::fabs (toPlain (b1t, defaultNormalized (b1t)) + 82.0) < 1e-9 && std::fabs (toPlain (b2t, defaultNormalized (b2t)) + 18.0) < 1e-9,
+               "a new instance: band 1 at -82 dB, band 2 at -18 dB");
+        // a round trip keeps a Threshold under -60 dB
+        {
+            State st;
+            for (uint32_t id = 0; id < kNumParams; ++id)
+            {
+                st.norm[id] = defaultNormalized (id);
+                st.has[id] = true;
+            }
+            st.norm[kHighThreshold] = toNormalized (kHighThreshold, -88.0);
+            MemoryStream s;
+            CHECK (writeState (&s, st), "write");
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            State back;
+            CHECK (readState (&s, back) && std::fabs (plain (back, kHighThreshold) + 88.0) < 1e-9 && std::fabs (plain (back, b1t) + 82.0) < 1e-9,
+                   "-88 and -82 dB: a round trip");
+        }
+    }
     // a state from a newer Gentlr: the IDs this one does not know are skipped, the rest read
     {
         MemoryStream s;
         {
             IBStreamer w (&s, kLittleEndian);
             w.writeInt32 (0x474E544C);
-            w.writeInt32 (7); // a later version
+            w.writeInt32 (8); // a later version
             w.writeInt32 (2);
             w.writeInt32u (kNumParams + 40);
             w.writeDouble (0.5);

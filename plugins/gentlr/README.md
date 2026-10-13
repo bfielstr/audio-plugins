@@ -14,8 +14,8 @@ gentlr was called gently before 0.12. It is the same gentlr that smacheratr has 
 
 ## How to use it
 
-1. Put gentlr on a track or a bus. **Band 1** (on the mud, 250 Hz) and **Band 2** (on the harshness, 3
-   kHz) are already working.
+1. Put gentlr on a track or a bus. **Band 1** (on the low end, 100 Hz, cutting from -82 dB) and **Band
+   2** (on the harshness, 3 kHz) are already working.
 2. Play the loudest part. In the display, the lit cinnabar areas show what each band is cutting right
    now. Drag a band's handle sideways to move it and down for more **Range** (the most it may cut).
 3. For the sub or the top, pull the **Sub** or **High** handle down from 0 dB. For control over where
@@ -36,7 +36,8 @@ knee), at most by its **Range**, which it reaches (Range / 0.6) dB over the thre
 out of the signal and put back turned down, so a band that is not cutting leaves the signal exactly as it
 was, bit for bit.
 
-- **Band 1**: the low mids, the mud: 250 Hz, 2 octaves wide, Range 8 dB.
+- **Band 1**: the low end: 100 Hz, 2 octaves wide, Range 20 dB, its Threshold at -82 dB (Advanced), so
+  it holds the low end down by up to 20 dB nearly all the time and lets it through as it gets quieter.
 - **Band 2**: the upper mids, the harshness: 3 kHz, 2 octaves wide, Range 6 dB.
 - Each has **On**, **Freq** (20 Hz to 20 kHz), **Width** (0.5 to 4 octaves between the band's edges)
   and **Range** (0 to 24 dB; at 0 dB the band does nothing). The band's readout shows the edges of its
@@ -124,12 +125,14 @@ of the project: it applies at once to every gentlr display in every plug-in.
 
 ## Advanced
 
-**Advanced** gives each band its own **Threshold** instead of the fixed -18 dB: a vertical slider per
-band (Band 1, Band 2, Sub, High) at the right edge of the display, with the band's level rising beside
-it, bright where it is over the threshold (there the band is being cut). The law over the threshold
-stays the same. Drag a slider (Shift: fine); a double-click or right click puts it back to -18 dB.
-Advanced is on in a new gentlr (the Thresholds at -18 dB sound the same as Advanced off, so the sliders
-are there to move). With Advanced off, the Thresholds are kept but not used. To have every new gentlr
+**Advanced** gives each band its own **Threshold** (-90 to 0 dB) instead of the fixed -18 dB: a
+vertical slider per band (Band 1, Band 2, Sub, High) at the right edge of the display, with the band's
+level rising beside it, bright where it is over the threshold (there the band is being cut). The law
+over the threshold stays the same. Drag a slider (Shift: fine); a double-click or right click puts it
+back to its default: -82 dB for Band 1, -18 dB for the others. Advanced is on in a new gentlr (Band 1
+at -82 dB; the others at -18 dB sound the same as Advanced off). With Advanced off, the Thresholds are
+kept but not used: every band starts cutting at -18 dB, Band 1 too, so Band 1 then only works on a loud
+low end. To have every new gentlr
 start with Advanced off, uncheck **Menu > Defaults > Advanced On by Default** (it applies to new
 instances only, on top of a saved default; see the
 [top-level README](../../README.md#defaults-for-new-instances)).
@@ -175,7 +178,10 @@ Grabbing any of a band's controls (its handle or edge in the display, a knob or 
 Threshold slider in Advanced mode) selects the band: its handle lights, and so do its header and its
 Threshold slider.
 
-gentlr is also in smemplr's effects rack.
+gentlr is also in smemplr's effects rack (and moistr's lab). There it keeps the settings it had up to
+0.30.0, so projects with it sound as they did: Thresholds from -60 to 0 dB, and Band 1 at 250 Hz with
+Range 8 dB and Threshold -18 dB for a new slot. A gentlr preset loaded into a slot keeps its Thresholds
+(one under -60 dB at -60).
 
 ## Presets
 
@@ -199,3 +205,8 @@ and presets saved with 0.24 or earlier keep the defaults they were saved with: *
 smacheratr at the end off with its gentlr off, where they did not set them. Projects
 saved while the Sub and High bands had On buttons sound the same: a band that was off loads with its
 Range at 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing glued.
+Projects and presets saved with 0.30.0 or earlier keep every Threshold at the dB it had (the range went
+from -60 to -90 dB in 0.30.1), and Band 1 at 250 Hz, Range 8 dB and Threshold -18 dB where they did not
+set them, so they sound as they did. Host automation of a Threshold recorded before
+0.30.1 is stored by the host on the old range and plays back lower (a lane drawn from -60 to 0 dB now
+reads -90 to 0 dB): redraw it if a project automates one.

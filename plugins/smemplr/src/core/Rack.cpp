@@ -96,7 +96,7 @@ void migrateGentlrInSlots (std::array<double, kNumParams>& norm, std::array<bool
         if (type == kFxSmacheratr)
             setDefaults (first, smacheratr::kNumParams, smacheratr::paramTable ());
         else if (type == kFxGentlr && version >= 13) // (Gentlr came to the rack in 13)
-            setDefaults (gentlr::kHighOn, gentlr::kTailExt3Base, gentlr::paramTable ());
+            setDefaults (gentlr::kHighOn, gentlr::kTailExt3Base, gentlr::rackTable ());
     }
 }
 

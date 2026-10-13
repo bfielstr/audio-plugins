@@ -3,10 +3,12 @@
 // bottom as a meter, energy idle below the threshold and lit cinnabar over it (there the band is being
 // cut); the threshold is the text-coloured line with the handle.
 //   drag up / down              the Threshold (Shift: fine)
-//   double-click or right-click reset it (-18 dB: where Gentlr starts without Advanced)
+//   double-click or right-click reset it (its default: -18 dB, where Gentlr starts without Advanced)
 //   mouse wheel                 step it
 // Grabbing a slider picks its band (onPicked: the editor shows that band's controls and lights its handle
 // in the colour display); the band picked is drawn selected (setSelected: a lit lamp under its name).
+// The range, the ticks and the default are the host table's Threshold entry (gentlr's go to -90 dB:
+// its host shows Smacheratr's IDs with gentlr::sliderTable).
 // Used by Smacheratr, the saturator at the end of the other plug-ins (TailPanel) and the Smacheratr
 // in Smemplr's rack; layout() puts the sliders at the right edge of the colour display.
 #pragma once
