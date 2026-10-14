@@ -2,8 +2,8 @@
 
 sweepr is a two-band EQ whose two bands move. Each band is a bell (a boost or a cut around its
 frequency), and each has an LFO that sweeps that frequency up and down, in time with the song or free.
-After the two bands the sound goes through a tape stage: compression, drive into a tape-style saturator,
-the low head bump, softer highs and a little wow, all following the tape **Speed**. Put it on a bass and
+After the two bands the sound goes through a tape stage: drive into a fast leveller and a clipper that
+holds the level, then softer highs as the tape **Speed** comes down. Put it on a bass and
 a boost and a cut roll over the harmonics with the beat; the curve on the display moves with them. Install
 instructions are in the [top-level README](../../README.md).
 
@@ -21,9 +21,9 @@ instructions are in the [top-level README](../../README.md).
    dotted ones too), off for a free **Rate** in Hz; **Shape**; **Depth** (how many octaves up and down;
    0 keeps the band still); **Phase**. **Link** in band B makes B follow A's LFO, offset by B's
    **Phase** (180: against A).
-4. Shape the tape: **Drive** for more saturation (the level stays about the same), **Speed** lower for
-   a darker, warmer, wobblier tape, **Compression** for more squash. **Tape** off leaves the moving EQ
-   alone.
+4. Shape the tape: **Drive** for more saturation (and, once it saturates, a level that hardly moves),
+   **Speed** lower for a darker tape, **Compression** for a smoother, quieter, less distorted one (0: a
+   hard clip). **Tape** off leaves the moving EQ alone.
 5. **Mix** blends in the dry sound, **Output** sets the level.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -82,19 +82,22 @@ shows the settings when it does not.
 **TAPE**
 
 - **Tape** (on by default): the tape stage after the two bands. Switching it fades over 10 ms.
-- **Drive** (0 to 100 %, 75 % by default): how hard the bands drive the tape, from clean to thick and
-  squashed. The stage makes up for the drive, so the level stays about the same: turn it by ear.
-- **Speed** (0 to 100 %, 80 % by default): the tape speed. Lower is darker, with softer highs, a bigger
-  head bump lower down and more wow; higher is brighter and tighter.
-- **Compression** (0 to 100 %, 35 % by default): how much the tape squashes the sound before it
-  saturates.
+- **Drive** (0 to 100 %, 75 % by default): the gain into the tape, -10 dB to +50 dB: clean and quieter
+  at 0, saturated and held at a steady level from about a third up. There is no makeup: like a real
+  tape, more drive is louder until it saturates.
+- **Speed** (0 to 100 %, 80 % by default): the tape speed, a high shelf after the curve: at 100 % almost
+  flat (-2 dB at the very top, a little lift around 10 kHz), at 80 % -10 dB from about 15 kHz, at 0 %
+  -48 dB above 2 kHz.
+- **Compression** (0 to 100 %, 35 % by default): a fast leveller before the curve (2 ms attack, 21 ms
+  release): the higher, the lower it holds the level into the curve, so the softer, quieter and less
+  distorted the tape. At 0 nothing holds it, and a high **Drive** clips to a square wave.
 
 **OUTPUT**
 
 - **Mix** (100 % by default): the effect against the untouched input, kept in time with each other (no
   comb filtering).
-- **Output** (-24 to +12 dB, -1.5 dB by default): the overall level. At the defaults a bass at a typical
-  level (around -18 dBFS RMS) comes out about as loud as it went in.
+- **Output** (-24 to +12 dB, -4.4 dB by default): the overall level. At the defaults the tape holds a
+  bass at about -13 dBFS RMS whether it comes in at -18 dBFS or at 0.
 
 **smacheratr** (bottom panel): the saturator every plug-in here ends with. In sweepr it starts **off**,
 since the tape stage is the saturator; switch it on for more (its gentlr is on, ready). See
@@ -106,9 +109,8 @@ and **Output**; **Advanced** shows everything.
 ## How it works
 
 ```
-input -> bell A -> bell B -> 4x up -> tape: compression, pre-emphasis, drive, saturator, de-emphasis
-      -> 4x down -> head bump, high roll-off, wow -> Mix (with the input, delayed as much) -> Output
-      -> smacheratr (off by default)
+input -> bell A -> bell B -> 4x up -> tape: drive, leveller, clipper -> 4x down -> tape: DC blocker,
+      the Speed shelf -> Mix (with the input, delayed as much) -> Output -> smacheratr (off by default)
 ```
 
 **The bells.** Each band is the bell of a classic two-band digital EQ, measured step by step and matched
@@ -127,32 +129,25 @@ there from the start. The random shapes take their values from the cycle's numbe
 the song too. With the host stopped, a synced LFO runs on at the last tempo from where it was. Free, an
 LFO runs at **Rate** from the moment playback (or the plug-in) starts.
 
-**The tape stage.** At four times the sample rate:
+**The tape stage.** A classic tape saturation, measured knob by knob (sines from -72 to 0 dBFS, noise
+and level steps) and matched: the gain and the odd harmonics of a 100 Hz sine within about 1 dB at every
+level and setting measured. At four times the sample rate:
 
-- a compressor on both channels together (the louder sets the gain of both), its squash set by
-  **Compression**;
-- a +6 dB high shelf above 3 kHz before the curve and the exact opposite after it: the highs are driven
-  harder, so they saturate sooner and come back softer;
-- **Drive** (-6 to +24 dB into the curve) into a soft, slightly asymmetric curve (a little even-harmonic
-  warmth), with a memory like tape's magnetisation: the output follows the curve at a rate that grows
-  with how fast the input moves, so it traces a loop that depends on the level rather than a fixed line;
-  the curve is anti-aliased (its antiderivative), so with the oversampling a 7 kHz sine at -6 dBFS and
-  full **Drive** leaves no fold-back above -58 dB;
-- a makeup gain worked out from **Drive** and **Compression** so a sine at about -15 dBFS comes out as
-  loud as it went in.
+- **Drive**'s gain, -10 to +50 dB;
+- a leveller on both channels together (the louder sets the gain of both): a peak follower (2 ms attack,
+  21 ms release) and a gain of 1 / (1 + 3.21 x **Compression** x the level), so the level into the curve
+  heads for a ceiling that **Compression** lowers;
+- a sine clipper: the input's sine (slope 1 at 0, a gentle bend) up to the top of the sine, then flat at
+  half of full scale. Its harmonics are odd (a third harmonic of -14 dB at the defaults, -9.5 dB fully
+  clipped), with a hint of even ones (about -60 dB). It is anti-aliased (its antiderivative), so with the
+  oversampling even a 7 kHz sine at -6 dBFS clipped to a square wave leaves no fold-back above -49 dB.
 
-Then, at the normal rate:
+Then, at the normal rate: a 10 Hz DC blocker and **Speed**'s high shelf.
 
-- the head bump: a bell from 30 Hz (+4.5 dB) at **Speed** 0 to 100 Hz (+1.5 dB) at 100 %, with a
-  small dip above it;
-- a 12 dB per octave roll-off from 6 kHz at **Speed** 0 to 22 kHz at 100 %;
-- a 10 Hz DC blocker;
-- wow and flutter: a gently moving delay (0.55 and 0.13 Hz wow, 6.5 Hz flutter), none at **Speed** 100 %
-  and about 0.2 % of pitch at 0 %.
-
-**Calibrating the bells.** Everything that decides a bell's shape (the knobs' ranges and tapers, how Q
-and Gain combine, an optional proportional Q) is in one file, `src/core/BellShape.h`; the filter and the
-display are both made from it. `sweepr_analyze` (built with the plug-in) compares recordings:
+**Calibrating the bells and the tape.** Everything that decides a bell's shape (the knobs' ranges and
+tapers, how Q and Gain combine) is in one file, `src/core/BellShape.h`; the filter and the display are
+both made from it. The tape's (Drive's range, the leveller, the curve, Speed's shelf) is in
+`src/core/TapeShape.h`. `sweepr_analyze` (built with the plug-in) compares recordings:
 
 ```sh
 sweepr_analyze dry.wav processed.wav    # processed's response against dry per 1/12 octave, and the null depth
@@ -171,11 +166,11 @@ settings. The menu is described in the [top-level README](../../README.md#preset
 ## Latency
 
 sweepr's own latency is constant whatever the settings, so automating anything never moves the sound in
-time: the oversampling's filters and the centre of the wow delay, 68 samples at 48 kHz. smacheratr at the
+time: the oversampling's filters, 37 samples at 48 kHz. smacheratr at the
 end adds its own (85 samples at 48 kHz at its default 4x Oversampling, also while it is off, so switching
 it never changes the latency). The host is told and compensates.
 
 ## CPU
 
-The defaults take about 3.5 % of one core at 48 kHz stereo, about 4.5 % with smacheratr at the end on
+The defaults take about 2 % of one core at 48 kHz stereo, about 3 % with smacheratr at the end on
 (measured as process CPU time, the best of three runs, on the build machine).

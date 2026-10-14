@@ -52,7 +52,7 @@ const ParamTable& paramTable ()
         v.push_back (percent (kSpeed, "Speed", "Speed", 0.8));
         v.push_back (percent (kCompression, "Compression", "Compression", 0.35));
         v.push_back (percent (kMix, "Mix", "Mix", 1.0));
-        v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, -1.5, Curve::Linear, Disp::Db));
+        v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, -4.4, Curve::Linear, Disp::Db));
         // the end saturator: off in a new instance (the tape stage is the saturator here)
         pk::addTailParams (v, kTailBase, false);
         smacheratr::addTailExtParams (v, kTailExtBase);

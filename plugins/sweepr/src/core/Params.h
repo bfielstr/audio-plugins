@@ -32,8 +32,8 @@ enum ParamId : uint32_t
     kLink = kBandB + kBandFields, // B's LFO follows A's (A's rate and shape; B's Phase is its offset from A)
     kTapeOn,                      // the tape stage in the path
     kDrive,                       // 0 .. 1
-    kSpeed,                       // 0 .. 1: the tape speed (low: darker, more head bump and wow)
-    kCompression,                 // 0 .. 1: the squash before the curve
+    kSpeed,                       // 0 .. 1: the tape speed (low: darker)
+    kCompression,                 // 0 .. 1: the leveller before the curve
     kMix,                         // 0 .. 1: dry .. wet
     kOutput,                      // dB
     // the Smacheratr at the end of the chain (the suite's end saturator, off by default here: the tape

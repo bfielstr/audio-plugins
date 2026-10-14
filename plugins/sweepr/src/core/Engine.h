@@ -1,8 +1,8 @@
 // Sweepr: two bells whose frequencies an LFO each sweeps, into tape.
 //
-//   input -> bell A -> bell B -> 4x up -> tape curve (compression, pre-emphasis, drive, hysteresis-like
-//         saturator, de-emphasis, makeup) -> 4x down -> tape filters (head bump, high roll-off, DC) -> wow
-//         -> Mix (with the input delayed as much) -> Output -> Smacheratr (the end saturator, off by default)
+//   input -> bell A -> bell B -> 4x up -> tape (Drive, the leveller, the sine clipper) -> 4x down -> tape
+//         (DC blocker, the Speed shelf) -> Mix (with the input delayed as much) -> Output -> Smacheratr (the
+//         end saturator, off by default)
 //
 // The bells. Each is Reason's PEQ-2 bell (BellShape.h: its knobs' ranges and how Q and Gain shape it,
 // measured) as a trapezoidal state-variable filter, prewarped at its frequency. The filter runs at the
@@ -18,22 +18,18 @@
 // B's Phase as the offset from A and B's own Depth. The modulation glides over 2 ms, so a Square or a
 // Random step sweeps quickly instead of jumping.
 //
-// The tape stage (Tape on; switching fades over 10 ms). At 4x: a stereo-linked peak compressor
-// (Compression: more squash before the curve), a +6 dB high shelf, the Drive gain (-6 to +24 dB) into an
-// asymmetric tanh (a bias: even harmonics; anti-aliased with its antiderivative) with a hysteresis-like
-// memory (the "magnetisation" follows the curve at a rate that grows with how fast the field moves, so the
-// transfer traces a loop that depends on the level), the inverse shelf (the highs, driven harder, come back softer) and a makeup gain worked out
-// so a -15 dBFS sine comes out as loud as it went in at any Drive and Compression. At the base rate: a head
-// bump (30 Hz at Speed 0 to 100 Hz at 100 %, up to +4.5 dB, with a dip above it), a 12 dB / octave
-// roll-off (6 kHz at Speed 0 to 22 kHz at 100 %), a 10 Hz DC blocker and wow and flutter (a modulated
-// delay, none at Speed 100 %, about 0.2 % of pitch at 0 %).
+// The tape stage (Tape on; switching fades over 10 ms): Scream 4's Tape mode, measured (TapeShape.h). At 4x:
+// Drive's gain (-10 to +50 dB), a stereo-linked peak leveller (Compression: 1 / (1 + 3.21 Compression level),
+// 2 ms attack, 21 ms release) and a sine clipper (flat at +-0.5, anti-aliased with its antiderivative). At
+// the base rate: a 10 Hz DC blocker and Speed's high shelf (-48 dB above 2 kHz at 0 to -2 dB above 11 kHz at
+// 100 %). No makeup: like Scream's, the output settles near the clipper's level whatever goes in.
 //
-// Latency: the oversampler's plus the wow delay's centre (constant whatever the settings), plus the end
-// saturator's. Mix blends with the input delayed by the same amount; Mix 0 is the delayed input bit for bit.
+// Latency: the oversampler's (constant whatever the settings), plus the end saturator's. Mix blends with the input delayed by the same amount; Mix 0 is the delayed input bit for bit.
 #pragma once
 
 #include "Dsp.h"
 #include "Params.h"
+#include "TapeShape.h"
 
 #include "para/src/core/Oversampler.h"
 #include "smacheratr/src/core/Tail.h"
@@ -71,7 +67,7 @@ public:
     // ppq (quarter notes) and whether the host plays (then the synced LFOs follow ppq; else they run on).
     void setTransport (double tempo, double ppq, bool playing);
     int latency () const { return ownLatency () + tail.latency (); }
-    int ownLatency () const { return osLatency + wowCentre; }
+    int ownLatency () const { return osLatency; }
     void setMeters (Meters* m) { meters = m; }
     void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
@@ -82,16 +78,6 @@ public:
     double bandFreqNow (int b) const { return fNow[b]; } // the swept frequency at the end of the last block
     double lfoNow (int b) const { return lfoVal[b]; }
     double beatsNow () const { return beatPos; }
-    static double driveDb (double drive) { return -6.0 + 30.0 * drive; }
-    // the makeup gain the tape stage applies at Drive d and Compression c (linear)
-    static double tapeMakeup (double d, double c);
-    static double compAmount (double c) { return 8.0 * c; }
-    static double biasOf (double d) { return 0.25 * d; }
-    // the tape filters at Speed s
-    static double bumpHz (double s) { return 30.0 * std::pow (100.0 / 30.0, s); }
-    static double bumpDb (double s) { return 1.5 + 3.0 * (1.0 - s); }
-    static double rollOffHz (double s) { return 6000.0 * std::pow (22000.0 / 6000.0, std::pow (std::clamp (s, 0.0, 1.0), 0.7)); }
-    static double wowAmount (double s) { return std::pow (std::clamp (1.0 - s, 0.0, 1.0), 1.5); }
 
 private:
     struct Band
@@ -119,28 +105,21 @@ private:
     float out = 1.0f;
     // per input sample of a chunk: the bells' coefficients, the tape's amount and gains
     dsp::SvfCoefs coef[kBands][kChunk];
-    double tapeAt[kChunk] {}, gainAt[kChunk] {}, makeupAt[kChunk] {}, biasAt[kChunk] {}, tanhBiasAt[kChunk] {}, compAt[kChunk] {},
-        holdAt[kChunk] {};
-    double makeupNow = 1.0, makeupFor[2] {-1.0, -1.0};
+    double tapeAt[kChunk] {}, gainAt[kChunk] {}, compAt[kChunk] {};
     // oversampling
     para::Oversampler4x os[2];
     int osLatency = 0;
     std::vector<float> up[2], wet[2];
-    // the tape at 4x
-    double env = 0.0, cAtk = 0.0, cRel = 0.0, cHyst = 0.0;
-    double emphG = 0.0, deemphG = 0.0;
-    dsp::OnePole emph[2], deemph[2];
-    double mag[2] {}, lastH[2] {};
+    // the tape at 4x: the leveller's level and the curve's last input (the anti-aliasing)
+    double env = 0.0, cAtk = 0.0, cRel = 0.0;
+    double lastZ[2] {};
     // the tape at the base rate
-    dsp::SvfCoefs bumpC, dipC, lpC;
-    dsp::Svf bump[2], dip[2], hf[2];
+    dsp::SvfCoefs shelfC;
+    dsp::Svf shelf[2];
+    double shelfHigh = 1.0, shelfMid = 1.0;
     double dcG = 0.0;
     dsp::OnePole dc[2];
     double shownSpeed = -1.0;
-    // wow: a modulated delay around its centre
-    std::vector<float> wowBuf[2];
-    int wowCentre = 0, wowPos = 0, wowSize = 0;
-    double wowPh = 0.0, driftPh = 0.0, flutterPh = 0.0;
     // the dry path, delayed as much as the wet one
     std::vector<float> dryBuf[2];
     int dryPos = 0, drySize = 0;

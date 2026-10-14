@@ -442,14 +442,15 @@ TEST (tape_is_finite_and_free_of_denormals)
 TEST (high_drive_keeps_aliasing_low)
 {
     // Drive 100 % (Speed 100 %, no compression, flat bells) on a 7 kHz sine at -6 dBFS and a 3.1 kHz one at
-    // -12 dBFS: their harmonics above Nyquist would fold back between the real ones (for 7 kHz to 20, 13, 6,
-    // 1, 8, 15 and 22 kHz); in the audible range, with the 4x oversampling and the curve's anti-aliasing those stay far below the
-    // fundamental, while the real harmonics are there
+    // -12 dBFS: clipped to a square wave, whose harmonics above Nyquist would fold back between the real ones
+    // (for 7 kHz to 20, 13, 6, 1, 8, 15 and 22 kHz); in the audible range, with the 4x oversampling and the
+    // curve's anti-aliasing those stay far below the fundamental (Scream 4, at its base rate: -14 and -20 dB),
+    // while the real harmonics are there
     struct Case
     {
         double hz, amp, limitDb;
     };
-    for (const Case& k : {Case {7000.0, 0.5, -55.0}, Case {3100.0, 0.25, -70.0}})
+    for (const Case& k : {Case {7000.0, 0.5, -46.0}, Case {3100.0, 0.25, -52.0}})
     {
         auto e = engine ([] (Engine& e) {
             plain (e);
@@ -488,39 +489,44 @@ TEST (high_drive_keeps_aliasing_low)
     }
 }
 
-TEST (drive_keeps_the_level)
+TEST (tape_is_scream_4s)
 {
-    // Drive 0 .. 100 % on the reference sine (-15 dBFS at 200 Hz) and on a bass: about as loud at every Drive
-    for (double c : {0.0, 0.35, 1.0})
+    // Scream 4's Tape mode, measured (TapeShape.h): a 100 Hz sine through it at Damage, P1 and P2 = Drive,
+    // Speed and Compression, its Master at 0 dB: the gain and the third and fifth harmonics (dB re the
+    // fundamental). The same settings here (flat bells, Output 0 dB) give the same within 0.3 dB (the gain)
+    // and 1.5 dB (the harmonics).
+    struct Case
     {
-        double lo = 1e9, hi = -1e9, blo = 1e9, bhi = -1e9;
-        for (double d = 0.0; d <= 1.0001; d += 0.25)
-        {
-            auto set = [d, c] (Engine& e) {
-                plain (e);
-                e.setParam (bandParam (0, kGain), 0.0);
-                e.setParam (bandParam (1, kGain), 0.0);
-                e.setParam (kTapeOn, 1.0);
-                e.setParam (kDrive, d);
-                e.setParam (kCompression, c);
-                e.setParam (kSpeed, 1.0);
-            };
-            auto e = engine (set);
-            const auto x = sine (200.0, 1.0, 0.18);
-            const auto y = run (*e, x);
-            const double g = db (rms (y, 24000, y.size ())) - db (rms (x, 24000, x.size ()));
-            lo = std::min (lo, g);
-            hi = std::max (hi, g);
-            auto eb = engine (set);
-            const auto xb = bass (2.0);
-            const auto yb = run (*eb, xb);
-            const double gb = db (rms (yb, 48000, yb.size ())) - db (rms (xb, 48000, xb.size ()));
-            blo = std::min (blo, gb);
-            bhi = std::max (bhi, gb);
-        }
-        std::printf ("    Compression %.0f %%: the sine %+.1f .. %+.1f dB, the bass %+.1f .. %+.1f dB over Drive\n", 100 * c, lo, hi, blo, bhi);
-        CHECK (lo > -1.5 && hi < 1.5, "the reference sine within 1.5 dB: %.1f .. %.1f", lo, hi);
-        CHECK (bhi - blo < 4.0 && blo > -4.0 && bhi < 4.0, "the bass within a few dB: %.1f .. %.1f", blo, bhi);
+        double drive, speed, comp, inDb, gain, h3, h5;
+    };
+    const double m = 4.4378; // (Scream's Master in the patch measured)
+    const Case cases[] = {
+        {0.75, 0.8, 0.35, -48.0, 28.68 + m, -42.7, -64.2}, {0.75, 0.8, 0.35, -24.0, 14.65 + m, -17.8, -43.1},
+        {0.75, 0.8, 0.35, -12.0, 3.00 + m, -14.8, -33.0},  {0.75, 0.8, 0.35, 0.0, -8.93 + m, -14.2, -30.4},
+        {0.0, 0.8, 0.35, 0.0, -17.07 + m, -38.6, -62.8},   {32.0 / 127.0, 0.8, 0.35, -12.0, -2.93 + m, -34.3, -62.4},
+        {0.75, 0.8, 0.0, -12.0, 3.61 + m, -9.6, -14.0},    {0.75, 0.8, 1.0, -12.0, -2.12 + m, -30.4, -52.8},
+    };
+    for (const auto& c : cases)
+    {
+        auto e = engine ([&c] (Engine& e) {
+            plain (e);
+            e.setParam (bandParam (0, kGain), 0.0);
+            e.setParam (bandParam (1, kGain), 0.0);
+            e.setParam (kTapeOn, 1.0);
+            e.setParam (kDrive, c.drive);
+            e.setParam (kSpeed, c.speed);
+            e.setParam (kCompression, c.comp);
+            e.setParam (kOutput, 0.0);
+        });
+        const double amp = std::pow (10.0, c.inDb / 20.0);
+        const auto x = sine (100.0, 1.5, amp);
+        const auto y = run (*e, x);
+        const size_t a = 24000, b = a + 38400;
+        const double fund = toneLevel (y, a, b, 100.0);
+        const double gain = db (fund / amp), h3 = db (toneLevel (y, a, b, 300.0) / fund), h5 = db (toneLevel (y, a, b, 500.0) / fund);
+        CHECK (std::fabs (gain - c.gain) < 0.3 && std::fabs (h3 - c.h3) < 1.5 && std::fabs (h5 - c.h5) < 1.5,
+               "Drive %.0f %%, Compression %.0f %%, %.0f dBFS: gain %+.2f dB (Scream %+.2f), H3 %.1f (%.1f), H5 %.1f (%.1f)", 100 * c.drive,
+               100 * c.comp, c.inDb, gain, c.gain, h3, c.h3, h5, c.h5);
     }
 }
 
@@ -580,13 +586,23 @@ TEST (defaults)
 
 TEST (default_level)
 {
-    // the defaults on a bass at a typical level (-18 dBFS RMS): about as loud as it went in (Output's default)
-    auto e = engine ();
-    const auto x = bass (4.0, 1.0);
-    const auto y = run (*e, x);
-    const double g = db (rms (y, 48000, y.size ())) - db (rms (x, 48000, x.size ()));
-    std::printf ("    the defaults on a bass: %+.1f dB\n", g);
-    CHECK (std::fabs (g) < 2.0, "%.1f dB", g);
+    // the defaults level a bass as Scream 4's Tape does: 18 dB apart going in, a few dB apart coming out, and
+    // never far above the clipper's level (-6 dBFS) less Output's 4.4 dB (a clipped wave, band-limited by the
+    // oversampler and through the shelf, overshoots by a few dB)
+    double out[2] {};
+    for (int k = 0; k < 2; ++k)
+    {
+        auto e = engine ();
+        const auto x = bass (4.0, k == 0 ? 0.125 : 1.0);
+        const auto y = run (*e, x);
+        out[k] = db (rms (y, 48000, y.size ()));
+        double peak = 0.0;
+        for (size_t i = 4800; i < y.size (); ++i)
+            peak = std::max (peak, (double)std::fabs (y[i]));
+        std::printf ("    the defaults on a bass at %+.0f dB: out %.1f dBFS RMS, peak %.1f dBFS\n", k == 0 ? -18.0 : 0.0, out[k], db (peak));
+        CHECK (db (peak) < -6.0, "peak %.1f dBFS", db (peak));
+    }
+    CHECK (out[1] - out[0] < 6.0, "18 dB more in, %.1f dB more out", out[1] - out[0]);
 }
 
 TEST (analyze_tool_measures_the_bells)

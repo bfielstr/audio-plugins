@@ -210,7 +210,7 @@ void Editor::idle ()
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
         {
-            // its own (the oversampling and the tape's wow) and the end saturator's (-1: not known yet)
+            // its own (the oversampling) and the end saturator's (-1: not known yet)
             const int tailNow = s->tailMeters.latency.load ();
             latencyLabel->setTexts (pk::latencyTexts (tailNow >= 0 ? s->ownLatency.load () + tailNow : s->latency.load ()));
         }

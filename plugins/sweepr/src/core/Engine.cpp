@@ -8,10 +8,6 @@
 namespace sweepr {
 
 namespace {
-constexpr double kEmphHz = 3000.0;    // the pre-emphasis shelf's corner (+6 dB above it)
-constexpr double kHystHz = 5000.0;    // how fast the magnetisation follows the curve at rest
-constexpr double kHystSlope = 2.0;    // and how much faster it follows a moving field
-constexpr double kRefAmp = 0.18;      // the makeup's reference: a sine this high (about -15 dBFS, -18 dBFS RMS) comes out as loud
 constexpr uint32_t kSeed[kBands] = {0x5EED0A11u, 0x5EED0B22u};
 inline double coefFor (double sec, double sr) { return 1.0 - std::exp (-1.0 / (std::max (1e-6, sec) * sr)); }
 // glides x towards t by c, landing on it once close (so a still setting is exactly its value)
@@ -21,13 +17,6 @@ inline void glide (double& x, double t, double c, double eps = 1e-9)
     if (std::fabs (t - x) < eps)
         x = t;
 }
-inline float hermite (float xm1, float x0, float x1, float x2, float f)
-{
-    const float c1 = 0.5f * (x1 - xm1);
-    const float c2 = xm1 - 2.5f * x0 + 2.0f * x1 - 0.5f * x2;
-    const float c3 = 0.5f * (x2 - xm1) + 1.5f * (x0 - x1);
-    return ((c3 * f + c2) * f + c1) * f + x0;
-}
 } // namespace
 
 ParamArray defaultParams ()
@@ -36,25 +25,6 @@ ParamArray defaultParams ()
     for (uint32_t i = 0; i < kNumParams; ++i)
         p[i] = paramTable ().info (i).def;
     return p;
-}
-
-double Engine::tapeMakeup (double d, double c)
-{
-    // what the curve does to the reference sine (after the compressor's steady gain for it): its RMS, DC
-    // removed (the DC blocker takes it out), against the sine's
-    const double g = std::pow (10.0, driveDb (d) / 20.0) / std::sqrt (1.0 + compAmount (c) * kRefAmp);
-    const double bias = biasOf (d), tb = std::tanh (bias);
-    constexpr int kN = 64;
-    double sum = 0.0, sum2 = 0.0;
-    for (int k = 0; k < kN; ++k)
-    {
-        const double y = dsp::tapeCurve (g * kRefAmp * std::sin (2.0 * dsp::kPi * (k + 0.5) / kN), bias, tb);
-        sum += y;
-        sum2 += y * y;
-    }
-    const double mean = sum / kN;
-    const double rmsOut = std::sqrt (std::max (1e-12, sum2 / kN - mean * mean));
-    return (kRefAmp / std::sqrt (2.0)) / rmsOut;
 }
 
 Engine::Engine () {}
@@ -71,27 +41,16 @@ void Engine::prepare (double sampleRate, int maxBlock)
         up[c].assign ((size_t)(kChunk * kOversample), 0.0f);
         wet[c].assign ((size_t)kChunk, 0.0f);
     }
-    // the wow delay: its centre far enough from 0 for the deepest wow and the interpolation
-    wowCentre = (int)std::ceil (0.0006 * sr) + 2;
-    wowSize = 1;
-    while (wowSize < 2 * wowCentre + 8)
-        wowSize *= 2;
     drySize = 1;
-    while (drySize < osLatency + wowCentre + 2)
+    while (drySize < osLatency + 2)
         drySize *= 2;
-    for (int c = 0; c < 2; ++c)
-    {
-        wowBuf[c].assign ((size_t)wowSize, 0.0f);
-        dryBuf[c].assign ((size_t)drySize, 0.0f);
-    }
+    for (auto& d : dryBuf)
+        d.assign ((size_t)drySize, 0.0f);
     cSmooth = coefFor (0.02, sr);
     cMod = coefFor (0.002, sr);
     cFade = 1.0 / (0.01 * sr); // (a linear fade: 10 ms)
-    cAtk = coefFor (0.002, srOs);
-    cRel = coefFor (0.1, srOs);
-    cHyst = coefFor (1.0 / (2.0 * dsp::kPi * kHystHz), srOs);
-    emphG = dsp::onePoleG (kEmphHz, srOs);
-    deemphG = dsp::onePoleG (0.5 * kEmphHz, srOs);
+    cAtk = coefFor (tape::kLevelAttack, srOs);
+    cRel = coefFor (tape::kLevelRelease, srOs);
     dcG = dsp::onePoleG (10.0, sr);
     tail.prepare (sr, std::max (1, maxBlock));
     for (uint32_t id = 0; id < kNumParams; ++id)
@@ -119,28 +78,19 @@ void Engine::reset ()
         o.reset ();
     for (int c = 0; c < 2; ++c)
     {
-        emph[c].reset ();
-        deemph[c].reset ();
-        bump[c].reset ();
-        dip[c].reset ();
-        hf[c].reset ();
+        shelf[c].reset ();
         dc[c].reset ();
-        mag[c] = lastH[c] = 0.0;
-        std::fill (wowBuf[c].begin (), wowBuf[c].end (), 0.0f);
+        lastZ[c] = tape::kBias;
         std::fill (dryBuf[c].begin (), dryBuf[c].end (), 0.0f);
     }
     env = 0.0;
-    wowPos = dryPos = 0;
-    wowPh = driftPh = flutterPh = 0.0;
+    dryPos = 0;
     tapeAmt = p[kTapeOn] >= 0.5 ? 1.0 : 0.0;
     drive = p[kDrive];
     speed = p[kSpeed];
     comp = p[kCompression];
     mixNow = std::clamp (p[kMix], 0.0, 1.0);
     out = (float)std::pow (10.0, p[kOutput] / 20.0);
-    makeupNow = tapeMakeup (drive, comp);
-    makeupFor[0] = drive;
-    makeupFor[1] = comp;
     shownSpeed = -1.0;
     tapeFilters ();
     tail.reset ();
@@ -178,10 +128,12 @@ void Engine::tapeFilters ()
     if (std::fabs (speed - shownSpeed) < 1e-4)
         return;
     shownSpeed = speed;
-    const double f = bumpHz (speed), db = bumpDb (speed);
-    bumpC.cookbookBell (f, sr, 1.0, db);
-    dipC.cookbookBell (2.6 * f, sr, 1.4, -0.4 * db);
-    lpC.lowpass (std::min (rollOffHz (speed), 0.45 * sr), sr, 0.6);
+    // the high shelf: an SVF (k the denominator's s term), its outputs mixed as the numerator
+    const tape::Shelf sh = tape::shelfAt (speed);
+    shelfC.k = sh.a1;
+    shelfC.set (std::tan (dsp::kPi * std::min (sh.corner, 0.45 * sr) / sr));
+    shelfHigh = std::pow (10.0, sh.gainDb / 20.0);
+    shelfMid = sh.b1;
 }
 
 // One chunk's controls, per input sample: the smoothed settings, the LFOs, the bells' coefficients and the
@@ -191,22 +143,7 @@ void Engine::controlChunk (int m)
     const double beatStep = bpm / 60.0 / sr;
     const bool link = p[kLink] >= 0.5;
     const double fMax = 0.45 * sr;
-    // the makeup at the end of the chunk's glide (the settings move slowly: interpolated across it)
     const double tapeT = p[kTapeOn] >= 0.5 ? 1.0 : 0.0;
-    double dEnd = drive, cEnd = comp;
-    for (int i = 0; i < m; ++i)
-    {
-        dEnd += (p[kDrive] - dEnd) * cSmooth;
-        cEnd += (p[kCompression] - cEnd) * cSmooth;
-    }
-    double mkEnd = makeupNow;
-    if (std::fabs (dEnd - makeupFor[0]) > 1e-7 || std::fabs (cEnd - makeupFor[1]) > 1e-7)
-    {
-        mkEnd = tapeMakeup (dEnd, cEnd);
-        makeupFor[0] = dEnd;
-        makeupFor[1] = cEnd;
-    }
-    const double mk0 = makeupNow;
 
     for (int i = 0; i < m; ++i)
     {
@@ -258,14 +195,9 @@ void Engine::controlChunk (int m)
         glide (comp, p[kCompression], cSmooth);
         glide (speed, p[kSpeed], cSmooth);
         tapeAt[i] = tapeAmt;
-        gainAt[i] = std::pow (10.0, driveDb (drive) / 20.0);
-        biasAt[i] = biasOf (drive);
-        tanhBiasAt[i] = std::tanh (biasAt[i]);
-        compAt[i] = compAmount (comp);
-        holdAt[i] = 0.25 * drive;
-        makeupAt[i] = mk0 + (mkEnd - mk0) * (double)(i + 1) / m;
+        gainAt[i] = std::pow (10.0, tape::driveDb (drive) / 20.0);
+        compAt[i] = tape::kLevelAmount * comp;
     }
-    makeupNow = mkEnd;
 }
 
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
@@ -274,10 +206,8 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     const float outT = (float)std::pow (10.0, p[kOutput] / 20.0);
     const float smoothOut = (float)cSmooth;
     const double cMix = cSmooth;
-    const int dryDelay = osLatency + wowCentre;
-    const double wowDepth = 0.0005 * sr, flutterDepth = 0.000015 * sr;
-    const double wowStep = 2.0 * dsp::kPi * 0.55 / sr, driftStep = 2.0 * dsp::kPi * 0.13 / sr,
-                 flutterStep = 2.0 * dsp::kPi * 6.5 / sr;
+    const int dryDelay = osLatency;
+    const double curveRest = tape::curve (tape::kBias);
 
     for (int a = 0; a < n; a += kChunk)
     {
@@ -295,12 +225,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         {
             // fully off: the tape's state starts again from silence when it comes back
             env = 0.0;
-            for (int c = 0; c < 2; ++c)
-            {
-                emph[c].reset ();
-                deemph[c].reset ();
-                mag[c] = lastH[c] = 0.0;
-            }
+            lastZ[0] = lastZ[1] = tape::kBias;
         }
         tapeFilters ();
 
@@ -324,23 +249,17 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             double x[2] = {u0[j], u1[j]};
             if (tape)
             {
-                // the compressor, linked: the louder channel sets the gain of both
-                const double lvl = std::max (std::fabs (x[0]), std::fabs (x[1]));
+                // Drive, then the leveller, linked (the louder channel sets the gain of both)
+                const double lvl = gainAt[i] * std::max (std::fabs (x[0]), std::fabs (x[1]));
                 env += (lvl - env) * (lvl > env ? cAtk : cRel);
-                const double gc = 1.0 / std::sqrt (1.0 + compAt[i] * env);
+                const double g = gainAt[i] / (1.0 + compAt[i] * env);
                 for (int c = 0; c < 2; ++c)
                 {
-                    const double lp = emph[c].lp (x[c], emphG);
-                    const double h = gainAt[i] * gc * (lp + 2.0 * (x[c] - lp));
-                    const double man = dsp::tapeCurveAa (h, lastH[c], biasAt[i], tanhBiasAt[i]);
-                    // the magnetisation follows the curve, faster the faster the field moves: a loop
-                    const double rate = std::min (1.0, cHyst + kHystSlope * std::fabs (h - lastH[c]));
-                    lastH[c] = h;
-                    mag[c] += (man - mag[c]) * rate;
-                    const double y = man + holdAt[i] * (mag[c] - man);
-                    const double dl = deemph[c].lp (y, deemphG);
-                    const double t = (dl + 0.5 * (y - dl)) * makeupAt[i];
-                    x[c] += (t - x[c]) * tapeAt[i];
+                    // the curve (anti-aliased), its bias taken out again
+                    const double z = g * x[c] + tape::kBias;
+                    const double y = tape::curveAa (z, lastZ[c]) - curveRest;
+                    lastZ[c] = z;
+                    x[c] += (y - x[c]) * tapeAt[i];
                 }
             }
             u0[j] = (float)x[0];
@@ -349,8 +268,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         os[0].down (u0, wet[0].data (), m);
         os[1].down (u1, wet[1].data (), m);
 
-        // the base rate: the tape's filters, wow, Mix and Output
-        const double wowAmt = wowAmount (speed);
+        // the base rate: the tape's DC blocker and shelf (Speed), Mix and Output
         for (int i = 0; i < m; ++i)
         {
             float w[2];
@@ -360,40 +278,13 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 if (tape)
                 {
                     double f = s - dc[c].lp (s, dcG);
-                    f = bump[c].bell (f, bumpC);
-                    f = dip[c].bell (f, dipC);
-                    f = hf[c].lowpass (f, lpC);
+                    double lp;
+                    const double bp = shelf[c].tick (f, shelfC, lp);
+                    f = shelfHigh * (f - shelfC.k * bp - lp) + shelfMid * bp + lp;
                     s += (f - s) * tapeAt[i];
                 }
-                wowBuf[c][(size_t)wowPos] = (float)s;
+                w[c] = (float)s;
             }
-            // wow and flutter: the delay moves around its centre (exactly the centre with none)
-            const double mod = tapeAt[i] * wowAmt *
-                               (wowDepth * (0.7 * std::sin (wowPh) + 0.3 * std::sin (driftPh)) + flutterDepth * std::sin (flutterPh));
-            wowPh += wowStep;
-            driftPh += driftStep;
-            flutterPh += flutterStep;
-            if (wowPh > 2.0 * dsp::kPi)
-                wowPh -= 2.0 * dsp::kPi;
-            if (driftPh > 2.0 * dsp::kPi)
-                driftPh -= 2.0 * dsp::kPi;
-            if (flutterPh > 2.0 * dsp::kPi)
-                flutterPh -= 2.0 * dsp::kPi;
-            const double d = (double)wowCentre + mod;
-            const int k0 = (int)std::floor (d);
-            const float fr = (float)(d - k0);
-            const int mask = wowSize - 1;
-            for (int c = 0; c < 2; ++c)
-            {
-                const float* buf = wowBuf[c].data ();
-                if (fr == 0.0f)
-                    w[c] = buf[(wowPos - k0) & mask];
-                else
-                    w[c] = hermite (buf[(wowPos - k0 + 1) & mask], buf[(wowPos - k0) & mask], buf[(wowPos - k0 - 1) & mask],
-                                    buf[(wowPos - k0 - 2) & mask], fr);
-            }
-            wowPos = (wowPos + 1) & mask;
-
             // the dry signal, as late as the wet one
             const int dmask = drySize - 1;
             dryBuf[0][(size_t)dryPos] = dryL[i];
@@ -419,7 +310,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         for (int b = 0; ok && b < kBands; ++b)
             ok = band[b].svf[0].finite () && band[b].svf[1].finite ();
         for (int c = 0; ok && c < 2; ++c)
-            ok = std::isfinite (mag[c]) && bump[c].finite () && hf[c].finite ();
+            ok = shelf[c].finite ();
         if (!ok)
         {
             reset ();

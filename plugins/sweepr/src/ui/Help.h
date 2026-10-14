@@ -45,14 +45,16 @@ inline const char* forParam (uint32_t id)
         case kLink:
             return "B's LFO follows A's: A's Sync, rate and Shape, with B's Phase as the offset from A (180: against A) and B's "
                    "own Depth.";
-        case kTapeOn: return "The tape stage after the two bands: compression, saturation, head bump, soft highs and wow.";
+        case kTapeOn: return "The tape stage after the two bands: drive into a fast leveller and a clipper, then softer highs.";
         case kDrive:
-            return "How hard the bands drive the tape: from clean to thick, squashed saturation. The level stays about the same "
-                   "(the stage makes up for the drive), so turn it by ear.";
+            return "The gain into the tape, -10 to +50 dB: clean and quieter at 0, saturated and held at a steady level from "
+                   "about a third up (no makeup: more drive is louder until it saturates).";
         case kSpeed:
-            return "The tape speed. Lower: darker, softer highs, a bigger head bump lower in the lows and more wow. Higher: "
-                   "brighter and tighter.";
-        case kCompression: return "How much the tape squashes the sound before it saturates (loud parts held down more).";
+            return "The tape speed: a high shelf after the curve. 100 %: almost flat. Lower: darker, down to -48 dB above "
+                   "2 kHz at 0.";
+        case kCompression:
+            return "A fast leveller before the curve: higher holds the level lower, so the tape is softer, quieter and less "
+                   "distorted. 0: nothing holds it, and a high Drive clips to a square wave.";
         case kMix: return "Blend of the effect and the untouched signal (kept in time with each other, so no comb filtering).";
         case kOutput: return "Overall output level.";
         default: return nullptr;

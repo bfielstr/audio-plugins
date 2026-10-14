@@ -1,6 +1,6 @@
 // Sweepr's DSP pieces, without any framework: the bell (a topology-preserving state-variable filter,
-// stable however fast its coefficients move), one-pole shelves for the tape's pre- and de-emphasis, the
-// LFO shapes and the tape's hysteresis-like saturator.
+// stable however fast its coefficients move), a one-pole section (the tape's DC blocker) and the LFO
+// shapes. The tape's curve and shelf are in TapeShape.h.
 #pragma once
 
 #include "BellShape.h"
@@ -32,13 +32,6 @@ struct SvfCoefs
         k = p.poleDamp;
         set (std::tan (kPi * bell::centreAt (p.centreHz, sr) / sr));
         m1 = p.zeroDamp - p.poleDamp;
-    }
-    // the cookbook's constant-Q bell (the tape's head bump and dip): A = 10^(gain / 40), the poles' damping
-    // 1 / (Q A), the zeros' A / Q
-    void cookbookBell (double fc, double sr, double q, double gainDb)
-    {
-        const double A = std::pow (10.0, gainDb / 40.0), qq = std::max (0.01, q);
-        bell ({fc, 1.0 / (qq * A), A / qq}, sr);
     }
     void lowpass (double fc, double sr, double q)
     {
@@ -90,7 +83,7 @@ inline std::complex<double> bellResponse (double f, double fc, double q, double 
     return bell::response (bell::prototype (fc, q, gainDb, sr), f, sr);
 }
 
-// ---- a first-order TPT section: low-pass state, and the high shelf built on it
+// ---- a first-order TPT section: low-pass state
 struct OnePole
 {
     double s = 0.0;
@@ -141,25 +134,6 @@ inline double lfoShape (int shape, double pos, uint32_t seed)
             return a + (b - a) * 0.5 * (1.0 - std::cos (kPi * f));
         }
     }
-}
-
-// ---- the tape's curve: an asymmetric soft saturator (tanh with a bias: even harmonics, 0 at 0, slope ~1)
-inline double tapeCurve (double h, double bias, double tanhBias) { return std::tanh (h + bias) - tanhBias; }
-// its antiderivative (log cosh, written so it never overflows)
-inline double tapeCurveIntegral (double h, double bias, double tanhBias)
-{
-    const double a = std::fabs (h + bias);
-    return a + std::log1p (std::exp (-2.0 * a)) - kLn2 - h * tanhBias;
-}
-// The curve with first-order antiderivative anti-aliasing: the mean of the curve between the last input and
-// this one (what the curve does to a straight line between them), so its harmonics beyond the oversampled
-// Nyquist fold back far weaker. Half a sample of delay (at 4x: an eighth of an input sample).
-inline double tapeCurveAa (double h, double last, double bias, double tanhBias)
-{
-    const double d = h - last;
-    if (std::fabs (d) < 1e-6)
-        return tapeCurve (0.5 * (h + last), bias, tanhBias);
-    return (tapeCurveIntegral (h, bias, tanhBias) - tapeCurveIntegral (last, bias, tanhBias)) / d;
 }
 
 } // namespace sweepr::dsp
