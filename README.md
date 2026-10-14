@@ -39,7 +39,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 | [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/orbitr/ui_orbitr.png" width="420" alt="orbitr">](plugins/orbitr/README.md)<br>orbitr |
 | [<img src="docs/ciphr/ui_ciphr.png" width="420" alt="ciphr">](plugins/ciphr/README.md)<br>ciphr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
 | [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr |
-| [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr | |
+| [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr | [<img src="docs/tapr/ui_tapr.png" width="420" alt="tapr">](plugins/tapr/README.md)<br>tapr |
 
 ## What every plug-in has
 
