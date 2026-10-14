@@ -1,4 +1,4 @@
-# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr
+# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr, sweepr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
 to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.30.1**.
@@ -23,6 +23,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.30.1**
 | [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: eight bell EQs sweep the low end against each other like rolling waves, and a level-matched saturator makes it crunch with a clean sub kept underneath (a resonant high shelf on a slow orbit is there too). After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
 | [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
 | [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
+| [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive, compression, head bump, soft highs and wow that follow the tape speed. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 
 ## Gallery
 
@@ -37,13 +38,15 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.30.1**
 | [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/orbitr/ui_orbitr.png" width="420" alt="orbitr">](plugins/orbitr/README.md)<br>orbitr |
 | [<img src="docs/ciphr/ui_ciphr.png" width="420" alt="ciphr">](plugins/ciphr/README.md)<br>ciphr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
 | [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr |
+| [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr | |
 
 ## What every plug-in has
 
 - **smacheratr at the end.** Every plug-in except probr (which passes the sound untouched) ends its chain with smacheratr, with all its controls. A
   new instance runs through it with gentlr on and gentlr's **Slope** at **Signature**, and smacheratr's
   own defaults as they are (Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %); switch
-  **Saturator** off for the plug-in alone. Projects and presets saved with 0.24 or earlier load as they
+  **Saturator** off for the plug-in alone. sweepr is the exception: its tape stage is its saturator, so
+  smacheratr at its end starts off (gentlr ready, as everywhere, once you switch it on). Projects and presets saved with 0.24 or earlier load as they
   were saved (where they did not set them: smacheratr at the end as it was then, off in most plug-ins,
   gentlr off, **12 / 12**). Factory presets start from **Init**, so they run through it too, except the
   few that switch it off (gentlr's and ciphr's **Dry Cluster**). That
@@ -227,6 +230,7 @@ The main controls of each Basic page:
 | smacheratr | Analog curve and colour display | Drive, Post Clip, Color, Gentlr | Output, Dry/Wet |
 | gentlr | bands | Band Slope, Attack, Release | Mix, Output |
 | smeezr | pink balance | Squeeze, Speed, Mix | Output |
+| sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
 | dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
 | orbitr | orbs | Pattern, Orbs, Speed, Spread | Dry/Wet, Output |
 | para | filter response | HP Freq, LP Freq, Movement | Dry/Wet, Output |
@@ -358,7 +362,7 @@ ctest --test-dir build -j 4 --output-on-failure          # everything, before a 
 ```
 
 - **Targets** per plug-in (`orbitr` here): `orbitr_tests` (DSP tests), `orbitr_state_tests` (saved
-  state; ciphr, dropr, gentlr, moistr, probr, smacheratr and smemplr), `Orbitr` (the bundle, checked by the
+  state; ciphr, dropr, gentlr, moistr, probr, smacheratr, smemplr and sweepr), `Orbitr` (the bundle, checked by the
   VST3 validator as it builds), `orbitr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
   `orbitr_hosttest` (macOS). The tests are named `orbitr_core`, `orbitr_state`,
   `orbitr_drawbench`, `orbitr_drawbench_layouts` and `orbitr_hosttest`.
@@ -425,6 +429,7 @@ plugins/ciphr       wavetable synthesizer    same structure
 plugins/moistr      sweeps, moving bands     same structure
 plugins/smeezr      one-knob pink / OTT      same structure
 plugins/probr       analysis probe           same structure (scripts/probr_align.py analyses its sessions)
+plugins/sweepr      swept bells into tape    same structure
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()
