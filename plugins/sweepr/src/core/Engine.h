@@ -1,12 +1,12 @@
 // Sweepr: two bells whose frequencies an LFO each sweeps, into tape.
 //
-//   input -> 4x up -> bell A -> bell B -> tape curve (compression, pre-emphasis, drive, hysteresis-like
+//   input -> bell A -> bell B -> 4x up -> tape curve (compression, pre-emphasis, drive, hysteresis-like
 //         saturator, de-emphasis, makeup) -> 4x down -> tape filters (head bump, high roll-off, DC) -> wow
 //         -> Mix (with the input delayed as much) -> Output -> Smacheratr (the end saturator, off by default)
 //
-// The bells. Each is a constant-Q analog bell (RBJ's definition: the gain narrows a boost and widens a cut
-// symmetrically) as a trapezoidal state-variable filter, prewarped at its frequency. The filter runs at 4x
-// the sample rate, so the bell keeps its analog shape up to 20 kHz (no cramping near Nyquist), and its
+// The bells. Each is Reason's PEQ-2 bell (BellShape.h: its knobs' ranges and how Q and Gain shape it,
+// measured) as a trapezoidal state-variable filter, prewarped at its frequency. The filter runs at the
+// sample rate, as PEQ-2's does (so a bell high up cramps towards Nyquist the same way), and its
 // coefficients are worked out again every input sample from the swept frequency and the smoothed Gain and
 // Q: the SVF's state stays valid under any coefficient change, so fast sweeps neither zipper nor click.
 //

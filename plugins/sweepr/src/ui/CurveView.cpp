@@ -61,8 +61,8 @@ double CurveView::liveHz (int b) const
 
 double CurveView::responseDb (double f, double fa, double fb) const
 {
-    const auto h = dsp::bellResponse (f, fa, host->plainValue (bandParam (0, kQ)), host->plainValue (bandParam (0, kGain))) *
-                   dsp::bellResponse (f, fb, host->plainValue (bandParam (1, kQ)), host->plainValue (bandParam (1, kGain)));
+    const auto h = dsp::bellResponse (f, fa, host->plainValue (bandParam (0, kQ)), host->plainValue (bandParam (0, kGain)), shownSr) *
+                   dsp::bellResponse (f, fb, host->plainValue (bandParam (1, kQ)), host->plainValue (bandParam (1, kGain)), shownSr);
     return 20.0 * std::log10 (std::max (1e-6, std::abs (h)));
 }
 
@@ -331,6 +331,12 @@ void CurveView::idle ()
     else if (idleSinceBlock < (1 << 20))
         ++idleSinceBlock;
     bool changed = live () != wasLive;
+    const double rate = m->sampleRate.load (std::memory_order_relaxed);
+    if (rate > 1000.0 && rate != shownSr)
+    {
+        shownSr = rate;
+        changed = true;
+    }
     for (int b = 0; b < kBands; ++b)
     {
         const float hz = m->freqHz[(size_t)b].load (std::memory_order_relaxed);

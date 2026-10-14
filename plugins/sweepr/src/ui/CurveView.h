@@ -60,6 +60,7 @@ private:
     VSTGUI::CPoint down;
     double startFreq = 0.0, startGain = 0.0, startQ = 0.0;
     float shownHz[kBands] {};
+    double shownSr = 48000.0; // the rate the bells run at (the curve is the digital bells')
     uint32_t lastBlocks = 0;
     int idleSinceBlock = 1 << 20;
     pk::CachedLayer gridLayer;

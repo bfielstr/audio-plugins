@@ -24,16 +24,22 @@ struct SvfCoefs
     double a1 = 1.0, a2 = 0.0, a3 = 0.0;
     double m1 = 0.0;                 // bell: the band-pass mix (x + m1 * bp)
     double k = 1.0;                  // the damping (1 / Q of the poles)
-    // A bell at rate sr: the band's prototype (BellShape.h, where its shape is defined) mapped with the
+    // A bell at rate sr: a prototype (a band's: BellShape.h, where its shape is defined) mapped with the
     // bilinear transform prewarped at its centre. The SVF's band-pass is s / (s^2 + k s + 1), so
     // x + m1 bp with k the poles' damping and m1 = zeroDamp - poleDamp is the prototype.
     void bell (const bell::Prototype& p, double sr)
     {
         k = p.poleDamp;
-        set (std::tan (kPi * std::clamp (p.centreHz, 1.0, 0.49 * sr) / sr));
+        set (std::tan (kPi * bell::centreAt (p.centreHz, sr) / sr));
         m1 = p.zeroDamp - p.poleDamp;
     }
-    void bell (double fc, double sr, double q, double gainDb) { bell (bell::prototype (fc, q, gainDb), sr); }
+    // the cookbook's constant-Q bell (the tape's head bump and dip): A = 10^(gain / 40), the poles' damping
+    // 1 / (Q A), the zeros' A / Q
+    void cookbookBell (double fc, double sr, double q, double gainDb)
+    {
+        const double A = std::pow (10.0, gainDb / 40.0), qq = std::max (0.01, q);
+        bell ({fc, 1.0 / (qq * A), A / qq}, sr);
+    }
     void lowpass (double fc, double sr, double q)
     {
         k = 1.0 / std::max (q, 0.01);
@@ -77,10 +83,11 @@ struct Svf
     bool finite () const { return std::isfinite (ic1) && std::isfinite (ic2); }
 };
 
-// The analog bell at f (Hz) for a band at fc, Q, gain dB (BellShape.h; the display, the tests).
-inline std::complex<double> bellResponse (double f, double fc, double q, double gainDb)
+// A band's bell at f (Hz) for fc, Q, gain dB, as the filter at rate sr has it (BellShape.h; the display,
+// the tests).
+inline std::complex<double> bellResponse (double f, double fc, double q, double gainDb, double sr)
 {
-    return bell::response (bell::prototype (fc, q, gainDb), f);
+    return bell::response (bell::prototype (fc, q, gainDb, sr), f, sr);
 }
 
 // ---- a first-order TPT section: low-pass state, and the high shelf built on it

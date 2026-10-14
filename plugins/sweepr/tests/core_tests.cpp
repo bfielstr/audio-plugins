@@ -1,5 +1,5 @@
 // Headless tests for the Sweepr DSP. Run: ./sweepr_tests [filter]
-// The bells match the analog bell they are made from (also high up: no cramping), the LFOs follow the song
+// The bells are the measured reference EQ's (BellShape.h) and the engine's match them, the LFOs follow the song
 // position (the same from any starting point, the random shapes too), run free at their rate and link, fast
 // sweeps do not click, the tape stage stays finite and free of denormals, keeps aliasing low at full Drive
 // on a high sine, holds the level across Drive, Mix 0 is the delayed input bit for bit, the wet path is
@@ -161,7 +161,43 @@ double toneLevel (const std::vector<float>& x, size_t a, size_t b, double f)
 
 } // namespace
 
-TEST (bells_match_the_analog_bell)
+TEST (bells_are_peq2s)
+{
+    // Reason's PEQ-2, measured through the Reason Rack Plugin at 48 kHz (BellShape.h): knob steps (Freq, Q,
+    // Gain, 0 .. 127) and the prototype fitted to each impulse response (centre Hz, the poles' and the zeros'
+    // dampings). The same steps on sweepr's knobs (normalized step / 127) give the same bell within 0.05 dB
+    // (0.0001 dB from 40 Hz up; lower, PEQ-2's own centre wanders by up to 0.2 % around its formula, a
+    // rounding of its coefficients it seems).
+    struct Case
+    {
+        int f, q, g;
+        double centre, poles, zeros;
+    };
+    const Case cases[] = {
+        {64, 64, 127, 707.103, 0.43354, 3.38801},    {0, 64, 127, 29.796, 0.43220, 3.37703},   {127, 64, 127, 16000.000, 1.04698, 8.18184},
+        {64, 0, 127, 707.107, 4.00570, 31.30340},    {64, 127, 127, 707.109, 0.06163, 0.48159}, {64, 64, 0, 707.104, 3.27715, 0.40589},
+        {127, 64, 0, 16000.003, 7.91416, 0.98021},   {64, 0, 0, 707.104, 30.27945, 3.75028},   {64, 96, 80, 707.110, 0.15575, 0.26254},
+        {64, 32, 32, 707.108, 4.94778, 1.74127},     {110, 64, 127, 6895.777, 0.49782, 3.89035}, {64, 64, 60, 707.111, 0.20482, 0.17975},
+    };
+    const auto& t = paramTable ();
+    double worst = 0.0;
+    for (const auto& c : cases)
+    {
+        const double fc = toPlain (bandParam (0, kFreq), c.f / 127.0), q = toPlain (bandParam (0, kQ), c.q / 127.0),
+                     g = toPlain (bandParam (0, kGain), c.g / 127.0);
+        const bell::Prototype ref {c.centre, c.poles, c.zeros};
+        double err = 0.0;
+        for (double f = 20.0; f < 20001.0; f *= 1.05)
+            err = std::max (err, std::fabs (db (std::abs (dsp::bellResponse (f, fc, q, g, kSr))) - db (std::abs (bell::response (ref, f, kSr)))));
+        worst = std::max (worst, err);
+        CHECK (err < 0.05, "Freq %d, Q %d, Gain %d (%.1f Hz, Q %.2f, %+.2f dB): %.3f dB from PEQ-2's", c.f, c.q, c.g, fc, q, g, err);
+    }
+    std::printf ("    at most %.4f dB from PEQ-2's measured bells\n", worst);
+    CHECK (std::fabs (t.info (bandParam (0, kGain)).min + 18.1417) < 1e-3 && std::fabs (toPlain (bandParam (0, kGain), 64.0 / 127.0)) < 1e-9,
+           "Gain: PEQ-2's steps, 0 dB at step 64");
+}
+
+TEST (bells_match_their_response)
 {
     // the defaults' bells (A 110 Hz Q 1 +13 dB, B 320 Hz Q 1.6 -15 dB), static, no tape: sine by sine
     auto e = engine (plain);
@@ -172,12 +208,12 @@ TEST (bells_match_the_analog_bell)
         const auto x = sine (f, 0.5, 0.1);
         const auto y = run (*e, x);
         const double got = db (rms (y, 12000, y.size ())) - db (rms (x, 12000, x.size ()));
-        const double want = db (std::abs (dsp::bellResponse (f, 110.0, 1.0, 13.0) * dsp::bellResponse (f, 320.0, 1.6, -15.0)));
+        const double want = db (std::abs (dsp::bellResponse (f, 110.0, 1.0, 13.0, kSr) * dsp::bellResponse (f, 320.0, 1.6, -15.0, kSr)));
         worst = std::max (worst, std::fabs (got - want));
         CHECK (std::fabs (got - want) < 0.25, "%.0f Hz: %.2f dB, the bells %.2f dB", f, got, want);
     }
-    std::printf ("    worst %.3f dB from the analog bells\n", worst);
-    // high up: a bell at 12 kHz keeps its analog shape (no cramping towards Nyquist)
+    std::printf ("    worst %.3f dB from the bells\n", worst);
+    // high up: a bell at 12 kHz is the digital one (it cramps towards Nyquist, as PEQ-2's)
     auto h = engine ([] (Engine& e) {
         plain (e);
         e.setParam (bandParam (0, kFreq), 12000.0);
@@ -185,14 +221,14 @@ TEST (bells_match_the_analog_bell)
         e.setParam (bandParam (0, kGain), 12.0);
         e.setParam (bandParam (1, kGain), 0.0);
     });
-    for (double f : {6000.0, 9000.0, 12000.0, 15000.0, 18000.0})
+    for (double f : {6000.0, 9000.0, 12000.0, 15000.0, 18000.0, 21000.0})
     {
         h->reset ();
         const auto x = sine (f, 0.3, 0.1);
         const auto y = run (*h, x);
         const double got = db (rms (y, 9600, y.size ())) - db (rms (x, 9600, x.size ()));
-        const double want = db (std::abs (dsp::bellResponse (f, 12000.0, 2.0, 12.0)));
-        CHECK (std::fabs (got - want) < 0.4, "12 kHz bell at %.0f Hz: %.2f dB, analog %.2f dB", f, got, want);
+        const double want = db (std::abs (dsp::bellResponse (f, 12000.0, 2.0, 12.0, kSr)));
+        CHECK (std::fabs (got - want) < 0.4, "12 kHz bell at %.0f Hz: %.2f dB, the bell %.2f dB", f, got, want);
     }
 }
 
@@ -356,9 +392,10 @@ TEST (link_makes_b_follow_a)
 
 TEST (fast_sweeps_do_not_click)
 {
-    // a 200 Hz sine through the steepest settings (Q 10, +18 dB) swept 4 octaves by a 40 Hz Square, a Saw and
-    // Random: no sample jumps further than the loudest static setting's sine can move (the bell at 200 Hz:
-    // the sine 18 dB up), with some room
+    // a 200 Hz sine through steep settings (Q 10, +18 dB) swept 4 octaves by a 40 Hz Square, a Saw and
+    // Random: no sample jumps much further than the loudest static setting's sine can move (the bell at
+    // 200 Hz: the sine 18 dB up). The room: PEQ-2's boost keeps its poles' width whatever the Gain (the
+    // cookbook's narrows them), so a bell swept fast rings a little more (Random's jumps up to 1.6 times).
     const double amp = 0.25;
     const double staticStep = amp * std::pow (10.0, 18.0 / 20.0) * 2.0 * kPi * 200.0 / kSr;
     for (int shape : {kSquare, kSawUp, kRandom, kSine})
@@ -377,7 +414,7 @@ TEST (fast_sweeps_do_not_click)
         const auto x = sine (200.0, 2.0, amp);
         const auto y = run (*e, x);
         const double step = maxStep (y, 4800);
-        CHECK (finite (y) && step < 1.5 * staticStep, "shape %d: the largest step %.4f (static at most %.4f)", shape, step, staticStep);
+        CHECK (finite (y) && step < 2.0 * staticStep, "shape %d: the largest step %.4f (static at most %.4f)", shape, step, staticStep);
     }
 }
 
@@ -555,7 +592,7 @@ TEST (default_level)
 TEST (analyze_tool_measures_the_bells)
 {
     // sweepr_analyze's measurements (tools/Analyze.h) on white noise through the static bells: the delay found,
-    // the response per 1/12 octave against the analog bells, the null depth of a signal against itself delayed
+    // the response per 1/12 octave against the bells, the null depth of a signal against itself delayed
     auto e = engine (plain);
     std::vector<float> x (size_t (6.0 * kSr));
     uint32_t s = 9;
@@ -572,7 +609,7 @@ TEST (analyze_tool_measures_the_bells)
     {
         if (b.centreHz < 25.0 || b.centreHz > 18000.0)
             continue;
-        const double want = db (std::abs (dsp::bellResponse (b.centreHz, 110.0, 1.0, 13.0) * dsp::bellResponse (b.centreHz, 320.0, 1.6, -15.0)));
+        const double want = db (std::abs (dsp::bellResponse (b.centreHz, 110.0, 1.0, 13.0, kSr) * dsp::bellResponse (b.centreHz, 320.0, 1.6, -15.0, kSr)));
         worst = std::max (worst, std::fabs (b.db - want));
     }
     std::printf ("    the measured response at most %.3f dB from the bells (25 Hz .. 18 kHz, 1/12 octave)\n", worst);

@@ -56,9 +56,12 @@ shows the settings when it does not.
 
 **BAND A** and **BAND B** (each the same, B with **Link**)
 
-- **Freq** (20 Hz to 20 kHz; A 110 Hz, B 320 Hz by default): the bell's centre, where the LFO sweeps from.
-- **Q** (0.1 to 10; A 1.00, B 1.60): the bell's width. Low Q is broad and gentle, high Q a narrow peak or notch.
-- **Gain** (-18 to +18 dB; A +13 dB, B -15 dB): how far the bell boosts or cuts.
+- **Freq** (30 Hz to 16 kHz; A 110 Hz, B 320 Hz by default): the bell's centre, where the LFO sweeps from
+  (the LFO takes it further, up to just under half the sample rate).
+- **Q** (0.25 to 16.25; A 1.00, B 1.60): the bell's width. Low Q is broad and gentle, high Q a narrow peak
+  or notch. A boost keeps its width at any **Gain**; a cut widens the deeper it goes.
+- **Gain** (-18.1 to +17.9 dB in the classic EQ's steps, 0 dB in the middle; A +13 dB, B -15 dB): how far
+  the bell boosts or cuts.
 - **LFO**:
   - **Sync** (on by default): on, the LFO's length is a note value locked to the song position; off,
     it runs free at **Rate**.
@@ -103,15 +106,17 @@ and **Output**; **Advanced** shows everything.
 ## How it works
 
 ```
-input -> 4x up -> bell A -> bell B -> tape: compression, pre-emphasis, drive, saturator, de-emphasis
+input -> bell A -> bell B -> 4x up -> tape: compression, pre-emphasis, drive, saturator, de-emphasis
       -> 4x down -> head bump, high roll-off, wow -> Mix (with the input, delayed as much) -> Output
       -> smacheratr (off by default)
 ```
 
-**The bells.** Each band is the classic constant-Q bell (the gain narrows a boost and widens a cut, the
-same both ways) built as a trapezoidal state-variable filter. It runs at four times the sample rate, so
-its shape matches the analog bell up to 20 kHz, with no squeezing near the top of the spectrum, and its
-coefficients are worked out again for every sample from the swept frequency. That filter keeps a valid
+**The bells.** Each band is the bell of a classic two-band digital EQ, measured step by step and matched
+to within a few thousandths of a dB: its **Freq**, **Q** and **Gain** knobs have that EQ's ranges and
+tapers, a boost keeps the width **Q** gives it at any **Gain**, a cut widens in proportion to its depth,
+and a bell high up is squeezed towards half the sample rate (and widened) as that EQ's is. It is built as a
+trapezoidal state-variable filter at the sample rate, and its coefficients are worked out again for
+every sample from the swept frequency. That filter keeps a valid
 state whatever its coefficients do, so even a 40 Hz **Square** sweeping four octaves neither zippers nor
 clicks. The LFO's movement glides over 2 ms, so a **Square** or **Random** step sweeps quickly rather than
 jumping. **Freq**, **Q** and **Gain** glide over 20 ms when you turn them.

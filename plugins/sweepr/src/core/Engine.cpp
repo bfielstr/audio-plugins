@@ -179,8 +179,8 @@ void Engine::tapeFilters ()
         return;
     shownSpeed = speed;
     const double f = bumpHz (speed), db = bumpDb (speed);
-    bumpC.bell (f, sr, 1.0, db);
-    dipC.bell (2.6 * f, sr, 1.4, -0.4 * db);
+    bumpC.cookbookBell (f, sr, 1.0, db);
+    dipC.cookbookBell (2.6 * f, sr, 1.4, -0.4 * db);
     lpC.lowpass (std::min (rollOffHz (speed), 0.45 * sr), sr, 0.6);
 }
 
@@ -230,7 +230,7 @@ void Engine::controlChunk (int m)
             glide (s.gainDb, p[bandParam (b, kGain)], cSmooth);
             glide (s.modOct, p[bandParam (b, kLfoDepth)] * v[b], cMod, 1e-12);
             const double f = std::clamp (std::exp (s.logF + s.modOct * dsp::kLn2), 10.0, fMax);
-            coef[b][i].bell (f, srOs, std::exp (s.logQ), s.gainDb);
+            coef[b][i].bell (bell::prototype (f, std::exp (s.logQ), s.gainDb, sr), sr);
             if (i == m - 1)
             {
                 fNow[b] = f;
@@ -304,20 +304,24 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         tapeFilters ();
 
-        // 4x: the bells and the tape's curve
-        os[0].up (dryL, up[0].data (), m);
-        os[1].up (dryR, up[1].data (), m);
+        // the base rate: the bells (digital bells at the host's rate, as the EQ they are calibrated against)
+        float belled[2][kChunk];
+        for (int i = 0; i < m; ++i)
+        {
+            const float x[2] = {dryL[i], dryR[i]};
+            for (int c = 0; c < 2; ++c)
+                belled[c][i] = (float)band[1].svf[c].bell (band[0].svf[c].bell (x[c], coef[0][i]), coef[1][i]);
+        }
+
+        // 4x: the tape's curve
+        os[0].up (belled[0], up[0].data (), m);
+        os[1].up (belled[1], up[1].data (), m);
         float* u0 = up[0].data ();
         float* u1 = up[1].data ();
         for (int j = 0; j < m * kOversample; ++j)
         {
             const int i = j / kOversample;
             double x[2] = {u0[j], u1[j]};
-            for (int c = 0; c < 2; ++c)
-            {
-                x[c] = band[0].svf[c].bell (x[c], coef[0][i]);
-                x[c] = band[1].svf[c].bell (x[c], coef[1][i]);
-            }
             if (tape)
             {
                 // the compressor, linked: the louder channel sets the gain of both
