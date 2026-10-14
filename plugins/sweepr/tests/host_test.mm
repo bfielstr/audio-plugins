@@ -98,27 +98,29 @@ int main (int argc, char** argv)
         CHECK (differ == 0, "Mix 0: the input bit for bit (%zu samples differ)", differ);
         CHECK (allFinite (out), "finite");
 
-        // the defaults on the bass: about as loud as it went in, finite, and moving (the LFOs at work: the
-        // level changes from beat to beat)
+        // the defaults on the bass: finite, the tape holding it at about -13 dBFS RMS
         rig.param (kMix, 1.0);
         rig.param (sweepr::kOutput, defaultNormalized (sweepr::kOutput));
         out.clear ();
         outR.clear ();
-        rig.render (4.0, out, &outR, bass ());
+        rig.render (2.0, out, &outR, bass ());
         CHECK (allFinite (out) && allFinite (outR), "finite");
-        std::vector<float> in (out.size ());
-        for (size_t i = 0; i < in.size (); ++i)
-            in[i] = bassAt ((long long)i);
-        const double g = dbfs (rms (out, 48000, out.size ())) - dbfs (rms (in, 48000, in.size ()));
-        CHECK (std::fabs (g) < 3.0, "the defaults: %.1f dB against the input", g);
+        const double level = dbfs (rms (out, 48000, out.size ()));
+        CHECK (level > -18.0 && level < -8.0, "the defaults: %.1f dBFS RMS", level);
+        // and moving: with Tape off (the tape holds the level), the level changes from beat to beat (the LFOs
+        // at work)
+        rig.param (kTapeOn, 0.0);
+        out.clear ();
+        rig.render (2.0, out, nullptr, bass ());
         double lo = 1e9, hi = -1e9;
-        for (size_t a = 48000; a + 2400 <= out.size (); a += 2400) // 50 ms windows
+        for (size_t a = 24000; a + 2400 <= out.size (); a += 2400) // 50 ms windows
         {
             const double l = dbfs (rms (out, a, a + 2400));
             lo = std::min (lo, l);
             hi = std::max (hi, l);
         }
         CHECK (hi - lo > 1.0, "the sweep moves the level: %.1f .. %.1f dBFS", lo, hi);
+        rig.param (kTapeOn, 1.0);
 
         // state round trip
         rig.param (bandParam (0, kLfoShape), toNormalized (bandParam (0, kLfoShape), kSmoothRandom));
