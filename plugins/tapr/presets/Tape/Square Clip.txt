@@ -1,0 +1,7 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: clip, square, aggressive
+comment: No leveller, full drive: a sine comes out as a square wave. Mix it in on a bass.
+Drive = 100 %
+Compression = 0 %
+Speed = 100 %
+Mix = 50 %

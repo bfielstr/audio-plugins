@@ -1,0 +1,5 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cut, warm, bass
+comment: A fuller low end and softer highs after the tape.
+Cut Lo = 6 dB
+Cut Hi = -6 dB

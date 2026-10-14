@@ -1,0 +1,6 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: tape, hot, drive
+comment: Pushed hard with little holding it back: thick odd harmonics and a firm, steady level.
+Drive = 95 %
+Compression = 15 %
+Speed = 90 %

@@ -1,0 +1,17 @@
+# sweepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: mids, vowel, random
+comment: A narrow boost and cut in the mids wander together in eighth notes, B half a cycle behind A: a talking, vowel-like movement.
+A Freq = 700 Hz
+A Q = 2.5
+A Gain = 12 dB
+B Freq = 1.40 kHz
+B Q = 3.0
+B Gain = -10 dB
+A LFO Division = 1/8
+A LFO Shape = Smooth Random
+A LFO Depth = 1.5
+B LFO Depth = 1.5
+B LFO Phase = 180
+LFO Link = On
+Drive = 50 %
+Compression = 20 %

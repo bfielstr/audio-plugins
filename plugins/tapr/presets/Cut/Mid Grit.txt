@@ -1,0 +1,7 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cut, pre, mids, grit
+comment: The mids boosted before the tape, so they saturate first: a gritty, forward middle.
+Cut Mid = 9 dB
+Cut Lo = -4 dB
+Cut Place = Pre
+Drive = 70 %

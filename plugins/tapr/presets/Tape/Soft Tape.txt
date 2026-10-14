@@ -1,0 +1,6 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: tape, soft, warm
+comment: Gentle: the leveller keeps the curve barely bent, a slower tape rounds off the top.
+Drive = 55 %
+Compression = 80 %
+Speed = 55 %

@@ -1,0 +1,11 @@
+# sweepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: filter, sweep, clean
+comment: No tape: one resonant boost sweeps two octaves each way over a bar, the other band flat.
+A Freq = 400 Hz
+A Q = 4.0
+A Gain = 12 dB
+A LFO Division = 1 Bar
+A LFO Depth = 2
+B Gain = 0 dB
+B LFO Depth = 0
+Tape = Off

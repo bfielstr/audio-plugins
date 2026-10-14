@@ -176,6 +176,7 @@ std::string ParamTable::toText (uint32_t id, double v) const
                 return fmt ("%.0f", v);
             return fmt ("%.0f", v);
         case Disp::Number: return fmt ("%.2f", v);
+        case Disp::Octaves: return v == 0.0 ? std::string ("0.00 oct") : fmt ("%+.2f oct", v);
         case Disp::Note:
         {
             static const char* names[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};

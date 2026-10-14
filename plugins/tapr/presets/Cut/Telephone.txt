@@ -1,0 +1,9 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: cut, lo-fi, narrow
+comment: Lows and highs cut hard after a slow, driven tape: small and boxy.
+Cut Lo = -18 dB
+Cut Mid = 8 dB
+Cut Hi = -12 dB
+Speed = 35 %
+Drive = 85 %
+Output = 0 dB

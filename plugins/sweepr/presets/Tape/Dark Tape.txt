@@ -1,0 +1,11 @@
+# sweepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: tape, dark, warm
+comment: Slow tape pushed hard: dark, soft highs and a smooth, held level; the bands move gently over two bars.
+A LFO Division = 2 Bars
+A LFO Depth = 0.5
+B LFO Division = 2 Bars
+B LFO Depth = 0.5
+B LFO Phase = 90
+Drive = 85 %
+Speed = 25 %
+Compression = 60 %

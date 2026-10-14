@@ -12,8 +12,8 @@ enum class PType { Float, Int, Choice, Bool };
 // Ratio: min .. max with 1:1 at the centre (compressor / expander ratios, shown Live-style as
 // "1 : x"; the maximum shows as "1 : inf").
 enum class Curve { Linear, Log, Power3, Ratio };
-enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Number, Beats, Degrees, Choice, OnOff, Sustain, Curve, Ratio, Bpm, Note };
-// Note: a MIDI note number shown as a name, Live-style (60 = C3).
+enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Number, Beats, Degrees, Choice, OnOff, Sustain, Curve, Ratio, Bpm, Note, Octaves };
+// Note: a MIDI note number shown as a name, Live-style (60 = C3). Octaves: a signed amount of octaves ("+1.00 oct").
 
 struct ParamInfo
 {
