@@ -142,7 +142,7 @@ void CurveView::draw (CDrawContext* ctx)
     // how far each LFO sweeps: a bar under its handle from Freq / 2^|Depth| to Freq x 2^|Depth|
     for (int b = 0; b < kBands; ++b)
     {
-        const double depth = std::fabs (host->plainValue (bandParam (b, kLfoDepth)));
+        const double depth = host->plainValue (lfoOnParam (b)) >= 0.5 ? std::fabs (host->plainValue (bandParam (b, kLfoDepth))) : 0.0;
         if (depth < 0.01)
             continue;
         const CPoint h = handle (b);

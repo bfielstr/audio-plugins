@@ -42,6 +42,10 @@ inline const char* forParam (uint32_t id)
     }
     switch (id)
     {
+        case kLfoOnA:
+        case kLfoOnB:
+            return "The band's LFO on or off. Off, the band stays at its Freq (its LFO settings are kept for when it comes "
+                   "back on).";
         case kLink:
             return "B's LFO follows A's: A's Sync, rate and Shape, with B's Phase as the offset from A (180: against A) and B's "
                    "own Depth.";

@@ -62,7 +62,8 @@ shows the settings when it does not.
   or notch. A boost keeps its width at any **Gain**; a cut widens the deeper it goes.
 - **Gain** (-18.1 to +17.9 dB in the classic EQ's steps, 0 dB in the middle; A +13 dB, B -15 dB): how far
   the bell boosts or cuts.
-- **LFO**:
+- **LFO** (on by default): the switch at the top of the panel turns the band's LFO on or off. Off, the
+  band glides back to its **Freq** and stays there; its LFO settings are kept for when it comes back on.
   - **Sync** (on by default): on, the LFO's length is a note value locked to the song position; off,
     it runs free at **Rate**.
   - the note value (shown with **Sync** on; **1/32**, **1/16T**, **1/16**, **1/16D**, ... **1/2D**,

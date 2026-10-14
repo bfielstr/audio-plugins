@@ -96,9 +96,7 @@ void Editor::buildUI (CFrame* f)
             const uint32_t f = k == 0 ? kFreq : (k == 1 ? kQ : kGain);
             bind (p, new Knob (CRect (kKnobX[k], kKnobTop, kKnobX[k] + kKnobW, kKnobTop + kKnobH), this, id (f), nullptr, f == kGain));
         }
-        auto* lfo = new Label (CRect (kColLeft, kLfoTop - 20, kColLeft + 100, kLfoTop - 6), "LFO", 10.5, true);
-        lfo->setDim (true);
-        p->addView (lfo);
+        bind (p, new Toggle (CRect (kColLeft, kLfoTop - 22, kColLeft + kColW, kLfoTop - 4), this, lfoOnParam (b), "LFO"));
         auto row = [] (int i) { return CRect (kColLeft, kLfoTop + i * kRowStep, kColLeft + kColW, kLfoTop + i * kRowStep + kRowH); };
         auto* sync = bind (p, new Toggle (row (0), this, id (kLfoSync), "Sync"));
         divViews[b] = bind (p, new Choice (row (1), this, id (kLfoDiv)));
@@ -195,7 +193,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id < kLink && display)
+    if ((id < kLink || id == kLfoOnA || id == kLfoOnB) && display)
         display->invalid ();
     if (id == kLink || id == bandParam (0, kLfoSync) || id == bandParam (1, kLfoSync))
         updateRates ();

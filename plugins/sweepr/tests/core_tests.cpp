@@ -372,6 +372,23 @@ TEST (free_lfo_runs_at_its_rate)
     CHECK (ups == 4, "%d upward crossings in 2 s at 2 Hz", ups);
 }
 
+TEST (lfo_switch_keeps_a_band_still)
+{
+    // A's LFO off: A stays at its Freq while B's LFO (on) keeps sweeping
+    auto e = engine ([] (Engine& e) { e.setParam (kLfoOnA, 0.0); });
+    double aLo = 1e9, aHi = 0.0, bLo = 1e9, bHi = 0.0;
+    Engine* ep = e.get ();
+    run (*e, bass (0.6), nullptr, 48, 0.0, true, [&] (size_t) {
+        aLo = std::min (aLo, ep->bandFreqNow (0));
+        aHi = std::max (aHi, ep->bandFreqNow (0));
+        bLo = std::min (bLo, ep->bandFreqNow (1));
+        bHi = std::max (bHi, ep->bandFreqNow (1));
+    });
+    CHECK (std::fabs (aLo - 110.0) < 1e-6 && std::fabs (aHi - 110.0) < 1e-6, "A held at %.2f .. %.2f Hz", aLo, aHi);
+    CHECK (bLo < 200.0 && bHi > 500.0, "B swept %.0f .. %.0f Hz", bLo, bHi);
+    CHECK (paramTable ().info (kLfoOnA).def == 1.0 && paramTable ().info (kLfoOnB).def == 1.0, "both LFOs on in a new instance");
+}
+
 TEST (link_makes_b_follow_a)
 {
     // Link on, B's Phase 180: B's LFO is A's upside down (A's rate and shape, B's own phase offset)

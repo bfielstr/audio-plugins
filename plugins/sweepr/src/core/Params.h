@@ -43,17 +43,22 @@ enum ParamId : uint32_t
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
     kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields,
     kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields,
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    // each band's LFO on or off (off: the band stays at its Freq; appended in 0.31)
+    kLfoOnA = kTailExt4Base + pk::kTailExt4Fields,
+    kLfoOnB,
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
 static_assert (kBandFields == 9 && kBandA == 0 && kBandB == 9 && kLink == 18 && kTapeOn == 19 && kDrive == 20 && kSpeed == 21 &&
                    kCompression == 22 && kMix == 23 && kOutput == 24 && kTailBase == 25,
                "Sweepr's parameter IDs are fixed");
-static_assert (kTailExtBase == 31 && kTailExt2Base == 48 && kTailExt3Base == 57 && kTailExt4Base == 63 && kNumParams == 68,
-               "saved IDs: the end saturator's blocks at 25 .. 67");
+static_assert (kTailExtBase == 31 && kTailExt2Base == 48 && kTailExt3Base == 57 && kTailExt4Base == 63 && kLfoOnA == 68 &&
+                   kLfoOnB == 69 && kNumParams == 70,
+               "saved IDs: the end saturator's blocks at 25 .. 67, the LFOs' switches at 68 and 69");
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return (band == 0 ? kBandA : kBandB) + field; }
+constexpr uint32_t lfoOnParam (int band) { return band == 0 ? kLfoOnA : kLfoOnB; }
 
 enum Shape
 {

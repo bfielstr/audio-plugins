@@ -165,7 +165,8 @@ void Engine::controlChunk (int m)
             glide (s.logF, std::log (p[bandParam (b, kFreq)]), cSmooth);
             glide (s.logQ, std::log (p[bandParam (b, kQ)]), cSmooth);
             glide (s.gainDb, p[bandParam (b, kGain)], cSmooth);
-            glide (s.modOct, p[bandParam (b, kLfoDepth)] * v[b], cMod, 1e-12);
+            const double depth = p[lfoOnParam (b)] >= 0.5 ? p[bandParam (b, kLfoDepth)] : 0.0;
+            glide (s.modOct, depth * v[b], cMod, 1e-12);
             const double f = std::clamp (std::exp (s.logF + s.modOct * dsp::kLn2), 10.0, fMax);
             coef[b][i].bell (bell::prototype (f, std::exp (s.logQ), s.gainDb, sr), sr);
             if (i == m - 1)

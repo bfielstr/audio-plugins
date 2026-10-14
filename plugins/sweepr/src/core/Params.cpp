@@ -59,6 +59,8 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        v.push_back (toggle (kLfoOnA, "A LFO", "LFO", true));
+        v.push_back (toggle (kLfoOnB, "B LFO", "LFO", true));
         return v;
     }());
     return t;
