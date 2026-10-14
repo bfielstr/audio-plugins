@@ -133,7 +133,7 @@ int main (int argc, char** argv)
                        r.getHeight () == (int32)(Editor::kHeight + pk::EditorBase::kInfoHeight),
                    "editor size %d x %d", r.getWidth (), r.getHeight ());
             pump (0.1);
-            const double sx = Editor::kCutLeft + 12.0 + 45.0, sy = Editor::kRowTop + Editor::kSwitchTop + Editor::kSwitchH / 2;
+            const double sx = Editor::kCutLeft + 12.0 + 45.0, sy = Editor::kRowTop + Editor::kSwitchTop + Editor::kSwitchH / 2.0;
             win.click (sx, sy);
             pump (0.05);
             CHECK (plainOf (rig, kCutOn) < 0.5, "Cut clicked off");
@@ -141,15 +141,17 @@ int main (int argc, char** argv)
             pump (0.05);
             CHECK (plainOf (rig, kCutOn) >= 0.5, "Cut clicked on");
 
-            // the LO handle: 30 px up (+ about 6.8 dB)
+            // the LO handle: 40 px to the right (Freq up) and 30 px up (+ about 6.8 dB)
             const double hx = displayX (126.32), hy = displayY (0.0);
-            win.drag (hx, hy, hx, hy - 30.0);
+            win.drag (hx, hy, hx + 40.0, hy - 30.0);
             pump (0.05);
             CHECK (plainOf (rig, kCutLo) > 4.0 && plainOf (rig, kCutLo) < 9.0, "LO dragged up to %.1f dB", plainOf (rig, kCutLo));
-            // a double-click on it puts it back at 0 dB
-            win.click (hx, displayY (plainOf (rig, kCutLo)), 2);
+            CHECK (plainOf (rig, kCutLoFreq) > 150.0, "LO dragged to %.0f Hz", plainOf (rig, kCutLoFreq));
+            // a double-click on it puts it back (126 Hz, 0 dB)
+            win.click (displayX (plainOf (rig, kCutLoFreq)), displayY (plainOf (rig, kCutLo)), 2);
             pump (0.05);
-            CHECK (std::fabs (plainOf (rig, kCutLo)) < 1e-6, "LO back at 0 dB: %.2f dB", plainOf (rig, kCutLo));
+            CHECK (std::fabs (plainOf (rig, kCutLo)) < 1e-6 && std::fabs (plainOf (rig, kCutLoFreq) - 126.32) < 1e-3, "LO back: %.0f Hz, %.2f dB",
+                   plainOf (rig, kCutLoFreq), plainOf (rig, kCutLo));
 
             for (int i = 0; i < 20; ++i)
             {

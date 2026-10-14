@@ -11,7 +11,8 @@
 // softer and cleaner) or after it (Post: it rides the clipped signal down, so the drive stays as hard and the
 // level is held). At the base rate: a 10 Hz DC blocker and Speed's high shelf.
 //
-// The Cut EQ (Cut on; switching fades over 10 ms): Lo, Mid and Hi bells as trapezoidal SVFs at the base rate.
+// The Cut EQ (Cut on; switching fades over 10 ms): Lo, Mid and Hi bells (each with its Freq) as trapezoidal
+// SVFs at the base rate.
 // Cut Place puts them after the tape (Post, Scream's) or before it (Pre: the EQ shapes what saturates).
 // Switching either Place takes effect at once.
 //
@@ -77,7 +78,7 @@ private:
     // smoothing
     double cSmooth = 0.001, cFade = 0.002;
     double tapeAmt = 1.0, cutAmt = 1.0, drive = 0.75, speed = 0.8, comp = 0.35, mixNow = 1.0;
-    double cutGain[cut::kBands] {};
+    double cutGain[cut::kBands] {}, cutLogF[cut::kBands] {};
     float out = 1.0f;
     // per input sample of a chunk: the tape's and the Cut's amounts and the tape's gains
     double tapeAt[kChunk] {}, cutAt[kChunk] {}, gainAt[kChunk] {}, compAt[kChunk] {};

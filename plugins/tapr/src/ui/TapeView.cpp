@@ -26,7 +26,6 @@ constexpr double kHandleRadius = 6.0;
 constexpr int kPoints = 240; // along the frequency axis
 constexpr double kCurveIn = 1.5; // the curve's box: -1.5 .. +1.5 in
 const char* const kNames[cut::kBands] = {"LO", "MID", "HI"};
-const uint32_t kGainIds[cut::kBands] = {kCutLo, kCutMid, kCutHi};
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
            bool bold = false)
@@ -80,7 +79,7 @@ double TapeView::yOfDb (double db) const
 
 CPoint TapeView::handle (int b) const
 {
-    return CPoint (xOfHz (cut::kCentreHz[b]), yOfDb (host->plainValue (kGainIds[b])));
+    return CPoint (xOfHz (host->plainValue (cutFreqParam (b))), yOfDb (host->plainValue (cutGainParam (b))));
 }
 
 double TapeView::responseDb (double f) const
@@ -88,7 +87,8 @@ double TapeView::responseDb (double f) const
     std::complex<double> h = 1.0;
     if (host->plainValue (kCutOn) >= 0.5)
         for (int b = 0; b < cut::kBands; ++b)
-            h *= sweepr::bell::response (cut::prototype (b, host->plainValue (kGainIds[b]), shownSr), f, shownSr);
+            h *= sweepr::bell::response (cut::prototype (host->plainValue (cutFreqParam (b)), host->plainValue (cutGainParam (b)), shownSr), f,
+                                         shownSr);
     if (host->plainValue (kTapeOn) >= 0.5)
         h *= shelfResponse (host->plainValue (kSpeed), f, shownSr);
     return 20.0 * std::log10 (std::max (1e-6, std::abs (h)));
@@ -238,19 +238,22 @@ void TapeView::onMouseDownEvent (MouseDownEvent& e)
     drag = hit (e.mousePosition);
     if (drag < 0)
         return;
-    const uint32_t id = kGainIds[drag];
+    const uint32_t gId = cutGainParam (drag), fId = cutFreqParam (drag);
     if (e.clickCount == 2 || right)
     {
-        host->setOnce (id, host->table ().defaultNormalized (id));
+        for (uint32_t id : {gId, fId})
+            host->setOnce (id, host->table ().defaultNormalized (id));
         drag = -1;
         invalid ();
         e.consumed = true;
         e.ignoreFollowUpMoveAndUpEvents (true);
         return;
     }
-    downY = e.mousePosition.y;
-    startGain = host->plainValue (id);
-    host->beginEdit (id);
+    down = e.mousePosition;
+    startGain = host->plainValue (gId);
+    startFreq = host->plainValue (fId);
+    host->beginEdit (gId);
+    host->beginEdit (fId);
     e.consumed = true;
     invalid ();
 }
@@ -260,14 +263,16 @@ void TapeView::onMouseMoveEvent (MouseMoveEvent& e)
     if (drag < 0)
     {
         if (auto* f = getFrame ())
-            f->setCursor (hit (e.mousePosition) >= 0 ? kCursorVSize : kCursorDefault);
+            f->setCursor (hit (e.mousePosition) >= 0 ? kCursorSizeAll : kCursorDefault);
         return;
     }
     const double fine = e.modifiers.has (ModifierKey::Shift) ? 0.2 : 1.0;
+    const double dx = (e.mousePosition.x - down.x) * fine, dy = (e.mousePosition.y - down.y) * fine;
     const double dbPerPx = (kMaxDb - kMinDb) / (responseRect ().getHeight () - kScaleH);
-    const uint32_t id = kGainIds[drag];
-    host->setNorm (id, host->table ().toNormalized (id, std::clamp (startGain - (e.mousePosition.y - downY) * fine * dbPerPx, cut::kGainMin,
-                                                                    cut::kGainMax)));
+    const uint32_t gId = cutGainParam (drag), fId = cutFreqParam (drag);
+    host->setNorm (gId, host->table ().toNormalized (gId, std::clamp (startGain - dy * dbPerPx, cut::kGainMin, cut::kGainMax)));
+    // (the parameter's range keeps it in its band's span)
+    host->setNorm (fId, host->table ().toNormalized (fId, startFreq * std::pow (kMaxHz / kMinHz, dx / responseRect ().getWidth ())));
     invalid ();
     e.consumed = true;
 }
@@ -276,7 +281,8 @@ void TapeView::onMouseUpEvent (MouseUpEvent& e)
 {
     if (drag < 0)
         return;
-    host->endEdit (kGainIds[drag]);
+    host->endEdit (cutGainParam (drag));
+    host->endEdit (cutFreqParam (drag));
     drag = -1;
     invalid ();
     e.consumed = true;

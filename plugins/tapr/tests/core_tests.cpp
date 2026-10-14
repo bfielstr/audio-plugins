@@ -210,7 +210,7 @@ TEST (cut_is_scream_4s)
     double worst = 0.0;
     for (const auto& c : cases)
     {
-        const sweepr::bell::Prototype ours = cut::prototype (c.band, c.gainDb, kSr), ref {c.centre, c.poles, c.zeros};
+        const sweepr::bell::Prototype ours = cut::prototype (cut::kCentreHz[c.band], c.gainDb, kSr), ref {c.centre, c.poles, c.zeros};
         for (double f = 20.0; f < 20001.0; f *= 1.05)
             worst = std::max (worst, std::fabs (db (std::abs (sweepr::bell::response (ours, f, kSr))) -
                                                 db (std::abs (sweepr::bell::response (ref, f, kSr)))));
@@ -235,9 +235,35 @@ TEST (cut_is_scream_4s)
         std::complex<double> h = 1.0;
         const double g[3] = {12.0, -9.0, 6.0};
         for (int b = 0; b < 3; ++b)
-            h *= sweepr::bell::response (cut::prototype (b, g[b], kSr), f, kSr);
+            h *= sweepr::bell::response (cut::prototype (cut::kCentreHz[b], g[b], kSr), f, kSr);
         CHECK (std::fabs (got - db (std::abs (h))) < 0.1, "%.0f Hz: %.2f dB, the bells %.2f dB", f, got, db (std::abs (h)));
     }
+}
+
+TEST (cut_bells_move)
+{
+    // the Mid bell moved to 2.5 kHz at +12 dB: the boost is there, and no longer at 983 Hz
+    auto e = engine ([] (Engine& e) {
+        plain (e);
+        e.setParam (kTapeOn, 0.0);
+        e.setParam (kCutOn, 1.0);
+        e.setParam (kCutMid, 12.0);
+        e.setParam (kCutMidFreq, 2500.0);
+    });
+    double got[2] {};
+    const double f[2] = {2500.0, 982.6};
+    for (int k = 0; k < 2; ++k)
+    {
+        e->reset ();
+        const auto x = sine (f[k], 0.5, 0.1);
+        const auto y = run (*e, x);
+        got[k] = db (rms (y, 12000, y.size ())) - db (rms (x, 12000, x.size ()));
+    }
+    const double want = db (std::abs (sweepr::bell::response (cut::prototype (2500.0, 12.0, kSr), 982.6, kSr)));
+    CHECK (std::fabs (got[0] - 12.0) < 0.1 && std::fabs (got[1] - want) < 0.1, "at 2.5 kHz %.2f dB (12), at 983 Hz %.2f dB (%.2f)", got[0], got[1],
+           want);
+    CHECK (paramTable ().info (kCutLoFreq).def == cut::kCentreHz[0] && paramTable ().info (kCutHiFreq).def == cut::kCentreHz[2],
+           "Scream's centres by default");
 }
 
 TEST (cut_post_is_after_the_curve)

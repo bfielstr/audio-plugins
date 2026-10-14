@@ -100,7 +100,7 @@ int main ()
         CHECK (t.info (kTapeOn).def == 1.0 && t.info (kDrive).def == 0.75 && t.info (kSpeed).def == 0.8 && t.info (kCompression).def == 0.35 &&
                    t.info (kCompPlace).def == (double)kPre && t.info (kCutOn).def == 1.0 && t.info (kCutLo).def == 0.0 && t.info (kCutMid).def == 0.0 &&
                    t.info (kCutHi).def == 0.0 && t.info (kCutPlace).def == (double)kPost && t.info (kMix).def == 1.0 && t.info (kOutput).def == -4.4 &&
-                   t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0,
+                   t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0 && std::fabs (t.info (kCutMidFreq).def - 982.6) < 1e-9,
                "Tape on, Drive 75 %%, Speed 80 %%, Compression 35 %% Pre, Cut on and flat, Post, Mix 100 %%, Output -4.4 dB, the end "
                "saturator off");
         CHECK (t.toText (kCompPlace, kPre) == "Pre" && t.toText (kCutPlace, kPost) == "Post", "the places' names");

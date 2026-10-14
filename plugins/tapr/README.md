@@ -17,9 +17,9 @@ the EQ and the two placements added. Install instructions are in the [top-level 
    tape): more is softer, quieter and cleaner, and at 0 a high **Drive** clips a sine to a square wave.
    **Post** (after the curve): the curve stays as hard and the leveller rides the result down.
 4. **Speed** lower for a darker tape (a high shelf after the curve).
-5. Shape it with **Cut**: **Lo**, **Mid** and **Hi**, after the tape (**Post**) to colour the saturated
-   sound, or before it (**Pre**) so a boost saturates first and a cut stays cleaner. Drag **LO**, **MID**
-   and **HI** on the display too.
+5. Shape it with **Cut**: **Lo**, **Mid** and **Hi** and where each sits (**Lo Freq**, **Mid Freq**,
+   **Hi Freq**), after the tape (**Post**) to colour the saturated sound, or before it (**Pre**) so a boost
+   saturates first and a cut stays cleaner. Drag **LO**, **MID** and **HI** on the display too.
 6. **Mix** blends in the dry sound, **Output** sets the level.
 
 Point at any control for help in the info box at the bottom (**?** also switches on hover tooltips).
@@ -27,8 +27,8 @@ Point at any control for help in the info box at the bottom (**?** also switches
 ## The display
 
 - At the left, the response of **Speed**'s shelf (with **Tape** on) and the three **Cut** bells (with
-  **Cut** on), +18 to -18 dB from 20 Hz to 20 kHz. Drag **LO**, **MID** or **HI** up and down for its
-  gain; a double-click (or a right click) puts it back at 0 dB.
+  **Cut** on), +18 to -18 dB from 20 Hz to 20 kHz. Drag **LO**, **MID** or **HI** sideways for its
+  frequency and up and down for its gain; a double-click (or a right click) puts it back.
 - At the right, the tape's curve, with two markers at the level reaching it while audio plays, and the
   leveller's gain.
 - At the top, where the leveller and the EQ sit (**Pre** or **Post**).
@@ -50,9 +50,10 @@ Point at any control for help in the info box at the bottom (**?** also switches
 **CUT**
 
 - **Cut** (on by default): the three bells. At 0 dB each does nothing.
-- **Lo** (-18 to +18 dB, 0 by default): a broad bell (Q 1) at 126 Hz.
-- **Mid**: at 983 Hz.
-- **Hi**: at 9.8 kHz.
+- **Lo** (-18 to +18 dB, 0 by default): a broad bell (Q 1); **Lo Freq** (20 to 600 Hz, 126 Hz by default)
+  is where it sits.
+- **Mid** and **Mid Freq** (150 Hz to 6 kHz, 983 Hz by default).
+- **Hi** and **Hi Freq** (1.5 to 20 kHz, 9.8 kHz by default).
 - **Place** (**Post** by default): the EQ after the tape (**Post**) or before it (**Pre**).
 
 **OUTPUT**
@@ -85,8 +86,8 @@ the sample rate. **Speed**'s shelf is a second-order high shelf fitted at 18 pos
 shapes are in sweepr's `src/core/TapeShape.h`, shared by both plug-ins.
 
 **The Cut EQ** is three fixed bells, measured the same way and matched to within a few thousandths of a
-dB: Q 1 at 126 Hz, 983 Hz and 9.8 kHz, a boost and the cut of the same size exact mirrors, at the sample
-rate (`src/core/CutShape.h`).
+dB: Q 1 at 126 Hz, 983 Hz and 9.8 kHz (the frequencies' defaults; here they move), a boost and the cut
+of the same size exact mirrors, at the sample rate (`src/core/CutShape.h`).
 
 ## Presets
 

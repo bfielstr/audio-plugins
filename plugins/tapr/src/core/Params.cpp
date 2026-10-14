@@ -35,6 +35,9 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        v.push_back (real (kCutLoFreq, "Cut Lo Freq", "Lo Freq", cut::kFreqMin[0], cut::kFreqMax[0], cut::kCentreHz[0], Curve::Log, Disp::Hz));
+        v.push_back (real (kCutMidFreq, "Cut Mid Freq", "Mid Freq", cut::kFreqMin[1], cut::kFreqMax[1], cut::kCentreHz[1], Curve::Log, Disp::Hz));
+        v.push_back (real (kCutHiFreq, "Cut Hi Freq", "Hi Freq", cut::kFreqMin[2], cut::kFreqMax[2], cut::kCentreHz[2], Curve::Log, Disp::Hz));
         return v;
     }());
     return t;

@@ -83,7 +83,7 @@ void Editor::buildUI (CFrame* f)
     root->addView (tape);
     const double tw = kTapeRight - kTapeLeft;
     bind (tape, new Toggle (CRect (12, kSwitchTop, 132, kSwitchTop + kSwitchH), this, kTapeOn, "Tape"));
-    bind (tape, new Choice (CRect (tw - 152, kSwitchTop, tw - 12, kSwitchTop + kSwitchH), this, kCompPlace, "Comp"));
+    bind (tape, new Choice (CRect (tw - 152, kChoiceTop, tw - 12, kChoiceTop + kChoiceH), this, kCompPlace, "Compression"));
     for (int k = 0; k < 3; ++k)
     {
         const uint32_t id = k == 0 ? kDrive : (k == 1 ? kSpeed : kCompression);
@@ -95,9 +95,12 @@ void Editor::buildUI (CFrame* f)
     root->addView (cutPanel);
     const double cw = kCutRight - kCutLeft;
     bind (cutPanel, new Toggle (CRect (12, kSwitchTop, 102, kSwitchTop + kSwitchH), this, kCutOn, "Cut"));
-    bind (cutPanel, new Choice (CRect (cw - 142, kSwitchTop, cw - 12, kSwitchTop + kSwitchH), this, kCutPlace, "Place"));
+    bind (cutPanel, new Choice (CRect (cw - 142, kChoiceTop, cw - 12, kChoiceTop + kChoiceH), this, kCutPlace, "Place"));
     for (int k = 0; k < 3; ++k)
-        bind (cutPanel, new Knob (CRect (kCutX[k], kKnobTop, kCutX[k] + kKnobW, kKnobTop + kKnobH), this, kCutLo + (uint32_t)k, nullptr, true));
+    {
+        bind (cutPanel, new Knob (CRect (kCutX[k], kKnobTop, kCutX[k] + kKnobW, kKnobTop + kKnobH), this, cutFreqParam (k)));
+        bind (cutPanel, new Knob (CRect (kCutX[k], kKnobRow2, kCutX[k] + kKnobW, kKnobRow2 + kKnobH), this, cutGainParam (k), nullptr, true));
+    }
 
     // OUTPUT: Mix and Output
     auto* out = new Panel (CRect (kOutLeft, kRowTop, kOutRight, kRowBottom), "OUTPUT");
@@ -145,7 +148,7 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if (id < kMix && display)
+    if ((id < kMix || id >= kCutLoFreq) && display)
         display->invalid ();
 }
 

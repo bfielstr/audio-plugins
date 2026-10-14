@@ -91,13 +91,16 @@ void Engine::reset ()
     speed = p[kSpeed];
     comp = p[kCompression];
     for (int b = 0; b < cut::kBands; ++b)
-        cutGain[b] = p[kCutLo + (uint32_t)b];
+    {
+        cutGain[b] = p[cutGainParam (b)];
+        cutLogF[b] = std::log (p[cutFreqParam (b)]);
+    }
     mixNow = std::clamp (p[kMix], 0.0, 1.0);
     out = (float)std::pow (10.0, p[kOutput] / 20.0);
     shownSpeed = -1.0;
     tapeFilters ();
     for (int b = 0; b < cut::kBands; ++b)
-        cutC[b].bell (cut::prototype (b, cutGain[b], sr), sr);
+        cutC[b].bell (cut::prototype (std::exp (cutLogF[b]), cutGain[b], sr), sr);
     tail.reset ();
 }
 
@@ -145,14 +148,17 @@ void Engine::controlChunk (int m)
         glide (comp, p[kCompression], cSmooth);
         glide (speed, p[kSpeed], cSmooth);
         for (int b = 0; b < cut::kBands; ++b)
-            glide (cutGain[b], p[kCutLo + (uint32_t)b], cSmooth);
+        {
+            glide (cutGain[b], p[cutGainParam (b)], cSmooth);
+            glide (cutLogF[b], std::log (p[cutFreqParam (b)]), cSmooth);
+        }
         tapeAt[i] = tapeAmt;
         cutAt[i] = cutAmt;
         gainAt[i] = std::pow (10.0, tape::driveDb (drive) / 20.0);
         compAt[i] = tape::kLevelAmount * comp;
     }
     for (int b = 0; b < cut::kBands; ++b)
-        cutC[b].bell (cut::prototype (b, cutGain[b], sr), sr);
+        cutC[b].bell (cut::prototype (std::exp (cutLogF[b]), cutGain[b], sr), sr);
     tapeFilters ();
 }
 

@@ -22,16 +22,19 @@ public:
     static constexpr double kWidth = 760.0;
     static constexpr double kTop = 40.0, kDisplayBottom = 240.0;
     static constexpr double kArrangedDisplayW = 420.0;
-    static constexpr double kRowTop = 248.0, kRowBottom = 388.0;
+    static constexpr double kRowTop = 248.0, kRowBottom = 464.0;
     static constexpr double kTailTop = kRowBottom + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right)
     static constexpr double kTapeLeft = 8.0, kTapeRight = 316.0;
     static constexpr double kCutLeft = 324.0, kCutRight = 588.0;
     static constexpr double kOutLeft = 596.0, kOutRight = 752.0;
-    // inside a panel: its switch and its Place at the top, the knobs in a row under them
+    // inside a panel: its switch and its Place (a labelled dropdown, its field level with the switch) at the
+    // top, then the knobs: TAPE's three in a row; CUT's Freq knobs over their gains; OUTPUT's two side by side
     static constexpr double kKnobW = 56.0, kKnobH = 64.0, kTapeKnobW = 76.0;
-    static constexpr double kSwitchTop = 28.0, kSwitchH = 20.0, kKnobTop = 60.0;
+    static constexpr double kChoiceTop = 24.0, kChoiceH = 34.0;
+    static constexpr double kSwitchTop = kChoiceTop + 15.0, kSwitchH = kChoiceH - 15.0;
+    static constexpr double kKnobTop = 66.0, kKnobRow2 = 140.0;
     static constexpr double kTapeX[3] = {12.0, 116.0, 220.0};
     static constexpr double kCutX[3] = {20.0, 104.0, 188.0};
     static constexpr double kOutX[2] = {16.0, 84.0};

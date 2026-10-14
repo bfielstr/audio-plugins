@@ -1,8 +1,9 @@
 // Tapr's display. At the left, the frequency response the tape and the Cut EQ give (Speed's high shelf
 // with Tape on, the three Cut bells with Cut on), +-21 dB from 20 Hz to 20 kHz, with a handle on each Cut
 // bell:
+//   drag a handle sideways    its Freq (within its band's range)
 //   drag a handle up / down   its gain (Lo, Mid or Hi)
-//   double-click a handle     back to 0 dB
+//   double-click a handle     back to its default Freq and 0 dB
 // At the right, the curve: the sine clipper from -1.5 to +1.5 in, with the level reaching it now (two
 // markers while audio runs) and the leveller's gain. The grid is a cached layer; the view repaints when a
 // setting changed or the meters moved.
@@ -38,7 +39,7 @@ public:
     VSTGUI::CRect curveRect () const;    // the curve's box (empty when the view is too narrow for it)
     double xOfHz (double hz) const;
     double yOfDb (double db) const;
-    VSTGUI::CPoint handle (int band) const; // a Cut bell's handle (its centre across, its gain up)
+    VSTGUI::CPoint handle (int band) const; // a Cut bell's handle (its Freq across, its gain up)
 
 private:
     double responseDb (double f) const;
@@ -49,7 +50,8 @@ private:
     pk::ParamHost* host;
     MeterSource meters;
     int drag = -1;
-    double downY = 0.0, startGain = 0.0;
+    VSTGUI::CPoint down;
+    double startGain = 0.0, startFreq = 0.0;
     float shownPeak = 0.0f, shownLevel = 0.0f;
     double shownSr = 48000.0;
     uint32_t lastBlocks = 0;
