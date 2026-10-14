@@ -1,0 +1,8 @@
+# tapr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bus, glue, parallel
+comment: The leveller after the curve rides the saturated sound down; blended under the dry signal.
+Drive = 45 %
+Compression = 60 %
+Compression Place = Post
+Mix = 40 %
+Output = -1 dB
