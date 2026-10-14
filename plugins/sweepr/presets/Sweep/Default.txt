@@ -1,0 +1,17 @@
+# sweepr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, sweep, tape
+comment: A new instance's settings: a low boost and a low-mid cut, each swept an octave up and down every beat, into tape.
+A Freq = 110 Hz
+A Q = 1.00
+A Gain = 13 dB
+B Freq = 320 Hz
+B Q = 1.60
+B Gain = -15 dB
+A LFO Division = 1/4
+B LFO Division = 1/4
+A LFO Depth = 1
+B LFO Depth = 1
+Tape = On
+Drive = 75 %
+Speed = 80 %
+Compression = 35 %
