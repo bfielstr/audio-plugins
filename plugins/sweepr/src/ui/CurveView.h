@@ -1,4 +1,4 @@
-// The two bands' frequency response, in the style of a two-band EQ's screen: +18 / 0 / -18 dB, a grid from
+// The three bands' frequency response, in the style of a two-band EQ's screen: +18 / 0 / -18 dB, a grid from
 // 31 Hz to 16 kHz. The curve now (the bands where their LFOs have swept them: a solid line over a faint
 // fill, a dot on each band's swept frequency) over the curve at the knobs' settings (dashed), with a bar
 // under each handle that shows how far its LFO sweeps.
@@ -48,7 +48,7 @@ public:
     double liveHz (int band) const;
 
 private:
-    double responseDb (double f, double fa, double fb) const;
+    double responseDb (double f, const double* centres) const; // (a centre per band)
     int hit (const VSTGUI::CPoint& p) const; // the band whose handle is there, -1: none
     void paintGrid (VSTGUI::CDrawContext* ctx);
     bool live () const { return lastBlocks != 0 && idleSinceBlock < 10; }

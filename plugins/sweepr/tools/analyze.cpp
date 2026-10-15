@@ -8,7 +8,7 @@
 //   sweepr_analyze <dry.wav> <reference.wav> --preset <settings.txt> [--static] [--bpm <tempo>] [--out <wav>]
 //       renders dry.wav through sweepr at the settings (a factory preset's text format; Init plus its
 //       lines), then prints the reference's response, sweepr's and their difference per 1/12 octave, and
-//       how deep the two renders null. --static sets both LFO Depths to 0 and Tape off, whatever the
+//       how deep the two renders null. --static sets every band's LFO Depth to 0 and Tape off, whatever the
 //       settings say (the bells alone, as a static EQ). --bpm: the song's tempo for synced LFOs (120 by
 //       default; the render starts at the song's start). --out writes sweepr's render (32-bit float, the latency removed).
 //
@@ -77,8 +77,8 @@ std::vector<std::vector<float>> render (const az::Audio& dry, const pk::SettingV
         e.setParam (id, toPlain (id, norm));
     if (still)
     {
-        e.setParam (bandParam (0, kLfoDepth), 0.0);
-        e.setParam (bandParam (1, kLfoDepth), 0.0);
+        for (int b = 0; b < kBands; ++b)
+            e.setParam (bandParam (b, kLfoDepth), 0.0);
         e.setParam (kTapeOn, 0.0);
     }
     e.reset ();

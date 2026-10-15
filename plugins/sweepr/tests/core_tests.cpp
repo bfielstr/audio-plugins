@@ -121,8 +121,8 @@ std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& tweak = {})
 // static bells, no tape, no end saturator, Output 0 dB
 void plain (Engine& e)
 {
-    e.setParam (bandParam (0, kLfoDepth), 0.0);
-    e.setParam (bandParam (1, kLfoDepth), 0.0);
+    for (int b = 0; b < kBands; ++b)
+        e.setParam (bandParam (b, kLfoDepth), 0.0);
     e.setParam (kTapeOn, 0.0);
     e.setParam (kOutput, 0.0);
 }
@@ -387,6 +387,32 @@ TEST (lfo_switch_keeps_a_band_still)
     CHECK (std::fabs (aLo - 110.0) < 1e-6 && std::fabs (aHi - 110.0) < 1e-6, "A held at %.2f .. %.2f Hz", aLo, aHi);
     CHECK (bLo < 200.0 && bHi > 500.0, "B swept %.0f .. %.0f Hz", bLo, bHi);
     CHECK (paramTable ().info (kLfoOnA).def == 1.0 && paramTable ().info (kLfoOnB).def == 1.0, "both LFOs on in a new instance");
+}
+
+TEST (band_c_is_flat_until_turned_up)
+{
+    // a new instance: C at 0 dB (the sound as before C was added); turned up, it boosts at its Freq and its LFO
+    // sweeps it
+    CHECK (paramTable ().info (bandParam (2, kGain)).def == 0.0 && paramTable ().info (kLfoOnC).def == 1.0, "C flat, its LFO on");
+    auto e = engine ([] (Engine& e) {
+        plain (e);
+        e.setParam (bandParam (0, kGain), 0.0);
+        e.setParam (bandParam (1, kGain), 0.0);
+        e.setParam (bandParam (2, kFreq), 2000.0);
+        e.setParam (bandParam (2, kGain), 12.0);
+    });
+    const auto x = sine (2000.0, 0.5, 0.1);
+    const auto y = run (*e, x);
+    const double got = db (rms (y, 12000, y.size ())) - db (rms (x, 12000, x.size ()));
+    CHECK (std::fabs (got - 12.0) < 0.1, "C at 2 kHz: %.2f dB", got);
+    auto s = engine ([] (Engine& e) { e.setParam (bandParam (2, kLfoDepth), 2.0); });
+    double lo = 1e9, hi = 0.0;
+    Engine* sp = s.get ();
+    run (*s, bass (0.6), nullptr, 48, 0.0, true, [&] (size_t) {
+        lo = std::min (lo, sp->bandFreqNow (2));
+        hi = std::max (hi, sp->bandFreqNow (2));
+    });
+    CHECK (lo < 400.0 && hi > 2500.0, "C swept %.0f .. %.0f Hz", lo, hi);
 }
 
 TEST (link_makes_b_follow_a)

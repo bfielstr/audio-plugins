@@ -89,7 +89,7 @@ void Editor::buildUI (CFrame* f)
     for (int b = 0; b < kBands; ++b)
     {
         auto id = [b] (uint32_t f) { return bandParam (b, f); };
-        auto* p = new Panel (CRect (kBandLeft[b], kRowTop, kBandLeft[b] + kBandW, kRowBottom), b == 0 ? "BAND A" : "BAND B");
+        auto* p = new Panel (CRect (kBandLeft[b], kRowTop, kBandLeft[b] + kBandW, kRowBottom), b == 0 ? "BAND A" : (b == 1 ? "BAND B" : "BAND C"));
         root->addView (p);
         for (int k = 0; k < 3; ++k)
         {
@@ -177,9 +177,10 @@ pk::basic::Spec Editor::basicSpec ()
     s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
     s.displayHeight = 200;
     s.display = [this] (const CRect& r) -> CView* { return makeCurve (r); };
-    s.rows = {{knob (bandParam (0, kGain), "A Gain", true), knob (bandParam (1, kGain), "B Gain", true),
-               knob (bandParam (0, kLfoDepth), "A Depth", true), knob (bandParam (1, kLfoDepth), "B Depth", true)},
-              {knob (kDrive), knob (kMix)}};
+    s.rows = {{knob (bandParam (0, kGain), "A Gain", true), knob (bandParam (1, kGain), "B Gain", true), knob (bandParam (2, kGain), "C Gain", true),
+               knob (kDrive)},
+              {knob (bandParam (0, kLfoDepth), "A Depth", true), knob (bandParam (1, kLfoDepth), "B Depth", true),
+               knob (bandParam (2, kLfoDepth), "C Depth", true), knob (kMix)}};
     s.output = {knob (kOutput, {}, true)};
     smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
     s.menu = [this] (CPoint p) { showMenu (p); };
@@ -193,9 +194,9 @@ void Editor::paramChanged (uint32_t id)
     pk::EditorBase::paramChanged (id);
     if (tail)
         tail->paramChanged (id);
-    if ((id < kLink || id == kLfoOnA || id == kLfoOnB) && display)
+    if (bandOf (id) >= 0 && display)
         display->invalid ();
-    if (id == kLink || id == bandParam (0, kLfoSync) || id == bandParam (1, kLfoSync))
+    if (id == kLink || id == bandParam (0, kLfoSync) || id == bandParam (1, kLfoSync) || id == bandParam (2, kLfoSync))
         updateRates ();
 }
 
@@ -249,6 +250,7 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"display", "display", {d.left, d.top, d.right, d.bottom}, 0},
         {"band-a", "", {kBandLeft[0], kRowTop, kBandLeft[0] + kBandW, kRowBottom}, 0},
         {"band-b", "", {kBandLeft[1], kRowTop, kBandLeft[1] + kBandW, kRowBottom}, 0},
+        {"band-c", "", {kBandLeft[2], kRowTop, kBandLeft[2] + kBandW, kRowBottom}, 0},
         {"tape", "", {kTapeLeft, kRowTop, kTapeRight, kRowBottom}, 0},
         {"output", "", {kOutLeft, kRowTop, kOutRight, kRowBottom}, 0},
         {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
