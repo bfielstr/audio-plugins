@@ -2035,11 +2035,12 @@ TEST (length_is_the_loop_and_fade_fades_the_start_in)
     auto o = play (0.25, 0.0, false, 60000);
     const double end = soundEnd (o.l) / kHostSr;
     CHECK (std::fabs (end - 1.0) < 0.02, "plays to the end flag: %f s", end);
-    // with Fade the loop's start fades in on the first pass; without, it starts at once
+    // Fade acts only where the loop wraps: with it or without, the note starts at full level (the first
+    // pass plays the loop's head as it is)
     const double hard = rms (play (0.3, 0.0, true, 4800).l, 480, 960);
     const double soft = rms (play (0.3, 0.5, true, 4800).l, 480, 960);
     CHECK (hard > 0.3, "no fade: starts at full level (%f)", hard);
-    CHECK (soft < hard * 0.4, "fade: the start fades in (%f vs %f)", soft, hard);
+    CHECK (std::fabs (soft - hard) < hard * 0.02, "fade: the start as loud as without (%f vs %f)", soft, hard);
     auto held = play (0.3, 0.5, true, 48000);
     CHECK (rms (held.l, 24000, 48000) > hard * 0.9, "then holds the level through the loop (%f)", rms (held.l, 24000, 48000));
 }
