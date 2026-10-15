@@ -8,7 +8,7 @@
 
 namespace sweepr {
 
-constexpr int kBands = 2; // A and B
+constexpr int kBands = 3; // A, B and C
 
 // A band's fields: its bell, then its LFO (on the band's Freq). Band b's field f is bandParam (b, f).
 enum BandField : uint32_t
@@ -46,6 +46,9 @@ enum ParamId : uint32_t
     // each band's LFO on or off (off: the band stays at its Freq; appended in 0.31)
     kLfoOnA = kTailExt4Base + pk::kTailExt4Fields,
     kLfoOnB,
+    // band C (appended in 0.32): its bell and LFO fields as A's and B's, then its LFO switch
+    kBandC,
+    kLfoOnC = kBandC + kBandFields,
     kNumParams
 };
 
@@ -54,11 +57,20 @@ static_assert (kBandFields == 9 && kBandA == 0 && kBandB == 9 && kLink == 18 && 
                    kCompression == 22 && kMix == 23 && kOutput == 24 && kTailBase == 25,
                "Sweepr's parameter IDs are fixed");
 static_assert (kTailExtBase == 31 && kTailExt2Base == 48 && kTailExt3Base == 57 && kTailExt4Base == 63 && kLfoOnA == 68 &&
-                   kLfoOnB == 69 && kNumParams == 70,
-               "saved IDs: the end saturator's blocks at 25 .. 67, the LFOs' switches at 68 and 69");
+                   kLfoOnB == 69 && kBandC == 70 && kLfoOnC == 79 && kNumParams == 80,
+               "saved IDs: the end saturator's blocks at 25 .. 67, the LFOs' switches at 68 and 69, band C at 70 .. 79");
 
-constexpr uint32_t bandParam (int band, uint32_t field) { return (band == 0 ? kBandA : kBandB) + field; }
-constexpr uint32_t lfoOnParam (int band) { return band == 0 ? kLfoOnA : kLfoOnB; }
+constexpr uint32_t bandBase (int band) { return band == 0 ? kBandA : (band == 1 ? kBandB : kBandC); }
+constexpr uint32_t bandParam (int band, uint32_t field) { return bandBase (band) + field; }
+constexpr uint32_t lfoOnParam (int band) { return band == 0 ? kLfoOnA : (band == 1 ? kLfoOnB : kLfoOnC); }
+// the band a parameter belongs to (its bell or LFO fields or its LFO switch), -1: none
+constexpr int bandOf (uint32_t id)
+{
+    for (int b = 0; b < kBands; ++b)
+        if ((id >= bandBase (b) && id < bandBase (b) + kBandFields) || id == lfoOnParam (b))
+            return b;
+    return -1;
+}
 
 enum Shape
 {

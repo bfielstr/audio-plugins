@@ -8,7 +8,7 @@
 namespace sweepr {
 
 namespace {
-constexpr uint32_t kSeed[kBands] = {0x5EED0A11u, 0x5EED0B22u};
+constexpr uint32_t kSeed[kBands] = {0x5EED0A11u, 0x5EED0B22u, 0x5EED0C33u};
 inline double coefFor (double sec, double sr) { return 1.0 - std::exp (-1.0 / (std::max (1e-6, sec) * sr)); }
 // glides x towards t by c, landing on it once close (so a still setting is exactly its value)
 inline void glide (double& x, double t, double c, double eps = 1e-9)
@@ -236,7 +236,12 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         {
             const float x[2] = {dryL[i], dryR[i]};
             for (int c = 0; c < 2; ++c)
-                belled[c][i] = (float)band[1].svf[c].bell (band[0].svf[c].bell (x[c], coef[0][i]), coef[1][i]);
+            {
+                double y = x[c];
+                for (int b = 0; b < kBands; ++b)
+                    y = band[b].svf[c].bell (y, coef[b][i]);
+                belled[c][i] = (float)y;
+            }
         }
 
         // 4x: the tape's curve

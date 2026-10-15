@@ -16,20 +16,20 @@ class CurveView;
 class Editor : public pk::EditorBase
 {
 public:
-    // Classic: the curve across the top; under it BAND A, BAND B (each its bell and its LFO), TAPE and
+    // Classic: the curve across the top; under it BAND A, BAND B, BAND C (each its bell and its LFO), TAPE and
     // OUTPUT side by side; the end saturator's section at the bottom. An arranged layout (Wide) builds the
     // curve narrower and as tall as the panels' row, beside them.
-    static constexpr double kWidth = 900.0;
+    static constexpr double kWidth = 1188.0;
     static constexpr double kTop = 40.0, kDisplayBottom = 260.0;
     static constexpr double kArrangedDisplayW = 440.0;
     static constexpr double kRowTop = 268.0, kRowBottom = 500.0;
     static constexpr double kTailTop = kRowBottom + 8.0;
     static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
     // the panels' places (left, right)
-    static constexpr double kBandLeft[kBands] = {8.0, 296.0};
+    static constexpr double kBandLeft[kBands] = {8.0, 296.0, 584.0};
     static constexpr double kBandW = 280.0;
-    static constexpr double kTapeLeft = 584.0, kTapeRight = 780.0;
-    static constexpr double kOutLeft = 788.0, kOutRight = 892.0;
+    static constexpr double kTapeLeft = 872.0, kTapeRight = 1068.0;
+    static constexpr double kOutLeft = 1076.0, kOutRight = 1180.0;
     // inside a band's panel: the bell's knobs in a row, then the LFO: Sync, the rate (Division or Rate),
     // Shape and (B) Link in a column at the left, Depth and Phase knobs beside them
     static constexpr double kKnobW = 56.0, kKnobH = 64.0;

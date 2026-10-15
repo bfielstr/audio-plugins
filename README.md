@@ -23,7 +23,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 | [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: eight bell EQs sweep the low end against each other like rolling waves, and a level-matched saturator makes it crunch with a clean sub kept underneath (a resonant high shelf on a slow orbit is there too). After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
 | [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
 | [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
-| [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
+| [**sweepr**](plugins/sweepr/README.md) | Three EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 | [**tapr**](plugins/tapr/README.md) | A tape saturator: drive into a fast leveller and a clipper that holds the level, highs that soften as the tape speed comes down, and a three-band Cut EQ. The leveller and the EQ each go before or after the saturation. sweepr's tape stage on its own. |
 
 ## Gallery
@@ -231,7 +231,7 @@ The main controls of each Basic page:
 | smacheratr | Analog curve and colour display | Drive, Post Clip, Color, Gentlr | Output, Dry/Wet |
 | gentlr | bands | Band Slope, Attack, Release | Mix, Output |
 | smeezr | pink balance | Squeeze, Speed, Mix | Output |
-| sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
+| sweepr | EQ curve | A Gain, B Gain, C Gain, Drive, A Depth, B Depth, C Depth, Mix | Output |
 | tapr | response and curve | Drive, Speed, Compression, Lo, Mid, Hi | Mix, Output |
 | dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
 | orbitr | orbs | Pattern, Orbs, Speed, Spread | Dry/Wet, Output |

@@ -6,14 +6,15 @@ namespace sweepr::help {
 
 inline const char* forParam (uint32_t id)
 {
-    if (id < kLink)
+    if (const int band = bandOf (id); band >= 0 && id != lfoOnParam (band))
     {
-        const bool b = id >= kBandB;
-        switch (id - (b ? kBandB : kBandA))
+        const bool b = band == 1;
+        switch (id - bandBase (band))
         {
             case kFreq:
-                return b ? "Band B's centre frequency, where its LFO sweeps from (drag the B handle sideways in the display)."
-                         : "Band A's centre frequency, where its LFO sweeps from (drag the A handle sideways in the display).";
+                return band == 0 ? "Band A's centre frequency, where its LFO sweeps from (drag the A handle sideways in the display)."
+                                 : (b ? "Band B's centre frequency, where its LFO sweeps from (drag the B handle sideways in the display)."
+                                      : "Band C's centre frequency, where its LFO sweeps from (drag the C handle sideways in the display).");
             case kQ:
                 return "How narrow the bell is: low Q is broad and gentle, high Q a narrow peak or notch. A boost keeps its width "
                        "at any Gain; a cut widens the deeper it goes (the mouse wheel over a handle, or Alt and drag up and down, "
@@ -36,7 +37,7 @@ inline const char* forParam (uint32_t id)
                        "round). 0 leaves the band still.";
             case kLfoPhase:
                 return b ? "Where in its cycle B's LFO starts. With Link on, B's offset from A's LFO (180: B moves against A)."
-                         : "Where in its cycle A's LFO starts (synced: its offset from the beat).";
+                         : "Where in its cycle the band's LFO starts (synced: its offset from the beat).";
             default: return nullptr;
         }
     }
@@ -44,12 +45,13 @@ inline const char* forParam (uint32_t id)
     {
         case kLfoOnA:
         case kLfoOnB:
+        case kLfoOnC:
             return "The band's LFO on or off. Off, the band stays at its Freq (its LFO settings are kept for when it comes "
                    "back on).";
         case kLink:
             return "B's LFO follows A's: A's Sync, rate and Shape, with B's Phase as the offset from A (180: against A) and B's "
                    "own Depth.";
-        case kTapeOn: return "The tape stage after the two bands: drive into a fast leveller and a clipper, then softer highs.";
+        case kTapeOn: return "The tape stage after the three bands: drive into a fast leveller and a clipper, then softer highs.";
         case kDrive:
             return "The gain into the tape, -10 to +50 dB: clean and quieter at 0, saturated and held at a steady level from "
                    "about a third up (no makeup: more drive is louder until it saturates).";
@@ -66,9 +68,9 @@ inline const char* forParam (uint32_t id)
 }
 
 constexpr const char* kCurveView =
-    "The two bands' curve, +18 to -18 dB from 20 Hz to 20 kHz: the bright line is the curve now, with each band where its "
+    "The three bands' curve, +18 to -18 dB from 20 Hz to 20 kHz: the bright line is the curve now, with each band where its "
     "LFO has swept it (the dots); the dashed line is the curve at the knobs' settings and the bars under the handles show "
-    "how far each LFO sweeps. Drag the A or B handle sideways for Freq, up and down for Gain; the mouse wheel over a "
+    "how far each LFO sweeps. Drag the A, B or C handle sideways for Freq, up and down for Gain; the mouse wheel over a "
     "handle (or Alt and drag) changes Q; a double-click resets the band.";
 
 } // namespace sweepr::help

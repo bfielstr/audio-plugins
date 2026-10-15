@@ -27,10 +27,10 @@ const ParamTable& paramTable ()
         // a new instance: the settings the plug-in was made to replace (a low boost at 110 Hz and a cut
         // at 320 Hz, both swept an octave up and down every beat), into tape
         // (the bells' ranges, tapers and shape: BellShape.h)
-        const double freq[kBands] = {110.0, 320.0}, q[kBands] = {1.0, 1.6}, gain[kBands] = {13.0, -15.0};
-        for (int b = 0; b < kBands; ++b)
-        {
-            const std::string n = b == 0 ? "A " : "B ";
+        // (band C, added later, starts flat: a new instance sounds as before until C is turned up)
+        const double freq[kBands] = {110.0, 320.0, 1000.0}, q[kBands] = {1.0, 1.6, 1.0}, gain[kBands] = {13.0, -15.0, 0.0};
+        auto addBand = [&] (int b) {
+            const std::string n = b == 0 ? "A " : (b == 1 ? "B " : "C ");
             auto id = [b] (uint32_t f) { return bandParam (b, f); };
             v.push_back (real (id (kFreq), keep (n + "Freq"), "Freq", bell::kFreqMin, bell::kFreqMax, freq[b], Curve::Log, Disp::Hz));
             v.push_back (real (id (kQ), keep (n + "Q"), "Q", bell::kQMin, bell::kQMax, q[b], Curve::Log, Disp::Number));
@@ -45,7 +45,9 @@ const ParamTable& paramTable ()
                                  {"Sine", "Triangle", "Saw Up", "Saw Down", "Square", "Random", "Smooth Random"}, kSine));
             v.push_back (real (id (kLfoDepth), keep (n + "LFO Depth"), "Depth", -4.0, 4.0, 1.0, Curve::Linear, Disp::Octaves));
             v.push_back (real (id (kLfoPhase), keep (n + "LFO Phase"), "Phase", 0.0, 360.0, 0.0, Curve::Linear, Disp::Degrees));
-        }
+        };
+        addBand (0);
+        addBand (1);
         v.push_back (toggle (kLink, "LFO Link", "Link", false));
         v.push_back (toggle (kTapeOn, "Tape", "Tape", true));
         v.push_back (percent (kDrive, "Drive", "Drive", 0.75));
@@ -61,6 +63,8 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt4Params (v, kTailExt4Base);
         v.push_back (toggle (kLfoOnA, "A LFO", "LFO", true));
         v.push_back (toggle (kLfoOnB, "B LFO", "LFO", true));
+        addBand (2);
+        v.push_back (toggle (kLfoOnC, "C LFO", "LFO", true));
         return v;
     }());
     return t;

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdio>
 #include <string>
 
@@ -22,7 +23,7 @@ namespace theme = pk::theme;
 namespace {
 constexpr double kHandleRadius = 6.0;
 constexpr int kPoints = 240; // along the frequency axis
-const char* const kNames[kBands] = {"A", "B"};
+const char* const kNames[kBands] = {"A", "B", "C"};
 
 void text (CDrawContext* ctx, const std::string& s, const CRect& r, const CColor& c, double size, CHoriTxtAlign a = kCenterText,
            bool bold = false)
@@ -59,10 +60,11 @@ double CurveView::liveHz (int b) const
     return host->plainValue (bandParam (b, kFreq));
 }
 
-double CurveView::responseDb (double f, double fa, double fb) const
+double CurveView::responseDb (double f, const double* centres) const
 {
-    const auto h = dsp::bellResponse (f, fa, host->plainValue (bandParam (0, kQ)), host->plainValue (bandParam (0, kGain)), shownSr) *
-                   dsp::bellResponse (f, fb, host->plainValue (bandParam (1, kQ)), host->plainValue (bandParam (1, kGain)), shownSr);
+    std::complex<double> h = 1.0;
+    for (int b = 0; b < kBands; ++b)
+        h *= dsp::bellResponse (f, centres[b], host->plainValue (bandParam (b, kQ)), host->plainValue (bandParam (b, kGain)), shownSr);
     return 20.0 * std::log10 (std::max (1e-6, std::abs (h)));
 }
 
@@ -104,9 +106,15 @@ void CurveView::draw (CDrawContext* ctx)
     ctx->setClipRect (all);
     const double plotBottom = all.bottom - kScaleH;
 
-    const double setA = host->plainValue (bandParam (0, kFreq)), setB = host->plainValue (bandParam (1, kFreq));
-    const double nowA = liveHz (0), nowB = liveHz (1);
-    auto curve = [&] (double fa, double fb, bool fill, const CColor& stroke, double width, bool dashed) {
+    double set[kBands], now[kBands];
+    bool moved = false;
+    for (int b = 0; b < kBands; ++b)
+    {
+        set[b] = host->plainValue (bandParam (b, kFreq));
+        now[b] = liveHz (b);
+        moved = moved || std::fabs (std::log (now[b] / set[b])) > 1e-3;
+    }
+    auto curve = [&] (const double* centres, bool fill, const CColor& stroke, double width, bool dashed) {
         auto path = owned (ctx->createGraphicsPath ());
         if (!path)
             return;
@@ -114,7 +122,7 @@ void CurveView::draw (CDrawContext* ctx)
         for (int i = 0; i <= kPoints; ++i)
         {
             const double f = kMinHz * std::pow (kMaxHz / kMinHz, (double)i / kPoints);
-            const CPoint pt (xOfHz (f), yOfDb (responseDb (f, fa, fb)));
+            const CPoint pt (xOfHz (f), yOfDb (responseDb (f, centres)));
             if (i == 0)
             {
                 path->beginSubpath (fill ? CPoint (pt.x, base) : pt);
@@ -158,16 +166,14 @@ void CurveView::draw (CDrawContext* ctx)
     }
 
     // the curve at the settings (dashed) under the curve now
-    const bool moved = std::fabs (std::log (nowA / setA)) > 1e-3 || std::fabs (std::log (nowB / setB)) > 1e-3;
     if (moved)
-        curve (setA, setB, false, theme::withAlpha (theme::kCopperPale, 140), 1.0, true);
-    curve (nowA, nowB, true, theme::kText, 1.5, false);
+        curve (set, false, theme::withAlpha (theme::kCopperPale, 140), 1.0, true);
+    curve (now, true, theme::kText, 1.5, false);
 
     // where each band is now: a cinnabar dot on the curve
     for (int b = 0; b < kBands; ++b)
     {
-        const double f = b == 0 ? nowA : nowB;
-        const CPoint p (xOfHz (f), yOfDb (responseDb (f, nowA, nowB)));
+        const CPoint p (xOfHz (now[b]), yOfDb (responseDb (now[b], now)));
         ctx->setFillColor (theme::kEnergyLive);
         ctx->drawEllipse (CRect (p.x - 3.0, p.y - 3.0, p.x + 3.0, p.y + 3.0), kDrawFilled);
     }
@@ -182,25 +188,33 @@ void CurveView::draw (CDrawContext* ctx)
     }
 
     // the readout: each band's settings, and where it is now (narrow: a line per band)
-    char a[80], b[80], now[64];
-    std::snprintf (a, sizeof (a), "A %s  Q %s  %s", host->valueText (bandParam (0, kFreq)).c_str (), host->valueText (bandParam (0, kQ)).c_str (),
-                   host->valueText (bandParam (0, kGain)).c_str ());
-    std::snprintf (b, sizeof (b), "B %s  Q %s  %s", host->valueText (bandParam (1, kFreq)).c_str (), host->valueText (bandParam (1, kQ)).c_str (),
-                   host->valueText (bandParam (1, kGain)).c_str ());
-    std::snprintf (now, sizeof (now), "now A %.0f Hz / B %.0f Hz", nowA, nowB);
-    // (at the top right, where the curve is usually flat; the scale's labels are at the left)
-    if (all.getWidth () >= 640.0)
+    std::string line[kBands], all3;
+    std::string nowText = "now";
+    for (int k = 0; k < kBands; ++k)
     {
-        text (ctx, std::string (a) + "     " + b, CRect (all.left + 200, all.top + 4, all.right - 8, all.top + 18), theme::kText, 10.5, kRightText, true);
+        char buf[96];
+        std::snprintf (buf, sizeof (buf), "%s %s  Q %s  %s", kNames[k], host->valueText (bandParam (k, kFreq)).c_str (),
+                       host->valueText (bandParam (k, kQ)).c_str (), host->valueText (bandParam (k, kGain)).c_str ());
+        line[k] = buf;
+        all3 += (k ? "     " : "") + line[k];
+        std::snprintf (buf, sizeof (buf), "%s %s %.0f Hz", k ? " /" : "", kNames[k], now[k]);
+        nowText += buf;
+    }
+    // (at the top right, where the curve is usually flat; the scale's labels are at the left)
+    if (all.getWidth () >= 860.0)
+    {
+        text (ctx, all3, CRect (all.left + 200, all.top + 4, all.right - 8, all.top + 18), theme::kText, 10.5, kRightText, true);
         if (live ())
-            text (ctx, now, CRect (all.left + 200, all.top + 18, all.right - 8, all.top + 31), theme::kTextDim, 9.5, kRightText);
+            text (ctx, nowText, CRect (all.left + 200, all.top + 18, all.right - 8, all.top + 31), theme::kTextDim, 9.5, kRightText);
     }
     else
     {
-        text (ctx, a, CRect (all.left + 36, all.top + 4, all.right - 8, all.top + 18), theme::kText, 10.5, kRightText, true);
-        text (ctx, b, CRect (all.left + 36, all.top + 18, all.right - 8, all.top + 32), theme::kText, 10.5, kRightText, true);
+        for (int k = 0; k < kBands; ++k)
+            text (ctx, line[k], CRect (all.left + 36, all.top + 4 + 14 * k, all.right - 8, all.top + 18 + 14 * k), theme::kText, 10.5, kRightText,
+                  true);
         if (live ())
-            text (ctx, now, CRect (all.left + 36, all.top + 32, all.right - 8, all.top + 45), theme::kTextDim, 9.5, kRightText);
+            text (ctx, nowText, CRect (all.left + 36, all.top + 4 + 14 * kBands, all.right - 8, all.top + 17 + 14 * kBands), theme::kTextDim, 9.5,
+                  kRightText);
     }
     ctx->setLineWidth (1.0);
     ctx->resetClipRect ();
@@ -208,7 +222,7 @@ void CurveView::draw (CDrawContext* ctx)
 
 int CurveView::hit (const CPoint& p) const
 {
-    // (B first: drawn last, so on top where they overlap)
+    // (the last band first: drawn last, so on top where they overlap)
     for (int b = kBands - 1; b >= 0; --b)
     {
         const CPoint h = handle (b);

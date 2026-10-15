@@ -1,8 +1,8 @@
 # sweepr
 
-sweepr is a two-band EQ whose two bands move. Each band is a bell (a boost or a cut around its
-frequency), and each has an LFO that sweeps that frequency up and down, in time with the song or free.
-After the two bands the sound goes through a tape stage: drive into a fast leveller and a clipper that
+sweepr is an EQ whose three bands move. Each band is a bell (a boost or a cut around its frequency),
+and each has an LFO that sweeps that frequency up and down, in time with the song or free. After the
+bands the sound goes through a tape stage: drive into a fast leveller and a clipper that
 holds the level, then softer highs as the tape **Speed** comes down. Put it on a bass and
 a boost and a cut roll over the harmonics with the beat; the curve on the display moves with them. Install
 instructions are in the [top-level README](../../README.md).
@@ -13,8 +13,9 @@ instructions are in the [top-level README](../../README.md).
 
 1. Put sweepr on a bass, a pad or a loop and press play. A new instance is already moving: band A boosts
    13 dB at 110 Hz, band B cuts 15 dB at 320 Hz, and each LFO sweeps its band an octave up and down
-   every beat (1/4, Sine), into tape.
-2. Drag the **A** and **B** handles on the display: sideways for the frequency, up and down for the
+   every beat (1/4, Sine), into tape. Band C starts flat (0 dB at 1 kHz): turn its **Gain** up or down
+   for a third moving bell.
+2. Drag the **A**, **B** and **C** handles on the display: sideways for the frequency, up and down for the
    gain; the mouse wheel over a handle (or Alt and drag) for Q. The bright line is the curve now, the
    dashed line the curve at the settings, the bar under each handle how far its LFO sweeps.
 3. Set each band's LFO in its panel: **Sync** on for a note value (**1/32** to **4 Bars**, triplets and
@@ -30,7 +31,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 ## The display
 
-The curve of the two bands from 20 Hz to 20 kHz, +18 to -18 dB, on the grid of a classic two-band EQ
+The curve of the three bands from 20 Hz to 20 kHz, +18 to -18 dB, on the grid of a classic two-band EQ
 screen (31 Hz to 16 kHz in octaves):
 
 - the bright line over a faint fill: the curve now, with each band where its LFO has swept it, and a
@@ -38,7 +39,7 @@ screen (31 Hz to 16 kHz in octaves):
 - the dashed line: the curve at the knobs' settings (while the bands are swept away from it);
 - the **A** and **B** handles: each band's **Freq** and **Gain**, to drag;
 - the bar under a handle: how far its LFO sweeps (**Depth** octaves each way from **Freq**);
-- at the top right: both bands' settings, and while audio plays where they are now.
+- at the top right: each band's settings, and while audio plays where they are now.
 
 | On a handle | What it does |
 |---|---|
@@ -54,13 +55,13 @@ shows the settings when it does not.
 
 ## Controls
 
-**BAND A** and **BAND B** (each the same, B with **Link**)
+**BAND A**, **BAND B** and **BAND C** (each the same, B with **Link**)
 
-- **Freq** (30 Hz to 16 kHz; A 110 Hz, B 320 Hz by default): the bell's centre, where the LFO sweeps from
+- **Freq** (30 Hz to 16 kHz; A 110 Hz, B 320 Hz, C 1 kHz by default): the bell's centre, where the LFO sweeps from
   (the LFO takes it further, up to just under half the sample rate).
-- **Q** (0.25 to 16.25; A 1.00, B 1.60): the bell's width. Low Q is broad and gentle, high Q a narrow peak
+- **Q** (0.25 to 16.25; A 1.00, B 1.60, C 1.00): the bell's width. Low Q is broad and gentle, high Q a narrow peak
   or notch. A boost keeps its width at any **Gain**; a cut widens the deeper it goes.
-- **Gain** (-18.1 to +17.9 dB in the classic EQ's steps, 0 dB in the middle; A +13 dB, B -15 dB): how far
+- **Gain** (-18.1 to +17.9 dB in the classic EQ's steps, 0 dB in the middle; A +13 dB, B -15 dB, C 0 dB): how far
   the bell boosts or cuts.
 - **LFO** (on by default): the switch at the top of the panel turns the band's LFO on or off. Off, the
   band glides back to its **Freq** and stays there; its LFO settings are kept for when it comes back on.
@@ -82,7 +83,7 @@ shows the settings when it does not.
 
 **TAPE**
 
-- **Tape** (on by default): the tape stage after the two bands. Switching it fades over 10 ms.
+- **Tape** (on by default): the tape stage after the three bands. Switching it fades over 10 ms.
 - **Drive** (0 to 100 %, 75 % by default): the gain into the tape, -10 dB to +50 dB: clean and quieter
   at 0, saturated and held at a steady level from about a third up. There is no makeup: like a real
   tape, more drive is louder until it saturates.
@@ -104,8 +105,8 @@ shows the settings when it does not.
 since the tape stage is the saturator; switch it on for more (its gentlr is on, ready). See
 [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
 
-The **Basic** page has the display, **A Gain**, **B Gain**, **A Depth**, **B Depth**, **Drive**, **Mix**
-and **Output**; **Advanced** shows everything.
+The **Basic** page has the display, **A Gain**, **B Gain**, **C Gain**, **Drive**, **A Depth**, **B Depth**,
+**C Depth**, **Mix** and **Output**; **Advanced** shows everything.
 
 ## How it works
 
