@@ -14,6 +14,23 @@ namespace pinchr {
 namespace dsp = sweepr::dsp;
 
 namespace {
+// the germanium transistor's open-loop curve: asymmetric (the positive side saturates first), slope 1 at rest
+constexpr double kGermBias = 0.35;
+const double kGermT = std::tanh (kGermBias), kGermNorm = 1.0 / (1.0 - kGermT * kGermT);
+inline double germ (double x) { return (std::tanh (x + kGermBias) - kGermT) * kGermNorm; }
+inline double germSlope (double x)
+{
+    const double t = std::tanh (x + kGermBias);
+    return (1.0 - t * t) * kGermNorm;
+}
+// the stage's output for a linear-stage output y: z = head germ (x), x + loop germ (x) = (1 + loop) y / head
+inline double germStage (double y, double loop, double head, double& x)
+{
+    const double r = (1.0 + loop) * y / head;
+    for (int k = 0; k < 4; ++k)
+        x -= (x + loop * germ (x) - r) / (1.0 + loop * germSlope (x));
+    return head * germ (x);
+}
 // the level u (dB) a follower level w stands for: kCalW read backwards (linear between its points)
 inline double levelOf (double w)
 {
@@ -125,6 +142,7 @@ void Engine::prepare (double sampleRate, int maxBlock)
     cSmooth = coefFor (0.02, sr);
     hp1G = dsp::onePoleG (shape::kHp1Hz, srOs);
     hp2G = dsp::onePoleG (shape::kHp2Hz, srOs);
+    satDcG = dsp::onePoleG (5.0, srOs);
     kSm = coefFor (shape::kSmoothSec, srOs);
 
     tail.prepare (sr, std::max (1, maxBlock));
@@ -148,6 +166,8 @@ void Engine::reset ()
         grNow[c] = 0.0;
         for (auto& s : svf)
             s[c].reset ();
+        satX[c] = 0.0;
+        satDc[c].reset ();
     }
     levelNow = -120.0;
     inGain = dbToGain (p[kInput]);
@@ -158,6 +178,7 @@ void Engine::reset ()
     mix = std::clamp (p[kMix], 0.0, 1.0);
     drive = p[kDrive];
     feedback = p[kFeedback];
+    satAmt = std::clamp (p[kSaturation], 0.0, 1.0);
     out = (float)dbToGain (p[kOutput]);
     shownDrive = shownFeedback = -1.0;
     controlChunk ();
@@ -216,6 +237,10 @@ void Engine::controlChunk ()
     glide (release, p[kRelease], c, 1e-6);
     glide (drive, p[kDrive], c, 1e-6);
     glide (feedback, p[kFeedback], c, 1e-6);
+    glide (satAmt, std::clamp (p[kSaturation], 0.0, 1.0), c, 1e-6);
+    // the loop's gain: 30 at Feedback 0 down to about 1 at 10; the headroom: +6 dBFS at 0 % .. -12 dBFS at 100 %
+    satLoop = 30.0 * std::pow (10.0, -0.15 * feedback);
+    satHead = dbToGain (6.0 - 18.0 * satAmt);
     kAtk = coefFor (tableTime (shape::kAttackSec, attack), srOs);
     kRel = coefFor (tableTime (shape::kReleaseSec, release), srOs);
     const int sf = std::clamp ((int)std::lround (p[kScFilter]), 0, kNumScFilters - 1);
@@ -350,7 +375,15 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                     const double hp = y - sec[s].c.k * bp - lp;
                     y = sec[s].mHp * hp + sec[s].mBp * bp + sec[s].mLp * lp;
                 }
-                up[c][(size_t)j] = (float)(y * stageGain);
+                y *= stageGain;
+                // the germanium transistor (its distortion's DC blocked; at 0 % the stage stays linear)
+                if (satAmt > 0.0)
+                {
+                    const double z = germStage (y, satLoop, satHead, satX[c]);
+                    const double d = (z - y) * std::min (1.0, satAmt * 20.0); // (fades in over the first 5 %)
+                    y += d - satDc[c].lp (d, satDcG);
+                }
+                up[c][(size_t)j] = (float)y;
             }
         }
         os[0].down (up[0].data (), wet[0].data (), m);
@@ -375,7 +408,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         // (never: a NaN or an overflow in the filters starts them again)
         bool ok = std::isfinite (yl[a + m - 1]) && std::isfinite (yr[a + m - 1]) && std::isfinite (smooth[0]) && std::isfinite (smooth[1]);
         for (int s = 0; ok && s < 4; ++s)
-            ok = svf[s][0].finite () && svf[s][1].finite ();
+            ok = svf[s][0].finite () && svf[s][1].finite () && std::isfinite (satX[0]) && std::isfinite (satX[1]);
         if (!ok)
         {
             reset ();

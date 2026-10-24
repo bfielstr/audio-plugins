@@ -30,6 +30,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kMode, "Mode", "Mode", {"Stereo", "Mid/Side"}, kStereo));
         v.push_back (toggle (kExtSc, "Ext SC", "Ext SC", false));
         v.push_back (real (kScGain, "SC Gain", "SC Gain", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (percent (kSaturation, "Saturation", "Saturation", 0.5));
         // the end saturator: off in a new instance (the output stage is the colour here)
         pk::addTailParams (v, kTailBase, false);
         smacheratr::addTailExtParams (v, kTailExtBase);

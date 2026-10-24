@@ -41,8 +41,8 @@ public:
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
     pk::layout::Spec layoutSpec (bool arranged) const override;
-    // The Basic page (pluginkit/ui/BasicView.h): the display; Input, Ratio, Attack, Release, Drive and
-    // Feedback; Mix and Output; the end saturator in the extras
+    // The Basic page (pluginkit/ui/BasicView.h): the display; Input, Ratio, Release, Drive, Feedback and
+    // Saturation; Mix and Output; the end saturator in the extras
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;

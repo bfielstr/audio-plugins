@@ -95,11 +95,12 @@ void Editor::buildUI (CFrame* f)
     bind (comp, new Toggle (CRect (12, kKnobRow2 + 22, 92, kKnobRow2 + 22 + kSwitchH), this, kExtSc, "Ext SC"));
     bind (comp, new Knob (CRect (kCompX[1], kKnobRow2, kCompX[1] + kCompKnobW, kKnobRow2 + kKnobH), this, kScGain, nullptr, true));
 
-    // GERMANIUM: the output stage, Drive and Feedback
+    // GERMANIUM: the output stage, Drive and Feedback, then Saturation
     auto* germ = new Panel (CRect (kGermLeft, kRowTop, kGermRight, kRowBottom), "GERMANIUM");
     root->addView (germ);
     bind (germ, new Knob (CRect (kGermX[0], kKnobTop, kGermX[0] + kKnobW, kKnobTop + kKnobH), this, kDrive));
     bind (germ, new Knob (CRect (kGermX[1], kKnobTop, kGermX[1] + kKnobW, kKnobTop + kKnobH), this, kFeedback));
+    bind (germ, new Knob (CRect (kGermX[0], kKnobRow2, kGermX[0] + kKnobW, kKnobRow2 + kKnobH), this, kSaturation));
 
     // OUTPUT: Mode, then Mix and Output
     auto* out = new Panel (CRect (kOutLeft, kRowTop, kOutRight, kRowBottom), "OUTPUT");
@@ -127,14 +128,14 @@ std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
 
 pk::basic::Spec Editor::basicSpec ()
 {
-    // the compressor's four knobs and the output stage's two; Mix and Output
+    // the compressor's Input, Ratio and Release, the output stage's Drive, Feedback and Saturation; Mix and Output
     using namespace pk::basic;
     Spec s;
     s.title = "pinchr";
     s.capture = [c = ctl] () -> const pk::CaptureBuffer* { auto* sh = c->getShared (); return sh ? &sh->capture : nullptr; };
     s.displayHeight = 180;
     s.display = [this] (const CRect& r) -> CView* { return makeDisplay (r); };
-    s.rows = {{knob (kInput, {}, true), knob (kRatio), knob (kAttack)}, {knob (kRelease), knob (kDrive), knob (kFeedback)}};
+    s.rows = {{knob (kInput, {}, true), knob (kRatio), knob (kRelease)}, {knob (kDrive), knob (kFeedback), knob (kSaturation)}};
     s.output = {knob (kMix), knob (kOutput, {}, true)};
     smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
     s.menu = [this] (CPoint p) { showMenu (p); };

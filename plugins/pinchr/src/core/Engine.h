@@ -18,6 +18,13 @@
 // at every Feedback position (a gain, three resonant low sections, a high peak), interpolated along
 // Feedback; Drive glides from one step's to the next.
 //
+// Saturation: the output stage's germanium transistor, an asymmetric soft curve (more second harmonic than
+// third) inside a negative-feedback loop solved every sample. Feedback sets the loop's gain: low Feedback,
+// much feedback, clean until the stage nears its headroom, then a firmer knee; high Feedback, little feedback,
+// warm from much lower levels. Saturation sets the headroom (100 %: -12 dBFS at the stage's output; 0 %: off,
+// the measured linear stage exactly). Small signals pass as the linear stage has them; the distortion's DC is
+// blocked.
+//
 // Latency: the oversampler's (constant), plus the end saturator's.
 #pragma once
 
@@ -109,6 +116,10 @@ private:
     Section sec[4];
     sweepr::dsp::Svf svf[4][2];
     double stageGain = 1.0;
+    // the germanium saturation: the loop gain, the headroom (linear) and per channel the last solution and the DC
+    double satAmt = 0.5, satLoop = 5.0, satHead = 1.0, satX[2] {};
+    sweepr::dsp::OnePole satDc[2];
+    double satDcG = 0.0;
     double shownDrive = -1.0, shownFeedback = -1.0;
     // oversampling
     para::Oversampler4x os[2], scOs[2]; // (the sidechain's: only up)

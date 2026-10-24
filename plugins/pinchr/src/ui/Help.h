@@ -40,6 +40,11 @@ inline const char* forParam (uint32_t id)
         case kFeedback:
             return "The output stage's feedback, 0 to 10: up adds gain and a resonant bass bump (about 20 to 90 Hz, "
                    "higher with more Drive) with a steep cut below it. At 0 the stage is quiet and flat.";
+        case kSaturation:
+            return "The germanium transistor in the output stage: an asymmetric, mostly second-harmonic saturation. "
+                   "Higher sets it in at lower levels (100 %: from about -12 dBFS out of the stage). Feedback shapes "
+                   "it: low Feedback stays clean, then breaks up more firmly; high Feedback is warm from lower levels. "
+                   "0 %: off, the measured clean stage.";
         case kOutput: return "Overall output level.";
         case kLink: return "One detector for both channels (the louder sets the gain), so the image stays put. Off: each channel on its own.";
         case kMode: return "Stereo (left and right) or Mid/Side (the compressor and the output stage work on the mid and the side).";

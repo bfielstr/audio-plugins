@@ -220,14 +220,18 @@ TEST (mix_blends_before_the_output_stage)
     const double half = db (0.5 * std::pow (10.0, g[0] / 20.0) + 0.5 * std::pow (10.0, g[2] / 20.0));
     CHECK (std::fabs (g[1] - half) < 0.05, "Mix 50 %%: %.2f dB (linear blend %.2f)", g[1], half);
     // deep compression: Mix 0 is untouched by it
-    auto a = engine ([] (Engine& e) { e.setParam (kMix, 0.0); }), b = engine ([] (Engine& e) { e.setParam (kMix, 0.0); });
+    auto mix0 = [] (Engine& e) {
+        e.setParam (kMix, 0.0);
+        e.setParam (kSaturation, 0.0);
+    };
+    auto a = engine (mix0), b = engine (mix0);
     const double quiet = gainAt (*a, 1000.0, -60.0), loud = gainAt (*b, 1000.0, -6.0);
     CHECK (std::fabs (loud - quiet) < 0.1, "Mix 0: %.2f dB at -6 dBFS against -60 dBFS", loud - quiet);
 }
 
 TEST (dirty_adds_a_second_harmonic)
 {
-    // with a silent sidechain (Ext SC) nothing compresses, so nothing ripples: Dirty's second harmonic is
+    // with a silent sidechain (Ext SC) nothing compresses, so nothing ripples; Saturation off: Dirty's second harmonic is
     // k A / 2 (k 0.11 at rest) at -12 dBFS, as the model's was, and Clean has none
     const double amp = std::pow (10.0, -12.0 / 20.0);
     const auto x = sine (220.0, 1.0, amp);
@@ -237,6 +241,7 @@ TEST (dirty_adds_a_second_harmonic)
         auto e = engine ([dirty] (Engine& e) {
             e.setParam (kExtSc, 1.0);
             e.setParam (kDirty, dirty ? 1.0 : 0.0);
+            e.setParam (kSaturation, 0.0); // (the FET alone)
         });
         std::vector<float> l (x.size ()), r (x.size ());
         for (size_t a = 0; a < x.size (); a += 480)
@@ -255,6 +260,59 @@ TEST (dirty_adds_a_second_harmonic)
         else
             CHECK (db (h2 / h1) < -90.0 && db (h3 / h1) < -90.0, "Clean: H2 %.1f dB, H3 %.1f dB", db (h2 / h1), db (h3 / h1));
     }
+}
+
+TEST (saturation_is_germanium)
+{
+    // 0 %: the measured linear stage exactly; quiet signals pass the same at any Saturation; a hot 100 Hz sine
+    // gets mostly second harmonic, more with more Saturation, and at the same output level more with high
+    // Feedback (little feedback) than low; the stage holds its headroom
+    auto h = [] (double sat, double fb, double drive, double level, double& h2, double& h3) {
+        auto e = engine ([&] (Engine& e) {
+            e.setParam (kSaturation, sat);
+            e.setParam (kFeedback, fb);
+            e.setParam (kDrive, drive);
+            e.setParam (kExtSc, 1.0); // (a silent sidechain: no compression)
+        });
+        const double amp = std::pow (10.0, level / 20.0);
+        const auto x = sine (100.0, 1.0, amp);
+        const std::vector<float> silent (x.size (), 0.0f);
+        std::vector<float> l (x.size ()), r (x.size ());
+        for (size_t a = 0; a < x.size (); a += 480)
+        {
+            const int n = (int)std::min<size_t> (480, x.size () - a);
+            e->process (x.data () + a, x.data () + a, l.data () + a, r.data () + a, n, silent.data () + a, silent.data () + a);
+        }
+        const size_t a = l.size () - (size_t)(0.5 * kSr);
+        const double h1 = toneLevel (l, a, l.size (), 100.0);
+        h2 = db (toneLevel (l, a, l.size (), 200.0) / h1);
+        h3 = db (toneLevel (l, a, l.size (), 300.0) / h1);
+        return db (h1 / amp);
+    };
+    double h2, h3, h2b, h3b;
+    h (0.0, 5.0, 5.0, -6.0, h2, h3);
+    CHECK (h2 < -90.0 && h3 < -90.0, "0 %%: H2 %.1f, H3 %.1f dB", h2, h3);
+    const double gQuietOff = h (0.0, 5.0, 5.0, -50.0, h2, h3), gQuietOn = h (1.0, 5.0, 5.0, -50.0, h2, h3);
+    CHECK (std::fabs (gQuietOn - gQuietOff) < 0.05, "a quiet sine: %.2f dB at 100 %% against 0 %%", gQuietOn - gQuietOff);
+    h (0.5, 5.0, 5.0, -6.0, h2, h3);
+    h (1.0, 5.0, 5.0, -6.0, h2b, h3b);
+    CHECK (h2 > -60.0 && h2 > h3 && h2b > h2 + 6.0, "-6 dBFS: H2 %.1f (H3 %.1f) at 50 %%, H2 %.1f at 100 %%", h2, h3, h2b);
+    // Feedback 2 against 9 at the same level out of the stage (Drive compensates the gain)
+    const double gLow = h (0.0, 2.0, 9.0, -50.0, h2, h3), gHigh = h (0.0, 9.0, 4.0, -50.0, h2, h3);
+    h (0.75, 2.0, 9.0, -20.0 - gLow, h2, h3);
+    h (0.75, 9.0, 4.0, -20.0 - gHigh, h2b, h3b);
+    CHECK (h2b > h2 + 6.0, "-20 dBFS out: H2 %.1f dB at Feedback 9, %.1f at Feedback 2", h2b, h2);
+    // very hot: bounded near the headroom
+    auto e = engine ([] (Engine& e) {
+        e.setParam (kSaturation, 1.0);
+        e.setParam (kDrive, 10.0);
+        e.setParam (kFeedback, 10.0);
+    });
+    const auto y = run (*e, sine (100.0, 1.0, 1.0));
+    double peak = 0.0;
+    for (size_t i = 24000; i < y.size (); ++i)
+        peak = std::max (peak, (double)std::fabs (y[i]));
+    CHECK (finite (y) && peak < 1.0, "Drive 10, Feedback 10, 100 %%: peak %.2f", peak);
 }
 
 TEST (link_and_mid_side)

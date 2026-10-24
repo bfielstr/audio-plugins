@@ -100,10 +100,10 @@ int main ()
         CHECK (t.info (kInput).def == 0.0 && t.info (kRatio).def == 4.0 && t.info (kCurve).def == (double)kGermSoft && t.info (kAttack).def == 3.0 &&
                    t.info (kRelease).def == 3.0 && t.info (kScFilter).def == 0.0 && t.info (kDirty).def == 0.0 && t.info (kMix).def == 1.0 &&
                    t.info (kDrive).def == 5.0 && t.info (kFeedback).def == 5.0 && t.info (kOutput).def == 0.0 && t.info (kLink).def == 1.0 &&
-                   t.info (kMode).def == (double)kStereo && t.info (kExtSc).def == 0.0 && t.info (kScGain).def == 0.0 &&
+                   t.info (kMode).def == (double)kStereo && t.info (kExtSc).def == 0.0 && t.info (kScGain).def == 0.0 && t.info (kSaturation).def == 0.5 &&
                    t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0,
                "Input 0 dB, Ratio 4, Germ Soft, Attack and Release 3, SC Filter off, clean, Mix 100 %%, Drive 5, Feedback 5, Output "
-               "0 dB, linked, stereo, Ext SC off at 0 dB, the end saturator off");
+               "0 dB, linked, stereo, Ext SC off at 0 dB, Saturation 50 %%, the end saturator off");
         CHECK (t.toText (kCurve, kZenerHard) == "Zener Hard" && t.toText (kScFilter, 5) == "300 Hz" && t.toText (kMode, kMidSide) == "Mid/Side" &&
                    t.toText (kDrive, 7.0) == "7",
                "the choices' names (%s, %s, %s, %s)", t.toText (kCurve, kZenerHard).c_str (), t.toText (kScFilter, 5).c_str (),

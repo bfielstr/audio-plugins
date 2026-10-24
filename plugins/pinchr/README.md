@@ -16,7 +16,8 @@ the base for a sound of its own. Install instructions are in the [top-level READ
 4. **Attack** and **Release**: 0 is fast, 10 slow. Short peaks release quickly, long loud passages more
    slowly, as on the hardware.
 5. **Drive** and **Feedback** colour it: **Feedback** up gives more level and a bass bump (about 20 to 90
-   Hz, higher with more **Drive**) with a steep cut below it; the display shows the response.
+   Hz, higher with more **Drive**) with a steep cut below it; the display shows the response. **Saturation**
+   sets how readily the germanium stage distorts (0 % for the clean, measured stage).
 6. **Mix** for parallel compression: both the compressed and the uncompressed signal go through the
    output stage.
 
@@ -53,6 +54,12 @@ Point at any control for help in the info box at the bottom (**?** also switches
 - **Drive** (0 to 10 in steps, 5 by default): the output stage's gain switch, about 3 dB a step.
 - **Feedback** (0 to 10, 5 by default): the output stage's feedback. 0 is quiet (about -37 dB) and flat;
   up gives more gain and the resonant bass bump.
+- **Saturation** (0 to 100 %, 50 % by default): the output stage's germanium transistor, an asymmetric
+  saturation, mostly second harmonic, inside the stage's feedback loop. Higher sets it in at lower levels
+  (from about +6 dBFS out of the stage just above 0 %, -3 dBFS at 50 %, -12 dBFS at 100 %), so more **Drive**
+  also drives it harder. **Feedback** shapes it: low Feedback (much feedback) stays clean, then breaks up
+  more firmly; high Feedback (little feedback) is warm from lower levels. At 0 % it is off: the measured
+  clean stage.
 
 **OUTPUT**
 
@@ -73,5 +80,6 @@ with a silent external sidechain so nothing compressed, single tones against fix
 **Dirty**) and fitted in Python. The compression curves are its own, interpolated between the eleven
 **Ratio** positions; the output stage is a gain, three resonant low sections and a high peak per
 **Drive** step, fitted at every **Feedback** position (within about 1 dB from 10 Hz to 16 kHz); the
-detector is a fitted model of its timing. The tables are generated: `src/core/CompShape.h`,
+detector is a fitted model of its timing. **Saturation** is pinchr's own: the reference's output stage
+is perfectly linear. The tables are generated: `src/core/CompShape.h`,
 `StageShape.h`, `DetectorShape.h`.

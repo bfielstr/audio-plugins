@@ -25,6 +25,7 @@ enum ParamId : uint32_t
     kMode,      // Stereo or Mid/Side (the channels are the mid and the side)
     kExtSc,     // the detector hears the sidechain input instead (when the host routes one)
     kScGain,    // dB, -24 .. +24: the sidechain input's level into the detector
+    kSaturation, // 0 .. 1: the germanium transistor's saturation in the output stage (0: off, the measured linear stage)
     // the Smacheratr at the end of the chain (the suite's end saturator, off by default here: the output
     // stage is the colour), every block of it
     kTailBase,
@@ -38,10 +39,10 @@ enum ParamId : uint32_t
 // pinned: these numbers are in saved projects
 static_assert (kInput == 0 && kRatio == 1 && kCurve == 2 && kAttack == 3 && kRelease == 4 && kScFilter == 5 && kDirty == 6 && kMix == 7 &&
                    kDrive == 8 && kFeedback == 9 && kOutput == 10 && kLink == 11 && kMode == 12 && kExtSc == 13 && kScGain == 14 &&
-                   kTailBase == 15,
+                   kSaturation == 15 && kTailBase == 16,
                "Pinchr's parameter IDs are fixed");
-static_assert (kTailExtBase == 21 && kTailExt2Base == 38 && kTailExt3Base == 47 && kTailExt4Base == 53 && kNumParams == 58,
-               "saved IDs: the end saturator's blocks at 15 .. 57");
+static_assert (kTailExtBase == 22 && kTailExt2Base == 39 && kTailExt3Base == 48 && kTailExt4Base == 54 && kNumParams == 59,
+               "saved IDs: the end saturator's blocks at 16 .. 58");
 
 enum Knee
 {
