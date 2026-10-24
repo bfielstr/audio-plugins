@@ -1,0 +1,8 @@
+# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: clean, colour
+comment: Low Feedback and high Drive: the output stage flatter and brighter, the compression soft.
+Ratio = 3
+Curve = R Soft
+Drive = 9
+Feedback = 2
+Output = 3 dB

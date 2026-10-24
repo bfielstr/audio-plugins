@@ -1,0 +1,9 @@
+# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bus, glue
+comment: Gentle and slow on a mix or a bus: R Soft at a low Ratio, a slow attack that lets the transients through.
+Ratio = 3
+Curve = R Soft
+Attack = 7
+Release = 6
+SC Filter = 90 Hz
+Mix = 80 %

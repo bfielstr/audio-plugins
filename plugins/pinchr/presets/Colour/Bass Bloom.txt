@@ -1,0 +1,8 @@
+# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, colour
+comment: The output stage's resonant low bump up high, a light touch of compression, the level brought back down.
+Ratio = 2
+Curve = Germ Soft
+Drive = 6
+Feedback = 9
+Output = -8 dB
