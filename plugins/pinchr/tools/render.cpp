@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
