@@ -58,7 +58,6 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                 if (meters)
                     meters->release ();
                 meters = m;
-                watchLatency (&meters->satMeters.latency); // (the end saturator's moves with its Oversampling)
             }
         }
         return kResultOk;

@@ -19,8 +19,8 @@
 // 24 dB by default; the bands always sum to an all-pass. A new slope starts a second set of filters
 // beside the running one, lets it settle (30 ms) and crossfades the bands to it (20 ms), so a change
 // never clicks and the latency stays the same.
-// Soften's Color (off by default): Smacheratr's colour chain after the Output gain, before the built-in
-// saturator: the high colour peak at 5 kHz, Width 4, Amount 15 % (Soften 0) to 35 % (Soften 100 %),
+// Soften's Color (off by default): Smacheratr's colour chain after the Output gain, before the clips at
+// the end: the high colour peak at 5 kHz, Width 4, Amount 15 % (Soften 0) to 35 % (Soften 100 %),
 // Drive 0 dB, Hi-Quality (4x): the highs are pushed into the Analog curve and taken back down after
 // it, so the loud highs upward compression brings up come out rounder. Its latency is always part of
 // Multidyn's: off, the signal only goes through a delay of that length (to the bit) and the colour
@@ -68,15 +68,16 @@
 // Soft Knee, Soften and the transient guard are Character's and do nothing in OTT style; Pre-Limit,
 // the side-chain, the crossovers (24 dB: OTT's Linkwitz-Riley 4) and the Sub band work in both.
 // Character is Multidyn's own sound described above; projects saved before Style existed open in it.
-// Saturator: a built-in Smacheratr after the Output gain (the usual chain), always in the path
-// with its dry/wet at zero when off, so its oversampling latency is constant too.
+// The end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h, both off by default), after Soften's
+// Color: plain curves, no latency. (A built-in Smacheratr was there; its parameters are retired.)
+// Latency: the 1 ms look-ahead and Soften's Color's (constant).
 #pragma once
 
 #include "Crossover.h"
 #include "Ott.h"
 #include "Params.h"
 
-#include "smacheratr/src/core/Tail.h" // the end-of-chain saturator (and Soften's Color: its Engine)
+#include "smacheratr/src/core/Engine.h" // Soften's Color
 
 #include <algorithm>
 #include <array>
@@ -115,14 +116,12 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain) { p[id] = plain; }
     double param (uint32_t id) const { return p[id]; }
-    // withTail: the end-of-chain Smacheratr (off where Multidyn is built into another plug-in)
-    explicit Engine (bool withTail = true);
-    int latency () const { return look + color.latency () + (hasTail ? sat.latency () : 0); } // constant while the saturator's Oversampling is held
+    // withEnd: the clips at the end of the chain (off where Multidyn is built into another plug-in)
+    explicit Engine (bool withEnd = true);
+    int latency () const { return look + color.latency (); } // constant
     int colorLatency () const { return color.latency (); } // Soften's Color's part of it
     // Bypassed, the dry signal passes with the same latency (for the built-in use in Smemplr).
     void setBypass (bool b) { bypass = b; }
-    // Levels of the built-in saturator for an editor (may be null).
-    void setSatMeters (smacheratr::Meters* m) { sat.setMeters (m); }
 
     // In-place capable. sc may be null (no side-chain connected). All buffers are n samples.
     void process (const float* inL, const float* inR, const float* scL, const float* scR, float* outL, float* outR,
@@ -153,7 +152,6 @@ private:
         int delayPos = 0;
     };
     void updateFilters (bool force);
-    void syncSaturator (); // pushes the saturator parameters into its engine
     void syncColor ();     // Soften's Color: its amount
     void processColor (float* l, float* r, int n);
 
@@ -205,7 +203,6 @@ private:
     float peakCoefC = 0.0f;
     float limAtk = 0.0f, limRel = 0.0f, limPeakDecay = 0.0f, meterFall = 0.0f, smooth = 0.0f;
     float guardC = 0.0f; // the transient guard's 3 ms RMS
-    smacheratr::Tail sat;
     smacheratr::Engine color; // Soften's Color (its dry/wet always 1: the crossfade is processColor's)
     enum class ColorState { Off, Warming, In }; // In: fading in, on, or fading out
     ColorState colorState = ColorState::Off;
@@ -215,7 +212,7 @@ private:
     int colorDelayPos = 0;
     static constexpr int kColorChunk = 256;
     float colorWet[2][kColorChunk] {};
-    bool hasTail = true;
+    bool hasEnd = true;
     bool bypass = false;
     std::vector<float> bypassDelay[2];
     int bypassPos = 0;

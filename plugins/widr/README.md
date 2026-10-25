@@ -74,6 +74,13 @@ fed band-limited, with its own left and right outputs going to the voices), **De
 **Dry** and **Wet** (the sliders under the panels): the input and what widr adds (the voices and the
 reverb), in parallel, each from -inf to +6 dB.
 
+**Soft Clip** and **Hard Clip** (beside the sliders, off by default): the end of the chain. Soft Clip
+rounds peaks off from -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when
+both are on).
+
+The **Basic** page has the stage and the goniometer, **Character**, **Width**, **Air**, **Mono Below**,
+**Cinema**, **Output**, **Soft Clip** and **Hard Clip**; **Advanced** shows everything.
+
 ## The cinema stage
 
 Film and trailer mixes keep dialogue straight down the middle and push the music, the effects and the
@@ -174,11 +181,6 @@ a vertical line) and a **CORRELATION** meter (+1 mono, 0 unrelated, below 0 it c
 Cinema on, five thin arcs on the stage are the lanes (Voice innermost, Ambience outermost), each as wide
 as its Position and Width put it and lit by how much of the sound it holds right now.
 
-**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
-its gentlr on, Drive 0 dB). Here it
-saturates the mid and the side apart, so pushing it does not narrow the image. While it is off it folds
-to its header strips; click a strip (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
-
 ## Presets
 
 The **Presets** menu in the header starts with **Init** (every control at its default) and has these
@@ -189,11 +191,9 @@ README](../../README.md#presets).
 
 ## Latency
 
-About 1.8 ms (85 samples at 48 kHz, the saturator's, the same whether it is on or off), reported to the
-host for automatic compensation. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told.
-
-With **Cinema** above 0 % the lanes add 21.3 ms (1023 samples at 44.1 or 48 kHz, 2047 at 88.2 or 96 kHz),
-also reported. Moving Cinema from 0 % to anything above switches the stage on and changes the latency, so
+None with **Cinema** at 0 % (Soft Clip and Hard Clip work sample by sample). Above 0 % the lanes add
+21.3 ms (1023 samples at 44.1 or 48 kHz, 2047 at 88.2 or 96 kHz), reported to the host for automatic
+compensation. Moving Cinema from 0 % to anything above switches the stage on and changes the latency, so
 automate it between values above 0 %, not from 0 %. **Width** 0 % still bypasses everything (with Cinema
 on, the input comes out delayed by the latency, untouched). Inside smemplr's rack widr has no cinema
 stage.

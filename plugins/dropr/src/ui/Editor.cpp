@@ -43,7 +43,6 @@ void Editor::onClose ()
     display = nullptr;
     ratioKnob = negRatioKnob = rangeKnob = nullptr;
     latencyLabel = nullptr;
-    tail.reset ();
 }
 
 void Editor::buildUI (CFrame* f)
@@ -97,37 +96,27 @@ void Editor::buildUI (CFrame* f)
     knobAt (9, kTilt, true);
     knobAt (10, kMakeup);
 
-    // levels: in, dry / wet, out
-    auto* levels = new Panel (CRect (8, 428, 752, 516), "LEVELS");
+    // levels: in, dry / wet, out; then Soft Clip and Hard Clip (the end of the chain)
+    auto* levels = new Panel (CRect (8, kLevelsTop, 752, 516), "LEVELS");
     root->addView (levels);
     bind (levels, new Knob (CRect (24, 20, 80, 84), this, kInput));
     bind (levels, new Knob (CRect (104, 20, 160, 84), this, kMix));
     bind (levels, new Knob (CRect (184, 20, 240, 84), this, kOutput, nullptr, true));
-    levels->addView (new Label (CRect (270, 30, 736, 46),
+    bind (levels, new pk::Toggle (CRect (kClipLeft, kClipTop, kClipLeft + kClipW, kClipTop + kClipH), this, kSoftClip, "Soft Clip"));
+    bind (levels, new pk::Toggle (CRect (kClipLeft + kClipW + 8, kClipTop, kClipLeft + 2 * kClipW + 8, kClipTop + kClipH), this, kHardClip,
+                                  "Hard Clip"));
+    levels->addView (new Label (CRect (kClipLeft, 52, 736, 68),
                                 "Dry: the input before the Input gain.  Wet: the bands after their gains.", 10.0));
     showRatio ();
-
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, 524, 752, 524 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     idle ();
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
     // how many bands, where it pushes down and where it lifts (the thresholds), how fast it lets go
-    // (Release); Mix and Output
+    // (Release); Mix, Output, Soft Clip and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "dropr";
@@ -140,8 +129,7 @@ pk::basic::Spec Editor::basicSpec ()
     };
     s.rows = {{segmented (kBands, "Bands", {"1", "2", "3", "4", "5", "6"}, 300)},
               {knob (kDownThreshold), knob (kUpThreshold), knob (kRelease)}};
-    s.output = {knob (kMix), knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kMix), knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (348, 6, 432, 28);
@@ -151,8 +139,6 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if (display && id < kTailBase)
         display->invalid ();
     if (id == kNegative)
@@ -185,15 +171,11 @@ void Editor::showRatio ()
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (display)
         display->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
-        {
-            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ()));
-        }
+            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ())); // (none: no look-ahead)
 }
 
 void Editor::showMenu (CPoint where)
@@ -224,13 +206,12 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the display, the channels, the dynamics over the levels; the end saturator under them
+    // the display, the channels, the dynamics over the levels
     s.panels = {
         {"display", "display", {kDisplayLeft, kDisplayTop, kDisplayRight, kDisplayBottom}, 0},
         {"channels", "", {kSideLeft, kSideTop, 752, kDisplayBottom}, 0},
         {"dynamics", "", {kDynLeft, kDynTop, 752, 420}, 0, 0},
-        {"levels", "", {8, 428, 752, 516}, 0, 0},
-        {"tail", "end of the chain", {8, 524, 752, 524 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"levels", "", {8, kLevelsTop, 752, 516}, 0, 0},
     };
     return s;
 }

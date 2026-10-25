@@ -2,6 +2,7 @@
 
 #include "BellShape.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <string>
@@ -53,7 +54,7 @@ const ParamTable& paramTable ()
         v.push_back (percent (kCompression, "Compression", "Compression", 0.35));
         v.push_back (percent (kMix, "Mix", "Mix", 1.0));
         v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, -4.4, Curve::Linear, Disp::Db));
-        // the end saturator: off in a new instance (the tape stage is the saturator here)
+        // the old end saturator, retired (its IDs kept for saved projects)
         pk::addTailParams (v, kTailBase, false);
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
@@ -61,6 +62,8 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt4Params (v, kTailExt4Base);
         v.push_back (toggle (kLfoOnA, "A LFO", "LFO", true));
         v.push_back (toggle (kLfoOnB, "B LFO", "LFO", true));
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;
     }());
     return t;

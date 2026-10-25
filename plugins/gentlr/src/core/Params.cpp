@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <string>
@@ -58,6 +59,7 @@ std::vector<ParamInfo> buildTable (bool rack)
     v.push_back (like (kSubFreq, smacheratr::kClaritySubFreq, "Sub Frequency", "Freq", smacheratr::kSubDefaultHz));
     v.push_back (like (kSubRange, smacheratr::kClaritySubRange, "Sub Range", "Range", 0.0));
     v.push_back (threshold (kSubThreshold, "Sub Threshold", smacheratr::kClarityThresholdDb));
+    // the old end saturator, retired (its IDs kept for saved projects; pk::retire below)
     pk::addTailParams (v, kTailBase);
     smacheratr::addTailExtParams (v, kTailExtBase);
     smacheratr::addTailExt2Params (v, kTailExt2Base);
@@ -78,7 +80,13 @@ std::vector<ParamInfo> buildTable (bool rack)
     smacheratr::addTailExt4Params (v, kTailExt4Base);
     static_assert (kBandShelves == kTailExt4Base + pk::kTailExt4Fields, "Band Shelves after the end saturator's fifth block");
     v.push_back (toggle (kBandShelves, "Band Shelves", "Shelves", rack)); // (on for states from before it, and in the racks)
-    static_assert (kNumParams == kBandShelves + 1, "Band Shelves is the last");
+    if (rack)
+        return v; // (the racks' gentlr, as it was up to 0.30.0: no end clips, its end saturator hidden by the rack)
+    pk::addEndClipParams (v, kSoftClip, kHardClip);
+    static_assert (kNumParams == kHardClip + 1 && kSoftClip == kBandShelves + 1, "the clips are the last");
+    pk::retire (v, kTailBase, kHighOn);
+    pk::retire (v, kTailExt3Base, kSlope);
+    pk::retire (v, kTailExt4Base, kBandShelves);
     return v;
 }
 

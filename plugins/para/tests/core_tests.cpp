@@ -99,11 +99,10 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
     return 20.0 * std::log10 (std::max (1e-12, amp));
 }
 
-// The defaults with the end saturator (on by default) off: the tests are about Para's own filters.
+// The defaults (Soft Clip and Hard Clip off: the tests are about Para's own filters).
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
-    e->setParam (kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }
@@ -143,6 +142,70 @@ TEST (params)
     CHECK (std::fabs (t.info (kHpFreq).def - 300.0) < 1e-9 && std::fabs (t.info (kLpFreq).def - 100.0) < 1e-9 &&
                t.info (kHpSlope).def == (double)kSlope24 && t.info (kLpSlope).def == (double)kSlope24, "defaults: HP 300 Hz, LP 100 Hz, 24 dB");
     CHECK (t.info (kDragGain).def == 0.0 && kHostedParams == kTailBase + pk::kTailFields, "Drag Gain off, after the hosted IDs");
+    CHECK (kSoftClip == kTailExt4Base + pk::kTailExt4Fields && kHardClip == kSoftClip + 1 && kNumParams == kHardClip + 1 &&
+               std::string (t.info (kSoftClip).name) == "Soft Clip" && std::string (t.info (kHardClip).name) == "Hard Clip" &&
+               t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0,
+           "Soft Clip and Hard Clip last, off");
+    // the old end saturator's blocks: still there (saved IDs stay put), retired; nothing else is
+    int wrong = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        wrong += t.info (id).retired != ((id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields) ||
+                                         (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields) ||
+                                         (id >= kTailExt3Base && id < kTailExt4Base + pk::kTailExt4Fields));
+    CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
+}
+
+TEST (end_clips)
+{
+    // at the end, after Output (+12 dB: the filters meeting, a -6 dB tone comes out at +6 dBFS): off = as it
+    // is, Soft Clip rounds it off at 0 dBFS, Hard Clip holds 0 dBFS; the old saturator's switch does nothing
+    auto e = engine ();
+    e->setParam (kHpFreq, 700.0);
+    e->setParam (kLpFreq, 700.0);
+    e->setParam (kOutput, 12.0);
+    e->setParam (kTailBase + pk::kTailOn, 1.0);
+    e->setParam (kTailBase + pk::kTailDrive, 14.0);
+    e->reset ();
+    auto in = tones ({{1000.0, -6.0}}, 0.5);
+    const size_t a = 12000, b = 24000;
+    auto peak = [&] (const Sig& s) {
+        double p = 0.0;
+        for (size_t i = a; i < b; ++i)
+            p = std::max (p, (double)std::fabs (s.l[i]));
+        return 20.0 * std::log10 (std::max (1e-12, p));
+    };
+    auto h3 = [&] (const Sig& s) { return toneDb (s.l, 3000.0, a, b) - toneDb (s.l, 1000.0, a, b); };
+    auto out = run (*e, in);
+    CHECK (peak (out) > 5.5 && h3 (out) < -60.0, "off: peak %f dB, third harmonic %f dB", peak (out), h3 (out));
+    e->setParam (kSoftClip, 1.0);
+    e->reset ();
+    out = run (*e, in);
+    CHECK (peak (out) <= 1e-4 && h3 (out) > -40.0, "Soft Clip: peak %f dB, third harmonic %f dB", peak (out), h3 (out));
+    e->setParam (kSoftClip, 0.0);
+    e->setParam (kHardClip, 1.0);
+    e->reset ();
+    out = run (*e, in);
+    CHECK (peak (out) <= 1e-4 && peak (out) > -0.01, "Hard Clip holds 0 dBFS: %f", peak (out));
+    // below the clips the sound passes bit for bit
+    auto quiet = tones ({{1000.0, -20.0}}, 0.5);
+    auto plain = engine (), clipped = engine ();
+    clipped->setParam (kSoftClip, 1.0);
+    clipped->setParam (kHardClip, 1.0);
+    clipped->reset ();
+    const auto x = run (*plain, quiet), y = run (*clipped, quiet);
+    size_t diff = 0;
+    for (size_t i = 0; i < x.l.size (); ++i)
+        diff += x.l[i] != y.l[i] || x.r[i] != y.r[i];
+    CHECK (diff == 0, "below the clips: %zu samples differ", diff);
+    // where Para is built into another plug-in, no clips
+    Engine bare (false);
+    bare.prepare (kSr, 512);
+    bare.setParam (kHpFreq, 700.0);
+    bare.setParam (kLpFreq, 700.0);
+    bare.setParam (kOutput, 12.0);
+    bare.setParam (kHardClip, 1.0);
+    bare.reset ();
+    CHECK (peak (run (bare, in)) > 5.5, "built in: no clips");
 }
 
 TEST (filters_meeting_sum_flat)
@@ -388,8 +451,8 @@ TEST (slope_changes_do_not_click)
 {
     // every slope in turn, a new one every 50 ms (or one slope throughout), the filters meeting (they
     // sum flat at every slope)
-    auto render = [] (const Sig& in, bool tail, int fixedSlope) {
-        auto e = std::make_unique<Engine> (tail);
+    auto render = [] (const Sig& in, bool withEnd, int fixedSlope) {
+        auto e = std::make_unique<Engine> (withEnd);
         e->prepare (kSr, 512);
         e->setParam (kHpFreq, 700.0);
         e->setParam (kLpFreq, 700.0);
@@ -724,7 +787,7 @@ TEST (drive_params)
     for (uint32_t id = 0; id < kNumParams; ++id)
         CHECK (t.info (id).id == id, "entry %u has ID %u", id, t.info (id).id);
     CHECK (kHpDriveOn == kTailExtBase + 17 && kTailExt2Base == kHpDriveOn + 3, "the drive's IDs follow the end saturator's block");
-    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kTailExt3Base == kLpGainLock + 1 && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kTailExt4Base + pk::kTailExt4Fields &&
+    CHECK (kLpDriveOn == kTailExt2Base + pk::kTailExt2Fields && kLpDrive == kLpDriveOn + 1 && kLpSlope == kLpDrive + 1 && kTailExt3Base == kLpGainLock + 1 && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kSoftClip == kTailExt4Base + pk::kTailExt4Fields &&
                std::string (t.info (kTailExt4Base + pk::kTailExt4Glue12).name) == "Saturator Gentlr Glue 1 / 2" &&
                t.info (kTailExt4Base + pk::kTailExt4Glue2High).def == 0.0 &&
                std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
@@ -1270,7 +1333,7 @@ TEST (drive_switches_without_clicks)
 
 TEST (bypassed_is_the_latency)
 {
-    // where Para is built in without its end saturator (Smemplr's rack), switching it off leaves the
+    // where Para is built in without the clips at its end (Smemplr's rack), switching it off leaves the
     // delay its latency stands for
     Engine e (false);
     e.prepare (kSr, 512);
@@ -1340,8 +1403,10 @@ TEST (performance)
             setSlopes (*e, slope);
             e->setParam (kEnvAmount, 12.0);
             e->noteOn (64);
-            if (drive)
+            if (drive) // (and the clips at the end)
             {
+                e->setParam (kSoftClip, 1.0);
+                e->setParam (kHardClip, 1.0);
                 e->setParam (kHpDriveOn, 1.0);
                 e->setParam (kLpDriveOn, 1.0);
                 e->setParam (kHpDrive, 12.0);
@@ -1358,7 +1423,7 @@ TEST (performance)
     CHECK (secs / 10.0 < 0.05, "too slow");
     // with both drives on (each 4x oversampled)
     const double secs1 = cpuSecs (true, kSlope24);
-    std::printf ("    CPU: %.2f%% of one core with both drives on\n", 100.0 * secs1 / 10.0);
+    std::printf ("    CPU: %.2f%% of one core with both drives and the clips on\n", 100.0 * secs1 / 10.0);
     CHECK (secs1 / 10.0 < 0.05, "too slow with the drives");
     // the steepest slopes (eight sections a filter; Brickwall's all-passes) with both drives
     for (int slope : {kSlope96, kSlopeBrickwall})

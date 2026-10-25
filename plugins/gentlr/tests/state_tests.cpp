@@ -48,11 +48,11 @@ int main ()
         for (uint32_t id = 0; id < kNumParams; ++id)
             wrong += back.has[id] && back.norm[id] == st.norm[id] ? 0 : 1;
         CHECK (wrong == 0, "every parameter back as it was (%d not)", wrong);
-        // the Sub band's, the High band's and the end saturator's last block among them
+        // the Sub band's, the High band's and the last parameter (Hard Clip) among them
         CHECK (back.norm[kSubOn] == st.norm[kSubOn] && back.norm[kSubThreshold] == st.norm[kSubThreshold] &&
                    back.norm[kHighFreq] == st.norm[kHighFreq] && back.norm[kNoOverlap] == st.norm[kNoOverlap] &&
                    back.norm[kNumParams - 1] == st.norm[kNumParams - 1],
-               "the Sub band, the High band, No Overlap and the last block");
+               "the Sub band, the High band, No Overlap and the last parameter");
     }
     // a state with only some parameters (an older layout, or a partial one): the rest at their defaults
     {
@@ -377,6 +377,34 @@ int main ()
         State back;
         CHECK (readState (&s, back), "read");
         CHECK (back.has[kSubRange] && back.norm[kSubRange] == 0.75, "the known one read");
+    }
+    // Soft Clip and Hard Clip at the end: off in a new instance and in a state from before them (it has
+    // none); the old end saturator's blocks are still there (saved IDs stay put), retired, and nothing else is
+    {
+        const auto& t = paramTable ();
+        CHECK (t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0, "a new instance: the clips off");
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            const bool old = (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields) ||
+                             (id >= kTailExt4Base && id < kTailExt4Base + pk::kTailExt4Fields);
+            wrong += t.info (id).retired != old;
+        }
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
+        MemoryStream s;
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x474E544C);
+            w.writeInt32 (7); // (no clips yet)
+            w.writeInt32 (1);
+            w.writeInt32u (kTailBase + pk::kTailOn);
+            w.writeDouble (1.0);
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "read");
+        CHECK (back.norm[kSoftClip] == 0.0 && back.norm[kHardClip] == 0.0 && !back.has[kSoftClip] && !back.has[kHardClip],
+               "a state from before them: the clips off");
     }
     // not Gentlr's
     {

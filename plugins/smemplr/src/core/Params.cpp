@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <algorithm>
@@ -35,14 +36,6 @@ const std::vector<const char*> kPreserveNames = {"Transients", "1 Bar", "1/2", "
 const double kPreserveBeats[] = {0.0, 4.0, 2.0, 1.0, 0.5, 0.25, 0.125};
 
 using P = ParamInfo;
-
-// A new Smemplr's rack: Smacheratr in the first slot with its own defaults, the other slots empty. A
-// slot's block is stored normalized, and Smacheratr's block positions are its own IDs.
-double slotDefault (int slot, uint32_t j)
-{
-    const auto& st = smacheratr::paramTable ();
-    return slot == 0 && j < st.size () ? st.defaultNormalized (j) : 0.0;
-}
 
 std::vector<ParamInfo> buildTable ()
 {
@@ -186,6 +179,7 @@ std::vector<ParamInfo> buildTable ()
     {
         ParamInfo pi = para::paramTable ().info (i);
         pi.id = paraParam (i);
+        pi.retired = false; // (Smemplr's own: what Para retired is still read here, from an old project)
         // (Para's one Slope of then is its High-Pass Slope now)
         pi.name = keep (std::string ("Old Para ") + (i == para::kHpSlope ? "Slope" : pi.name));
         add (pi);
@@ -195,6 +189,7 @@ std::vector<ParamInfo> buildTable ()
     {
         ParamInfo pi = multidyn::paramTable ().info (i);
         pi.id = multidynParam (i);
+        pi.retired = false;
         pi.name = keep (std::string ("Old Multidyn ") + pi.name);
         add (pi);
     }
@@ -206,7 +201,7 @@ std::vector<ParamInfo> buildTable ()
     add (fl (kMsMidGain, "Old Mid Gain", "Mid", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
     add (P {kRootKey, "Root Note", "Root", PType::Int, 0.0, 127.0, (double)kRootNote, Curve::Linear, Disp::Note, {}});
     // the old saturator after the rack (before 0.9; a Smacheratr slot does its job now, and old projects
-    // get one when they load): off, not in the editor (its other controls are at kTailExtBase)
+    // get one when they load): retired (below), its other controls at kTailExtBase
     auto markOld = [&] (size_t from) {
         for (size_t i = from; i < t.size (); ++i)
             t[i].name = keep (std::string ("Old End ") + t[i].name);
@@ -223,17 +218,20 @@ std::vector<ParamInfo> buildTable ()
     add (toggle (kParaNotch, "Old Para Liquid Notch", "Notch", false));
     // the effects rack: per slot a Type, an On and a block of values (normalized; each effect reads
     // them through its own table, and the controller shows them that way). A new Smemplr starts with
-    // Smacheratr in the first slot, with its own defaults (kDefaultSlotType, slotDefault).
+    // every slot Empty. The Type's choices are every kind's name, the retired ones' too (their places are
+    // saved in projects: a slot of one is Empty, FxSlot.h)
+    std::vector<const char*> kinds {"Empty"};
+    for (int k = kFxEmpty + 1; k < kNumFxTypes; ++k)
+        kinds.push_back (fxName (k));
     for (int s = 0; s < kRackSlots; ++s)
     {
         const std::string fx = "FX " + std::to_string (s + 1);
-        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), {"Empty", "para", "multidyn", "m/s eq", "smacheratr", "widr", "wubr", "levlr", "gentlr", "smoothr"},
-                     s == 0 ? kDefaultSlotType : kFxEmpty));
+        add (choice ((ParamId)slotParam (s, kSlotType), keep (fx + " Type"), keep (fx), kinds, kFxEmpty));
         add (toggle ((ParamId)slotParam (s, kSlotOn), keep (fx + " On"), keep (fx + " On"), true));
         for (uint32_t j = 0; j < kSlotBlock; ++j)
         {
             const std::string n = fx + " " + std::to_string (j + 1);
-            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, slotDefault (s, j), Curve::Linear, Disp::Percent));
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
         }
     }
     // the rest of the old end-of-chain Smacheratr
@@ -248,7 +246,7 @@ std::vector<ParamInfo> buildTable ()
         for (uint32_t j = kSlotBlock; j < kSlotBlockAll; ++j)
         {
             const std::string n = "FX " + std::to_string (s + 1) + " " + std::to_string (j + 1);
-            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, slotDefault (s, j), Curve::Linear, Disp::Percent));
+            add (fl ((ParamId)slotBlockParam (s, j), keep (n), keep (n), 0.0, 1.0, 0.0, Curve::Linear, Disp::Percent));
         }
     // the high-pass that follows Transpose (off: a new or old project sounds as before)
     add (toggle (kTransHpOn, "Transpose HP", "HP", false));
@@ -297,6 +295,10 @@ std::vector<ParamInfo> buildTable ()
     // the loop's Sync and Beat (off: the loop as it always was)
     add (toggle (kLoopSync, "Loop Sync", "Sync", false));
     add (toggle (kLoopBeat, "Loop Retrigger on Beat", "Beat", false));
+    // the end of the chain (off: as before), and the old end saturator retired (its IDs kept for saved projects)
+    pk::addEndClipParams (t, kSoftClip, kHardClip);
+    pk::retire (t, kTailBase, kTailBase + pk::kTailFields);
+    pk::retire (t, kTailExtBase, kTailExtBase + pk::kTailExtFields);
     return t;
 }
 

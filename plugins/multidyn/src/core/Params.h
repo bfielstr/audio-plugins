@@ -29,7 +29,8 @@ enum ParamId : uint32_t
     kMode = kBandBase + 4 * 10, // unused: Multidyn always works as the former Character mode (IDs are persisted)
     kPreLimit,                  // look-ahead limiter on each band's driven input
     kPreLimitCeiling,           // dB relative to the band's Above threshold
-    kSatOn,                     // the built-in Smacheratr after Output
+    kSatOn,                     // the old built-in Smacheratr after Output (retired, as all its blocks: kept
+                                // so saved IDs stay put)
     kSatPreLimit,               // its pre-limiter before the drive
     kSatDrive,                  // dB
     kSatPostClip,               // No / Soft / Hard Clip
@@ -37,8 +38,8 @@ enum ParamId : uint32_t
     kSatPreLimitThreshold,      // dB
     kRmsWindow,                 // ms, the RMS detector's window (Character: 2.5 times as long)
     kSoften,                    // the top band: softens what upward compression lifts as its thresholds close in
-    kSatExtBase,                // the rest of the built-in Smacheratr: pk::kTailExtFields entries
-    kSatExt2Base = kSatExtBase + pk::kTailExtFields, // Gentlr's Advanced mode in it: pk::kTailExt2Fields entries
+    kSatExtBase,                // the rest of the old built-in Smacheratr (retired): pk::kTailExtFields entries
+    kSatExt2Base = kSatExtBase + pk::kTailExtFields, // Gentlr's Advanced mode in it (retired): pk::kTailExt2Fields entries
     kXoverSlope = kSatExt2Base + pk::kTailExt2Fields, // the crossovers' slope (an XoverSlope, Crossover.h)
     kSoftenColor,                                     // Soften's Color: Smacheratr's high colour after Output (see Engine.h)
     // the Sub band (see Engine.h): an extra band below band 1, split off below its corner and compressed
@@ -51,9 +52,11 @@ enum ParamId : uint32_t
     kSubOutput,  // dB, its level after the compression
     kStyle,      // OTT (a model of Xfer's OTT, see Ott.h) / Character (Multidyn's own, see Engine.h)
     kSubInput,   // dB, the Sub band's level before its compression (as a band's Input)
-    kSatExt3Base, // Gentlr's High band, No Overlap and Slope in the built-in Smacheratr: pk::kTailExt3Fields entries
-    kSatExt4Base = kSatExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries
-    kNumParams = kSatExt4Base + pk::kTailExt4Fields
+    kSatExt3Base, // Gentlr's High band, No Overlap and Slope in the old built-in Smacheratr (retired): pk::kTailExt3Fields entries
+    kSatExt4Base = kSatExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it (retired): pk::kTailExt4Fields entries
+    kSoftClip = kSatExt4Base + pk::kTailExt4Fields, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
+    kNumParams
 };
 
 // pinned: IDs are persisted (the Smacheratr blocks before them have a fixed size now)
@@ -62,8 +65,10 @@ static_assert (kSubOn == 92 && kSubFreq == 93 && kSubThresh == 94 && kSubRatio =
                    kSubOutput == 98,
                "the Sub band is 92 .. 98");
 static_assert (kStyle == 99 && kSubInput == 100, "Style is 99, Sub Input 100");
-static_assert (kSatExt3Base == 101 && kSatExt4Base == 107 && kNumParams == 112,
-               "the built-in Smacheratr's fourth block is 101 .. 106, its fifth 107 .. 111");
+static_assert (kSatExt3Base == 101 && kSatExt4Base == 107 && kSoftClip == 112 && kHardClip == 113 && kNumParams == 114,
+               "the old built-in Smacheratr's fourth block is 101 .. 106, its fifth 107 .. 111 (retired), the clips 112 and 113");
+// the old built-in Smacheratr's blocks (retired, pk::retire): first .. last - 1 each
+constexpr uint32_t kRetiredSat[3][2] = {{kSatOn, kSatOn + pk::kTailFields}, {kSatExtBase, kXoverSlope}, {kSatExt3Base, kSoftClip}};
 
 enum Style { kStyleOtt = 0, kStyleCharacter };
 
@@ -124,8 +129,7 @@ inline double toNormalized (uint32_t id, double p) { return paramTable ().toNorm
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 inline std::string toText (uint32_t id, double p) { return paramTable ().toText (id, p); }
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the built-in saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kSatOn, kSatExtBase, kSatExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the built-in saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace multidyn

@@ -53,7 +53,6 @@ public:
     void reset ();
     // a LAB parameter (isLabParam): plain is its plain value (a slot's block values are normalized)
     void setParam (uint32_t id, double plain);
-    void setTransport (double bpm, double ppq, bool playing);
 
     // Whether the LAB does anything now: a slot of chains 1 .. 3 or POST holding an effect, a chain not at 0 dB, muted,
     // soloed or mono (or still fading). Not active: the engine leaves it out (moistr as 0.29, bit for bit).

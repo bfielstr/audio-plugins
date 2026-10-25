@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace sweepr::help {
 
 inline const char* forParam (uint32_t id)
@@ -61,6 +63,8 @@ inline const char* forParam (uint32_t id)
                    "distorted. 0: nothing holds it, and a high Drive clips to a square wave.";
         case kMix: return "Blend of the effect and the untouched signal (kept in time with each other, so no comb filtering).";
         case kOutput: return "Overall output level.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

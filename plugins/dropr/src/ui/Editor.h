@@ -1,7 +1,5 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailPanel.h"
-
 #include <memory>
 #include <string>
 
@@ -16,20 +14,23 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 524, 8 px clear under it
-    static constexpr double kHeight = 524.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
+    // the LEVELS row at the bottom (to y 516), 8 px clear under it
+    static constexpr double kHeight = 524.0;
     // the layout (the host test clicks on it)
     static constexpr double kDisplayLeft = 8.0, kDisplayTop = 40.0, kDisplayRight = 620.0, kDisplayBottom = 300.0;
     static constexpr double kSideLeft = 628.0, kSideTop = 40.0;           // the right column; its Bands selector at
     static constexpr double kBandsSelLeft = 8.0, kBandsSelTop = 34.0, kBandsSelW = 108.0; // (in the column)
     static constexpr double kDynLeft = 8.0, kDynTop = 308.0, kDynColumn = 66.0, kDynFirst = 10.0; // the knob row
     static constexpr double kNegToggleTop = 89.0;                          // the Negative toggle (in the row, column 4)
+    // LEVELS (from y 428): Input, Dry/Wet and Output, then Soft Clip and Hard Clip side by side (the end of the chain)
+    static constexpr double kLevelsTop = 428.0, kClipLeft = 270.0, kClipTop = 22.0, kClipW = 96.0, kClipH = 19.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
-    // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Bands, the down and up thresholds and Release; Mix and Output; the end saturator in the extras
+    // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Bands, the down and up thresholds and Release; Mix, Output,
+    // Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
@@ -37,9 +38,6 @@ public:
     BandView* bandView () const { return display; }
 
 private:
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases ();
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
 

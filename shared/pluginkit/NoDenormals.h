@@ -1,4 +1,4 @@
-// Flushes denormals to zero while alive (as Gentlr, Levlr and Orbitr do in their own copies): filters
+// Flushes denormals to zero while alive (as Gentlr does in its own copy): filters
 // and delay lines decay towards them once the audio stops, and on x86 every operation on one is many
 // times slower (a stopped track could cost several cores). Hosts usually set this on their audio
 // threads, but not all do. It changes nothing but values below 1.2e-38 (they become 0).

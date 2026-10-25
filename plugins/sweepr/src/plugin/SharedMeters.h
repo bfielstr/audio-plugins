@@ -12,9 +12,7 @@ namespace sweepr {
 struct SharedMeters
 {
     Meters meters;                 // the swept frequencies, for the display
-    smacheratr::Meters tailMeters; // the saturator at the end of the chain
-    std::atomic<int> latency {0};    // all of it, as the host is told
-    std::atomic<int> ownLatency {0}; // without the end saturator's
+    std::atomic<int> latency {0}; // as the host is told
     std::atomic<double> sampleRate {48000.0};
     pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }

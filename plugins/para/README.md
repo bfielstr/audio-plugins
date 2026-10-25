@@ -67,10 +67,12 @@ slope: first order at 6 dB, Linkwitz-Riley at 12, 24 and 36 to 96 dB, a quadratu
   small amount on or off, Pre or Post (37 samples at 48 kHz), so the latency never changes; moving them
   between Pre and Post fades the sound out and back in for about 10 ms. Both drives on, stereo, take
   about 1.5 % of a core.
-- **smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
-  its gentlr on, Drive 0 dB). While
-  it is off it folds to its header strips; click a strip (or switch it on) to open it. See
-  [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+- **Soft Clip** and **Hard Clip** (in OUTPUT, under Dry/Wet and Output; off by default): the end of the
+  chain. Soft Clip rounds peaks off from -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out
+  (after Soft Clip when both are on). Neither adds latency.
+
+The **Basic** page has the display, **HP Freq**, **LP Freq**, **Movement**, **Dry/Wet**, **Output**,
+**Soft Clip** and **Hard Clip**; **Advanced** shows everything.
 
 ![The Vocal movement](../../docs/para/ui_para_vocal.png)
 
@@ -109,3 +111,5 @@ README](../../README.md#presets).
   filters had, the high-pass's Lock is on unless the saved high-pass gain is above 0 dB (then off), the
   low-pass's is off, and Fade keeps the semitones it was saved with (an instance that never changed it
   keeps 12 semitones). The fade's shape is now the even-in-dB one described above.
+- Projects saved while para ended with a smacheratr (on by default then) open without it: its settings
+  are kept but no longer used, and Soft Clip and Hard Clip start off.

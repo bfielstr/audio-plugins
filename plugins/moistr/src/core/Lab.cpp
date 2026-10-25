@@ -110,21 +110,13 @@ void Lab::setParam (uint32_t id, double plain)
     const uint32_t field = labFieldOf (id);
     if (field == kLabType)
     {
-        // a kind this build does not run is Empty
-        const int t = (int)std::lround (plain);
-        s->setType (t > 0 && t < smemplr::kNumFxTypes ? t : smemplr::kFxEmpty);
+        // a kind this build does not run is Empty (the room after smemplr's kinds, and its retired ones: smemplr::fxKind)
+        s->setType (smemplr::fxKind ((int)std::lround (plain)));
     }
     else if (field == kLabOn)
         s->setOn (plain >= 0.5);
     else
         s->setValue (field - kLabBlock, plain);
-}
-
-void Lab::setTransport (double bpm, double ppq, bool playing)
-{
-    for (auto& s : slots)
-        if (s)
-            s->setTransport (bpm, ppq, playing);
 }
 
 bool Lab::active () const

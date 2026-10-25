@@ -1,5 +1,6 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
 #include "pluginkit/NoDenormals.h"
 
 #include <algorithm>
@@ -48,7 +49,7 @@ double belowGainDb (double x, double thresh, double ratio, bool softKnee, double
     return kneeGain (thresh - x, 1.0 - 1.0 / std::max (0.01, ratio), softKnee, kneeDb);
 }
 
-Engine::Engine (bool withTail) : hasTail (withTail)
+Engine::Engine (bool withEnd) : hasEnd (withEnd)
 {
     // Soften's Color: Smacheratr with only its high colour, around the Analog curve at Drive 0 dB
     using namespace smacheratr;
@@ -190,7 +191,6 @@ void Engine::prepare (double sampleRate, int)
     limPeakDecay = (float)std::exp (-1.0 / (2.0 * look)); // the input peak is held about twice the look-ahead
     guardC = (float)std::exp (-1.0 / (0.003 * sr));
     limRel = (float)std::exp (-1.0 / (0.050 * sr));
-    sat.prepare (sr, 512);
     color.prepare (sr, kColorChunk);
     colorWarm = color.latency () + (int)std::lround (0.010 * sr);
     colorStep = (float)(1.0 / (0.020 * sr));
@@ -228,8 +228,6 @@ void Engine::reset ()
     subMix = subState == SubState::In ? 1.0f : 0.0f;
     outGain = dbToGain (p[kOutput] + kBakedMasterDb);
     scGain = dbToGain (p[kScGain]);
-    syncSaturator ();
-    sat.reset ();
     syncColor ();
     color.reset ();
     for (auto& d : colorDelay)
@@ -238,20 +236,6 @@ void Engine::reset ()
     colorState = on (p[kSoftenColor]) ? ColorState::In : ColorState::Off;
     colorMix = colorState == ColorState::In ? 1.0f : 0.0f;
     updateFilters (true);
-}
-
-void Engine::syncSaturator ()
-{
-    for (uint32_t f = 0; f < pk::kTailFields; ++f)
-        sat.setParam (f, p[kSatOn + f]);
-    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
-        sat.setParam (pk::kTailFields + f, p[kSatExtBase + f]);
-    for (uint32_t f = 0; f < pk::kTailExt2Fields; ++f)
-        sat.setParam (pk::kTailFields + pk::kTailExtFields + f, p[kSatExt2Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt3Fields; ++f)
-        sat.setParam (smacheratr::kTailExt3First + f, p[kSatExt3Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt4Fields; ++f)
-        sat.setParam (smacheratr::kTailExt4First + f, p[kSatExt4Base + f]);
 }
 
 int Engine::bandCount () const { return std::clamp ((int)std::lround (p[kBands]) + 1, 1, kMaxBands); }
@@ -382,7 +366,6 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
     const int slopeT = std::clamp ((int)std::lround (p[kXoverSlope]), 0, kNumXoverSlopes - 1);
     const bool wantSub = on (p[kSubOn]);
     const bool ottStyle = std::lround (p[kStyle]) == kStyleOtt;
-    syncSaturator ();
     syncColor ();
 
     // the bands, then the Sub band (kSubBand: its parameters in a band's terms, Above only)
@@ -758,12 +741,11 @@ void Engine::process (const float* inL, const float* inR, const float* scL, cons
         if (scKept[k])
             banks[k].copyLanes (scKeep[k], 2, kLanes);
 
-    // Soften's Color after the Output gain, then the built-in saturator (neither on the side-chain
-    // listen signal)
+    // Soften's Color after the Output gain (not on the side-chain listen signal), then the clips at the end
     if (!listen)
         processColor (outL, outR, n);
-    if (!listen && hasTail)
-        sat.process (outL, outR, n);
+    if (hasEnd)
+        pk::endClip (outL, outR, n, on (p[kSoftClip]), on (p[kHardClip]));
 
     used[kSubBand] = subState != SubState::Off;
     for (int b = 0; b < kAll; ++b)

@@ -83,7 +83,7 @@ on their own timing, is moistr's second stage (the moving bands).
 input -> Input -> SWEEP: bells A .. H -> High Shelf -> saturator (level matched; Clean Sub: the lows around it)
                [+ Sub Boost: the saturator's input, low-passed] -> Tone
       -> [PARA: low-pass path + high-pass path, moving] -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet)
-      -> Output -> smacheratr (the end saturator) -> [Sub Guard: the lows below Freq replaced by the steady ones]
+      -> Output -> [Sub Guard: the lows below Freq replaced by the steady ones] -> Soft Clip -> Hard Clip
 motion clock: the song position, or (Loop Lock) the region of the window (Start .. End) once a Length: every
           clock below reads it (the bells, the shelf, the bands, Liquid, the gesture, Wobble, PARA)
 pass:    split: Low | Mid | High [| Air] (crossovers) -> Low held, the others rising and falling
@@ -310,12 +310,9 @@ The Low band (everything under the Low crossover, so the sub) is never shifted.
   anti-aliasing), so it needs no oversampling and adds no latency.
 
 **OUTPUT**: **Mix** (100 %: the effect against the untouched input) and **Output** (-24 to +12 dB). At
-**Mix** 0 the output is exactly the input (delayed by the end saturator's latency, as the effect is).
-
-**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance,
-its gentlr on, Drive 0 dB). While
-it is off it folds to its header strips; click a strip (or switch it on) to open it. See
-[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+**Mix** 0 the output is exactly the input (delayed by the LAB's latency, as the effect is).
+**Soft Clip** and **Hard Clip** (off by default): the end of the chain. Soft Clip rounds peaks off from
+-6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when both are on).
 
 ## LAB
 
@@ -328,7 +325,8 @@ pass:
   goes into the High chain). Each band's moving gain (**Movement**, the gestures) comes *before* its chain,
   so when a band rises or falls it drives its effects harder or softer: the timbre moves, not only the
   level. A chain has four effect slots in a row (the same slots as smemplr's rack: Empty, para, multidyn,
-  m/s eq, smacheratr, widr, wubr, levlr, gentlr or smoothr), then its **Level**, **Mute**, **Solo** (only
+  m/s eq, smacheratr, widr or gentlr; a slot saved with wubr, levlr or smoothr, which are gone, loads
+  empty), then its **Level**, **Mute**, **Solo** (only
   the soloed chains are heard, the Low band silent too) and **Mono**.
 - **POST**: three more slots on the chains' sum, before **Liquid**, **Close**, **Wobble** and the shifter
   (so those movements stay on top of its compression).
@@ -497,7 +495,7 @@ on your computer; nothing is sent anywhere.
 
 ## Input, Loop Lock, PARA and Sub Guard
 
-Two rows above the end saturator (all new in 0.30; a project saved before keeps its sound: **Input** at
+Two rows at the bottom (all new in 0.30; a project saved before keeps its sound: **Input** at
 0 dB, **Loop Lock**, **Split** and **Drift** off, **Sub Guard** and **Guard Bells** off).
 
 **INPUT**: **Input** (-24 to +12 dB, 0 dB by default) is the level going in, at the very start of the
@@ -569,12 +567,11 @@ through the same filters: the stereo image stays.
 **SUB GUARD** keeps the sub steady while everything above it moves. With **Sub Guard** on (in a new
 instance, Init and the factory presets, with **Guard Bells**) no level movement reaches the lows below **Freq** (40 to 200 Hz,
 90 Hz by default): the bands' fall and **Drop Out**, **Low Dip**, the gesture's level lanes, **Wobble**,
-**PARA**'s low-pass path, the LAB's chains, the **Glue**'s pumping and the end saturator pressed by the
-rest. moistr takes the lows from the SWEEP stage's output (a Linkwitz-Riley 8th-order split at **Freq**:
+**PARA**'s low-pass path, the LAB's chains and the **Glue**'s pumping. moistr takes the lows from the SWEEP stage's output (a Linkwitz-Riley 8th-order split at **Freq**:
 steep, so what moves above it hardly reaches below), sends them through the bands' crossovers with every
-band at its rest level (so they stay in phase with the rest), a **Glue**, **Grit** and end saturator of
-their own (the gain those have on the lows alone), and puts them in place of the output's lows after the
-end saturator. **Floor** (0 to -12 dB, 0 by default) lets some of the movement through: the lows may dip
+band at its rest level (so they stay in phase with the rest), a **Glue** and **Grit** of their own (the
+gain those have on the lows alone), and puts them in place of the output's lows (before **Soft Clip** and
+**Hard Clip**). **Floor** (0 to -12 dB, 0 by default) lets some of the movement through: the lows may dip
 at most that far. The SWEEP stage's bells move the low end on purpose (bells A and B sweep 20 to 300 Hz at
 +-23 dB in the Ocean recipe) and do so with **Guard Bells** off; **Guard Bells** (on by default) keeps them
 off the lows too: each bell acts
@@ -590,8 +587,8 @@ Switching fades over 20 ms; off, it is not run.
 The window opens on the Basic page (the layout every plug-in here shares): the output's scope across the
 top (hold it with **Freeze**, drag it out as audio or as a wavetable), the **Loop** display (the window, every
 modulator's curve over it and the loop region to drag), then **Input**, **Drive** (the SWEEP stage's) and
-**Movement**; **Loop Lock**, **Length** and **Sub Guard**; **Mix** and **Output** at the right; the end
-saturator in the strip at the bottom (**Extras**). Those are the controls that change the most: how hard it
+**Movement**; **Loop Lock**, **Length** and **Sub Guard**; **Mix**, **Output**, **Soft Clip** and **Hard Clip**
+at the right. Those are the controls that change the most: how hard it
 crunches (**Input** into **Drive**), how much the bands move (**Movement**), which part of the movement
 loops and how fast (**Loop Lock**, the region, **Length**) and whether the sub stays put (**Sub Guard**).
 **Advanced** shows every control.
@@ -662,12 +659,8 @@ moistr adds no latency of its own (its sweeping filters, crossovers, compressor 
 by sample), except for the **LAB** while one of its slots holds an effect: then every path is lined up to
 the slowest chain plus POST, plus 64 samples (the effects run 64 samples at a time), and the total is
 reported to the host; the dry signal for **Mix** is delayed to match. The Neuro recipe's LAB takes 495
-samples at 48 kHz. The end
-saturator is always in the path, so switching it on or off never changes the latency (nor does **Sub
-Guard**, whose own end saturator runs beside it), and its latency is
-reported to the host for automatic compensation: 85 samples at 48 kHz at 4x **Oversampling** (the
-default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host
-is told.
+samples at 48 kHz. **Sub Guard**, **Soft Clip** and **Hard Clip** add none. With the LAB empty (a new
+instance) moistr has no latency.
 
 The *Moist* and *Subtle* presets are from before the SWEEP stage and keep it off, so they sound as they
 always did. The *Sweep* presets from 0.24 and 0.25 (Classic Sweep, Heavy, Gentle, Wide Bump, High Shelf 5k,

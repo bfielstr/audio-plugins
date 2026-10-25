@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace dropr::help {
 
 inline const char* forParam (uint32_t id)
@@ -53,9 +55,11 @@ inline const char* forParam (uint32_t id)
         case kKnee: return "Softens the corner at the thresholds over this many dB.";
         case kTilt:
             return "Tilts the bands' gains across the spectrum: dB per octave from 1 kHz (positive: brighter).";
-        case kMakeup: return "Gain on every band after its compression (into the saturator).";
+        case kMakeup: return "Gain on every band after its compression.";
         case kMix: return "Blend of the compressed bands (wet) and the input before the Input gain (dry).";
-        case kOutput: return "Level after the dry / wet blend, before the saturator.";
+        case kOutput: return "Level after the dry / wet blend, before Soft Clip and Hard Clip.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

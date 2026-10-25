@@ -3,7 +3,7 @@
 //
 //   input -> Input -> [Mid/Side] -> 4x up -> the FET compressor (feed-forward detector, CompShape.h,
 //         DetectorShape.h) -> Mix with the uncompressed signal -> the output stage (Drive, Feedback:
-//         StageShape.h) -> 4x down -> [Mid/Side back] -> Output -> Smacheratr (the end saturator, off by default)
+//         StageShape.h) -> 4x down -> [Mid/Side back] -> Output -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
 // The compressor. The detector hears the signal after Input (the same channel, or both with Link: the louder
 // sets the gain), or with Ext SC the sidechain input (SC Gain; Mid/Side like the input): two first-order
@@ -25,13 +25,12 @@
 // the measured linear stage exactly). Small signals pass as the linear stage has them; the distortion's DC is
 // blocked.
 //
-// Latency: the oversampler's (constant), plus the end saturator's.
+// Latency: the oversampler's (constant).
 #pragma once
 
 #include "Params.h"
 
 #include "para/src/core/Oversampler.h"
-#include "smacheratr/src/core/Tail.h"
 #include "sweepr/src/core/Dsp.h"
 
 #include <array>
@@ -77,10 +76,9 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return ownLatency () + tail.latency (); }
+    int latency () const { return ownLatency (); }
     int ownLatency () const { return osLatency; }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In place is fine. scL / scR: the sidechain input (null when the host routes none; Ext SC uses it).
     void process (const float* inL, const float* inR, float* outL, float* outR, int n, const float* scL = nullptr,
@@ -129,7 +127,6 @@ private:
     int osLatency = 0;
     std::vector<float> up[2], wet[2], scUp[2];
     Meters* meters = nullptr;
-    smacheratr::Tail tail;
 };
 
 } // namespace pinchr

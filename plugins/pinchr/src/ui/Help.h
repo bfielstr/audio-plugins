@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace pinchr::help {
 
 inline const char* forParam (uint32_t id)
@@ -52,6 +54,8 @@ inline const char* forParam (uint32_t id)
             return "The compressor listens to the sidechain input instead of the sound it compresses (route one to "
                    "pinchr's sidechain in the host; without one, it listens to its input as usual).";
         case kScGain: return "The sidechain input's level into the compressor, -24 to +24 dB (0: as the input would be heard).";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

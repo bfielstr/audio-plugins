@@ -28,6 +28,8 @@
 // is never driven. Every path is delayed by the same amount, the drives on or off, so Para's latency
 // never changes. Moving the drives between Pre and Post fades the output out and back in (their delay
 // moves with them).
+// The end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h, both off by default): plain curves,
+// no latency. (A Smacheratr was there; its parameters are retired.)
 #pragma once
 
 #include "Drive.h"
@@ -35,7 +37,6 @@
 #include "Slopes.h"
 
 #include "pluginkit/ScopeBuffer.h"
-#include "smacheratr/src/core/Tail.h"
 
 #include <algorithm>
 #include <array>
@@ -106,29 +107,17 @@ class Engine
 public:
     void prepare (double sampleRate, int maxBlock);
     void reset ();
-    // withTail: the end-of-chain Smacheratr (off where Para is built into another plug-in)
-    explicit Engine (bool withTail = true) : hasTail (withTail) {}
+    // withEnd: the clips at the end of the chain (off where Para is built into another plug-in)
+    explicit Engine (bool withEnd = true) : hasEnd (withEnd) {}
     void setParam (uint32_t id, double plain)
     {
         if (id >= kNumParams)
             return;
-        p[id] = plain;
-        if (id >= kTailBase && id < kTailBase + pk::kTailFields)
-            tail.setParam (id - kTailBase, plain);
-        else if (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields)
-            tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-        else if (id >= kTailExt2Base && id < kTailExt2Base + pk::kTailExt2Fields)
-            tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
-        else if (id >= kTailExt3Base && id < kTailExt3Base + pk::kTailExt3Fields)
-            tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-        else if (id >= kTailExt4Base && id < kTailExt4Base + pk::kTailExt4Fields)
-            tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
+        p[id] = plain; // (read where they are used; the old end saturator's are retired)
     }
     double param (uint32_t id) const { return p[id]; }
-    // Depends on the sample rate only: the drives' delay, whether they are on and wherever they are,
-    // and the end-of-chain Smacheratr's.
-    int latency () const { return driveHp.latency () + (hasTail ? tail.latency () : 0); }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
+    // Depends on the sample rate only: the drives' delay, whether they are on and wherever they are.
+    int latency () const { return driveHp.latency (); }
 
     void noteOn (int note);
     void noteOff (int note);
@@ -200,7 +189,7 @@ private:
     double offset = 0.0, split = 0.0; // smoothed semitone offsets
     float mix = 1.0f, out = 1.0f, hpG = 1.0f, lpG = 1.0f, smooth = 0.0f, semiSmooth = 0.0f;
     Meters* meters = nullptr;
-    bool hasTail = true;
+    bool hasEnd = true;
     // Vocal movement
     bool leaderLp = true;
     // Liquid: where the leader is (semitones) and where it was ~150 ms ago
@@ -209,7 +198,6 @@ private:
     bool liquidLeaderLp = true;
     double prevHpBase = -1.0, prevLpBase = -1.0, curHp = 0.0, curLp = 0.0, rawHp = 0.0, rawLp = 0.0;
     float hpMul = 1.0f, lpMul = 1.0f, hpMulT = 1.0f, lpMulT = 1.0f;
-    smacheratr::Tail tail;
     // the drives, where they are (kDrivePos) and the fade that covers moving them: out to silence, held
     // while the stages fill again, back in
     DriveStage driveHp, driveLp;

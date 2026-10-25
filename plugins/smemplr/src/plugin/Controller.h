@@ -37,8 +37,8 @@ public:
                                                                Steinberg::Vst::ParamID& id) override;
 
 
-    // The rack: a slot's current effect; when it changes, the slot's parameters take the effect's
-    // names (the host is told), and values show in the effect's units.
+    // The rack: a slot's current effect (Empty for a retired kind: FxSlot.h, fxKind); when it changes, the
+    // slot's parameters take the effect's names (the host is told), and values show in the effect's units.
     Steinberg::tresult PLUGIN_API setParamNormalized (Steinberg::Vst::ParamID tag, Steinberg::Vst::ParamValue value) override;
     int slotType (int slot);
     // Tells the host when the latency changed (effects with latency loaded into the rack or taken
@@ -83,7 +83,8 @@ protected:
             bridge->setMods ({});
         slotPresets = {};
     }
-    bool isSetting (uint32_t id) const override { return !isMidiParam (id); } // (not reset, copied or pasted)
+    // (the hidden MIDI parameters and the retired ones are not reset, copied or pasted)
+    bool isSetting (uint32_t id) const override { return !isMidiParam (id) && pk::ControllerBase::isSetting (id); }
 
 private:
     void retitleSlot (int slot);

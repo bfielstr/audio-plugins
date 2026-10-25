@@ -14,10 +14,10 @@ smemplr opens on its **Basic** page: the capture band (a scope of the output to 
 drag onto a track as audio, or into a wavetable synth as a wavetable: see the [top-level
 README](../../README.md#basic-and-advanced-views)), the waveform, then **Mode** (**Classic**, **One-Shot** or
 **Slicing**), **Transpose**, **Filter Freq** (the filter's frequency), **Amp Attack** and **Amp
-Release** (the amp envelope), and **Volume** at the right. **Load** and the arrows beside the sample's
-name load a sample, as in the Advanced view, and a file dropped on the waveform loads too. The strip at
-the bottom lists the effects in the rack (they keep playing), **Extras** opens the output scope, and
-the meter at its right shows the output level. **Advanced** in the header shows everything below: the
+Release** (the amp envelope), and **Volume**, **Soft Clip** and **Hard Clip** at the right. **Load** and
+the arrows beside the sample's name load a sample, as in the Advanced view, and a file dropped on the
+waveform loads too. The strip at the bottom lists the effects in the rack (they keep playing), and the
+meter at its right shows the output level. **Advanced** in the header shows everything below: the
 sample row, the filter's type and the other envelopes, the LFOs, the effects rack and the modulation.
 The view is saved with the project (see the [top-level README](../../README.md#basic-and-advanced-views)).
 
@@ -229,8 +229,7 @@ and in presets.
 ## The effects rack
 
 At the bottom: after the sampler, up to 8 effects in any order, and the same effect as many times as
-you like. A new smemplr starts with **smacheratr** in the first slot (on, Drive 0 dB, Pre-Limit on). It
-is a slot like any other, so you can move it, switch it off or remove it.
+you like. A new smemplr starts with an empty rack.
 
 - **+** adds an effect at the end of the chain. The tabs show the chain from left to right.
 - Click a tab to show that effect. **Drag a tab sideways** to move the effect (a cinnabar bar shows
@@ -267,8 +266,6 @@ The slots, named as the tabs show them:
   right; Gentlr in a new instance, kept with the project); grabbing a gentlr band's handle, button or Threshold slider selects the band and lights them.
 - **widr**: the stereo widener with its left and right voices. In the rack it works alone: sharing the
   stereo field needs widr's own plug-in instances.
-- **wubr**: wubr's two drawn bands.
-- **levlr**: levlr's bands, each with its Drive and Type, and the drives' **Oversampling**.
 - **gentlr**: gentlr's two bands, Sub and High bands on its display, a row of values for each, **Band
   Slope**, **No Overlap**, glue, **Advanced** and its region Drive. In gentlr and smacheratr slots the
   Sub and High bands have no buttons: they work once their Range is above 0 dB, and start at 0 dB. Drag
@@ -277,13 +274,15 @@ The slots, named as the tabs show them:
   With **Advanced** on, each band's Threshold also has a slider at the right of the display, as in
   gentlr's own display: drag it (Shift: fine), double-click or right-click for -18 dB. The band's level
   rises beside it, bright where it is over the threshold and being cut.
-- **smoothr**: smoothr's limiter and gain-reduction history. Its own saturator before the limiter is
-  off in the rack: put a smacheratr slot before it for that.
 
 Every control is an automatable parameter (the host shows a slot's values in the units of the effect
 loaded there). The latency of the rack is reported to the host, which is told when it changes; a
-switched-off effect keeps its latency. The **Output Scope** on the right shows the final output (click
-it to change the time span).
+switched-off effect keeps its latency.
+
+After the rack, at the very end of the chain: **Soft Clip** and **Hard Clip** (off by default), above the
+**Output Scope** on the right. Soft Clip rounds peaks off from -6 dBFS up to 0 dBFS; Hard Clip lets nothing
+above 0 dBFS out (after Soft Clip when both are on). The scope shows the final output (click it to change
+the time span).
 
 ### A slot's presets
 
@@ -291,9 +290,8 @@ The **Presets** control on the selected slot's line lists exactly what the effec
 in its header: **Init**, its factory presets, your presets from its preset folder (by category, with
 the **Tags** filter) and its saved default. Loading one changes only that slot: the other slots and
 smemplr's own controls stay as they are, and the host records the changes as edits (automation and
-undo see them). Parameters of the plug-in that a slot does not have (widr's cinema stage, the
-saturators of multidyn and wubr, and the plug-in's end saturator where the slot has no place for it)
-are skipped.
+undo see them). Parameters of the plug-in that a slot does not have (widr's cinema stage, multidyn's
+saturator, and the plug-in's old end saturator where the slot has no place for it) are skipped.
 
 **Save**, **Save As...**, **Rename...**, **Edit Tags...** and **Delete...** work on the plug-in's own
 preset folder, in its format, so a preset saved from a slot is in the plug-in's menu as well, and one
@@ -358,15 +356,16 @@ smemplr was called smempler, and simplr before 0.5.0; projects and presets carry
 - Before 0.7: a para slot keeps its slope and its one drive becomes both filters' drives. A para slot
   from before the separate slopes gets its one slope on both filters, its HP Lock on unless its
   high-pass gain was above 0 dB, its LP Lock off, and keeps its Fade in semitones. A multidyn slot's
-  gains move into its controls for the OTT gain staging (see [multidyn](../multidyn/README.md)), and a
-  levlr slot keeps 4 bands without drive. multidyn slots saved before Style existed open in Character.
+  gains move into its controls for the OTT gain staging (see [multidyn](../multidyn/README.md)).
+  multidyn slots saved before Style existed open in Character.
 - Before 0.9 a fixed end saturator sat after the rack. Projects saved with it on load with a
   smacheratr slot at the end of their chain instead (the first free slot after the last effect, with
   the same settings); projects with it off get nothing added. If such a project's rack is full, the old
-  saturator keeps running after the rack, and the rack's control line shows **old end saturator**: once
-  the last slot is free, click it to move the saturator into the rack. Its parameters stay in the
-  host's list as "Old End Saturator ...", so old automation still loads. Old M/S EQ slopes (6 / 12 / 24
-  dB) stay what they were.
+  saturator is left out (nothing runs after the rack any more). Its parameters stay in the project, hidden
+  from the host. Old M/S EQ slopes (6 / 12 / 24 dB) stay what they were.
+- Up to 0.31 a new smemplr started with a smacheratr in the first slot; projects saved then keep theirs.
+- The rack had **wubr**, **levlr** and **smoothr** slots too. Their plug-ins are gone: a project's slot of
+  one of them loads empty (the other slots stay where they are), and the LFO mappings onto it go.
 - smacheratr and gentlr slots: slots saved before the High band load with it and No Overlap off; slots
   saved while the Sub and High bands had buttons load a band that was off at Range 0 dB; slots saved
   before glue load with nothing glued.

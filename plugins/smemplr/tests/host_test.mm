@@ -97,8 +97,12 @@ static smemplr::PluginState baseState (const std::string& sample)
         st.has[i] = true;
     }
     st.samplePath = sample;
-    // the first slot's Smacheratr as it was up to 0.24 (its Gentlr off, 12 / 12): the checks measure the
-    // sampler's own levels through it (a new instance has Gentlr on, Signature: checked after loading)
+    // a Smacheratr in the first slot as a new instance had it up to 0.31 (with its Gentlr off and 12 / 12, as up
+    // to 0.24): the checks measure the sampler's own levels through it (a new instance's rack is empty now:
+    // checked after loading)
+    for (uint32_t k = 0; k < smemplr::kSlotParams + smemplr::kSlotBlockAll; ++k)
+        st.norm[k < smemplr::kSlotParams ? smemplr::slotParam (0, k) : smemplr::slotBlockParam (0, k - smemplr::kSlotParams)] =
+            smemplr::oldFirstSlotDefault (k);
     st.norm[smemplr::slotBlockParam (0, smacheratr::kClarity)] = 0.0;
     st.norm[smemplr::slotBlockParam (0, smacheratr::kClaritySlope)] = 0.0;
     auto set = [&] (uint32_t id, double plain) { st.norm[id] = smemplr::toNormalized (id, plain); };
@@ -385,13 +389,19 @@ int main (int argc, char** argv)
         // (the hidden MIDI parameters are in the table's range, 1000 .. 1002: no more than its size)
         CHECK (count == (int32)smemplr::kNumParams, "param count %d", count);
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        // a new instance: the first slot's Smacheratr with Gentlr on and the Signature Slope (its block
-        // positions are Smacheratr's IDs, normalized as Smacheratr's), the old saturator after the rack off
-        CHECK (rig.controller->getParamNormalized (smemplr::slotBlockParam (0, smacheratr::kClarity)) == 1.0 &&
-                   rig.controller->getParamNormalized (smemplr::slotBlockParam (0, smacheratr::kClaritySlope)) ==
-                       smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature) &&
-                   rig.controller->getParamNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0,
-               "a new instance: the first slot's Gentlr on, Signature; the old saturator off");
+        // a new instance: an empty rack, Soft Clip and Hard Clip off; the old saturator after the rack retired
+        // (hidden from the host, not automatable)
+        {
+            int full = 0;
+            for (int s = 0; s < smemplr::kRackSlots; ++s)
+                full += rig.controller->getParamNormalized (smemplr::slotParam (s, smemplr::kSlotType)) != 0.0 ? 1 : 0;
+            ParameterInfo info {};
+            const bool tailHidden = rig.controller->getParameterInfo ((int32)(smemplr::kTailBase + pk::kTailOn), info) == kResultOk &&
+                                    (info.flags & ParameterInfo::kIsHidden) && !(info.flags & ParameterInfo::kCanAutomate);
+            CHECK (full == 0 && rig.controller->getParamNormalized (smemplr::kSoftClip) == 0.0 &&
+                       rig.controller->getParamNormalized (smemplr::kHardClip) == 0.0 && tailHidden,
+                   "a new instance: the rack empty (%d slots used), the clips off, the old saturator hidden", full);
+        }
         String128 str;
         rig.controller->getParamStringByValue (smemplr::kFilterFreq, 1.0, str);
         const std::string freqText = StringConvert::convert (std::u16string (reinterpret_cast<const char16_t*> (str)));
@@ -409,7 +419,7 @@ int main (int argc, char** argv)
         {
             ParameterInfo info {};
             rig.controller->getParameterInfo (i, info);
-            if (!(info.flags & ParameterInfo::kCanAutomate))
+            if (!(info.flags & ParameterInfo::kCanAutomate) && !(info.flags & ParameterInfo::kIsHidden)) // (hidden: retired)
                 ++notAutomatable;
         }
         CHECK (notAutomatable == 0, "%d parameters are not automatable", notAutomatable);
@@ -641,17 +651,18 @@ int main (int argc, char** argv)
             for (uint32_t j = 0; j < smemplr::kSlotBlockAll; ++j)
                 rig.param (smemplr::slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
         };
+        // (every kind the editor offers, and a second Multidyn last)
         constexpr int kKinds = 7;
         const int kinds[kKinds] = {smemplr::kFxPara, smemplr::kFxMultidyn, smemplr::kFxMsEq, smemplr::kFxSmacheratr,
-                                   smemplr::kFxWidr, smemplr::kFxWubr,     smemplr::kFxLevlr};
-        constexpr int kWubrSlot = 5;
+                                   smemplr::kFxWidr, smemplr::kFxGentlr,   smemplr::kFxMultidyn};
+        constexpr int kExtSlot = 6;
         for (int s = 0; s < kKinds; ++s)
             loadFx (s, kinds[s]);
-        // Wubr (slot 6) with a value in the slot's extension (block positions from kSlotBlock on): band 2's
-        // third point's level; it must move with the slot when the editor moves the rack up
-        const uint32_t wubrExt = (uint32_t)smemplr::fxBlockOf (smemplr::kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
-        CHECK (wubrExt >= smemplr::kSlotBlock && wubrExt < smemplr::kSlotBlockAll, "band 2's point 3 level is in the extension: %u", wubrExt);
-        rig.param (smemplr::slotBlockParam (kWubrSlot, wubrExt), 0.75);
+        // the second Multidyn (slot 7) with a value in the slot's extension (block positions from kSlotBlock on):
+        // its Style; it must move with the slot when the editor moves the rack up
+        const uint32_t extPos = (uint32_t)smemplr::fxBlockOf (smemplr::kFxMultidyn, multidyn::kStyle);
+        CHECK (extPos >= smemplr::kSlotBlock && extPos < smemplr::kSlotBlockAll, "Multidyn's Style is in the extension: %u", extPos);
+        rig.param (smemplr::slotBlockParam (kExtSlot, extPos), 1.0);
         auto typeOf = [&] (int slot) {
             return (int)std::lround (smemplr::toPlain (slotParam (slot, smemplr::kSlotType),
                                                         rig.controller->getParamNormalized (slotParam (slot, smemplr::kSlotType))));
@@ -673,7 +684,7 @@ int main (int argc, char** argv)
             };
             const double tabY = smemplr::Editor::kFxTabTop + 10, ctlY = smemplr::Editor::kFxCtlTop + 10;
             // one tab per slot in chain order (no saturator after the rack any more: a slot does that)
-            const char* names[kKinds] = {"para", "multidyn", "ms", "smacheratr", "widr", "wubr", "levlr"};
+            const char* names[kKinds] = {"para", "multidyn", "ms", "smacheratr", "widr", "gentlr", "multidyn2"};
             auto tabX = [] (int pos) { return 8 + pos * smemplr::Editor::kFxTabWidth + 40; };
             for (int t = 0; t < kKinds; ++t)
             {
@@ -731,27 +742,27 @@ int main (int argc, char** argv)
             // remove it (the moved slot is selected): Para, then the rest move up
             fx.click (8 + 208 + 34, ctlY); // Remove
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (4) == smemplr::kFxWubr &&
-                       typeOf (5) == smemplr::kFxLevlr && typeOf (6) == smemplr::kFxEmpty,
+            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (4) == smemplr::kFxGentlr &&
+                       typeOf (5) == smemplr::kFxMultidyn && typeOf (6) == smemplr::kFxEmpty,
                    "removed: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (4), typeOf (5), typeOf (6));
-            // Wubr moved up a slot with its extension value, and the freed slot's extension is cleared
-            const double moved = rig.controller->getParamNormalized (smemplr::slotBlockParam (kWubrSlot - 1, wubrExt));
-            const double freed = rig.controller->getParamNormalized (smemplr::slotBlockParam (kKinds - 1, wubrExt));
-            CHECK (std::fabs (moved - 0.75) < 1e-9 && freed == 0.0, "Wubr's extension moved with it: %f, left behind %f", moved, freed);
+            // the second Multidyn moved up a slot with its extension value, and the freed slot's extension is cleared
+            const double moved = rig.controller->getParamNormalized (smemplr::slotBlockParam (kExtSlot - 1, extPos));
+            const double freed = rig.controller->getParamNormalized (smemplr::slotBlockParam (kExtSlot, extPos));
+            CHECK (std::fabs (moved - 1.0) < 1e-9 && freed == 0.0, "Multidyn's extension moved with it: %f, left behind %f", moved, freed);
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_remove.png"), "after remove snapshot");
             // Cmd-drag (Ctrl on Windows) Para two places right: a copy lands in that gap, the rest move up one
             fx.drag (tabX (0), tabY, tabX (2), tabY, kCmd);
             pump (0.1);
             CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxPara &&
-                       typeOf (3) == smemplr::kFxSmacheratr && typeOf (6) == smemplr::kFxLevlr,
+                       typeOf (3) == smemplr::kFxSmacheratr && typeOf (6) == smemplr::kFxMultidyn,
                    "duplicated: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (2), typeOf (3), typeOf (6));
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_duplicate.png"), "after duplicate snapshot");
             // Alt-click (Option-click) the copy: it goes, the ones after it move up
             fx.click (tabX (2), tabY, 1, kAlt);
             pump (0.1);
-            CHECK (typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxSmacheratr && typeOf (5) == smemplr::kFxLevlr &&
+            CHECK (typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxSmacheratr && typeOf (5) == smemplr::kFxMultidyn &&
                        typeOf (6) == smemplr::kFxEmpty,
                    "alt-click removed it: %d %d %d %d", typeOf (1), typeOf (2), typeOf (5), typeOf (6));
         }
@@ -760,69 +771,32 @@ int main (int argc, char** argv)
         rig.note (60, 0.0f);
         rig.render (0.3, out);
 
-        // the kinds that did not fit the rack above (it has 8 slots): Gentlr and Smoothr, their pages (every
-        // parameter with a control, or listed as not shown), and Copy / Paste between two Smoothr slots
+        // Copy / Paste between two Widr slots (the Size comes along), with a slot of a retired kind after them
+        // (Levlr: its plug-in is gone; an Empty slot, no tab)
         {
-            loadFx (0, smemplr::kFxGentlr);
-            loadFx (1, smemplr::kFxSmoothr);
-            loadFx (2, smemplr::kFxSmoothr);
-            const uint32_t ceil1 = smemplr::slotBlockParam (1, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
-            const uint32_t ceil2 = smemplr::slotBlockParam (2, (uint32_t)smemplr::fxBlockOf (smemplr::kFxSmoothr, smoothr::kCeiling));
-            rig.param (ceil1, 0.2);
+            loadFx (0, smemplr::kFxWidr);
+            loadFx (1, smemplr::kFxWidr);
+            rig.param (slotParam (2, smemplr::kSlotType), smemplr::toNormalized (slotParam (2, smemplr::kSlotType), smemplr::kFxRetiredLevlr));
+            const uint32_t size1 = smemplr::slotBlockParam (0, (uint32_t)smemplr::fxBlockOf (smemplr::kFxWidr, widr::kSize));
+            const uint32_t size2 = smemplr::slotBlockParam (1, (uint32_t)smemplr::fxBlockOf (smemplr::kFxWidr, widr::kSize));
+            rig.param (size1, 0.2);
             EditorWindow fx (rig.controller);
-            CHECK (fx.ok (), "fx editor (gentlr, smoothr)");
+            CHECK (fx.ok (), "fx editor (widr)");
             const double tabY = smemplr::Editor::kFxTabTop + 10, ctlY = smemplr::Editor::kFxCtlTop + 10;
             auto tabX = [] (int pos) { return 8 + pos * smemplr::Editor::kFxTabWidth + 40; };
-            const int more[2] = {smemplr::kFxGentlr, smemplr::kFxSmoothr};
-            const char* moreNames[2] = {"gentlr", "smoothr"};
-            for (int t = 0; t < 2; ++t)
-            {
-                fx.click (tabX (t), tabY);
-                rig.note (60, 1.0f);
-                for (int i = 0; i < 12; ++i)
-                {
-                    rig.render (0.05, out);
-                    pump (0.03);
-                }
-                rig.note (60, 0.0f);
-                CHECK (fx.savePng (outDir + "/ui_fx_" + moreNames[t] + ".png"), "fx %s snapshot", moreNames[t]);
-                std::set<uint32_t> shown;
-                int reported = -1;
-                std::ifstream rep (rackReport);
-                for (std::string line; std::getline (rep, line);)
-                {
-                    std::istringstream ls (line);
-                    int type = -1;
-                    ls >> type;
-                    if (type != more[t])
-                        continue;
-                    reported = type;
-                    shown.clear ();
-                    for (uint32_t id; ls >> id;)
-                        shown.insert (id);
-                }
-                CHECK (reported == more[t], "rack %s: the page was reported", moreNames[t]);
-                const auto& table = smemplr::fxTable (more[t]);
-                const auto& hidden = smemplr::rackHiddenParams (more[t]);
-                for (uint32_t id = 0; id < table.size (); ++id)
-                {
-                    const bool listed = std::any_of (hidden.begin (), hidden.end (),
-                                                     [id] (const smemplr::RackHidden& h) { return id >= h.first && id <= h.last; });
-                    CHECK (listed || shown.count (id) == 1, "rack %s: \"%s\" (%u) has no control on the page", moreNames[t],
-                           table.info (id).name, id);
-                }
-            }
-            // Copy on slot 2's page, Paste on slot 3's: the Ceiling comes along
-            fx.click (tabX (1), tabY);
+            fx.click (tabX (0), tabY);
             pump (0.1);
             fx.click (8 + 284 + 26, ctlY); // Copy
-            fx.click (tabX (2), tabY);
+            fx.click (tabX (1), tabY);
             pump (0.1);
             fx.click (8 + 340 + 26, ctlY); // Paste
             pump (0.1);
-            CHECK (std::fabs (rig.controller->getParamNormalized (ceil2) - 0.2) < 1e-9, "pasted: the ceiling %f",
-                   rig.controller->getParamNormalized (ceil2));
+            CHECK (std::fabs (rig.controller->getParamNormalized (size2) - 0.2) < 1e-9, "pasted: the size %f",
+                   rig.controller->getParamNormalized (size2));
         }
+        for (int s = 0; s < smemplr::kRackSlots; ++s)
+            rig.param (slotParam (s, smemplr::kSlotType), 0.0);
+        rig.render (0.3, out);
         for (int s = 0; s < smemplr::kRackSlots; ++s)
             rig.param (slotParam (s, smemplr::kSlotType), 0.0);
         rig.render (0.3, out);

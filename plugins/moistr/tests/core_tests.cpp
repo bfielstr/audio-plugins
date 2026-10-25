@@ -172,7 +172,6 @@ std::unique_ptr<Engine> engine (int block = 512)
 {
     auto e = std::make_unique<Engine> ();
     legacy (*e);
-    e->setParam (kTailBase + pk::kTailOn, 0.0); // (the end saturator, on by default since 0.25: the tests are about moistr's own processing)
     e->prepare (kSr, block);
     return e;
 }
@@ -183,14 +182,6 @@ std::unique_ptr<Engine> fresh (double sr = kSr, int block = 512)
     e->prepare (sr, block);
     return e;
 }
-// the end saturator out of the way (its Saturator and Gentlr off: it passes the engine's output through)
-void tailNeutral (Engine& e)
-{
-    e.setParam (kTailBase + pk::kTailOn, 0.0);
-    e.setParam (kTailExtBase + pk::kTailExtClarity, 0.0);
-    e.reset ();
-}
-
 // the split alone: no Drive, Glue, Grit or movement
 void plain (Engine& e)
 {
@@ -1011,11 +1002,8 @@ TEST (mix_zero_is_dry)
     bool same = true;
     for (size_t i = (size_t)lat; i < x.size () && same; ++i)
         same = y[i] == x[i - (size_t)lat];
-    std::printf ("    latency %d samples (the end saturator's)\n", lat);
     CHECK (same, "Mix 0: the input bit for bit, %d samples late", lat);
-    smacheratr::Tail t;
-    t.prepare (kSr, 512);
-    CHECK (lat == t.latency (), "the latency is the end saturator's alone: %d", lat);
+    CHECK (lat == 0, "no latency (the LAB empty, nothing after it): %d", lat);
 }
 
 TEST (silence_and_extremes)
@@ -2338,7 +2326,7 @@ TEST (liquid_preset_statistics)
 
 // ---- the SWEEP stage (0.24) -------------------------------------------------------------------------------
 namespace {
-// the SWEEP stage alone (no split, no end saturator): the defaults, then `set` (plain values)
+// the SWEEP stage alone (no split): the defaults, then `set` (plain values)
 struct SweepRig
 {
     ParamArray p = defaultParams ();
@@ -2436,7 +2424,11 @@ TEST (sweep_default_is_the_recipe)
     CHECK (d[kDrive] == 0.0 && d[kMovement] == 0.0 && d[kGlue] == 0.0 && d[kGrit] == 0.0 && d[kLink] == 0.0 && d[kLiquid] == 0.0 &&
                d[kShiftOn] == 0.0 && d[kMix] == 1.0 && d[kOutput] == 0.0,
            "the rest neutral: Drive, Movement, Glue, Grit, Link, Liquid 0, the shifter off, Mix 100 %%");
-    CHECK (d[kTailBase + pk::kTailOn] == 1.0, "the end saturator on (as in every plug-in since 0.25)");
+    CHECK (d[kSoftClip] == 0.0 && d[kHardClip] == 0.0, "Soft Clip and Hard Clip off");
+    int wrong = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        wrong += paramTable ().info (id).retired != (id >= kTailBase && id < kTailExt4Base + pk::kTailExt4Fields);
+    CHECK (wrong == 0, "the old end saturator's blocks retired, nothing else (%d wrong)", wrong);
     // the bells' centres follow the prototype's formula exactly, tick by tick, over 20 s (the engine, from reset)
     for (double sr : {44100.0, 48000.0, 96000.0})
     {
@@ -2557,12 +2549,12 @@ TEST (sweep_keeps_the_stereo_image)
     // swapping L and R in swaps them out, bit for bit; a mono input stays mono
     const auto a = reese (3.0);
     const auto b = noise (0.2, 3.0, 11);
-    for (int tailOn = 0; tailOn < 2; ++tailOn)
+    for (int clips = 0; clips < 2; ++clips)
     {
         auto render = [&] (const std::vector<float>& l, const std::vector<float>& r, std::vector<float>& outR) {
             auto e = fresh ();
-            if (!tailOn)
-                tailNeutral (*e);
+            e->setParam (kSoftClip, clips);
+            e->setParam (kHardClip, clips);
             std::vector<float> outL (l.size ());
             outR.assign (l.size (), 0.0f);
             for (size_t i = 0; i < l.size (); i += 256)
@@ -2576,12 +2568,12 @@ TEST (sweep_keeps_the_stereo_image)
         std::vector<float> r1, r2, r3, r4;
         const auto l1 = render (a, silent, r1);
         CHECK (peak (r1, 0, r1.size ()) == 0.0 && rms (l1, 0, l1.size ()) > 0.01, "%s: L only in, R out silent (peak %.3g)",
-               tailOn ? "the end saturator on" : "the engine", peak (r1, 0, r1.size ()));
+               clips ? "the clips on" : "the engine", peak (r1, 0, r1.size ()));
         const auto l2 = render (a, b, r2);
         const auto l3 = render (b, a, r3);
-        CHECK (l2 == r3 && r2 == l3, "%s: swapping L and R in swaps them out, bit for bit", tailOn ? "the end saturator on" : "the engine");
+        CHECK (l2 == r3 && r2 == l3, "%s: swapping L and R in swaps them out, bit for bit", clips ? "the clips on" : "the engine");
         const auto l4 = render (a, a, r4);
-        CHECK (l4 == r4, "%s: mono in, mono out", tailOn ? "the end saturator on" : "the engine");
+        CHECK (l4 == r4, "%s: mono in, mono out", clips ? "the clips on" : "the engine");
     }
 }
 
@@ -2621,7 +2613,7 @@ TEST (sub_boost_adds_the_lows)
     const auto x = detunedBass (6.0);
     auto render = [&] (bool on, double level, double* unit = nullptr) {
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         e->setParam (kSubBoost, on ? 1.0 : 0.0);
         e->setParam (kSubLevel, level);
         e->reset ();
@@ -2795,7 +2787,7 @@ TEST (sweep_stable_everywhere)
         for (int extreme = 0; extreme < 2; ++extreme)
         {
             auto e = fresh (sr);
-            tailNeutral (*e);
+            e->reset ();
             if (extreme)
             {
                 for (uint32_t id : {kARate, kBRate, kShelfRate})
@@ -2995,7 +2987,7 @@ TEST (sweep_default_level)
     {
         const auto x = which == 0 ? detunedBass (8.0) : reese (8.0);
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         const auto y = run (*e, x);
         const size_t from = (size_t)(0.5 * kSr);
         const double gap = db (rms (y, from, y.size ())) - db (rms (x, from, x.size ()));
@@ -3007,7 +2999,7 @@ TEST (sweep_default_level)
     {
         const auto x = detunedBass (6.0);
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         e->setParam (kSweepDrive, drive);
         e->reset ();
         const auto y = run (*e, x);
@@ -3204,7 +3196,7 @@ TEST (gesture_walk_reversal)
     // the engine: a Walk across its turns, Talk on Liquid Pos, the curve's value continuous (no step beyond
     // what the curve's steepest slope allows in a tick)
     auto e = fresh ();
-    tailNeutral (*e);
+    e->reset ();
     gesture (*e, 0, kTargetLiquid, kGestureTalk);
     e->setParam (kLiquid, 1.0);
     e->setParam (gestureId (0, kGestureMode), kModeWalk);
@@ -3339,7 +3331,7 @@ TEST (gesture_tempo_and_transport)
     CHECK (std::fabs (f->gestureBeats () - 512.0 / kSr * 2.0) < 1e-9, "never told a tempo: 120 bpm");
     // a tempo change while playing: the value follows the song position, without a step
     auto g = fresh ();
-    tailNeutral (*g);
+    g->reset ();
     gesture (*g, 0, kTargetHighLevel, kGestureRampUp);
     g->setParam (gestureId (0, kGestureLength), 5);
     g->reset ();
@@ -3391,7 +3383,7 @@ TEST (wobble_phase_continuous)
     // 0.9 back to 0.2 of the range) the phase runs on without a jump, its step each tick the rate x the tick's
     // beats, and the gain on the bands above Low moves no more than the fastest rate allows
     auto e = fresh ();
-    tailNeutral (*e);
+    e->reset ();
     gesture (*e, 0, kTargetWobbleRate, kGestureRateRise);
     e->setParam (kWobbleAmount, 1.0);
     e->reset ();
@@ -3424,7 +3416,7 @@ TEST (wobble_phase_continuous)
     CHECK (hiRate > 3.0 * loRate, "the rate gesture moves the rate (%.2f .. %.2f)", loRate, hiRate);
     // at Wobble Rate x2 with no gesture, the tremolo's period is half a beat at 2 cycles per beat
     auto f = fresh ();
-    tailNeutral (*f);
+    f->reset ();
     f->setParam (kWobbleAmount, 1.0);
     f->setParam (kWobbleRate, 2.0);
     f->reset ();
@@ -3449,7 +3441,7 @@ TEST (gestures_never_touch_low)
     {
         auto render = [&] (int target, std::vector<float>* right) {
             auto e = fresh ();
-            tailNeutral (*e);
+            e->reset ();
             e->setParam (kSeed, seed);
             if (target != kTargetOff)
             {
@@ -3464,7 +3456,7 @@ TEST (gestures_never_touch_low)
         {
             auto ref = [&] {
                 auto e = fresh ();
-                tailNeutral (*e);
+                e->reset ();
                 e->setParam (kSeed, seed);
                 audible (*e, target);
                 e->reset ();
@@ -3492,7 +3484,7 @@ TEST (gesture_targets_act)
     auto render = [&] (int target, double depth, Engine** keep = nullptr) {
         static std::unique_ptr<Engine> held;
         held = fresh ();
-        tailNeutral (*held);
+        held->reset ();
         audible (*held, target);
         if (target != kTargetOff)
         {
@@ -3570,7 +3562,7 @@ TEST (gesture_target_change_fades)
     // switching a slot's Target (or the gesture on and off) fades: no click
     const auto x = bandsMix (3.0);
     auto e = fresh ();
-    tailNeutral (*e);
+    e->reset ();
     static Gesture zero;
     zero.flat (0.0);
     e->setUserGesture (0, &zero);
@@ -3589,7 +3581,7 @@ TEST (gesture_target_change_fades)
             e->setParam (kWobbleAmount, 1.0);
     });
     auto f = fresh ();
-    tailNeutral (*f);
+    f->reset ();
     const auto ref = run (*f, x, nullptr, 256);
     double jump = 0.0, own = 0.0;
     for (size_t i = 1000; i < y.size (); ++i)
@@ -3654,11 +3646,11 @@ TEST (gesture_presets)
     for (const char* rel : {"Gestures/Reese Cell.txt", "Gestures/Stutter Wobble.txt", "Gestures/Talking Reese.txt", "Gestures/Crossover Scan.txt"})
     {
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         CHECK (loadPreset (*e, rel), "%s loads", rel);
         e->reset ();
         auto off = fresh ();
-        tailNeutral (*off);
+        off->reset ();
         loadPreset (*off, rel);
         off->setParam (kScene, kSceneNone);
         off->setParam (kWobbleAmount, 0.0);
@@ -3774,7 +3766,7 @@ TEST (scene_lanes_in_tandem)
         for (double at : {0.1, 0.45, 0.8})
         {
             auto e = fresh ();
-            tailNeutral (*e);
+            e->reset ();
             sceneOn (*e, which);
             e->setParam (kSceneMode, kModeWalk);
             e->setParam (kSceneSpeed, 0); // Hold
@@ -3789,7 +3781,7 @@ TEST (scene_lanes_in_tandem)
                    factorySceneName (which), at, worst);
         }
     auto e = fresh ();
-    tailNeutral (*e);
+    e->reset ();
     sceneOn (*e, kSceneStutterCell);
     e->reset ();
     const std::vector<float> z (Engine::kTick, 0.0f);
@@ -3820,7 +3812,7 @@ TEST (scene_loop_and_walk_continuous)
     for (int mode : {kModeLoop, kModeWalk})
     {
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         e->setUserScene (s.get ());
         e->setParam (kScene, kSceneUser);
         e->setParam (kSceneMode, mode);
@@ -3924,7 +3916,7 @@ TEST (scene_lane_ranges)
     CHECK (s->count == 6, "the Off lane left out (%d lanes)", s->count);
     auto render = [&] (double amount) {
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         e->setParam (kShiftOn, 1.0);
         e->setUserScene (s.get ());
         e->setParam (kScene, kSceneUser);
@@ -4001,7 +3993,7 @@ TEST (scene_change_fades)
     const auto x = bandsMix (3.0);
     auto s = sceneFrom (R"({"length_beats": 1, "lanes": [{"target": "High Level", "points": [[0, 0]]}, {"target": "Mid Level", "points": [[0, 0]]}]})");
     auto e = fresh ();
-    tailNeutral (*e);
+    e->reset ();
     e->setUserScene (s.get ());
     sceneOn (*e, kSceneSlowPhrase);
     e->reset ();
@@ -4017,7 +4009,7 @@ TEST (scene_change_fades)
             e->setParam (kScene, kSceneUser);
     });
     auto f = fresh ();
-    tailNeutral (*f);
+    f->reset ();
     const auto ref = run (*f, x, nullptr, 256);
     double jump = 0.0, own = 0.0;
     for (size_t i = 1000; i < y.size (); ++i)
@@ -4087,7 +4079,7 @@ void dirtyLab (Engine& e, double driveDb = 18.0)
     }
     labSlot (e, postSlot (0), smemplr::kFxMultidyn, true, {{multidyn::kAmount, 0.4}});
 }
-// the engine linear: no SWEEP stage, Drive, Glue, Grit or movement, the end saturator out of the way
+// the engine linear: no SWEEP stage, Drive, Glue, Grit or movement
 std::unique_ptr<Engine> linearEngine (int bands = 4)
 {
     auto e = engine ();
@@ -4096,7 +4088,7 @@ std::unique_ptr<Engine> linearEngine (int bands = 4)
     e->setParam (kBandCount, bands == 4 ? kBands4 : kBands3);
     e->setParam (kXoverMid, 1200.0);
     e->setParam (kXoverHigh, 6000.0);
-    tailNeutral (*e);
+    e->reset ();
     return e;
 }
 } // namespace
@@ -4104,7 +4096,7 @@ std::unique_ptr<Engine> linearEngine (int bands = 4)
 TEST (lab_empty_is_029)
 {
     // every slot Empty and every chain at 0 dB (Init, and a state saved before 0.30, which reads the LAB's parameters at
-    // these: defaultNormalizedForVersion): the LAB does not run, the latency is the end saturator's alone, and the sound
+    // these: defaultNormalizedForVersion): the LAB does not run, no latency, and the sound
     // is the engine's without the LAB, bit for bit, also where the LAB had been set up and taken back (the check against
     // 0.29 itself, a build of each rendering every factory preset and gesture, bit for bit, is run by hand)
     const auto x = reese (1.5);
@@ -4151,10 +4143,9 @@ TEST (lab_paths_line_up)
         const Lab& lab = e->labStage ();
         const int labLat = e->labLatency ();
         CHECK (lab.chainLatency (0) > lab.chainLatency (1) && lab.chainLatency (2) == 0 && labLat == Lab::kChunk + lab.chainLatency (0) + lab.postLatency () &&
-                   e->latency () == labLat + ref->latency (),
-               "the latency: the effects' block, the slowest chain's (%d) and POST's (%d), then the end saturator's (%d)", lab.chainLatency (0),
-               lab.postLatency (),
-               e->latency () - labLat);
+                   e->latency () == labLat && ref->latency () == 0,
+               "the latency: the effects' block, the slowest chain's (%d) and POST's (%d), nothing else (%d)", lab.chainLatency (0),
+               lab.postLatency (), e->latency () - labLat);
         std::vector<float> x (32768, 0.0f);
         x[0] = 0.5f;
         const auto y0 = run (*ref, x), y = run (*e, x);
@@ -4195,7 +4186,6 @@ TEST (lab_mono_and_sub)
     {
         en->setParam (kBandCount, kBands4);
         en->setParam (kMovement, 0.5);
-        tailNeutral (*en); // (the end saturator after it all would take the sub down as the rest gets louder)
     }
     dirtyLab (*e, 24.0);
     ref->reset ();
@@ -4227,7 +4217,7 @@ TEST (lab_mute_solo_level)
         e->setParam (kBandCount, kBands4);
         dirtyLab (*e);
         set (*e);
-        tailNeutral (*e);
+        e->reset ();
         return run (*e, x, right);
     };
     const size_t a = (size_t)(0.6 * kSr), b = x.size ();
@@ -4334,15 +4324,15 @@ TEST (neuro_recipe)
                lab.kind (postSlot (0)) == smemplr::kFxMultidyn && lab.kind (postSlot (1)) == smemplr::kFxSmacheratr &&
                lab.kind (chainSlot (3, 0)) == smemplr::kFxEmpty,
            "the LAB: smacheratr and an OTT on each band, an OTT and a clipper in POST");
-    std::printf ("    latency: the LAB's %d (chains %d, %d, %d; POST %d) and the end saturator's %d\n", e->labLatency (), lab.chainLatency (0),
-                 lab.chainLatency (1), lab.chainLatency (2), lab.postLatency (), e->latency () - e->labLatency ());
+    std::printf ("    latency: the LAB's %d (chains %d, %d, %d; POST %d)\n", e->labLatency (), lab.chainLatency (0), lab.chainLatency (1),
+                 lab.chainLatency (2), lab.postLatency ());
+    CHECK (e->latency () == e->labLatency (), "the latency is the LAB's: %d", e->latency ());
 }
 
 TEST (neuro_presets)
 {
     // every LAB preset on a mono Reese at 140 BPM: finite, mono, and the sub (55 Hz, the Low band's) within 1 dB of the
-    // same settings with the LAB empty (the end saturator out of the way: it takes everything down as the rest gets
-    // louder), lined up by the LAB's latency
+    // same settings with the LAB empty, lined up by the LAB's latency
     const auto x = reese (4.0);
     const size_t a = (size_t)(1.0 * kSr);
     for (const char* file : {"Neuro/Neuro.txt", "Neuro/Neuro Heavy.txt", "Neuro/Dirty Mids.txt", "Neuro/Neuro Gesture.txt"})
@@ -4350,8 +4340,8 @@ TEST (neuro_presets)
         const auto values = presetValues (file);
         auto e = withValues (values);
         auto bare = withValues (values);
-        tailNeutral (*e);
-        tailNeutral (*bare);
+        e->reset ();
+        bare->reset ();
         for (int sl = 0; sl < kNumLabSlots; ++sl)
             bare->setParam (labSlotParam (sl, kLabType), 0.0);
         bare->reset ();
@@ -4493,13 +4483,13 @@ TEST (input_gain)
     // Input: the gain at the very start, exact (the dry signal for Mix has it too); 0 dB is not run; a change glides
     const auto x = sine (220.0, 0.5, 0.5);
     auto e = engine ();
-    tailNeutral (*e);
+    e->reset ();
     e->setParam (kMix, 0.0);
     e->setParam (kInput, -6.0);
     e->reset ();
     const auto y = run (*e, x);
     const float g = (float)std::pow (10.0, -6.0 / 20.0);
-    const size_t lat = (size_t)e->latency (); // (the end saturator, off, still delays)
+    const size_t lat = (size_t)e->latency ();
     double worst = 0.0;
     for (size_t i = 0; i + lat < x.size (); ++i)
         worst = std::max (worst, (double)std::fabs (y[i + lat] - x[i] * g));
@@ -4836,7 +4826,7 @@ TEST (para_split)
     for (double hz : {50.0, 150.0, 300.0, 600.0, 2000.0, 8000.0})
     {
         auto e = engine ();
-        tailNeutral (*e);
+        e->reset ();
         plain (*e);
         still (*e);
         e->reset ();
@@ -4848,7 +4838,7 @@ TEST (para_split)
     // the low-pass path's level moves in and out (LP Move 100 %: all the way), the high-pass path's corner up HP Move
     // octaves and back, its level in and out; both channels the same
     auto e = engine ();
-    tailNeutral (*e);
+    e->reset ();
     plain (*e);
     still (*e);
     e->setParam (kParaLpMove, 1.0);
@@ -4890,7 +4880,7 @@ TEST (para_split)
     CHECK (ml == mr, "a mono input stays mono (PARA, Loop Lock, Input, Sub Guard and Guard Bells on)");
     // with Sub Guard the low-pass path's level moves only above Sub Guard Freq
     auto g = engine ();
-    tailNeutral (*g);
+    g->reset ();
     plain (*g);
     still (*g);
     g->setParam (kParaLpMove, 1.0);
@@ -5115,7 +5105,7 @@ TEST (sub_guard_floor_and_bells)
     const auto lowSine = sine (45.0, 0.3, 1.5);
     auto dropped = [&] (bool guard, double floorDb) {
         auto e = engine ();
-        tailNeutral (*e);
+        e->reset ();
         plain (*e);
         e->setParam (kLowLevel, kLevelOffDb); // (the Low band off: as if it had dipped all the way)
         e->setParam (kSubGuard, guard ? 1.0 : 0.0);
@@ -5129,7 +5119,7 @@ TEST (sub_guard_floor_and_bells)
     auto dip = [&] (double floorDb) {
         // a gesture lane can not take the Low band down; Low Dip can: 6 dB, with Sub Guard held to Sub Floor
         auto e = engine ();
-        tailNeutral (*e);
+        e->reset ();
         plain (*e);
         e->setParam (kMovement, 1.0);
         e->setParam (kLowDip, 6.0);
@@ -5147,7 +5137,7 @@ TEST (sub_guard_floor_and_bells)
     CHECK (unguarded < -2.0 && held > -0.5 && floor6 < held - 0.5 && floor6 > unguarded, "Low Dip held off the sub, Sub Floor lets it part of the way");
     auto bell = [&] (double centre, bool guardBells, double hz) {
         auto e = fresh ();
-        tailNeutral (*e);
+        e->reset ();
         for (int b = 0; b < kNumBells; ++b)
             e->setParam (bellOnId (b), b == 1 ? 1.0 : 0.0);
         e->setParam (bellId (1, kBellLow), centre);
@@ -5174,7 +5164,7 @@ TEST (sub_guard_floor_and_bells)
 TEST (cpu_budget)
 {
     // 10 s of a stereo Reese, the defaults, the heaviest settings and the Neuro recipe (under 18 %) (4 bands, 2 passes, full movement at the
-    // fastest Rate with the longest ramps, the end saturator on): CPU time, the best of three renders
+    // fastest Rate with the longest ramps, Soft Clip and Hard Clip on): CPU time, the best of three renders
     const auto x = reese (10.0);
     for (int which = 0; which < 6; ++which)
     {
@@ -5187,7 +5177,7 @@ TEST (cpu_budget)
             auto e = ocean ? fresh () : neuro ? withValues (neuroRecipe ()) : engine ();
             if (ocean)
             {
-                // a new instance (eight bells, Sub Boost, Tone, the end saturator) with Clean Sub on as well
+                // a new instance (eight bells, Sub Boost, Tone) with Clean Sub on as well
                 e->setParam (kCleanSub, 1.0);
                 e->setParam (kSplitDrive, 6.0);
                 e->setParam (kShelf, 1.0);
@@ -5228,7 +5218,8 @@ TEST (cpu_budget)
                 e->setParam (kGrit, 1.0);
                 e->setParam (kShiftOn, 1.0);
                 e->setParam (kShift, 120.0);
-                e->setParam (kTailBase + pk::kTailOn, 1.0);
+                e->setParam (kSoftClip, 1.0);
+                e->setParam (kHardClip, 1.0);
                 // and the 0.22 controls: both patterns overlapping, the densest, fastest movement, the Low band moving
                 e->setParam (kSeedBlend, 0.5);
                 e->setParam (kDensity, 8.0);
@@ -5250,7 +5241,7 @@ TEST (cpu_budget)
         std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0,
                      all030 ? "the Neuro preset with two passes, Input, Loop Lock, PARA, Sub Guard and Guard Bells"
                      : neuro ? "the Neuro preset (the Neuro recipe: three chains of smacheratr and an OTT, an OTT and a clipper in POST)"
-                     : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the end saturator on"
+                     : heavy ? "4 bands, 2 passes, full movement, Seed Blend, Density x8, Speed x16, Low Push / Dip, Shift on, Link, Liquid, the clips on"
                      : gestures ? "the new instance as above, with four slots (a level gate, Close, Wobble on a rate gesture, Dirt) and Reese Cell"
                      : ocean ? "a new instance's eight bells, Sub Boost and Tone, plus Clean Sub, Split Drive and the High Shelf"
                              : "the bands alone (Sweep off)");

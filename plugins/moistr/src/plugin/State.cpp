@@ -1,10 +1,12 @@
 #include "State.h"
 
 #include "smacheratr/src/core/TailExt.h"
+#include "smemplr/src/core/FxSlot.h"
 
 #include "base/source/fstreamer.h"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 
 namespace moistr {
@@ -45,7 +47,10 @@ constexpr int32 kMagic = 0x5453494D; // 'MIST'
 //    slot Empty, every chain at 0 dB (their defaults: defaultNormalizedForVersion) and keeps its slots, which still
 //    play, so a 0.29 project sounds as it did, bit for bit. (A 0.29 build reads a version 9 state's first 220
 //    parameters and its slots and stops before the new block.)
-constexpr int32 kVersion = 9;
+// 10: 0.32, Soft Clip and Hard Clip at the end (IDs 1953, 1954 appended; off, their defaults), the end saturator retired
+//    (its IDs kept). In every version: a LAB slot of a kind smemplr retired (Wubr, Levlr, Smoothr) loads Empty (on, its block
+//    at its defaults), as it plays.
+constexpr int32 kVersion = 10;
 constexpr int32 kGestureMagic = 0x54534547; // 'GEST'
 constexpr int32 kSceneMagic = 0x454E4353;   // 'SCNE'
 constexpr int32 kMaxSceneBytes = 4 << 20;
@@ -188,6 +193,21 @@ bool readState (IBStream* stream, State& st)
     // then keeps them where it lacks them
     if (version < kNewDefaults)
         smacheratr::tailOldDefaults (st.norm, st.has, kTailBase, kTailExtBase, kTailExt3Base);
+    // a LAB slot of a retired kind: Empty
+    for (int slot = 0; slot < kNumLabSlots; ++slot)
+    {
+        const uint32_t typeId = labSlotParam (slot, kLabType);
+        if (!st.has[typeId] || !smemplr::fxRetired ((int)std::lround (toPlain (typeId, st.norm[typeId]))))
+            continue;
+        st.norm[typeId] = toNormalized (typeId, (double)smemplr::kFxEmpty);
+        st.norm[labSlotParam (slot, kLabOn)] = 1.0;
+        st.has[labSlotParam (slot, kLabOn)] = true;
+        for (uint32_t j = 0; j < smemplr::kSlotBlockAll; ++j)
+        {
+            st.norm[labBlockParam (slot, j)] = defaultNormalized (labBlockParam (slot, j));
+            st.has[labBlockParam (slot, j)] = true;
+        }
+    }
     return true;
 }
 

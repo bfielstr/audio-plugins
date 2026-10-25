@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <vector>
@@ -41,7 +42,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kLpGain, "Low-Pass Gain", "LP Gain", kGainMinDb, 12.0, 0.0, Curve::Linear, Disp::DbGain));
         v.push_back (toggle (kResLink, "Link Resonance", "Link Res", false));
         v.push_back (choice (kMovement, "Movement", "Movement", {"Free", "Vocal"}, kFree));
-        pk::addTailParams (v, kTailBase);
+        pk::addTailParams (v, kTailBase); // (the old end saturator's blocks: retired below)
         v.push_back (toggle (kDragGain, "Drag Gain", "Drag Gain", false));
         v.push_back (toggle (kLiquid, "Liquid (unused)", "Liquid", false));
         // (1 .. 36 semitones, 12 by default, before: fadeFromOldRange)
@@ -65,6 +66,10 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kLpGainLock, "Low-Pass Gain Lock", "LP Lock", false));
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        // the old end saturator's blocks: kept (saved IDs stay put), retired
+        for (const auto& r : kRetiredTail)
+            pk::retire (v, r[0], r[1]);
         return v;
     }());
     return t;

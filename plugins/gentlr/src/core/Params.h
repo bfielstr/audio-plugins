@@ -3,8 +3,9 @@
 // them, at fixed numbers, and the end saturator's fourth block after those. That block grew by one
 // field (its Gentlr's Slope) while it was still the last; Gentlr's own Slope came after it, so it is
 // closed in now. Gentlr's glue switches came next, its own and then the end saturator's (a fifth
-// block), and Band Shelves after that, at the very end. Every ID below is pinned (static_asserts at the
-// end of this file).
+// block), Band Shelves after that, and Soft Clip and Hard Clip at the very end. The end saturator is
+// retired (its blocks stay in the table so saved IDs stay put: pk::retire). Every ID below is pinned
+// (static_asserts at the end of this file).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -61,7 +62,7 @@ enum ParamId : uint32_t
     kRelease,      // ms, how fast it lets go
     kStereo,       // StereoMode
     kMix,          // dry / wet
-    kOutput,       // dB, before the Smacheratr at the end
+    kOutput,       // dB, before Soft Clip and Hard Clip at the end
     kBandBase,                                         // kBands x kBandBlock
     // the Sub band: a shelf, everything from the very bottom up to where its cut starts to let go (
     // smacheratr::subBand), compressed like the bands; it has no Width, and no button: it works while its
@@ -70,7 +71,7 @@ enum ParamId : uint32_t
     kSubFreq,                                 // Hz, where the band starts to taper off (20 - 100 Hz)
     kSubRange,                                // dB, the most it turns the sub region down (0 - 24; 0 by default)
     kSubThreshold,                            // dB, where it starts cutting (Advanced; without it -18 dB)
-    kTailBase,                                         // the Smacheratr at the end of the chain: pk::kTailFields entries
+    kTailBase,                                         // the old end saturator (retired): pk::kTailFields entries
     kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
     kTailExt2Base = kTailExtBase + pk::kTailExtFields, // its Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields entries
     // --- after the end saturator's first three blocks ---
@@ -100,6 +101,8 @@ enum ParamId : uint32_t
     // 20 kHz: smacheratr::clarityBand), running flat out to that side. Off for a new instance (the bands
     // stay bands wherever they are); State.cpp gives states from before it On, the way they sounded then.
     kBandShelves = kTailExt4Base + pk::kTailExt4Fields,
+    kSoftClip, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
     kNumParams
 };
 // Gentlr's glue switches (smacheratr::GluePair's order)
@@ -124,6 +127,7 @@ constexpr uint32_t thresholdParam (int k)
 constexpr bool isSubParam (uint32_t id) { return id >= kSubOn && id < kTailBase; }
 constexpr bool isHighParam (uint32_t id) { return id >= kHighOn && id <= kHighThreshold; }
 constexpr bool isBandParam (uint32_t id) { return (id >= kBandBase && id < kTailBase) || isHighParam (id); }
+// the old end saturator's parameters (retired: the engine ignores them)
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kHighOn) || (id >= kTailExt3Base && id < kSlope) || (id >= kTailExt4Base && id < kBandShelves);
@@ -196,15 +200,16 @@ static_assert (kAdvanced == 0 && kDrive == 1 && kDriveAmount == 2 && kAttack == 
                "Gentlr's IDs are persisted");
 static_assert (kBandBase == 8 && kBandBlock == 5 && bandParam (1, kThreshold) == 17, "the bands: 8 - 17");
 static_assert (kSubOn == 18 && kSubFreq == 19 && kSubRange == 20 && kSubThreshold == 21, "the Sub band: 18 - 21");
-static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "the end saturator's blocks: 22, 28, 45");
+static_assert (kTailBase == 22 && kTailExtBase == 28 && kTailExt2Base == 45, "the old end saturator's blocks (retired): 22, 28, 45");
 static_assert (kHighOn == 54 && kHighFreq == 55 && kHighRange == 56 && kHighThreshold == 57 && kNoOverlap == 58,
                "the High band: 54 - 57, No Overlap 58");
 static_assert (kTailExt3Base == 59 && kSlope == 65, "the end saturator's fourth block 59 - 64, Slope 65");
 static_assert (kGlue12 == 66 && kGlue2High == 70 && kTailExt4Base == 71, "the glue switches 66 - 70, the end saturator's fifth block 71 - 75");
-static_assert (kBandShelves == 76 && kNumParams == 77, "Band Shelves 76: 77 parameters");
+static_assert (kBandShelves == 76 && kSoftClip == 77 && kHardClip == 78 && kNumParams == 79, "Band Shelves 76, the clips 77 and 78: 79 parameters");
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: its own Advanced only (it is Gentlr: no Gentlr switch)
+// Default set in a new instance: its own Advanced only (it is Gentlr: no Gentlr switch; the end saturator
+// it had is retired)
 inline constexpr pk::GentlrIds kGentlrIds = pk::GentlrIds {-1, -1, (int32_t)kAdvanced};
 
 } // namespace gentlr

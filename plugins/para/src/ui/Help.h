@@ -2,6 +2,8 @@
 
 #include "../core/Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace para::help {
 
 inline const char* forParam (uint32_t id)
@@ -76,6 +78,8 @@ inline const char* forParam (uint32_t id)
                    "makes (the low-pass takes the top ones away). Post: after its filter (before its gain), so its "
                    "harmonics stay. The dry part of Dry/Wet is never driven. Switching fades the sound out and back in "
                    "for a moment.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

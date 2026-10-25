@@ -1,61 +1,36 @@
 // Every plug-in's factory presets (plugins/<plugin>/presets/**/*.txt) parse against its parameter table:
 // known parameter names, values the parameter accepts and inside its range, unique names. Also
 // `factory_presets_tests --dump <plugin>` lists a plug-in's parameters (names, ranges, defaults,
-// choices) for writing presets. And a new instance of every plug-in runs through its end saturator with
-// Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them; probr,
-// which passes the sound untouched, has none; sweepr's and tapr's start off, their tape stage is the saturator, and
-// pinchr's, its germanium output stage is the colour).
+// choices) for writing presets. And a new instance of every plug-in ends with Soft Clip and Hard Clip off
+// (the parameters found by name, as presets name them; probr, which passes the sound untouched, has none;
+// smacheratr, the saturator itself, starts with its Gentlr on and Signature).
 #include "pluginkit/PresetStore.h"
 
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
 // with a PK_WITH_<name> are linked and checked.
 #if !defined(PK_PRESET_SUBSET)
-#define PK_WITH_ciphr
-#define PK_WITH_deepr
 #define PK_WITH_dropr
 #define PK_WITH_gentlr
-#define PK_WITH_levlr
-#define PK_WITH_locus
 #define PK_WITH_moistr
-#define PK_WITH_smeezr
 #define PK_WITH_probr
 #define PK_WITH_sweepr
 #define PK_WITH_tapr
 #define PK_WITH_pinchr
 #define PK_WITH_multidyn
-#define PK_WITH_orbitr
 #define PK_WITH_para
 #define PK_WITH_smacheratr
 #define PK_WITH_smemplr
-#define PK_WITH_smoothr
-#define PK_WITH_stretchr
 #define PK_WITH_widr
-#define PK_WITH_wubr
 #endif
 
-#ifdef PK_WITH_ciphr
-#include "ciphr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_deepr
-#include "deepr/src/core/Params.h"
-#endif
 #ifdef PK_WITH_dropr
 #include "dropr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_gentlr
 #include "gentlr/src/core/Params.h"
 #endif
-#ifdef PK_WITH_levlr
-#include "levlr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_locus
-#include "locus/src/core/Params.h"
-#endif
 #ifdef PK_WITH_moistr
 #include "moistr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_smeezr
-#include "smeezr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_probr
 #include "probr/src/core/Params.h"
@@ -72,9 +47,6 @@
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
 #endif
-#ifdef PK_WITH_orbitr
-#include "orbitr/src/core/Params.h"
-#endif
 #ifdef PK_WITH_para
 #include "para/src/core/Params.h"
 #endif
@@ -85,17 +57,8 @@
 #include "smacheratr/src/core/Params.h"
 #include "smemplr/src/core/Params.h"
 #endif
-#ifdef PK_WITH_smoothr
-#include "smoothr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_stretchr
-#include "stretchr/src/core/Params.h"
-#endif
 #ifdef PK_WITH_widr
 #include "widr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_wubr
-#include "wubr/src/core/Params.h"
 #endif
 
 #include <algorithm>
@@ -122,32 +85,17 @@ struct Plugin
 };
 
 const Plugin kPlugins[] = {
-#ifdef PK_WITH_ciphr
-    {"ciphr", ciphr::paramTable},
-#endif
-#ifdef PK_WITH_deepr
-    {"deepr", deepr::paramTable},
-#endif
 #ifdef PK_WITH_dropr
     {"dropr", dropr::paramTable},
 #endif
 #ifdef PK_WITH_gentlr
     {"gentlr", gentlr::paramTable},
 #endif
-#ifdef PK_WITH_levlr
-    {"levlr", levlr::paramTable},
-#endif
-#ifdef PK_WITH_locus
-    {"locus", locus::paramTable},
-#endif
 #ifdef PK_WITH_multidyn
     {"multidyn", multidyn::paramTable},
 #endif
 #ifdef PK_WITH_moistr
     {"moistr", moistr::paramTable},
-#endif
-#ifdef PK_WITH_smeezr
-    {"smeezr", smeezr::paramTable},
 #endif
 #ifdef PK_WITH_probr
     {"probr", probr::paramTable},
@@ -161,9 +109,6 @@ const Plugin kPlugins[] = {
 #ifdef PK_WITH_pinchr
     {"pinchr", pinchr::paramTable},
 #endif
-#ifdef PK_WITH_orbitr
-    {"orbitr", orbitr::paramTable},
-#endif
 #ifdef PK_WITH_para
     {"para", para::paramTable},
 #endif
@@ -173,17 +118,8 @@ const Plugin kPlugins[] = {
 #ifdef PK_WITH_smemplr
     {"smemplr", smemplr::paramTable},
 #endif
-#ifdef PK_WITH_smoothr
-    {"smoothr", smoothr::paramTable},
-#endif
-#ifdef PK_WITH_stretchr
-    {"stretchr", stretchr::paramTable},
-#endif
 #ifdef PK_WITH_widr
     {"widr", widr::pluginParamTable},
-#endif
-#ifdef PK_WITH_wubr
-    {"wubr", wubr::paramTable},
 #endif
 };
 
@@ -227,7 +163,9 @@ std::string defaultText (const pk::ParamTable& t, const char* name)
     return {};
 }
 
-// Every Gentlr a new instance has: on, with the Signature Slope; the end saturator on.
+// A new instance: Soft Clip and Hard Clip at the end, off (dropr: Hard Clip on; the old end saturator's
+// parameters are retired);
+// smacheratr's own Gentlr on with the Signature Slope.
 void checkNewInstance (const Plugin& p)
 {
     const auto& t = p.table ();
@@ -246,28 +184,16 @@ void checkNewInstance (const Plugin& p)
         expect ("Slope", "Signature");
     if (n == "probr")
     {
-        // an analysis probe: the sound passes untouched, so it has no end saturator; it starts off
+        // an analysis probe: the sound passes untouched, so it has no clips; it starts off
         expect ("Record", "Off");
         return;
     }
-#ifdef PK_WITH_smemplr
-    if (n == "smemplr")
-    {
-        // its rack's first slot is a Smacheratr with its own defaults (Smacheratr's IDs are its block
-        // positions); the old saturator after the rack stays off (only old projects use it)
-        const uint32_t block = smemplr::slotBlockParam (0, 0);
-        check (t.defaultNormalized (block + smacheratr::kClarity) == 1.0 && t.defaultNormalized (block + smacheratr::kClaritySlope) ==
-                                                                                 smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature),
-               "smemplr: the first slot's Smacheratr has Gentlr on, Signature");
-        check (t.defaultNormalized (smemplr::kTailBase + pk::kTailOn) == 0.0, "smemplr: the old saturator after the rack off");
-        return;
-    }
-#endif
-    // sweepr's and tapr's tape stage is their saturator, pinchr's output stage its colour: their end saturator
-    // starts off (its Gentlr ready, as everywhere)
-    expect ("Saturator", n == "sweepr" || n == "tapr" || n == "pinchr" ? "Off" : "On");
-    expect ("Saturator Gentlr", "On");
-    expect ("Saturator Gentlr Slope", "Signature");
+    expect ("Soft Clip", "Off");
+    expect ("Hard Clip", n == "dropr" ? "On" : "Off"); // (dropr's defaults make up +90 dB: held to 0 dBFS)
+    // the old end saturator, where a plug-in had one: retired (hidden, never a setting)
+    for (uint32_t id = 0; id < t.size (); ++id)
+        if (std::strncmp (t.info (id).name, "Saturator", 9) == 0)
+            check (t.info (id).retired, n + ": " + t.info (id).name + " is retired");
 }
 
 } // namespace

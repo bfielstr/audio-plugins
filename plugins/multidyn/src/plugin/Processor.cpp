@@ -23,7 +23,6 @@ Processor::Processor ()
 {
     setControllerClass (kControllerUID);
     meters = new Meters ();
-    engine.setSatMeters (&meters->satMeters);
     for (uint32_t id = 0; id < kNumParams; ++id)
         normMirror[id].store (defaultNormalized (id));
 }

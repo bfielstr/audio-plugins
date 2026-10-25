@@ -1,7 +1,5 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailPanel.h"
-
 #include <memory>
 
 #include "pluginkit/vst/EditorBase.h"
@@ -16,10 +14,12 @@ class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 760.0;
-    // the cinema stage's row (LANES, CINEMA) from y 556, the levels from 704, the end saturator's section
-    // (smacheratr::TailPanel, both parts open) at the bottom, from y 752, 8 px clear under it
-    static constexpr double kLanesTop = 556.0, kLevelsTop = 704.0, kTailTop = 752.0;
-    static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
+    // the cinema stage's row (LANES, CINEMA) from y 556, the levels at the bottom from 704 (Dry and Wet, then
+    // Soft Clip and Hard Clip: the end of the chain), 8 px clear under them
+    static constexpr double kLanesTop = 556.0, kLevelsTop = 704.0, kLevelsH = 40.0;
+    static constexpr double kHeight = kLevelsTop + kLevelsH + 8.0;
+    // in the levels row: the two sliders, then the two switches side by side
+    static constexpr double kSliderW = 276.0, kClipLeft = 588.0, kClipW = 70.0;
     // the LANES panel's columns (one per lane, kLaneColumn wide from kLanesLeft), the CINEMA panel, for the tests
     static constexpr double kLanesLeft = 8.0, kLaneColumn = 100.0, kCinemaLeft = 520.0;
     // the stage display, for the tests
@@ -30,16 +30,13 @@ public:
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
     // The Basic page (pluginkit/ui/BasicView.h): the stage and the goniometer, Character, Width, Air, Mono
-    // Below and Cinema; Output; the end saturator in the extras
+    // Below and Cinema; Output, Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
     StageView* stageView () const { return stage; }
 
 private:
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases ();
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
 

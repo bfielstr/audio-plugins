@@ -28,11 +28,6 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
-    // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12): the checks are
-    // about moistr's own sound (a new instance has it on: checkNewInstanceGentlr)
-    st.norm[kTailBase + pk::kTailOn] = 0.0;
-    st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
-    st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
     return st;
 }
 
@@ -87,16 +82,15 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
-        // a new instance keeps the defaults (the Ocean sound, the LAB empty); with the Neuro recipe (the LAB on) it reports
-        // the LAB's latency with the end saturator's, as the engine has it with those settings
+        // a new instance keeps the defaults (the Ocean sound, the LAB empty, Soft Clip and Hard Clip off); with the Neuro
+        // recipe (the LAB on) it reports the LAB's latency, as the engine has it with those settings
         {
             int differ = 0;
             for (uint32_t id = 0; id < kNumParams; ++id)
-                if (id != kTailBase + pk::kTailOn && id != kTailExtBase + pk::kTailExtClarity && id != kTailExt3Base + pk::kTailExt3Slope &&
-                    id != kTailExt2Base + pk::kTailExt2Advanced)
-                    differ += std::fabs (rig.controller->getParamNormalized (id) - defaultNormalized (id)) > 1e-9;
+                differ += std::fabs (rig.controller->getParamNormalized (id) - defaultNormalized (id)) > 1e-9;
             CHECK (differ == 0, "a new instance: the defaults, the Ocean sound (%d values differ)", differ);
+            CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 0.0,
+                   "a new instance: Soft Clip and Hard Clip off");
             State neuro;
             for (uint32_t id = 0; id < kNumParams; ++id)
             {
@@ -121,7 +115,7 @@ int main (int argc, char** argv)
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
         const uint32 latency = rig.processor->getLatencySamples ();
-        CHECK (latency < 200, "latency reported %u (the end saturator's: the LAB empty)", latency);
+        CHECK (latency == 0, "latency reported %u (the LAB empty: none)", latency);
 
         // Mix 0 %: the tone passes at its level
         rig.param (kMix, 0.0);
@@ -396,7 +390,8 @@ int main (int argc, char** argv)
             checkLayouts (rig, win, {(uint32_t)kXoverMid, (uint32_t)kMovement, (uint32_t)kGlue, (uint32_t)kMix, (uint32_t)kSceneAmount},
                           outDir + "/ui_moistr_wide.png");
         }
-        // the Basic page (pluginkit/ui/BasicView.h): Input, Drive, Movement, Loop Lock, Position, Sub Guard, Mix and Output
+        // the Basic page (pluginkit/ui/BasicView.h): Input, Drive, Movement, Loop Lock, Position, Sub Guard, Mix, Output, Soft
+        // Clip and Hard Clip
         // found where it puts them, the rest not; Input turns there; the capture band's buffer has every frame; the
         // Advanced switch shows every control
         {
@@ -405,7 +400,7 @@ int main (int argc, char** argv)
             CHECK (std::fabs (win.width () - pk::basic::kWidth) < 1, "the Basic page's width: %.0f", win.width ());
             ControlRect r;
             for (uint32_t id : {(uint32_t)moistr::kInput, (uint32_t)kSweepDrive, (uint32_t)kMovement, (uint32_t)kLoopLock, (uint32_t)kLoopLength,
-                                (uint32_t)kSubGuard, (uint32_t)kMix, (uint32_t)moistr::kOutput})
+                                (uint32_t)kSubGuard, (uint32_t)kMix, (uint32_t)moistr::kOutput, (uint32_t)kSoftClip, (uint32_t)kHardClip})
                 CHECK (findControl (rig.controller, id, r) && r.right <= win.width () + 0.5 && r.bottom <= win.height () + 0.5,
                        "Basic: the control of parameter %u is shown", id);
             CHECK (!findControl (rig.controller, kXoverMid, r) && !findControl (rig.controller, kParaLpFreq, r), "Basic: the Advanced view's controls are not");

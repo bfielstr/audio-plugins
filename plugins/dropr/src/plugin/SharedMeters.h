@@ -11,9 +11,8 @@ namespace dropr {
 
 struct SharedMeters
 {
-    Meters meters;                 // the bands: levels and gain reduction
-    smacheratr::Meters tailMeters; // the saturator at the end of the chain
-    std::atomic<int> latency {0};
+    Meters meters;                // the bands: levels and gain reduction
+    std::atomic<int> latency {0}; // as the host is told
     std::atomic<double> sampleRate {48000.0};
     pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }

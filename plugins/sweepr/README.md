@@ -100,18 +100,17 @@ shows the settings when it does not.
 - **Output** (-24 to +12 dB, -4.4 dB by default): the overall level. At the defaults the tape holds a
   bass at about -13 dBFS RMS whether it comes in at -18 dBFS or at 0.
 
-**smacheratr** (bottom panel): the saturator every plug-in here ends with. In sweepr it starts **off**,
-since the tape stage is the saturator; switch it on for more (its gentlr is on, ready). See
-[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+- **Soft Clip** and **Hard Clip** (off by default): the end of the chain. Soft Clip rounds peaks off from
+  -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when both are on).
 
-The **Basic** page has the display, **A Gain**, **B Gain**, **A Depth**, **B Depth**, **Drive**, **Mix**
-and **Output**; **Advanced** shows everything.
+The **Basic** page has the display, **A Gain**, **B Gain**, **A Depth**, **B Depth**, **Drive**, **Mix**,
+**Output**, **Soft Clip** and **Hard Clip**; **Advanced** shows everything.
 
 ## How it works
 
 ```
 input -> bell A -> bell B -> 4x up -> tape: drive, leveller, clipper -> 4x down -> tape: DC blocker,
-      the Speed shelf -> Mix (with the input, delayed as much) -> Output -> smacheratr (off by default)
+      the Speed shelf -> Mix (with the input, delayed as much) -> Output -> Soft Clip -> Hard Clip
 ```
 
 **The bells.** Each band is the bell of a classic two-band digital EQ, measured step by step and matched
@@ -166,12 +165,11 @@ settings. The menu is described in the [top-level README](../../README.md#preset
 
 ## Latency
 
-sweepr's own latency is constant whatever the settings, so automating anything never moves the sound in
-time: the oversampling's filters, 37 samples at 48 kHz. smacheratr at the
-end adds its own (85 samples at 48 kHz at its default 4x Oversampling, also while it is off, so switching
-it never changes the latency). The host is told and compensates.
+sweepr's latency is constant whatever the settings, so automating anything never moves the sound in
+time: the oversampling's filters, 37 samples at 48 kHz (Soft Clip and Hard Clip add none). The host is
+told and compensates.
 
 ## CPU
 
-The defaults take about 2 % of one core at 48 kHz stereo, about 3 % with smacheratr at the end on
+The defaults take about 2 % of one core at 48 kHz stereo, about the same with Soft Clip and Hard Clip on
 (measured as process CPU time, the best of three runs, on the build machine).

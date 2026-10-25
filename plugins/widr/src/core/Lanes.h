@@ -30,7 +30,7 @@
 
 #include "Params.h"
 
-#include "locus/src/core/Fft.h"
+#include "Fft.h"
 
 #include <array>
 #include <complex>
@@ -95,7 +95,7 @@ private:
     int n = 1024, hop = 512, nb = 513, mask_ = 1023, count = 0;
     float olaScale = 1.0f;
     uint64_t t = 0, frameCount = 0;
-    locus::Fft fft {1024};
+    Fft fft {1024};
     std::vector<float> win, inL, inR, buf;
     std::vector<cf> xl, xr;
     // overlap-add outputs: Voice, the side cut, the Bass mid, the Wide feed, the Beyond feed, the Beyond

@@ -1,7 +1,6 @@
-// The optional Smacheratr at the end of every plug-in's chain: a block of parameters each plug-in
-// appends to its table at some base ID. The processing is smacheratr::Tail, the editor panel
-// smacheratr::TailPanel. On by default (off up to 0.24, and states saved by those keep it off:
-// smacheratr::tailOldDefaults), Drive 0 dB.
+// The Smacheratr every plug-in's chain once ended with: a block of parameters each plug-in appended to its
+// table at some base ID. Retired now (pk::retire; the plug-ins end with pluginkit/EndClip.h instead): the
+// blocks stay in the tables only so saved IDs keep their places.
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -88,8 +87,7 @@ enum TailExt3Field : uint32_t
 // addTailExt4Params). One switch per pair of bands that can be glued at a shared border (smacheratr's
 // GluePair order), all off by default: states from before it load them off and sound as they did. In
 // smacheratr::Tail::setParam field kTailFields + kTailExtFields + kTailExt2Fields + kTailExt3Fields + i
-// is this block's field i. Levlr has its drives' Oversampling right after it (closed in there: a new tail
-// field needs a sixth block). Oversampling (kTailExtOversampling) was the Hi-Quality switch and became a
+// is this block's field i. Oversampling (kTailExtOversampling) was the Hi-Quality switch and became a
 // choice in its place: its ID and the meaning of its two ends stayed, so no block grew.
 enum TailExt4Field : uint32_t
 {

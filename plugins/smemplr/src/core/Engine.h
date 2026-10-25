@@ -13,11 +13,8 @@
 #include "TrackingHp.h"
 #include "Warp.h"
 
-#include "smacheratr/src/core/Tail.h"
-
 #include <algorithm>
 #include <array>
-#include <bitset>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -279,16 +276,11 @@ public:
         bend = bipolar;
         rack.setPitchBend (bipolar);
     }
-    // After the sampler: the effects rack (and the old saturator after it, only in an old project
-    // whose rack had no room for it). The latency is theirs (it changes when an effect with latency is
-    // loaded into the rack or taken out).
-    int latency () const { return rack.latency () + (tail.isOn () ? tail.latency () : 0); }
+    // After the sampler: the effects rack, then Soft Clip and Hard Clip (pluginkit/EndClip.h). The latency is
+    // the rack's (it changes when an effect with latency is loaded into the rack or taken out).
+    int latency () const { return rack.latency (); }
     // Destinations for the editor's displays (may be null).
-    void setFxMeters (RackMeters* rm, smacheratr::Meters* tailMeters)
-    {
-        rack.setMeters (rm);
-        tail.setMeters (tailMeters);
-    }
+    void setFxMeters (RackMeters* rm) { rack.setMeters (rm); }
     int rackType (int slot) const { return rack.type (slot); }
     void setSustain (bool on);
     void noteOn (int note, float velocity);
@@ -313,7 +305,7 @@ private:
     void applyParam (uint32_t id, double plain); // to what plays (setParam: the base value too)
     bool modWorks (const ModMapping& m) const;
     void modulate (int n);                        // the mapped parameters for the next n samples
-    void renderEffects (float* L, float* R, int n, const HostInfo& host);
+    void renderEffects (float* L, float* R, int n); // the rack, then the clips at the end
     bool regionFor (int note, PlayRegion& r) const;
     void computeBeatBounds (const PlayRegion& r);
 
@@ -340,7 +332,6 @@ private:
     double sr = 44100.0;
     float bend = 0.0f;
     bool sustain = false;
-    std::bitset<128> pedalHeld; // notes let go while the pedal was down (for the rack's Wubr)
     uint64_t ageCounter = 0;
     int groupCounter = 0;
     int lastNote = -1;
@@ -351,9 +342,8 @@ private:
     double syncBpm = 120.0; // the host's last tempo (the loop's Sync)
     float volGain = 0.0f;
     std::vector<float> scratchL, scratchR;
-    // the effects rack and the old saturator after it (before 0.9; off unless an old project needs it)
+    // the effects rack
     Rack rack;
-    smacheratr::Tail tail;
 };
 
 } // namespace smemplr

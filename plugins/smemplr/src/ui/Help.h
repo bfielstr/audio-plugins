@@ -5,6 +5,7 @@
 
 #include "multidyn/src/ui/Help.h"
 #include "para/src/ui/Help.h"
+#include "pluginkit/EndClip.h"
 
 namespace smemplr::help {
 
@@ -26,6 +27,8 @@ inline const char* forParam (uint32_t id)
         case kMsSideGain: return "Level of the side signal (the stereo width).";
         case kMsMidGain: return "Level of the mid signal.";
         case kRootKey: return "The note on which the sample plays at its own pitch (C3 by default).";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         case kGridOn:
             return "Grid (off by default): dragging the loop's start, its end or the whole loop in the waveform snaps to "
                    "a beat grid, so the loop is always a whole number of grid steps long. The grid follows the sample's "
@@ -78,8 +81,8 @@ inline const char* forParam (uint32_t id)
             default:
                 return "Retrig: every note starts the LFO again at its Phase. Off: it runs freely (synced, with the song).";
         }
-    if (id >= kTailBase)
-        return nullptr; // the saturator panel has its own tips
+    if (isTailParam (id) || isRackParam (id))
+        return nullptr; // (the old saturator after the rack is retired; a rack page's controls have their effects' tips)
     if (id == kParaDragGain)
         return para::help::forParam (para::kDragGain);
     if (id == kParaLiquid)
@@ -249,7 +252,7 @@ constexpr const char* kHelpButton = "Show or hide the floating help tooltips (th
 constexpr const char* kLoad = "Load a sample (WAV, AIFF, FLAC or MP3). You can also drop a file on the waveform.";
 constexpr const char* kPrevNext = "Load the previous / next audio file in the same folder.";
 constexpr const char* kMenu = "Sample menu: normalize, reverse, crop, loop fade type, show the file, interface size.";
-// the Basic page (pluginkit/ui/BasicView.h): its strip's line and its extras
+// the Basic page (pluginkit/ui/BasicView.h): its strip's line
 constexpr const char* kBasicRack =
     "The effects in the rack after the sampler, in chain order. They play on the Basic page too; to change, add or "
     "move them, switch to the Advanced view.";

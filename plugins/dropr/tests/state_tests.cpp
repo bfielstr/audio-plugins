@@ -74,6 +74,18 @@ int main ()
         CHECK (std::fabs (toPlain (kInput, back.norm[kInput]) - 30.0) < 1e-9 && std::lround (toPlain (kBands, back.norm[kBands])) == 6,
                "Input +30 dB, 6 bands");
     }
+    // a new instance: Soft Clip and Hard Clip at the end, off; the old end saturator's blocks still there
+    // (saved IDs stay put), retired; nothing else is
+    {
+        const auto& t = paramTable ();
+        CHECK (t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 1.0 && std::string (t.info (kSoftClip).name) == "Soft Clip" &&
+                   std::string (t.info (kHardClip).name) == "Hard Clip",
+               "Soft Clip off, Hard Clip on");
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            wrong += t.info (id).retired != (id >= kTailBase && id < kTailExt4Base + pk::kTailExt4Fields);
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
+    }
     // a partial state: the rest at their defaults
     {
         State st;

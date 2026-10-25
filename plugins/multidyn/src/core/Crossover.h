@@ -7,7 +7,7 @@
 //   18 dB/oct: a third-order Butterworth split (low = 1 / ((1 + s)(s^2 + s + 1)), high = s^3 / (...)):
 //     for an odd Butterworth order low + high is an all-pass, here (s^2 - s + 1) / (s^2 + s + 1). The
 //     one-pole comes first and is shared by both sides, then one SVF section (Q 1) on each side.
-//   12, 24 .. 96 dB/oct: Linkwitz-Riley 2, 4 .. 16, as in Levlr (levlr/src/core/Crossover.h, the same design):
+//   12, 24 .. 96 dB/oct: Linkwitz-Riley 2, 4 .. 16:
 //     a split of order 2N is a Butterworth of order N squared on each side. A Butterworth pair of
 //     poles (damping 2 sin ((2i-1) pi / 2N)) is squared, so each appears twice; with N odd the squared
 //     first-order pole is one section of Q 0.5. The high side is turned over when N is odd (only

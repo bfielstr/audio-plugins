@@ -101,7 +101,7 @@ Parameter* Controller::makeParameter (uint32_t id)
 
 int Controller::slotType (int slot)
 {
-    return std::clamp ((int)std::lround (plain (slotParam (slot, kSlotType))), 0, kNumFxTypes - 1);
+    return fxKind ((int)std::lround (plain (slotParam (slot, kSlotType)))); // (a retired kind: Empty)
 }
 
 void Controller::retitleSlot (int slot)
@@ -151,7 +151,7 @@ tresult PLUGIN_API Controller::initialize (FUnknown* context)
     if (r != kResultOk)
         return r;
     // (the hidden MIDI parameters are in the table's range: makeParameter registered them)
-    // a new Smemplr's first slot has an effect: its parameters take its names from the start
+    // the slots' parameters take their effects' names from the start (a new Smemplr's rack is empty)
     for (int s = 0; s < kRackSlots; ++s)
         retitleSlot (s);
     return kResultOk;

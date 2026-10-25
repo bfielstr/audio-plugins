@@ -66,7 +66,7 @@ static void setPresetsDir (const std::string& dir)
         }                                                                  \
     } while (0)
 
-static const int kHostedTypes[] = {kFxPara, kFxMultidyn, kFxSmacheratr, kFxWidr, kFxWubr, kFxLevlr, kFxGentlr, kFxSmoothr};
+static const int kHostedTypes[] = {kFxPara, kFxMultidyn, kFxSmacheratr, kFxWidr, kFxGentlr};
 
 // a new smemplr's values, with `type` in `slot` (its factory defaults, as addFx puts it there)
 static std::vector<double> rackWith (int slot, int type)
@@ -147,6 +147,10 @@ static void factoryPresetsLoadIntoSlots ()
             }
     }
     CHECK (hostedPlugin (kFxEmpty) == nullptr && hostedPlugin (kFxMsEq) == nullptr, "Empty and the M/S EQ have no plug-in");
+    for (int type : {(int)kFxRetiredWubr, (int)kFxRetiredLevlr, (int)kFxRetiredSmoothr})
+        CHECK (hostedPlugin (type) == nullptr && rackio::codecOf (type) == nullptr && rackio::factoryPresetsOf (type).empty () &&
+                   slotEditsFor (0, type, {0.5}).empty (),
+               "the retired kind %d: no plug-in, no presets", type);
     CHECK (slotEditsFor (0, kFxMsEq, {0.5}).empty (), "no edits for the M/S EQ");
 }
 
@@ -204,10 +208,13 @@ static void savedFromSlotReadsInThePlugin ()
         std::vector<char> comp, ctrl;
         CHECK (pk::presets::read (path, rackio::codecOf (type)->classId, comp, ctrl) && !comp.empty () && ctrl.empty (),
                "%s: a .vstpreset of the plug-in (component state only)", fxName (type));
+        // (every parameter of the plug-in; gentlr's has its own after the rack's table: its clips, off)
         std::vector<double> back;
-        CHECK (rackio::codecOf (type)->read (comp, back) && back.size () == hostedPlugin (type)->table->size (), "%s: the plug-in reads it",
-               fxName (type));
-        if (type == kFxGentlr && back.size () == out.size ())
+        CHECK (rackio::codecOf (type)->read (comp, back) &&
+                   (type == kFxGentlr ? back.size () == gentlr::kNumParams && back.size () >= out.size () && back[gentlr::kSoftClip] == 0.0
+                                      : back.size () == hostedPlugin (type)->table->size ()),
+               "%s: the plug-in reads it (%zu)", fxName (type), back.size ());
+        if (type == kFxGentlr && back.size () >= out.size ())
         {
             // the gentlr plug-in's Thresholds go lower than the rack's (-90 dB, not -60): it reads each at the
             // slot's dB, and its Band Shelves on (the rack's gentlr has shelves)
@@ -220,8 +227,9 @@ static void savedFromSlotReadsInThePlugin ()
             CHECK (wrongDb == 0 && back[gentlr::kBandShelves] == 1.0, "gentlr: the plug-in reads the slot's Thresholds at their dB (%d not)", wrongDb);
             gentlr::rackFromPlugin (back);
         }
-        if (back.size () == out.size ())
+        if (back.size () >= out.size ())
         {
+            back.resize (out.size ()); // (gentlr's clips: not the rack's)
             int diff = 0;
             for (size_t id = 0; id < out.size (); ++id)
                 diff += (type == kFxGentlr ? std::fabs (back[id] - out[id]) > 1e-12 : back[id] != out[id]) ? 1 : 0;
@@ -292,13 +300,13 @@ static void robustness ()
         std::ofstream (file) << "x";
         const std::string saved = std::getenv ("PK_PRESETS_DIR");
         setPresetsDir ((fs::path (file) / "presets").string ().c_str ());
-        CHECK (rackio::folderOf (kFxLevlr).empty (), "no folder");
-        CHECK (pk::presets::listUser (rackio::folderOf (kFxLevlr)).empty (), "nothing listed");
-        CHECK (!rackio::writeValues (kFxLevlr, (fs::path (file) / "presets" / "Levlr" / "x.vstpreset").string (), pluginDefaults (kFxLevlr), {}),
+        CHECK (rackio::folderOf (kFxWidr).empty (), "no folder");
+        CHECK (pk::presets::listUser (rackio::folderOf (kFxWidr)).empty (), "nothing listed");
+        CHECK (!rackio::writeValues (kFxWidr, (fs::path (file) / "presets" / "Widr" / "x.vstpreset").string (), pluginDefaults (kFxWidr), {}),
                "nothing saved");
         bool applied = true;
-        CHECK (rackio::newSlotValues (kFxLevlr, &applied) == pluginDefaults (kFxLevlr) && !applied, "a new slot: the factory defaults");
-        CHECK (!rackio::factoryPresetsOf (kFxLevlr).empty (), "the factory presets are still there");
+        CHECK (rackio::newSlotValues (kFxWidr, &applied) == pluginDefaults (kFxWidr) && !applied, "a new slot: the factory defaults");
+        CHECK (!rackio::factoryPresetsOf (kFxWidr).empty (), "the factory presets are still there");
         setPresetsDir (saved.c_str ());
     }
 }
@@ -348,12 +356,13 @@ static void newSlotDefaults ()
     pk::writeGentlrDefaults (rackio::folderOf (kFxGentlr), sw);
     g = rackio::newSlotValues (kFxGentlr, &applied);
     CHECK (g[gentlr::kAdvanced] == 1.0, "gentlr: Advanced on");
-    // Para's switches set its end saturator, which a Para slot carries (and does not run)
+    // Para's switches: they set its end saturator, which is retired (they set nothing: a new Para slot is its
+    // factory defaults)
     sw = {};
     sw.gentlrOn = true;
     pk::writeGentlrDefaults (rackio::folderOf (kFxPara), sw);
     const std::vector<double> p = rackio::newSlotValues (kFxPara);
-    CHECK (p[(size_t)para::kGentlrIds.saturator] == 1.0 && p[(size_t)para::kGentlrIds.gentlr] == 1.0, "para: the saturator's switches");
+    CHECK (para::kGentlrIds.saturator < 0 && para::kGentlrIds.gentlr < 0 && p == pluginDefaults (kFxPara), "para: its switches set nothing");
 
     // a project loads as saved, whatever the plug-in's default and switches say
     PluginState st;

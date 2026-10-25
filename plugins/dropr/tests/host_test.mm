@@ -26,10 +26,9 @@ static State baseState ()
         st.norm[id] = defaultNormalized (id);
         st.has[id] = true;
     }
-    // the end saturator's Gentlr as a new instance had it up to 0.24 (off, 12 / 12; the saturator on, as
-    // it still is): the checks are about dropr's own sound (a new instance: checkNewInstanceGentlr)
-    st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
-    st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
+    // Hard Clip on: the end held to 0 dBFS (off, the hits that get through before the attack leave with
+    // the whole +90 dB of the defaults' gain)
+    st.norm[kHardClip] = 1.0;
     return st;
 }
 
@@ -51,19 +50,6 @@ static void hits (int, int, float* buf, int n, long long pos)
 {
     for (int i = 0; i < n; ++i)
         buf[i] = (float)snareAt (pos + i);
-}
-
-// the crack's peak (first 5 ms) against the body (30 .. 150 ms), dB, for the hit at `onset` s
-static double transientToBody (const std::vector<float>& x, double onset, size_t latency)
-{
-    const size_t a = (size_t)(onset * 48000.0) + latency;
-    double pk = 0.0, s = 0.0;
-    for (size_t i = a; i < a + 240 && i < x.size (); ++i)
-        pk = std::max (pk, (double)std::fabs (x[i]));
-    const size_t b0 = a + 1440, b1 = std::min (x.size (), a + 7200);
-    for (size_t i = b0; i < b1; ++i)
-        s += (double)x[i] * x[i];
-    return 20.0 * std::log10 (std::max (1e-9, pk) / std::max (1e-9, std::sqrt (2.0 * s / (double)std::max<size_t> (1, b1 - b0))));
 }
 
 // the display's geometry (BandView), in editor coordinates
@@ -96,26 +82,29 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
+        // a new instance: Hard Clip on at the end (the defaults' +90 dB held to 0 dBFS), Soft Clip off
+        CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 1.0,
+               "a new instance: Soft Clip off, Hard Clip on");
 
         State st = baseState ();
         CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState");
         CHECK (rig.start (), "start");
-        const uint32 latency = rig.processor->getLatencySamples ();
-        CHECK (latency > 0 && latency < 200, "latency reported %u (the end saturator's)", latency);
+        CHECK (rig.processor->getLatencySamples () == 0, "no latency reported (%u)", rig.processor->getLatencySamples ());
 
-        // the defaults: the crack clamped, the body up, the end held to 0 dBFS
+        // the defaults with Hard Clip: the body up, the end held to 0 dBFS
         std::vector<float> out;
         rig.render (1.5, out, nullptr, hits);
         CHECK (allFinite (out), "finite");
         float pk = 0.0f;
+        double sum = 0.0;
         for (float v : out)
+        {
             pk = std::max (pk, std::fabs (v));
+            sum += (double)v * v;
+        }
         CHECK (pk <= 1.001f && pk > 0.5f, "the output peaks near 0 dBFS: %.2f dBFS", dbfs (pk));
-        std::vector<float> in (out.size ());
-        hits (0, 0, in.data (), (int)in.size (), 0);
-        const double before = transientToBody (in, 0.75, 0), after = transientToBody (out, 0.75, latency);
-        CHECK (after < before - 10.0, "the snap clamped against the body: %.1f dB -> %.1f dB", before, after);
+        const double rms = 10.0 * std::log10 (std::max (1e-20, sum / (double)std::max<size_t> (1, out.size ())));
+        CHECK (rms > -30.0, "and loud: the quiet body brought up (RMS %.1f dBFS)", rms);
 
         // the text of the negative ratio
         String128 txt {};

@@ -41,7 +41,7 @@ int main (int argc, char** argv)
             e->setParam ((uint32_t)std::atoi (a.substr (0, eq).c_str ()), std::atof (a.substr (eq + 1).c_str ()));
     }
     e->prepare (info.sampleRate, 512);
-    const int lat = e->latency (); // (the end saturator keeps its latency while off)
+    const int lat = e->latency (); // (the oversampler's)
     std::vector<float> l (frames + (size_t)lat, 0.0f), r (frames + (size_t)lat, 0.0f), sl (frames + (size_t)lat, 0.0f),
         sr (frames + (size_t)lat, 0.0f);
     for (size_t i = 0; i < frames; ++i)

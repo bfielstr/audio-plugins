@@ -23,10 +23,7 @@ const hosted::Codec* codecOf (int type)
         case kFxMultidyn: return &hosted::codecMultidyn ();
         case kFxSmacheratr: return &hosted::codecSmacheratr ();
         case kFxWidr: return &hosted::codecWidr ();
-        case kFxWubr: return &hosted::codecWubr ();
-        case kFxLevlr: return &hosted::codecLevlr ();
         case kFxGentlr: return &hosted::codecGentlr ();
-        case kFxSmoothr: return &hosted::codecSmoothr ();
         default: return nullptr;
     }
 }

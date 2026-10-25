@@ -2,6 +2,7 @@
 
 #include "CutShape.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <vector>
@@ -29,7 +30,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kCutPlace, "Cut Place", "Cut", {"Pre", "Post"}, kPost));
         v.push_back (percent (kMix, "Mix", "Mix", 1.0));
         v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, -4.4, Curve::Linear, Disp::Db));
-        // the end saturator: off in a new instance (the tape stage is the saturator here)
+        // the old end saturator, retired (its IDs kept for saved projects)
         pk::addTailParams (v, kTailBase, false);
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
@@ -38,6 +39,8 @@ const ParamTable& paramTable ()
         v.push_back (real (kCutLoFreq, "Cut Lo Freq", "Lo Freq", cut::kFreqMin[0], cut::kFreqMax[0], cut::kCentreHz[0], Curve::Log, Disp::Hz));
         v.push_back (real (kCutMidFreq, "Cut Mid Freq", "Mid Freq", cut::kFreqMin[1], cut::kFreqMax[1], cut::kCentreHz[1], Curve::Log, Disp::Hz));
         v.push_back (real (kCutHiFreq, "Cut Hi Freq", "Hi Freq", cut::kFreqMin[2], cut::kFreqMax[2], cut::kCentreHz[2], Curve::Log, Disp::Hz));
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;
     }());
     return t;
