@@ -109,6 +109,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {multidyn::kSatExt2Base, multidyn::kSatExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {multidyn::kSatExt3Base, multidyn::kSatExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {multidyn::kSatExt4Base, multidyn::kSatExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
+        {multidyn::kSoftClip, multidyn::kHardClip, "its own end of the chain: the rack's Multidyn runs without its clips"},
     };
     static const std::vector<RackHidden> widrHidden {
         {widr::kRole, widr::kGroup, "Mix Aware: between Widr plug-ins on different tracks, not inside Smemplr"},
