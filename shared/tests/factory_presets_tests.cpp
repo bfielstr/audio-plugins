@@ -163,7 +163,8 @@ std::string defaultText (const pk::ParamTable& t, const char* name)
     return {};
 }
 
-// A new instance: Soft Clip and Hard Clip at the end, off (the old end saturator's parameters are retired);
+// A new instance: Soft Clip and Hard Clip at the end, off (dropr: Hard Clip on; the old end saturator's
+// parameters are retired);
 // smacheratr's own Gentlr on with the Signature Slope.
 void checkNewInstance (const Plugin& p)
 {
@@ -188,7 +189,7 @@ void checkNewInstance (const Plugin& p)
         return;
     }
     expect ("Soft Clip", "Off");
-    expect ("Hard Clip", "Off");
+    expect ("Hard Clip", n == "dropr" ? "On" : "Off"); // (dropr's defaults make up +90 dB: held to 0 dBFS)
     // the old end saturator, where a plug-in had one: retired (hidden, never a setting)
     for (uint32_t id = 0; id < t.size (); ++id)
         if (std::strncmp (t.info (id).name, "Saturator", 9) == 0)
