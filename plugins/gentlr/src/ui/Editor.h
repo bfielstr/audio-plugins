@@ -1,6 +1,5 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailPanel.h"
 #include "smacheratr/src/ui/ThresholdSlider.h"
 
 #include "../core/Params.h"
@@ -20,16 +19,18 @@ class GentlrView;
 // edge in the display, a knob or switch of its own, its Threshold slider): its handle lights, its
 // header and its Threshold slider too. Then (each band's On, Frequency, Width and Range; the Sub and High bands'
 // On, Frequency and Range; the detector's Attack, Release and stereo mode; Advanced and the region
-// Drive; No Overlap, Mix and Output), then the end Smacheratr.
+// Drive; No Overlap, Mix and Output, Soft Clip and Hard Clip under them: the end of the chain).
 class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 1160.0;
-    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 404, 8 px clear under it
-    static constexpr double kHeight = 404.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
     // layout (also used by the host test)
     static constexpr double kViewLeft = 8.0, kViewTop = 40.0, kViewRight = 1152.0, kViewBottom = 292.0;
-    static constexpr double kRowTop = 300.0, kTailTop = 404.0;
+    static constexpr double kRowTop = 300.0;
+    // Soft Clip and Hard Clip, one above the other under Mix and Output; 8 px clear under them
+    static constexpr double kClipTop = kRowTop + 96.0, kClipH = 20.0, kClipGap = 6.0;
+    static constexpr double kClipBottom = kClipTop + 2 * kClipH + kClipGap;
+    static constexpr double kHeight = kClipBottom + 8.0;
     static constexpr double kBandW = 198.0; // each band's controls
     static constexpr double kSubLeft = kViewLeft + kBands * kBandW, kSubW = 156.0; // the Sub band's
     static constexpr double kHighLeft = kSubLeft + kSubW;                           // the High band's (as wide)
@@ -40,7 +41,7 @@ public:
     void buildUI (VSTGUI::CFrame* f) override;
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
-    // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Band Slope, Attack and Release; Mix and Output; the end saturator in the extras
+    // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Band Slope, Attack and Release; Mix, Output, Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
@@ -56,9 +57,6 @@ private:
     void updateLooks ();
 
     Controller* ctl;
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases ();
     std::unique_ptr<pk::MappedParamHost> sliderHost; // Smacheratr's Threshold sliders on Gentlr's Thresholds
     GentlrView* view = nullptr;
     smacheratr::ThresholdSlider* sliders[kAllBands] = {nullptr, nullptr, nullptr, nullptr}; // (ThresholdSlider::layout takes all four)

@@ -5,6 +5,7 @@
 #include "smacheratr/src/core/ClarityBand.h"
 #include "smacheratr/src/core/Glue.h"
 #include "smacheratr/src/core/NoOverlap.h"
+#include "smacheratr/src/core/TailExt.h"
 
 #include <algorithm>
 #include <chrono>
@@ -59,7 +60,7 @@ struct Sig
     std::vector<float> l, r;
 };
 
-// Gentlr alone (no end saturator), with `set` applied before it starts. Its bands with the 12 / 12 Slope
+// Gentlr alone (no end clips), with `set` applied before it starts. Its bands with the 12 / 12 Slope
 // (the default up to 0.24; Signature now): the cuts the tests expect are that shape's, exactly the Range
 // at a band's centre (the Slopes have tests of their own). Band 1 as a new instance had it up to 0.30.0
 // (250 Hz, Range 8 dB, Threshold -18 dB: the tests below were written for it; new_band_1_defaults has
@@ -165,9 +166,10 @@ TEST (parameters_and_defaults)
         CHECK (t.info (id).id == id, "id %u in its place", id);
     CHECK (kTailExtBase == kTailBase + pk::kTailFields && kTailExt2Base == kTailExtBase + pk::kTailExtFields &&
                kHighOn == kTailExt2Base + pk::kTailExt2Fields && kSlope == kTailExt3Base + pk::kTailExt3Fields && kGlue12 == kSlope + 1 &&
-               kTailExt4Base == kGlue2High + 1 && kBandShelves == kTailExt4Base + pk::kTailExt4Fields && kNumParams == kBandShelves + 1,
+               kTailExt4Base == kGlue2High + 1 && kBandShelves == kTailExt4Base + pk::kTailExt4Fields && kSoftClip == kBandShelves + 1 &&
+               kHardClip == kSoftClip + 1 && kNumParams == kHardClip + 1,
            "the end saturator's three blocks, one after the other, then the High band and No Overlap, then its fourth block, then the "
-           "Slope, the glue switches and the end saturator's fifth block, then Band Shelves");
+           "Slope, the glue switches and the end saturator's fifth block, then Band Shelves, then Soft Clip and Hard Clip");
     CHECK (!isTailParam (kBandShelves) && isTailParam (kBandShelves - 1), "Band Shelves is gentlr's own");
     CHECK (std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced", "the third block");
     CHECK (std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)", "the last block");
@@ -177,7 +179,12 @@ TEST (parameters_and_defaults)
         const int f = smacheratr::tailFieldIn (id, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base});
         CHECK (isTailParam (id) == (f >= 0) && (f < 0 || tailField (id) == (uint32_t)f), "ID %u: tail field %d", id, f);
     }
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 1.0, "the end Smacheratr on");
+    // the old end saturator: retired (kept so saved IDs stay put), and nothing else; the clips at the end off
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        CHECK (t.info (id).retired == isTailParam (id), "ID %u (%s) retired: %d", id, t.info (id).name, (int)t.info (id).retired);
+    CHECK (t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0 && std::string (t.info (kSoftClip).name) == "Soft Clip" &&
+               std::string (t.info (kHardClip).name) == "Hard Clip",
+           "Soft Clip and Hard Clip off");
     CHECK (t.info (kAdvanced).def == 1.0 && t.info (kDrive).def == 0.0 && t.info (kDriveAmount).def == 12.0, "Advanced on (the Thresholds show), Drive off (12 dB)");
     CHECK (t.info (kAttack).def == 15.0 && t.info (kRelease).def == 150.0, "Smacheratr's detector times");
     CHECK (t.info (kStereo).def == (double)kStereoLinked && t.info (kMix).def == 1.0 && t.info (kOutput).def == 0.0, "stereo, 100 %%, 0 dB");
@@ -214,10 +221,11 @@ TEST (parameters_and_defaults)
                    "Smacheratr's %u as it is", id);
     }
     // the racks (smemplr, moistr) keep the table up to 0.30.0: -60 .. 0 dB Thresholds, band 1 at 250 Hz,
-    // 8 dB, -18 dB, Band Shelves on; everything else is gentlr's
+    // 8 dB, -18 dB, Band Shelves on, no end clips (and the end saturator not retired: the racks hide it);
+    // everything else is gentlr's
     const auto& rt = rackTable ();
-    CHECK (rt.size () == t.size (), "the rack table: every parameter");
-    for (uint32_t id = 0; id < t.size (); ++id)
+    CHECK (rt.size () == kSoftClip, "the rack table: every parameter up to Band Shelves (%u)", (unsigned)rt.size ());
+    for (uint32_t id = 0; id < rt.size (); ++id)
     {
         const auto& a = t.info (id);
         const auto& r = rt.info (id);
@@ -277,10 +285,10 @@ TEST (parameters_and_defaults)
         {58, "No Overlap"},       {59, "Saturator Gentlr High (unused)"}, {63, "Saturator Gentlr No Overlap"},
         {64, "Saturator Gentlr Slope"}, {65, "Slope"}, {66, "Glue 1 / 2"}, {67, "Glue Sub / 1"}, {68, "Glue Sub / 2"},
         {69, "Glue 1 / High"}, {70, "Glue 2 / High"}, {71, "Saturator Gentlr Glue 1 / 2"}, {75, "Saturator Gentlr Glue 2 / High"},
-        {76, "Band Shelves"}};
+        {76, "Band Shelves"}, {77, "Soft Clip"}, {78, "Hard Clip"}};
     for (const auto& [id, name] : pinned)
         CHECK (std::string (t.info (id).name) == name, "ID %u is %s (%s)", id, name, t.info (id).name);
-    CHECK (kNumParams == 77, "77 parameters: %u", (unsigned)kNumParams);
+    CHECK (kNumParams == 79, "79 parameters: %u", (unsigned)kNumParams);
     std::printf ("    %u parameters (bands at %u, Sub at %u, tail at %u, tail ext at %u, Gentlr block at %u)\n", (unsigned)kNumParams,
                  (unsigned)kBandBase, (unsigned)kSubOn, (unsigned)kTailBase, (unsigned)kTailExtBase, (unsigned)kTailExt2Base);
 }
@@ -792,13 +800,13 @@ TEST (latency_is_constant)
             if (e->latency () != base)
                 worst = e->latency ();
         }
-        Engine withTail (true);
-        withTail.prepare (sr, 512);
-        smacheratr::Tail t;
-        t.prepare (sr, 512);
-        std::printf ("    %.0f Hz: %d samples (with the end Smacheratr %d)\n", sr, base, withTail.latency ());
+        Engine withClips (true);
+        withClips.setParam (kSoftClip, 1.0);
+        withClips.setParam (kHardClip, 1.0);
+        withClips.prepare (sr, 512);
+        std::printf ("    %.0f Hz: %d samples (with the end clips on %d)\n", sr, base, withClips.latency ());
         CHECK (worst == base && base > 0 && base < 100, "the same with every setting: %d / %d", base, worst);
-        CHECK (withTail.latency () == base + t.latency (), "with the end Smacheratr: %d", withTail.latency ());
+        CHECK (withClips.latency () == base, "the end clips add none: %d", withClips.latency ());
     }
     // an impulse comes out at the latency, the Drive on (and the region lined up with it: a loud click
     // in the band comes out as one click)
@@ -817,6 +825,45 @@ TEST (latency_is_constant)
         if (std::fabs (out.l[i]) > std::fabs (out.l[peak]))
             peak = i;
     CHECK ((int)peak - 4800 == e->latency (), "the impulse at %d, the latency %d", (int)peak - 4800, e->latency ());
+}
+
+TEST (end_clips)
+{
+    // Soft Clip and Hard Clip at the end (pluginkit/EndClip.h): off, the plug-in's engine is the hosted one
+    // (no clips) bit for bit, even with the old end saturator's switch on (retired: ignored); Hard Clip on,
+    // nothing leaves above 0 dBFS; Soft Clip on, the peaks are rounded off up to 0 dBFS
+    Sig in;
+    in.l.assign (24000, 0.0f);
+    in.r.assign (24000, 0.0f);
+    for (size_t i = 0; i < in.l.size (); ++i)
+    {
+        in.l[i] = (float)(0.9 * std::sin (2.0 * 3.141592653589793 * 220.0 * (double)i / kSr));
+        in.r[i] = (float)(0.9 * std::sin (2.0 * 3.141592653589793 * 330.0 * (double)i / kSr));
+    }
+    auto render = [&] (bool withClips, bool soft, bool hard) {
+        Engine e (withClips);
+        e.setParam (kOutput, 12.0);
+        e.setParam (kTailBase + pk::kTailOn, 1.0);
+        e.setParam (kSoftClip, soft ? 1.0 : 0.0);
+        e.setParam (kHardClip, hard ? 1.0 : 0.0);
+        e.prepare (kSr, 512);
+        return run (e, in);
+    };
+    auto peak = [] (const Sig& s) {
+        double m = 0.0;
+        for (size_t i = 0; i < s.l.size (); ++i)
+            m = std::max ({m, (double)std::fabs (s.l[i]), (double)std::fabs (s.r[i])});
+        return m;
+    };
+    const Sig hosted = render (false, true, true), off = render (true, false, false);
+    CHECK (std::memcmp (hosted.l.data (), off.l.data (), hosted.l.size () * sizeof (float)) == 0 &&
+               std::memcmp (hosted.r.data (), off.r.data (), hosted.r.size () * sizeof (float)) == 0,
+           "the clips off: as the hosted engine (no clips), bit for bit");
+    const double pOff = peak (off), pHard = peak (render (true, false, true)), pSoft = peak (render (true, true, false));
+    std::printf ("    peak: off %.3f, Hard Clip %.3f, Soft Clip %.3f\n", pOff, pHard, pSoft);
+    CHECK (pOff > 2.0, "Output +12 dB goes over 0 dBFS: %.3f", pOff);
+    CHECK (pHard <= 1.0 && pHard > 0.999, "Hard Clip holds 0 dBFS: %.4f", pHard);
+    CHECK (pSoft <= 1.0, "Soft Clip rounds off up to 0 dBFS: %.4f", pSoft);
 }
 
 TEST (stereo_modes)
@@ -987,17 +1034,17 @@ TEST (fuzz_and_cpu)
     }
     CHECK (finite, "finite and bounded");
 
-    // CPU: both bands cutting (and the Sub band with the region Drive); plain, with the region Drive, Mid/Side, and with the end Smacheratr on
+    // CPU: both bands cutting (and the Sub band with the region Drive); plain, with the region Drive, Mid/Side, and with Soft Clip and Hard Clip on
     struct Case
     {
         const char* name;
-        bool drive, ms, tail;
+        bool drive, ms, clips;
     };
     for (const Case& cs : {Case {"both bands", false, false, false}, Case {"both bands and Sub, region Drive", true, false, false},
                            Case {"both bands, Mid/Side, region Drive", true, true, false},
-                           Case {"both bands, region Drive, end saturator on", true, false, true}})
+                           Case {"both bands, region Drive, the clips on", true, false, true}})
     {
-        Engine c (cs.tail);
+        Engine c (cs.clips);
         c.setParam (kAdvanced, 1.0);
         c.setParam (bandParam (0, kThreshold), -40.0);
         c.setParam (bandParam (1, kThreshold), -40.0);
@@ -1005,7 +1052,8 @@ TEST (fuzz_and_cpu)
         c.setParam (kSubThreshold, -40.0);
         c.setParam (kDrive, cs.drive ? 1.0 : 0.0);
         c.setParam (kStereo, cs.ms ? kMidSide : kStereoLinked);
-        c.setParam (kTailBase + pk::kTailOn, cs.tail ? 1.0 : 0.0);
+        c.setParam (kSoftClip, cs.clips ? 1.0 : 0.0);
+        c.setParam (kHardClip, cs.clips ? 1.0 : 0.0);
         c.prepare (kSr, 512);
         const int blocks = (int)(10.0 * kSr / 512);
         const auto t0 = std::chrono::steady_clock::now ();

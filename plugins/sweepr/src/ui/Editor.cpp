@@ -51,7 +51,6 @@ void Editor::onClose ()
     for (auto*& v : bLfoViews)
         v = nullptr;
     bShape = nullptr;
-    tail.reset ();
 }
 
 CRect Editor::displayRect (bool arranged) const
@@ -123,16 +122,15 @@ void Editor::buildUI (CFrame* f)
     const double cx = 0.5 * (kTapeRight - kTapeLeft - kTapeKnobW);
     bind (tape, new Knob (CRect (cx, kTapeRow[1], cx + kTapeKnobW, kTapeRow[1] + kKnobH), this, kCompression));
 
-    // OUTPUT: Mix and Output
+    // OUTPUT: Mix and Output, then Soft Clip and Hard Clip (the end of the chain)
     auto* out = new Panel (CRect (kOutLeft, kRowTop, kOutRight, kRowBottom), "OUTPUT");
     root->addView (out);
     const double ox = 0.5 * (kOutRight - kOutLeft - kKnobW);
     bind (out, new Knob (CRect (ox, kKnobTop, ox + kKnobW, kKnobTop + kKnobH), this, kMix));
     bind (out, new Knob (CRect (ox, kLfoTop, ox + kKnobW, kLfoTop + kKnobH), this, kOutput, nullptr, true));
-
-    // the saturator at the end of the chain (off in a new instance: the tape stage is the saturator)
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+    const double cw = kOutRight - kOutLeft - 2 * kClipX;
+    bind (out, new Toggle (CRect (kClipX, kClipTop, kClipX + cw, kClipTop + kClipH), this, kSoftClip, "Soft Clip"));
+    bind (out, new Toggle (CRect (kClipX, kClipTop + kClipH + kClipGap, kClipX + cw, kClipTop + 2 * kClipH + kClipGap), this, kHardClip, "Hard Clip"));
 
     applyParamTooltips (&help::forParam);
     updateRates ();
@@ -159,18 +157,10 @@ void Editor::updateRates ()
         bShape->setEnabledLook (!link);
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
-    // the two bands' Gain and how far each LFO sweeps them, how hard the tape is driven and the blend; Output
+    // the two bands' Gain and how far each LFO sweeps them, how hard the tape is driven and the blend; Output,
+    // Soft Clip and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "sweepr";
@@ -180,8 +170,7 @@ pk::basic::Spec Editor::basicSpec ()
     s.rows = {{knob (bandParam (0, kGain), "A Gain", true), knob (bandParam (1, kGain), "B Gain", true),
                knob (bandParam (0, kLfoDepth), "A Depth", true), knob (bandParam (1, kLfoDepth), "B Depth", true)},
               {knob (kDrive), knob (kMix)}};
-    s.output = {knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (348, 6, 432, 28);
@@ -191,8 +180,6 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if ((id < kLink || id == kLfoOnA || id == kLfoOnB) && display)
         display->invalid ();
     if (id == kLink || id == bandParam (0, kLfoSync) || id == bandParam (1, kLfoSync))
@@ -201,17 +188,11 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (display)
         display->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
-        {
-            // its own (the oversampling) and the end saturator's (-1: not known yet)
-            const int tailNow = s->tailMeters.latency.load ();
-            latencyLabel->setTexts (pk::latencyTexts (tailNow >= 0 ? s->ownLatency.load () + tailNow : s->latency.load ()));
-        }
+            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ())); // (the oversampling's)
 }
 
 void Editor::showMenu (CPoint where)
@@ -243,15 +224,13 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the curve (narrower, as tall as the panels), the bands, TAPE and OUTPUT side by side; the end
-    // saturator in a row of its own
+    // Wide: the curve (narrower, as tall as the panels), the bands, TAPE and OUTPUT side by side
     s.panels = {
         {"display", "display", {d.left, d.top, d.right, d.bottom}, 0},
         {"band-a", "", {kBandLeft[0], kRowTop, kBandLeft[0] + kBandW, kRowBottom}, 0},
         {"band-b", "", {kBandLeft[1], kRowTop, kBandLeft[1] + kBandW, kRowBottom}, 0},
         {"tape", "", {kTapeLeft, kRowTop, kTapeRight, kRowBottom}, 0},
         {"output", "", {kOutLeft, kRowTop, kOutRight, kRowBottom}, 0},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

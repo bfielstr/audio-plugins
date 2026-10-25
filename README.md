@@ -1,4 +1,4 @@
-# Audio plug-ins: smemplr, multidyn, locus, stretchr, smacheratr, para, widr, wubr, levlr, deepr, smoothr, gentlr, dropr, orbitr, ciphr, moistr, smeezr, probr, sweepr, tapr, pinchr, bubr
+# Audio plug-ins: smemplr, multidyn, smacheratr, para, widr, gentlr, dropr, moistr, probr, sweepr, tapr, pinchr, bubr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
 to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**.
@@ -7,21 +7,12 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 |---|---|
 | [**smemplr**](plugins/smemplr/README.md) | Plays a sample from the keyboard. Loop it, slice it into hits, or warp it to the song tempo. A multi-mode filter, envelopes you can draw, an LFO, four modulation LFOs you drag onto any control, and an effects rack with up to 8 of the suite's effects in any order. |
 | [**multidyn**](plugins/multidyn/README.md) | Squashes or opens up 1 to 4 frequency bands at once: quiet detail comes up and loud parts are held down, band by band. The **OTT** style gives the loud, dense, over-the-top sound; **Character** is smoother. Side-chain input and a Sub band. |
-| [**locus**](plugins/locus/README.md) | Cleans up or thickens the low end. Positive Contrast brings the main bass notes forward and pushes the mud between them down; negative Contrast evens the low end out for weight. |
-| [**stretchr**](plugins/stretchr/README.md) | Changes the pitch and timing of a clip recorded on a track: 8 algorithms, stretch markers, a drawn pitch envelope and formant control. Bounce the result in place or drag it to a track. |
 | [**smacheratr**](plugins/smacheratr/README.md) | Adds warmth, grit or hard clipping. A pre-limiter stops transients from clipping harder than the rest, colour filters choose which frequencies saturate, and gentlr keeps a pushed sound from turning muddy or harsh. |
 | [**para**](plugins/para/README.md) | A high-pass and a low-pass side by side. Pull them apart to carve a notch, then sweep it, fire it from MIDI notes, or use the **Vocal** movement, where the filter you move leads and fades the other out. Good for bass movement and filter sweeps. |
 | [**widr**](plugins/widr/README.md) | Makes a part very wide without falling apart in mono. Widrs in the same project share out the stereo field by role, so they do not all widen the same place. |
-| [**wubr**](plugins/wubr/README.md) | Two EQ bands whose level and frequency follow shapes you draw: wubs, pumps and sweeps, synced to the song or free, or fired once by MIDI or by hits in the audio. |
-| [**levlr**](plugins/levlr/README.md) | Splits the sound into up to 4 bands and gives each a level and a saturator (Analog, Tape, Tube, Hard Clip, Fold). Lift the lows, dip the low mids, dirty up only the highs. |
-| [**deepr**](plugins/deepr/README.md) | Makes a bass sound deeper without making it louder: dips the low mids only while the sub plays, and folds the sub to mono. No latency of its own. |
-| [**smoothr**](plugins/smoothr/README.md) | A loudness limiter for the master or a bus that keeps the low end clean: the lows get a slow, smooth gain and the highs catch the fast peaks. True-peak ceiling and a scrolling gain-reduction history. |
 | [**gentlr**](plugins/gentlr/README.md) | Keeps a mix clear by turning down mud and harshness only while they build up. Two bands plus a Sub and a High band, each cutting its region only while it is loud. |
 | [**dropr**](plugins/dropr/README.md) | Slams a sound flat in 6 bands and drives it into a saturator. Negative ratios turn loud hits down below quieter parts, so a snare's body comes up and its snap is tamed. |
-| [**orbitr**](plugins/orbitr/README.md) | Turns a sound into a swarm: 1 to 16 copies fly around you, each one bending in pitch as it moves towards or away from you. |
-| [**ciphr**](plugins/ciphr/README.md) | An 8-voice synthesizer: clusters of wavetable oscillators you sweep with one knob, FM and ring modulation between them, and echoes that turn into reverb, with a frequency shifter in the feedback for endlessly climbing repeats. Metallic, screeching and vocal waves for alien textures, and Disperse, a dial that brings the sound back band by band. Can also play a track through its side-chain input. |
 | [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: eight bell EQs sweep the low end against each other like rolling waves, and a level-matched saturator makes it crunch with a clean sub kept underneath (a resonant high shelf on a slow orbit is there too). After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
-| [**smeezr**](plugins/smeezr/README.md) | A one-knob compressor. Turning up Squeeze first pulls every octave towards the balance of pink noise (dull sounds get brighter, harsh ones darker, the loudness stays), then past the middle adds an OTT-style boost on top: quiet details up, peaks down, most squashed at 100 %. At 0 it does nothing. |
 | [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
 | [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 | [**tapr**](plugins/tapr/README.md) | A tape saturator: drive into a fast leveller and a clipper that holds the level, highs that soften as the tape speed comes down, and a three-band Cut EQ. The leveller and the EQ each go before or after the saturation. sweepr's tape stage on its own. |
@@ -33,31 +24,22 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 | | |
 |---|---|
 | [<img src="docs/smemplr/ui_classic.png" width="420" alt="smemplr">](plugins/smemplr/README.md)<br>smemplr | [<img src="docs/multidyn/ui_multidyn.png" width="420" alt="multidyn">](plugins/multidyn/README.md)<br>multidyn |
-| [<img src="docs/locus/ui_locus.png" width="420" alt="locus">](plugins/locus/README.md)<br>locus | [<img src="docs/stretchr/docs.png" width="420" alt="stretchr">](plugins/stretchr/README.md)<br>stretchr |
 | [<img src="docs/smacheratr/ui_smacheratr.png" width="420" alt="smacheratr">](plugins/smacheratr/README.md)<br>smacheratr | [<img src="docs/para/ui_para.png" width="420" alt="para">](plugins/para/README.md)<br>para |
-| [<img src="docs/widr/ui_widr.png" width="420" alt="widr">](plugins/widr/README.md)<br>widr | [<img src="docs/wubr/ui_wubr.png" width="420" alt="wubr">](plugins/wubr/README.md)<br>wubr |
-| [<img src="docs/levlr/ui_levlr.png" width="420" alt="levlr">](plugins/levlr/README.md)<br>levlr | [<img src="docs/deepr/ui_deepr.png" width="420" alt="deepr">](plugins/deepr/README.md)<br>deepr |
-| [<img src="docs/smoothr/ui_smoothr.png" width="420" alt="smoothr">](plugins/smoothr/README.md)<br>smoothr | [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr |
-| [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/orbitr/ui_orbitr.png" width="420" alt="orbitr">](plugins/orbitr/README.md)<br>orbitr |
-| [<img src="docs/ciphr/ui_ciphr.png" width="420" alt="ciphr">](plugins/ciphr/README.md)<br>ciphr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
-| [<img src="docs/smeezr/ui_smeezr.png" width="420" alt="smeezr">](plugins/smeezr/README.md)<br>smeezr | [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr |
-| [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr | [<img src="docs/tapr/ui_tapr.png" width="420" alt="tapr">](plugins/tapr/README.md)<br>tapr |
+| [<img src="docs/widr/ui_widr.png" width="420" alt="widr">](plugins/widr/README.md)<br>widr | [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr |
+| [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
+| [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr | [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr |
+| [<img src="docs/tapr/ui_tapr.png" width="420" alt="tapr">](plugins/tapr/README.md)<br>tapr | |
 
 ## What every plug-in has
 
-- **smacheratr at the end.** Every plug-in except probr (which passes the sound untouched) and bubr (Soft Clip and Hard Clip at its end instead) ends its chain with smacheratr, with all its controls. A
-  new instance runs through it with gentlr on and gentlr's **Slope** at **Signature**, and smacheratr's
-  own defaults as they are (Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %); switch
-  **Saturator** off for the plug-in alone. sweepr, tapr and pinchr are the exceptions: their tape stage (pinchr's germanium output stage) is their colour, so
-  smacheratr at their end starts off (gentlr ready, as everywhere, once you switch it on). Projects and presets saved with 0.24 or earlier load as they
-  were saved (where they did not set them: smacheratr at the end as it was then, off in most plug-ins,
-  gentlr off, **12 / 12**). Factory presets start from **Init**, so they run through it too, except the
-  few that switch it off (gentlr's and ciphr's **Dry Cluster**). That
-  includes its **gentlr**: two bands, a **Sub** band (from 20 Hz up
-  to a point of 20 to 100 Hz) and a **High** band (from a point of 2 to 16 kHz up). The Sub and High
-  bands are always there and start at Range 0 dB, so they cut nothing until you pull them down.
-  gentlr's **Slope**, **No Overlap**, band glue and **Advanced** mode (a Threshold per band and a Drive
-  for the region it cuts) are there too.
+- **Soft Clip and Hard Clip.** Every plug-in except probr (which passes the sound untouched) ends its
+  chain with two switches, **Soft Clip** and **Hard Clip**, both off in a new instance. **Soft Clip** is
+  smacheratr's Analog curve: it rounds the peaks off from -6 dBFS up to 0 dBFS. **Hard Clip** lets
+  nothing above 0 dBFS out (after Soft Clip when both are on). Neither oversamples or adds latency, and
+  the sound below them is untouched. They sit with each plug-in's output controls and on its Basic page.
+  Projects and presets saved with earlier versions still load: the end saturator those versions had
+  (smacheratr at the end of the chain) is no longer heard, and its settings, kept in the project, are
+  hidden from the host.
 - **Info box.** A strip along the bottom of every window. Point at a control or a display and it says
   what it is and what it does. The **?** in the header switches the floating tooltips on and off; the
   info box is always there.
@@ -65,12 +47,9 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
   to fit and centred, never stretched. **Menu > Interface Size** sets the usual sizes.
 - **Basic and Advanced views**. The window
   opens on a **Basic** page with the plug-in's main controls only, large, its most useful display, the
-  output at the right and, across the top, a scope of the output to hold and drag onto a track as audio
+  output (with Soft Clip and Hard Clip) at the right and, across the top, a scope of the output to hold and drag onto a track as audio
   or into a wavetable synth; **Advanced** in the header shows every control, in the layout you pick
-  (below), and switches back. A strip at the bottom of the Basic page holds the extras: **Extras** opens
-  them (smacheratr at the end, with all its controls), **Tail** switches it, and a small meter shows the
-  output level (see
-  [Basic and Advanced views](#basic-and-advanced-views)).
+  (below), and switches back (see [Basic and Advanced views](#basic-and-advanced-views)).
 - **Layouts.** **Menu > Layout** picks how the window is laid out: **Wide** (what a new instance
   opens in), a long, short strip for a DAW's device area, with the sections side by side as titled
   blocks in rows by purpose, or **Classic** (the fixed layout the plug-ins had before; see
@@ -85,15 +64,14 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 - **Presets** in the header of every plug-in: **Init** (every control at its default) always at the
   top, a few factory presets, your own presets in categories with tags you can filter by, and **Save
   as Default** so a new instance starts the way you like it (see below).
-- **Defaults** in every plug-in's **Menu** (all but probr): **Gentlr On by Default** and **Advanced On by
-  Default** (all but smemplr) decide whether gentlr (on unless you uncheck it), and its Advanced mode, are
-  on in a new instance, and **Glue Bands on Touch** whether band edges dragged together in a gentlr
-  display snap and glue (see [Defaults for new instances](#defaults-for-new-instances)).
+- **Defaults** in every plug-in's **Menu**: **Advanced View by Default** (where there is a Basic page)
+  decides whether a new instance opens in the Advanced view, and **Glue Bands on Touch** whether band
+  edges dragged together in a gentlr display snap and glue. smacheratr and gentlr also set their own
+  gentlr defaults there (see [Defaults for new instances](#defaults-for-new-instances)).
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
-Older names: smemplr was called simplr and locus was called lowfocus until 0.5.0. gentlr was called
-gently before 0.12. smacheratr's gentlr was called Clarity. Projects keep loading: the plug-in IDs are
-unchanged.
+Older names: smemplr was called simplr until 0.5.0. gentlr was called gently before 0.12. smacheratr's
+gentlr was called Clarity. Projects keep loading: the plug-in IDs are unchanged.
 
 ## Install
 
@@ -145,7 +123,7 @@ VST3 folder (e.g. `~/Library/Audio/Plug-Ins/VST3/bfielstr/`). Running a script a
 installed versions. Copies that older installers put directly in the VST3 folder, and bundles under the
 older names above, are removed. Only ours are touched: the vendor in the bundle is checked.
 
-Options (environment variables): `SIMPLR_PLUGINS="Multidyn Locus"` installs only some plug-ins,
+Options (environment variables): `SIMPLR_PLUGINS="Multidyn Tapr"` installs only some plug-ins,
 `SIMPLR_VERSION=v0.25.0` picks a release, `SIMPLR_DEST=...` chooses the VST3 folder.
 
 ### Install by hand
@@ -192,9 +170,8 @@ They live in
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
 
-smemplr's effects rack uses the same presets: a slot holding para, multidyn, smacheratr, widr, wubr,
-levlr, gentlr or smoothr has a **Presets** control with that plug-in's menu, reading and writing the
-same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
+smemplr's effects rack uses the same presets: a slot holding para, multidyn, smacheratr, widr or
+gentlr has a **Presets** control with that plug-in's menu, reading and writing the same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
 [smemplr README](plugins/smemplr/README.md#a-slots-presets).
 
 ## Basic and Advanced views
@@ -216,43 +193,31 @@ has the same layout:
   **Save Audio...** and **Save Wavetable...** to a file of your choice. The length is saved with the
   project;
 - the main controls in the middle, three to six of them, large, under the plug-in's most useful display
-  (smemplr's waveform, a spectrum, a band display), and the output at the right (**OUTPUT**);
-- the extras strip at the bottom: **Extras** opens the extras under the main controls (smacheratr at the
-  end of the chain, all its controls; smemplr's output scope), **Tail** switches smacheratr at the end on
-  or off, a line says what is there, and a small meter shows the output level (-60 to +6 dB, the mark at
-  0 dB).
+  (smemplr's waveform, a spectrum, a band display), and the output at the right (**OUTPUT**), with
+  **Soft Clip** and **Hard Clip** (all but probr);
+- a small meter of the output at the bottom, under the output column.
 
 The main controls of each Basic page:
 
 | plug-in | display | main controls | output |
 | --- | --- | --- | --- |
 | smemplr | waveform | Mode, Transpose, Filter Freq, Amp Attack, Amp Release | Volume |
-| ciphr | cluster and taps | Timbre, Character, Cutoff, Space | Blend, Output |
 | widr | stage and goniometer | Character, Width, Air, Mono Below, Cinema | Output |
 | multidyn | bands | Bands, Style, Amount, Time | Output |
 | smacheratr | Analog curve and colour display | Drive, Post Clip, Color, Gentlr | Output, Dry/Wet |
 | gentlr | bands | Band Slope, Attack, Release | Mix, Output |
-| smeezr | pink balance | Squeeze, Speed, Mix | Output |
 | sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
 | tapr | response and curve | Drive, Speed, Compression, Lo, Mid, Hi | Mix, Output |
 | pinchr | output stage and compression curve | Input, Ratio, Attack, Release, Drive, Feedback | Mix, Output |
 | bubr | effect response and gate curve | Boost, Freq, Intensity, Q-Factor, Drive, Gate | Dry/Wet, Output, Soft Clip, Hard Clip |
 | dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
-| orbitr | orbs | Pattern, Orbs, Speed, Spread | Dry/Wet, Output |
 | para | filter response | HP Freq, LP Freq, Movement | Dry/Wet, Output |
-| levlr | levels | Bands, Band 1 to Band 4 | Output |
-| locus | spectrum | Mode, Contrast, Low, High | Output |
-| stretchr | clip (Capture, Load and Drag to DAW in the header) | Algorithm, Pitch, Speed, Follow Tempo | Gain |
-| deepr | display | Depth, Dip, Thresh, Sub | Mix, Output |
-| smoothr | history | Input, Smooth, Character, Release | Ceiling |
-| wubr | bands | Mode, Band 1 Depth, Band 2 Depth | Dry/Wet, Output |
 | probr | Record, the level and the status | Mode | (none; no capture band: probr records the track itself) |
 
 **Advanced** shows every control, in the layout of **Menu > Layout**; **Advanced** in its header
 (lit) goes back to the Basic page. The two views play the same sound: the controls the Basic page leaves
-out keep their settings, and the effects in smemplr's rack keep running. The view you pick, and whether
-the extras are open, is saved with the project; loading a preset does not change it. A new instance
-opens on the Basic page unless **Menu > Defaults > Advanced View by Default** is checked; a project
+out keep their settings, and the effects in smemplr's rack keep running. The view you pick is saved with
+the project; loading a preset does not change it. A new instance opens on the Basic page unless **Menu > Defaults > Advanced View by Default** is checked; a project
 saved before 0.29 opens in the same view as a new instance (its layout is kept for the Advanced view).
 The Layout sub-menu is in the Menu of the Advanced view only.
 
@@ -261,34 +226,24 @@ The Layout sub-menu is in the Menu of the Advanced view only.
 Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. In a plug-in with a Basic
 page (all but moistr) it starts with **Advanced View by Default** (unchecked): checked, a new instance opens in
 the Advanced view instead of the Basic page (see [Basic and Advanced views](#basic-and-advanced-views)).
-It is saved in the same `.defaults.txt` as the items below and, like them, applies to new instances
-only. Every plug-in except
-smemplr has two items there for new instances:
-
-- **Gentlr On by Default**: a new instance starts with gentlr on in smacheratr at the end, and
-  smacheratr at the end on (gentlr is not heard while it is off), with its other controls as they would
-  be (by default Drive 0 dB, Pre-Limit on at -6 dB, No Clip, Dry/Wet 100 %). This is how a new instance
-  starts anyway, so it is checked until you uncheck it. Unchecked, a new instance starts with gentlr
-  off and smacheratr at the end as it would be (on, unless your saved default has it off).
-- **Advanced On by Default**: a new instance starts with gentlr's **Advanced** mode on (unchecked: off).
-
-In smacheratr they set its own **Gentlr** (on in a new smacheratr) and **Advanced**. gentlr has only **Advanced On by
+smacheratr and gentlr have items of their own there. In smacheratr, **Gentlr On by Default** and
+**Advanced On by Default** decide whether its **Gentlr** (on in a new smacheratr) and gentlr's
+**Advanced** mode (off in a new smacheratr) are on in a new instance. gentlr has **Advanced On by
 Default**, for its own **Advanced**, which is already on in a new gentlr: uncheck it to have new
-instances start with Advanced off.
+instances start with Advanced off. Until you pick one, an item shows the plug-in's factory default and
+changes nothing.
 
-Until you pick one, it shows the plug-in's factory default (gentlr on, Advanced off) and changes
-nothing. A pick is saved at once
-in the hidden file `.defaults.txt` in the plug-in's preset folder (beside the saved default), so it
-lasts after you close the host and applies to every new instance of that plug-in. It applies only when
-you insert a new instance: the instance you pick it in keeps its settings, a project you open loads
-exactly as it was saved, and a preset, **Init** or **Load Default** loads exactly its own settings.
-With a saved default (**Save as Default**), a new instance starts from it and then gets these two on
-top, since you set them yourself. Delete `.defaults.txt` to go back to how the plug-in started before.
+A pick is saved at once in the hidden file `.defaults.txt` in the plug-in's preset folder (beside the
+saved default), so it lasts after you close the host and applies to every new instance of that
+plug-in. It applies only when you insert a new instance: the instance you pick it in keeps its
+settings, a project you open loads exactly as it was saved, and a preset, **Init** or **Load Default**
+loads exactly its own settings. With a saved default (**Save as Default**), a new instance starts from
+it and then gets these picks on top, since you set them yourself. Delete `.defaults.txt` to go back to
+how the plug-in started before.
 
 The same sub-menu, in every plug-in (smemplr too), has **Glue Bands on Touch** (unchecked by default):
 checked, a band edge dragged to within a few pixels of a neighbour's in a gentlr display (gentlr's,
-smacheratr's, smacheratr at the end of any plug-in, smemplr's slots) snaps onto it, and the two are
-glued when you let go. Unchecked, edges move freely past each other and nothing glues by itself; the
+smacheratr's, smemplr's slots) snaps onto it, and the two are glued when you let go. Unchecked, edges move freely past each other and nothing glues by itself; the
 link icon on the border of two bands that touch still glues or detaches them, and pairs already glued
 stay glued. It is your own editor preference, not part of a project or preset: one setting for the
 whole suite (`.defaults.txt` in the `bfielstr` presets folder, beside the plug-ins' folders), applied at once to
@@ -300,11 +255,10 @@ Every plug-in has a **Layout** sub-menu in its **Menu**:
 
 - **Wide**: the controls as titled blocks side by side, so the window is wide and short, like a device
   in Live's device view. A new instance opens in it, and so does a project saved before layouts.
-  Blocks are in rows by purpose: for most plug-ins the display and the plug-in's own controls in the
-  first row and smacheratr at the end of the chain in a row of its own under it, as wide as the window.
-  smemplr has two rows of about the same width: the sound (waveform over the sample row, filter,
-  envelopes, the list of mappings) and then the effects rack, the output, the global controls, the LFO
-  and the modulation LFOs. smacheratr shows its Gentlr controls as a column beside the two displays.
+  Blocks are in rows by purpose, with **Soft Clip** and **Hard Clip** in the output's block. smemplr
+  has two rows of about the same width: the sound (waveform over the sample row, filter, envelopes, the
+  list of mappings) and then the effects rack, the output, the global controls, the LFO and the
+  modulation LFOs. smacheratr shows its Gentlr controls as a column beside the two displays.
 - **Classic**: the fixed layout every plug-in had before layouts (it was called Default then). A
   project saved in it keeps it.
 - Your **saved layouts**, by name.
@@ -316,8 +270,7 @@ In Wide or a saved layout, the blocks fill their rows: every row runs the full w
 the same 8 pixel gap between blocks, between rows and at the edges. The window is as wide as the widest
 row needs, and the blocks of a narrower row are stretched to that width, each in proportion to its own
 width. The blocks of a row are all as tall as its tallest one. A section's panel grows to fill its
-block, with its controls centred in it, and smacheratr at the end of the chain is built as wide as its
-block.
+block, with its controls centred in it.
 
 Each block has a title strip with a grip at its left. Drag the strip to move the block: a cinnabar line
 shows where it will land, beside another block, above or below one (they then share a column), or in a
@@ -362,20 +315,20 @@ ctest --test-dir build -C Release           # DSP tests (+ plug-in host tests on
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPK_DRAW_BENCH=ON \
   -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 cmake --build build                                      # everything
-cmake --build build --target orbitr_tests Orbitr         # one plug-in: its DSP tests and its bundle
-ctest --test-dir build -R '^orbitr_' --output-on-failure # one plug-in's tests
+cmake --build build --target tapr_tests Tapr             # one plug-in: its DSP tests and its bundle
+ctest --test-dir build -R '^tapr_' --output-on-failure   # one plug-in's tests
 ctest --test-dir build -j 4 --output-on-failure          # everything, before a pull request
 ```
 
-- **Targets** per plug-in (`orbitr` here): `orbitr_tests` (DSP tests), `orbitr_state_tests` (saved
-  state; ciphr, dropr, gentlr, moistr, probr, smacheratr, smemplr, sweepr, tapr, pinchr and bubr), `Orbitr` (the bundle, checked by the
-  VST3 validator as it builds), `orbitr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
-  `orbitr_hosttest` (macOS). The tests are named `orbitr_core`, `orbitr_state`,
-  `orbitr_drawbench`, `orbitr_drawbench_layouts` and `orbitr_hosttest`.
+- **Targets** per plug-in (`tapr` here): `tapr_tests` (DSP tests), `tapr_state_tests` (saved state;
+  bubr, dropr, gentlr, moistr, pinchr, probr, smacheratr, smemplr, sweepr, tapr and widr), `Tapr` (the bundle,
+  checked by the VST3 validator as it builds), `tapr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
+  `tapr_hosttest` (macOS). The tests are named `tapr_core`, `tapr_state`, `tapr_drawbench`,
+  `tapr_drawbench_layouts` and `tapr_hosttest`.
 - **Tests in parallel.** `ctest -j` is safe: the tests that time the DSP against a CPU budget are
   marked `RUN_SERIAL` and labelled `cpu` (`pk_cpu_test` in `cmake/PluginKit.cmake`), so ctest runs
   them on their own. `ctest -L cpu` runs only those, `ctest -LE cpu` everything else.
-- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="orbitr;ciphr"` configures only those plug-ins (and the
+- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="tapr;pinchr"` configures only those plug-ins (and the
   libraries of the plug-ins they use, without their tests or bundles); empty builds all of them. Pull
   requests on GitHub build this way (below).
 - **ccache** across worktrees: set `CCACHE_BASEDIR` to the checkout's folder (for example
@@ -419,21 +372,12 @@ repository.
 ```
 plugins/smemplr     sampler                  src/core (DSP) · src/plugin (VST3) · src/ui · tests · presets
 plugins/multidyn    multiband dynamics       same structure
-plugins/locus       low-end contrast         same structure
-plugins/stretchr    pitch/time editor        same structure (reuses Smemplr's warp engines)
 plugins/smacheratr  saturator                same structure
 plugins/para        parallel filters         same structure
 plugins/widr        stereo width             same structure
-plugins/wubr        drawn band LFOs          same structure
-plugins/levlr       four-band levels         same structure
-plugins/smoothr     low-end-first limiter    same structure
-plugins/deepr       bass depth by contrast   same structure
 plugins/gentlr      gentle de-mud / de-harsh same structure
 plugins/dropr       multiband compressor     same structure
-plugins/orbitr      doppler swarm            same structure
-plugins/ciphr       wavetable synthesizer    same structure
 plugins/moistr      sweeps, moving bands     same structure
-plugins/smeezr      one-knob pink / OTT      same structure
 plugins/probr       analysis probe           same structure (scripts/probr_align.py analyses its sessions)
 plugins/sweepr      swept bells into tape    same structure
 plugins/tapr        tape saturator, Cut EQ   same structure

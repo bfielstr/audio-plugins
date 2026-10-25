@@ -77,9 +77,9 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        // a new instance: the end saturator off (the tape stage is the saturator), its Gentlr ready
-        checkNewInstanceGentlr (rig.controller, -1, (uint32_t)kTailExtBase + pk::kTailExtClarity, (uint32_t)kTailExt3Base + pk::kTailExt3Slope);
-        CHECK (rig.controller->getParamNormalized ((uint32_t)kTailBase + pk::kTailOn) == 0.0, "a new instance: the end saturator off");
+        // a new instance: the clips at the end off
+        CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 0.0,
+               "a new instance: Soft Clip and Hard Clip off");
         CHECK (std::fabs (plainOf (rig, kDrive) - 0.75) < 1e-9 && std::fabs (plainOf (rig, tapr::kOutput) + 4.4) < 1e-9 &&
                    std::lround (plainOf (rig, kCutPlace)) == kPost,
                "a new instance: the defaults (Drive 75 %%, Output -4.4 dB, Cut Post)");

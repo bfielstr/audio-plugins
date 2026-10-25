@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
+
 #include "Interp.h"
 
 #include <algorithm>
@@ -1025,23 +1027,16 @@ void Engine::prepare (double sampleRate, int)
     for (auto& v : voices)
         v.prepare (sr);
     rack.prepare (sr, 512);
-    tail.prepare (sr, 512);
-    // the saturator after the rack (before 0.9) has no parameters for Gentlr's band Slope: Classic, the
-    // shape its bands had (an old project's sound)
-    tail.setParam (smacheratr::kTailExt3First + pk::kTailExt3Slope, smacheratr::kSlopeClassic);
-    // the effects as the parameters have them (a new Smemplr: Smacheratr in the first slot)
+    // the effects as the parameters have them (a new Smemplr: an empty rack)
     for (uint32_t id = 0; id < kNumParams; ++id)
         if (isRackParam (id))
             rack.setParam (id, p[id]);
-        else if (isTailParam (id))
-            tail.setParam (tailField (id), p[id]);
     reset ();
 }
 
 void Engine::reset ()
 {
     rack.reset ();
-    tail.reset ();
     mod.reset ();
     for (auto& v : voices)
         v.hardStop ();
@@ -1083,15 +1078,7 @@ void Engine::applyParam (uint32_t id, double plain)
     p[id] = plain;
     if (isRackParam (id))
         rack.setParam (id, plain);
-    else if (isTailParam (id))
-    {
-        // the old saturator after the rack runs only while it is on (an old project whose rack was
-        // full); switched on, it starts from silence
-        const bool was = tail.isOn ();
-        tail.setParam (tailField (id), plain);
-        if (!was && tail.isOn ())
-            tail.reset ();
-    }
+    // (the rest are read where they are used; the old saturator after the rack is retired)
 }
 
 void Engine::setSustain (bool onOff)
@@ -1102,10 +1089,6 @@ void Engine::setSustain (bool onOff)
         for (auto& v : voices)
             if (v.isActive () && v.sustained)
                 v.release (p);
-        for (int n = 0; n < 128; ++n)
-            if (pedalHeld.test ((size_t)n))
-                rack.noteOff (n);
-        pedalHeld.reset ();
     }
 }
 
@@ -1345,11 +1328,6 @@ void Engine::startNote (int note, float velocity, bool)
 
 void Engine::noteOff (int note)
 {
-    // Wubr: letting go plays the rest of its envelopes (with the pedal down: when it comes up, as the sound)
-    if (sustain)
-        pedalHeld.set ((size_t)std::clamp (note, 0, 127));
-    else
-        rack.noteOff (note);
     const int mode = idx (p[kMode]);
     if (mode == kModeClassic && idx (p[kGlideMode]) == kGlideMono)
     {
@@ -1382,8 +1360,6 @@ void Engine::noteOff (int note)
 void Engine::allNotesOff ()
 {
     monoStack.clear ();
-    rack.allNotesOff ();
-    pedalHeld.reset ();
     for (auto& v : voices)
         if (v.isActive ())
             v.release (p);
@@ -1534,7 +1510,7 @@ void Engine::renderStep (float* L, float* R, int n, const HostInfo& host)
     globalLfoPhase -= std::floor (globalLfoPhase);
     if (!smp)
     {
-        renderEffects (L, R, n, host);
+        renderEffects (L, R, n);
         return;
     }
     updateSlices ();
@@ -1574,15 +1550,13 @@ void Engine::renderStep (float* L, float* R, int n, const HostInfo& host)
         L[i] *= volGain;
         R[i] *= volGain;
     }
-    renderEffects (L, R, n, host);
+    renderEffects (L, R, n);
 }
 
-void Engine::renderEffects (float* L, float* R, int n, const HostInfo& host)
+void Engine::renderEffects (float* L, float* R, int n)
 {
-    rack.setTransport (host.bpm > 0.0 ? host.bpm : 120.0, host.ppq, host.playing && host.ppqValid);
     rack.process (L, R, n);
-    if (tail.isOn ())
-        tail.process (L, R, n);
+    pk::endClip (L, R, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5); // (the very end)
 }
 
 int Engine::activeVoices () const

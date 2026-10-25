@@ -33,9 +33,6 @@ const Codec& codecPara ();
 const Codec& codecMultidyn ();
 const Codec& codecSmacheratr ();
 const Codec& codecWidr ();
-const Codec& codecWubr ();
-const Codec& codecLevlr ();
 const Codec& codecGentlr ();
-const Codec& codecSmoothr ();
 
 } // namespace smemplr::hosted

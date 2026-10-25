@@ -62,11 +62,11 @@ Point at any control for help in the info box at the bottom (**?** also switches
   comb filtering).
 - **Output** (-24 to +12 dB, -4.4 dB by default): the overall level.
 
-**smacheratr** (bottom panel): the saturator every plug-in here ends with. In tapr it starts **off**,
-since the tape is the saturator; switch it on for more (its gentlr is on, ready).
+- **Soft Clip** and **Hard Clip** (off by default): the end of the chain. Soft Clip rounds peaks off from
+  -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when both are on).
 
 The **Basic** page has the display, **Drive**, **Speed**, **Compression**, **Lo**, **Mid** and **Hi**,
-**Mix** and **Output**; **Advanced** shows everything.
+**Mix**, **Output**, **Soft Clip** and **Hard Clip**; **Advanced** shows everything.
 
 ## How it works
 

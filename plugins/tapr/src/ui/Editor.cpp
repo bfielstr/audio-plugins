@@ -44,7 +44,6 @@ void Editor::onClose ()
 {
     display = nullptr;
     latencyLabel = nullptr;
-    tail.reset ();
 }
 
 CRect Editor::displayRect (bool arranged) const
@@ -102,27 +101,16 @@ void Editor::buildUI (CFrame* f)
         bind (cutPanel, new Knob (CRect (kCutX[k], kKnobRow2, kCutX[k] + kKnobW, kKnobRow2 + kKnobH), this, cutGainParam (k), nullptr, true));
     }
 
-    // OUTPUT: Mix and Output
+    // OUTPUT: Mix and Output, then Soft Clip and Hard Clip (the end of the chain)
     auto* out = new Panel (CRect (kOutLeft, kRowTop, kOutRight, kRowBottom), "OUTPUT");
     root->addView (out);
     bind (out, new Knob (CRect (kOutX[0], kKnobTop, kOutX[0] + kKnobW, kKnobTop + kKnobH), this, kMix));
     bind (out, new Knob (CRect (kOutX[1], kKnobTop, kOutX[1] + kKnobW, kKnobTop + kKnobH), this, kOutput, nullptr, true));
-
-    // the saturator at the end of the chain (off in a new instance: the tape stage is the saturator)
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+    bind (out, new Toggle (CRect (kOutX[0], kClipTop, kOutX[0] + kClipW, kClipTop + kSwitchH), this, kSoftClip, "Soft Clip"));
+    bind (out, new Toggle (CRect (kOutX[0], kClipTop + kSwitchH + 6, kOutX[0] + kClipW, kClipTop + 2 * kSwitchH + 6), this, kHardClip, "Hard Clip"));
 
     applyParamTooltips (&help::forParam);
     idle ();
-}
-
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
 }
 
 pk::basic::Spec Editor::basicSpec ()
@@ -135,8 +123,7 @@ pk::basic::Spec Editor::basicSpec ()
     s.displayHeight = 180;
     s.display = [this] (const CRect& r) -> CView* { return makeDisplay (r); };
     s.rows = {{knob (kDrive), knob (kSpeed), knob (kCompression)}, {knob (kCutLo, {}, true), knob (kCutMid, {}, true), knob (kCutHi, {}, true)}};
-    s.output = {knob (kMix), knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kMix), knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (300, 6, 384, 28);
@@ -146,25 +133,17 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if ((id < kMix || id >= kCutLoFreq) && display)
         display->invalid ();
 }
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (display)
         display->idle ();
     if (latencyLabel)
         if (auto* s = ctl->getShared ())
-        {
-            // its own (the oversampling) and the end saturator's (-1: not known yet)
-            const int tailNow = s->tailMeters.latency.load ();
-            latencyLabel->setTexts (pk::latencyTexts (tailNow >= 0 ? s->ownLatency.load () + tailNow : s->latency.load ()));
-        }
+            latencyLabel->setTexts (pk::latencyTexts (s->latency.load ())); // (the oversampling's)
 }
 
 void Editor::showMenu (CPoint where)
@@ -196,14 +175,12 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
 {
     pk::layout::Spec s;
     const CRect d = displayRect (arranged);
-    // Wide: the display (narrower, as tall as the panels), TAPE, CUT and OUTPUT side by side; the end
-    // saturator in a row of its own
+    // Wide: the display (narrower, as tall as the panels), TAPE, CUT and OUTPUT side by side
     s.panels = {
         {"display", "display", {d.left, d.top, d.right, d.bottom}, 0},
         {"tape", "", {kTapeLeft, kRowTop, kTapeRight, kRowBottom}, 0},
         {"cut", "", {kCutLeft, kRowTop, kCutRight, kRowBottom}, 0},
         {"output", "", {kOutLeft, kRowTop, kOutRight, kRowBottom}, 0},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
     };
     return s;
 }

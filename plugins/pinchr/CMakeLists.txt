@@ -44,7 +44,7 @@ pk_add_plugin(Pinchr
         src/ui/Editor.cpp
 )
 target_include_directories(Pinchr PRIVATE src)
-target_link_libraries(Pinchr PRIVATE pinchr_core smacheratr_ui)
+target_link_libraries(Pinchr PRIVATE pinchr_core)
 
 # the saved state (plugin/State.cpp) on its own: runs everywhere, beside the core tests
 add_executable(pinchr_state_tests tests/state_tests.cpp src/plugin/State.cpp

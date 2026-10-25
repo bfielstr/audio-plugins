@@ -115,9 +115,6 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    if (tail)
-        tail->closed ();
-    tail.reset ();
     view = nullptr;
     for (auto& s : sliders)
         s = nullptr;
@@ -208,14 +205,12 @@ void Editor::buildUI (CFrame* f)
     driveAmount = bind (root, new Knob (knobRect (ax + 64, kRowTop + 24), this, kDriveAmount, "Amount"));
     advancedViews.push_back (driveAmount);
 
-    // No Overlap (the bands push each other), Mix and Output
+    // No Overlap (the bands push each other), Mix and Output, then Soft Clip and Hard Clip (the end of the chain)
     bind (root, new smacheratr::NoOverlapToggle (CRect (kNoOverlapLeft, kRowTop - 1, kViewRight - 4, kRowTop + 19), this, GentlrView::bandParams ()));
     bind (root, new Knob (knobRect (kViewRight - 2 * kKnobW - 12, kRowTop + 24), this, kMix));
     bind (root, new Knob (knobRect (kViewRight - kKnobW - 4, kRowTop + 24), this, kOutput));
-
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+    bind (root, new Toggle (CRect (kNoOverlapLeft, kClipTop, kViewRight - 4, kClipTop + kClipH), this, kSoftClip, "Soft Clip"));
+    bind (root, new Toggle (CRect (kNoOverlapLeft, kClipTop + kClipH + kClipGap, kViewRight - 4, kClipBottom), this, kHardClip, "Hard Clip"));
 
     applyParamTooltips (&help::forParam);
     layoutAdvanced ();
@@ -279,22 +274,10 @@ void Editor::updateLooks ()
         driveAmount->setEnabledLook (plainValue (kDrive) >= 0.5);
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* {
-                                                        auto* s = c->getShared ();
-                                                        return s ? &s->tailMeters : nullptr;
-                                                    });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
     // the bands themselves on the display (drag a handle: its frequency and how far it cuts), how steep
-    // they are (Band Slope), how fast it follows and lets go (Attack, Release); Mix and Output
+    // they are (Band Slope), how fast it follows and lets go (Attack, Release); Mix, Output, Soft Clip and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "gentlr";
@@ -310,8 +293,7 @@ pk::basic::Spec Editor::basicSpec ()
         return view;
     };
     s.rows = {{choice (kSlope, "Band Slope", 160), knob (kAttack), knob (kRelease)}};
-    s.output = {knob (kMix), knob (kOutput)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kMix), knob (kOutput), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (544, 6, 632, 28);
@@ -321,9 +303,7 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
-    if (isTailParam (id))
+    if (isTailParam (id) || id == kSoftClip || id == kHardClip) // (the old end saturator's are retired; the clips are not drawn)
         return;
     if (view)
         view->invalid ();
@@ -343,8 +323,6 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (view)
         view->idle ();
     for (auto* s : sliders)
@@ -391,14 +369,13 @@ pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
     // the band display (with its Threshold sliders), the bands' controls, the detector, Advanced and the
-    // output in a row; the end saturator under them
+    // output (Soft Clip and Hard Clip under Mix and Output) in a row
     s.panels = {
         {"display", "display", {kViewLeft, kViewTop, kViewRight, kViewBottom}, 0},
         {"bands", "bands", {kViewLeft, kRowTop - 1, kHighLeft + kSubW, kRowTop + 88}, 0},
         {"detector", "detector", {kHighLeft + kSubW + 8, kRowTop - 1, kHighLeft + kSubW + 128, kRowTop + 88}, 0},
         {"advanced", "advanced", {kHighLeft + kSubW + 154, kRowTop - 1, kHighLeft + kSubW + 274, kRowTop + 88}, 0},
-        {"output", "output", {kNoOverlapLeft, kRowTop - 1, kViewRight, kRowTop + 88}, 0},
-        {"tail", "end of the chain", {kViewLeft, kTailTop, kViewRight, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"output", "output", {kNoOverlapLeft, kRowTop - 1, kViewRight, kClipBottom}, 0},
     };
     return s;
 }

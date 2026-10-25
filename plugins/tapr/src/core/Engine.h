@@ -2,7 +2,7 @@
 //
 //   input -> [Cut, Pre] -> 4x up -> Drive -> [leveller, Pre] -> sine clipper -> [leveller, Post] -> 4x down
 //         -> DC blocker -> Speed's high shelf -> [Cut, Post] -> Mix (with the input delayed as much) -> Output
-//         -> Smacheratr (the end saturator, off by default)
+//         -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
 // The tape (Tape on; switching fades over 10 ms). At 4x: Drive's gain (-10 to +50 dB), the leveller (a
 // stereo-linked peak follower, 2.2 ms attack, 21 ms release, and a gain 1 / (1 + 3.21 Compression level))
@@ -16,7 +16,7 @@
 // Cut Place puts them after the tape (Post, Scream's) or before it (Pre: the EQ shapes what saturates).
 // Switching either Place takes effect at once.
 //
-// Latency: the oversampler's (constant whatever the settings), plus the end saturator's. Mix blends with
+// Latency: the oversampler's (constant whatever the settings). Mix blends with
 // the input delayed by the same amount; Mix 0 is the delayed input bit for bit.
 #pragma once
 
@@ -24,7 +24,6 @@
 #include "Params.h"
 
 #include "para/src/core/Oversampler.h"
-#include "smacheratr/src/core/Tail.h"
 #include "sweepr/src/core/Dsp.h"
 #include "sweepr/src/core/TapeShape.h"
 
@@ -57,10 +56,9 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return ownLatency () + tail.latency (); }
+    int latency () const { return ownLatency (); }
     int ownLatency () const { return osLatency; }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In place is fine.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -103,7 +101,6 @@ private:
     std::vector<float> dryBuf[2];
     int dryPos = 0, drySize = 0;
     Meters* meters = nullptr;
-    smacheratr::Tail tail;
 };
 
 } // namespace tapr

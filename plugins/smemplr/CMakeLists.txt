@@ -5,7 +5,7 @@ project(Smemplr VERSION 0.31.0.0)
 # engines. Smemplr's rack is a row of them; moistr's lab uses them too (as "smemplr/src/core/FxSlot.h").
 add_library(smemplr_fxslot STATIC src/core/FxSlot.cpp)
 target_include_directories(smemplr_fxslot PUBLIC ${CMAKE_SOURCE_DIR}/plugins PRIVATE src/core)
-target_link_libraries(smemplr_fxslot PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core wubr_core levlr_core smoothr_core gentlr_core)
+target_link_libraries(smemplr_fxslot PUBLIC pluginkit_core para_core multidyn_core smacheratr_core widr_core gentlr_core)
 pk_dsp_settings(smemplr_fxslot)
 
 add_library(smemplr_core STATIC
@@ -47,7 +47,7 @@ add_test(NAME smemplr_state COMMAND smemplr_state_tests)
 # effect's state format (its plug-in's State.cpp, with its migrations) and factory presets, compiled in
 # once per effect beside src/plugin/HostedState.cpp (which sees only that effect's headers).
 set(smemplr_hosted_libs)
-foreach(p IN ITEMS para multidyn smacheratr widr wubr levlr gentlr smoothr)
+foreach(p IN ITEMS para multidyn smacheratr widr gentlr)
     string(SUBSTRING ${p} 0 1 _first)
     string(SUBSTRING ${p} 1 -1 _rest)
     string(TOUPPER ${_first} _first)
@@ -109,10 +109,6 @@ pk_add_plugin(Smemplr
         ${CMAKE_SOURCE_DIR}/plugins/para/src/ui/FilterView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/multidyn/src/ui/DynDisplay.cpp
         ${CMAKE_SOURCE_DIR}/plugins/widr/src/ui/GonioView.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/wubr/src/ui/BandView.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/wubr/src/ui/ShapeView.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/levlr/src/ui/LevelView.cpp
-        ${CMAKE_SOURCE_DIR}/plugins/smoothr/src/ui/HistoryView.cpp
         ${CMAKE_SOURCE_DIR}/plugins/gentlr/src/ui/GentlrView.cpp
 )
 target_include_directories(Smemplr PRIVATE src src/core)

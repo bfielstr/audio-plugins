@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace tapr::help {
 
 inline const char* forParam (uint32_t id)
@@ -34,6 +36,8 @@ inline const char* forParam (uint32_t id)
                    "before it (it shapes what goes into the saturation: a boost saturates harder, a cut cleaner).";
         case kMix: return "Blend of the effect and the untouched signal (kept in time with each other, so no comb filtering).";
         case kOutput: return "Overall output level.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

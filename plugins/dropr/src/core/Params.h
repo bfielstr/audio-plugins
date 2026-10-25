@@ -36,12 +36,15 @@ enum ParamId : uint32_t
     kMakeup,                       // dB on every band
     kMix,                          // dry / wet
     kOutput,                       // dB
-    kTailBase,                     // the Smacheratr at the end of the chain: pk::kTailFields entries
-    kTailExtBase = kTailBase + pk::kTailFields,        // the rest of it: pk::kTailExtFields entries
-    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // Gentlr's Advanced mode and Sub band: pk::kTailExt2Fields
-    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // Gentlr's High band, No Overlap and Slope in it: pk::kTailExt3Fields entries
-    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    // the old end saturator's blocks (smacheratr at the end of the chain), retired: kept so saved IDs stay put
+    kTailBase,                     // pk::kTailFields entries
+    kTailExtBase = kTailBase + pk::kTailFields,        // pk::kTailExtFields entries
+    kTailExt2Base = kTailExtBase + pk::kTailExtFields, // pk::kTailExt2Fields entries
+    kTailExt3Base = kTailExt2Base + pk::kTailExt2Fields, // pk::kTailExt3Fields entries
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // pk::kTailExt4Fields entries
+    kSoftClip = kTailExt4Base + pk::kTailExt4Fields, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
+    kNumParams
 };
 
 // pinned: these numbers are in saved projects
@@ -50,6 +53,9 @@ static_assert (kXover1 == 2 && kBandGain1 == 7 && kMode == 13 && kLink == 14 && 
                    kRange == 22 && kUpThreshold == 23 && kUpRatio == 24 && kKnee == 25 && kTilt == 26 && kMakeup == 27 &&
                    kMix == 28 && kOutput == 29 && kTailBase == 30,
                "Dropr's parameter IDs are fixed");
+static_assert (kTailExtBase == 36 && kTailExt2Base == 53 && kTailExt3Base == 62 && kTailExt4Base == 68 && kSoftClip == 73 &&
+                   kHardClip == 74 && kNumParams == 75,
+               "saved IDs: the old end saturator's blocks at 30 .. 72 (retired), the clips 73 and 74");
 
 enum Mode { kModeStereo = 0, kModeMidSide, kNumModes };
 
@@ -65,8 +71,7 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 // the Negative Ratio's text: "1 : -x", "1 : -inf" at the maximum
 std::string negRatioText (double x);
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the end saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace dropr

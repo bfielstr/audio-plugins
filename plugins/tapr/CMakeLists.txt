@@ -40,7 +40,7 @@ pk_add_plugin(Tapr
         src/ui/Editor.cpp
 )
 target_include_directories(Tapr PRIVATE src)
-target_link_libraries(Tapr PRIVATE tapr_core smacheratr_ui)
+target_link_libraries(Tapr PRIVATE tapr_core)
 
 # the saved state (plugin/State.cpp) on its own: runs everywhere, beside the core tests
 add_executable(tapr_state_tests tests/state_tests.cpp src/plugin/State.cpp

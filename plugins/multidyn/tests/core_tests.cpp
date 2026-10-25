@@ -125,7 +125,6 @@ static void neutralize (Engine& e)
     e.setParam (kOutput, -kBakedMasterDb); // cancel the baked gains
     e.setParam (kMode, kBase);
     e.setParam (kPreLimit, 0.0);
-    e.setParam (kSatOn, 0.0);
     for (int b = 0; b < kMaxBands; ++b)
     {
         e.setParam (bandParam (b, kBandInput), -kBakedInputDb);
@@ -168,13 +167,26 @@ TEST (params_roundtrip)
                t.toText (kXoverSlope, kXover6) == "6 dB" && t.toText (kXoverSlope, kXover18) == "18 dB" &&
                t.toText (kXoverSlope, kXover24) == "24 dB" && t.toText (kXoverSlope, kXover96) == "96 dB",
            "Slope: 6 dB .. Brickwall, 24 dB by default; then Soften Color");
-    CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kSubInput == kStyle + 1 && kSatExt3Base == kSubInput + 1 && kSatExt4Base == kSatExt3Base + pk::kTailExt3Fields && kNumParams == kSatExt4Base + pk::kTailExt4Fields && t.info (kSubInput).def == 0.0 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
+    CHECK (kSubOn == kSoftenColor + 1 && kStyle == kSubOutput + 1 && kSubInput == kStyle + 1 && kSatExt3Base == kSubInput + 1 && kSatExt4Base == kSatExt3Base + pk::kTailExt3Fields && t.info (kSubInput).def == 0.0 && t.info (kStyle).def == kStyleOtt && t.info (kSubOn).def == 0.0 && t.info (kSubFreq).def == 40.0 &&
                t.info (kSubFreq).min == 20.0 && t.info (kSubFreq).max == 100.0 && t.info (kSubRatio).curve == pk::Curve::Ratio,
            "the Sub band, then the built-in Smacheratr's fourth and fifth blocks last: off, 40 Hz in 20 .. 100 Hz");
     CHECK (std::string (t.info (kSatExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" && t.info (kSatExt3Base + pk::kTailExt3High).def == 0.0 &&
                t.info (kSatExt3Base + pk::kTailExt3NoOverlap).def == 0.0 && t.info (kSatExt4Base + pk::kTailExt4Glue12).def == 0.0 &&
                std::string (t.info (kSatExt4Base + pk::kTailExt4Glue2High).name) == "Saturator Gentlr Glue 2 / High",
            "the built-in Smacheratr's Gentlr High band and No Overlap: off");
+    CHECK (kSoftClip == kSatExt4Base + pk::kTailExt4Fields && kHardClip == kSoftClip + 1 && kNumParams == kHardClip + 1 &&
+               std::string (t.info (kSoftClip).name) == "Soft Clip" && std::string (t.info (kHardClip).name) == "Hard Clip" &&
+               t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0,
+           "Soft Clip and Hard Clip last, off");
+    // the old built-in Smacheratr's blocks: still there (saved IDs stay put), retired; nothing else is
+    int wrong = 0;
+    for (uint32_t id = 0; id < kNumParams; ++id)
+        wrong += t.info (id).retired != ((id >= kSatOn && id < kSatOn + pk::kTailFields) || (id >= kSatExtBase && id < kXoverSlope) ||
+                                         (id >= kSatExt3Base && id < kSatExt4Base + pk::kTailExt4Fields));
+    CHECK (wrong == 0, "the retired parameters are the old built-in saturator's (%d wrong)", wrong);
+    CHECK (kSatPreLimitThreshold == kSatOn + pk::kTailFields - 1 && kRmsWindow == kSatPreLimitThreshold + 1 &&
+               kXoverSlope == kSatExtBase + pk::kTailExtFields + pk::kTailExt2Fields,
+           "the old saturator's blocks: 56 .. 61, 64 .. 89, 101 .. 111");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& p = t.info (id);
@@ -443,7 +455,6 @@ TEST (transient_guard_after_a_quiet_passage)
     Engine e;
     e.prepare (kSr, 512);
     e.setParam (kStyle, kStyleCharacter); // (the guard is Character's)
-    e.setParam (kSatOn, 0.0);
     const size_t n = (size_t)(kSr * 2.0), hitAt = (size_t)kSr;
     Sig in;
     in.l.resize (n);
@@ -482,9 +493,7 @@ TEST (preset_defaults)
            "3 bands at 88.3 Hz / 2.5 kHz (8 kHz for a fourth)");
     CHECK (std::lround (e.param (kMode)) == kCharacter && e.param (kPreLimit) < 0.5 && e.param (kPreLimitCeiling) == 0.0,
            "Character mode, pre-limit off");
-    CHECK (e.param (kSatOn) >= 0.5 && e.param (kSatDrive) == 0.0 && e.param (kSatExtBase + pk::kTailExtClarity) >= 0.5 &&
-               std::lround (e.param (kSatExt3Base + pk::kTailExt3Slope)) == smacheratr::kSlopeSignature,
-           "end-of-chain saturator on, Drive 0 dB, its Gentlr on with the Signature Slope");
+    CHECK (e.param (kSoftClip) < 0.5 && e.param (kHardClip) < 0.5, "Soft Clip and Hard Clip off");
     for (int b = 0; b < kMaxBands; ++b)
         CHECK (std::fabs (e.param (bandParam (b, kAboveRatio)) - 66.7) < 1e-9 && std::fabs (e.param (bandParam (b, kBelowRatio)) - 4.17) < 1e-9,
                "band %d ratios: Above 1:66.7, Below 1:4.17", b + 1);
@@ -526,7 +535,7 @@ TEST (pre_limiter_rounds_transients)
     const int lat = e->latency ();
     smacheratr::Engine satAlone;
     satAlone.prepare (kSr, 512);
-    CHECK (lat == 48 + 2 * satAlone.latency (), "1 ms look-ahead + Soften Color's and the saturator's oversampling at 48 kHz: %d", lat);
+    CHECK (lat == 48 + satAlone.latency (), "1 ms look-ahead + Soften Color's oversampling at 48 kHz: %d", lat);
     // under the ceiling (the Above threshold, -12 dB here, + 0) nothing but the delay happens
     e->setParam (kPreLimit, 1.0);
     e->setParam (kPreLimitCeiling, 0.0);
@@ -578,26 +587,40 @@ TEST (compression_eases_in)
            "Mode is unused");
 }
 
-TEST (built_in_saturator)
+TEST (end_clips)
 {
-    // after the Output gain: off = clean, on = harmonics, and Dry/Wet blends
+    // after the Output gain (+12 dB: a -6 dB sine comes out at +6 dBFS): off = the sine as it is, Soft Clip
+    // rounds it off at 0 dBFS (harmonics), Hard Clip holds 0 dBFS; the old saturator's switch does nothing
     auto e = engine ();
-    auto in = sine (1000.0, -6.0, 0.5);
-    auto out = run (*e, in);
-    const size_t a = 12000, b = 24000;
-    auto h3 = [&] (const Sig& s) { return toneDb (s.l, 3000.0, a, b) - toneDb (s.l, 1000.0, a, b); };
-    CHECK (h3 (out) < -80.0, "off: clean %f", h3 (out));
+    e->setParam (kOutput, 12.0 - kBakedMasterDb);
     e->setParam (kSatOn, 1.0);
     e->setParam (kSatDrive, 14.0);
-    e->setParam (kSatExtBase + pk::kTailExtClarity, 0.0); // (the curve alone: its Gentlr, on by default, off)
+    e->reset ();
+    auto in = sine (1000.0, -6.0, 0.5);
+    const size_t a = 12000, b = 24000;
+    auto h3 = [&] (const Sig& s) { return toneDb (s.l, 3000.0, a, b) - toneDb (s.l, 1000.0, a, b); };
+    auto out = run (*e, in);
+    CHECK (h3 (out) < -80.0 && peakDb (out.l, a, b) > 5.9, "off: clean %f, peak %f dB", h3 (out), peakDb (out.l, a, b));
+    e->setParam (kSoftClip, 1.0);
     e->reset ();
     out = run (*e, in);
-    CHECK (h3 (out) > -30.0, "on: third harmonic %f dB", h3 (out));
-    CHECK (peakDb (out.l, a, b) <= 0.01, "analog clip holds 0 dB: %f", peakDb (out.l, a, b));
-    e->setParam (kSatMix, 0.0);
+    CHECK (h3 (out) > -40.0 && peakDb (out.l, a, b) <= 1e-4, "Soft Clip: third harmonic %f dB, peak %f dB", h3 (out), peakDb (out.l, a, b));
+    e->setParam (kSoftClip, 0.0);
+    e->setParam (kHardClip, 1.0);
     e->reset ();
     out = run (*e, in);
-    CHECK (h3 (out) < -80.0, "dry/wet 0: clean %f", h3 (out));
+    CHECK (peakDb (out.l, a, b) <= 1e-4 && peakDb (out.l, a, b) > -0.01, "Hard Clip holds 0 dBFS: %f", peakDb (out.l, a, b));
+    // below the clips the sound passes bit for bit
+    auto quiet = sine (1000.0, -20.0, 0.5);
+    auto plain = engine (), clipped = engine ();
+    clipped->setParam (kSoftClip, 1.0);
+    clipped->setParam (kHardClip, 1.0);
+    clipped->reset ();
+    const auto x = run (*plain, quiet), y = run (*clipped, quiet);
+    size_t diff = 0;
+    for (size_t i = 0; i < x.l.size (); ++i)
+        diff += x.l[i] != y.l[i] || x.r[i] != y.r[i];
+    CHECK (diff == 0, "below the clips: %zu samples differ", diff);
 }
 
 TEST (rms_ignores_short_peaks_more_than_peak)
@@ -864,7 +887,6 @@ static void setOldProject (Engine& e, int variant)
     e.setParam (kXover2, 2500.0);
     e.setParam (kXover3, variant == 0 ? 8000.0 : 6000.0);
     e.setParam (kPreLimit, 0.0);
-    e.setParam (kSatOn, 0.0);
     e.setParam (kRmsWindow, 50.0);
     e.setParam (kSoften, 0.5);
     for (int b = 0; b < 4; ++b)
@@ -908,7 +930,7 @@ TEST (old_project_sounds_the_same)
          {50188, 3.44758564e-06f, 0.000869573909f},  {54287, 0.0345171094f, 0.0305288732f},
          {58386, -0.0314433314f, -0.0461570099f},    {62485, 0.00110437023f, 0.00429637311f},
          {66584, -0.000194986409f, -0.000911167008f}, {70683, 0.0013168942f, 0.00117437821f}}};
-    const int oldLatency = 133; // 1 ms look-ahead + the end saturator, at 48 kHz
+    const int oldLatency = 133; // 1 ms look-ahead + the end saturator, at 48 kHz (the saturator is gone, Soften's Color took its place)
     const auto& t = paramTable ();
     for (int variant = 0; variant < 2; ++variant)
     {
@@ -927,8 +949,8 @@ TEST (old_project_sounds_the_same)
         }
         setMigrated (kOutput, g.master);
         e.reset ();
-        CHECK (e.latency () == oldLatency + e.colorLatency (), "the latency grew by Soften Color's only: %d", e.latency ());
-        const int shift = e.colorLatency ();
+        CHECK (e.latency () == 48 + e.colorLatency (), "the look-ahead and Soften Color's: %d", e.latency ());
+        const int shift = e.latency () - oldLatency;
         const Sig out = run (e, oldProjectSignal ());
         double worst = 0.0;
         for (const Golden& gd : golden[variant])
@@ -1245,7 +1267,6 @@ TEST (soften_color_softens_the_highs)
     auto measure = [] (bool colorOn, double soften, double& rms, double& crest, double& all) {
         Engine e;
         e.prepare (kSr, 512);
-        e.setParam (kSatOn, 0.0); // (Multidyn's own curve: the end saturator, on by default, off)
         e.setParam (kOutput, 10.0); // hot, as OTT usually leaves it: into the curve
         e.setParam (kSoftenColor, colorOn ? 1.0 : 0.0);
         e.setParam (kSoften, soften);
@@ -1666,6 +1687,8 @@ TEST (performance)
 {
     auto e = engine (false);
     e->setParam (kScOn, 1);
+    e->setParam (kSoftClip, 1.0); // (and the clips at the end on)
+    e->setParam (kHardClip, 1.0);
     for (int b = 0; b < kNumBands; ++b)
     {
         e->setParam (bandParam (b, kAboveRatio), 4.0);
@@ -1675,8 +1698,8 @@ TEST (performance)
     const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     run (*e, in, &in);
     const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
-    std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, stereo)\n", 100.0 * secs / 10.0);
-    CHECK (secs / 10.0 < 0.05, "too slow"); // 4 bands plus the 4x oversampled saturator (about 1.4 % here)
+    std::printf ("    CPU: %.2f%% of one core (3 bands + side-chain, the clips on, stereo)\n", 100.0 * secs / 10.0);
+    CHECK (secs / 10.0 < 0.05, "too slow"); // 4 bands (about 1 % here)
     // four bands with the side-chain, the new parts one by one, up to the heaviest: the brickwall with
     // the Sub band and Soften's Color
     struct Setup
@@ -1723,7 +1746,6 @@ static std::unique_ptr<Engine> ottEngine (int solo = -1)
 {
     auto e = std::make_unique<Engine> ();
     e->prepare (kSr, 512);
-    e->setParam (kSatOn, 0.0);
     if (solo >= 0)
         e->setParam (bandParam (solo, kBandSolo), 1.0);
     e->reset ();
@@ -1763,7 +1785,9 @@ TEST (ott_static_curve)
             auto e = ottEngine (pr.kind);
             auto in = sine (pr.hz, level, 1.0);
             auto out = run (*e, in);
-            const double got = rmsDb (out.l, 36000, 48000) - rmsDb (in.l, 36000, 48000);
+            // (over 12 whole cycles at 45 Hz: in the knee the gain ripples with the low tone, and a part cycle
+            // would weigh the ripple by where the window starts)
+            const double got = rmsDb (out.l, 35200, 48000) - rmsDb (in.l, 35200, 48000);
             const double want = ott::gainDb (pr.kind, ottDetectorDb (pr.kind, pr.hz, level), 1.0, 1.0, 1.0, 0.0, 0.0);
             CHECK (std::fabs (got - want) < 0.6, "%.0f Hz at %.0f dB: %.2f dB (OTT: %.2f dB)", pr.hz, level, got, want);
         }

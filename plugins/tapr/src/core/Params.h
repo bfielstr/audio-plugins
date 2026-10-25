@@ -22,8 +22,7 @@ enum ParamId : uint32_t
     kCutPlace,    // the Cut EQ before the tape (Pre: into the saturation) or after it (Post)
     kMix,         // 0 .. 1: dry .. wet
     kOutput,      // dB
-    // the Smacheratr at the end of the chain (the suite's end saturator, off by default here: the tape
-    // stage is the saturator), every block of it
+    // the old end saturator's blocks (smacheratr at the end of the chain), retired: kept so saved IDs stay put
     kTailBase,
     kTailExtBase = kTailBase + pk::kTailFields,
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
@@ -33,6 +32,8 @@ enum ParamId : uint32_t
     kCutLoFreq = kTailExt4Base + pk::kTailExt4Fields,
     kCutMidFreq,
     kCutHiFreq,
+    kSoftClip, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
     kNumParams
 };
 
@@ -41,8 +42,8 @@ static_assert (kTapeOn == 0 && kDrive == 1 && kSpeed == 2 && kCompression == 3 &
                    kCutMid == 7 && kCutHi == 8 && kCutPlace == 9 && kMix == 10 && kOutput == 11 && kTailBase == 12,
                "Tapr's parameter IDs are fixed");
 static_assert (kTailExtBase == 18 && kTailExt2Base == 35 && kTailExt3Base == 44 && kTailExt4Base == 50 && kCutLoFreq == 55 &&
-                   kCutMidFreq == 56 && kCutHiFreq == 57 && kNumParams == 58,
-               "saved IDs: the end saturator's blocks at 12 .. 54, the Cut frequencies at 55 .. 57");
+                   kCutMidFreq == 56 && kCutHiFreq == 57 && kSoftClip == 58 && kHardClip == 59 && kNumParams == 60,
+               "saved IDs: the old end saturator's blocks at 12 .. 54 (retired), the Cut frequencies at 55 .. 57, the clips 58 and 59");
 
 // a Cut band's gain and frequency
 constexpr uint32_t cutGainParam (int band) { return kCutLo + (uint32_t)band; }
@@ -59,8 +60,7 @@ inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the end saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace tapr

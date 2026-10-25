@@ -1,7 +1,6 @@
 #!/bin/sh
-# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
-# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr, Moistr, Smeezr, Probr,
-# Sweepr, Tapr, Pinchr, Bubr)
+# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Smacheratr, Para,
+# Widr, Gentlr, Dropr, Moistr, Probr, Sweepr, Tapr, Pinchr, Bubr)
 # for the current user, into a "bfielstr" vendor folder inside the VST3 folder. Existing
 # versions are replaced; copies left at the top of the VST3 folder by older installers are
 # removed (only if they are ours).
@@ -11,7 +10,7 @@
 # Environment overrides:
 #   SIMPLR_VERSION=v0.1.0   install a specific release instead of the latest
 #   SIMPLR_DEST=/some/dir   use a different VST3 folder (plug-ins go into <dir>/bfielstr)
-#   SIMPLR_PLUGINS="Multidyn Locus"   install only some of the plug-ins
+#   SIMPLR_PLUGINS="Multidyn Tapr"   install only some of the plug-ins
 set -eu
 
 REPO="${SIMPLR_REPO:-bfielstr/audio-plugins-releases}"

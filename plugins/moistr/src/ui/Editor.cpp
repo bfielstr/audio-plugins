@@ -176,7 +176,6 @@ void Editor::onClose ()
     wobbleKnobs.clear ();
     gestureView = nullptr;
     latencyLabel = nullptr;
-    tail.reset ();
 }
 
 CRect Editor::displayRect (bool arranged) const
@@ -396,10 +395,19 @@ void Editor::buildUI (CFrame* f)
     const auto made = knobs (liquid, kLiquidRight - kLiquidLeft, {{kLiquid}, {kLiquidRes}, {kLiquidLow}, {kLiquidHigh}});
     liquidKnobs.assign (made.begin () + 1, made.end ());
 
-    // the output: Mix and Output
+    // the output: Mix and Output, then Soft Clip over Hard Clip (the end of the chain)
     auto* out = new Panel (CRect (kOutLeft, kRow2, kOutRight, kRow2 + kRowH), "OUTPUT");
     root->addView (out);
-    knobs (out, kOutRight - kOutLeft, {{kMix}, {kOutput, true}});
+    for (int i = 0; i < 2; ++i)
+    {
+        const double x = kKnobLeft + kKnobStep * i;
+        bind (out, new Knob (CRect (x, kKnobTop, x + kKnobW, kKnobTop + kKnobH), this, i == 0 ? kMix : kOutput, nullptr, i == 1));
+    }
+    {
+        const double x = kKnobLeft + kKnobStep * 2 + 8.0;
+        bind (out, new Toggle (CRect (x, kSwitchTop, x + kSwitchW, kSwitchTop + kSwitchH), this, kSoftClip, "Soft Clip"));
+        bind (out, new Toggle (CRect (x, kColTop2, x + kSwitchW, kColTop2 + kSwitchH), this, kHardClip, "Hard Clip"));
+    }
 
     // the gesture (0.30): ONE gesture moving many targets together. Gesture and File (a user gesture from the
     // Gestures folder); Mode, Length and Speed; Position, Smooth and Amount
@@ -456,10 +464,6 @@ void Editor::buildUI (CFrame* f)
     }
     root->addView (makeLoopView (layoutRegion ("loopview", CRect (kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH))));
 
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight)));
-
     applyParamTooltips (&help::forParam);
     pickBell (pickedBell);
     updateLooks ();
@@ -480,12 +484,6 @@ LoopView* Editor::makeLoopView (const CRect& r)
                              [c = ctl] { return c->userScene (); });
     pk::setHelp (loopView, "Loop", help::kLoopView);
     return loopView;
-}
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (), [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
 }
 
 void Editor::buildRow6 (CViewContainer* root)
@@ -537,7 +535,8 @@ void Editor::buildRow6 (CViewContainer* root)
 pk::basic::Spec Editor::basicSpec ()
 {
     // Input (the level into the saturator: its crunch), Drive (the SWEEP stage's: how hard it crunches) and Movement (how
-    // far the bands move); Loop Lock, Length (how long its region takes) and Sub Guard (the sub steady); Mix and Output.
+    // far the bands move); Loop Lock, Length (how long its region takes) and Sub Guard (the sub steady); Mix, Output,
+    // Soft Clip and Hard Clip.
     // The display: Loop Lock's window, every curve over it, the region dragged there (which moment the loop holds).
     using namespace pk::basic;
     Spec s;
@@ -546,8 +545,7 @@ pk::basic::Spec Editor::basicSpec ()
     s.displayHeight = 150;
     s.display = [this] (const CRect& r) -> CView* { return makeLoopView (r); };
     s.rows = {{knob (kInput), knob (kSweepDrive), knob (kMovement)}, {toggle (kLoopLock, "Loop Lock"), choice (kLoopLength, "Length"), toggle (kSubGuard, "Sub Guard")}};
-    s.output = {knob (kMix), knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kMix), knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (440, 6, 524, 28);
@@ -765,8 +763,6 @@ void Editor::updateLooks ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if (affectsLooks (id))
         updateLooks ();
     if (sweepView && SweepView::shows (id))
@@ -790,8 +786,6 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (display)
         display->idle ();
     if (sweepView)
@@ -804,9 +798,9 @@ void Editor::idle ()
         if (auto* s = ctl->getShared ())
         {
             char buf[64];
-            // (the LAB's and the end saturator's; -1: not known yet)
-            const int tailNow = s->tailMeters.latency.load (), labNow = s->meters.labLatency.load ();
-            std::snprintf (buf, sizeof (buf), "Latency %d samples", tailNow >= 0 && labNow >= 0 ? tailNow + labNow : s->latency.load ());
+            // (the LAB's; -1: not known yet)
+            const int labNow = s->meters.labLatency.load ();
+            std::snprintf (buf, sizeof (buf), "Latency %d samples", labNow >= 0 ? labNow : s->latency.load ());
             latencyLabel->setText (buf);
         }
 }
@@ -848,8 +842,8 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
     // Wide: the SWEEP stage's row first (sweep; bells over sub; the high shelf over its display), then the
     // bands' display and columns of two panels (split over movement, levels over band move, shift over rise /
     // fall, glue over the output); a row of the later panels (seed b and link, low, extreme, liquid) under them,
-    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST), a row of
-    // input, loop lock, para and sub guard, and the end saturator in a row of its own at the bottom
+    // a row of the gesture (gesture, wobble, the gesture display), a row of the LAB (its three chains and POST), and a row
+    // of input, loop lock, para and sub guard
     s.panels = {
         {"sweep", "", {kSweepLeft, kSweepRow1, kSweepRight, kSweepRow1 + kRowH}, 0},
         {"bells", "", {kBellsLeft, kSweepRow1, kBellsRight, kSweepRow1 + kRowH}, 0, 0},
@@ -882,7 +876,6 @@ pk::layout::Spec Editor::layoutSpec (bool arranged) const
         {"input", "", {kInputLeft, kRow7, kInputRight, kRow7 + kRowH}, 6},
         {"drift", "", {kDriftLeft, kRow7, kDriftRight, kRow7 + kRowH}, 6},
         {"loopview", "loop", {kLoopViewLeft, kRow7, kLoopViewRight, kRow7 + kLoopViewH}, 6, -1, true},
-        {"tail", "end of the chain", {8, kTailTop, kWidth - 8, kTailTop + smacheratr::TailPanel::kOpenHeight}, 7, -1, true},
     };
     return s;
 }

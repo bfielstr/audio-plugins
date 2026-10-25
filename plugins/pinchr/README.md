@@ -68,9 +68,8 @@ Point at any control for help in the info box at the bottom (**?** also switches
 - **Mix** (0 to 100 %, 100 % by default): the compressed signal against the uncompressed one, both through
   the output stage.
 - **Output** (-24 to +24 dB, 0 by default).
-
-At the bottom, smacheratr, the suite's end saturator, with all its controls: off in a new instance (the
-output stage is pinchr's colour), its gentlr ready.
+- **Soft Clip** and **Hard Clip** (off by default): the end of the chain. Soft Clip rounds peaks off from
+  -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when both are on).
 
 ## How it was measured
 

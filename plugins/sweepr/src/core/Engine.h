@@ -1,8 +1,8 @@
 // Sweepr: two bells whose frequencies an LFO each sweeps, into tape.
 //
 //   input -> bell A -> bell B -> 4x up -> tape (Drive, the leveller, the sine clipper) -> 4x down -> tape
-//         (DC blocker, the Speed shelf) -> Mix (with the input delayed as much) -> Output -> Smacheratr (the
-//         end saturator, off by default)
+//         (DC blocker, the Speed shelf) -> Mix (with the input delayed as much) -> Output -> Soft Clip, Hard
+//         Clip (pluginkit/EndClip.h)
 //
 // The bells. Each is Reason's PEQ-2 bell (BellShape.h: its knobs' ranges and how Q and Gain shape it,
 // measured) as a trapezoidal state-variable filter, prewarped at its frequency. The filter runs at the
@@ -24,7 +24,7 @@
 // the base rate: a 10 Hz DC blocker and Speed's high shelf (-48 dB above 2 kHz at 0 to -2 dB above 11 kHz at
 // 100 %). No makeup: like Scream's, the output settles near the clipper's level whatever goes in.
 //
-// Latency: the oversampler's (constant whatever the settings), plus the end saturator's. Mix blends with the input delayed by the same amount; Mix 0 is the delayed input bit for bit.
+// Latency: the oversampler's (constant whatever the settings). Mix blends with the input delayed by the same amount; Mix 0 is the delayed input bit for bit.
 #pragma once
 
 #include "Dsp.h"
@@ -32,7 +32,6 @@
 #include "TapeShape.h"
 
 #include "para/src/core/Oversampler.h"
-#include "smacheratr/src/core/Tail.h"
 
 #include <array>
 #include <atomic>
@@ -66,10 +65,9 @@ public:
     // The song position at the start of the next block: tempo (BPM, <= 0: unknown, the last one is kept),
     // ppq (quarter notes) and whether the host plays (then the synced LFOs follow ppq; else they run on).
     void setTransport (double tempo, double ppq, bool playing);
-    int latency () const { return ownLatency () + tail.latency (); }
+    int latency () const { return ownLatency (); }
     int ownLatency () const { return osLatency; }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In place is fine.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -124,7 +122,6 @@ private:
     std::vector<float> dryBuf[2];
     int dryPos = 0, drySize = 0;
     Meters* meters = nullptr;
-    smacheratr::Tail tail;
 };
 
 } // namespace sweepr

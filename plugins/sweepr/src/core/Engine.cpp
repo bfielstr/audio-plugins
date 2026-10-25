@@ -1,5 +1,6 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
 #include "pluginkit/NoDenormals.h"
 
 #include <algorithm>
@@ -52,7 +53,6 @@ void Engine::prepare (double sampleRate, int maxBlock)
     cAtk = coefFor (tape::kLevelAttack, srOs);
     cRel = coefFor (tape::kLevelRelease, srOs);
     dcG = dsp::onePoleG (10.0, sr);
-    tail.prepare (sr, std::max (1, maxBlock));
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParam (id, p[id]);
     reset ();
@@ -93,7 +93,6 @@ void Engine::reset ()
     out = (float)std::pow (10.0, p[kOutput] / 20.0);
     shownSpeed = -1.0;
     tapeFilters ();
-    tail.reset ();
 }
 
 void Engine::setParam (uint32_t id, double plain)
@@ -101,17 +100,7 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kTailExt4Base)
-        tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
-    else if (id >= kTailExt3Base)
-        tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-    else if (id >= kTailExt2Base)
-        tail.setParam (smacheratr::kTailExt2First + (id - kTailExt2Base), plain);
-    else if (id >= kTailExtBase)
-        tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-    else if (id >= kTailBase)
-        tail.setParam (id - kTailBase, plain);
-    // (the rest are read where they are used)
+    // (read where they are used; the old end saturator's are retired)
 }
 
 void Engine::setTransport (double tempo, double ppq, bool isPlaying)
@@ -331,7 +320,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         }
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
-    tail.process (yl, yr, n);
+    pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
 }
 
 } // namespace sweepr

@@ -92,6 +92,20 @@ int main ()
                    std::lround (toPlain (lanePosition (kLaneAmbience), back.norm[lanePosition (kLaneAmbience)])) == kPosBeyond,
                "the lanes' default positions");
     }
+    // a new instance: Soft Clip and Hard Clip at the end, off (a state from before them loads them off too);
+    // the old end saturator's blocks still there (saved IDs stay put), retired; nothing else is
+    {
+        const auto& t = pluginParamTable ();
+        CHECK (defaultNormalized (kSoftClip) == 0.0 && defaultNormalized (kHardClip) == 0.0, "the clips off");
+        State back;
+        CHECK (readRaw (8, {{kWidth, 0.25}}, back) && back.norm[kSoftClip] == 0.0 && back.norm[kHardClip] == 0.0 && !back.has[kSoftClip],
+               "a state from before the clips: off");
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumPluginParams; ++id)
+            wrong += t.info (id).retired != ((id >= kTailBase && id < kTailBase + pk::kTailFields) ||
+                                             (id >= kTailExtBase && id < kTailExt4Base + pk::kTailExt4Fields));
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
+    }
     // a newer Widr's state (an ID this one does not know): read, the unknown one skipped
     {
         State back;

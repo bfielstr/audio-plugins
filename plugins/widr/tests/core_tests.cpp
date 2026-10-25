@@ -1,6 +1,7 @@
 // Headless tests for the Widr DSP. Run: ./widr_tests [filter]
 #include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
+#include "Fft.h"
 #include "Mix.h"
 #include "Params.h"
 
@@ -107,11 +108,10 @@ static Sig run (Engine& e, const Sig& in, int block = 512)
     return out;
 }
 
-// The defaults with the end saturator (on by default) off: the tests are about Widr's own processing.
+// The defaults (Soft Clip and Hard Clip off: the tests are about Widr's own processing).
 static std::unique_ptr<Engine> engine ()
 {
     auto e = std::make_unique<Engine> ();
-    e->setParam ((uint32_t)kTailBase + pk::kTailOn, 0.0);
     e->prepare (kSr, 512);
     return e;
 }
@@ -144,9 +144,9 @@ static double toneDb (const std::vector<float>& x, double f, size_t a, size_t b)
 static std::array<double, kBands> bandDb (const std::vector<float>& x, size_t a, size_t b)
 {
     constexpr int n = 8192;
-    locus::Fft fft (n);
+    widr::Fft fft (n);
     std::vector<float> frame (n);
-    std::vector<locus::Fft::cf> spec (n / 2 + 1);
+    std::vector<widr::Fft::cf> spec (n / 2 + 1);
     std::array<double, kBands> e {};
     int frames = 0;
     for (size_t pos = a; pos + n <= b; pos += n / 2, ++frames)
@@ -211,13 +211,13 @@ TEST (params)
         CHECK (all.fromText (id, all.toText (id, all.info (id).def), parsed) || all.info (id).disp == pk::Disp::Choice, "%s parses",
                all.info (id).name);
     }
-    CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kTailExt4Base + pk::kTailExt4Fields && kNumPluginParams == kLaneBase + 2 * kNumLanes &&
+    CHECK (kTailExt3Base == kTailExt2Base + pk::kTailExt2Fields && kTailExt4Base == kTailExt3Base + pk::kTailExt3Fields && kNumParams == kTailExt4Base + pk::kTailExt4Fields && kSoftClip == kLaneBase + 2 * kNumLanes && kNumPluginParams == kHardClip + 1 &&
                std::string (t.info (kTailExt4Base + pk::kTailExt4Glue12).name) == "Saturator Gentlr Glue 1 / 2" &&
                t.info (kTailExt4Base + pk::kTailExt4Glue2High).def == 0.0 &&
                std::string (t.info (kTailExt3Base + pk::kTailExt3High).name) == "Saturator Gentlr High (unused)" &&
                std::string (t.info (kTailExt2Base + pk::kTailExt2Advanced).name) == "Saturator Gentlr Advanced" &&
                t.info (kTailExt2Base + pk::kTailExt2Threshold).def == -18.0 && t.info (kTailExt2Base + pk::kTailExt2Advanced).def == 0.0,
-           "Gentlr's Advanced block (the end saturator's), its High band block, then its glue block last (off)");
+           "Gentlr's Advanced block (the old end saturator's), its High band block, then its glue block last (off); the clips after the lanes");
     for (uint32_t id = 0; id < kNumParams; ++id)
     {
         const auto& info = t.info (id);
@@ -232,13 +232,23 @@ TEST (params)
     CHECK (t.toText (kWidth, 1.0) == "100 %" && t.toText (kDecay, 1200.0) == "1.20 s", "%s / %s",
            t.toText (kWidth, 1.0).c_str (), t.toText (kDecay, 1200.0).c_str ());
     CHECK (t.info (kCharacter).def == (double)kWide && t.info (kRole).def == (double)kSupport, "Wide, Support");
-    CHECK (t.info ((uint32_t)kTailBase + pk::kTailOn).def == 1.0 && t.info ((uint32_t)kTailBase + pk::kTailDrive).def == 0.0, "saturator on, 0 dB");
+    // Soft Clip and Hard Clip at the end, off; the old end saturator's blocks still there (saved IDs stay
+    // put), retired, in 0.19's table and the plug-in's alike; nothing else is
+    CHECK (std::string (all.info (kSoftClip).name) == "Soft Clip" && std::string (all.info (kHardClip).name) == "Hard Clip" &&
+               all.info (kSoftClip).def == 0.0 && all.info (kHardClip).def == 0.0,
+           "the clips off");
+    auto oldTail = [] (uint32_t id) {
+        return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExt4Base + pk::kTailExt4Fields);
+    };
+    int wrong = 0;
+    for (uint32_t id = 0; id < kNumPluginParams; ++id)
+        wrong += all.info (id).retired != oldTail (id) || (id < kNumParams && t.info (id).retired != oldTail (id));
+    CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
 }
 
 TEST (width_zero_is_bit_exact)
 {
-    // everything that would act is turned up; Width 0 must still pass the input untouched (delayed
-    // by the tail's constant latency)
+    // everything that would act is turned up; Width 0 must still pass the input untouched (no latency)
     auto in = pink (1.0, true, 0.3f);
     auto e = engine ();
     e->setParam (kWidth, 0.0);
@@ -249,7 +259,7 @@ TEST (width_zero_is_bit_exact)
     e->reset ();
     auto out = run (*e, in);
     const size_t lat = (size_t)e->latency ();
-    CHECK (lat > 0 && lat < 200, "latency %zu", lat);
+    CHECK (lat == 0, "latency %zu", lat);
     size_t diff = 0;
     for (size_t i = lat; i < in.l.size (); ++i)
         diff += (out.l[i] != in.l[i - lat]) + (out.r[i] != in.r[i - lat]);
@@ -812,12 +822,14 @@ TEST (performance)
     e->setParam (kWidth, 1.5);
     e->setParam (kSpace, 0.5);
     e->setParam (kBeyond, 0.5);
+    e->setParam (kSoftClip, 1.0);
+    e->setParam (kHardClip, 1.0);
     e->reset ();
     auto in = pink (10.0, true);
     const pk::testing::CpuClock t0 = pk::testing::cpuClock (); // CPU time: other programs running do not count
     run (*e, in);
     const double secs = (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec;
-    std::printf ("    CPU: %.2f%% of one core (stereo)\n", 100.0 * secs / 10.0);
+    std::printf ("    CPU: %.2f%% of one core (stereo, the clips on)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.05, "too slow");
 }
 
@@ -1055,9 +1067,9 @@ TEST (elements_land_in_their_lanes)
     LaneSplitter split;
     split.prepare (kSr);
     const int n = split.fftSize (), nb = split.bins ();
-    locus::Fft fft (n);
+    widr::Fft fft (n);
     std::vector<float> frame ((size_t)n);
-    std::vector<locus::Fft::cf> xl ((size_t)nb), xr ((size_t)nb);
+    std::vector<widr::Fft::cf> xl ((size_t)nb), xr ((size_t)nb);
     std::array<std::array<double, kNumLanes>, kNumElements> share {};
     LaneSample ls;
     uint64_t seen = 0;

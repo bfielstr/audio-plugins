@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <vector>
@@ -29,15 +30,18 @@ const ParamTable& paramTable ()
         v.push_back (integer (kGroup, "Group", "Group", 1.0, 8.0, 1.0, Disp::Plain));
         v.push_back (toggle (kMonoCheck, "Mono Check", "Mono", false));
         v.push_back (real (kOutput, "Output", "Output", -12.0, 12.0, 0.0, Curve::Linear, Disp::Db));
+        // the old end saturator, retired (its IDs kept for saved projects), in two pieces
         pk::addTailParams (v, kTailBase);
         v.push_back (percent (kContrast, "Contrast", "Contrast", 0.5));
         v.push_back (real (kDryLevel, "Dry Level", "Dry", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
         v.push_back (real (kWetLevel, "Wet Level", "Wet", kLevelMinDb, 6.0, 0.0, Curve::Linear, Disp::DbGain));
-        smacheratr::addTailExtParams (v, kTailExtBase, true); // Mid/Side on: it keeps the width when pushed
+        smacheratr::addTailExtParams (v, kTailExtBase, true);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
         static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last of 0.19's");
+        pk::retire (v, kTailBase, kTailBase + pk::kTailFields);
+        pk::retire (v, kTailExtBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;
     }());
     return t;
@@ -64,7 +68,10 @@ const ParamTable& pluginParamTable ()
             v.push_back (choice (lanePosition (l), laneNames[l][0], laneShort[l], {"Centre", "Wide", "Beyond"}, defPos[l]));
             v.push_back (percent (laneWidth (l), laneNames[l][1], "Width", defWidth[l]));
         }
-        static_assert (kNumPluginParams == kLaneBase + 2 * kNumLanes, "the lanes are the last block");
+        static_assert (kSoftClip == kLaneBase + 2 * kNumLanes, "the clips after the lanes");
+        // the end of the chain (Widr's own; another plug-in hosting the engine has its own end)
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        static_assert (kNumPluginParams == kHardClip + 1, "the clips are the last");
         return v;
     }());
     return t;

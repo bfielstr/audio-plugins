@@ -100,8 +100,13 @@ int main ()
         CHECK (t.info (bandParam (0, kFreq)).def == 110.0 && t.info (bandParam (0, kGain)).def == 13.0 && t.info (bandParam (1, kFreq)).def == 320.0 &&
                    t.info (bandParam (1, kGain)).def == -15.0 && t.info (bandParam (0, kLfoDepth)).def == 1.0 &&
                    t.info (bandParam (1, kLfoDepth)).def == 1.0 && t.info (kLink).def == 0.0 && t.info (kTapeOn).def == 1.0 &&
-                   t.info (kMix).def == 1.0 && t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0,
-               "A 110 Hz +13 dB, B 320 Hz -15 dB, both swept +1 octave, Link off, Tape on, Mix 100 %%, the end saturator off");
+                   t.info (kMix).def == 1.0 && t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0,
+               "A 110 Hz +13 dB, B 320 Hz -15 dB, both swept +1 octave, Link off, Tape on, Mix 100 %%, the clips off");
+        // the old end saturator's blocks: still there (saved IDs stay put), retired; nothing else is
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            wrong += t.info (id).retired != (id >= kTailBase && id < kTailExt4Base + pk::kTailExt4Fields);
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
         // the values as the presets and the info box show them
         CHECK (t.toText (bandParam (0, kLfoDepth), 1.0) == "+1.00 oct" && t.toText (bandParam (0, kLfoDepth), -2.5) == "-2.50 oct" &&
                    t.toText (bandParam (0, kLfoDepth), 0.0) == "0.00 oct",

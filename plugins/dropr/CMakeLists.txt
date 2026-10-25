@@ -1,4 +1,4 @@
-# Dropr: a 6-band, Fuse-style compressor (downward with normal or negative ratios, upward) feeding a saturator.
+# Dropr: a 6-band, Fuse-style compressor (downward with normal or negative ratios, upward).
 project(Dropr VERSION 0.31.0.0)
 
 add_library(dropr_core STATIC
@@ -38,7 +38,7 @@ pk_add_plugin(Dropr
         src/ui/Editor.cpp
 )
 target_include_directories(Dropr PRIVATE src)
-target_link_libraries(Dropr PRIVATE dropr_core smacheratr_ui)
+target_link_libraries(Dropr PRIVATE dropr_core)
 
 # the saved state (plugin/State.cpp) on its own: runs everywhere, beside the core tests
 add_executable(dropr_state_tests tests/state_tests.cpp src/plugin/State.cpp

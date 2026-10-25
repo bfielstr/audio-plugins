@@ -33,7 +33,7 @@ TableParameter::TableParameter (const ParamTable& t, uint32_t id) : table (t)
     info.stepCount = p.stepCount ();
     info.defaultNormalizedValue = t.defaultNormalized (id);
     info.unitId = kRootUnitId;
-    info.flags = ParameterInfo::kCanAutomate;
+    info.flags = p.retired ? ParameterInfo::kIsHidden : ParameterInfo::kCanAutomate; // (retired: kept for old projects only)
     if (p.type == PType::Choice)
         info.flags |= ParameterInfo::kIsList;
     valueNormalized = info.defaultNormalizedValue;

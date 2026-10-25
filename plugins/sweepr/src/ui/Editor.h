@@ -2,8 +2,6 @@
 
 #include "Params.h"
 
-#include "smacheratr/src/ui/TailPanel.h"
-
 #include <memory>
 
 #include "pluginkit/vst/EditorBase.h"
@@ -17,14 +15,13 @@ class Editor : public pk::EditorBase
 {
 public:
     // Classic: the curve across the top; under it BAND A, BAND B (each its bell and its LFO), TAPE and
-    // OUTPUT side by side; the end saturator's section at the bottom. An arranged layout (Wide) builds the
-    // curve narrower and as tall as the panels' row, beside them.
+    // OUTPUT side by side. An arranged layout (Wide) builds the curve narrower and as tall as the panels'
+    // row, beside them.
     static constexpr double kWidth = 900.0;
     static constexpr double kTop = 40.0, kDisplayBottom = 260.0;
     static constexpr double kArrangedDisplayW = 440.0;
-    static constexpr double kRowTop = 268.0, kRowBottom = 500.0;
-    static constexpr double kTailTop = kRowBottom + 8.0;
-    static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
+    static constexpr double kRowTop = 268.0, kRowBottom = 524.0;
+    static constexpr double kHeight = kRowBottom + 8.0;
     // the panels' places (left, right)
     static constexpr double kBandLeft[kBands] = {8.0, 296.0};
     static constexpr double kBandW = 280.0;
@@ -40,20 +37,19 @@ public:
     static constexpr double kTapeKnobW = 76.0;
     static constexpr double kTapeX[2] = {16.0, 104.0};
     static constexpr double kTapeRow[2] = {58.0, 142.0};
+    // inside OUTPUT: Mix over Output, then Soft Clip and Hard Clip, one above the other
+    static constexpr double kClipTop = 190.0, kClipH = 19.0, kClipGap = 6.0, kClipX = 8.0;
 
     explicit Editor (Controller* c);
     void buildUI (VSTGUI::CFrame* f) override;
     pk::layout::Spec layoutSpec (bool arranged) const override;
     // The Basic page (pluginkit/ui/BasicView.h): the curve; both bands' Gain and LFO Depth, Drive and Mix;
-    // Output; the end saturator in the extras
+    // Output, Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
 private:
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases ();
     void onClose () override;
     void showMenu (VSTGUI::CPoint where);
     void updateRates ();

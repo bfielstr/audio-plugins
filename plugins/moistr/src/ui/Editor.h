@@ -2,8 +2,6 @@
 
 #include "Params.h"
 
-#include "smacheratr/src/ui/TailPanel.h"
-
 #include <memory>
 #include <vector>
 
@@ -23,8 +21,8 @@ public:
     // Classic: two rows of the SWEEP stage at the top (SWEEP, BELLS, SUB over HIGH SHELF and the sweep display),
     // the bands' display across, three rows of panels (SPLIT, LEVELS, SHIFT, GLUE over MOVEMENT,
     // BAND MOVE, RISE / FALL, OUTPUT over SEED B / LINK, LOW, EXTREME, LIQUID), a row of the gesture (GESTURE,
-    // WOBBLE and the gesture display), a row of the LAB (MID, HIGH, AIR chains and POST), the end saturator's
-    // section at the bottom
+    // WOBBLE and the gesture display), a row of the LAB (MID, HIGH, AIR chains and POST), a row of LOOP LOCK, PARA
+    // and SUB GUARD, and one of INPUT, DRIFT and Loop Lock's window at the bottom
     static constexpr double kWidth = 1132.0;
     static constexpr double kRowH = 116.0;
     static constexpr double kSweepRow1 = 40.0, kSweepRow2 = kSweepRow1 + kRowH + 8.0;
@@ -32,13 +30,12 @@ public:
     static constexpr double kRow4 = kRow3 + kRowH + 8.0;
     // the LAB's row (0.30): a row of knobs with a row of switches under them
     static constexpr double kLabRowH = 128.0, kRow5 = kRow4 + kRowH + 8.0;
-    // a row of LOOP LOCK, PARA and SUB GUARD (0.30), INPUT, DRIFT and Loop Lock's window (LoopView), then the end saturator
+    // a row of LOOP LOCK, PARA and SUB GUARD (0.30), then INPUT, DRIFT and Loop Lock's window (LoopView)
     static constexpr double kRow6 = kRow5 + kLabRowH + 8.0, kRow7 = kRow6 + kRowH + 8.0, kLoopViewH = 116.0;
     // row 7: INPUT (Input), DRIFT (Drift Seed, Start Drift, Speed Drift) and Loop Lock's window (LoopView)
     static constexpr double kInputLeft = 8.0, kInputRight = 88.0;
     static constexpr double kDriftLeft = 96.0, kDriftRight = 312.0, kLoopViewLeft = 320.0, kLoopViewRight = 1124.0;
-    static constexpr double kTailTop = kRow7 + kLoopViewH + 8.0;
-    static constexpr double kHeight = kTailTop + smacheratr::TailPanel::kOpenHeight + 8.0;
+    static constexpr double kHeight = kRow7 + kLoopViewH + 8.0;
     // the panels' places (left, right) in the Classic layout, for the host test
     static constexpr double kSweepLeft = 8.0, kSweepRight = 258.0;          // sweep row 1: Sweep, Curve, Tone (on); Drive, Tone
     static constexpr double kBellsLeft = 266.0, kBellsRight = 854.0;        // sweep row 1: the bell picker, the On strip, Sync, Sync Rate; the picked bell's knobs
@@ -61,7 +58,7 @@ public:
     static constexpr double kMoveLeft = 8.0, kMoveRight = 342.0;            // row 2: Sync, Sync Rate, Movement, Rate, Seed
     static constexpr double kBandMoveLeft = 350.0, kBandMoveRight = 626.0;  // row 2: Mid Move, High Move, Air Move
     static constexpr double kShapeLeft = 634.0, kShapeRight = 846.0;        // row 2: Rise, Fall, Depth
-    static constexpr double kOutLeft = 854.0, kOutRight = 1124.0;           // row 2: Mix, Output
+    static constexpr double kOutLeft = 854.0, kOutRight = 1124.0;           // row 2: Mix, Output; Soft Clip over Hard Clip
     static constexpr double kSeedBLeft = 8.0, kSeedBRight = 290.0;          // row 3: Seed B, Blend, Link
     static constexpr double kLowLeft = 298.0, kLowRight = 470.0;            // row 3: Push, Dip (the Low band's)
     static constexpr double kExtremeLeft = 478.0, kExtremeRight = 770.0;    // row 3: Drop Out, Density, Speed (centred)
@@ -108,15 +105,12 @@ public:
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
     // The Basic page (pluginkit/ui/BasicView.h): Loop Lock's window (LoopView); Input, Drive (SWEEP's) and Movement; Loop
-    // Lock, Length and Sub Guard; Mix and Output; the end saturator in the extras
+    // Lock, Length and Sub Guard; Mix, Output, Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
 
 private:
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
     GestureView* makeGestureView (const VSTGUI::CRect& r);
     LoopView* makeLoopView (const VSTGUI::CRect& r);
     LoopView* loopView = nullptr;

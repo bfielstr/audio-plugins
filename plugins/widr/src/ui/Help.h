@@ -2,6 +2,8 @@
 
 #include "../core/Params.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <string>
 
 namespace widr::help {
@@ -45,6 +47,8 @@ inline const char* forParam (uint32_t id)
         case kGroup: return "Widrs listen to the others in the same group (1 to 8) only.";
         case kMonoCheck: return "Listen in mono (L + R), to check the fold.";
         case kOutput: return "Overall output level.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         case kCinema:
             return "The cinema stage. widr hears the mix as five lanes (Voice, Bass, Hits, Tones, Ambience) and places "
                    "each by its Position: the Centre ones stay dry and mono in the middle, the Wide and Beyond ones are "
@@ -59,7 +63,7 @@ inline const char* forParam (uint32_t id)
         default:
             break;
     }
-    if (id >= kLaneBase && id < kNumPluginParams)
+    if (id >= kLaneBase && id < kLaneBase + 2 * kNumLanes)
     {
         static const char* what[kNumLanes] = {
             "Voice: speech and singing in the centre (harmonic, moving at a syllable rate).",

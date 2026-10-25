@@ -1,5 +1,6 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
 #include "pluginkit/NoDenormals.h"
 
 #include <algorithm>
@@ -88,14 +89,8 @@ void Engine::prepare (double sampleRate, int maxBlock)
         s.glue.prepare (sr);
     for (auto& g : subGlue)
         g.prepare (sr);
-    tail.prepare (sr, std::max (1, maxBlock));
-    tailSub.prepare (sr, std::max (1, maxBlock));
     for (int ch = 0; ch < 2; ++ch)
-    {
         subOut[ch].assign ((size_t)std::max (1, maxBlock), 0.0f);
-        subThru[ch].assign ((size_t)std::max (1, maxBlock), 0.0f);
-        tailDelay[ch].assign ((size_t)kGuardDelay, 0.0f);
-    }
     for (auto* v : {&guardG, &guardMix, &guardShare})
         v->assign ((size_t)std::max (1, maxBlock), 0.0);
     lab.prepare (sr);
@@ -429,13 +424,7 @@ void Engine::reset ()
     guardRun = false;
     guardBlock = guardFade > 0.0;
     for (int c = 0; c < 2; ++c)
-    {
         guardDry[c].reset ();
-        std::fill (tailDelay[c].begin (), tailDelay[c].end (), 0.0f);
-    }
-    tailW = 0;
-    tailInMs = tailOutMs = 0.0;
-    tailSub.reset ();
     drive.reset ();
     for (int k = 0; k < kMaxPasses; ++k)
     {
@@ -451,7 +440,6 @@ void Engine::reset ()
     mix = (float)std::clamp (p[kMix], 0.0, 1.0);
     out = dbToGain (p[kOutput]);
     quiet = (int)sr;
-    tail.reset ();
     lab.reset ();
     for (auto& d : dryDelay)
         std::fill (d.begin (), d.end (), 0.0f);
@@ -472,38 +460,26 @@ void Engine::setParam (uint32_t id, double plain)
     }
     if (id == kSeedB || id == kDensity)
         applyPattern (true);
-    if (id >= kBandCount)
-        return; // (the split's: read where they are used)
     if (id >= kTailBase)
+        return; // (the split's and the later ones: read where they are used; the old end saturator's are retired)
+    switch (id)
     {
-        // (the end saturator, and Sub Guard's own for the steady lows)
-        const uint32_t field = id >= kTailExt4Base   ? smacheratr::kTailExt4First + (id - kTailExt4Base)
-                               : id >= kTailExt3Base ? smacheratr::kTailExt3First + (id - kTailExt3Base)
-                               : id >= kTailExt2Base ? smacheratr::kTailExt2First + (id - kTailExt2Base)
-                               : id >= kTailExtBase  ? pk::kTailFields + (id - kTailExtBase)
-                                                     : id - kTailBase;
-        tail.setParam (field, plain);
-        tailSub.setParam (field, plain);
+        case kDrive: drive.setAmount (plain); break;
+        case kGlue:
+            for (auto& s : state)
+                s.glue.setAmount (plain);
+            for (auto& g : subGlue)
+                g.setAmount (plain);
+            break;
+        case kGrit:
+            for (auto& s : state)
+                s.grit.setAmount (plain);
+            for (auto& g : subGrit)
+                g.setAmount (plain);
+            break;
+        case kSeed: applyPattern (true); break;
+        default: break; // (the rest are read where they are used; the 0.18 filters' are not used)
     }
-    else
-        switch (id)
-        {
-            case kDrive: drive.setAmount (plain); break;
-            case kGlue:
-                for (auto& s : state)
-                    s.glue.setAmount (plain);
-                for (auto& g : subGlue)
-                    g.setAmount (plain);
-                break;
-            case kGrit:
-                for (auto& s : state)
-                    s.grit.setAmount (plain);
-                for (auto& g : subGrit)
-                    g.setAmount (plain);
-                break;
-            case kSeed: applyPattern (true); break;
-            default: break; // (the rest are read where they are used; the 0.18 filters' are not used)
-        }
 }
 
 void Engine::setTransport (double tempo, double ppq, bool isPlaying)
@@ -514,7 +490,6 @@ void Engine::setTransport (double tempo, double ppq, bool isPlaying)
     songPpq = ppq;
     playing = isPlaying;
     transportSet = true;
-    lab.setTransport (bpm, ppq, isPlaying);
 }
 
 void Engine::targets (int pass, double th, double* g, double* gain, bool snap)
@@ -1171,8 +1146,6 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     {
         for (auto& v : subOut)
             v.assign ((size_t)n, 0.0f);
-        for (auto& v : subThru)
-            v.assign ((size_t)n, 0.0f);
         for (auto* v : {&guardG, &guardMix, &guardShare})
             v->assign ((size_t)n, 0.0);
     }
@@ -1543,7 +1516,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 subGainPrev = subGainNow;
             const double share0 = floorShare;
             glide (floorShare, std::pow (10.0, std::clamp (p[kSubFloor], kSubFloorMin, 0.0) / 20.0), tickSmooth);
-            // (what the replacement after the end saturator needs, sample by sample: the guard's corner, fade and share, and
+            // (what the replacement at the output needs, sample by sample: the guard's corner, fade and share, and
             // the steady lows at their gain; Mix and Output are applied to them below)
             for (int i = 0; i < m; ++i)
             {
@@ -1689,34 +1662,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->guardAmount.store ((float)guardFade, rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
-    tail.process (yl, yr, n);
     if (guardBlock)
     {
-        // Sub Guard: the output's lows (after the end saturator) replaced by the steady ones, delayed as the end saturator
-        // delays, at the gain it has on them alone (an end saturator of their own, the same settings: its output's slow RMS
-        // against its input's; only the level is taken from it, so its harmonics of the lows are not doubled)
-        const int tailLat = std::min (tail.latency (), kGuardDelay - 1);
-        double inE = 0.0, outE = 0.0;
-        for (int ch = 0; ch < 2; ++ch)
-            std::copy (subOut[ch].begin (), subOut[ch].begin () + n, subThru[ch].begin ());
-        tailSub.process (subThru[0].data (), subThru[1].data (), n);
-        for (int i = 0; i < n; ++i)
-            for (int ch = 0; ch < 2; ++ch)
-            {
-                tailDelay[ch][(size_t)tailW] = subOut[ch][(size_t)i];
-                subOut[ch][(size_t)i] = tailDelay[ch][(size_t)((tailW - tailLat) & (kGuardDelay - 1))];
-                if (ch == 1)
-                    tailW = (tailW + 1) & (kGuardDelay - 1);
-                inE += (double)subOut[ch][(size_t)i] * subOut[ch][(size_t)i];
-                outE += (double)subThru[ch][(size_t)i] * subThru[ch][(size_t)i];
-            }
-        if (inE > 2.0 * n * 1e-10)
-        {
-            const double c = 1.0 - std::exp (-(double)n / (kGuardTailSec * sr));
-            tailInMs += (inE / (2.0 * n) - tailInMs) * c;
-            tailOutMs += (outE / (2.0 * n) - tailOutMs) * c;
-        }
-        const double tailGain = tailInMs > 1e-20 ? std::min (std::sqrt (tailOutMs / tailInMs), 4.0) : 1.0;
+        // Sub Guard: the output's lows replaced by the steady ones
         for (int i = 0; i < n; ++i)
         {
             const double gf = guardMix[(size_t)i];
@@ -1728,7 +1676,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 double lo, hi;
                 guardWet[ch].tick (*io[ch], cg, lo, hi);
                 const double a2 = guardShare[(size_t)i];
-                const double guarded = hi + lo * (1.0 - a2) + a2 * tailGain * subOut[ch][(size_t)i];
+                const double guarded = hi + lo * (1.0 - a2) + a2 * subOut[ch][(size_t)i];
                 *io[ch] = (float)(*io[ch] + (guarded - *io[ch]) * gf);
             }
         }
@@ -1737,10 +1685,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             guardBlock = false;
             for (auto& w : guardWet)
                 w.reset ();
-            tailSub.reset ();
-            tailInMs = tailOutMs = 0.0;
         }
     }
+    pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5); // (the very end)
 }
 
 } // namespace moistr

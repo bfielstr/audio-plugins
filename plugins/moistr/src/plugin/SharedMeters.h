@@ -11,8 +11,7 @@ namespace moistr {
 
 struct SharedMeters
 {
-    Meters meters;                 // the bands' movement, for the display
-    smacheratr::Meters tailMeters; // the saturator at the end of the chain
+    Meters meters; // the bands' movement, for the display
     std::atomic<int> latency {0};
     std::atomic<double> sampleRate {48000.0};
     pk::CaptureBuffer capture; // the output, for the Basic page's capture band

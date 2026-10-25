@@ -4,6 +4,8 @@
 #include "smacheratr/src/core/Glue.h"
 #include "smacheratr/src/core/NoOverlap.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -77,11 +79,8 @@ void Engine::Channel::reset ()
 
 void Engine::prepare (double sampleRate, int maxBlock)
 {
+    (void)maxBlock; // (processed in chunks of kChunk)
     sr = sampleRate;
-    tail.prepare (sr, maxBlock);
-    for (uint32_t id = kTailBase; id < kNumParams; ++id)
-        if (isTailParam (id))
-            tail.setParam (tailField (id), p[id]);
     for (auto& c : chan)
     {
         c.os.prepare (sr, kChunk);
@@ -134,16 +133,13 @@ void Engine::reset ()
     mix = (float)std::clamp (p[kMix], 0.0, 1.0);
     regionGain = dbToGain (std::clamp (p[kDriveAmount], 0.0, 36.0));
     regionMix = 0.0f;
-    tail.reset ();
 }
 
 void Engine::setParam (uint32_t id, double plain)
 {
     if (id >= kNumParams)
         return;
-    p[id] = plain;
-    if (isTailParam (id))
-        tail.setParam (tailField (id), plain);
+    p[id] = plain; // (read where they are used; the old end saturator's are retired)
 }
 
 void Engine::retune (bool force, const bool* works)
@@ -404,12 +400,12 @@ void Engine::processChunk (const float* inL, const float* inR, float* outL, floa
         outL[i] = (dryBuf[0][i] * (1.0f - mix) + wetBuf[0][i] * mix) * out;
         outR[i] = (dryBuf[1][i] * (1.0f - mix) + wetBuf[1][i] * mix) * out;
     }
-    if (hasTail)
-        tail.process (outL, outR, n);
+    if (hasEndClip)
+        pk::endClip (outL, outR, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
 
     if (meters)
     {
-        // the analyser: the input, and the output after the tail
+        // the analyser: the input, and the output after the clips
         for (int i = 0; i < n; ++i)
             meters->scope.push (inMono[i], 0.5f * (outL[i] + outR[i]));
         // each band's cut and level: the larger of the two detectors when they work apart

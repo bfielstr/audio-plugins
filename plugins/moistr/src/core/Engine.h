@@ -2,7 +2,7 @@
 // crossover (Linkwitz-Riley 4th order), keeps the low end locked and lets the bands above it rise and fall
 // on a seeded pattern, then glues the bands back together with a compressor and a little soft clipping.
 //
-//   input -> SWEEP -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> Smacheratr (the end saturator)
+//   input -> SWEEP -> Drive -> pass 1 -> [pass 2] -> Mix (dry / wet) -> Output -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
 // SWEEP (0.24, Sweep.h; on in a new instance, off in a state saved before 0.24): eight sweeping bell EQs
 // (0.26; two before), a High Shelf on a smooth orbit, a level-compensated saturator (Curve, Clean Sub, Sub
@@ -114,18 +114,17 @@
 //               through the passes' all-passes only (the same corners, every band at unity: in phase with what the passes
 //               do to the lows), through a Glue and Grit of their own (their gain on the lows alone), delayed with the LAB's
 //               Low band, at the Low band's Level (none while a LAB chain is soloed), then Mix (the dry signal's lows for
-//               the rest) and Output, and delayed as the end saturator delays, at the gain it has on them alone (an end
-//               saturator of their own, the same settings: only its level is used). After the end saturator the output's
-//               lows (the low side of the same split) are replaced by them, its band above the corner kept as it is. So no
-//               dip after the tap reaches the lows (the bands' fall and Drop Out, Low Dip, the gestures' level lanes,
-//               Wobble, the LAB chains, the Glue's pumping, the end saturator pressed by the rest), and PARA's low-pass path
+//               the rest) and Output. Then the output's lows (the low side of the same split) are replaced by them, its band
+//               above the corner kept as it is (before Soft Clip and Hard Clip). So no dip after the tap reaches the lows
+//               (the bands' fall and Drop Out, Low Dip, the gestures' level lanes, Wobble, the LAB chains, the Glue's
+//               pumping), and PARA's low-pass path
 //               moves only above the corner (ParaSplit.h). Low Push (a swell) is held too. The SWEEP stage's bells move
 //               the lows on purpose and are kept, unless Guard Bells. Sub Floor: the guarded lows are a blend, the steady
 //               ones x 10^(Floor / 20) and the wet ones x the rest, so they may dip at most to Sub Floor. Switching fades
 //               over 20 ms; off it is not run (the engine is then as without it, bit for bit).
 //
-// The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too) and the end
-// saturator's (always in the path).
+// The latency is the LAB's (its slowest chain's and POST's; the dry signal for Mix is delayed by it too). At the very
+// end: Soft Clip, then Hard Clip (pluginkit/EndClip.h), after Sub Guard's replacement of the lows.
 #pragma once
 
 #include "Dsp.h"
@@ -137,8 +136,6 @@
 #include "ParaSplit.h"
 #include "Params.h"
 #include "Sweep.h"
-
-#include "smacheratr/src/core/Tail.h"
 
 #include <algorithm>
 #include <array>
@@ -211,9 +208,6 @@ constexpr double kLiquidMaxDb = 18.0, kLiquidF2Db = 12.0, kLiquidQMin = 1.5, kLi
 // (kGestureLevelDb, kCloseOctaves and kCloseOpenHz: Gesture.h)
 constexpr double kLevelFadeShare = 16.0, kCloseQ = 5.0;
 constexpr double kSmoothMinSec = 0.002, kSmoothMaxBeats = 0.0625;
-// Sub Guard: the end saturator's gain on the steady lows follows them over this (s); its delay line's length (samples)
-constexpr double kGuardTailSec = 0.3;
-constexpr int kGuardDelay = 1 << 12;
 
 class Engine
 {
@@ -225,12 +219,11 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return lab.latency () + tail.latency (); } // the LAB's, then the end saturator's
+    int latency () const { return lab.latency (); } // the LAB's
     int labLatency () const { return lab.latency (); }
     const Lab& labStage () const { return lab; }
     Lab& labStage () { return lab; }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // The host's transport for the next process (): tempo, the song position at its first sample (in
     // quarter notes) and whether it plays. While it plays the movement's phase follows the song position.
@@ -457,7 +450,6 @@ private:
     float mix = 1.0f, out = 1.0f, smooth = 0.001f;
     int quiet = 0; // samples since the input was last heard
     Meters* meters = nullptr;
-    smacheratr::Tail tail;
     // the LAB (0.30), whether it runs this tick (Lab::active), and the dry signal's delay to its latency (always
     // written, read only while it has one)
     Lab lab;
@@ -495,15 +487,12 @@ private:
     dsp::Glue subGlue[kMaxPasses];
     dsp::Saturator subGrit[kMaxPasses];
     double guardBellsTap = 0.0; // (the SWEEP stage's steady tap's share: Guard Bells' fade)
-    // the replacement after the end saturator: whether this block has one, per sample the guard's corner (g), fade and Sub
-    // Floor's share, the steady lows at the output (then through tailSub); the dry signal's lows (for Mix)
+    // the replacement at the output: whether this block has one, per sample the guard's corner (g), fade and Sub Floor's
+    // share, the steady lows at the output; the dry signal's lows (for Mix)
     bool guardBlock = false;
     std::vector<double> guardG, guardMix, guardShare;
-    std::vector<float> subOut[2], subThru[2], tailDelay[2];
-    int tailW = 0;
-    double tailInMs = 0.0, tailOutMs = 0.0;
+    std::vector<float> subOut[2];
     dsp::Lr8Split guardDry[2];
-    smacheratr::Tail tailSub;
     dsp::Lr8Split guardTap[2], guardWet[2];
     dsp::Lr4Allpass subAp[kMaxPasses][kMaxXovers][2];
     double subLow[2][kTick] {}, subLow2[2][kTick] {};

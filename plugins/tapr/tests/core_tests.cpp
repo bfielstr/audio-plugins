@@ -115,7 +115,7 @@ std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& tweak = {})
     e->reset ();
     return e;
 }
-// the tape alone (Cut off), no end saturator, Output 0 dB
+// the tape alone (Cut off), Output 0 dB
 void plain (Engine& e)
 {
     e.setParam (kCutOn, 0.0);
@@ -432,7 +432,7 @@ TEST (defaults_level_a_bass)
 
 TEST (cpu_budget)
 {
-    // 10 s of stereo bass: the defaults, and the same with the end saturator on; the best of three
+    // 10 s of stereo bass: the defaults, and the same with Soft Clip and Hard Clip on; the best of three
     auto x = bass (10.0);
     for (bool heavy : {false, true})
     {
@@ -442,14 +442,17 @@ TEST (cpu_budget)
         {
             auto e = engine ([heavy] (Engine& e) {
                 if (heavy)
-                    e.setParam ((uint32_t)kTailBase + pk::kTailOn, 1.0);
+                {
+                    e.setParam (kSoftClip, 1.0);
+                    e.setParam (kHardClip, 1.0);
+                }
             });
             const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = run (*e, x, nullptr, 512);
             secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         CHECK (finite (l), "finite");
-        std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0, heavy ? "the defaults, the end saturator on" : "the defaults");
+        std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0, heavy ? "the defaults, the clips on" : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }

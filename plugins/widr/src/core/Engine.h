@@ -23,8 +23,8 @@
 //   7. Mono Below: the side is high-passed by a Linkwitz-Riley 8th-order filter and the mid goes
 //      through the matching all-pass (the same crossover's low-pass plus high-pass), so the low end
 //      is mono and mid and side stay in phase above it.
-//   8. Output, then the Smacheratr tail.
-// Width 0 bypasses everything but Output and Mono Check: bit-exact at 0 dB (the tail only delays).
+//   8. Output, then Soft Clip and Hard Clip (pluginkit/EndClip.h; off by default).
+// Width 0 bypasses everything but Output and Mono Check (and the clips): bit-exact at 0 dB.
 //
 // The cinema stage (Cinema above 0; at 0 none of it runs and Widr is what it was, bit for bit):
 //   a. The input is separated into five element lanes that sum back to it (Lanes.h): Voice, Bass,
@@ -53,9 +53,8 @@
 #include "Reverb.h"
 #include "Theatre.h"
 
-#include "locus/src/core/Fft.h"
+#include "Fft.h"
 #include "pluginkit/ScopeBuffer.h"
-#include "smacheratr/src/core/Tail.h"
 
 #include <array>
 #include <atomic>
@@ -104,33 +103,20 @@ struct MixOutcome
 class Engine
 {
 public:
-    // withTail: the end-of-chain Smacheratr (off where Widr is built into another plug-in)
-    explicit Engine (bool withTail = true);
+    // withEndClip: Soft Clip and Hard Clip at the end (off where Widr is built into another plug-in, which
+    // has its own end)
+    explicit Engine (bool withEndClip = true);
     void prepare (double sampleRate, int maxBlock);
     void reset ();
     void setParam (uint32_t id, double plain)
     {
-        if (id >= kNumPluginParams)
-            return;
-        p[id] = plain;
-        if (id >= kTailBase && id < kTailBase + pk::kTailFields)
-            tail.setParam (id - kTailBase, plain);
-        else if (id >= kNumParams)
-            return; // (the cinema stage's: read from p[])
-        else if (id >= kTailExt4Base)
-            tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
-        else if (id >= kTailExt3Base)
-            tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-        else if (id >= kTailExt2Base)
-            tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
-        else if (id >= kTailExtBase)
-            tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
+        if (id < kNumPluginParams)
+            p[id] = plain; // (read where they are used; the old end saturator's are retired)
     }
     double param (uint32_t id) const { return p[id]; }
-    // the end saturator's, and the lanes' STFT while Cinema is above 0
-    int latency () const { return (hasTail ? tail.latency () : 0) + (p[kCinema] > 0.0 ? lanes.latency () : 0); }
+    // the lanes' STFT while Cinema is above 0
+    int latency () const { return p[kCinema] > 0.0 ? lanes.latency () : 0; }
     int cinemaLatency () const { return lanes.latency (); }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -234,9 +220,9 @@ private:
     // mid and side, what the voices add to the mid (Gm) and to the side (Gs), and the mid with them
     // (Mono: where the voices are still in phase with the mid, low down, they add more than power)
     static constexpr int kFft = 2048, kHop = 1024;
-    locus::Fft fft {kFft};
+    Fft fft {kFft};
     std::vector<float> ringM, ringS, ringGm, ringGs, ringMono, window, frame;
-    std::vector<locus::Fft::cf> spec;
+    std::vector<Fft::cf> spec;
     int ringPos = 0, hopCount = 0;
     std::array<float, kBands> eM {}, eS {}, eGm {}, eGs {}, eMono {}, pubSide {};
     std::array<float, kBands> gCur {}, gYieldCur {};
@@ -245,8 +231,7 @@ private:
     double sLR = 0.0, sLL = 0.0, sRR = 0.0;
     float corr = 1.0f;
 
-    smacheratr::Tail tail;
-    bool hasTail = true;
+    bool hasEndClip = true;
 
     // the cinema stage (Lanes.h, Theatre.h, Depth.h): runs only while Cinema is above 0
     void cinemaReset ();

@@ -1,6 +1,5 @@
-# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Locus, Stretchr,
-# Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr, Moistr, Smeezr, Probr, Sweepr, Tapr, Pinchr, Bubr)
-# on Windows,
+# Downloads the latest release and installs the VST3 plug-ins (Smemplr, Multidyn, Smacheratr, Para,
+# Widr, Gentlr, Dropr, Moistr, Probr, Sweepr, Tapr, Pinchr, Bubr) on Windows,
 # into a "bfielstr" vendor folder inside the VST3 folder. Existing versions are replaced; copies
 # left at the top of the VST3 folder by older installers are removed (only if they are ours).
 #
@@ -11,7 +10,7 @@
 # current user into %LOCALAPPDATA%\Programs\Common\VST3.
 #
 # Environment overrides: $env:SIMPLR_VERSION = 'v0.2.0'; $env:SIMPLR_DEST = 'D:\VST3';
-#   $env:SIMPLR_PLUGINS = 'Multidyn Locus' to install only some of them
+#   $env:SIMPLR_PLUGINS = 'Multidyn Tapr' to install only some of them
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue' # Invoke-WebRequest is very slow with the progress bar

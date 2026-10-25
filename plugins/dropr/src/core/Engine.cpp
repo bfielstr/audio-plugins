@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -34,19 +36,13 @@ ParamArray defaultParams ()
     return p;
 }
 
-void Engine::prepare (double sampleRate, int maxBlock)
+void Engine::prepare (double sampleRate, int /*maxBlock*/)
 {
     sr = sampleRate;
     xfCoef = 1.0 - std::exp (-(double)kChunk / (kXoverSmoothMs * 0.001 * sr));
     smooth = (float)coeff (20.0, sr);
     mkSmooth = (float)coeff (20.0, sr);
     duckStep = (float)(1.0 / std::max (1.0, kModeDuckMs * 0.001 * sr));
-    tail.prepare (sr, maxBlock);
-    for (uint32_t f = 0; f < smacheratr::kTailAllFields; ++f)
-    {
-        const uint32_t id = smacheratr::tailParamOf (f, {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base});
-        tail.setParam (f, p[id]);
-    }
     reset ();
 }
 
@@ -98,7 +94,6 @@ void Engine::reset ()
     gin = dbToGain (p[kInput]);
     gout = dbToGain (p[kOutput]);
     mix = (float)std::clamp (p[kMix], 0.0, 1.0);
-    tail.reset ();
 }
 
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n)
@@ -125,7 +120,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             meters->outDb[k].store (used ? band[k].mOut : -150.0f, std::memory_order_relaxed);
         }
     }
-    tail.process (yl, yr, n);
+    pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
 }
 
 void Engine::processChunk (const float* xl, const float* xr, float* yl, float* yr, int n)

@@ -47,7 +47,6 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tail.reset ();
     stage = nullptr;
     gonio = nullptr;
     statusLabel = nullptr;
@@ -120,33 +119,22 @@ void Editor::buildUI (CFrame* f)
     bind (cp, new Knob (knobAt (100, 36), this, kDepth));
     bind (cp, new Knob (knobAt (166, 36), this, kTheatre));
 
-    // the parallel levels: the input and what Widr adds
-    auto* lp = new Panel (CRect (8, kLevelsTop, 752, kLevelsTop + 40), "");
+    // the parallel levels: the input and what Widr adds; then Soft Clip and Hard Clip (the end of the chain)
+    auto* lp = new Panel (CRect (8, kLevelsTop, 752, kLevelsTop + kLevelsH), "");
     root->addView (lp);
-    bind (lp, new pk::HSlider (CRect (12, 8, 364, 32), this, kDryLevel, "Dry"));
-    bind (lp, new pk::HSlider (CRect (380, 8, 732, 32), this, kWetLevel, "Wet"));
-
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight)));
+    bind (lp, new pk::HSlider (CRect (12, 8, 12 + kSliderW, 32), this, kDryLevel, "Dry"));
+    bind (lp, new pk::HSlider (CRect (24 + kSliderW, 8, 24 + 2 * kSliderW, 32), this, kWetLevel, "Wet"));
+    bind (lp, new Toggle (CRect (kClipLeft, 11, kClipLeft + kClipW, 29), this, kSoftClip, "Soft Clip"));
+    bind (lp, new Toggle (CRect (kClipLeft + kClipW + 8, 11, kClipLeft + 2 * kClipW + 8, 29), this, kHardClip, "Hard Clip"));
 
     applyParamTooltips (&help::forParam);
     idle ();
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? (double)s->meters.sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
     // how wide and in what character (Character, Width), the top's sheen (Air), the low end kept mono
-    // (Mono Below) and the cinema stage's lanes (Cinema); Output
+    // (Mono Below) and the cinema stage's lanes (Cinema); Output, Soft Clip and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "widr";
@@ -168,8 +156,7 @@ pk::basic::Spec Editor::basicSpec ()
     };
     s.rows = {{segmented (kCharacter, "Character", {"Tight", "Wide", "Epic", "Surround"})},
               {knob (widr::kWidth), knob (kAir), knob (kMonoBelow), knob (kCinema)}};
-    s.output = {knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (348, 6, 432, 28);
@@ -179,16 +166,12 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if (stage)
         stage->invalid ();
 }
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (stage)
         stage->idle ();
     if (gonio)
@@ -233,16 +216,15 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the stage, the goniometer, the width over the levels, the space over the mix; the end saturator under
-    // them, beside the cinema stage (the lanes over Cinema)
+    // the stage, the goniometer, the width over the levels, the space over the mix; the cinema stage (the
+    // lanes beside Cinema) under them
     s.panels = {
         {"stage", "stage", {8, 40, 560, 300}, 0},
         {"gonio", "goniometer", {568, 40, 752, 300}, 0},
         {"width", "", {8, 308, 752, 432}, 0, 0},
-        {"levels", "levels", {8, kLevelsTop, 752, kLevelsTop + 40}, 0, 0},
+        {"levels", "levels", {8, kLevelsTop, 752, kLevelsTop + kLevelsH}, 0, 0},
         {"space", "", {8, 440, 376, 548}, 0, 1},
         {"mix", "", {384, 440, 752, 548}, 0, 1},
-        {"tail", "end of the chain", {8, kTailTop, 752, kTailTop + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
         {"lanes", "", {kLanesLeft, kLanesTop, 512, kLanesTop + 140}, 1, 2},
         {"cinema", "", {kCinemaLeft, kLanesTop, 752, kLanesTop + 140}, 1, 2},
     };

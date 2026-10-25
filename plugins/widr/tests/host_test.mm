@@ -94,25 +94,12 @@ int main (int argc, char** argv)
         CHECK (a.controller->getParameterCount () == (int32)kNumPluginParams, "param count");
         CHECK (countNonAutomatable (a.controller) == 0, "non-automatable parameters");
         checkPresetMenu (a.controller); // Init first, Save as Default, factory presets
-        checkNewInstanceGentlr (a.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kTailExt3Base + pk::kTailExt3Slope);
-        // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
-        // starts: the checks are about widr's own sound
-        {
-            State st;
-            for (uint32_t id = 0; id < kNumPluginParams; ++id)
-            {
-                st.norm[id] = defaultNormalized (id);
-                st.has[id] = true;
-            }
-            st.norm[kTailBase + pk::kTailOn] = 0.0;
-            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
-            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
-            CHECK (a.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
-            CHECK (b.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
-        }
+        // a new instance: the clips at the end off
+        CHECK (a.controller->getParamNormalized (kSoftClip) == 0.0 && a.controller->getParamNormalized (kHardClip) == 0.0,
+               "a new instance: Soft Clip and Hard Clip off");
         CHECK (a.start () && b.start (), "start");
         const uint32 latency = a.processor->getLatencySamples ();
-        CHECK (latency > 0 && latency < 200, "latency reported %u", latency);
+        CHECK (latency == 0, "no latency reported (Cinema off): %u", latency);
 
         // A: full-band material, B: band-limited material around 1 kHz. Each only gives way to a
         // higher role, so a role change on one moves the other's gains in the band they share.

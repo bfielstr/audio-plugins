@@ -71,7 +71,6 @@ Editor::Editor (Controller* c) : pk::EditorBase (c, kWidth, kHeight), ctl (c) {}
 
 void Editor::onClose ()
 {
-    tail.reset ();
     display = nullptr;
     scStatus = nullptr;
     rmsWindowBox = nullptr;
@@ -162,6 +161,10 @@ void Editor::buildUI (CFrame* f)
     bind (root, new Knob (knobRect (kGlobalColLeft, 188), this, kAmount));
     softenKnob = bind (root, new Knob (knobRect (kGlobalColLeft, 262), this, kSoften));
     bind (root, new Toggle (CRect (kGlobalColLeft, kColorTop, kGlobalColLeft + 60, kColorTop + 18), this, kSoftenColor, "Color"));
+    // the end of the chain under them: Soft Clip, then Hard Clip
+    bind (root, new Toggle (CRect (kGlobalColLeft, kClipTop, kWidth - 8, kClipTop + kClipH), this, kSoftClip, "Soft Clip"));
+    bind (root, new Toggle (CRect (kGlobalColLeft, kClipTop + kClipH + kClipGap, kWidth - 8, kClipTop + 2 * kClipH + kClipGap), this, kHardClip,
+                            "Hard Clip"));
 
     // bottom row
     softKneeToggle = bind (root, new Toggle (CRect (8, 352, 96, 372), this, kSoftKnee, "Soft Knee"));
@@ -187,10 +190,6 @@ void Editor::buildUI (CFrame* f)
     root->addView (lp);
     bind (lp, new Toggle (CRect (12, 30, 66, 50), this, kPreLimit, "On"));
     bind (lp, new Knob (knobRect (96, 6), this, kPreLimitCeiling));
-    // the end-of-chain Smacheratr, after the Output gain
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, 424, 912, 424 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     updateLayout ();
@@ -198,18 +197,10 @@ void Editor::buildUI (CFrame* f)
     idle ();
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kSatOn, kSatExtBase, kSatExt2Base, kSatExt3Base, kSatExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* m = c->getMeters (); return m ? m->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* m = c->getMeters (); return m ? &m->satMeters : nullptr; });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
-    // how many bands and which compressor (Bands, Style), how hard (Amount) and how fast (Time); Output
+    // how many bands and which compressor (Bands, Style), how hard (Amount) and how fast (Time); Output, Soft
+    // Clip and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "multidyn";
@@ -223,8 +214,7 @@ pk::basic::Spec Editor::basicSpec ()
     };
     s.rows = {{segmented (kBands, "Bands", {"1", "2", "3", "4"}, 200), segmented (kStyle, "Style", {"OTT", "Character"})},
               {knob (kAmount), knob (kTime)}};
-    s.output = {knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (504, 6, 570, 28);
@@ -307,8 +297,6 @@ void Editor::setNorm (uint32_t id, double v)
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if (display)
         display->invalid ();
     if (id == kBands || id == kSubOn)
@@ -330,8 +318,6 @@ void Editor::updateLooks ()
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (display)
         display->idle ();
     if (scStatus)
@@ -382,15 +368,15 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the bands (the display with each band's controls around it) beside the crossover row, the side-chain
-    // and the pre-limiter stacked; the end saturator under them. The band controls the display places as
-    // the band count changes (those not shown yet have no place) go with the bands.
+    // the bands (the display with each band's controls around it) beside the crossover row, the side-chain,
+    // the pre-limiter and the clips (under the global column) stacked. The band controls the display places
+    // as the band count changes (those not shown yet have no place) go with the bands.
     s.panels = {
         {"bands", "bands", {kBandColLeft, kDisplayTop, kWidth - 8, 348}, 0},
         {"crossover", "crossover", {kBandColLeft, 350, 342, 420}, 0, 0},
         {"sidechain", "", {350, 344, 640, 416}, 0, 0},
         {"prelimit", "", {648, 344, 822, 416}, 0, 0},
-        {"tail", "end of the chain", {8, 424, kWidth - 8, 424 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"clip", "", {kGlobalColLeft, kClipTop - 4, kWidth - 8, kClipTop + 2 * kClipH + kClipGap + 4}, 0, 0},
     };
     s.fallback = "bands";
     return s;
