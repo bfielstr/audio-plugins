@@ -8,7 +8,7 @@
 //          |     -> Drive [down] -> the tilt undone, two more band-passes, a gain (the ceiling at Freq stays put) -> Boost
 //          |                                                                       |
 //          +-> dry ------------------------------> Dry/Wet: dry and the effect, then Low Cut (blended) <-+
-//                -> the output limiter (0 dBFS) -> Output -> Soft Clip -> Hard Clip
+//                -> the output limiter (0 dBFS) -> Output -> Soft Clip -> Hard Clip (pluginkit/EndClip.h)
 //
 // The band. Four band-pass sections whose frequencies and Qs were fitted at every Freq (13) and Q-Factor (11)
 // of the reference, interpolated between them (log Freq, Q-Factor). The first two are the focus, ahead of the

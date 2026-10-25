@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace bubr::help {
 
 inline const char* forParam (uint32_t id)
@@ -42,8 +44,8 @@ inline const char* forParam (uint32_t id)
             return "The output limiter (0 dBFS) ramps its gain down 1 ms early (that latency): cleaner when it limits. "
                    "Off: no latency, it acts at once.";
         case kOutput: return "The output level, -60 dB (silence) to 0 dB, after the output limiter.";
-        case kSoftClip: return kSoftClipHelp;
-        case kHardClip: return kHardClipHelp;
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

@@ -1,5 +1,7 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <vector>
 
 namespace bubr {
@@ -28,8 +30,7 @@ const ParamTable& paramTable ()
         v.push_back (choice (kOversample, "Oversample", "Oversample", {"Off", "2x", "4x"}, kOsOff));
         v.push_back (toggle (kLookahead, "Lookahead", "Lookahead", true));
         v.push_back (real (kOutput, "Output", "Output", -60.0, 0.0, 0.0, Curve::Linear, Disp::Db));
-        v.push_back (toggle (kSoftClip, "Soft Clip", "Soft Clip", false));
-        v.push_back (toggle (kHardClip, "Hard Clip", "Hard Clip", false));
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
         return v;
     }());
     return t;
