@@ -3,7 +3,8 @@
 // `factory_presets_tests --dump <plugin>` lists a plug-in's parameters (names, ranges, defaults,
 // choices) for writing presets. And a new instance of every plug-in runs through its end saturator with
 // Gentlr on and Gentlr's Slope Signature (the parameters found by name, as presets name them; probr,
-// which passes the sound untouched, has none; sweepr's and tapr's start off, their tape stage is the saturator).
+// which passes the sound untouched, has none; sweepr's and tapr's start off, their tape stage is the saturator, and
+// pinchr's, its germanium output stage is the colour).
 #include "pluginkit/PresetStore.h"
 
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
@@ -20,6 +21,7 @@
 #define PK_WITH_probr
 #define PK_WITH_sweepr
 #define PK_WITH_tapr
+#define PK_WITH_pinchr
 #define PK_WITH_multidyn
 #define PK_WITH_orbitr
 #define PK_WITH_para
@@ -63,6 +65,9 @@
 #endif
 #ifdef PK_WITH_tapr
 #include "tapr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_pinchr
+#include "pinchr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
@@ -152,6 +157,9 @@ const Plugin kPlugins[] = {
 #endif
 #ifdef PK_WITH_tapr
     {"tapr", tapr::paramTable},
+#endif
+#ifdef PK_WITH_pinchr
+    {"pinchr", pinchr::paramTable},
 #endif
 #ifdef PK_WITH_orbitr
     {"orbitr", orbitr::paramTable},
@@ -255,9 +263,9 @@ void checkNewInstance (const Plugin& p)
         return;
     }
 #endif
-    // sweepr's and tapr's tape stage is their saturator: their end saturator starts off (its Gentlr ready, as
-    // everywhere)
-    expect ("Saturator", n == "sweepr" || n == "tapr" ? "Off" : "On");
+    // sweepr's and tapr's tape stage is their saturator, pinchr's output stage its colour: their end saturator
+    // starts off (its Gentlr ready, as everywhere)
+    expect ("Saturator", n == "sweepr" || n == "tapr" || n == "pinchr" ? "Off" : "On");
     expect ("Saturator Gentlr", "On");
     expect ("Saturator Gentlr Slope", "Signature");
 }

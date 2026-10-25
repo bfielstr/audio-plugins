@@ -1,0 +1,10 @@
+# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: drums, smash, parallel
+comment: The hardest knee, fast both ways and driven, Dirty, blended under the dry drums.
+Input = 9 dB
+Ratio = 11
+Curve = Zener Hard
+Attack = 0
+Release = 0
+Dirty = On
+Mix = 45 %
