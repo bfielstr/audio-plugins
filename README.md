@@ -1,4 +1,4 @@
-# Audio plug-ins: smemplr, multidyn, smacheratr, para, widr, gentlr, dropr, moistr, probr, sweepr, tapr, pinchr
+# Audio plug-ins: smemplr, multidyn, smacheratr, para, widr, gentlr, dropr, moistr, probr, sweepr, tapr, pinchr, bubr
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
 to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**.
@@ -17,6 +17,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.31.0**
 | [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 | [**tapr**](plugins/tapr/README.md) | A tape saturator: drive into a fast leveller and a clipper that holds the level, highs that soften as the tape speed comes down, and a three-band Cut EQ. The leveller and the EQ each go before or after the saturation. sweepr's tape stage on its own. |
 | [**pinchr**](plugins/pinchr/README.md) | A germanium compressor: a FET compressor with six knees, from a soft resistor to a hard Zener, into a germanium output stage whose Feedback adds gain and a resonant bass bump. Mix blends the compressed and the uncompressed sound, both through that stage. |
+| [**bubr**](plugins/bubr/README.md) | A bass enhancer: a band at a frequency you tune (20 to 125 Hz), its focus set by Q-Factor, driven into a clipper (Intensity, Drive, Boost) and blended back with the dry sound, a gate keeping it to the louder parts, Low Cut, and a 0 dBFS limiter at the output. Measured setting by setting from a commercial bass enhancer, as a 1:1 model to start from. |
 
 ## Gallery
 
@@ -208,6 +209,7 @@ The main controls of each Basic page:
 | sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
 | tapr | response and curve | Drive, Speed, Compression, Lo, Mid, Hi | Mix, Output |
 | pinchr | output stage and compression curve | Input, Ratio, Attack, Release, Drive, Feedback | Mix, Output |
+| bubr | effect response and gate curve | Boost, Freq, Intensity, Q-Factor, Drive, Gate | Dry/Wet, Output, Soft Clip, Hard Clip |
 | dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
 | para | filter response | HP Freq, LP Freq, Movement | Dry/Wet, Output |
 | probr | Record, the level and the status | Mode | (none; no capture band: probr records the track itself) |
@@ -319,7 +321,7 @@ ctest --test-dir build -j 4 --output-on-failure          # everything, before a 
 ```
 
 - **Targets** per plug-in (`tapr` here): `tapr_tests` (DSP tests), `tapr_state_tests` (saved state;
-  dropr, gentlr, moistr, pinchr, probr, smacheratr, smemplr, sweepr, tapr and widr), `Tapr` (the bundle,
+  bubr, dropr, gentlr, moistr, pinchr, probr, smacheratr, smemplr, sweepr, tapr and widr), `Tapr` (the bundle,
   checked by the VST3 validator as it builds), `tapr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
   `tapr_hosttest` (macOS). The tests are named `tapr_core`, `tapr_state`, `tapr_drawbench`,
   `tapr_drawbench_layouts` and `tapr_hosttest`.
@@ -380,6 +382,7 @@ plugins/probr       analysis probe           same structure (scripts/probr_align
 plugins/sweepr      swept bells into tape    same structure
 plugins/tapr        tape saturator, Cut EQ   same structure
 plugins/pinchr      germanium compressor     same structure (tools/render.cpp: pinchr_render, for calibrating it)
+plugins/bubr        bass enhancer            same structure (tools/render.cpp: bubr_render, for calibrating it)
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

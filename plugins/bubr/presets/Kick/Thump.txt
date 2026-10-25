@@ -1,0 +1,10 @@
+# bubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: kick, drums, saturation
+comment: Driven harder at 50 Hz with a few milliseconds of attack, so the click stays clean and the thump follows.
+Freq = 50.0 Hz
+Intensity = 75 %
+Drive = 40 %
+Gate = -20.0 dB
+Attack = 5.0 ms
+Release = 60 ms
+Boost = 45 %

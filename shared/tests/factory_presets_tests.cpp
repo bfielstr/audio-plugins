@@ -16,6 +16,7 @@
 #define PK_WITH_sweepr
 #define PK_WITH_tapr
 #define PK_WITH_pinchr
+#define PK_WITH_bubr
 #define PK_WITH_multidyn
 #define PK_WITH_para
 #define PK_WITH_smacheratr
@@ -43,6 +44,9 @@
 #endif
 #ifdef PK_WITH_pinchr
 #include "pinchr/src/core/Params.h"
+#endif
+#ifdef PK_WITH_bubr
+#include "bubr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
@@ -108,6 +112,9 @@ const Plugin kPlugins[] = {
 #endif
 #ifdef PK_WITH_pinchr
     {"pinchr", pinchr::paramTable},
+#endif
+#ifdef PK_WITH_bubr
+    {"bubr", bubr::paramTable},
 #endif
 #ifdef PK_WITH_para
     {"para", para::paramTable},
@@ -182,6 +189,13 @@ void checkNewInstance (const Plugin& p)
     }
     if (n == "gentlr")
         expect ("Slope", "Signature");
+    if (n == "bubr")
+    {
+        // no end saturator: Soft Clip and Hard Clip at the end of its chain, off
+        expect ("Soft Clip", "Off");
+        expect ("Hard Clip", "Off");
+        return;
+    }
     if (n == "probr")
     {
         // an analysis probe: the sound passes untouched, so it has no clips; it starts off

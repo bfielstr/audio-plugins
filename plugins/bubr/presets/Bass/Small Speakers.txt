@@ -1,0 +1,9 @@
+# bubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, saturation
+comment: A high band hit hard, its fundamental cut away by Low Cut: the bass heard as its harmonics.
+Freq = 100 Hz
+Intensity = 80 %
+Drive = 60 %
+Low Cut = 70.0 Hz
+Boost = 35 %
+Gate = -45.0 dB
