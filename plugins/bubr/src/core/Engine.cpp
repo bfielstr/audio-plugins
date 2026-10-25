@@ -3,6 +3,7 @@
 #include "BandShape.h"
 #include "WetShape.h"
 
+#include "pluginkit/EndClip.h"
 #include "pluginkit/NoDenormals.h"
 
 #include <algorithm>
@@ -58,18 +59,6 @@ inline double clipCurve (double v)
     const double b = v + shape::kBias;
     return b / std::pow (1.0 + std::pow (std::fabs (b), shape::kKnee), 1.0 / shape::kKnee) - shape::kBiasOut;
 }
-inline float softClip (float x)
-{
-    const float a = std::fabs (x);
-    if (a <= 0.5f)
-        return x;
-    const float s = x < 0.0f ? -1.0f : 1.0f;
-    if (a >= 1.5f)
-        return s;
-    const float u = a - 0.5f;
-    return s * (0.5f + u - 0.5f * u * u);
-}
-inline float hardClip (float x) { return std::clamp (x, -1.0f, 1.0f); }
 // Dry/Wet (-1 .. 1) as the reference's 0 .. 100 and the mix's parts: the effect's gain, the dry's and how much of
 // the sum goes through Low Cut (and its Q)
 struct MixLaw
@@ -554,16 +543,10 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
             limGrNow = gr;
             limMax = std::max (limMax, gr);
             const double g = gr > 0.0 ? std::pow (10.0, -gr / 20.0) : 1.0;
-            for (int c = 0; c < 2; ++c)
-            {
-                float o = (float)(std::clamp (y[c] * g, -1.0, 1.0) * outGain);
-                if (soft)
-                    o = softClip (o);
-                if (hard)
-                    o = hardClip (o);
-                (c == 0 ? yl : yr)[a + i] = o;
-            }
+            yl[a + i] = (float)(std::clamp (y[0] * g, -1.0, 1.0) * outGain);
+            yr[a + i] = (float)(std::clamp (y[1] * g, -1.0, 1.0) * outGain);
         }
+        pk::endClip (yl + a, yr + a, m, soft, hard);
         // (never: a NaN or an overflow in the filters starts them again)
         bool ok = std::isfinite (yl[a + m - 1]) && std::isfinite (yr[a + m - 1]);
         for (int s = 0; ok && s < 4; ++s)

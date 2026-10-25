@@ -25,7 +25,7 @@ enum ParamId : uint32_t
     kOversample, // Off, 2x, 4x: the clipper oversampled
     kLookahead,  // the output limiter's lookahead (off: no latency, a little more distortion when it limits)
     kOutput,     // dB, -60 .. 0 (-60: silence), after the output limiter
-    kSoftClip,   // the end of the chain: Soft Clip, then Hard Clip
+    kSoftClip,   // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
     kHardClip,
     kNumParams
 };
@@ -50,12 +50,5 @@ inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNorm
 
 // Menu > Defaults (pluginkit/GentlrDefaults.h): none (bubr has no end saturator)
 inline constexpr pk::GentlrIds kGentlrIds {};
-
-// the clips at the end of the chain (the same as pluginkit's EndClip.h on the suite cleanup branch, here until
-// it is shared)
-constexpr const char* kSoftClipHelp = "Soft Clip at the very end: a smooth knee from -6 dBFS that rounds peaks off up to 0 dBFS. "
-                                      "Off: the sound passes untouched.";
-constexpr const char* kHardClipHelp = "Hard Clip at the very end: nothing leaves above 0 dBFS (after Soft Clip when both are on). "
-                                      "Off: the sound passes untouched.";
 
 } // namespace bubr
