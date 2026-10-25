@@ -390,7 +390,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 if (satAmt > 0.0)
                 {
                     double u = y / satHead;
-                    u = u == u ? std::clamp (u, -kSatHalf * kSatStep, kSatHalf * kSatStep) : 0.0; // (a NaN reads the middle)
+                    u = std::isfinite (u) ? std::clamp (u, -kSatHalf * kSatStep, kSatHalf * kSatStep) : 0.0; // (a NaN reads the middle)
                     const double v = u / kSatStep + kSatHalf;
                     const int i0 = std::min (2 * kSatHalf - 1, (int)v);
                     const double z = satHead * (satTab[i0] + (satTab[i0 + 1] - satTab[i0]) * (v - i0));
