@@ -28,16 +28,6 @@ class ThresholdSlider;
 namespace widr {
 class GonioView;
 }
-namespace wubr {
-class BandView;
-class ShapeView;
-}
-namespace levlr {
-class LevelView;
-}
-namespace smoothr {
-class HistoryView;
-}
 namespace gentlr {
 class GentlrView;
 }
@@ -77,8 +67,8 @@ public:
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's two rows, instrument and effects
     pk::layout::Spec layoutSpec (bool arranged) const override;
     // The Basic page (pluginkit/ui/BasicView.h): the waveform, Mode, Transpose, Filter Freq, Amp Attack and
-    // Amp Release, Volume at the right; the sample's Load and arrows in the header; the output scope in
-    // the extras, the rack's effects listed in the strip
+    // Amp Release, Volume, Soft Clip and Hard Clip at the right; the sample's Load and arrows in the header;
+    // the rack's effects listed in the strip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
@@ -144,7 +134,6 @@ private:
     // shows it); dropped there, the effect moves
     void dragTab (int pos, int target, bool copy);
     void dropTab (int pos, int target, bool copy);
-    void moveOldEndIntoRack (); // an old project's saturator after a full rack, into the rack
     void showAddMenu (VSTGUI::CPoint where);
     void copySlot (int from, int to);
     void browseForSample ();
@@ -227,21 +216,7 @@ private:
     pk::MappedParamHost* satHost = nullptr;
     void updateSatAdvanced ();
     widr::GonioView* fxGonio = nullptr;
-    // the Wubr page: its band display, both bands' shapes (stacked, always shown), both bands'
-    // controls (the selected band's shown), each band's rate controls (band 1's while Link Rates is
-    // on, else the selected band's; Sync or Hz by its rate mode), and the controls only Envelope mode uses
-    wubr::BandView* wubrBands = nullptr;
-    levlr::LevelView* levlrView = nullptr; // the Levlr page's band display
-    smoothr::HistoryView* smoothrView = nullptr; // the Smoothr page's history
-    gentlr::GentlrView* gentlrView = nullptr;    // the Gentlr page's band display
-    wubr::ShapeView* wubrShapes[2] {};
-    int wubrBand = 0;
-    std::vector<VSTGUI::CView*> wubrBandViews[2], wubrBandButtons;
-    VSTGUI::CView *wubrRateMode[2] {}, *wubrSync[2] {}, *wubrHz[2] {};
-    std::vector<ParamView*> wubrEnvViews;
-    ParamView* wubrSensView = nullptr;
-    void showWubrBand (int band);
-    void updateWubrLooks (); // the rate controls shown (Link, rate mode); the Envelope controls' look
+    gentlr::GentlrView* gentlrView = nullptr; // the Gentlr page's band display
     MsView* msView = nullptr;
     pk::ParamHost* mdLayoutHost = nullptr;
     pk::ScopeView* scope = nullptr;

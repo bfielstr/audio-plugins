@@ -148,7 +148,7 @@ void keepOldFirstSlotDefaults (std::array<double, kNumParams>& norm, std::array<
     // (only while the first slot holds a Smacheratr: its block positions are Smacheratr's IDs; another
     // effect there keeps its own values)
     const uint32_t typeId = slotParam (0, kSlotType);
-    if ((int)std::lround (toPlain (typeId, has[typeId] ? norm[typeId] : defaultNormalized (typeId))) != kFxSmacheratr)
+    if ((int)std::lround (toPlain (typeId, has[typeId] ? norm[typeId] : oldFirstSlotDefault (kSlotType))) != kFxSmacheratr)
         return;
     for (uint32_t j : {(uint32_t)smacheratr::kClarity, (uint32_t)smacheratr::kClaritySlope})
     {
@@ -197,12 +197,6 @@ void migrateOversamplingInSlots (std::array<double, kNumParams>& norm, std::arra
             const uint32_t id = slotBlockParam (slot, (uint32_t)fxBlockOf (type, smacheratr::kOversampling));
             if (has[id])
                 norm[id] = smacheratr::oversamplingFromHiQuality (norm[id]);
-        }
-        else if (type == kFxLevlr)
-        {
-            const uint32_t id = slotBlockParam (slot, (uint32_t)fxBlockOf (type, levlr::kDriveOversampling));
-            norm[id] = levlr::defaultNormalized (levlr::kDriveOversampling);
-            has[id] = true;
         }
     }
     smacheratr::tailOversamplingFromHiQuality (norm, has, kTailExtBase); // (the old saturator after the rack)
@@ -305,20 +299,48 @@ void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, 
     }
 }
 
-void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
+bool retiredKindsToEmpty (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
 {
-    if (version >= 13)
-        return;
+    bool any = false;
     for (int slot = 0; slot < kRackSlots; ++slot)
     {
         const uint32_t typeId = slotParam (slot, kSlotType);
-        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxLevlr)
+        if (!has[typeId] || !fxRetired ((int)std::lround (toPlain (typeId, norm[typeId]))))
             continue;
-        for (uint32_t id = levlr::kFirstAddedAfter060; id < levlr::kEndAddedAfter060; ++id)
-        {
-            norm[slotBlockParam (slot, id)] = levlr::defaultNormalized (id);
-            has[slotBlockParam (slot, id)] = true;
-        }
+        any = true;
+        auto set = [&] (uint32_t id, double v) {
+            norm[id] = v;
+            has[id] = true;
+        };
+        set (typeId, toNormalized (typeId, (double)kFxEmpty));
+        set (slotParam (slot, kSlotOn), 1.0);
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            set (slotBlockParam (slot, j), 0.0);
+    }
+    return any;
+}
+
+double oldFirstSlotDefault (uint32_t field)
+{
+    // Smacheratr, on, with its own defaults (Smacheratr's block positions are its own IDs)
+    if (field == kSlotType)
+        return toNormalized (slotParam (0, kSlotType), (double)kFxSmacheratr);
+    if (field == kSlotOn)
+        return 1.0;
+    const auto& st = smacheratr::paramTable ();
+    const uint32_t j = field - kSlotParams;
+    return j < st.size () ? st.defaultNormalized (j) : 0.0;
+}
+
+void keepOldFirstSlot (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
+{
+    for (uint32_t k = 0; k < kSlotParams + kSlotBlockAll; ++k)
+    {
+        const uint32_t id = k < kSlotParams ? slotParam (0, k) : slotBlockParam (0, k - kSlotParams);
+        if (has[id])
+            continue;
+        norm[id] = oldFirstSlotDefault (k);
+        has[id] = true;
     }
 }
 
@@ -351,9 +373,6 @@ void Rack::setMeters (RackMeters* m)
         s.para.setMeters (m ? &m->para[(size_t)i] : nullptr);
         s.sat.setMeters (m ? &m->sat[(size_t)i] : nullptr);
         s.widr.setMeters (m ? &m->widr[(size_t)i] : nullptr);
-        s.wubr.setMeters (m ? &m->wubr[(size_t)i] : nullptr);
-        s.levlr.setMeters (m ? &m->levlr[(size_t)i] : nullptr);
-        s.smoothr.setMeters (m ? &m->smoothr[(size_t)i] : nullptr);
         s.gentlr.setMeters (m ? &m->gentlr[(size_t)i] : nullptr);
     }
 }
@@ -385,24 +404,6 @@ void Rack::noteOn (int note)
 {
     for (auto& s : slots)
         s->noteOn (note);
-}
-
-void Rack::noteOff (int note)
-{
-    for (auto& s : slots)
-        s->noteOff (note);
-}
-
-void Rack::allNotesOff ()
-{
-    for (auto& s : slots)
-        s->allNotesOff ();
-}
-
-void Rack::setTransport (double bpm, double ppq, bool playing)
-{
-    for (auto& s : slots)
-        s->setTransport (bpm, ppq, playing);
 }
 
 void Rack::setPitchBend (float bipolar)

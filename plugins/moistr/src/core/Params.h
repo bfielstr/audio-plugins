@@ -44,7 +44,7 @@ enum ParamId : uint32_t
     // OUTPUT
     kMix,    // 0 .. 1: dry .. wet
     kOutput, // dB
-    // the Smacheratr at the end of the chain (the suite's end saturator), every block of it
+    // the old end saturator's blocks (the Smacheratr at the end of the chain), retired: kept so saved IDs stay put
     kTailBase,
     kTailExtBase = kTailBase + pk::kTailFields,
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
@@ -206,6 +206,9 @@ enum ParamId : uint32_t
     kSpeedDrift,   // 0 .. 0.1: each modulator's rate changed by up to +- this much (fixed per seed)
     // Loop Depth (LoopDepth.h): with Loop Lock, each modulator's movement in the region stretched toward its full range
     kLoopDepth,    // 0 .. 1 (0: as the region plays it)
+    // --- added in 0.32 (append only): the end of the chain, Soft Clip, then Hard Clip (pluginkit/EndClip.h; off) ---
+    kSoftClip,
+    kHardClip,
     kNumParams
 };
 
@@ -218,7 +221,7 @@ static_assert (kMovement == 12 && kRate == 13 && kSync == 14 && kSyncRate == 15 
                    kMix == 24 && kOutput == 25 && kTailBase == 26,
                "Moistr's parameter IDs are fixed");
 static_assert (kTailExtBase == 32 && kTailExt2Base == 49 && kTailExt3Base == 58 && kTailExt4Base == 64,
-               "saved IDs: the end saturator's blocks at 26 .. 68");
+               "saved IDs: the old end saturator's blocks at 26 .. 68 (retired)");
 static_assert (kBandCount == 69 && kXoverMid == 70 && kXoverHigh == 71 && kAirLevel == 72 && kAirMove == 73 && kRise == 74 &&
                    kFall == 75 && kDepth == 76 && kShiftOn == 77 && kShift == 78 && kShiftMix == 79 && kSeedB == 80 && kSeedBlend == 81 &&
                    kDensity == 82 && kLowPush == 83 && kLowDip == 84 && kDropOut == 85 && kSpeed == 86,
@@ -281,9 +284,10 @@ static_assert (kInput == 1931 && kLoopLock == 1932 && kLoopStart == 1933 && kLoo
                    kLoopShape == 1936 && kParaOn == 1937 && kParaLpFreq == 1938 && kParaHpFreq == 1939 && kParaLpMove == 1940 &&
                    kParaHpMove == 1941 && kParaHpLevelMove == 1942 && kParaRate == 1943 && kParaMix == 1944 && kSubGuard == 1945 &&
                    kSubGuardFreq == 1946 && kSubFloor == 1947 && kGuardBells == 1948 && kDriftSeed == 1949 && kStartDrift == 1950 &&
-                   kSpeedDrift == 1951 && kLoopDepth == 1952 && kNumParams == 1953,
+                   kSpeedDrift == 1951 && kLoopDepth == 1952,
                "saved IDs: Input at 1931, Loop Lock at 1932 .. 1936, PARA at 1937 .. 1944, Sub Guard at 1945 .. 1948, Drift at 1949 .. 1951, "
                "Loop Depth at 1952");
+static_assert (kSoftClip == 1953 && kHardClip == 1954 && kNumParams == 1955, "saved IDs: Soft Clip at 1953, Hard Clip at 1954");
 constexpr int kMaxDriftSeed = 128;
 constexpr double kSpeedDriftMax = 0.1;
 // Loop Lock: Length's choices (beats: 1/16 .. 4 bars; then Natural, LoopWindow.h)
@@ -298,8 +302,9 @@ constexpr double kParaLpMin = 40.0, kParaLpMax = 2000.0, kParaHpMin = 100.0, kPa
 constexpr double kGuardFreqMin = 40.0, kGuardFreqMax = 200.0, kGuardFreqDefault = 90.0, kSubFloorMin = -12.0;
 // the state version that has Sub Guard (State.cpp): a state saved before reads it off
 constexpr int kStateSubGuard = 9;
-// a slot's Type: Empty, then smemplr's kinds (smemplr::FxType, in its order), with room for kinds still to come (their
-// names "Kind 10" .. are placeholders; the engine runs them as Empty). The choice's length is saved: never change it.
+// a slot's Type: Empty, then smemplr's kinds (smemplr::FxType, in its order: its retired ones, Wubr, Levlr and Smoothr,
+// keep their names and places and are Empty slots), with room for kinds still to come (their names "Kind 10" .. are
+// placeholders; the engine runs them as Empty). The choice's length is saved: never change it.
 constexpr int kLabKinds = 32;
 // the chains' names (their parameters' and the LAB's)
 constexpr const char* kChainNames[kNumChains] = {"Mid", "High", "Air", "Chain 4"};
@@ -446,8 +451,7 @@ int labSlotKind (int slot);
 // bands moving in time with the song; the Low band (below 146 Hz, Seed 2) clean.
 std::vector<std::pair<uint32_t, double>> neuroRecipe ();
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the end saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace moistr

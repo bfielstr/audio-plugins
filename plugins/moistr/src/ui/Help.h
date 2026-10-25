@@ -2,6 +2,8 @@
 
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
+
 namespace moistr::help {
 
 // a bell's controls (the same for A .. H)
@@ -299,6 +301,8 @@ inline const char* forParam (uint32_t id)
                    "it off unless a gesture drives Wobble Amount. The Low band never wobbles.";
         case kMix: return "Blend of the effect and the untouched signal.";
         case kOutput: return "Overall output level.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         default: return nullptr;
     }
 }

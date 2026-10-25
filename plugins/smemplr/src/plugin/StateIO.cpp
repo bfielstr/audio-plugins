@@ -53,8 +53,13 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     (off and 12 / 12 before: a state without them keeps those)
 // 24: Gentlr's band Slope has a fourth choice, Alt Signature, in the rack's Smacheratrs and Gentlrs (a Slope
 //     saved before, over three choices, is read as the same choice)
-constexpr int32 kVersion = 24;
+// 25: a new Smemplr's rack is empty (a Smacheratr in its first slot before: what a state lacks of that slot
+//     gets the old defaults, keepOldFirstSlot), Soft Clip and Hard Clip at the end (off), the old saturator
+//     after the rack retired. (In every state: a slot of a retired kind, Wubr, Levlr or Smoothr, loads Empty,
+//     and the mappings that modulated it go: retiredKindsToEmpty.)
+constexpr int32 kVersion = 25;
 constexpr int32 kNewDefaults = 23;
+constexpr int32 kEmptyRack = 25;
 constexpr int32 kModsSince = 18;
 
 bool writeDoubles (IBStreamer& s, const std::vector<double>& v)
@@ -180,6 +185,11 @@ bool readState (IBStream* stream, PluginState& st)
             if (st.has[typeId])
                 st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeGentlr - 1)));
         }
+    // a slot of a retired kind (Wubr, Levlr, Smoothr): Empty, and the mappings of its effect go (its slot's
+    // parameters stay with it; another effect loaded there later starts unmodulated)
+    if (retiredKindsToEmpty (st.norm, st.has))
+        st.mods.list.erase (std::remove_if (st.mods.list.begin (), st.mods.list.end (), [] (const ModMapping& m) { return fxRetired (m.fxType); }),
+                            st.mods.list.end ());
     // the M/S EQ's slope was stored over its three choices (6, 12, 24 dB): the same slope on the longer
     // list (before the old fixed M/S EQ moves into the rack, which converts its own)
     if (version < 9)
@@ -282,8 +292,6 @@ bool readState (IBStream* stream, PluginState& st)
     migrateGentlrInSlots (st.norm, st.has, version);
     // the Sub and High bands without buttons (19): one that was off gets Range 0 (after the defaults above)
     migrateSubHighInSlots (st.norm, st.has, version);
-    // Levlr's Bands and drives (13)
-    migrateLevlrInSlots (st.norm, st.has, version);
     // Para's slopes and per-filter drives (13), its low-pass slope, gain locks and Fade range (15)
     migrateParaInSlots (st.norm, st.has, version);
     // Multidyn's OTT gain staging, slope and Sub band (13), Style (14), Sub Input (16)
@@ -295,11 +303,14 @@ bool readState (IBStream* stream, PluginState& st)
     migrateSlopeInSlots (st.norm, st.has, version);
     // Gentlr's glue (21): off
     migrateGlueInSlots (st.norm, st.has, version);
-    // Oversampling (22): the Smacheratrs' Hi-Quality as Off or 4x, a Levlr's drives at 4x
+    // Oversampling (22): the Smacheratrs' Hi-Quality as Off or 4x
     migrateOversamplingInSlots (st.norm, st.has, version);
     // the first slot's defaults before 23 (Gentlr off, Slope 12 / 12): kept where the state lacks them
     if (version < kNewDefaults)
         keepOldFirstSlotDefaults (st.norm, st.has);
+    // ... and before 25 (a Smacheratr with its own defaults; an empty rack now): kept where the state lacks them
+    if (version < kEmptyRack)
+        keepOldFirstSlot (st.norm, st.has);
     return true;
 }
 

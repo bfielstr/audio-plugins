@@ -26,10 +26,10 @@ void endSaturatorToSlot (int slot, const std::function<double (uint32_t)>& norm,
 // chain), or -1 when the last slot is used. typeOf gives a slot's effect.
 int slotAfterChain (const std::function<int (int)>& typeOf);
 // A state from before 0.9 (version 9), as normalized values and whether the state had them: its rack
-// is what it was (the slots it does not have are empty, not a new Smemplr's Smacheratr), and its
-// saturator after the rack, if it was on (states without it played it on), goes to the end of the
-// chain (slotAfterChain) with the same settings and is switched off. With no room there (the last slot
-// is used) the old saturator stays on and keeps running after the rack, as before.
+// is what it was (the slots it does not have are empty), and its saturator after the rack, if it was
+// on (states without it played it on), goes to the end of the chain (slotAfterChain) with the same
+// settings and is switched off. With no room there (the last slot is used) it is left as it was: the
+// saturator after the rack is retired, nothing runs it any more.
 void moveEndSaturatorIntoRack (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
 // States from before version 17 (before 12: the Sub band's too; before 11: Gentlr's Advanced mode too):
@@ -62,8 +62,7 @@ void migrateGlueInSlots (std::array<double, kNumParams>& norm, std::array<bool, 
 
 // States from before version 22: the rack's Smacheratrs had the Hi-Quality switch where Oversampling is
 // (on -> 4x, off -> Off: smacheratr::oversamplingFromHiQuality), and so had the old saturator after the
-// rack; a Levlr slot's drives' Oversampling (its place held nothing that was used) gets 4x, what the
-// drives always ran at. Same sound.
+// rack (for moveEndSaturatorIntoRack). Same sound.
 void migrateOversamplingInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
 
 // States from before version 13: a Multidyn slot's gain staging (its preset's gains baked in were an
@@ -76,16 +75,22 @@ void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bo
 // unless its gain is above 0 dB, the low-pass's off, and Fade (1 .. 36 semitones then) keeps its
 // semitones (para::upgradeToSeparateSlopes).
 void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
-// States from before version 13: a Levlr slot's Bands and band drives (added in 0.7) read 0 there,
-// which is 1 band: they get their defaults (4 bands, no drive: the same sound).
-void migrateLevlrInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
+// Every state: a slot of a retired kind (Wubr, Levlr, Smoothr: FxSlot.h, fxRetired) becomes an Empty slot (Type
+// Empty, On, its block at 0), as it plays now; the slots after it stay where they are. True when there was one.
+bool retiredKindsToEmpty (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
-// States from before version 23: a new Smemplr's first slot (Smacheratr, its own defaults: Params.cpp
-// slotDefault) had Gentlr off and its Slope 12 / 12; Smacheratr has them on and Signature by default now.
-// Where such a state lacks them (and the slot holds a Smacheratr, as by default), they get the old values
-// (normalized 0), so it sounds as it did. (A state
-// from 9 on has every rack parameter, and moveEndSaturatorIntoRack fills an older one's rack.)
+// States from before version 23: a new Smemplr's first slot (Smacheratr, its own defaults) had Gentlr off
+// and its Slope 12 / 12; Smacheratr has them on and Signature by default since. Where such a state lacks
+// them (and the slot holds a Smacheratr, as it did by default), they get the old values (normalized 0),
+// so it sounds as it did. (A state from 9 on has every rack parameter, and moveEndSaturatorIntoRack fills
+// an older one's rack.)
 void keepOldFirstSlotDefaults (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
+// States from before version 25: a new Smemplr had a Smacheratr (its own defaults) in its first slot; it
+// starts with an empty rack now. What such a state lacks of the first slot gets the old defaults
+// (oldFirstSlotDefault), so it loads as it was saved.
+void keepOldFirstSlot (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
+// The first slot's defaults before version 25, normalized, by field (kSlotType, kSlotOn or kSlotParams + j)
+double oldFirstSlotDefault (uint32_t field);
 
 // What the rack's effects show in the editor, per slot.
 struct RackMeters
@@ -95,9 +100,6 @@ struct RackMeters
     std::array<std::atomic<float>, kRackSlots> msMid {}, msSide {};
     std::array<smacheratr::Meters, kRackSlots> sat;
     std::array<widr::Meters, kRackSlots> widr;
-    std::array<wubr::Meters, kRackSlots> wubr;
-    std::array<levlr::Meters, kRackSlots> levlr;
-    std::array<smoothr::Meters, kRackSlots> smoothr;
     std::array<gentlr::Meters, kRackSlots> gentlr;
 };
 
@@ -114,12 +116,8 @@ public:
     int latency () const;
     int type (int slot) const { return slots[(size_t)slot]->type; }
 
-    // Para's envelope follows the sampler's notes; Wubr's envelopes start with them.
+    // Para's envelope follows the sampler's notes (and the pitch bend).
     void noteOn (int note);
-    void noteOff (int note);
-    void allNotesOff ();
-    // the host's transport for the next block (Wubr's synced shapes follow the song)
-    void setTransport (double bpm, double ppq, bool playing);
     void setPitchBend (float bipolar);
 
     void setMeters (RackMeters* m);

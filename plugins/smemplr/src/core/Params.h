@@ -19,9 +19,9 @@ namespace smemplr {
 // The effects rack after the sampler: kRackSlots slots, each Empty or one of the suite's effects, in
 // any order (the same effect may sit in several). A slot is a Type, an On and a block of kSlotBlock
 // parameters that the slot's effect reads through its own table (FxSlot.h: fxTable), so the IDs stay
-// the same whatever is loaded where. An effect with more parameters than that (Wubr) uses the slot's
-// extension too: kSlotExt more positions per slot, in a block of their own after the end saturator's
-// (block positions kSlotBlock and up; slotBlockParam finds either).
+// the same whatever is loaded where. An effect with more parameters than that (Para, Multidyn) uses the
+// slot's extension too: kSlotExt more positions per slot, in a block of their own after the old end
+// saturator's (block positions kSlotBlock and up; slotBlockParam finds either).
 // (FxType, the slot's block and its fields: FxSlot.h)
 // the slot types before Wubr (states before version 8 stored the type over this many)
 constexpr int kFxTypesBeforeWubr = 6;
@@ -29,10 +29,10 @@ constexpr int kFxTypesBeforeWubr = 6;
 constexpr int kFxTypesBeforeLevlr = 7;
 // ... and before Gentlr and Smoothr (states 10 .. 12)
 constexpr int kFxTypesBeforeGentlr = 8;
+// A new Smemplr's rack is empty (every slot Empty, its block at 0). Up to 0.31 its first slot held a
+// Smacheratr (Rack.h: oldFirstSlotDefault, for the states saved then), and before 0.9 a Smacheratr sat
+// after the rack instead (kTailBase: retired, kept for old projects, see StateIO.cpp).
 constexpr int kRackSlots = 8;
-// A new Smemplr's first slot (with the effect's own defaults; the other slots start empty). Before 0.9
-// a Smacheratr sat after the rack instead (kTailBase: kept for old projects, see StateIO.cpp).
-constexpr int kDefaultSlotType = kFxSmacheratr;
 // Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
 constexpr uint32_t kLegacyMdParams = 62;
 constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
@@ -140,7 +140,7 @@ enum ParamId : uint32_t
     kMsSideGain, // dB
     kMsMidGain,  // dB
     kRootKey,    // the root note: the sample plays at its own pitch on this note
-    kTailBase,   // the Smacheratr after the rack (before 0.9; now "Old End", off): pk::kTailFields entries
+    kTailBase,   // the Smacheratr after the rack (before 0.9; "Old End", retired): pk::kTailFields entries
     kParaTransposeLock = kTailBase + pk::kTailFields, // unused since Para stopped tracking notes
     kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
     kParaLiquid,        // Para's Liquid movement
@@ -149,7 +149,7 @@ enum ParamId : uint32_t
     // --- added in 0.6: the effects rack (Rack.h); the fixed Para / Multidyn / M/S EQ above are
     // no longer used (old projects are moved into the rack when they load) ---
     kRackBase,
-    // --- added in 0.7: the rest of the end-of-chain Smacheratr (smacheratr/src/core/TailExt.h) ---
+    // --- added in 0.7: the rest of the end-of-chain Smacheratr (smacheratr/src/core/TailExt.h; retired) ---
     kTailExtBase = kRackBase + kRackSlots * kSlotSize,
     // --- added in 0.8: the rack slots' extensions (the end saturator's block before it is full: its
     // fields are fixed at 17; more would go after this) ---
@@ -197,8 +197,11 @@ enum ParamId : uint32_t
     // Beat (Classic, Loop on, the host playing): the loop starts again on the host's beats (every beat; with
     // Sync and a Grid Size of a beat or more, every Grid Size from the bar's start)
     kLoopBeat, // 1018
+    // --- added in 0.32: the end of the chain, after the rack (pluginkit/EndClip.h; off: as before) ---
+    kSoftClip, // 1019
+    kHardClip, // 1020
 
-    // The next free ID is 1019 (the enumerator after kLoopBeat). New parameters are appended, never in a block above: every ID is
+    // The next free ID is 1021 (the enumerator after kHardClip). New parameters are appended, never in a block above: every ID is
     // stored in projects. A slot's extension cannot grow in place (slot s's position kSlotBlock + j is
     // kRackExtBase + s * kSlotExt + j, the next slot's right after it): more positions per slot are a
     // second extension block from here (kRackSlots times the new count, slot by slot), which
@@ -216,7 +219,8 @@ static_assert (kGridOn == 1003 && kGridSize == 1004 && kPlayheads == 1005 && kHe
                    kHeadRegionBase == 1011,
                "stored IDs moved: append, never insert");
 static_assert (kLoopSync == 1017 && kLoopBeat == 1018, "stored IDs moved: append, never insert");
-static_assert (kNumParams == 1019, "a new parameter: update the next free ID in the comment above (and this)");
+static_assert (kSoftClip == 1019 && kHardClip == 1020, "stored IDs moved: append, never insert");
+static_assert (kNumParams == 1021, "a new parameter: update the next free ID in the comment above (and this)");
 
 // More playheads: up to kMaxPlayheads, the first the main one (Start, Length, the loop); the others
 // (2 .. 4) each a region of their own, a Start and a Length like the main loop's (shares of the flagged
@@ -261,12 +265,12 @@ constexpr RackField rackField (uint32_t id)
         return {(int)((id - kRackExtBase) / kSlotExt), kSlotParams + kSlotBlock + (id - kRackExtBase) % kSlotExt};
     return {(int)((id - kRackBase) / kSlotSize), (id - kRackBase) % kSlotSize};
 }
-// the end-of-chain Smacheratr's parameters (both blocks), and their field in smacheratr::Tail
+// the old end-of-chain Smacheratr's parameters (both blocks; retired: kept for old projects, which move it
+// into the rack when they load, Rack.h)
 constexpr bool isTailParam (uint32_t id)
 {
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
 }
-constexpr uint32_t tailField (uint32_t id) { return id >= kTailExtBase ? pk::kTailFields + (id - kTailExtBase) : id - kTailBase; }
 
 constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
 

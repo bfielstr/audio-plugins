@@ -3,6 +3,7 @@
 #include "Dsp.h"
 #include "Gesture.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 #include "smemplr/src/core/FxSlot.h"
 
@@ -50,7 +51,7 @@ const ParamTable& paramTable ()
         // OUTPUT
         v.push_back (percent (kMix, "Mix", "Mix", 1.0));
         v.push_back (real (kOutput, "Output", "Output", -24.0, 12.0, 0.0, Curve::Linear, Disp::Db));
-        // the end saturator
+        // the old end saturator, retired (its IDs kept for saved projects; pk::retire below)
         pk::addTailParams (v, kTailBase);
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
@@ -223,6 +224,9 @@ const ParamTable& paramTable ()
         v.push_back (percent (kStartDrift, "Start Drift", "Start Drift", 0.25));
         v.push_back (real (kSpeedDrift, "Speed Drift", "Speed Drift", 0.0, kSpeedDriftMax, 0.02, Curve::Linear, Disp::Percent));
         v.push_back (percent (kLoopDepth, "Loop Depth", "Depth", 0.0));
+        // 0.32: the end of the chain (off: as without them)
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;
     }());
     return t;

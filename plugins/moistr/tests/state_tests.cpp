@@ -10,12 +10,14 @@
 #include "plugin/State.h"
 
 #include "smacheratr/src/core/TailExt.h"
+#include "smemplr/src/core/FxSlot.h"
 
 #include "base/source/fstreamer.h"
 #include "public.sdk/source/common/memorystream.h"
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -44,6 +46,15 @@ static double keptAs (uint32_t id, double saved)
     return id == kTailExt3Base + pk::kTailExt3Slope ? smacheratr::slopeNormFromThreeChoices (saved) : saved;
 }
 
+// A value of its own for every parameter (a LAB slot's Type never one of smemplr's retired kinds: those load Empty)
+static double someValue (uint32_t id)
+{
+    double v = std::fmod (0.137 * (id + 1), 1.0);
+    while (isLabSlotParam (id) && labFieldOf (id) == kLabType && smemplr::fxRetired ((int)std::lround (toPlain (id, v))))
+        v = std::fmod (v + 0.1, 1.0);
+    return v;
+}
+
 int main ()
 {
     // every parameter, a value of its own, there and back
@@ -51,7 +62,7 @@ int main ()
         State st;
         for (uint32_t id = 0; id < kNumParams; ++id)
         {
-            st.norm[id] = std::fmod (0.137 * (id + 1), 1.0);
+            st.norm[id] = someValue (id);
             st.has[id] = true;
         }
         MemoryStream s;
@@ -135,7 +146,7 @@ int main ()
         r.readInt32 (magic);
         r.readInt32 (version);
         r.readInt32 (count);
-        CHECK (version == 9 && count == (int32)kNumParams, "saved as version 9 (%d) with %d values", version, count);
+        CHECK (version == 10 && count == (int32)kNumParams, "saved as version 10 (%d) with %d values", version, count);
     }
     // a 0.23 state (version 2, IDs 0 .. 91, every one): every value kept, the SWEEP stage off and its settings at
     // their defaults; a state from 0.24 (version 3) without them reads the new defaults (Sweep on)
@@ -460,7 +471,7 @@ int main ()
             for (uint32_t id = 0; id < old; ++id)
             {
                 w.writeInt32u (id);
-                w.writeDouble (std::fmod (0.137 * (id + 1), 1.0));
+                w.writeDouble (someValue (id));
             }
             w.writeInt32 (0x54534547); // 'GEST': no user gestures
             w.writeInt32 (kNumGestureSlots);
@@ -478,7 +489,7 @@ int main ()
         int kept = 0;
         for (uint32_t id = 0; id < old; ++id)
         {
-            const double saved = std::fmod (0.137 * (id + 1), 1.0);
+            const double saved = someValue (id);
             kept += back.has[id] && back.norm[id] == (version == 7 ? saved : keptAs (id, saved));
         }
         CHECK (kept == (int)old, "version %d: every stored value kept, the Slope %s (%d of %u)", version,
@@ -538,9 +549,18 @@ int main ()
         // 0.30: the LAB, every slot Empty (its Type over kLabKinds kinds: Empty, smemplr's, then room) and on, every chain at
         // 0 dB; a slot's block at the defaults of the kind it is meant for
         const auto& type0 = t.info (labSlotParam (0, kLabType));
+        // (smemplr's retired kinds, Wubr, Levlr and Smoothr, keep their names and places: they are Empty slots)
         CHECK ((int)type0.choices.size () == kLabKinds && std::string (type0.choices[1]) == "para" && std::string (type0.choices[4]) == "smacheratr" &&
-                   std::string (type0.choices[9]) == "smoothr",
+                   std::string (type0.choices[6]) == "wubr" && std::string (type0.choices[8]) == "gentlr" && std::string (type0.choices[9]) == "smoothr",
                "0.30: a slot's Type: Empty, para .. smoothr in smemplr's order, then room");
+        // 0.32: Soft Clip and Hard Clip, off; the old end saturator's blocks retired, nothing else
+        CHECK (t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0 && std::string (t.info (kSoftClip).name) == "Soft Clip" &&
+                   std::string (t.info (kHardClip).name) == "Hard Clip",
+               "0.32: Soft Clip and Hard Clip off");
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            wrong += t.info (id).retired != (id >= kTailBase && id < kTailExt4Base + pk::kTailExt4Fields);
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
         int labDefaults = 0;
         for (int sl = 0; sl < kNumLabSlots; ++sl)
             labDefaults += t.info (labSlotParam (sl, kLabType)).def == 0.0 && t.info (labSlotParam (sl, kLabOn)).def == 1.0;
@@ -558,6 +578,38 @@ int main ()
             for (uint32_t b = a + 1; b < kNumParams; ++b)
                 CHECK (std::string (t.info (a).name) != t.info (b).name, "names %u and %u differ (%s)", a, b, t.info (a).name);
         }
+    }
+    // a LAB slot saved with a kind smemplr retired (Wubr 6, Levlr 7, Smoothr 9) loads Empty, on, its block at its
+    // defaults (in every version); the other slots as saved
+    for (int32 version : {9, 10})
+    {
+        State st;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            st.norm[id] = defaultNormalized (id);
+            st.has[id] = true;
+        }
+        const int kinds[4] = {smemplr::kFxRetiredWubr, smemplr::kFxRetiredLevlr, smemplr::kFxRetiredSmoothr, smemplr::kFxWidr};
+        for (int k = 0; k < 4; ++k)
+        {
+            st.norm[labSlotParam (k, kLabType)] = toNormalized (labSlotParam (k, kLabType), kinds[k]);
+            st.norm[labSlotParam (k, kLabOn)] = 0.0;
+            st.norm[labBlockParam (k, 3)] = 0.77;
+        }
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        std::memcpy (s.getData () + 4, &version, sizeof (version));
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back), "read version %d", version);
+        int wrong = 0;
+        for (int k = 0; k < 3; ++k)
+            wrong += back.norm[labSlotParam (k, kLabType)] != 0.0 || back.norm[labSlotParam (k, kLabOn)] != 1.0 ||
+                     back.norm[labBlockParam (k, 3)] != defaultNormalized (labBlockParam (k, 3));
+        CHECK (wrong == 0, "version %d: the retired kinds' slots Empty, on, at their defaults (%d wrong)", version, wrong);
+        CHECK (std::lround (toPlain (labSlotParam (3, kLabType), back.norm[labSlotParam (3, kLabType)])) == smemplr::kFxWidr &&
+                   back.norm[labSlotParam (3, kLabOn)] == 0.0 && back.norm[labBlockParam (3, 3)] == 0.77,
+               "version %d: a widr slot as saved", version);
     }
     std::printf ("%d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

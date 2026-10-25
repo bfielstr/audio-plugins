@@ -14,7 +14,7 @@
 
 namespace smemplr::rackio {
 
-const hosted::Codec* codecOf (int type); // nullptr for Empty and the M/S EQ
+const hosted::Codec* codecOf (int type); // nullptr for Empty, the M/S EQ and the retired kinds
 // The plug-in's user folder, as the plug-in itself makes it (made if missing; "" when that fails).
 std::string folderOf (int type);
 // The plug-in's folder without making it, and its saved default there (Save as Default).

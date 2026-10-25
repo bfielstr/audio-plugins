@@ -38,27 +38,6 @@ static_assert (kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumP
 static_assert (para::kLpDrive == kSlotBlock - 1 && para::kLpSlope == kSlotBlock && para::kHpGainLock == kSlotBlock + 1 &&
                    para::kLpGainLock == kSlotBlock + 2 && para::kNumParams <= kSlotBlockAll,
                "Para's parameters must fit a slot's block and extension (block position = Para's ID)");
-// Wubr in a slot: its own IDs without its end saturator (5 .. 10, 85 .. 101 and its last block,
-// Gentlr's Advanced mode), in order, then the ones after the saturator's block (Link Rates)
-constexpr uint32_t kWubrBands = wubr::kTailBase + (wubr::kTailExtBase - wubr::kBandBase); // positions before Link Rates
-constexpr uint32_t kWubrHosted = kWubrBands + (wubr::kTailExt2Base - wubr::kLinkRate);
-static_assert (wubr::kTailBase == 5 && kWubrHosted <= kSlotBlockAll, "Wubr's parameters must fit a slot's block and extension");
-static int64_t wubrIdAt (uint32_t j)
-{
-    if (j < wubr::kTailBase)
-        return j;
-    if (j < kWubrBands)
-        return (int64_t)(j - wubr::kTailBase + wubr::kBandBase);
-    return j < kWubrHosted ? (int64_t)(j - kWubrBands + wubr::kLinkRate) : -1;
-}
-static int64_t wubrBlockOf (uint32_t id)
-{
-    if (id < wubr::kTailBase)
-        return id;
-    if (id >= wubr::kBandBase && id < wubr::kTailExtBase)
-        return (int64_t)(id - wubr::kBandBase + wubr::kTailBase);
-    return id >= wubr::kLinkRate && id < wubr::kTailExt2Base ? (int64_t)(id - wubr::kLinkRate + kWubrBands) : -1;
-}
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
 static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk::kTailExt2Fields && multidyn::kRmsWindow == kSlotBlock &&
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
@@ -71,8 +50,6 @@ static_assert (kMdAdded == 11 && kSlotBlock + kMdAdded <= kSlotBlockAll, "Multid
 
 int64_t fxIdAt (int type, uint32_t j)
 {
-    if (type == kFxWubr)
-        return wubrIdAt (j);
     if (type == kFxMultidyn)
     {
         if (j >= kSlotBlock)
@@ -91,8 +68,6 @@ int64_t fxIdAt (int type, uint32_t j)
 
 int64_t fxBlockOf (int type, uint32_t id)
 {
-    if (type == kFxWubr)
-        return wubrBlockOf (id);
     if (type == kFxMultidyn)
     {
         if (id >= multidyn::kXoverSlope)
@@ -124,6 +99,7 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {para::kTailExt4Base, para::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
         {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
+        {para::kSoftClip, para::kHardClip, "its own end of the chain: the rack's Para runs without its clips"},
     };
     static const std::vector<RackHidden> multidynHidden {
         {multidyn::kScOn, multidyn::kScListen, "the side-chain: Smemplr has no side-chain input"},
@@ -142,36 +118,6 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         {widr::kTailExt3Base, widr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
         {widr::kTailExt4Base, widr::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
     };
-    static const std::vector<RackHidden> levlrHidden {
-        {levlr::kTailBase, levlr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {levlr::kTailExtBase, levlr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {levlr::kTailExt2Base, levlr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {levlr::kTailExt3Base, levlr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {levlr::kTailExt4Base, levlr::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-    };
-    // (its saturator's fourth block runs on into the slot's extension: not in the rack)
-    static_assert (levlr::kTailExt3Base <= kSlotBlock && levlr::kNumParams <= kSlotBlockAll, "Levlr's parameters must fit a slot's block");
-    static const std::vector<RackHidden> wubrHidden {
-        {wubr::kTailBase, wubr::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {wubr::kTailExtBase, wubr::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {wubr::kTailExt2Base, wubr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {wubr::kTailExt3Base, wubr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {wubr::kTailExt4Base, wubr::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        // each band's points and their count: drawn in the shape display (a ShapeView, not a control per value)
-        {wubr::bandParam (0, wubr::kPointCount), wubr::bandParam (0, wubr::kPointCount), "the shape display adds and removes points"},
-        {wubr::pointParam (0, 0, wubr::kPtX), wubr::pointParam (0, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
-        {wubr::bandParam (1, wubr::kPointCount), wubr::bandParam (1, wubr::kPointCount), "the shape display adds and removes points"},
-        {wubr::pointParam (1, 0, wubr::kPtX), wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve), "drawn in the shape display"},
-    };
-    // Smoothr's saturator before its limiter: a Smacheratr slot before it does that (in the rack it is off)
-    static const std::vector<RackHidden> smoothrHidden {
-        {smoothr::kTailBase, smoothr::kTailBase + pk::kTailFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
-        {smoothr::kTailExtBase, smoothr::kTailExtBase + pk::kTailExtFields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
-        {smoothr::kTailExt2Base, smoothr::kTailExt2Base + pk::kTailExt2Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
-        {smoothr::kTailExt3Base, smoothr::kTailExt3Base + pk::kTailExt3Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
-        {smoothr::kTailExt4Base, smoothr::kTailExt4Base + pk::kTailExt4Fields - 1, "its own saturator before the limiter: in Smemplr a Smacheratr slot before it does that"},
-    };
-    static_assert (smoothr::kNumParams <= kSlotBlock, "Smoothr's parameters must fit a slot's block");
     static const std::vector<RackHidden> gentlrHidden {
         {gentlr::kSubOn, gentlr::kSubOn, "unused: the Sub band works while its Range is above 0"},
         {gentlr::kTailBase, gentlr::kHighOn - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
@@ -194,9 +140,6 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
         case kFxPara: return paraHidden;
         case kFxMultidyn: return multidynHidden;
         case kFxWidr: return widrHidden;
-        case kFxWubr: return wubrHidden;
-        case kFxLevlr: return levlrHidden;
-        case kFxSmoothr: return smoothrHidden;
         case kFxGentlr: return gentlrHidden;
         default: return none;
     }
@@ -204,20 +147,6 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
 
 const pk::ParamTable& fxBlockTable (int type)
 {
-    if (type == kFxWubr)
-    {
-        static const pk::ParamTable t ([] {
-            std::vector<pk::ParamInfo> v;
-            for (uint32_t j = 0; j < kWubrHosted; ++j)
-            {
-                pk::ParamInfo pi = wubr::paramTable ().info ((uint32_t)wubrIdAt (j));
-                pi.id = j;
-                v.push_back (pi);
-            }
-            return v;
-        }());
-        return t;
-    }
     if (type != kFxMultidyn)
         return fxTable (type);
     static const pk::ParamTable t ([] {
@@ -255,10 +184,10 @@ const char* fxName (int type)
         case kFxMsEq: return "m/s eq";
         case kFxSmacheratr: return "smacheratr";
         case kFxWidr: return "widr";
-        case kFxWubr: return "wubr";
-        case kFxLevlr: return "levlr";
+        case kFxRetiredWubr: return "wubr"; // (retired: the Type's choices keep the names)
+        case kFxRetiredLevlr: return "levlr";
         case kFxGentlr: return "gentlr";
-        case kFxSmoothr: return "smoothr";
+        case kFxRetiredSmoothr: return "smoothr";
         default: return "";
     }
 }
@@ -275,11 +204,8 @@ const pk::ParamTable& fxTable (int type)
         case kFxMsEq: return mseq::paramTable ();
         case kFxSmacheratr: return smacheratr::paramTable ();
         case kFxWidr: return widr::paramTable ();
-        case kFxWubr: return wubr::paramTable ();
-        case kFxLevlr: return levlr::paramTable ();
-        case kFxSmoothr: return smoothr::paramTable ();
         case kFxGentlr: return gentlr::rackTable (); // (gentlr as it was up to 0.30.0: the rack's projects stay as they were)
-        default: return empty;
+        default: return empty; // (Empty and the retired kinds)
     }
 }
 
@@ -290,9 +216,6 @@ void FxSlot::prepare (double sampleRate, int maxBlock)
     ms.prepare (sampleRate);
     sat.prepare (sampleRate, maxBlock);
     widr.prepare (sampleRate, maxBlock);
-    wubr.prepare (sampleRate, maxBlock);
-    levlr.prepare (sampleRate, maxBlock);
-    smoothr.prepare (sampleRate, maxBlock);
     gentlr.prepare (sampleRate, maxBlock);
     applyAll ();
 }
@@ -304,9 +227,6 @@ void FxSlot::reset ()
     ms.reset ();
     sat.reset ();
     widr.reset ();
-    wubr.reset ();
-    levlr.reset ();
-    smoothr.reset ();
     gentlr.reset ();
 }
 
@@ -327,12 +247,6 @@ void FxSlot::apply (uint32_t block)
             sat.setParam (j, j == smacheratr::kDryWet && !on ? 0.0 : v);
             break;
         case kFxWidr: widr.setParam (j, v); break;
-        case kFxWubr: wubr.setParam (j, v); break;
-        case kFxLevlr: levlr.setParam (j, v); break;
-        case kFxSmoothr:
-            // its own saturator stays off in the rack (a Smacheratr slot before it does that)
-            smoothr.setParam (j, j == smoothr::kTailBase + pk::kTailOn ? 0.0 : v);
-            break;
         case kFxGentlr:
             // off: fully dry (its dry path is delayed to its latency)
             gentlr.setParam (j, j == gentlr::kMix && !on ? 0.0 : v);
@@ -354,9 +268,6 @@ void FxSlot::applyAll ()
         case kFxMsEq: ms.reset (); break;
         case kFxSmacheratr: sat.reset (); break;
         case kFxWidr: widr.reset (); break;
-        case kFxWubr: wubr.reset (); break;
-        case kFxLevlr: levlr.reset (); break;
-        case kFxSmoothr: smoothr.reset (); break;
         case kFxGentlr: gentlr.reset (); break;
         default: break;
     }
@@ -364,7 +275,7 @@ void FxSlot::applyAll ()
 
 void FxSlot::setType (int t)
 {
-    t = std::clamp (t, 0, kNumFxTypes - 1);
+    t = fxKind (t); // (a retired kind: Empty)
     if (t != type)
     {
         type = t;
@@ -396,10 +307,8 @@ int FxSlot::latency () const
     {
         case kFxMultidyn: return multidyn.latency ();
         case kFxSmacheratr: return sat.latency ();
-        case kFxPara: return para.latency ();       // its drive's oversampling, on or off
-        case kFxLevlr: return levlr.latency ();     // its drives' oversampling, on or off
-        case kFxGentlr: return gentlr.latency ();   // its region Drive's oversampler, always in the path
-        case kFxSmoothr: return smoothr.latency (); // the limiter's look-ahead (and its saturator's, off), on or off
+        case kFxPara: return para.latency ();     // its drive's oversampling, on or off
+        case kFxGentlr: return gentlr.latency (); // its region Drive's oversampler, always in the path
         default: return 0;
     }
 }
@@ -408,19 +317,6 @@ void FxSlot::noteOn (int note)
 {
     if (type == kFxPara)
         para.noteOn (note);
-    else if (type == kFxWubr)
-        wubr.noteOn (note);
-}
-
-// (whatever the kind, so a Wubr loaded while a note is down does not hang on to it)
-void FxSlot::noteOff (int note) { wubr.noteOff (note); }
-
-void FxSlot::allNotesOff () { wubr.allNotesOff (); }
-
-void FxSlot::setTransport (double bpm, double ppq, bool playing)
-{
-    if (type == kFxWubr)
-        wubr.setTransport (bpm, ppq, playing);
 }
 
 void FxSlot::setPitchBend (float bipolar) { para.setPitchBend (bipolar); }
@@ -452,23 +348,7 @@ void FxSlot::process (float* L, float* R, int n)
             if (on)
                 widr.process (L, R, L, R, n);
             break;
-        case kFxWubr:
-            if (on)
-                wubr.process (L, R, L, R, n);
-            break;
-        case kFxLevlr:
-            if (on)
-                levlr.process (L, R, L, R, n);
-            else
-                levlr.processBypassed (L, R, n); // off: its latency's delay only
-            break;
         case kFxGentlr: gentlr.process (L, R, L, R, n); break; // off: fully dry, same latency
-        case kFxSmoothr:
-            if (on)
-                smoothr.process (L, R, L, R, n);
-            else
-                smoothr.processBypassed (L, R, n); // off: its latency's delay only
-            break;
         default: break;
     }
 }

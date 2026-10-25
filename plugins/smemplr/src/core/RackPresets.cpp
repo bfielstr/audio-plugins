@@ -13,10 +13,7 @@ const HostedPlugin* hostedPlugin (int type)
         {"Multidyn", "", &multidyn::paramTable (), multidyn::kGentlrIds},
         {"Smacheratr", "", &smacheratr::paramTable (), smacheratr::kGentlrIds},
         {"Widr", "", &widr::pluginParamTable (), widr::kGentlrIds},
-        {"Wubr", "", &wubr::paramTable (), wubr::kGentlrIds},
-        {"Levlr", "", &levlr::paramTable (), levlr::kGentlrIds},
         {"Gentlr", "Gently", &gentlr::rackTable (), gentlr::kGentlrIds}, // (its values: RackPresetIO converts them)
-        {"Smoothr", "", &smoothr::paramTable (), smoothr::kGentlrIds},
     };
     switch (type)
     {
@@ -24,11 +21,8 @@ const HostedPlugin* hostedPlugin (int type)
         case kFxMultidyn: return &plugins[1];
         case kFxSmacheratr: return &plugins[2];
         case kFxWidr: return &plugins[3];
-        case kFxWubr: return &plugins[4];
-        case kFxLevlr: return &plugins[5];
-        case kFxGentlr: return &plugins[6];
-        case kFxSmoothr: return &plugins[7];
-        default: return nullptr; // Empty, the M/S EQ
+        case kFxGentlr: return &plugins[4];
+        default: return nullptr; // Empty, the M/S EQ, the retired kinds
     }
 }
 

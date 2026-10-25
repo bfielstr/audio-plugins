@@ -91,7 +91,6 @@ public:
 
     // the effects' displays and the output scope (audio thread -> editor)
     RackMeters rack;
-    smacheratr::Meters satMeters; // the saturator at the very end
     std::atomic<int> latency {0};  // what the processor reports; the editor tells the host when it changes
     static constexpr int kScopeSize = 65536;
     pk::ScopeBuffer<kScopeSize> outScope; // the final output

@@ -10,6 +10,8 @@
 #include "SampleData.h"
 #include "Slices.h"
 
+#include "smacheratr/src/core/TailExt.h"
+
 #include "dr_wav.h"
 #include "pluginkit/CrashDump.h"
 #include "pluginkit/SampleFiles.h"
@@ -113,11 +115,7 @@ static Out run (Engine& e, int frames, HostInfo host = {}, int block = 256)
 
 static Engine* makeEngine (std::shared_ptr<SampleData> s)
 {
-    auto* e = new Engine ();
-    // the first slot's Smacheratr as it was up to 0.24 (its Gentlr off, 12 / 12): the tests measure the
-    // sampler's own levels and timing through it
-    e->setParam (slotBlockParam (0, smacheratr::kClarity), 0.0);
-    e->setParam (slotBlockParam (0, smacheratr::kClaritySlope), 0.0);
+    auto* e = new Engine (); // (a new Smemplr's rack is empty: the tests measure the sampler's own levels and timing)
     e->prepare (kHostSr, 512);
     e->setSample (s);
     e->setParam (kVolume, 0.0);
@@ -468,12 +466,12 @@ static void setFx (Engine& e, int slot, uint32_t id, double plain)
 
 TEST (rack_effects)
 {
-    // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note
-    // (after a new Smemplr's Smacheratr in the first slot: the effects here go in slots 2 and 3)
+    // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note (the
+    // effects here go in slots 2 and 3, after the empty first one)
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     const int base = e->latency ();
-    CHECK (e->rackType (0) == kFxSmacheratr && base > 0, "the first slot's Smacheratr reports its latency: %d", base);
+    CHECK (e->rackType (0) == kFxEmpty && base == 0, "a new Smemplr's rack is empty, no latency: %d", base);
     e->noteOn (60, 1.0f);
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
@@ -517,45 +515,35 @@ TEST (rack_effects)
     CHECK (lifted > rms (o.l, 24000, 48000) * 2.0, "upward compression lifts it: %f vs %f", lifted, rms (o.l, 24000, 48000));
 }
 
-TEST (rack_smoothr)
+TEST (rack_retired_kinds_are_empty)
 {
-    // Smoothr in a slot: its latency counts, on or off; it holds a loud sample under its ceiling; its
-    // own saturator stays off (a Smacheratr slot before it does that)
-    auto s = sine (110.0, 1.0);
-    std::unique_ptr<Engine> e (makeEngine (s));
-    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
-    const int base = e->latency ();
-    loadFx (*e, 0, kFxSmoothr);
-    smoothr::Engine alone;
-    alone.prepare (kHostSr, 512);
-    alone.setParam (smoothr::kTailBase + pk::kTailOn, 0.0);
-    CHECK (e->latency () == base + alone.latency (), "its latency is reported: %d (%d + %d)", e->latency (), base, alone.latency ());
-    e->setParam (slotParam (0, kSlotOn), 0.0);
-    CHECK (e->latency () == base + alone.latency (), "off, the same: %d", e->latency ());
-    e->setParam (slotParam (0, kSlotOn), 1.0);
-    e->setParam (kGain, 18.0);
-    setFx (*e, 0, smoothr::kCeiling, -6.0);
-    e->reset ();
-    e->noteOn (60, 1.0f);
-    auto o = run (*e, 48000);
-    const double pk = std::max (peak (o.l), peak (o.r));
-    CHECK (pk <= std::pow (10.0, -6.0 / 20.0) * 1.02, "held under -6 dB: peak %.2f dB", 20.0 * std::log10 (pk));
-    // off: the sound passes, delayed by the same latency (so it lines up with the sound on)
-    e->setParam (slotParam (0, kSlotOn), 0.0);
-    e->reset ();
-    e->noteOn (60, 1.0f);
-    o = run (*e, 48000);
-    CHECK (std::max (peak (o.l), peak (o.r)) > 1.0, "off: not limited (%.2f)", std::max (peak (o.l), peak (o.r)));
-    CHECK (finite (o.l) && finite (o.r), "finite");
-    // the hidden saturator: every Smoothr tail parameter is listed as not shown on the page
-    const auto& hidden = rackHiddenParams (kFxSmoothr);
-    for (uint32_t id = 0; id < smoothr::kNumParams; ++id)
+    // Wubr, Levlr and Smoothr were kinds of slot (their plug-ins are gone): a slot set to one is Empty, with no
+    // latency, the sound untouched, whatever its block holds; the Type's choices keep their names and places
+    auto s = sine (220.0, 1.0);
+    std::unique_ptr<Engine> ref (makeEngine (s));
+    ref->noteOn (57, 1.0f);
+    const auto dry = run (*ref, 12000);
+    for (int type : {(int)kFxRetiredWubr, (int)kFxRetiredLevlr, (int)kFxRetiredSmoothr})
     {
-        bool listed = false;
-        for (const auto& h : hidden)
-            listed |= id >= h.first && id <= h.last;
-        CHECK (listed == smoothr::isTailParam (id), "smoothr %u hidden: %d", id, listed);
+        std::unique_ptr<Engine> e (makeEngine (s));
+        e->setParam (slotParam (2, kSlotType), (double)type);
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            e->setParam (slotBlockParam (2, j), 0.7);
+        CHECK (e->rackType (2) == kFxEmpty && e->latency () == 0, "%s: Empty (%d), latency %d", fxName (type), e->rackType (2), e->latency ());
+        CHECK (fxBlockTable (type).size () == 0 && fxTable (type).size () == 0 && rackHiddenParams (type).empty () && fxRetired (type) &&
+                   !fxOffered (type) && fxKind (type) == kFxEmpty,
+               "%s: no table", fxName (type));
+        e->noteOn (57, 1.0f);
+        const auto o = run (*e, 12000);
+        double diff = 0.0;
+        for (size_t i = 0; i < o.l.size (); ++i)
+            diff = std::max (diff, (double)std::fabs (o.l[i] - dry.l[i]));
+        CHECK (diff == 0.0, "%s: the sound untouched (%g)", fxName (type), diff);
     }
+    const auto& t = paramTable ();
+    CHECK (t.toText (slotParam (0, kSlotType), (double)kFxRetiredWubr) == "wubr" && t.toText (slotParam (0, kSlotType), (double)kFxGentlr) == "gentlr" &&
+               t.toText (slotParam (0, kSlotType), (double)kFxRetiredSmoothr) == "smoothr" && t.info (slotParam (0, kSlotType)).max == kNumFxTypes - 1,
+           "the Type's choices keep their places");
 }
 
 TEST (rack_gentlr)
@@ -588,34 +576,6 @@ TEST (rack_gentlr)
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     CHECK (std::fabs (rms (o.l, 24000, 48000) / dry - 1.0) < 0.01, "off: dry (%.3f)", rms (o.l, 24000, 48000) / dry);
-}
-
-TEST (rack_levlr_bands_and_drives)
-{
-    // Levlr's latency (its drives' oversampling) counts, on or off; an old state's Levlr slot gets 4
-    // bands and no drive (its Bands read 0 there: 1 band)
-    auto s = sine (440.0, 1.0);
-    std::unique_ptr<Engine> e (makeEngine (s));
-    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
-    const int base = e->latency ();
-    loadFx (*e, 0, kFxLevlr);
-    levlr::Engine alone (false);
-    alone.prepare (kHostSr, 512);
-    CHECK (alone.latency () > 0 && e->latency () == base + alone.latency (), "reported: %d (%d + %d)", e->latency (), base, alone.latency ());
-    e->setParam (slotParam (0, kSlotOn), 0.0);
-    CHECK (e->latency () == base + alone.latency (), "off, the same: %d", e->latency ());
-    auto st = std::make_unique<std::array<double, kNumParams>> ();
-    auto has = std::make_unique<std::array<bool, kNumParams>> ();
-    st->fill (0.0);
-    has->fill (false);
-    (*st)[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), (double)kFxLevlr);
-    (*has)[slotParam (2, kSlotType)] = true;
-    migrateLevlrInSlots (*st, *has, 12);
-    CHECK ((*st)[slotBlockParam (2, levlr::kBandCount)] == 1.0 && (*st)[slotBlockParam (2, levlr::driveParam (1, levlr::kDriveDb))] == 0.0,
-           "4 bands, no drive");
-    (*st)[slotBlockParam (2, levlr::kBandCount)] = 0.0;
-    migrateLevlrInSlots (*st, *has, 13);
-    CHECK ((*st)[slotBlockParam (2, levlr::kBandCount)] == 0.0, "a new state is left as it is");
 }
 
 TEST (old_para_slots_keep_their_slope_and_drive)
@@ -656,7 +616,7 @@ TEST (para_slots_separate_slopes_and_gain_locks)
 {
     // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
     // at block positions 62 .. 64 (Para's IDs), and map back
-    CHECK (para::kNumParams == 76 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
+    CHECK (para::kNumParams == 78 && para::kHardClip == 77 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
            (unsigned)para::kNumParams);
     for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
     {
@@ -668,6 +628,12 @@ TEST (para_slots_separate_slopes_and_gain_locks)
                "%s", para::paramTable ().info (id).name);
     }
     CHECK (fxIdAt (kFxPara, para::kNumParams) == -1 && fxBlockOf (kFxPara, para::kNumParams) == -1, "nothing after Para's last");
+    // Para's own Soft Clip and Hard Clip have places in the block (their IDs) but no control on the page: the
+    // rack's Para runs without them (they end Para's own chain, not the rack's)
+    bool clipsHidden = false;
+    for (const auto& h : rackHiddenParams (kFxPara))
+        clipsHidden |= h.first == para::kSoftClip && h.last == para::kHardClip;
+    CHECK (clipsHidden && fxBlockOf (kFxPara, para::kSoftClip) == (int64_t)para::kSoftClip, "Para's clips: hidden in the rack");
     // the old fixed Para's Fade (0.5) keeps its range of then, so its saved values keep their meaning
     CHECK (paramTable ().info (kParaFade).max == 36.0 && paramTable ().info (kParaFade).def == 12.0, "Old Para Vocal Fade 1 .. 36, 12");
     // they reach the slot's Para: the high-pass alone (the low-pass at -inf, the high-pass at 20 Hz: all of a
@@ -842,12 +808,12 @@ TEST (settings_text_roundtrip)
 TEST (old_slot_types_keep_their_effect)
 {
     // the slot type was stored normalized over the kinds there were: a state from before Gentlr and
-    // Smoothr (version 12: 8 kinds) keeps Levlr as Levlr on the longer list (StateIO.cpp does it; here
-    // the arithmetic it relies on)
+    // Smoothr (version 12: 8 kinds) keeps Widr as Widr on the longer list (StateIO.cpp does it; here
+    // the arithmetic it relies on). The retired kinds keep their places, Smoothr the last
     const uint32_t typeId = slotParam (0, kSlotType);
-    const double old = (double)kFxLevlr / (kFxTypesBeforeGentlr - 1);
-    CHECK (std::lround (toPlain (typeId, toNormalized (typeId, std::round (old * (kFxTypesBeforeGentlr - 1))))) == kFxLevlr, "Levlr");
-    CHECK (std::lround (toPlain (typeId, 1.0)) == kNumFxTypes - 1 && kFxSmoothr == kNumFxTypes - 1, "Smoothr last");
+    const double old = (double)kFxWidr / (kFxTypesBeforeGentlr - 1);
+    CHECK (std::lround (toPlain (typeId, toNormalized (typeId, std::round (old * (kFxTypesBeforeGentlr - 1))))) == kFxWidr, "Widr");
+    CHECK (std::lround (toPlain (typeId, 1.0)) == kNumFxTypes - 1 && kFxRetiredSmoothr == kNumFxTypes - 1, "Smoothr last");
 }
 
 TEST (rack_block_mapping)
@@ -1166,285 +1132,11 @@ TEST (rack_order_and_widr)
     CHECK (side2 < 1e-9 * midE + 1e-12, "off: mono again (%g)", side2);
 }
 
-// --- Wubr in the rack -------------------------------------------------------
-// Level (dB rms) of x in windows of `win` samples.
-static std::vector<double> dbWindows (const std::vector<float>& x, size_t win)
-{
-    std::vector<double> d;
-    for (size_t s = 0; s + win <= x.size (); s += win)
-        d.push_back (20.0 * std::log10 (rms (x, s, s + win) + 1e-12));
-    return d;
-}
-// Level of a over ref (dB), window by window.
-static std::vector<double> dbOver (const std::vector<float>& a, const std::vector<float>& ref, size_t win)
-{
-    auto d = dbWindows (a, win);
-    const auto r = dbWindows (ref, win);
-    for (size_t i = 0; i < d.size () && i < r.size (); ++i)
-        d[i] -= r[i];
-    d.resize (std::min (d.size (), r.size ()));
-    return d;
-}
-static int peaksOver (const std::vector<double>& v, double thr)
-{
-    int n = 0;
-    for (size_t i = 1; i + 1 < v.size (); ++i)
-        if (v[i] > v[i - 1] && v[i] >= v[i + 1] && v[i] > thr)
-            ++n;
-    return n;
-}
-static double meanOf (const std::vector<double>& v, size_t a, size_t b)
-{
-    double s = 0.0;
-    for (size_t i = a; i < b; ++i)
-        s += v[i];
-    return b > a ? s / (double)(b - a) : 0.0;
-}
-constexpr size_t kWin = 1200; // 25 ms: 3 whole cycles of 120 Hz at 48 kHz
-// The Wubr the sound tests below measure (not its defaults): band 1 on, band 2 off, both moving their
-// Gain, each at its own rate (Link Rates off), Sync 1/4
-static void wubrGainSync (Engine& e, int slot)
-{
-    for (int b = 0; b < wubr::kBands; ++b)
-    {
-        setFx (e, slot, wubr::bandParam (b, wubr::kBandOn), b == 0 ? 1.0 : 0.0);
-        setFx (e, slot, wubr::bandParam (b, wubr::kTarget), wubr::kTargetGain);
-        setFx (e, slot, wubr::bandParam (b, wubr::kRateMode), wubr::kSynced);
-        setFx (e, slot, wubr::bandParam (b, wubr::kSync), 8.0); // 1/4
-    }
-    setFx (e, slot, wubr::kLinkRate, 0.0);
-}
-
-TEST (rack_wubr_mapping)
-{
-    // Wubr's 80 parameters without its end saturator: 62 in the slot's block, 18 in its extension
-    // (the last Link Rates, the one after its end saturator's block)
-    const auto& t = fxBlockTable (kFxWubr);
-    const auto& wt = wubr::paramTable ();
-    CHECK (t.size () == 80 && t.size () <= kSlotBlockAll, "Wubr's block table: %u", (unsigned)t.size ());
-    int inExt = 0;
-    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
-    {
-        const int64_t id = fxIdAt (kFxWubr, j);
-        if (j >= t.size ())
-        {
-            CHECK (id < 0, "position %u after Wubr's: %lld", j, (long long)id);
-            continue;
-        }
-        CHECK (id >= 0 && id < wubr::kNumParams && fxBlockOf (kFxWubr, (uint32_t)id) == (int64_t)j, "position %u -> id %lld", j,
-               (long long)id);
-        if (id < 0)
-            continue;
-        CHECK (!wubr::isTailParam ((uint32_t)id), "position %u is its end saturator's %lld", j, (long long)id);
-        const auto& a = t.info (j);
-        const auto& b = wt.info ((uint32_t)id);
-        CHECK (a.id == j && std::string (a.name) == std::string (b.name) && a.min == b.min && a.max == b.max && a.def == b.def,
-               "position %u reads as %s", j, std::string (b.name).c_str ());
-        for (int s = 0; s < kRackSlots; ++s)
-        {
-            const uint32_t pid = slotBlockParam (s, j);
-            const RackField rf = rackField (pid);
-            CHECK (pid < kNumParams && isRackParam (pid) && !isTailParam (pid) && rf.slot == s && rf.field == kSlotParams + j,
-                   "slot %d position %u: id %u -> slot %d field %u", s, j, pid, rf.slot, rf.field);
-            if (j >= kSlotBlock)
-                CHECK (pid >= kRackExtBase && pid < kRackExtBase + kRackSlots * kSlotExt, "slot %d position %u in the extension: %u", s, j, pid);
-            else
-                CHECK (pid >= kRackBase && pid < kTailExtBase, "slot %d position %u in the rack block: %u", s, j, pid);
-        }
-        inExt += j >= kSlotBlock ? 1 : 0;
-    }
-    CHECK (inExt == 18, "18 in the extension: %d", inExt);
-    // back: every Wubr ID has a position, except its end saturator's
-    for (uint32_t id = 0; id < wubr::kNumParams; ++id)
-        CHECK ((fxBlockOf (kFxWubr, id) < 0) == wubr::isTailParam (id), "wubr %u (%s): %lld", id, wt.info (id).name,
-               (long long)fxBlockOf (kFxWubr, id));
-    // the extension is where band 2's shape runs on: its third point's level is the first position there,
-    // its last point's curve at 78; then Link Rates, the last
-    CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)) == (int64_t)kSlotBlock, "%lld",
-           (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY)));
-    CHECK (fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)) == 78, "%lld",
-           (long long)fxBlockOf (kFxWubr, wubr::pointParam (1, wubr::kMaxPoints - 1, wubr::kPtCurve)));
-    CHECK (fxBlockOf (kFxWubr, wubr::kLinkRate) == 79 && fxIdAt (kFxWubr, 79) == (int64_t)wubr::kLinkRate && t.size () > 79 &&
-               std::string (t.info (79).name) == "Link Rates",
-           "Link Rates at 79: %lld", (long long)fxBlockOf (kFxWubr, wubr::kLinkRate));
-    // the end saturator's second block, between the rack and the extensions, is not the rack's
-    for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
-        CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
-    // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
-    // high-pass, the modulation LFOs, the envelopes' Loop Locks), not the rack's, and the IDs run on to
-    // kNumParams with no gap, through the hidden MIDI parameters (1000 .. 1002: in the table, but not the
-    // instrument's) to the ones after them
-    CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kModLfoBase == kTransHpSlope + 1 &&
-               kFiltLoopLock == kModLfoEnd && kPitchLoopLock == kFiltLoopLock + 1 && kMidiPitchBend == kPitchLoopLock + 1 &&
-               kMidiModWheel + 1 == kGridOn && paramTable ().size () == kNumParams,
-           "kNumParams %u", (unsigned)kNumParams);
-    for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
-        CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id) == !isMidiParam (id), "%u is the sampler's", id);
-    CHECK (!isValidParam (kMidiPitchBend) && !isValidParam (kMidiSustain) && !isValidParam (kMidiModWheel) &&
-               isMidiParam (kMidiSustain) && !isMidiParam (kPitchLoopLock) && !isMidiParam (kGridOn) &&
-               !canModulate (kMidiModWheel, kFxEmpty) && !canModulate (kMidiPitchBend, kFxEmpty),
-           "the MIDI parameters are not the instrument's");
-    CHECK (isRackParam (kRackExtEnd - 1) && rackField (kRackExtEnd - 1).slot == kRackSlots - 1 &&
-               rackField (kRackExtEnd - 1).field == kSlotParams + kSlotBlockAll - 1,
-           "the last extension ID is the last slot's last position");
-    // what the rack page does not show: Wubr's own IDs, and every one it does show has a block position
-    for (const auto& h : rackHiddenParams (kFxWubr))
-        CHECK (h.first <= h.last && h.last < wubr::kNumParams, "hidden %u..%u", h.first, h.last);
-    for (uint32_t id = 0; id < wubr::kNumParams; ++id)
-    {
-        bool hidden = false;
-        for (const auto& h : rackHiddenParams (kFxWubr))
-            hidden |= id >= h.first && id <= h.last;
-        CHECK (hidden || fxBlockOf (kFxWubr, id) >= 0, "wubr %u (%s) is shown but has no place in the slot", id, wt.info (id).name);
-        CHECK (!wubr::isTailParam (id) || hidden, "wubr %u: its end saturator is listed as hidden", id);
-    }
-}
-
-TEST (rack_wubr_moves_the_sound)
-{
-    // a 120 Hz sample through Wubr in slot 3: band 1's triangle (1/4, +-12 dB around 120 Hz) swings it,
-    // two cycles a second at 120 BPM and one at 60; switched off, the slot leaves it untouched (Wubr set
-    // up by wubrGainSync: band 1 moving its gain, band 2 off)
-    auto s = sine (120.0, 3.0);
-    auto render = [&] (int type, bool on, HostInfo host, const std::function<void (Engine&)>& setup) {
-        std::unique_ptr<Engine> e (makeEngine (s));
-        e->setParam (kVolume, -20.0); // room for Wubr's +12 dB before the end saturator
-        if (type != kFxEmpty)
-            loadFx (*e, 2, type);
-        if (type == kFxWubr)
-            wubrGainSync (*e, 2);
-        e->setParam (slotParam (2, kSlotOn), on ? 1.0 : 0.0);
-        if (setup)
-            setup (*e);
-        e->noteOn (60, 1.0f);
-        return run (*e, 96000, host);
-    };
-    HostInfo h120;
-    h120.bpm = 120.0;
-    const auto dry = render (kFxEmpty, true, h120, nullptr);
-    const auto off = render (kFxWubr, false, h120, nullptr);
-    double offDiff = 0.0;
-    for (size_t i = 0; i < dry.l.size (); ++i)
-        offDiff = std::max (offDiff, (double)std::fabs (off.l[i] - dry.l[i]));
-    CHECK (offDiff < 1e-6, "off: untouched (%g)", offDiff);
-    const auto offLv = dbWindows (off.l, kWin);
-    const auto [offLo, offHi] = std::minmax_element (offLv.begin () + 2, offLv.end ());
-    CHECK (*offHi - *offLo < 0.5, "off: steady %.2f .. %.2f dB", *offLo, *offHi);
-
-    const auto on = render (kFxWubr, true, h120, nullptr);
-    const auto lv = dbOver (on.l, off.l, kWin);
-    const auto [lo, hi] = std::minmax_element (lv.begin () + 1, lv.end ());
-    std::printf ("    on: %.1f .. %.1f dB against off, %d peaks in 2 s\n", *lo, *hi, peaksOver (lv, 6.0));
-    CHECK (*hi > 10.0 && *lo < -10.0, "swings +-12 dB: %.1f .. %.1f dB", *lo, *hi);
-    CHECK (peaksOver (lv, 6.0) == 4, "two cycles a second at 120 BPM: %d peaks", peaksOver (lv, 6.0));
-    // the host's tempo reaches it
-    HostInfo h60;
-    h60.bpm = 60.0;
-    const auto slow = dbOver (render (kFxWubr, true, h60, nullptr).l, off.l, kWin);
-    CHECK (peaksOver (slow, 6.0) == 2, "one a second at 60 BPM: %d peaks", peaksOver (slow, 6.0));
-    // and its song position while it plays: half a beat in, the 1/4 triangle is at its top; at 0 at its bottom
-    HostInfo at0 = h120, atHalf = h120;
-    at0.playing = atHalf.playing = true;
-    at0.ppqValid = atHalf.ppqValid = true;
-    atHalf.ppq = 0.5;
-    const auto top = dbOver (render (kFxWubr, true, atHalf, nullptr).l, off.l, kWin);
-    const auto bottom = dbOver (render (kFxWubr, true, at0, nullptr).l, off.l, kWin);
-    std::printf ("    the song position: %.1f dB half a beat in, %.1f dB at 0\n", top[1], bottom[1]);
-    CHECK (top[1] > 5.0 && bottom[1] < -5.0, "follows the song: %.1f / %.1f dB", top[1], bottom[1]);
-
-    // band 2 instead (band 1 off), moved to 120 Hz: the same triangle, until its third point's level (a
-    // value in the slot's extension) goes to the top: then the second half of each cycle stays up
-    const uint32_t ext = (uint32_t)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
-    CHECK (ext >= kSlotBlock && ext < kSlotBlockAll, "band 2's point 3 level is in the extension: %u", ext);
-    auto band2 = [&] (bool raise) {
-        return [raise] (Engine& e) {
-            setFx (e, 2, wubr::bandParam (0, wubr::kBandOn), 0.0);
-            setFx (e, 2, wubr::bandParam (1, wubr::kBandOn), 1.0);
-            setFx (e, 2, wubr::bandParam (1, wubr::kFreq), 120.0);
-            if (raise)
-                setFx (e, 2, wubr::pointParam (1, 2, wubr::kPtY), 1.0);
-        };
-    };
-    const auto tri = dbOver (render (kFxWubr, true, h120, band2 (false)).l, off.l, kWin);
-    const auto raised = dbOver (render (kFxWubr, true, h120, band2 (true)).l, off.l, kWin);
-    const auto [tLo, tHi] = std::minmax_element (tri.begin () + 1, tri.end ());
-    const double triMean = meanOf (tri, 1, tri.size ()), raisedMean = meanOf (raised, 1, raised.size ());
-    std::printf ("    band 2: %.1f .. %.1f dB, mean %.1f dB; its point 3 raised: mean %.1f dB\n", *tLo, *tHi, triMean, raisedMean);
-    CHECK (*tHi > 10.0 && *tLo < -10.0 && std::fabs (triMean) < 1.5, "band 2 swings: %.1f .. %.1f, mean %.1f dB", *tLo, *tHi, triMean);
-    CHECK (raisedMean > triMean + 4.0, "the extension's value reaches the engine: mean %.1f vs %.1f dB", raisedMean, triMean);
-    {
-        std::unique_ptr<Engine> e (makeEngine (s));
-        loadFx (*e, 2, kFxWubr);
-        band2 (true) (*e);
-        CHECK (e->param (slotBlockParam (2, ext)) == 1.0 && e->param (slotBlockParam (1, ext)) == 0.0 &&
-                   e->param (slotBlockParam (3, ext)) == 0.0,
-               "stored in slot 3's extension only");
-    }
-}
-
-TEST (rack_wubr_envelope_follows_notes)
-{
-    // Wubr in Envelope mode, MIDI: the sampler's note-on starts band 1's shape (from -12 dB up to its
-    // hold point, the top, +12 dB, a quarter second in at 120 BPM) and it stays there while a note is
-    // held; a second note starts it again; letting go of the last note plays the rest (down to -12 dB).
-    // The sampler's release is long, so the sound carries on; the level is the 120 Hz of the first note,
-    // against the same notes with Wubr off.
-    auto s = sine (120.0, 6.0);
-    auto render = [&] (bool on) {
-        std::unique_ptr<Engine> e (makeEngine (s));
-        e->setParam (kVolume, -20.0);
-        e->setParam (kAmpR, 5000.0);
-        loadFx (*e, 0, kFxWubr);
-        wubrGainSync (*e, 0); // band 1 moving its gain, band 2 off
-        setFx (*e, 0, wubr::kMode, wubr::kEnvelope);
-        setFx (*e, 0, wubr::bandParam (0, wubr::kHold), 2.0);
-        e->setParam (slotParam (0, kSlotOn), on ? 1.0 : 0.0);
-        Out o;
-        auto more = [&] (int frames) {
-            const Out p = run (*e, frames);
-            o.l.insert (o.l.end (), p.l.begin (), p.l.end ());
-        };
-        more (4800); // nothing playing yet
-        e->noteOn (60, 1.0f);
-        more (48000);
-        e->noteOn (72, 1.0f); // an octave up (240 Hz: whole cycles in the windows, so it does not count)
-        more (24000);
-        e->noteOff (72);
-        more (24000);
-        e->noteOff (60);
-        more (48000);
-        return o;
-    };
-    const auto on = render (true), off = render (false);
-    // the 120 Hz level against Wubr off, per 25 ms from `t` seconds after the first note, over `secs`
-    auto level = [&] (double t, double secs) {
-        std::vector<double> d;
-        for (size_t a = 4800 + (size_t)(t * kHostSr); a + kWin <= 4800 + (size_t)((t + secs) * kHostSr); a += kWin)
-            d.push_back (20.0 * std::log10 ((toneAmp (on.l, 120.0, a, a + kWin) + 1e-12) / (toneAmp (off.l, 120.0, a, a + kWin) + 1e-12)));
-        return d;
-    };
-    auto range = [] (const std::vector<double>& v) { return std::make_pair (*std::min_element (v.begin (), v.end ()), *std::max_element (v.begin (), v.end ())); };
-    // (the second note's window starts 25 ms in: the drop from the top takes a few ms, and the output
-    // is late by the end saturator's latency)
-    const auto start = level (0.0, 0.025), held = level (0.4, 0.6), again = level (1.025, 0.025), again2 = level (1.4, 0.1),
-               stillHeld = level (1.6, 0.4), rest = level (2.35, 0.65);
-    std::printf ("    note on %.1f dB, held %.1f .. %.1f, 2nd note %.1f, 2nd note off %.1f .. %.1f, let go %.1f .. %.1f dB\n",
-                 start[0], range (held).first, range (held).second, again[0], range (stillHeld).first, range (stillHeld).second,
-                 range (rest).first, range (rest).second);
-    CHECK (start[0] < -6.0, "a note starts the shape at its bottom: %.1f dB", start[0]);
-    CHECK (range (held).first > 10.0, "held at the top: %.1f dB", range (held).first);
-    CHECK (again[0] < -6.0 && range (again2).first > 10.0, "a second note starts it again: %.1f, then %.1f dB", again[0],
-           range (again2).first);
-    CHECK (range (stillHeld).first > 10.0, "the first note still holds it after the second lets go: %.1f dB", range (stillHeld).first);
-    CHECK (range (rest).second < -10.0, "let go: the rest of the shape, down to the bottom: %.1f dB", range (rest).second);
-    const double released = rms (on.l, 4800 + (size_t)(2.35 * kHostSr), on.l.size ());
-    CHECK (released > 1e-3, "the sampler still sounds after the last note-off: %f", released);
-}
-
-TEST (rack_wubr_slots_and_moves)
+TEST (rack_slot_ids)
 {
     // every value of every slot (Type, On, each block position, the extension too) is a parameter of
-    // its own: no two slots share one, and none is the end saturator's
+    // its own: no two slots share one, and none is the old end saturator's; a position in the extension
+    // is one of the extensions' IDs, the others the rack block's
     std::vector<int> owner (kNumParams, -1);
     for (int s = 0; s < kRackSlots; ++s)
         for (uint32_t k = 0; k < kSlotParams + kSlotBlockAll; ++k)
@@ -1456,20 +1148,48 @@ TEST (rack_wubr_slots_and_moves)
                 owner[id] = s;
             CHECK (rackField (id).slot == s && rackField (id).field == k, "slot %d value %u decodes to %d / %u", s, k, rackField (id).slot,
                    rackField (id).field);
+            if (k >= kSlotParams + kSlotBlock)
+                CHECK (id >= kRackExtBase && id < kRackExtBase + kRackSlots * kSlotExt, "slot %d value %u in the extension: %u", s, k, id);
+            else
+                CHECK (id >= kRackBase && id < kTailExtBase, "slot %d value %u in the rack block: %u", s, k, id);
         }
-    // a Wubr slot moved the way the editor moves one (every value copied to the other slot, the old slot
-    // emptied) sounds the same, its extension values with it
+    // the end saturator's second block, between the rack and the extensions, is not the rack's
+    for (uint32_t id = kTailExtBase; id < kRackExtBase; ++id)
+        CHECK (!isRackParam (id) && isTailParam (id), "end saturator %u", id);
+    // the rack's extensions end at kRackExtEnd; what came after them is the sampler's own (the Transpose
+    // high-pass, the modulation LFOs, the envelopes' Loop Locks), not the rack's, and the IDs run on to
+    // kNumParams with no gap, through the hidden MIDI parameters (1000 .. 1002: in the table, but not the
+    // instrument's) to the ones after them (the clips at the end, the last)
+    CHECK (kRackExtEnd == kRackExtBase + kRackSlots * kSlotExt && kTransHpOn == kRackExtEnd && kModLfoBase == kTransHpSlope + 1 &&
+               kFiltLoopLock == kModLfoEnd && kPitchLoopLock == kFiltLoopLock + 1 && kMidiPitchBend == kPitchLoopLock + 1 &&
+               kMidiModWheel + 1 == kGridOn && kHardClip + 1 == kNumParams && paramTable ().size () == kNumParams,
+           "kNumParams %u", (unsigned)kNumParams);
+    for (uint32_t id = kRackExtEnd; id < kNumParams; ++id)
+        CHECK (!isRackParam (id) && !isTailParam (id) && isValidParam (id) == !isMidiParam (id), "%u is the sampler's", id);
+    CHECK (!isValidParam (kMidiPitchBend) && !isValidParam (kMidiSustain) && !isValidParam (kMidiModWheel) &&
+               isMidiParam (kMidiSustain) && !isMidiParam (kPitchLoopLock) && !isMidiParam (kGridOn) &&
+               !canModulate (kMidiModWheel, kFxEmpty) && !canModulate (kMidiPitchBend, kFxEmpty) && !canModulate (kSoftClip, kFxEmpty),
+           "the MIDI parameters are not the instrument's");
+    CHECK (isRackParam (kRackExtEnd - 1) && rackField (kRackExtEnd - 1).slot == kRackSlots - 1 &&
+               rackField (kRackExtEnd - 1).field == kSlotParams + kSlotBlockAll - 1,
+           "the last extension ID is the last slot's last position");
+    // what each kind's page does not show: its own IDs
+    for (int type = kFxPara; type < kNumFxTypes; ++type)
+        for (const auto& h : rackHiddenParams (type))
+            CHECK (h.first <= h.last && h.last < fxTable (type).size (), "%s hidden %u..%u", fxName (type), h.first, h.last);
+}
+
+TEST (rack_slot_moves_with_its_extension)
+{
+    // a Multidyn slot moved the way the editor moves one (every value copied to the other slot, the old
+    // slot emptied) sounds the same, its extension values with it (Style, in the extension)
     auto s = sine (120.0, 2.0);
-    const uint32_t ext = (uint32_t)fxBlockOf (kFxWubr, wubr::pointParam (1, 2, wubr::kPtY));
+    const uint32_t ext = (uint32_t)fxBlockOf (kFxMultidyn, multidyn::kStyle);
+    CHECK (ext >= kSlotBlock, "Style in the extension: %u", ext);
     auto setup = [&] (Engine& e, int slot) {
         e.setParam (kVolume, -20.0);
-        loadFx (e, slot, kFxWubr);
-        wubrGainSync (e, slot);
-        setFx (e, slot, wubr::bandParam (0, wubr::kBandOn), 0.0);
-        setFx (e, slot, wubr::bandParam (1, wubr::kBandOn), 1.0);
-        setFx (e, slot, wubr::bandParam (1, wubr::kFreq), 120.0);
-        setFx (e, slot, wubr::pointParam (1, 2, wubr::kPtY), 1.0); // in the extension
-        setFx (e, slot, wubr::pointParam (1, 1, wubr::kPtCurve), 0.6);
+        loadFx (e, slot, kFxMultidyn);
+        setFx (e, slot, multidyn::kStyle, multidyn::kStyleCharacter);
     };
     auto play = [&] (Engine& e) {
         e.reset ();
@@ -1487,8 +1207,9 @@ TEST (rack_wubr_slots_and_moves)
         b->setParam (to, b->param (from));
     }
     b->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
-    CHECK (b->rackType (4) == kFxWubr && b->rackType (1) == kFxEmpty && b->param (slotBlockParam (4, ext)) == 1.0,
-           "moved: slot 5 is Wubr (%d), slot 2 empty (%d)", b->rackType (4), b->rackType (1));
+    CHECK (b->rackType (4) == kFxMultidyn && b->rackType (1) == kFxEmpty &&
+               b->param (slotBlockParam (4, ext)) == fxBlockTable (kFxMultidyn).toPlain (ext, fxBlockTable (kFxMultidyn).toNormalized (ext, multidyn::kStyleCharacter)),
+           "moved: slot 5 is Multidyn (%d), slot 2 empty (%d)", b->rackType (4), b->rackType (1));
     const auto moved = play (*b);
     double diff = 0.0;
     for (size_t i = 0; i < ref.l.size (); ++i)
@@ -1496,68 +1217,13 @@ TEST (rack_wubr_slots_and_moves)
     CHECK (diff < 1e-6, "moved, it sounds the same: %g", diff);
     // without the extension's value it would not
     setup (*c, 4);
-    setFx (*c, 4, wubr::pointParam (1, 2, wubr::kPtY), -1.0);
+    setFx (*c, 4, multidyn::kStyle, multidyn::kStyleOtt);
     const auto plain = play (*c);
     double diff2 = 0.0;
     for (size_t i = 0; i < ref.l.size (); ++i)
         diff2 = std::max (diff2, (double)std::fabs (plain.l[i] - ref.l[i]));
     std::printf ("    moved: %g apart; without its extension value: %g\n", diff, diff2);
-    CHECK (diff2 > 0.01, "the extension's value matters: %g", diff2);
-}
-
-TEST (rack_wubr_defaults_and_link)
-{
-    // Wubr loads into a slot with its defaults: both bands on, moving their centres (Frequency), free at
-    // 0.75 Hz, Link Rates on
-    auto s = sine (120.0, 3.0);
-    {
-        std::unique_ptr<Engine> e (makeEngine (s));
-        loadFx (*e, 3, kFxWubr);
-        auto plain = [&] (uint32_t id) {
-            return wubr::toPlain (id, e->param (slotBlockParam (3, (uint32_t)fxBlockOf (kFxWubr, id))));
-        };
-        for (int b = 0; b < wubr::kBands; ++b)
-        {
-            CHECK (plain (wubr::bandParam (b, wubr::kBandOn)) == 1.0, "band %d on", b + 1);
-            CHECK (std::lround (plain (wubr::bandParam (b, wubr::kTarget))) == wubr::kTargetFreq, "band %d: Frequency (%f)", b + 1,
-                   plain (wubr::bandParam (b, wubr::kTarget)));
-            CHECK (std::lround (plain (wubr::bandParam (b, wubr::kRateMode))) == wubr::kFree, "band %d: Free (%f)", b + 1,
-                   plain (wubr::bandParam (b, wubr::kRateMode)));
-            CHECK (std::fabs (plain (wubr::bandParam (b, wubr::kRateHz)) - 0.75) < 1e-6, "band %d: 0.75 Hz (%f)", b + 1,
-                   plain (wubr::bandParam (b, wubr::kRateHz)));
-        }
-        CHECK (plain (wubr::kLinkRate) == 1.0, "Link Rates on (%f)", plain (wubr::kLinkRate));
-    }
-    // linked, band 2 runs at band 1's rate: band 2 alone (band 1 off) moving the gain at 120 Hz, free,
-    // its own rate 0.5 Hz; band 1's at 2 Hz, then 1 Hz. Peaks of the triangle in 2 s: 4, then 2; unlinked
-    // it keeps its own 0.5 Hz (1)
-    auto render = [&] (bool link, double hz1) {
-        std::unique_ptr<Engine> e (makeEngine (s));
-        e->setParam (kVolume, -20.0);
-        loadFx (*e, 3, kFxWubr);
-        setFx (*e, 3, wubr::bandParam (0, wubr::kBandOn), 0.0);
-        setFx (*e, 3, wubr::bandParam (0, wubr::kRateHz), hz1);
-        setFx (*e, 3, wubr::bandParam (1, wubr::kTarget), wubr::kTargetGain);
-        setFx (*e, 3, wubr::bandParam (1, wubr::kFreq), 120.0);
-        setFx (*e, 3, wubr::bandParam (1, wubr::kRateHz), 0.5);
-        setFx (*e, 3, wubr::kLinkRate, link ? 1.0 : 0.0);
-        e->setParam (slotParam (3, kSlotOn), 1.0);
-        e->noteOn (60, 1.0f);
-        const auto on = run (*e, 96000);
-        e->setParam (slotParam (3, kSlotOn), 0.0);
-        e->reset ();
-        e->noteOn (60, 1.0f);
-        const auto off = run (*e, 96000);
-        return dbOver (on.l, off.l, kWin);
-    };
-    const auto fast = render (true, 2.0), slower = render (true, 1.0), own = render (false, 2.0);
-    const auto [fLo, fHi] = std::minmax_element (fast.begin () + 1, fast.end ());
-    std::printf ("    band 2 linked to band 1 at 2 Hz: %d peaks (%.1f .. %.1f dB); at 1 Hz: %d; unlinked (its own 0.5 Hz): %d\n",
-                 peaksOver (fast, 6.0), *fLo, *fHi, peaksOver (slower, 6.0), peaksOver (own, 6.0));
-    CHECK (*fHi > 10.0 && *fLo < -10.0, "band 2 swings: %.1f .. %.1f dB", *fLo, *fHi);
-    CHECK (peaksOver (fast, 6.0) == 4, "linked: band 1's 2 Hz: %d peaks", peaksOver (fast, 6.0));
-    CHECK (peaksOver (slower, 6.0) == 2, "linked: band 1's 1 Hz: %d peaks", peaksOver (slower, 6.0));
-    CHECK (peaksOver (own, 6.0) == 1, "unlinked: band 2's own 0.5 Hz: %d peaks", peaksOver (own, 6.0));
+    CHECK (diff2 > 1e-4, "the extension's value matters: %g", diff2);
 }
 
 TEST (defaults_one_voice_and_root_note)
@@ -1565,31 +1231,28 @@ TEST (defaults_one_voice_and_root_note)
     const auto& t = paramTable ();
     CHECK (voicesFromIndex ((int)t.info (kVoices).def) == 1, "one voice by default");
     CHECK (t.info (kRootKey).def == 60.0 && t.toText (kRootKey, 60.0) == "C3", "root C3");
-    // a new Smemplr: Smacheratr in the first slot, on, with its own defaults (the other slots empty),
-    // and no saturator after the rack (the old one's parameters are off)
-    CHECK (t.info (kTailBase + pk::kTailOn).def == 0.0, "the old end saturator is off");
-    CHECK (t.info (slotParam (0, kSlotType)).def == (double)kFxSmacheratr && t.info (slotParam (0, kSlotOn)).def == 1.0,
-           "Smacheratr in the first slot, on");
-    for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+    // a new Smemplr: every slot empty and on (its block at 0), no saturator after the rack (the old one's
+    // parameters are retired), Soft Clip and Hard Clip off
+    CHECK (t.info (kTailBase + pk::kTailOn).retired && t.info (kTailExtBase + pk::kTailExtClarity).retired, "the old end saturator is retired");
+    for (int slot = 0; slot < kRackSlots; ++slot)
     {
-        const double want = j < smacheratr::kNumParams ? smacheratr::paramTable ().defaultNormalized (j) : 0.0;
-        CHECK (std::fabs (defaultNormalized (slotBlockParam (0, j)) - want) < 1e-12, "first slot position %u: %f, want %f", j,
-               defaultNormalized (slotBlockParam (0, j)), want);
+        CHECK (t.info (slotParam (slot, kSlotType)).def == (double)kFxEmpty && t.info (slotParam (slot, kSlotOn)).def == 1.0,
+               "slot %d empty, on", slot + 1);
+        int nonZero = 0;
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            nonZero += defaultNormalized (slotBlockParam (slot, j)) != 0.0 ? 1 : 0;
+        CHECK (nonZero == 0, "slot %d: its block at 0 (%d not)", slot + 1, nonZero);
     }
-    CHECK (smacheratr::paramTable ().info (smacheratr::kPreLimit).def == 1.0 &&
-               defaultNormalized (slotBlockParam (0, smacheratr::kPreLimit)) == 1.0,
-           "its Pre-Limit is on");
-    for (int slot = 1; slot < kRackSlots; ++slot)
-        CHECK (t.info (slotParam (slot, kSlotType)).def == (double)kFxEmpty, "slot %d empty", slot + 1);
+    CHECK (t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0, "Soft Clip and Hard Clip off");
     CHECK (std::string (t.info (kTailBase + pk::kTailOn).name).rfind ("Old ", 0) == 0 &&
                std::string (t.info (kTailExtBase + pk::kTailExtClarity).name).rfind ("Old ", 0) == 0,
            "the old end saturator's parameters are named Old: %s, %s", t.info (kTailBase + pk::kTailOn).name,
            t.info (kTailExtBase + pk::kTailExtClarity).name);
     {
-        // and the engine starts that way: the Smacheratr's latency, nothing after the rack
+        // and the engine starts that way: nothing in the rack, no latency
         Engine fresh;
         fresh.prepare (kHostSr, 256);
-        CHECK (fresh.rackType (0) == kFxSmacheratr && fresh.rackType (1) == kFxEmpty && fresh.latency () > 0,
+        CHECK (fresh.rackType (0) == kFxEmpty && fresh.rackType (1) == kFxEmpty && fresh.latency () == 0,
                "a new engine's rack: %d %d, latency %d", fresh.rackType (0), fresh.rackType (1), fresh.latency ());
     }
     // a 440 Hz sample with the root on C4: C4 plays 440 Hz, C3 an octave down
@@ -1806,36 +1469,31 @@ TEST (old_end_saturator_moves_into_the_rack)
                satValue (norm, 2, smacheratr::kOutput), satValue (norm, 2, smacheratr::kClarityFreq));
         // the colour filters were off after the rack (Smacheratr's own default is on)
         CHECK (satValue (norm, 2, smacheratr::kColorOn) == 0.0, "colour off, as it was");
-        // and it sounds the same: the old saturator after the rack against the slot
+        // and the slot runs it (its latency); the old saturator after the rack does not any more (retired):
+        // switched on, it changes nothing
         auto s = sine (220.0, 1.0);
-        std::array<double, kNumParams> before {};
-        std::array<bool, kNumParams> beforeHas {};
-        oldState (before, beforeHas);
-        for (uint32_t id = 0; id < kNumParams; ++id)
-            if (isTailParam (id))
-                before[id] = norm[id];
-        before[onId] = 1.0;
-        before[slotParam (0, kSlotType)] = norm[slotParam (0, kSlotType)];
         auto render = [&] (const std::array<double, kNumParams>& v) {
             std::unique_ptr<Engine> e (makeEngine (s));
             for (uint32_t id = 0; id < kNumParams; ++id)
                 if (isRackParam (id) || isTailParam (id))
                     e->setParam (id, toPlain (id, v[id]));
-            for (uint32_t j = 0; j < kSlotBlockAll; ++j) // Para with its defaults in the first slot
-                e->setParam (slotBlockParam (0, j), j < para::kNumParams ? para::paramTable ().defaultNormalized (j) : 0.0);
-            e->setParam (slotParam (1, kSlotType), (double)kFxEmpty); // (no Multidyn: it would make the two differ in time)
+            e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
+            e->setParam (slotParam (1, kSlotType), (double)kFxEmpty);
             e->reset (); // (the settings from the start, not glided into)
             e->noteOn (57, 1.0f);
             return std::make_pair (run (*e, 24000), e->latency ());
         };
-        std::array<double, kNumParams> after = norm;
-        const auto [a, la] = render (before);
-        const auto [b, lb] = render (after);
+        std::array<double, kNumParams> on = norm, off = norm;
+        on[onId] = 1.0;
+        const auto [a, la] = render (on);
+        const auto [b, lb] = render (off);
         double diff = 0.0;
         for (size_t i = 0; i < a.l.size (); ++i)
             diff = std::max (diff, (double)std::fabs (a.l[i] - b.l[i]));
-        CHECK (la == lb && diff < 1e-4 && rms (a.l, 0, a.l.size ()) > 0.01, "the same sound in the rack: latency %d / %d, difference %g",
-               la, lb, diff);
+        smacheratr::Engine alone;
+        alone.prepare (kHostSr, 512);
+        CHECK (la == lb && la == alone.latency () && diff == 0.0 && rms (a.l, 0, a.l.size ()) > 0.01,
+               "the slot runs it, the old switch changes nothing: latency %d / %d (%d), difference %g", la, lb, alone.latency (), diff);
     }
     {
         // off: nothing added, the rack as it was
@@ -1860,26 +1518,24 @@ TEST (old_end_saturator_moves_into_the_rack)
         // a gap in the rack: after the last effect, not in the gap
         oldState (norm, has);
         norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
-        norm[slotParam (3, kSlotType)] = toNormalized (slotParam (3, kSlotType), kFxWubr);
+        norm[slotParam (3, kSlotType)] = toNormalized (slotParam (3, kSlotType), kFxWidr);
         norm[onId] = 1.0;
         moveEndSaturatorIntoRack (norm, has);
         CHECK (typeOf (norm, 1) == kFxEmpty && typeOf (norm, 4) == kFxSmacheratr, "after the last effect: %d %d", typeOf (norm, 1),
                typeOf (norm, 4));
     }
     {
-        // the last slot used: no room, the old saturator stays on (it keeps running after the rack)
+        // the last slot used: no room, the old saturator is left as it was (retired: nothing runs it)
         oldState (norm, has);
         norm[slotParam (kRackSlots - 1, kSlotType)] = toNormalized (slotParam (kRackSlots - 1, kSlotType), kFxMsEq);
         norm[onId] = 1.0;
         moveEndSaturatorIntoRack (norm, has);
-        CHECK (norm[onId] == 1.0 && typeOf (norm, 0) == kFxEmpty, "no room: it stays after the rack");
+        CHECK (norm[onId] == 1.0 && typeOf (norm, 0) == kFxEmpty, "no room: it is left as it was");
         std::unique_ptr<Engine> e (makeEngine (sine (220.0, 0.5)));
         for (uint32_t id = 0; id < kNumParams; ++id)
             if (isRackParam (id) || isTailParam (id))
                 e->setParam (id, toPlain (id, norm[id]));
-        CHECK (e->latency () > 0, "and it runs (its latency): %d", e->latency ());
-        e->setParam (onId, 0.0);
-        CHECK (e->latency () == 0, "off: nothing after the rack, no latency: %d", e->latency ());
+        CHECK (e->latency () == 0, "and it does not run (no latency): %d", e->latency ());
     }
 }
 
@@ -1897,9 +1553,10 @@ TEST (effects_fuzz)
         std::unique_ptr<Engine> e (makeEngine (s));
         for (uint32_t id = kRackBase; id < kTailExtBase; ++id)
             e->setParam (id, toPlain (id, r01 ()));
-        for (int slot = 0; slot < kRackSlots; ++slot) // every kind of effect somewhere
+        for (int slot = 0; slot < kRackSlots; ++slot) // every kind of effect somewhere (the retired ones too: Empty)
             e->setParam (slotParam (slot, kSlotType), (double)(1 + (slot + iter) % (kNumFxTypes - 1)));
-        e->setParam (kTailBase + pk::kTailOn, 1.0);
+        e->setParam (kSoftClip, iter % 2 ? 1.0 : 0.0);
+        e->setParam (kHardClip, iter % 3 ? 1.0 : 0.0);
         bool finite = true;
         for (int step = 0; step < 6; ++step)
         {
@@ -3167,7 +2824,8 @@ TEST (fuzz_random_params_with_sample)
             if (r01 () < 0.6f)
                 e->setParam (id, toPlain (id, r01 ()));
         e->setParam (kVolume, 0.0);
-        e->setParam (kTailBase + pk::kTailOn, 0.0);
+        e->setParam (kSoftClip, 0.0);
+        e->setParam (kHardClip, 0.0);
         for (int slot = 0; slot < kRackSlots; ++slot)
             e->setParam (slotParam (slot, kSlotType), (double)kFxEmpty);
         HostInfo h;
@@ -3917,7 +3575,7 @@ TEST (mod_mapping_edits)
     // the rack's effects move: their mappings follow, a removed effect's go
     ModMap r;
     addMapping (r, 0, slotBlockParam (1, 3), 0.5, kFxPara);
-    addMapping (r, 1, slotBlockParam (2, kSlotBlock + 2), 0.5, kFxWubr); // (in the slot's extension)
+    addMapping (r, 1, slotBlockParam (2, kSlotBlock + 2), 0.5, kFxMultidyn); // (in the slot's extension)
     addMapping (r, 2, kVolume, 0.5, -1);
     std::array<int, kRackSlots> moved;
     for (int s = 0; s < kRackSlots; ++s)
@@ -3934,7 +3592,7 @@ TEST (mod_mappings_as_bytes)
 {
     ModMap m;
     addMapping (m, 0, kFilterFreq, 0.375, -1);
-    addMapping (m, 3, slotBlockParam (7, kSlotBlock + 5), -0.125, kFxWubr);
+    addMapping (m, 3, slotBlockParam (7, kSlotBlock + 5), -0.125, kFxMultidyn);
     const auto b = encodeModMap (m);
     ModMap back;
     CHECK (decodeModMap (b.data (), b.size (), back) && back.list.size () == 2 && back.list[0] == m.list[0] && back.list[1] == m.list[1],
@@ -4037,7 +3695,7 @@ TEST (mod_rack_mappings)
     e->setModMappings (&m, 1);
     run (*e, Engine::kModStep);
     CHECK (std::fabs (e->param (hp) - 0.5) < 1e-9 && e->modWorking (0), "para's high-pass: %f", e->param (hp));
-    loadFx (*e, 1, kFxLevlr);
+    loadFx (*e, 1, kFxWidr);
     e->setParam (hp, 0.3);
     run (*e, Engine::kModStep);
     CHECK (!e->modWorking (0) && e->param (hp) == 0.3, "another effect: paused, %f", e->param (hp));

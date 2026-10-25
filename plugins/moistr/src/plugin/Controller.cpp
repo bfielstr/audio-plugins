@@ -233,8 +233,7 @@ private:
 
 int Controller::labKind (int slot)
 {
-    const int t = (int)std::lround (plain (labSlotParam (slot, kLabType)));
-    return t > 0 && t < smemplr::kNumFxTypes ? t : smemplr::kFxEmpty;
+    return smemplr::fxKind ((int)std::lround (plain (labSlotParam (slot, kLabType)))); // (a retired or unknown kind: Empty)
 }
 
 Parameter* Controller::makeParameter (uint32_t id)
@@ -269,7 +268,6 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                 if (shared)
                     shared->release ();
                 shared = m;
-                watchLatency (&shared->tailMeters.latency); // (the end saturator's moves with its Oversampling)
                 watchLatency (&shared->meters.labLatency);  // (the LAB's with the kinds in its slots)
             }
         }
