@@ -63,9 +63,9 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        // a new instance: the end saturator off (the output stage is the colour), its Gentlr ready
-        checkNewInstanceGentlr (rig.controller, -1, (uint32_t)kTailExtBase + pk::kTailExtClarity, (uint32_t)kTailExt3Base + pk::kTailExt3Slope);
-        CHECK (rig.controller->getParamNormalized ((uint32_t)kTailBase + pk::kTailOn) == 0.0, "a new instance: the end saturator off");
+        // a new instance: the clips at the end off
+        CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 0.0,
+               "a new instance: Soft Clip and Hard Clip off");
         CHECK (std::fabs (plainOf (rig, kRatio) - 4.0) < 1e-9 && std::fabs (plainOf (rig, kDrive) - 5.0) < 1e-9 &&
                    std::lround (plainOf (rig, kCurve)) == kGermSoft,
                "a new instance: the defaults (Ratio 4, Drive 5, Germ Soft)");

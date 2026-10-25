@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <vector>
@@ -31,12 +32,14 @@ const ParamTable& paramTable ()
         v.push_back (toggle (kExtSc, "Ext SC", "Ext SC", false));
         v.push_back (real (kScGain, "SC Gain", "SC Gain", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
         v.push_back (percent (kSaturation, "Saturation", "Saturation", 0.5));
-        // the end saturator: off in a new instance (the output stage is the colour here)
+        // the old end saturator, retired (its IDs kept for saved projects)
         pk::addTailParams (v, kTailBase, false);
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;
     }());
     return t;

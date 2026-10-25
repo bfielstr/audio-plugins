@@ -4,6 +4,7 @@
 #include "DetectorShape.h"
 #include "StageShape.h"
 
+#include "pluginkit/EndClip.h"
 #include "pluginkit/NoDenormals.h"
 
 #include <algorithm>
@@ -124,7 +125,7 @@ std::complex<double> stageResponse (const StageParams& s, double hz)
 
 Engine::Engine () {}
 
-void Engine::prepare (double sampleRate, int maxBlock)
+void Engine::prepare (double sampleRate, int /*maxBlock*/) // (it works in chunks of kChunk)
 {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
     srOs = sr * kOversample;
@@ -145,7 +146,6 @@ void Engine::prepare (double sampleRate, int maxBlock)
     satDcG = dsp::onePoleG (5.0, srOs);
     kSm = coefFor (shape::kSmoothSec, srOs);
 
-    tail.prepare (sr, std::max (1, maxBlock));
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParam (id, p[id]);
     reset ();
@@ -181,7 +181,6 @@ void Engine::reset ()
     out = (float)dbToGain (p[kOutput]);
     shownDrive = shownFeedback = -1.0;
     controlChunk ();
-    tail.reset ();
 }
 
 void Engine::setParam (uint32_t id, double plain)
@@ -189,17 +188,7 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    if (id >= kTailExt4Base)
-        tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
-    else if (id >= kTailExt3Base)
-        tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-    else if (id >= kTailExt2Base)
-        tail.setParam (smacheratr::kTailExt2First + (id - kTailExt2Base), plain);
-    else if (id >= kTailExtBase)
-        tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-    else if (id >= kTailBase)
-        tail.setParam (id - kTailBase, plain);
-    // (the rest are read where they are used)
+    // (read where they are used; the old end saturator's are retired)
 }
 
 // The output stage's sections for the drive and feedback now (only when they moved).
@@ -438,7 +427,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         meters->levelDb.store ((float)levelNow, rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
-    tail.process (yl, yr, n);
+    pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
 }
 
 } // namespace pinchr
