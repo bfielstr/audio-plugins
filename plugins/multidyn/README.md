@@ -61,7 +61,7 @@ the defaults it is plain OTT; the band controls move it from there:
 
 **Peak/RMS**, the **RMS Window**, **Soft Knee**, **Soften** and the transient guard only work in
 Character and look disabled in OTT. Soften's **Color**, Pre-Limit, the side-chain, the crossovers (24
-dB: Linkwitz-Riley 4 in OTT), the Sub band and the smacheratr work in both. In OTT the display's block
+dB: Linkwitz-Riley 4 in OTT), the Sub band, Soft Clip and Hard Clip work in both. In OTT the display's block
 numbers show the gain over the makeup.
 
 **Character** is multidyn's own sound. Detection is smooth (the RMS Window, 50 ms by default, and a
@@ -146,9 +146,12 @@ exactly what it is without it. Switched on or off it fades over 30 ms; the laten
 
 ![The Sub band](../../docs/multidyn/ui_multidyn_sub.png)
 
-**smacheratr** (bottom panel, end of the chain): the saturator every plug-in here can end with, after
-the Output gain. On by default, its gentlr on with the **Signature** Slope, Drive 0 dB. While it is off
-it folds to its header strips; click a strip (or switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+**Soft Clip** and **Hard Clip** (under Color, off by default): the end of the chain,
+after the Output gain and Color. Soft Clip rounds peaks off from -6 dBFS up to 0 dBFS; Hard Clip lets
+nothing above 0 dBFS out (after Soft Clip when both are on). Neither adds latency.
+
+The **Basic** page has the display, **Bands**, **Style**, **Amount**, **Time**, **Output**, **Soft Clip**
+and **Hard Clip**; **Advanced** shows everything.
 
 Every control is an automatable parameter.
 
@@ -162,15 +165,16 @@ README](../../README.md#presets).
 
 ## Latency
 
-Every band always runs through the 1 ms look-ahead, and the saturator's and Color's oversampling add
-their own, so the latency (218 samples at 48 kHz) does not change with the settings, except the
-saturator's **Oversampling**: 4x is the default, 2x takes 5 samples off at 48 kHz and Off 37; the host is
-told when it changes. It is reported to the host.
+Every band always runs through the 1 ms look-ahead, and Color's oversampling adds its own (Color on or
+off), so the latency (133 samples at 48 kHz) never changes with the settings. It is reported to the host.
 
 ## Older projects
 
 Projects saved before Style existed (and smemplr rack slots saved before it) open in Character, so they
 sound as they did.
+
+Projects saved while multidyn ended with a smacheratr (on by default then) open without it: its
+settings are kept but no longer used, and Soft Clip and Hard Clip start off.
 
 Up to version 0.6 the defaults were a more extreme setting, with its gain staging built in (input +5.2
 dB, band outputs +24 / +9.1 / +11.3 / +11.7 dB, output -7 dB). A project saved before loads with the

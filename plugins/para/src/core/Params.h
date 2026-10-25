@@ -1,5 +1,5 @@
-// Para parameters. IDs are persisted in projects: only ever append (after the gain locks now; the
-// end saturator's blocks keep the room they have).
+// Para parameters. IDs are persisted in projects: only ever append (after the clips now; the old end
+// saturator's blocks keep the room they have, retired).
 #pragma once
 
 #include "pluginkit/ParamTable.h"
@@ -33,20 +33,20 @@ enum ParamId : uint32_t
     kLpGain,     // dB, level of the low-pass (minimum = -inf)
     kResLink,    // the low-pass uses the high-pass resonance
     kMovement,   // Free / Vocal (see Engine.h)
-    kTailBase,   // the Smacheratr at the end of the chain: pk::kTailFields entries
+    kTailBase,   // the old Smacheratr at the end of the chain (retired, as all its blocks): pk::kTailFields entries
     kDragGain = kTailBase + pk::kTailFields, // editor: dragging a handle up/down moves its gain with the resonance
     kLiquid,     // unused: Vocal movement is what Liquid was (see Engine.h)
     kFade,       // semitones: how far past where the dip starts Vocal takes the follower to -inf
     kNotch,      // unused (Liquid's notch is gone)
     kDipStart,   // Hz: Vocal, the low-pass leading - where the high-pass starts to rise and fade
     kLpFloor,    // Hz: the low-pass never goes below this (keeps the sub)
-    kTailExtBase, // the rest of the end-of-chain Smacheratr: pk::kTailExtFields entries
+    kTailExtBase, // the rest of the old end-of-chain Smacheratr (retired): pk::kTailExtFields entries
     // --- after the end saturator's block (which stays as it is from here on) ---
     kHpDriveOn = kTailExtBase + 17, // the high-pass branch's drive (Smacheratr's Analog curve, see Engine.h); the one
                                     // drive for both filters until the drive was per band
     kHpDrive,                       // dB into the curve
     kDrivePos,                      // Pre (before each filter) / Post (after it), for both drives
-    kTailExt2Base, // Gentlr's Advanced mode in the end Smacheratr: pk::kTailExt2Fields entries
+    kTailExt2Base, // Gentlr's Advanced mode in the old end Smacheratr (retired): pk::kTailExt2Fields entries
     // --- after Gentlr's Advanced block and its Sub band (its room is fixed at 9 from here on) ---
     kLpDriveOn = kTailExt2Base + 9, // the low-pass branch's drive
     kLpDrive,                       // dB into the curve
@@ -55,15 +55,24 @@ enum ParamId : uint32_t
     kHpGainLock, // the high-pass gain never goes above 0 dB (on by default)
     kLpGainLock, // the low-pass gain never goes above 0 dB (off by default)
     // --- after the gain locks ---
-    kTailExt3Base, // Gentlr's High band, No Overlap and Slope in the end Smacheratr: pk::kTailExt3Fields entries
-    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it: pk::kTailExt4Fields entries (the last block)
-    kNumParams = kTailExt4Base + pk::kTailExt4Fields
+    kTailExt3Base, // Gentlr's High band, No Overlap and Slope in the old end Smacheratr (retired): pk::kTailExt3Fields entries
+    kTailExt4Base = kTailExt3Base + pk::kTailExt3Fields, // Gentlr's glue in it (retired): pk::kTailExt4Fields entries
+    // --- after the old end saturator's last block ---
+    kSoftClip = kTailExt4Base + pk::kTailExt4Fields, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
+    kNumParams
 };
 static_assert (pk::kTailExtFields <= kHpDriveOn - kTailExtBase, "the end saturator's block grew into the drive's IDs");
 static_assert (pk::kTailExt2Fields == kLpDriveOn - kTailExt2Base, "Gentlr's Advanced block must fill its room: IDs are persisted");
 static_assert (kHpDriveOn == 48 && kHpDrive == 49 && kDrivePos == 50 && kTailExt2Base == 51 && kLpDriveOn == 60 && kLpDrive == 61 &&
-                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kTailExt3Base == 65 && kTailExt4Base == 71 && kNumParams == 76,
+                   kLpSlope == 62 && kHpGainLock == 63 && kLpGainLock == 64 && kTailExt3Base == 65 && kTailExt4Base == 71 && kSoftClip == 76 &&
+                   kHardClip == 77 && kNumParams == 78,
                "Para's IDs are persisted in projects");
+// the old end saturator's blocks (retired, pk::retire): first .. last - 1 each
+constexpr uint32_t kRetiredTail[4][2] = {{kTailBase, kTailBase + pk::kTailFields},
+                                         {kTailExtBase, kTailExtBase + pk::kTailExtFields},
+                                         {kTailExt2Base, kTailExt2Base + pk::kTailExt2Fields},
+                                         {kTailExt3Base, kTailExt4Base + pk::kTailExt4Fields}};
 
 // The IDs a plug-in hosting Para (Smemplr) reserves for it; the ones after are mapped one by one.
 constexpr uint32_t kHostedParams = kTailBase + pk::kTailFields;
@@ -143,8 +152,7 @@ void upgradeToPerBandDrive (const std::function<bool (uint32_t, double&)>& get, 
 // is off, and Fade (1 .. 36 semitones then) keeps its semitones (12, the default then, where none was saved).
 void upgradeToSeparateSlopes (const std::function<bool (uint32_t, double&)>& get, const std::function<void (uint32_t, double)>& set);
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the end saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace para

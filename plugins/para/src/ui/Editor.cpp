@@ -68,7 +68,6 @@ Editor::~Editor () = default;
 
 void Editor::onClose ()
 {
-    tail.reset ();
     view = nullptr;
     lpResKnob = nullptr;
     hpDriveKnob = lpDriveKnob = drivePosView = nullptr;
@@ -125,9 +124,12 @@ void Editor::buildUI (CFrame* f)
         bind (spP, new Knob (knobRect (116 + i * 62, 30), this, splitIds[i], splitNames[i], i < 2));
 
     // second row: movement and output
-    auto* outP = section (CRect (8, kRow2Top, 752, kRow2Top + 102), "OUTPUT");
+    auto* outP = section (CRect (8, kRow2Top, 752, kRow2Bottom), "OUTPUT");
     bind (outP, new Knob (knobRect (10, 22), this, kDryWet));
     bind (outP, new Knob (knobRect (72, 22), this, kOutput, nullptr, true));
+    // the end of the chain: Soft Clip, then Hard Clip
+    bind (outP, new Toggle (CRect (10, kClipTop, 10 + kClipW, kClipTop + kClipH), this, kSoftClip, "Soft Clip"));
+    bind (outP, new Toggle (CRect (16 + kClipW, kClipTop, 16 + 2 * kClipW, kClipTop + kClipH), this, kHardClip, "Hard Clip"));
     outP->addView (new Label (CRect (150, 24, 290, 38), "Movement", 10.5, false, 1));
     bind (outP, new Segmented (CRect (150, 42, 290, 62), this, kMovement, {"Free", "Vocal"}));
     bind (outP, new Knob (knobRect (300, 22), this, kDipStart));
@@ -140,10 +142,6 @@ void Editor::buildUI (CFrame* f)
     bind (outP, new Toggle (CRect (564, 70, 606, 88), this, kLpDriveOn, "LP"));
     hpDriveKnob = bind (outP, new Knob (knobRect (614, 22), this, kHpDrive, "HP Drive"));
     lpDriveKnob = bind (outP, new Knob (knobRect (676, 22), this, kLpDrive, "LP Drive"));
-
-    // the saturator at the end of the chain, with Smacheratr's displays above its controls
-    tail = makeTail ();
-    tail->add (root, layoutRegion ("tail", CRect (8, kRow2Top + 108, 752, kRow2Top + 108 + smacheratr::TailPanel::kOpenHeight)));
 
     applyParamTooltips (&help::forParam);
     updateLooks ();
@@ -163,19 +161,11 @@ void Editor::updateLooks ()
         drivePosView->setEnabledLook (hpOn || lpOn);
 }
 
-smacheratr::TailBases Editor::tailBases () { return {kTailBase, kTailExtBase, kTailExt2Base, kTailExt3Base, kTailExt4Base}; }
-
-std::unique_ptr<smacheratr::TailPanel> Editor::makeTail ()
-{
-    return std::make_unique<smacheratr::TailPanel> (this, tailBases (),
-                                                    [c = ctl] { auto* s = c->getShared (); return s ? s->sampleRate.load () : 48000.0; },
-                                                    [c = ctl] () -> const smacheratr::Meters* { auto* s = c->getShared (); return s ? &s->tailMeters : nullptr; });
-}
-
 pk::basic::Spec Editor::basicSpec ()
 {
     // the two filters' cutoffs (HP Freq, LP Freq: drag their handles on the display too, the gains go
-    // through the locks as in the Advanced view) and how they move (Movement); Dry/Wet and Output
+    // through the locks as in the Advanced view) and how they move (Movement); Dry/Wet, Output, Soft Clip
+    // and Hard Clip
     using namespace pk::basic;
     Spec s;
     s.title = "para";
@@ -190,8 +180,7 @@ pk::basic::Spec Editor::basicSpec ()
         return view;
     };
     s.rows = {{knob (kHpFreq, "HP Freq"), knob (kLpFreq, "LP Freq"), segmented (kMovement, "Movement", {"Free", "Vocal"}, 168)}};
-    s.output = {knob (kDryWet), knob (kOutput, {}, true)};
-    smacheratr::TailPanel::addToBasic (s, this, tailBases (), tail, [this] { return makeTail (); });
+    s.output = {knob (kDryWet), knob (kOutput, {}, true), toggle (kSoftClip, "Soft Clip"), toggle (kHardClip, "Hard Clip")};
     s.menu = [this] (CPoint p) { showMenu (p); };
     s.help = &help::forParam;
     s.advancedSwitch = CRect (348, 6, 432, 28);
@@ -201,8 +190,6 @@ pk::basic::Spec Editor::basicSpec ()
 void Editor::paramChanged (uint32_t id)
 {
     pk::EditorBase::paramChanged (id);
-    if (tail)
-        tail->paramChanged (id);
     if (view)
         view->invalid ();
     if (id == kResLink || id == kHpDriveOn || id == kLpDriveOn)
@@ -211,8 +198,6 @@ void Editor::paramChanged (uint32_t id)
 
 void Editor::idle ()
 {
-    if (tail)
-        tail->idle ();
     if (view)
         view->idle ();
 }
@@ -245,14 +230,13 @@ void Editor::showMenu (CPoint where)
 pk::layout::Spec Editor::layoutSpec (bool) const
 {
     pk::layout::Spec s;
-    // the response, the two filters, the split over the output; the end saturator under them
+    // the response, the two filters, the split over the output
     s.panels = {
         {"display", "response", {8, 40, 752, 290}, 0},
         {"highpass", "", {8, kRow1Top, 190, kRow1Bottom}, 0},
         {"lowpass", "", {196, kRow1Top, 378, kRow1Bottom}, 0},
         {"split", "", {384, kRow1Top, 752, kRow1Bottom}, 0, 0},
-        {"output", "", {8, kRow2Top, 752, kRow2Top + 102}, 0, 0},
-        {"tail", "end of the chain", {8, 536, 752, 536 + smacheratr::TailPanel::kOpenHeight}, 1, -1, true},
+        {"output", "", {8, kRow2Top, 752, kRow2Bottom}, 0, 0},
     };
     return s;
 }

@@ -43,7 +43,6 @@ static State baseState ()
         set (st, bandParam (b, kAboveThresh), -12.0);
         set (st, bandParam (b, kBelowThresh), -40.0);
     }
-    set (st, kSatOn, 0.0);
     set (st, multidyn::kOutput, -kBakedMasterDb);
     set (st, kPreLimit, 0.0);
     set (st, kMode, kBase);
@@ -95,7 +94,9 @@ int main (int argc, char** argv)
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count %d", rig.controller->getParameterCount ());
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        checkNewInstanceGentlr (rig.controller, kSatOn, kSatExtBase + pk::kTailExtClarity, kSatExt3Base + pk::kTailExt3Slope);
+        // a new instance: the clips at the end off
+        CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 0.0,
+               "a new instance: Soft Clip and Hard Clip off");
         CHECK (rig.component->getBusCount (kAudio, kInput) == 2, "main + side-chain inputs");
         // a fresh instance is the four-band upward-compression preset
         CHECK (std::lround (plainOf (rig, kBands)) == 2 && std::fabs (plainOf (rig, kXover1) - 88.3) < 1e-6 &&
@@ -159,7 +160,7 @@ int main (int argc, char** argv)
         set (st, bandParam (0, kRelease), 500.0);
         CHECK (apply (rig, st), "setState");
         CHECK (rig.start (), "start");
-        CHECK (rig.processor->getLatencySamples () > 48, "look-ahead + saturator latency %u", rig.processor->getLatencySamples ());
+        CHECK (rig.processor->getLatencySamples () > 48, "look-ahead + Soften Color's latency %u", rig.processor->getLatencySamples ());
         std::vector<float> out;
         rig.render (2.0, out, nullptr, tones (-6.0, -100.0));
         CHECK (allFinite (out), "finite");

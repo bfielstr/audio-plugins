@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -22,7 +24,6 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
 {
     sr = sampleRate;
     maxBlock = std::max (1, maxBlockSize);
-    tail.prepare (sr, maxBlock);
     driveHp.prepare (sr, maxBlock);
     driveLp.prepare (sr, maxBlock);
     for (int c = 0; c < 2; ++c)
@@ -39,16 +40,6 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
         v->assign ((size_t)maxBlock, 0.0f);
     duckStep = (float)(1.0 / (0.003 * sr)); // 3 ms fades around moving the drives
     slopeStep = 1.0 / (0.01 * sr);          // 10 ms from one slope to another
-    for (uint32_t f = 0; f < pk::kTailFields; ++f)
-        tail.setParam (f, p[kTailBase + f]);
-    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
-        tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
-    for (uint32_t f = 0; f < pk::kTailExt2Fields; ++f)
-        tail.setParam (pk::kTailFields + pk::kTailExtFields + f, p[kTailExt2Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt3Fields; ++f)
-        tail.setParam (smacheratr::kTailExt3First + f, p[kTailExt3Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt4Fields; ++f)
-        tail.setParam (smacheratr::kTailExt4First + f, p[kTailExt4Base + f]);
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     semiSmooth = (float)(1.0 - std::exp (-1.0 / (0.005 * sr))); // 5 ms glide of the cutoffs
     liquidA = 1.0 - std::exp (-1.0 / (0.15 * sr));
@@ -65,7 +56,6 @@ void Engine::reset ()
     lpF.reset (slopeOf (kLpSlope));
     env = 0.0;
     envRising = false;
-    tail.reset ();
     driveHp.set (p[kHpDriveOn] >= 0.5, p[kHpDrive]);
     driveLp.set (p[kLpDriveOn] >= 0.5, p[kLpDrive]);
     driveHp.reset ();
@@ -408,8 +398,8 @@ void Engine::processBlock (const float* xl, const float* xr, float* yl, float* y
     if (meters)
         for (int i = 0; i < n; ++i)
             meters->scope.push (scopeIn[(size_t)i], 0.5f * (yl[i] + yr[i]));
-    if (hasTail)
-        tail.process (yl, yr, n);
+    if (hasEnd)
+        pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
     if (meters)
     {
         meters->offset.store ((float)offset, std::memory_order_relaxed);

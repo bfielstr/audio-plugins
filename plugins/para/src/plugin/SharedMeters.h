@@ -13,7 +13,6 @@ struct SharedMeters
 {
     Meters meters;
     std::atomic<double> sampleRate {48000.0};
-    smacheratr::Meters tailMeters; // the saturator at the end of the chain
     pk::CaptureBuffer capture; // the output, for the Basic page's capture band
     void retain () { refs.fetch_add (1); }
     void release ()

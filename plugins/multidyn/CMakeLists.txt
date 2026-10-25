@@ -6,7 +6,7 @@ add_library(multidyn_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(multidyn_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-target_link_libraries(multidyn_core PUBLIC pluginkit_core smacheratr_core) # the built-in saturator
+target_link_libraries(multidyn_core PUBLIC pluginkit_core smacheratr_core) # Soften's Color (and the old saturator's parameter blocks)
 pk_dsp_settings(multidyn_core)
 
 add_executable(multidyn_tests tests/core_tests.cpp)
@@ -38,7 +38,7 @@ pk_add_plugin(Multidyn
         src/ui/Editor.cpp
 )
 target_include_directories(Multidyn PRIVATE src)
-target_link_libraries(Multidyn PRIVATE multidyn_core smacheratr_ui)
+target_link_libraries(Multidyn PRIVATE multidyn_core)
 
 pk_add_host_test(multidyn_hosttest
     PLUGIN Multidyn

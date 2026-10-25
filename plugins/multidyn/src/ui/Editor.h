@@ -1,7 +1,5 @@
 #pragma once
 
-#include "smacheratr/src/ui/TailPanel.h"
-
 #include <memory>
 
 #include "pluginkit/vst/EditorBase.h"
@@ -16,23 +14,26 @@ class DynDisplay;
 // Laid out like Live's Multiband Dynamics: a Split column (band names, On, Solo, the crossover
 // fields between the lanes), the Input knobs, the lanes with their Below / Above / Att/Rel value
 // fields, the Output knobs, and the global Output / Time / Amount / Soften (and Soften's Color) on the
-// right. The Sub band, when on, is a lane at the bottom (its Above and Att/Rel fields, its Output as a
-// field); its On and Frequency sit in the bottom row with the crossovers' Slope. The Style (OTT /
+// right, Soft Clip and Hard Clip (the end of the chain) under them, beside PRE-LIMIT. The Sub band, when
+// on, is a lane at the bottom (its Above and Att/Rel fields, its Output as a field); its On and Frequency
+// sit in the bottom row with the crossovers' Slope. The Style (OTT /
 // Character) sits in the top bar after the band count; in OTT style the controls only Character uses
 // (Soft Knee, Peak/RMS, the RMS Window, Soften) look disabled.
 class Editor : public pk::EditorBase
 {
 public:
     static constexpr double kWidth = 920.0;
-    // the end saturator's section (smacheratr::TailPanel, both parts open) at the bottom, from y 424, 8 px clear under it
-    static constexpr double kHeight = 424.0 + smacheratr::TailPanel::kOpenHeight + 8.0;
+    // the bottom row's panels end at y 416, 8 px clear under them
+    static constexpr double kHeight = 424.0;
     // layout (also used by the host test)
     static constexpr double kDisplayLeft = 166.0, kDisplayTop = 40.0, kDisplayRight = 760.0, kDisplayBottom = 336.0;
     static constexpr double kBandColLeft = 8.0, kInputColLeft = 104.0, kOutputColLeft = 766.0, kGlobalColLeft = 842.0;
-    // the second row under the display: Slope, the Sub band's On and Frequency; Soften's Color under Soften
+    // the second row under the display: Slope, the Sub band's On and Frequency; Soften's Color under Soften,
+    // Soft Clip and Hard Clip under it
     static constexpr double kRow2Top = 382.0;
     static constexpr double kSlopeLeft = 50.0, kSubOnLeft = 150.0, kSubFreqLeft = 204.0;
     static constexpr double kColorTop = 330.0;
+    static constexpr double kClipTop = 356.0, kClipH = 18.0, kClipGap = 6.0;
     // the top bar's Style selector (OTT | Character); the side-chain status line under the second row
     static constexpr double kStyleLeft = 378.0, kStyleRight = 498.0, kStyleTop = 7.0;
     static constexpr double kScStatusTop = 404.0;
@@ -42,7 +43,7 @@ public:
     // the panels for Menu > Layout (pluginkit/Layout.h): the Wide template's rows by purpose
     pk::layout::Spec layoutSpec (bool arranged) const override;
     // The Basic page (pluginkit/ui/BasicView.h): the bands' display, Bands and Style, Amount and Time;
-    // Output; the end saturator in the extras
+    // Output, Soft Clip and Hard Clip
     pk::basic::Spec basicSpec () override;
     void idle () override;
     void paramChanged (uint32_t id) override;
@@ -50,9 +51,6 @@ public:
     void setNorm (uint32_t id, double v) override;
 
 private:
-    std::unique_ptr<smacheratr::TailPanel> tail;
-    std::unique_ptr<smacheratr::TailPanel> makeTail ();
-    static smacheratr::TailBases tailBases ();
     void onClose () override;
     void updateLayout ();
     void showMenu (VSTGUI::CPoint where);

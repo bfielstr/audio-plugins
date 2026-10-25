@@ -2,6 +2,7 @@
 
 #include "Crossover.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <algorithm>
@@ -64,7 +65,7 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (choice (kMode, "Mode (unused)", "Mode", {"Base", "Character"}, kCharacter));
     t.push_back (toggle (kPreLimit, "Pre-Limit", "Pre-Limit", false));
     t.push_back (real (kPreLimitCeiling, "Pre-Limit Above Threshold", "Ceiling", -12.0, 24.0, 0.0, Curve::Linear, Disp::Db));
-    // the end-of-chain Smacheratr (off, Drive 0 dB): its fields line up with kSatOn ... kSatPreLimitThreshold
+    // the old end-of-chain Smacheratr (retired below): its fields line up with kSatOn ... kSatPreLimitThreshold
     static_assert (kSatPreLimit == kSatOn + pk::kTailPreLimit && kSatDrive == kSatOn + pk::kTailDrive &&
                    kSatPostClip == kSatOn + pk::kTailPostClip && kSatMix == kSatOn + pk::kTailMix &&
                    kSatPreLimitThreshold == kSatOn + pk::kTailThreshold);
@@ -89,7 +90,11 @@ std::vector<ParamInfo> buildTable ()
     t.push_back (real (kSubInput, "Sub Input Gain", "Input", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
     smacheratr::addTailExt3Params (t, kSatExt3Base);
     smacheratr::addTailExt4Params (t, kSatExt4Base);
-    static_assert (kNumParams == kSatExt4Base + pk::kTailExt4Fields, "the table ends with the built-in Smacheratr's fifth block");
+    pk::addEndClipParams (t, kSoftClip, kHardClip);
+    static_assert (kNumParams == kHardClip + 1, "the table ends with the clips");
+    // the old built-in Smacheratr's blocks: kept (saved IDs stay put), retired
+    for (const auto& r : kRetiredSat)
+        pk::retire (t, r[0], r[1]);
     return t;
 }
 
