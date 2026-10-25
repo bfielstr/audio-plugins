@@ -1,0 +1,5 @@
+# bubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: sub, default
+comment: A new instance: Boost 55 %, 40 Hz, Intensity 50 %, Q-Factor 20 %, Drive 20 %, the gate at -30 dB, both at full level.
+Boost = 55 %
+Freq = 40.0 Hz

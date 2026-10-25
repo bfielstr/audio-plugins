@@ -1,0 +1,10 @@
+# bubr factory preset (format: shared/pluginkit/PresetStore.h)
+tags: impacts, sound design
+comment: A wide sub band at 35 Hz pushed hard, the gate keeping it to the hits and letting them ring.
+Freq = 35.0 Hz
+Q-Factor = 0 %
+Intensity = 100 %
+Boost = 90 %
+Gate = -18.0 dB
+Release = 400 ms
+Output = -3.0 dB
