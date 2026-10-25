@@ -7,7 +7,7 @@ set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH
 
 project(AudioPlugins
     VERSION 0.31.0
-    DESCRIPTION "Smemplr, Multidyn, Locus, Stretchr, Smacheratr, Para, Widr, Wubr, Levlr, Deepr, Smoothr, Gentlr, Dropr, Orbitr, Ciphr, Moistr, Smeezr, Probr, Sweepr and Tapr VST3 plug-ins"
+    DESCRIPTION "Smemplr, Multidyn, Smacheratr, Para, Widr, Gentlr, Dropr, Moistr, Probr, Sweepr, Tapr and Pinchr VST3 plug-ins"
     LANGUAGES C CXX
 )
 if(APPLE)
@@ -41,10 +41,9 @@ endif()
 add_subdirectory(shared)
 
 # Every plug-in, in the order they are added.
-set(PK_ALL_PLUGINS smemplr multidyn locus stretchr smacheratr para widr wubr levlr deepr dropr gentlr smoothr
-    orbitr ciphr moistr smeezr probr sweepr tapr pinchr)
+set(PK_ALL_PLUGINS smemplr multidyn smacheratr para widr dropr gentlr moistr probr sweepr tapr pinchr)
 
-# -DPK_ONLY_PLUGINS="orbitr;ciphr" builds and tests only those plug-ins (pull request CI uses it for the
+# -DPK_ONLY_PLUGINS="tapr;pinchr" builds and tests only those plug-ins (pull request CI uses it for the
 # plug-ins a change touches); empty (the default) builds all of them. The plug-ins a selected one links
 # (smacheratr_core, smacheratr_ui, ...) are added too, but only their libraries are built and their
 # tests are disabled. The shared tests always run; factory_presets checks only the selected plug-ins.
@@ -101,8 +100,7 @@ if(PK_ONLY_PLUGINS)
     endforeach()
     target_link_libraries(factory_presets_tests PRIVATE pluginkit_core)
 else()
-    target_link_libraries(factory_presets_tests PRIVATE pluginkit_core ciphr_core deepr_core dropr_core gentlr_core levlr_core locus_core multidyn_core
-        moistr_core orbitr_core para_core smacheratr_core smemplr_core smoothr_core stretchr_core widr_core wubr_core
-        smeezr_core probr_core sweepr_core tapr_core pinchr_core)
+    target_link_libraries(factory_presets_tests PRIVATE pluginkit_core dropr_core gentlr_core multidyn_core
+        moistr_core para_core smacheratr_core smemplr_core widr_core probr_core sweepr_core tapr_core pinchr_core)
 endif()
 add_test(NAME factory_presets COMMAND factory_presets_tests)

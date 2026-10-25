@@ -139,7 +139,7 @@ struct Split4
 
 // ---- the frequency shifter's Hilbert transformer ---------------------------------------------------------
 // Two chains of four second-order allpasses whose outputs stay a quarter cycle apart over most of the band
-// (Olli Niemitalo's coefficients; the same transformer as Ciphr's FreqShifter, ciphr/src/core/Dsp.h). With
+// (Olli Niemitalo's coefficients). With
 // a complex oscillator, i cos (phase) + q sin (phase) is the single sideband: every frequency moved up by
 // the oscillator's frequency (down for a negative one). `i` alone is the unshifted signal with the same
 // phase response as the shifted one (so the two blend without comb filtering).

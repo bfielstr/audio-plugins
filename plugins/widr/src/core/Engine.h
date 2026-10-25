@@ -53,7 +53,7 @@
 #include "Reverb.h"
 #include "Theatre.h"
 
-#include "locus/src/core/Fft.h"
+#include "Fft.h"
 #include "pluginkit/ScopeBuffer.h"
 #include "smacheratr/src/core/Tail.h"
 
@@ -234,9 +234,9 @@ private:
     // mid and side, what the voices add to the mid (Gm) and to the side (Gs), and the mid with them
     // (Mono: where the voices are still in phase with the mid, low down, they add more than power)
     static constexpr int kFft = 2048, kHop = 1024;
-    locus::Fft fft {kFft};
+    Fft fft {kFft};
     std::vector<float> ringM, ringS, ringGm, ringGs, ringMono, window, frame;
-    std::vector<locus::Fft::cf> spec;
+    std::vector<Fft::cf> spec;
     int ringPos = 0, hopCount = 0;
     std::array<float, kBands> eM {}, eS {}, eGm {}, eGs {}, eMono {}, pubSide {};
     std::array<float, kBands> gCur {}, gYieldCur {};

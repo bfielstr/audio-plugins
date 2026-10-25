@@ -6,7 +6,7 @@
 #include <complex>
 #include <vector>
 
-namespace locus {
+namespace widr {
 
 class Fft
 {
@@ -116,4 +116,4 @@ private:
     std::vector<cf> tw, split, z;
 };
 
-} // namespace locus
+} // namespace widr
