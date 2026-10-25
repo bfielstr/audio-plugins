@@ -6,7 +6,7 @@ set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS architectures")
 set(vst3sdk_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/vst3sdk" CACHE PATH "VST3 SDK")
 
 project(AudioPlugins
-    VERSION 0.31.0
+    VERSION 0.32.0
     DESCRIPTION "Smemplr, Multidyn, Smacheratr, Para, Widr, Gentlr, Dropr, Moistr, Probr, Sweepr, Tapr and Pinchr VST3 plug-ins"
     LANGUAGES C CXX
 )
