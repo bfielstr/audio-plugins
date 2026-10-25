@@ -1,5 +1,7 @@
 #include "Engine.h"
 
+#include "pluginkit/EndClip.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -74,13 +76,12 @@ void Engine::Voice::reset ()
     driftCount = 0;
 }
 
-Engine::Engine (bool withTail) : hasTail (withTail)
+Engine::Engine (bool withEndClip) : hasEndClip (withEndClip)
 {
     gCur.fill (1.0f);
     gYieldCur.fill (1.0f);
     voice[0].seed = 0x1234567u;
     voice[1].seed = 0x89abcdeu;
-    tail.setMidSide (true); // until the parameters arrive: Mid/Side (the default) keeps the width when pushed
 }
 
 void Engine::prepare (double sampleRate, int maxBlockSize)
@@ -109,17 +110,6 @@ void Engine::prepare (double sampleRate, int maxBlockSize)
     duckRel = (float)(1.0 - std::exp (-1.0 / (0.12 * sr)));
     smooth = (float)(1.0 - std::exp (-1.0 / (0.02 * sr)));
     slow = (float)(1.0 - std::exp (-1.0 / (0.08 * sr)));
-    tail.prepare (sr, maxBlock);
-    for (uint32_t f = 0; f < pk::kTailFields; ++f)
-        tail.setParam (f, p[kTailBase + f]);
-    for (uint32_t f = 0; f < pk::kTailExtFields; ++f)
-        tail.setParam (pk::kTailFields + f, p[kTailExtBase + f]);
-    for (uint32_t f = 0; f < pk::kTailExt2Fields; ++f)
-        tail.setParam (pk::kTailFields + pk::kTailExtFields + f, p[kTailExt2Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt3Fields; ++f)
-        tail.setParam (smacheratr::kTailExt3First + f, p[kTailExt3Base + f]);
-    for (uint32_t f = 0; f < pk::kTailExt4Fields; ++f)
-        tail.setParam (smacheratr::kTailExt4First + f, p[kTailExt4Base + f]);
     if (meters)
         meters->sampleRate.store ((float)sr);
     // the cinema stage
@@ -163,7 +153,6 @@ void Engine::reset ()
     envFast = envSlow = 0.0;
     duck = duckT = 1.0f;
     duckCount = 0;
-    tail.reset ();
     // settle the smoothed controls on the current settings
     blockSetup ();
     gen = genT;
@@ -771,8 +760,8 @@ void Engine::processBlock (const float* inL, const float* inR, float* outL, floa
     corr = sLL * sRR > 1e-14 ? (float)std::clamp (sLR / std::sqrt (sLL * sRR), -1.0, 1.0) : 1.0f;
     if (meters)
         meters->correlation.store (corr, std::memory_order_relaxed);
-    if (hasTail)
-        tail.process (outL, outR, n);
+    if (hasEndClip)
+        pk::endClip (outL, outR, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);
 }
 
 } // namespace widr

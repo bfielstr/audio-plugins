@@ -1,17 +1,17 @@
 # dropr
 
-dropr slams a sound flat in six bands and drives the result into a saturator. Everything over a very
-low threshold is pulled to one level, then made up and pushed into smacheratr, so quiet tails and
-room come right up and the whole sound gets dense and heavy. With negative ratios, louder input comes
-out quieter: on a snare the snap is clamped down below the body, and the body comes up, heavily
-saturated. Reach for it for aggressive drums, crushed parallel buses and sound design. Install
-instructions are in the [top-level README](../../README.md).
+dropr slams a sound flat in six bands. Everything over a very low threshold is pulled to one level,
+then made up, so quiet tails and room come right up and the whole sound gets dense and heavy. With
+negative ratios, louder input comes out quieter. Reach for it for aggressive drums, crushed parallel
+buses and sound design. Install instructions are in the [top-level README](../../README.md).
 
 ![dropr](../../docs/dropr/ui_dropr.png)
 
 ## How to use it
 
-1. Put dropr on a drum or a bus. The defaults are already the crushed, saturated sound.
+1. Put dropr on a drum or a bus. The defaults are already the crushed sound; they make up so much gain
+   that the start of a hit, before the attack catches it, would leave far above 0 dBFS, so **Hard Clip**
+   starts on (switch it off only with the levels brought down).
 2. Blend it back with **Dry/Wet**, or use it on a parallel bus.
 3. Shape the result in the display: drag a band's gain point up or down, the threshold lines up or
    down, the crossovers sideways. **Release** and **Adaptive** set how it breathes.
@@ -22,7 +22,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 **Input** gain → six bands (Linkwitz-Riley crossovers) → per band: detector → downward and upward
 compression → attack / release → the band's gain + **Tilt** + **Makeup** → the bands summed →
-**Dry/Wet** → **Output** → **smacheratr** (on and driven by default).
+**Dry/Wet** → **Output** → **Soft Clip** → **Hard Clip** (Soft Clip off, Hard Clip on by default).
 
 ## Defaults
 
@@ -31,14 +31,14 @@ compression → attack / release → the band's gain + **Tilt** + **Makeup** →
   6 ms, **Release** 350 ms, **Adaptive** 50 %, **Knee** 0 dB.
 - Upward compression off (**Up Ratio** 1 : 1, **Up Thr** -48 dB), **Link** 100 %, **Mode** **Stereo**.
 - Every band's gain +12 dB, **Tilt** 0, **Makeup** +48 dB, **Dry/Wet** 100 %, **Output** 0 dB.
-- **smacheratr** on: Drive +18 dB, Hard Clip (which holds the very end to 0 dBFS), Pre-Limit off.
+- **Soft Clip** off, **Hard Clip** on.
 
 With these, everything over -102 dBFS at the input is brought to one level (the floor, -84 dB after the
-Input gain), +60 dB of gain brings it to about -24 dB per band, and the saturator does the rest. On the
-tests' snare-like hit the transient comes out about 17 dB closer to the body than it went in, peaking
-at 0 dBFS. The threshold is so low that very quiet material (below -102 dBFS) is not compressed at all
-and gets the whole +90 dB of gain: digital silence stays silent, but a noise floor around -110 dBFS
-comes up to about -20 dBFS.
+Input gain) and +60 dB of gain brings it to about -24 dB per band. What gets through before the attack
+(the first milliseconds of a hit) gets the whole +90 dB: with Hard Clip on, the tests' snare-like hit
+peaks at 0 dBFS. The threshold is so low that very quiet material (below -102 dBFS) is not compressed
+at all and gets the whole +90 dB of gain too: digital silence stays silent, but a noise floor around
+-110 dBFS comes up to about -20 dBFS.
 
 ## The display
 
@@ -92,11 +92,12 @@ Right-click or double-click a handle, point or line to reset it.
 - **Input** (-24 to +48 dB): gain before the bands.
 - **Dry/Wet**: the dry signal is the input before the Input gain, sent through the same all-passes as
   the bands so any blend lines up in phase.
-- **Output** (±24 dB): after the blend, before the saturator.
+- **Output** (±24 dB): after the blend.
+- **Soft Clip** (off by default) and **Hard Clip** (on by default: the defaults' gain needs it): the end of the chain. Soft Clip rounds peaks off from
+  -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip when both are on).
 
-**smacheratr** (bottom panel): the saturator at the end of the chain, with all its controls. While it is
-off it folds to its header strips; click a strip (or switch it on) to open it. See
-[smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+The **Basic** page has the display, **Bands**, **Down Thr**, **Up Thr** and **Release**, **Dry/Wet**,
+**Output**, **Soft Clip** and **Hard Clip**; **Advanced** shows everything.
 
 ## The gain law
 
@@ -139,9 +140,8 @@ README](../../README.md#presets).
 
 ## Latency
 
-Only the end saturator's (about 1.8 ms at 48 kHz, always in the path): the crossovers add none and
-there is no look-ahead. Switching the saturator on or off never changes it. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told. It is reported to
-the host for automatic compensation.
+None: the crossovers add none, there is no look-ahead, and Soft Clip and Hard Clip work sample by
+sample.
 
 ## Older projects
 

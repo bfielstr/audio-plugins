@@ -1,4 +1,5 @@
 # dropr factory preset (format: shared/pluginkit/PresetStore.h)
 tags: drums, parallel
-comment: The crushed sound blended under the dry signal.
+comment: The crushed sound blended under the dry signal, the end held to 0 dBFS by Hard Clip.
 Dry/Wet = 35 %
+Hard Clip = On

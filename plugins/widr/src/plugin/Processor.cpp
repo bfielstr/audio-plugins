@@ -20,7 +20,6 @@ Processor::Processor ()
     setControllerClass (kControllerUID);
     shared = new SharedMeters ();
     engine.setMeters (&shared->meters);
-    engine.setTailMeters (&shared->tailMeters);
     for (uint32_t id = 0; id < kNumPluginParams; ++id)
         normMirror[id].store (defaultNormalized (id));
     engine.prepare (48000.0, 512);
@@ -127,8 +126,7 @@ tresult PLUGIN_API Processor::process (ProcessData& data)
     engine.process (data.inputs[0].channelBuffers32[0], data.inputs[0].channelBuffers32[1],
                     data.outputs[0].channelBuffers32[0], data.outputs[0].channelBuffers32[1], n);
     mix.update (engine, n); // publish, then read the group for the next block
-    // the latency moves with Cinema (its lanes' STFT) and the end saturator's Oversampling: the
-    // controller tells the host
+    // the latency moves with Cinema (its lanes' STFT): the controller tells the host
     shared->latency.store (engine.latency (), std::memory_order_relaxed);
     data.outputs[0].silenceFlags = 0;
     pk::captureOutput (shared->capture, data, processSetup.sampleRate);

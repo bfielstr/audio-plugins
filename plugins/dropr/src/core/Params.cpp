@@ -1,5 +1,6 @@
 #include "Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/core/TailExt.h"
 
 #include <cstdio>
@@ -58,18 +59,22 @@ const ParamTable& paramTable ()
         v.push_back (real (kMakeup, "Makeup", "Makeup", -24.0, 72.0, 48.0, Curve::Linear, Disp::Db));
         v.push_back (percent (kMix, "Dry/Wet", "Dry/Wet", 1.0));
         v.push_back (real (kOutput, "Output", "Output", -24.0, 24.0, 0.0, Curve::Linear, Disp::Db));
-        // into a saturator: Smacheratr on and driven +18 dB, hard clipped at the very end (0 dBFS)
+        // the old end saturator, retired (its IDs kept for saved projects; its defaults as they were: on,
+        // driven +18 dB, Hard Clip, no Pre-Limit)
         pk::addTailParams (v, kTailBase, true);
         setDefault (v, kTailBase + pk::kTailDrive, 18.0);
         setDefault (v, kTailBase + pk::kTailPostClip, 2.0); // Hard Clip
-        // no Pre-Limit: the hits that get through before the attack go into the curve (and the clip) instead
-        // of ducking the body after them
         setDefault (v, kTailBase + pk::kTailPreLimit, 0.0);
         smacheratr::addTailExtParams (v, kTailExtBase);
         smacheratr::addTailExt2Params (v, kTailExt2Base);
         smacheratr::addTailExt3Params (v, kTailExt3Base);
         smacheratr::addTailExt4Params (v, kTailExt4Base);
-        static_assert (kNumParams == kTailExt4Base + pk::kTailExt4Fields, "the tail's fifth block is the last");
+        pk::addEndClipParams (v, kSoftClip, kHardClip);
+        // Hard Clip on in a new instance: the defaults make up some +90 dB, and what the attack lets through
+        // must not leave far above 0 dBFS (the old end saturator's Hard Clip held it there)
+        setDefault (v, kHardClip, 1.0);
+        pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
+        static_assert (kNumParams == kHardClip + 1, "the clips are the last");
         return v;
     }());
     return t;

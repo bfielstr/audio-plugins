@@ -1,9 +1,9 @@
-// Dropr: a multiband compressor in the style of Minimal Audio's Fuse Compressor, feeding a saturator.
+// Dropr: a multiband compressor in the style of Minimal Audio's Fuse Compressor.
 //
 //   in -> Input gain -> 6-band Linkwitz-Riley tree -> per band: detector -> gain law (Gain.h: downward,
 //   normal or negative ratio, upward) -> attack / release -> the band's gain (its point in the display,
 //   + Tilt + Makeup) -> sum -> Dry/Wet (the dry signal is the input before the Input gain) -> Output
-//   -> Smacheratr (the saturator at the end of every plug-in; on and driven by default)
+//   -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
 // Crossovers: Linkwitz-Riley 24 dB/oct splits (multidyn/src/core/Crossover.h), split[j] separating band
 // j from everything above it; each lower band goes through the all-passes of the crossovers above it,
@@ -26,15 +26,13 @@
 //   1 + 3 A min (1, |target - gain| / 24 dB)
 // so at 100 % a move of 24 dB or more runs 4 times as fast, at 50 % 2.5 times; small moves keep the
 // set times (smooth on steady material, quick on the jumps of a hit). 0 %: always the set times.
-// Latency: the end saturator's only (the crossovers are minimum-phase, there is no look-ahead); it
-// never changes. No allocation in process ().
+// Latency: none (the crossovers are minimum-phase, there is no look-ahead). No allocation in process ().
 #pragma once
 
 #include "Gain.h"
 #include "Params.h"
 
 #include "multidyn/src/core/Crossover.h"
-#include "smacheratr/src/core/Tail.h"
 
 #include <array>
 #include <atomic>
@@ -72,22 +70,12 @@ public:
     void reset ();
     void setParam (uint32_t id, double plain)
     {
-        p[id] = plain;
-        if (id >= kTailExt4Base)
-            tail.setParam (smacheratr::kTailExt4First + (id - kTailExt4Base), plain);
-        else if (id >= kTailExt3Base)
-            tail.setParam (smacheratr::kTailExt3First + (id - kTailExt3Base), plain);
-        else if (id >= kTailExt2Base)
-            tail.setParam (pk::kTailFields + pk::kTailExtFields + (id - kTailExt2Base), plain);
-        else if (id >= kTailExtBase)
-            tail.setParam (pk::kTailFields + (id - kTailExtBase), plain);
-        else if (id >= kTailBase)
-            tail.setParam (id - kTailBase, plain);
+        if (id < kNumParams)
+            p[id] = plain; // (read where they are used; the old end saturator's are retired)
     }
     double param (uint32_t id) const { return p[id]; }
-    int latency () const { return tail.latency (); }
+    int latency () const { return 0; }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In-place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -129,7 +117,6 @@ private:
     float gin = 1.0f, gout = 1.0f, mix = 1.0f, smooth = 0.0f, mkSmooth = 0.0f;
     float atkC = 0.1f, relC = 0.001f, atkL = 0.0f, relL = 0.0f; // one-pole coefficients and log2 (1 - c)
     Meters* meters = nullptr;
-    smacheratr::Tail tail;
 };
 
 } // namespace dropr

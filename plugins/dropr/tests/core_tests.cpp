@@ -76,7 +76,7 @@ static std::unique_ptr<Engine> engine ()
     return e;
 }
 
-// every gain neutral, no compression, no saturator: the bands should add up to the input (all-passed)
+// every gain neutral, no compression: the bands should add up to the input (all-passed)
 static void neutral (Engine& e)
 {
     e.setParam (kInput, 0.0);
@@ -88,7 +88,6 @@ static void neutral (Engine& e)
     e.setParam (kAdaptive, 0.0);
     for (int k = 0; k < kMaxBands; ++k)
         e.setParam (kBandGain1 + (uint32_t)k, 0.0);
-    e.setParam (kTailBase + pk::kTailOn, 0.0);
     e.reset ();
 }
 
@@ -405,10 +404,13 @@ static double transientToBody (const std::vector<float>& x, int latency)
     return sum / std::max (1, hits);
 }
 
-TEST (snare_defaults_clamp_the_snap)
+TEST (snare_defaults_hard_clip)
 {
+    // the defaults with Hard Clip on (the old end saturator held the end to 0 dBFS; off, the hits that get
+    // through before the attack leave with the whole +90 dB of gain)
     const Sig in = snare (4.0);
     auto e = engine ();
+    e->setParam (kHardClip, 1.0);
     const Sig out = run (*e, in);
     const double before = transientToBody (in.l, 0), after = transientToBody (out.l, e->latency ());
     double pk = 0.0, s = 0.0;
@@ -417,12 +419,12 @@ TEST (snare_defaults_clamp_the_snap)
         pk = std::max (pk, (double)std::fabs (v));
         s += (double)v * v;
     }
-    std::printf ("    transient-to-body: %.1f dB in, %.1f dB out (defaults); output peak %.2f dBFS, RMS %.1f dBFS\n", before, after,
-                 db (pk), 10.0 * std::log10 (s / (double)out.l.size ()));
-    CHECK (after < before - 12.0, "the snap is clamped and the body comes up: %.1f dB -> %.1f dB", before, after);
+    const double rms = 10.0 * std::log10 (s / (double)out.l.size ());
+    std::printf ("    transient-to-body: %.1f dB in, %.1f dB out (defaults, Hard Clip); output peak %.2f dBFS, RMS %.1f dBFS\n", before,
+                 after, db (pk), rms);
     CHECK (db (pk) <= 0.01, "Hard Clip holds the end to 0 dBFS (%.2f dBFS)", db (pk));
     CHECK (db (pk) > -1.0, "the defaults land near 0 dBFS (%.2f dBFS)", db (pk));
-    CHECK (10.0 * std::log10 (s / (double)out.l.size ()) > -16.0, "and loud (the body driven into the saturator)");
+    CHECK (rms > -24.0, "and loud: the quiet body brought up (RMS %.1f dBFS)", rms);
 }
 
 TEST (channel_link)
@@ -526,19 +528,20 @@ TEST (no_clicks_on_changes)
     CHECK (worst < steady * 2.0, "no clicks (%.4f against %.4f)", worst, steady);
 }
 
-TEST (constant_latency)
+TEST (no_latency)
 {
-    smacheratr::Tail t;
-    t.prepare (kSr, 512);
     auto e = engine ();
     const int lat = e->latency ();
-    CHECK (lat == t.latency (), "the latency is the end saturator's (%d, %d)", lat, t.latency ());
+    CHECK (lat == 0, "no latency (%d)", lat);
     e->setParam (kBands, 3.0);
     e->setParam (kMode, kModeMidSide);
-    e->setParam (kTailBase + pk::kTailOn, 0.0);
+    e->setParam (kSoftClip, 1.0);
+    e->setParam (kHardClip, 1.0);
     e->setParam (kNegative, 0.0);
-    CHECK (e->latency () == lat, "and it never changes (%d)", e->latency ());
-    // an impulse with the saturator off and nothing compressing: the bands' all-pass starts at the latency
+    CHECK (e->latency () == lat, "whatever the settings (%d)", e->latency ());
+    e->setParam (kSoftClip, 0.0);
+    e->setParam (kHardClip, 0.0);
+    // an impulse with nothing compressing: the bands' all-pass starts at once
     neutral (*e);
     Sig in;
     in.l.assign (4800, 0.0f);
@@ -569,8 +572,9 @@ TEST (fuzz_finite)
         {
             e->setParam (kInput, 48.0);
             e->setParam (kMakeup, 72.0);
-            e->setParam (kTailBase + pk::kTailOn, 0.0);
         }
+        e->setParam (kSoftClip, round % 2 ? 1.0 : 0.0);
+        e->setParam (kHardClip, round % 4 < 2 ? 1.0 : 0.0);
         e->reset ();
         Sig in;
         const size_t n = (size_t)(0.3 * kSr);
@@ -613,16 +617,18 @@ TEST (cpu)
         in.r[i] = in.l[i] + (float)((int32_t)seed / 2147483648.0 * 0.05);
     }
     // CPU time (other programs running do not count), the best of three renders, the defaults: 6 bands,
-    // stereo, the saturator on
+    // stereo, Soft Clip and Hard Clip on
     double secs = 1e9;
     for (int i = 0; i < 3; ++i)
     {
         auto e = engine ();
+        e->setParam (kSoftClip, 1.0);
+        e->setParam (kHardClip, 1.0);
         const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
         run (*e, in, 333);
         secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
     }
-    std::printf ("    CPU: %.2f%% of one core (6 bands, stereo, 48 kHz, saturator on)\n", 100.0 * secs / 10.0);
+    std::printf ("    CPU: %.2f%% of one core (6 bands, stereo, 48 kHz, the clips on)\n", 100.0 * secs / 10.0);
     CHECK (secs / 10.0 < 0.10, "too slow");
 }
 
