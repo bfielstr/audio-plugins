@@ -488,7 +488,7 @@ int countNonAutomatable (IEditController* controller)
     {
         ParameterInfo info {};
         controller->getParameterInfo (i, info);
-        if (!(info.flags & ParameterInfo::kCanAutomate))
+        if (!(info.flags & ParameterInfo::kCanAutomate) && !(info.flags & ParameterInfo::kIsHidden)) // (hidden: retired)
             ++n;
     }
     return n;

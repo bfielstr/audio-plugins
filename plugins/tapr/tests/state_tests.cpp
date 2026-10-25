@@ -100,9 +100,14 @@ int main ()
         CHECK (t.info (kTapeOn).def == 1.0 && t.info (kDrive).def == 0.75 && t.info (kSpeed).def == 0.8 && t.info (kCompression).def == 0.35 &&
                    t.info (kCompPlace).def == (double)kPre && t.info (kCutOn).def == 1.0 && t.info (kCutLo).def == 0.0 && t.info (kCutMid).def == 0.0 &&
                    t.info (kCutHi).def == 0.0 && t.info (kCutPlace).def == (double)kPost && t.info (kMix).def == 1.0 && t.info (kOutput).def == -4.4 &&
-                   t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0 && std::fabs (t.info (kCutMidFreq).def - 982.6) < 1e-9,
-               "Tape on, Drive 75 %%, Speed 80 %%, Compression 35 %% Pre, Cut on and flat, Post, Mix 100 %%, Output -4.4 dB, the end "
-               "saturator off");
+                   std::fabs (t.info (kCutMidFreq).def - 982.6) < 1e-9 && t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0,
+               "Tape on, Drive 75 %%, Speed 80 %%, Compression 35 %% Pre, Cut on and flat, Post, Mix 100 %%, Output -4.4 dB, the clips "
+               "off");
+        // the old end saturator's blocks: still there (saved IDs stay put), retired; nothing else is
+        int wrong = 0;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            wrong += t.info (id).retired != (id >= kTailBase && id < kTailExt4Base + pk::kTailExt4Fields);
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong)", wrong);
         CHECK (t.toText (kCompPlace, kPre) == "Pre" && t.toText (kCutPlace, kPost) == "Post", "the places' names");
         for (uint32_t a = 0; a < kNumParams; ++a)
         {

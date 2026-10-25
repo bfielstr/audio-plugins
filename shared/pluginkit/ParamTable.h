@@ -25,6 +25,9 @@ struct ParamInfo
     Curve curve;
     Disp disp;
     std::vector<const char*> choices;
+    // retired: kept in the table so saved IDs stay put (and old presets parse), but hidden from the host and
+    // the editors, and left out of presets, copy and paste and Reset (pk::retire)
+    bool retired = false;
 
     int stepCount () const; // 0 = continuous
 };
@@ -58,5 +61,13 @@ ParamInfo integer (uint32_t id, const char* name, const char* shortName, double 
 // Keeps generated strings alive for the lifetime of the program.
 const char* keep (std::string s);
 } // namespace make
+
+// Marks the entries with IDs first .. last - 1 retired (the old end saturator's blocks, for one).
+inline void retire (std::vector<ParamInfo>& v, uint32_t first, uint32_t last)
+{
+    for (auto& p : v)
+        if (p.id >= first && p.id < last)
+            p.retired = true;
+}
 
 } // namespace pk
