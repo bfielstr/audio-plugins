@@ -25,7 +25,7 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 The chain: **Input** -> **Band 1** -> **Band 2** -> **Sub** -> **High** (each turned down on its own
 when it is loud; with Advanced, the region they cut can be driven) -> **Mix** -> **Output** ->
-**smacheratr**.
+**Soft Clip** -> **Hard Clip**.
 
 ## The bands
 
@@ -169,13 +169,14 @@ is cutting. The readouts at the top show each band's frequency and its cut now.
 - Click Band 1's or Band 2's readout at the top to switch the band on or off.
 
 **No Overlap**, **Mix** (dry / wet: the input, delayed to line up, against gentlr's output) and
-**Output** (±24 dB, before the smacheratr at the end) sit at the right of the controls.
+**Output** (±24 dB, before the clips at the end) sit at the right of the controls.
 
-**smacheratr** (bottom panel): the saturator every plug-in here ends with (on in a new instance, Drive
-0 dB, its own gentlr on with the **Signature** Slope), with all its controls, its own gentlr included.
-After gentlr's own bands, its gentlr is a second one: switch **Saturator** off to hear gentlr alone (the
-factory presets do). While it is off it folds to its header strips; click a strip (or
-switch it on) to open it. See [smacheratr](../smacheratr/README.md#at-the-end-of-the-other-plug-ins).
+- **Soft Clip** and **Hard Clip** (off by default, under Mix and Output): the end of the chain. Soft Clip
+  rounds peaks off from -6 dBFS up to 0 dBFS; Hard Clip lets nothing above 0 dBFS out (after Soft Clip
+  when both are on).
+
+The **Basic** page has the display, **Band Slope**, **Attack** and **Release**, **Mix**, **Output**,
+**Soft Clip** and **Hard Clip**; **Advanced** shows everything.
 
 Grabbing any of a band's controls (its handle or edge in the display, a knob or switch of its own, its
 Threshold slider in Advanced mode) selects the band: its handle lights, and so do its header and its
@@ -197,19 +198,20 @@ Default** to make every new gentlr start from the current settings. The menu is 
 ## Latency
 
 The region Drive's 4x oversampler delays the signal a little (37 samples at 48 kHz). Its delay is always
-in the path, with the dry signal delayed to match, so the latency never changes with the settings. The
-end saturator adds its own (about 1.7 ms), also always in the path. Its share depends on its **Oversampling**: 85 samples at 48 kHz at 4x (the default), 80 at 2x and 48 (its 1 ms look-ahead) with Off; changing it changes the latency, and the host is told. Both are reported to
-the host for automatic compensation.
+in the path, with the dry signal delayed to match, so the latency never changes with the settings. It is
+reported to the host for automatic compensation. Soft Clip and Hard Clip add none.
 
 ## Older projects
 
 Projects saved before Band Slope existed load with **Classic** and sound exactly as they did. Projects
-and presets saved with 0.24 or earlier keep the defaults they were saved with: **12 / 12**, and the
-smacheratr at the end off with its gentlr off, where they did not set them. Projects
+and presets saved with 0.24 or earlier keep the defaults they were saved with: **12 / 12** where they did
+not set it. Projects
 saved while the Sub and High bands had On buttons sound the same: a band that was off loads with its
 Range at 0 dB, one that was on keeps its Range. Projects saved before glue load with nothing glued.
 Projects and presets saved with 0.30.0 or earlier keep every Threshold at the dB it had (the range went
 from -60 to -90 dB in 0.30.1), Band 1 at 250 Hz, Range 8 dB and Threshold -18 dB where they did not set
 them, and **Band Shelves** on, so they sound as they did. Host automation of a Threshold recorded before
 0.30.1 is stored by the host on the old range and plays back lower (a lane drawn from -60 to 0 dB now
-reads -90 to 0 dB): redraw it if a project automates one.
+reads -90 to 0 dB): redraw it if a project automates one. gentlr used to end with a smacheratr (the
+end saturator); it is gone, so a project that had it on loads without it, ending with Soft Clip and Hard
+Clip off.

@@ -110,7 +110,10 @@ int main (int argc, char** argv)
         CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "all automatable");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
-        checkNewInstanceGentlr (rig.controller, kTailBase + pk::kTailOn, kTailExtBase + pk::kTailExtClarity, kSlope);
+        // a new instance: gentlr's own Slope Signature (it has no end saturator, nor a Gentlr switch), the clips at the end off
+        checkNewInstanceGentlr (rig.controller, -1, -1, kSlope);
+        CHECK (rig.controller->getParamNormalized (kSoftClip) == 0.0 && rig.controller->getParamNormalized (kHardClip) == 0.0,
+               "a new instance: Soft Clip and Hard Clip off");
         // a new instance's band 1 (0.30.1): on at 100 Hz, Range 20 dB, Threshold -82 dB (Advanced on), and the
         // bands stay bands at the ends of the spectrum (Band Shelves off)
         CHECK (plainOf (rig, bandParam (0, kOn)) == 1.0 && std::fabs (plainOf (rig, bandParam (0, kFreq)) - 100.0) < 0.01 &&
@@ -118,9 +121,8 @@ int main (int argc, char** argv)
                    plainOf (rig, gentlr::kAdvanced) == 1.0 && plainOf (rig, kBandShelves) == 0.0,
                "a new instance: band 1 at %.1f Hz, %.1f dB, Threshold %.1f dB, Advanced on, Band Shelves off", plainOf (rig, bandParam (0, kFreq)),
                plainOf (rig, bandParam (0, kRange)), plainOf (rig, bandParam (0, kThreshold)));
-        // the end saturator as a new instance had it up to 0.24 (off, its Gentlr off, 12 / 12), before it
-        // starts: the checks are about gentlr's own sound, its bands with the 12 / 12 Slope they were written for,
-        // band 1 as a new instance had it up to 0.30.0 (250 Hz, 8 dB, -18 dB)
+        // before it starts: the checks are about gentlr's own sound, its bands with the 12 / 12 Slope they were
+        // written for, band 1 as a new instance had it up to 0.30.0 (250 Hz, 8 dB, -18 dB)
         {
             State st;
             for (uint32_t id = 0; id < kNumParams; ++id)
@@ -128,14 +130,11 @@ int main (int argc, char** argv)
                 st.norm[id] = defaultNormalized (id);
                 st.has[id] = true;
             }
-            st.norm[kTailBase + pk::kTailOn] = 0.0;
-            st.norm[kTailExtBase + pk::kTailExtClarity] = 0.0;
-            st.norm[kTailExt3Base + pk::kTailExt3Slope] = 0.0;
             st.norm[kSlope] = 0.0;
             st.norm[bandParam (0, kFreq)] = toNormalized (bandParam (0, kFreq), kBand1BeforeHz);
             st.norm[bandParam (0, kRange)] = toNormalized (bandParam (0, kRange), kBand1BeforeRangeDb);
             st.norm[bandParam (0, kThreshold)] = toNormalized (bandParam (0, kThreshold), smacheratr::kClarityThresholdDb);
-            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the end saturator as it was");
+            CHECK (rig.applyState ([&] (IBStream* s) { return writeState (s, st); }), "setState: the bands as the checks were written for");
         }
         // the Sub and High bands have no On: a fresh instance has them at Range 0 (no cut)
         CHECK (plainOf (rig, kSubRange) == 0.0 && plainOf (rig, kHighRange) == 0.0, "Sub and High start at Range 0: %.1f / %.1f dB",
@@ -378,7 +377,7 @@ int main (int argc, char** argv)
             pump (0.05);
             CHECK (std::fabs (plainOf (rig, bandParam (0, kThreshold)) + 82.0) < 1e-6 && std::fabs (plainOf (rig, bandParam (1, kThreshold)) + 18.0) < 1e-6,
                    "double-clicks: band 1 at %.1f dB, band 2 at %.1f dB", plainOf (rig, bandParam (0, kThreshold)), plainOf (rig, bandParam (1, kThreshold)));
-            // Menu > Layout: Wide (the display and the controls in a row, the end saturator under them) and
+            // Menu > Layout: Wide (the display and the controls in a row) and
             // back to the Default; the controls found by parameter through the view tree
             checkLayouts (rig, win, {bandParam (0, kFreq), (uint32_t)kAttack, (uint32_t)kMix}, outDir + "/ui_gentlr_wide.png");
         }

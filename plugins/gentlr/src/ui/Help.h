@@ -2,6 +2,7 @@
 
 #include "../core/Params.h"
 
+#include "pluginkit/EndClip.h"
 #include "smacheratr/src/ui/Help.h"
 
 namespace gentlr::help {
@@ -25,7 +26,9 @@ inline const char* forParam (uint32_t id)
             return "Stereo: left and right share one detector (the image stays put). Mid/Side: the mid and the side are "
                    "worked on apart, each with its own detector. Mid or Side: only that one (the other passes).";
         case kMix: return "Dry / wet: the input, delayed to line up, against Gentlr's output.";
-        case kOutput: return "Output level, before the Smacheratr at the end.";
+        case kOutput: return "Output level, before Soft Clip and Hard Clip at the end.";
+        case kSoftClip: return pk::kSoftClipHelp;
+        case kHardClip: return pk::kHardClipHelp;
         case kSubOn: return "Unused: the Sub band works while its Range is above 0 dB (it had a button of its own before).";
         case kSubFreq:
             return "The Sub band: where it starts to taper off, 20 to 100 Hz (40 Hz by default; drag its handle "

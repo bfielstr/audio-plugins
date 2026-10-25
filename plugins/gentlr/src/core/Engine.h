@@ -15,7 +15,7 @@
 //
 //   input -> [to mid / side] -> band 1 -> band 2 -> Sub -> High (each cut) -> [back to left / right] -> delay
 //                                    \ the cut bands -> 4x up -> region Drive -> 4x down -> added
-//         -> Mix (against the input, delayed the same) -> Output -> Smacheratr at the end
+//         -> Mix (against the input, delayed the same) -> Output -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
 // Advanced's region Drive puts the cut bands through Smacheratr's Analog curve on their own, level
 // matched (smacheratr::clarityRegionDrive: denser, not louder), oversampled 4x. The oversampler's
@@ -25,8 +25,9 @@
 // image stays put); Mid/Side works on the mid and the side, each with its own; Mid or Side works on
 // that one only.
 //
-// On its own (another plug-in hosting it, e.g. a rack): Engine (false) (no end saturator), prepare,
-// setParam (Gentlr's IDs below kTailBase, plain values), process; latency () is fixed per sample rate.
+// On its own (another plug-in hosting it, e.g. a rack): Engine (false) (no end clips), prepare,
+// setParam (Gentlr's IDs, plain values; the old end saturator's are retired and ignored), process;
+// latency () is fixed per sample rate.
 #pragma once
 
 #include "Params.h"
@@ -35,7 +36,6 @@
 #include "smacheratr/src/core/Biquad.h"
 #include "smacheratr/src/core/Engine.h"
 #include "smacheratr/src/core/Oversampler.h"
-#include "smacheratr/src/core/Tail.h"
 
 #include <array>
 #include <atomic>
@@ -58,16 +58,16 @@ struct Meters
 class Engine
 {
 public:
-    // withTail: the end-of-chain Smacheratr (off where Gentlr is built into another plug-in, and in tests)
-    explicit Engine (bool withTail = true) : hasTail (withTail) {}
+    // withEndClip: Soft Clip and Hard Clip at the end of the chain (off where Gentlr is built into another
+    // plug-in, and in tests)
+    explicit Engine (bool withEndClip = true) : hasEndClip (withEndClip) {}
     void prepare (double sampleRate, int maxBlock);
     void reset ();
     void setParam (uint32_t id, double plain);
     double param (uint32_t id) const { return p[id]; }
-    // Depends on the sample rate only (the region Drive's oversampler, and the end Smacheratr's).
-    int latency () const { return chan[0].os.latency () + (hasTail ? tail.latency () : 0); }
+    // Depends on the sample rate only (the region Drive's oversampler; the clips add none).
+    int latency () const { return chan[0].os.latency (); }
     void setMeters (Meters* m) { meters = m; }
-    void setTailMeters (smacheratr::Meters* m) { tail.setMeters (m); }
 
     // In place capable.
     void process (const float* inL, const float* inR, float* outL, float* outR, int n);
@@ -140,8 +140,7 @@ private:
     float gRegion[kChunk] {}, gRegionMix[kChunk] {};
     std::vector<float> osBuf;
     float out = 1.0f, mix = 1.0f, smooth = 0.0f, smoothCut = 0.0f;
-    smacheratr::Tail tail;
-    bool hasTail = true;
+    bool hasEndClip = true;
     Meters* meters = nullptr;
 };
 

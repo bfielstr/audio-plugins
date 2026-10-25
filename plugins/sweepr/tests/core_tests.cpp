@@ -118,7 +118,7 @@ std::unique_ptr<Engine> engine (const std::function<void (Engine&)>& tweak = {})
     e->reset ();
     return e;
 }
-// static bells, no tape, no end saturator, Output 0 dB
+// static bells, no tape, Output 0 dB
 void plain (Engine& e)
 {
     e.setParam (bandParam (0, kLfoDepth), 0.0);
@@ -241,21 +241,25 @@ TEST (wet_path_is_aligned_with_the_latency)
         e.setParam (bandParam (1, kGain), 0.0);
     });
     const int lat = e->latency (), own = e->ownLatency ();
-    CHECK (own > 0 && lat >= own && lat < 200, "latency %d (its own %d)", lat, own);
+    CHECK (own > 0 && lat == own && lat < 200, "latency %d (its own %d: the clips add none)", lat, own);
     const auto x = sine (440.0, 0.5, 0.25);
     const auto y = run (*e, x);
     double err = 0.0;
     for (size_t i = 4800; i < y.size (); ++i)
         err = std::max (err, (double)std::fabs (y[i] - x[i - (size_t)lat]));
     CHECK (db (err / 0.25) < -60.0, "the wet path against the delayed input: %.1f dB", db (err / 0.25));
-    // the latency never changes with the settings (the end saturator's apart)
+    // the latency never changes with the settings (the clips' included)
     for (auto set : std::vector<std::function<void (Engine&)>> {[] (Engine& e) { e.setParam (kTapeOn, 1.0); },
                                                                  [] (Engine& e) { e.setParam (kSpeed, 0.0); },
-                                                                 [] (Engine& e) { e.setParam (kDrive, 1.0); }})
+                                                                 [] (Engine& e) { e.setParam (kDrive, 1.0); },
+                                                                 [] (Engine& e) {
+                                                                     e.setParam (kSoftClip, 1.0);
+                                                                     e.setParam (kHardClip, 1.0);
+                                                                 }})
     {
         set (*e);
         e->reset ();
-        CHECK (e->ownLatency () == own, "latency %d with another setting", e->ownLatency ());
+        CHECK (e->ownLatency () == own && e->latency () == own, "latency %d with another setting", e->latency ());
     }
 }
 
@@ -585,8 +589,8 @@ TEST (defaults)
                    t.info (bandParam (b, kLfoShape)).def == (double)kSine && t.info (bandParam (b, kLfoDepth)).def == 1.0,
                "LFO %c: synced 1/4, Sine, +1 octave", 'A' + b);
     CHECK (t.info (kLink).def == 0.0 && t.info (kTapeOn).def == 1.0 && t.info (kDrive).def == 0.75 && t.info (kSpeed).def == 0.8 &&
-               t.info (kCompression).def == 0.35 && t.info (kMix).def == 1.0 && t.info ((uint32_t)kTailBase + pk::kTailOn).def == 0.0,
-           "Link off, Tape on, Drive 75 %%, Speed 80 %%, Compression 35 %%, Mix 100 %%, the end saturator off");
+               t.info (kCompression).def == 0.35 && t.info (kMix).def == 1.0 && t.info (kSoftClip).def == 0.0 && t.info (kHardClip).def == 0.0,
+           "Link off, Tape on, Drive 75 %%, Speed 80 %%, Compression 35 %%, Mix 100 %%, the clips off");
     CHECK (std::fabs (divisionBeats (kDiv4) - 1.0) < 1e-12 && std::fabs (divisionBeats (kDiv8D) - 0.75) < 1e-12 &&
                std::fabs (divisionBeats (kDiv4T) - 2.0 / 3.0) < 1e-12 && divisionBeats (kDiv4Bars) == 16.0,
            "the divisions in beats");
@@ -656,7 +660,7 @@ TEST (analyze_tool_measures_the_bells)
 
 TEST (cpu_budget)
 {
-    // 10 s of stereo bass: the defaults, and the same with the end saturator on; the best of three
+    // 10 s of stereo bass: the defaults, and the same with Soft Clip and Hard Clip on; the best of three
     auto x = bass (10.0);
     for (bool heavy : {false, true})
     {
@@ -666,14 +670,17 @@ TEST (cpu_budget)
         {
             auto e = engine ([heavy] (Engine& e) {
                 if (heavy)
-                    e.setParam ((uint32_t)kTailBase + pk::kTailOn, 1.0);
+                {
+                    e.setParam (kSoftClip, 1.0);
+                    e.setParam (kHardClip, 1.0);
+                }
             });
             const pk::testing::CpuClock t0 = pk::testing::cpuClock ();
             l = run (*e, x, nullptr, 512);
             secs = std::min (secs, (double)(pk::testing::cpuClock () - t0) / pk::testing::kCpuClocksPerSec);
         }
         CHECK (finite (l), "finite");
-        std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0, heavy ? "the defaults, the end saturator on" : "the defaults");
+        std::printf ("    CPU: %.2f%% of one core (%s)\n", 100.0 * secs / 10.0, heavy ? "the defaults, the clips on" : "the defaults");
         CHECK (secs / 10.0 < (heavy ? 0.15 : 0.08), "too slow");
     }
 }

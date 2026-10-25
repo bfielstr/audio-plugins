@@ -36,8 +36,7 @@ enum ParamId : uint32_t
     kCompression,                 // 0 .. 1: the leveller before the curve
     kMix,                         // 0 .. 1: dry .. wet
     kOutput,                      // dB
-    // the Smacheratr at the end of the chain (the suite's end saturator, off by default here: the tape
-    // stage is the saturator), every block of it
+    // the old end saturator's blocks (smacheratr at the end of the chain), retired: kept so saved IDs stay put
     kTailBase,
     kTailExtBase = kTailBase + pk::kTailFields,
     kTailExt2Base = kTailExtBase + pk::kTailExtFields,
@@ -46,6 +45,8 @@ enum ParamId : uint32_t
     // each band's LFO on or off (off: the band stays at its Freq; appended in 0.31)
     kLfoOnA = kTailExt4Base + pk::kTailExt4Fields,
     kLfoOnB,
+    kSoftClip, // the end of the chain: Soft Clip, then Hard Clip (pluginkit/EndClip.h)
+    kHardClip,
     kNumParams
 };
 
@@ -54,8 +55,8 @@ static_assert (kBandFields == 9 && kBandA == 0 && kBandB == 9 && kLink == 18 && 
                    kCompression == 22 && kMix == 23 && kOutput == 24 && kTailBase == 25,
                "Sweepr's parameter IDs are fixed");
 static_assert (kTailExtBase == 31 && kTailExt2Base == 48 && kTailExt3Base == 57 && kTailExt4Base == 63 && kLfoOnA == 68 &&
-                   kLfoOnB == 69 && kNumParams == 70,
-               "saved IDs: the end saturator's blocks at 25 .. 67, the LFOs' switches at 68 and 69");
+                   kLfoOnB == 69 && kSoftClip == 70 && kHardClip == 71 && kNumParams == 72,
+               "saved IDs: the old end saturator's blocks at 25 .. 67 (retired), the LFOs' switches at 68 and 69, the clips 70 and 71");
 
 constexpr uint32_t bandParam (int band, uint32_t field) { return (band == 0 ? kBandA : kBandB) + field; }
 constexpr uint32_t lfoOnParam (int band) { return band == 0 ? kLfoOnA : kLfoOnB; }
@@ -101,8 +102,7 @@ inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id
 inline double toNormalized (uint32_t id, double p) { return paramTable ().toNormalized (id, p); }
 inline double defaultNormalized (uint32_t id) { return paramTable ().defaultNormalized (id); }
 
-// Menu > Defaults (pluginkit/GentlrDefaults.h): the parameters Gentlr On by Default and Advanced On by
-// Default set in a new instance: the end saturator's Saturator and Gentlr switches and Gentlr's Advanced
-inline constexpr pk::GentlrIds kGentlrIds = pk::tailGentlrIds (kTailBase, kTailExtBase, kTailExt2Base);
+// Menu > Defaults (pluginkit/GentlrDefaults.h): none (the end saturator it set is retired)
+inline constexpr pk::GentlrIds kGentlrIds {};
 
 } // namespace sweepr

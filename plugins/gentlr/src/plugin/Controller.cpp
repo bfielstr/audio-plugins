@@ -57,7 +57,6 @@ tresult PLUGIN_API Controller::notify (IMessage* message)
                 if (shared)
                     shared->release ();
                 shared = m;
-                watchLatency (&shared->tailMeters.latency); // (the end saturator's moves with its Oversampling)
             }
         }
         return kResultOk;
