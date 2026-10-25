@@ -23,13 +23,13 @@ inline double germSlope (double x)
     const double t = std::tanh (x + kGermBias);
     return (1.0 - t * t) * kGermNorm;
 }
-// the stage's output for a linear-stage output y: z = head germ (x), x + loop germ (x) = (1 + loop) y / head
-inline double germStage (double y, double loop, double head, double& x)
+// the loop's solution: germ (x) for x + loop germ (x) = (1 + loop) v, v the linear stage's output over the headroom
+inline double germLoop (double v, double loop, double& x)
 {
-    const double r = (1.0 + loop) * y / head;
-    for (int k = 0; k < 4; ++k)
+    const double r = (1.0 + loop) * v;
+    for (int k = 0; k < 8; ++k)
         x -= (x + loop * germ (x) - r) / (1.0 + loop * germSlope (x));
-    return head * germ (x);
+    return germ (x);
 }
 // the level u (dB) a follower level w stands for: kCalW read backwards (linear between its points)
 inline double levelOf (double w)
@@ -166,7 +166,6 @@ void Engine::reset ()
         grNow[c] = 0.0;
         for (auto& s : svf)
             s[c].reset ();
-        satX[c] = 0.0;
         satDc[c].reset ();
     }
     levelNow = -120.0;
@@ -241,6 +240,17 @@ void Engine::controlChunk ()
     // the loop's gain: 30 at Feedback 0 down to about 1 at 10; the headroom: +6 dBFS at 0 % .. -12 dBFS at 100 %
     satLoop = 30.0 * std::pow (10.0, -0.15 * feedback);
     satHead = dbToGain (6.0 - 18.0 * satAmt);
+    // the loop has no memory: its curve, tabulated when its gain moves, is read per sample
+    if (std::fabs (satLoop - satTabLoop) > 1e-9)
+    {
+        satTabLoop = satLoop;
+        double x = 0.0;
+        for (int i = kSatHalf; i <= 2 * kSatHalf; ++i)
+            satTab[i] = germLoop ((i - kSatHalf) * kSatStep, satLoop, x);
+        x = 0.0;
+        for (int i = kSatHalf; i >= 0; --i)
+            satTab[i] = germLoop ((i - kSatHalf) * kSatStep, satLoop, x);
+    }
     kAtk = coefFor (tableTime (shape::kAttackSec, attack), srOs);
     kRel = coefFor (tableTime (shape::kReleaseSec, release), srOs);
     const int sf = std::clamp ((int)std::lround (p[kScFilter]), 0, kNumScFilters - 1);
@@ -379,7 +389,9 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
                 // the germanium transistor (its distortion's DC blocked; at 0 % the stage stays linear)
                 if (satAmt > 0.0)
                 {
-                    const double z = germStage (y, satLoop, satHead, satX[c]);
+                    const double v = std::clamp (y / satHead, -kSatHalf * kSatStep, kSatHalf * kSatStep) / kSatStep + kSatHalf;
+                    const int i0 = std::min (2 * kSatHalf - 1, (int)v);
+                    const double z = satHead * (satTab[i0] + (satTab[i0 + 1] - satTab[i0]) * (v - i0));
                     const double d = (z - y) * std::min (1.0, satAmt * 20.0); // (fades in over the first 5 %)
                     y += d - satDc[c].lp (d, satDcG);
                 }
@@ -408,7 +420,7 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
         // (never: a NaN or an overflow in the filters starts them again)
         bool ok = std::isfinite (yl[a + m - 1]) && std::isfinite (yr[a + m - 1]) && std::isfinite (smooth[0]) && std::isfinite (smooth[1]);
         for (int s = 0; ok && s < 4; ++s)
-            ok = svf[s][0].finite () && svf[s][1].finite () && std::isfinite (satX[0]) && std::isfinite (satX[1]);
+            ok = svf[s][0].finite () && svf[s][1].finite ();
         if (!ok)
         {
             reset ();

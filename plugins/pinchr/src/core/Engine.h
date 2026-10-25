@@ -117,7 +117,10 @@ private:
     sweepr::dsp::Svf svf[4][2];
     double stageGain = 1.0;
     // the germanium saturation: the loop gain, the headroom (linear) and per channel the last solution and the DC
-    double satAmt = 0.5, satLoop = 5.0, satHead = 1.0, satX[2] {};
+    double satAmt = 0.5, satLoop = 5.0, satHead = 1.0;
+    static constexpr int kSatHalf = 2048;            // the curve's table: -16 .. +16 times the headroom
+    static constexpr double kSatStep = 16.0 / kSatHalf;
+    double satTab[2 * kSatHalf + 1] {}, satTabLoop = -1.0;
     sweepr::dsp::OnePole satDc[2];
     double satDcG = 0.0;
     double shownDrive = -1.0, shownFeedback = -1.0;

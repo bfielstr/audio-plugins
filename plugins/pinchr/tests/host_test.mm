@@ -60,7 +60,7 @@ int main (int argc, char** argv)
         if (gFail)
             return finish ("pinchr host test");
         CHECK (rig.controller->getParameterCount () == (int32)kNumParams, "param count");
-        CHECK (rig.component->getBusCount (kEvent, kInput) == 0, "no event input");
+        CHECK (rig.component->getBusCount (kEvent, Steinberg::Vst::kInput) == 0, "no event input");
         CHECK (countNonAutomatable (rig.controller) == 0, "non-automatable parameters");
         checkPresetMenu (rig.controller); // Init first, Save as Default, factory presets
         // a new instance: the end saturator off (the output stage is the colour), its Gentlr ready
