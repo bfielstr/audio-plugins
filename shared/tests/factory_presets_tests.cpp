@@ -9,29 +9,20 @@
 // Built with -DPK_ONLY_PLUGINS (CMakeLists.txt), PK_PRESET_SUBSET is defined and only the plug-ins
 // with a PK_WITH_<name> are linked and checked.
 #if !defined(PK_PRESET_SUBSET)
-#define PK_WITH_dropr
 #define PK_WITH_gentlr
-#define PK_WITH_moistr
 #define PK_WITH_probr
 #define PK_WITH_sweepr
 #define PK_WITH_tapr
 #define PK_WITH_pinchr
 #define PK_WITH_bubr
 #define PK_WITH_multidyn
-#define PK_WITH_para
 #define PK_WITH_smacheratr
 #define PK_WITH_smemplr
 #define PK_WITH_widr
 #endif
 
-#ifdef PK_WITH_dropr
-#include "dropr/src/core/Params.h"
-#endif
 #ifdef PK_WITH_gentlr
 #include "gentlr/src/core/Params.h"
-#endif
-#ifdef PK_WITH_moistr
-#include "moistr/src/core/Params.h"
 #endif
 #ifdef PK_WITH_probr
 #include "probr/src/core/Params.h"
@@ -51,9 +42,7 @@
 #ifdef PK_WITH_multidyn
 #include "multidyn/src/core/Params.h"
 #endif
-#ifdef PK_WITH_para
-#include "para/src/core/Params.h"
-#endif
+
 #ifdef PK_WITH_smacheratr
 #include "smacheratr/src/core/Params.h"
 #endif
@@ -89,18 +78,13 @@ struct Plugin
 };
 
 const Plugin kPlugins[] = {
-#ifdef PK_WITH_dropr
-    {"dropr", dropr::paramTable},
-#endif
 #ifdef PK_WITH_gentlr
     {"gentlr", gentlr::paramTable},
 #endif
 #ifdef PK_WITH_multidyn
     {"multidyn", multidyn::paramTable},
 #endif
-#ifdef PK_WITH_moistr
-    {"moistr", moistr::paramTable},
-#endif
+
 #ifdef PK_WITH_probr
     {"probr", probr::paramTable},
 #endif
@@ -116,9 +100,7 @@ const Plugin kPlugins[] = {
 #ifdef PK_WITH_bubr
     {"bubr", bubr::paramTable},
 #endif
-#ifdef PK_WITH_para
-    {"para", para::paramTable},
-#endif
+
 #ifdef PK_WITH_smacheratr
     {"smacheratr", smacheratr::paramTable},
 #endif
@@ -170,8 +152,7 @@ std::string defaultText (const pk::ParamTable& t, const char* name)
     return {};
 }
 
-// A new instance: Soft Clip and Hard Clip at the end, off (dropr: Hard Clip on; the old end saturator's
-// parameters are retired);
+// A new instance: Soft Clip and Hard Clip at the end, off (the old end saturator's parameters are retired);
 // smacheratr's own Gentlr on with the Signature Slope.
 void checkNewInstance (const Plugin& p)
 {
@@ -203,7 +184,7 @@ void checkNewInstance (const Plugin& p)
         return;
     }
     expect ("Soft Clip", "Off");
-    expect ("Hard Clip", n == "dropr" ? "On" : "Off"); // (dropr's defaults make up +90 dB: held to 0 dBFS)
+    expect ("Hard Clip", "Off");
     // the old end saturator, where a plug-in had one: retired (hidden, never a setting)
     for (uint32_t id = 0; id < t.size (); ++id)
         if (std::strncmp (t.info (id).name, "Saturator", 9) == 0)

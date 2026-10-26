@@ -85,7 +85,7 @@ int main ()
         MemoryStream s;
         {
             IBStreamer w (&s, kLittleEndian);
-            w.writeInt32 (0x5453494D); // moistr's
+            w.writeInt32 (0x5453494D); // another plug-in's
             w.writeInt32 (1);
             w.writeInt32 (0);
         }

@@ -1,6 +1,6 @@
 # Notes for coding agents
 
-13 VST3 plug-ins in `plugins/<name>/` (`src/core` DSP without any framework, `src/plugin` VST3,
+10 VST3 plug-ins in `plugins/<name>/` (`src/core` DSP without any framework, `src/plugin` VST3,
 `src/ui` VSTGUI, `tests`, `presets`), shared code in `shared/pluginkit`, CMake helpers in
 `cmake/PluginKit.cmake`. The VST3 SDK lives in `external/vst3sdk` (fetched on the first configure; in a
 second worktree, symlink `external` to the main checkout's and never commit the link).
@@ -16,7 +16,7 @@ cmake --build build
 
 - One plug-in only (`tapr`; the bundle target is capitalised):
   `cmake --build build --target tapr_tests Tapr` (add `tapr_state_tests` where it exists:
-  bubr, dropr, gentlr, moistr, pinchr, probr, smacheratr, smemplr, sweepr, tapr, widr; `tapr_drawbench` with the draw bench).
+  bubr, gentlr, pinchr, probr, smacheratr, smemplr, sweepr, tapr, widr; `tapr_drawbench` with the draw bench).
   Then `ctest --test-dir build -R '^tapr_' --output-on-failure`.
 - A smaller build tree: `-DPK_ONLY_PLUGINS="tapr;pinchr"` configures only those plug-ins (plus the
   libraries of the ones they use, tests disabled); empty means all.

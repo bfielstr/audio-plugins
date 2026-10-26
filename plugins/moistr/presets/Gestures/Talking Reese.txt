@@ -1,7 +1,0 @@
-# moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: gestures, reese, talking, liquid
-comment: A talking Reese: one gesture steps a resonant low-pass and the Liquid resonance through vowels together on a triplet grid, gliding a little into each, while the mids dip every beat.
-Liquid = 80 %
-Liquid Res = 60 %
-Gesture = Talking Cell
-Gesture Smooth = 40 %

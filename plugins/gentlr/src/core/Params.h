@@ -150,7 +150,7 @@ constexpr double kBand1DefaultHz = 100.0, kBand1DefaultRangeDb = 20.0, kBand1Def
 constexpr double kBand1BeforeHz = 250.0, kBand1BeforeRangeDb = 8.0;
 
 const pk::ParamTable& paramTable ();
-// The table of a gentlr in the suite's racks (smemplr's effects rack, moistr's lab: smemplr::fxTable): the
+// The table of a gentlr in smemplr's effects rack (smemplr::fxTable): the
 // one up to 0.30.0, so the racks' projects and sound stay as they were: the Thresholds -60 to 0 dB, band 1 at
 // 250 Hz, Range 8 dB, Threshold -18 dB, and Band Shelves on (the racks do not show it: their gentlr always
 // has shelves at the ends). rackFromPlugin and pluginFromRack convert every parameter's normalized value
