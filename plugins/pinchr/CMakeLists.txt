@@ -1,6 +1,6 @@
 # Pinchr: a germanium compressor (a FET compressor with a choice of knees, into a germanium output stage whose
 # Feedback sets its gain and its low resonance), measured from the Softube model setting by setting.
-project(Pinchr VERSION 0.31.0.0)
+project(Pinchr VERSION 0.32.0.0)
 
 add_library(pinchr_core STATIC
     src/core/Params.cpp

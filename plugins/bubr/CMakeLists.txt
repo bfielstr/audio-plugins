@@ -1,6 +1,6 @@
 # Bubr: a bass enhancer (a band at Freq into a clipper, a gate, Dry/Wet with Low Cut, an output limiter),
 # BOOM Interactive's Uberbass measured setting by setting, as a 1:1 model to start from.
-project(Bubr VERSION 0.31.0.0)
+project(Bubr VERSION 0.32.0.0)
 
 add_library(bubr_core STATIC
     src/core/Params.cpp

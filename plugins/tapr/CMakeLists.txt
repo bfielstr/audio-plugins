@@ -1,6 +1,6 @@
 # Tapr: a tape saturator (Drive into a fast leveller and a sine clipper, then a high shelf that follows Speed)
 # with a three-band Cut EQ, each of the leveller and the EQ before or after the curve.
-project(Tapr VERSION 0.31.0.0)
+project(Tapr VERSION 0.32.0.0)
 
 add_library(tapr_core STATIC
     src/core/Params.cpp
