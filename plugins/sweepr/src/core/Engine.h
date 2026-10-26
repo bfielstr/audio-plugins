@@ -31,7 +31,7 @@
 #include "Params.h"
 #include "TapeShape.h"
 
-#include "para/src/core/Oversampler.h"
+#include "pluginkit/dsp/Oversampler4x.h"
 
 #include <array>
 #include <atomic>
@@ -105,7 +105,7 @@ private:
     dsp::SvfCoefs coef[kBands][kChunk];
     double tapeAt[kChunk] {}, gainAt[kChunk] {}, compAt[kChunk] {};
     // oversampling
-    para::Oversampler4x os[2];
+    pk::dsp::Oversampler4x os[2];
     int osLatency = 0;
     std::vector<float> up[2], wet[2];
     // the tape at 4x: the leveller's level and the curve's last input (the anti-aliasing)

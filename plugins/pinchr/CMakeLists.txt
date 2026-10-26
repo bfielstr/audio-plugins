@@ -7,7 +7,7 @@ add_library(pinchr_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(pinchr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-# (sweepr's Dsp.h and para's Oversampler.h are header-only)
+# (sweepr's Dsp.h and pluginkit's dsp/Oversampler4x.h are header-only)
 target_link_libraries(pinchr_core PUBLIC pluginkit_core smacheratr_core)
 pk_dsp_settings(pinchr_core)
 

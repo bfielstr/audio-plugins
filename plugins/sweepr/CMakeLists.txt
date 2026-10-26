@@ -7,7 +7,7 @@ add_library(sweepr_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(sweepr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-target_link_libraries(sweepr_core PUBLIC pluginkit_core smacheratr_core) # (para's Oversampler.h is header-only)
+target_link_libraries(sweepr_core PUBLIC pluginkit_core smacheratr_core) # (pluginkit's dsp/Oversampler4x.h is header-only)
 pk_dsp_settings(sweepr_core)
 
 add_executable(sweepr_tests tests/core_tests.cpp)

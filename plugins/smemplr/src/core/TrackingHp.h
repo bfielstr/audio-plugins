@@ -9,7 +9,7 @@
 // the others Butterworth 2, 3 and 4 twice).
 #pragma once
 
-#include "para/src/core/Svf.h"
+#include "pluginkit/dsp/Svf.h"
 
 #include <algorithm>
 #include <cmath>
@@ -62,7 +62,7 @@ public:
         const double g = std::tan (M_PI * std::clamp (hz, 5.0, 0.49 * sr) / sr);
         for (int k = 0; k < sections; ++k)
         {
-            auto& c = co[k]; // as para::SvfCoeffs::set does, with the tan () done once
+            auto& c = co[k]; // as pk::dsp::SvfCoeffs::set does, with the tan () done once
             c.g = g;
             c.k = 1.0 / q[k];
             c.a1 = 1.0 / (1.0 + g * (g + c.k));
@@ -89,9 +89,9 @@ public:
     }
 
 private:
-    para::SvfCoeffs co[kMaxSections];
-    para::Svf svf[2][kMaxSections];
-    para::OnePole one[2][kMaxOnePoles];
+    pk::dsp::SvfCoeffs co[kMaxSections];
+    pk::dsp::Svf svf[2][kMaxSections];
+    pk::dsp::OnePole one[2][kMaxOnePoles];
     double q[kMaxSections] {};
     double g1 = 0.0;
     int onePoles = 0, sections = 0, shapeOf = -1;

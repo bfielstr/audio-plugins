@@ -46,7 +46,7 @@
 
 #include "Params.h"
 
-#include "para/src/core/Oversampler.h"
+#include "pluginkit/dsp/Oversampler4x.h"
 #include "sweepr/src/core/Dsp.h"
 
 #include <array>
@@ -129,8 +129,8 @@ private:
     double tB0 = 1.0, tB1 = 0.0, tA1 = 0.0; // the rectified band's shelf
     double tZ[2] {}, tY[2] {};
     double fbA = 0.0, fbL[2] {}, fbH[2] {};
-    para::Halfband2xPoly os2[2];
-    para::Oversampler4x os4[2];
+    pk::dsp::Halfband2xPoly os2[2];
+    pk::dsp::Oversampler4x os4[2];
     std::vector<float> upBuf[2];
     // the gate
     double gateG[2] {1.0, 1.0}, gateThr = 0.0316, gateExp = 3.0, gAtk = 1.0, gRel = 0.0;

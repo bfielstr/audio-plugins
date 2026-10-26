@@ -30,7 +30,7 @@
 
 #include "Params.h"
 
-#include "para/src/core/Oversampler.h"
+#include "pluginkit/dsp/Oversampler4x.h"
 #include "sweepr/src/core/Dsp.h"
 
 #include <array>
@@ -123,7 +123,7 @@ private:
     double satDcG = 0.0;
     double shownDrive = -1.0, shownFeedback = -1.0;
     // oversampling
-    para::Oversampler4x os[2], scOs[2]; // (the sidechain's: only up)
+    pk::dsp::Oversampler4x os[2], scOs[2]; // (the sidechain's: only up)
     int osLatency = 0;
     std::vector<float> up[2], wet[2], scUp[2];
     Meters* meters = nullptr;

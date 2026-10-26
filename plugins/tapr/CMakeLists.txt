@@ -7,7 +7,7 @@ add_library(tapr_core STATIC
     src/core/Engine.cpp
 )
 target_include_directories(tapr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-# (sweepr's TapeShape.h, BellShape.h and Dsp.h and para's Oversampler.h are header-only)
+# (sweepr's TapeShape.h, BellShape.h and Dsp.h and pluginkit's dsp/Oversampler4x.h are header-only)
 target_link_libraries(tapr_core PUBLIC pluginkit_core smacheratr_core)
 pk_dsp_settings(tapr_core)
 
