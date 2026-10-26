@@ -1,9 +1,0 @@
-# bubr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: sub, clean
-comment: A low, wide band under the source, gently driven: weight without much distortion.
-Freq = 30.0 Hz
-Q-Factor = 10 %
-Intensity = 25 %
-Drive = 0 %
-Boost = 60 %
-Gate = -40.0 dB

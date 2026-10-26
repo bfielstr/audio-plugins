@@ -1,0 +1,9 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: drums, smash, parallel
+comment: The hardest knee, fast both ways and driven, blended under the dry drums.
+Input = 9 dB
+Ratio = 10
+Curve = Zener Hard
+Attack = 0
+Release = 0
+Mix = 45 %

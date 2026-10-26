@@ -1,0 +1,5 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: compressor, default
+comment: A new instance: Ratio 4, Germ Soft, Attack and Release 3, Drive 4, Feedback 3, fully compressed, Bass off.
+Ratio = 4
+Curve = Germ Soft

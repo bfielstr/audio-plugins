@@ -1,0 +1,9 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: vocal, level
+comment: Evens a voice out without pumping on its lows: Silicon Med, a medium attack, the 150 Hz sidechain filter.
+Input = 3 dB
+Ratio = 6
+Curve = Silicon Med
+Attack = 4
+Release = 5
+SC Filter = 150 Hz

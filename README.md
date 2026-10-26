@@ -1,4 +1,4 @@
-# Audio plug-ins: smemplr, multidyn, smacheratr, widr, gentlr, probr, sweepr, tapr, pinchr, bubr
+# Audio plug-ins: smemplr, multidyn, smacheratr, widr, gentlr, probr, sweepr, tapr, sunder
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
 to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**.
@@ -13,8 +13,7 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**
 | [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
 | [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 | [**tapr**](plugins/tapr/README.md) | A tape saturator: drive into a fast leveller and a clipper that holds the level, highs that soften as the tape speed comes down, and a three-band Cut EQ. The leveller and the EQ each go before or after the saturation. sweepr's tape stage on its own. |
-| [**pinchr**](plugins/pinchr/README.md) | A germanium compressor: a FET compressor with six knees, from a soft resistor to a hard Zener, into a germanium output stage whose Feedback adds gain and a resonant bass bump. Mix blends the compressed and the uncompressed sound, both through that stage. |
-| [**bubr**](plugins/bubr/README.md) | A bass enhancer: a band at a frequency you tune (20 to 125 Hz), its focus set by Q-Factor, driven into a clipper (Intensity, Drive, Boost) and blended back with the dry sound, a gate keeping it to the louder parts, Low Cut, and a 0 dBFS limiter at the output. Measured setting by setting from a commercial bass enhancer, as a 1:1 model to start from. |
+| [**sunder**](plugins/sunder/README.md) | A germanium compressor with a bass enhancer in front: a FET compressor with six knees, from a soft resistor to a hard Zener, into a germanium output stage whose Feedback adds gain and a resonant bass bump. Bass blends in a band of the low end you tune (20 to 125 Hz), driven into a clipper, before the compressor. Mix blends the compressed and the uncompressed sound, both through the output stage. (It was pinchr, and takes in bubr.) |
 
 ## Gallery
 
@@ -66,7 +65,9 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr until 0.5.0. gentlr was called gently before 0.12. smacheratr's
-gentlr was called Clarity. Projects keep loading: the plug-in IDs are unchanged.
+gentlr was called Clarity. sunder was called pinchr up to 0.32 (bubr's bass enhancer joined it then; bubr's
+own projects do not carry over). Projects keep loading: the plug-in IDs are unchanged (see the
+[sunder README](plugins/sunder/README.md#projects-from-pinchr-and-bubr) for pinchr's settings).
 
 ## Install
 
@@ -203,8 +204,7 @@ The main controls of each Basic page:
 | gentlr | bands | Band Slope, Attack, Release | Mix, Output |
 | sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
 | tapr | response and curve | Drive, Speed, Compression, Lo, Mid, Hi | Mix, Output |
-| pinchr | output stage and compression curve | Input, Ratio, Attack, Release, Drive, Feedback | Mix, Output |
-| bubr | effect response and gate curve | Boost, Freq, Intensity, Q-Factor, Drive, Gate | Dry/Wet, Output, Soft Clip, Hard Clip |
+| sunder | output stage and compression curve | Input, Ratio, Release, Drive, Feedback, Bass | Mix, Output, Soft Clip, Hard Clip |
 | probr | Record, the level and the status | Mode | (none; no capture band: probr records the track itself) |
 
 **Advanced** shows every control, in the layout of **Menu > Layout**; **Advanced** in its header
@@ -314,14 +314,14 @@ ctest --test-dir build -j 4 --output-on-failure          # everything, before a 
 ```
 
 - **Targets** per plug-in (`tapr` here): `tapr_tests` (DSP tests), `tapr_state_tests` (saved state;
-  bubr, gentlr, pinchr, probr, smacheratr, smemplr, sweepr, tapr and widr), `Tapr` (the bundle,
+  gentlr, probr, smacheratr, smemplr, sunder, sweepr, tapr and widr), `Tapr` (the bundle,
   checked by the VST3 validator as it builds), `tapr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
   `tapr_hosttest` (macOS). The tests are named `tapr_core`, `tapr_state`, `tapr_drawbench`,
   `tapr_drawbench_layouts` and `tapr_hosttest`.
 - **Tests in parallel.** `ctest -j` is safe: the tests that time the DSP against a CPU budget are
   marked `RUN_SERIAL` and labelled `cpu` (`pk_cpu_test` in `cmake/PluginKit.cmake`), so ctest runs
   them on their own. `ctest -L cpu` runs only those, `ctest -LE cpu` everything else.
-- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="tapr;pinchr"` configures only those plug-ins (and the
+- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="tapr;sunder"` configures only those plug-ins (and the
   libraries of the plug-ins they use, without their tests or bundles); empty builds all of them. Pull
   requests on GitHub build this way (below).
 - **ccache** across worktrees: set `CCACHE_BASEDIR` to the checkout's folder (for example
@@ -371,8 +371,7 @@ plugins/gentlr      gentle de-mud / de-harsh same structure
 plugins/probr       analysis probe           same structure (scripts/probr_align.py analyses its sessions)
 plugins/sweepr      swept bells into tape    same structure
 plugins/tapr        tape saturator, Cut EQ   same structure
-plugins/pinchr      germanium compressor     same structure (tools/render.cpp: pinchr_render, for calibrating it)
-plugins/bubr        bass enhancer            same structure (tools/render.cpp: bubr_render, for calibrating it)
+plugins/sunder      compressor, bass         same structure (tools/: sunder_render and sunder_bass_render, for calibrating it)
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

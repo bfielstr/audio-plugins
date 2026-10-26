@@ -1,4 +1,4 @@
-// A 4x oversampler (the suite's drives and saturating stages: tapr, sweepr, pinchr, bubr; its 2x stage alone
+// A 4x oversampler (the suite's drives and saturating stages: tapr, sweepr, sunder; its 2x stage alone
 // for 2x): Smacheratr's (two 2x stages, each a linear-phase Kaiser-windowed sinc half-band FIR, the same
 // taps and so the same sound and the same latency), computed polyphase.
 // A half-band FIR's taps are zero at every other place but the centre, and up-sampling feeds it a zero
