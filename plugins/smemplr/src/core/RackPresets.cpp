@@ -9,7 +9,7 @@ namespace smemplr {
 const HostedPlugin* hostedPlugin (int type)
 {
     static const HostedPlugin plugins[] = {
-        {"Para", "", &para::paramTable (), para::kGentlrIds},
+
         {"Multidyn", "", &multidyn::paramTable (), multidyn::kGentlrIds},
         {"Smacheratr", "", &smacheratr::paramTable (), smacheratr::kGentlrIds},
         {"Widr", "", &widr::pluginParamTable (), widr::kGentlrIds},
@@ -17,11 +17,10 @@ const HostedPlugin* hostedPlugin (int type)
     };
     switch (type)
     {
-        case kFxPara: return &plugins[0];
-        case kFxMultidyn: return &plugins[1];
-        case kFxSmacheratr: return &plugins[2];
-        case kFxWidr: return &plugins[3];
-        case kFxGentlr: return &plugins[4];
+        case kFxMultidyn: return &plugins[0];
+        case kFxSmacheratr: return &plugins[1];
+        case kFxWidr: return &plugins[2];
+        case kFxGentlr: return &plugins[3];
         default: return nullptr; // Empty, the M/S EQ, the retired kinds
     }
 }

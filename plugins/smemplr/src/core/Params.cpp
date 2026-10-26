@@ -173,17 +173,16 @@ std::vector<ParamInfo> buildTable ()
                      0.0, Curve::Linear, Disp::Curve));
         }
     }
-    // the fixed effects of 0.5 (kept so old projects load; they move into the rack)
+    // the fixed effects of 0.5 (kept so old projects load; they move into the rack). Para's places are kept,
+    // retired (below): the plug-in is gone, an old project's Para is not moved into the rack any more
     add (toggle (kFxParaOn, "Old Para On", "Para", false));
-    for (uint32_t i = 0; i < para::kHostedParams; ++i)
-    {
-        ParamInfo pi = para::paramTable ().info (i);
-        pi.id = paraParam (i);
-        pi.retired = false; // (Smemplr's own: what Para retired is still read here, from an old project)
-        // (Para's one Slope of then is its High-Pass Slope now)
-        pi.name = keep (std::string ("Old Para ") + (i == para::kHpSlope ? "Slope" : pi.name));
-        add (pi);
-    }
+    static const char* const kOldParaNames[kLegacyParaParams] = {
+        "High-Pass Frequency", "High-Pass Resonance", "Low-Pass Frequency", "Low-Pass Resonance", "Slope", "Split", "Envelope Amount",
+        "Envelope Attack", "Envelope Decay", "Key Tracking (unused)", "Transpose (unused)", "Pitch Bend Range (unused)",
+        "Root Note (unused)", "Dry/Wet", "Output", "High-Pass Gain", "Low-Pass Gain", "Link Resonance", "Movement", "Saturator",
+        "Saturator Pre-Limit", "Saturator Drive", "Saturator Post Clip", "Saturator Dry/Wet", "Saturator Pre-Limit Threshold"};
+    for (uint32_t i = 0; i < kLegacyParaParams; ++i)
+        add (pct ((ParamId)(kFxParaBase + i), keep (std::string ("Old Para ") + kOldParaNames[i]), "Para", 0.0));
     add (toggle (kFxMdOn, "Old Multidyn On", "Multidyn", false));
     for (uint32_t i = 0; i < kLegacyMdParams; ++i)
     {
@@ -212,9 +211,7 @@ std::vector<ParamInfo> buildTable ()
     add (toggle (kParaTransposeLock, "Old Para Transpose Lock", "Lock", false));
     add (toggle (kParaDragGain, "Old Para Drag Gain", "Drag Gain", false));
     add (toggle (kParaLiquid, "Old Para Liquid", "Liquid", false));
-    // Para's Fade as it was in 0.5 (1 .. 36 semitones, 12 by default; Para's is 1 .. 60 now): its saved
-    // values keep their meaning (StateIO.cpp moves it into a slot, migrateParaInSlots converts it)
-    add (fl (kParaFade, "Old Para Vocal Fade", "Fade", 1.0, para::kFadeOldMax, para::kFadeOldDefault, Curve::Log, Disp::Semis));
+    add (fl (kParaFade, "Old Para Vocal Fade", "Fade", 1.0, 36.0, 12.0, Curve::Log, Disp::Semis));
     add (toggle (kParaNotch, "Old Para Liquid Notch", "Notch", false));
     // the effects rack: per slot a Type, an On and a block of values (normalized; each effect reads
     // them through its own table, and the controller shows them that way). A new Smemplr starts with
@@ -295,8 +292,11 @@ std::vector<ParamInfo> buildTable ()
     // the loop's Sync and Beat (off: the loop as it always was)
     add (toggle (kLoopSync, "Loop Sync", "Sync", false));
     add (toggle (kLoopBeat, "Loop Retrigger on Beat", "Beat", false));
-    // the end of the chain (off: as before), and the old end saturator retired (its IDs kept for saved projects)
+    // the end of the chain (off: as before), and the old end saturator and the old fixed Para retired (their IDs
+    // kept for saved projects)
     pk::addEndClipParams (t, kSoftClip, kHardClip);
+    pk::retire (t, kFxParaOn, kFxMdOn); // the fixed Para of 0.5 (para is gone)
+    pk::retire (t, kParaTransposeLock, kParaNotch + 1);
     pk::retire (t, kTailBase, kTailBase + pk::kTailFields);
     pk::retire (t, kTailExtBase, kTailExtBase + pk::kTailExtFields);
     return t;

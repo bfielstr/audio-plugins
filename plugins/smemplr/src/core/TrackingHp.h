@@ -3,10 +3,10 @@
 // that moves with the pitch keeps the sample's own low end where it was: base Hz at 0 semitones,
 // base x 2^(semitones / 12) transposed.
 //
-// Para's slopes at resonance 0, built of Para's sections (the trapezoidal one-pole and state-variable
-// filter), so the cutoff means what it means in Para: 6 dB first order and 18 dB Butterworth 3 (-3 dB at
-// the cutoff); 12, 24, 36 and 48 dB Linkwitz-Riley (-6 dB at the cutoff: 12 dB one section of Q 0.5,
-// the others Butterworth 2, 3 and 4 twice).
+// The slopes para had at resonance 0, built of the same sections (the trapezoidal one-pole and state-variable
+// filter, pluginkit/dsp/Svf.h): 6 dB first order and 18 dB Butterworth 3 (-3 dB at the cutoff); 12, 24, 36
+// and 48 dB Linkwitz-Riley (-6 dB at the cutoff: 12 dB one section of Q 0.5, the others Butterworth 2, 3 and
+// 4 twice).
 #pragma once
 
 #include "pluginkit/dsp/Svf.h"

@@ -8,7 +8,6 @@
 #include "pluginkit/TailParams.h"
 
 #include "multidyn/src/core/Params.h"
-#include "para/src/core/Params.h"
 
 #include <cstdint>
 #include <string>
@@ -19,7 +18,7 @@ namespace smemplr {
 // The effects rack after the sampler: kRackSlots slots, each Empty or one of the suite's effects, in
 // any order (the same effect may sit in several). A slot is a Type, an On and a block of kSlotBlock
 // parameters that the slot's effect reads through its own table (FxSlot.h: fxTable), so the IDs stay
-// the same whatever is loaded where. An effect with more parameters than that (Para, Multidyn) uses the
+// the same whatever is loaded where. An effect with more parameters than that (Multidyn) uses the
 // slot's extension too: kSlotExt more positions per slot, in a block of their own after the old end
 // saturator's (block positions kSlotBlock and up; slotBlockParam finds either).
 // (FxType, the slot's block and its fields: FxSlot.h)
@@ -35,6 +34,8 @@ constexpr int kFxTypesBeforeGentlr = 8;
 constexpr int kRackSlots = 8;
 // Multidyn's parameter count in 0.5, when it was fixed after the sampler (its later ones are not there)
 constexpr uint32_t kLegacyMdParams = 62;
+// ... and Para's (the plug-in is gone: its places are kept, retired, so the IDs after them stay put)
+constexpr uint32_t kLegacyParaParams = 25;
 constexpr uint32_t kSlotSize = kSlotParams + kSlotBlock;
 
 enum ParamId : uint32_t
@@ -130,9 +131,9 @@ enum ParamId : uint32_t
     kLoopFadePower, // constant-power (on) or linear loop crossfade
     kEnvExtBase,    // per-envelope curves and breakpoints, see envParam()
     // --- added in 0.5 (append only): the built-in effects after the sampler, see fxParam() ---
-    kFxParaOn = kEnvExtBase + 3 * 22,
-    kFxParaBase, // para::kHostedParams entries (Para's own IDs, offset)
-    kFxMdOn = kFxParaBase + para::kHostedParams,
+    kFxParaOn = kEnvExtBase + 3 * 22, // (retired, with its block: para is gone)
+    kFxParaBase, // kLegacyParaParams entries (Para's own IDs then, offset)
+    kFxMdOn = kFxParaBase + kLegacyParaParams,
     kFxMdBase, // kLegacyMdParams entries (its own end-of-chain saturator is not used here)
     kMsOn = kFxMdBase + kLegacyMdParams, // mid/side EQ after the effects
     kMsSideHp,   // Hz, high-pass on the side signal
@@ -141,11 +142,11 @@ enum ParamId : uint32_t
     kMsMidGain,  // dB
     kRootKey,    // the root note: the sample plays at its own pitch on this note
     kTailBase,   // the Smacheratr after the rack (before 0.9; "Old End", retired): pk::kTailFields entries
-    kParaTransposeLock = kTailBase + pk::kTailFields, // unused since Para stopped tracking notes
-    kParaDragGain,      // Para's display: dragging a handle moves its gain with the resonance
-    kParaLiquid,        // Para's Liquid movement
-    kParaFade,          // Para's Vocal fade range
-    kParaNotch,         // Para's Liquid notch
+    kParaTransposeLock = kTailBase + pk::kTailFields, // the fixed Para's settings outside its block (retired)
+    kParaDragGain,
+    kParaLiquid,
+    kParaFade,
+    kParaNotch,
     // --- added in 0.6: the effects rack (Rack.h); the fixed Para / Multidyn / M/S EQ above are
     // no longer used (old projects are moved into the rack when they load) ---
     kRackBase,
@@ -208,6 +209,9 @@ enum ParamId : uint32_t
     // slotBlockParam, isRackParam and rackField then learn, and kSlotBlockAll grows by.
     kNumParams
 };
+static_assert (kFxParaOn == 148 && kFxParaBase == 149 && kFxMdOn == 174 && kFxMdBase == 175 && kMsOn == 237 && kTailBase == 243 &&
+                   kParaTransposeLock == 249 && kParaNotch == 253 && kRackBase == 254,
+               "stored IDs moved: append, never insert");
 static_assert (pk::kTailExtFields == 17, "Smemplr's end-saturator block is followed by the rack's extensions: add new "
                                          "fields in a block after them");
 static_assert (kRackExtEnd == 975 && kTransHpOn == 975 && kTransHpFreq == 976 && kTransHpSlope == 977,
@@ -272,7 +276,6 @@ constexpr bool isTailParam (uint32_t id)
     return (id >= kTailBase && id < kTailBase + pk::kTailFields) || (id >= kTailExtBase && id < kTailExtBase + pk::kTailExtFields);
 }
 
-constexpr uint32_t paraParam (uint32_t id) { return kFxParaBase + id; }
 
 constexpr uint32_t multidynParam (uint32_t id) { return kFxMdBase + id; }
 

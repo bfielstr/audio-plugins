@@ -1,7 +1,7 @@
-// One effects slot of the suite's racks (library smemplr_fxslot): Empty or one of the suite's effects (para,
-// multidyn, m/s eq, smacheratr, widr, gentlr). Smemplr's rack (Rack.h) is a row of these after the sampler;
-// moistr's lab (moistr/src/core/Lab.h) puts them on its bands and after them. (Wubr, Levlr and Smoothr were
-// kinds too: their places in the Type are kept, and a slot saved with one of them loads Empty: fxRetired.)
+// One effects slot of smemplr's rack (library smemplr_fxslot): Empty or one of the suite's effects (multidyn,
+// m/s eq, smacheratr, widr, gentlr). Smemplr's rack (Rack.h) is a row of these after the sampler. (Para, Wubr,
+// Levlr and Smoothr were kinds too: their places in the Type are kept, and a slot saved with one of them loads
+// Empty: fxRetired.)
 //
 // A slot owns one engine of each kind, allocated up front, so loading or moving an effect never allocates on
 // the audio thread; only the slot's current kind runs. Its parameters are a Type, an On and a block of
@@ -15,7 +15,6 @@
 
 #include "gentlr/src/core/Engine.h"
 #include "multidyn/src/core/Engine.h"
-#include "para/src/core/Engine.h"
 #include "smacheratr/src/core/Engine.h"
 #include "widr/src/core/Engine.h"
 
@@ -27,13 +26,13 @@
 
 namespace smemplr {
 
-// The kinds a slot can hold. Saved in projects (a slot's Type): only ever append. The retired ones (Wubr, Levlr,
-// Smoothr: their plug-ins are gone) keep their places, so the others keep theirs; a slot of one of them is an
-// Empty slot (fxKind), a project's loads as one, and no menu offers them (fxOffered).
+// The kinds a slot can hold. Saved in projects (a slot's Type): only ever append. The retired ones (Para, Wubr,
+// Levlr, Smoothr: their plug-ins are gone) keep their places, so the others keep theirs; a slot of one of them is
+// an Empty slot (fxKind), a project's loads as one, and no menu offers them (fxOffered).
 enum FxType
 {
     kFxEmpty = 0,
-    kFxPara,
+    kFxRetiredPara,
     kFxMultidyn,
     kFxMsEq,
     kFxSmacheratr,
@@ -44,16 +43,20 @@ enum FxType
     kFxRetiredSmoothr,
     kNumFxTypes
 };
-static_assert (kFxWidr == 5 && kFxRetiredWubr == 6 && kFxRetiredLevlr == 7 && kFxGentlr == 8 && kFxRetiredSmoothr == 9 && kNumFxTypes == 10,
+static_assert (kFxRetiredPara == 1 && kFxMultidyn == 2 && kFxMsEq == 3 && kFxSmacheratr == 4 && kFxWidr == 5 && kFxRetiredWubr == 6 &&
+                   kFxRetiredLevlr == 7 && kFxGentlr == 8 && kFxRetiredSmoothr == 9 && kNumFxTypes == 10,
                "the slot types are saved in projects: only ever append");
-constexpr bool fxRetired (int type) { return type == kFxRetiredWubr || type == kFxRetiredLevlr || type == kFxRetiredSmoothr; }
+constexpr bool fxRetired (int type)
+{
+    return type == kFxRetiredPara || type == kFxRetiredWubr || type == kFxRetiredLevlr || type == kFxRetiredSmoothr;
+}
 // what a slot of a saved Type holds: the kind, or Empty (a retired kind, or out of range)
 constexpr int fxKind (int type) { return type <= kFxEmpty || type >= kNumFxTypes || fxRetired (type) ? kFxEmpty : type; }
 // the kinds a user can put in a slot (every kind but Empty and the retired ones)
 constexpr bool fxOffered (int type) { return fxKind (type) != kFxEmpty; }
 // A slot's block: room for the largest effect's parameters (Multidyn, see fxBlockTable), then an extension of
-// kSlotExt more positions (block positions kSlotBlock and up: Para's and Multidyn's later parameters; its size
-// is saved in projects, from when Wubr's ran on into it).
+// kSlotExt more positions (block positions kSlotBlock and up: Multidyn's later parameters, Para's once; its
+// size is saved in projects, from when Wubr's ran on into it).
 constexpr uint32_t kSlotBlock = 62;
 constexpr uint32_t kSlotExt = 24;
 constexpr uint32_t kSlotBlockAll = kSlotBlock + kSlotExt; // every block position of a slot
@@ -71,15 +74,13 @@ const pk::ParamTable& paramTable ();
 double slopeFromThreeChoices (double oldNorm);
 } // namespace mseq
 
-const char* fxName (int type); // "para", ...; "" for Empty (a retired kind keeps its name, for the Type's choices)
+const char* fxName (int type); // "multidyn", ...; "" for Empty (a retired kind keeps its name, for the Type's choices)
 const char* fxFormerName (int type); // the name a renamed kind had ("gently" for gentlr), for pasting its old settings; "" for none
 // The table a kind reads its block through (an empty table for Empty).
 const pk::ParamTable& fxTable (int type); // the effect's own table, by its own IDs
 // A slot's block holds the effect's parameters by their own IDs, except that Multidyn's parameters
 // added after the rack (RMS Window, Soften) sit where its saturator's are (not used in the rack):
-// the block has room for 62; Multidyn's later ones run on into the slot's extension; and Para's after
-// its low-pass drive (Low-Pass Slope and the Gain Locks, IDs 62 .. 64) are at block positions 62 .. 64
-// too, the first of the slot's extension (its block position is its ID throughout). fxBlockTable is the
+// the block has room for 62; Multidyn's later ones run on into the slot's extension. fxBlockTable is the
 // table by block position (an empty table for Empty and the retired kinds); fxIdAt and fxBlockOf
 // convert (-1: none).
 const pk::ParamTable& fxBlockTable (int type);
@@ -102,7 +103,6 @@ struct FxSlot
     int type = kFxEmpty;
     bool on = true;
     std::array<double, kSlotBlockAll> norm {};
-    para::Engine para {false};
     multidyn::Engine multidyn {false};
     MsEq ms;
     smacheratr::Engine sat;
@@ -121,10 +121,6 @@ struct FxSlot
     // in place; off: the kind's bypass (its latency's delay, or fully dry at the same latency)
     void process (float* L, float* R, int n);
     int latency () const; // the kind's, on or off (0 for Empty, Widr and the M/S EQ)
-
-    // Para's envelope follows the notes (and the pitch bend).
-    void noteOn (int note);
-    void setPitchBend (float bipolar);
 };
 
 } // namespace smemplr

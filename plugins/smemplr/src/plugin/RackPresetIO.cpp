@@ -19,7 +19,7 @@ const hosted::Codec* codecOf (int type)
 {
     switch (type)
     {
-        case kFxPara: return &hosted::codecPara ();
+
         case kFxMultidyn: return &hosted::codecMultidyn ();
         case kFxSmacheratr: return &hosted::codecSmacheratr ();
         case kFxWidr: return &hosted::codecWidr ();
