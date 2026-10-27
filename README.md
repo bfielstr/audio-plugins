@@ -1,7 +1,7 @@
 # Audio plug-ins: smemplr, multidyn, smacheratr, widr, gentlr, probr, sweepr, tapr, sunder
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.33.0**.
 
 | Plug-in | What it does for you |
 |---|---|
