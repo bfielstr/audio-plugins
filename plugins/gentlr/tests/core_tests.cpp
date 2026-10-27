@@ -220,7 +220,7 @@ TEST (parameters_and_defaults)
                        sliderTable ().info (id).def == sm.info (id).def,
                    "Smacheratr's %u as it is", id);
     }
-    // the racks (smemplr, moistr) keep the table up to 0.30.0: -60 .. 0 dB Thresholds, band 1 at 250 Hz,
+    // smemplr's rack keeps the table up to 0.30.0: -60 .. 0 dB Thresholds, band 1 at 250 Hz,
     // 8 dB, -18 dB, Band Shelves on, no end clips (and the end saturator not retired: the racks hide it);
     // everything else is gentlr's
     const auto& rt = rackTable ();

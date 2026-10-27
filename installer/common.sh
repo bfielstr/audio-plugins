@@ -7,7 +7,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Bundles that were renamed. A copy left under the old name would load next to the new one (same
 # plug-in IDs). Keep in step with the lists in scripts/install.sh and scripts/install.ps1.
-RENAMED_BUNDLES="Simplr Lowfocus Smatcheratr Perrera Smempler Gently"
+RENAMED_BUNDLES="Simplr Lowfocus Smatcheratr Perrera Smempler Gently Pinchr"
 
 # The suite's version, from the project() call in CMakeLists.txt.
 app_version() {

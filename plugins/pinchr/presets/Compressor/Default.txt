@@ -1,5 +1,0 @@
-# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: compressor, default
-comment: A new instance: Ratio 4, Germ Soft, Attack and Release 3, Drive 5, Feedback 5, clean and fully compressed.
-Ratio = 4
-Curve = Germ Soft

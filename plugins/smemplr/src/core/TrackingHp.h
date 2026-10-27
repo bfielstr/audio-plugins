@@ -3,13 +3,13 @@
 // that moves with the pitch keeps the sample's own low end where it was: base Hz at 0 semitones,
 // base x 2^(semitones / 12) transposed.
 //
-// Para's slopes at resonance 0, built of Para's sections (the trapezoidal one-pole and state-variable
-// filter), so the cutoff means what it means in Para: 6 dB first order and 18 dB Butterworth 3 (-3 dB at
-// the cutoff); 12, 24, 36 and 48 dB Linkwitz-Riley (-6 dB at the cutoff: 12 dB one section of Q 0.5,
-// the others Butterworth 2, 3 and 4 twice).
+// The slopes para had at resonance 0, built of the same sections (the trapezoidal one-pole and state-variable
+// filter, pluginkit/dsp/Svf.h): 6 dB first order and 18 dB Butterworth 3 (-3 dB at the cutoff); 12, 24, 36
+// and 48 dB Linkwitz-Riley (-6 dB at the cutoff: 12 dB one section of Q 0.5, the others Butterworth 2, 3 and
+// 4 twice).
 #pragma once
 
-#include "para/src/core/Svf.h"
+#include "pluginkit/dsp/Svf.h"
 
 #include <algorithm>
 #include <cmath>
@@ -62,7 +62,7 @@ public:
         const double g = std::tan (M_PI * std::clamp (hz, 5.0, 0.49 * sr) / sr);
         for (int k = 0; k < sections; ++k)
         {
-            auto& c = co[k]; // as para::SvfCoeffs::set does, with the tan () done once
+            auto& c = co[k]; // as pk::dsp::SvfCoeffs::set does, with the tan () done once
             c.g = g;
             c.k = 1.0 / q[k];
             c.a1 = 1.0 / (1.0 + g * (g + c.k));
@@ -89,9 +89,9 @@ public:
     }
 
 private:
-    para::SvfCoeffs co[kMaxSections];
-    para::Svf svf[2][kMaxSections];
-    para::OnePole one[2][kMaxOnePoles];
+    pk::dsp::SvfCoeffs co[kMaxSections];
+    pk::dsp::Svf svf[2][kMaxSections];
+    pk::dsp::OnePole one[2][kMaxOnePoles];
     double q[kMaxSections] {};
     double g1 = 0.0;
     int onePoles = 0, sections = 0, shapeOf = -1;

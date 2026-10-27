@@ -1,34 +1,28 @@
-# Audio plug-ins: smemplr, multidyn, smacheratr, para, widr, gentlr, dropr, moistr, probr, sweepr, tapr, pinchr, bubr
+# Audio plug-ins: smemplr, multidyn, smacheratr, widr, gentlr, probr, sweepr, tapr, sunder
 
 VST3 plug-ins for REAPER, Ableton Live and any other VST3 host on **macOS, Windows and Linux**. Free
-to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**.
+to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.33.0**.
 
 | Plug-in | What it does for you |
 |---|---|
 | [**smemplr**](plugins/smemplr/README.md) | Plays a sample from the keyboard. Loop it, slice it into hits, or warp it to the song tempo. A multi-mode filter, envelopes you can draw, an LFO, four modulation LFOs you drag onto any control, and an effects rack with up to 8 of the suite's effects in any order. |
 | [**multidyn**](plugins/multidyn/README.md) | Squashes or opens up 1 to 4 frequency bands at once: quiet detail comes up and loud parts are held down, band by band. The **OTT** style gives the loud, dense, over-the-top sound; **Character** is smoother. Side-chain input and a Sub band. |
 | [**smacheratr**](plugins/smacheratr/README.md) | Adds warmth, grit or hard clipping. A pre-limiter stops transients from clipping harder than the rest, colour filters choose which frequencies saturate, and gentlr keeps a pushed sound from turning muddy or harsh. |
-| [**para**](plugins/para/README.md) | A high-pass and a low-pass side by side. Pull them apart to carve a notch, then sweep it, fire it from MIDI notes, or use the **Vocal** movement, where the filter you move leads and fades the other out. Good for bass movement and filter sweeps. |
 | [**widr**](plugins/widr/README.md) | Makes a part very wide without falling apart in mono. Widrs in the same project share out the stereo field by role, so they do not all widen the same place. |
 | [**gentlr**](plugins/gentlr/README.md) | Keeps a mix clear by turning down mud and harshness only while they build up. Two bands plus a Sub and a High band, each cutting its region only while it is loud. |
-| [**dropr**](plugins/dropr/README.md) | Slams a sound flat in 6 bands and drives it into a saturator. Negative ratios turn loud hits down below quieter parts, so a snare's body comes up and its snap is tamed. |
-| [**moistr**](plugins/moistr/README.md) | Turns a dry bass (a detuned saw or a Reese, typically) into a wet, moving neuro texture: eight bell EQs sweep the low end against each other like rolling waves, and a level-matched saturator makes it crunch with a clean sub kept underneath (a resonant high shelf on a slow orbit is there too). After that it can split the sound into 3 or 4 moving bands: the low band held steady, the bands above it rising and falling on a seeded pattern, glued back with a compressor and a little grit, with an optional frequency shifter that never touches the sub. |
 | [**probr**](plugins/probr/README.md) | An analysis probe. Put one after each device or rack chain you want to understand, label each, arm them and play: each writes exactly what passes through it (the sound itself is untouched) with the song position, the tempo and any MIDI, into one folder per session on your computer. A script lines all the probes up by beat and compares what each stage of your chain does. |
 | [**sweepr**](plugins/sweepr/README.md) | Two EQ bands whose frequencies an LFO each sweeps, synced to the song or free, into a tape stage: drive into a fast leveller and a clipper, and highs that soften as the tape speed comes down. A boost and a cut moving against a bass in time with the beat, with the movement shown on the EQ curve. |
 | [**tapr**](plugins/tapr/README.md) | A tape saturator: drive into a fast leveller and a clipper that holds the level, highs that soften as the tape speed comes down, and a three-band Cut EQ. The leveller and the EQ each go before or after the saturation. sweepr's tape stage on its own. |
-| [**pinchr**](plugins/pinchr/README.md) | A germanium compressor: a FET compressor with six knees, from a soft resistor to a hard Zener, into a germanium output stage whose Feedback adds gain and a resonant bass bump. Mix blends the compressed and the uncompressed sound, both through that stage. |
-| [**bubr**](plugins/bubr/README.md) | A bass enhancer: a band at a frequency you tune (20 to 125 Hz), its focus set by Q-Factor, driven into a clipper (Intensity, Drive, Boost) and blended back with the dry sound, a gate keeping it to the louder parts, Low Cut, and a 0 dBFS limiter at the output. Measured setting by setting from a commercial bass enhancer, as a 1:1 model to start from. |
+| [**sunder**](plugins/sunder/README.md) | A germanium compressor with a bass enhancer in front: a FET compressor with six knees, from a soft resistor to a hard Zener, into a germanium output stage whose Feedback adds gain and a resonant bass bump. Bass blends in a band of the low end you tune (20 to 125 Hz), driven into a clipper, before the compressor. Mix blends the compressed and the uncompressed sound, both through the output stage. (It was pinchr, and takes in bubr.) |
 
 ## Gallery
 
 | | |
 |---|---|
 | [<img src="docs/smemplr/ui_classic.png" width="420" alt="smemplr">](plugins/smemplr/README.md)<br>smemplr | [<img src="docs/multidyn/ui_multidyn.png" width="420" alt="multidyn">](plugins/multidyn/README.md)<br>multidyn |
-| [<img src="docs/smacheratr/ui_smacheratr.png" width="420" alt="smacheratr">](plugins/smacheratr/README.md)<br>smacheratr | [<img src="docs/para/ui_para.png" width="420" alt="para">](plugins/para/README.md)<br>para |
-| [<img src="docs/widr/ui_widr.png" width="420" alt="widr">](plugins/widr/README.md)<br>widr | [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr |
-| [<img src="docs/dropr/ui_dropr.png" width="420" alt="dropr">](plugins/dropr/README.md)<br>dropr | [<img src="docs/moistr/ui_moistr.png" width="420" alt="moistr">](plugins/moistr/README.md)<br>moistr |
-| [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr | [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr |
-| [<img src="docs/tapr/ui_tapr.png" width="420" alt="tapr">](plugins/tapr/README.md)<br>tapr | |
+| [<img src="docs/smacheratr/ui_smacheratr.png" width="420" alt="smacheratr">](plugins/smacheratr/README.md)<br>smacheratr | [<img src="docs/widr/ui_widr.png" width="420" alt="widr">](plugins/widr/README.md)<br>widr |
+| [<img src="docs/gentlr/ui_gentlr.png" width="420" alt="gentlr">](plugins/gentlr/README.md)<br>gentlr | [<img src="docs/probr/ui_probr.png" width="420" alt="probr">](plugins/probr/README.md)<br>probr |
+| [<img src="docs/sweepr/ui_sweepr.png" width="420" alt="sweepr">](plugins/sweepr/README.md)<br>sweepr | [<img src="docs/tapr/ui_tapr.png" width="420" alt="tapr">](plugins/tapr/README.md)<br>tapr |
 
 ## What every plug-in has
 
@@ -71,7 +65,9 @@ to use, not for sale (see [LICENSE](LICENSE)). The current version is **0.32.0**
 - The copper and cinnabar look described in [docs/THEME.md](docs/THEME.md).
 
 Older names: smemplr was called simplr until 0.5.0. gentlr was called gently before 0.12. smacheratr's
-gentlr was called Clarity. Projects keep loading: the plug-in IDs are unchanged.
+gentlr was called Clarity. sunder was called pinchr up to 0.32 (bubr's bass enhancer joined it then; bubr's
+own projects do not carry over). Projects keep loading: the plug-in IDs are unchanged (see the
+[sunder README](plugins/sunder/README.md#projects-from-pinchr-and-bubr) for pinchr's settings).
 
 ## Install
 
@@ -170,7 +166,7 @@ They live in
 with one sub-folder per category. The saved default is the hidden file `.default.vstpreset` in the
 same folder: delete it (or use **Reset Default**) to go back to the factory defaults.
 
-smemplr's effects rack uses the same presets: a slot holding para, multidyn, smacheratr, widr or
+smemplr's effects rack uses the same presets: a slot holding multidyn, smacheratr, widr or
 gentlr has a **Presets** control with that plug-in's menu, reading and writing the same folder, so presets (and the saved default) go both ways between a slot and the plug-in. See the
 [smemplr README](plugins/smemplr/README.md#a-slots-presets).
 
@@ -208,10 +204,7 @@ The main controls of each Basic page:
 | gentlr | bands | Band Slope, Attack, Release | Mix, Output |
 | sweepr | EQ curve | A Gain, B Gain, A Depth, B Depth, Drive, Mix | Output |
 | tapr | response and curve | Drive, Speed, Compression, Lo, Mid, Hi | Mix, Output |
-| pinchr | output stage and compression curve | Input, Ratio, Attack, Release, Drive, Feedback | Mix, Output |
-| bubr | effect response and gate curve | Boost, Freq, Intensity, Q-Factor, Drive, Gate | Dry/Wet, Output, Soft Clip, Hard Clip |
-| dropr | bands | Bands, Down Thr, Up Thr, Release | Dry/Wet, Output |
-| para | filter response | HP Freq, LP Freq, Movement | Dry/Wet, Output |
+| sunder | output stage and compression curve | Input, Ratio, Release, Drive, Feedback, Bass | Mix, Output, Soft Clip, Hard Clip |
 | probr | Record, the level and the status | Mode | (none; no capture band: probr records the track itself) |
 
 **Advanced** shows every control, in the layout of **Menu > Layout**; **Advanced** in its header
@@ -224,7 +217,7 @@ The Layout sub-menu is in the Menu of the Advanced view only.
 ## Defaults for new instances
 
 Every plug-in has a **Defaults** sub-menu in its **Menu**, after **Layout**. In a plug-in with a Basic
-page (all but moistr) it starts with **Advanced View by Default** (unchecked): checked, a new instance opens in
+page (every one) it starts with **Advanced View by Default** (unchecked): checked, a new instance opens in
 the Advanced view instead of the Basic page (see [Basic and Advanced views](#basic-and-advanced-views)).
 smacheratr and gentlr have items of their own there. In smacheratr, **Gentlr On by Default** and
 **Advanced On by Default** decide whether its **Gentlr** (on in a new smacheratr) and gentlr's
@@ -321,14 +314,14 @@ ctest --test-dir build -j 4 --output-on-failure          # everything, before a 
 ```
 
 - **Targets** per plug-in (`tapr` here): `tapr_tests` (DSP tests), `tapr_state_tests` (saved state;
-  bubr, dropr, gentlr, moistr, pinchr, probr, smacheratr, smemplr, sweepr, tapr and widr), `Tapr` (the bundle,
+  gentlr, probr, smacheratr, smemplr, sunder, sweepr, tapr and widr), `Tapr` (the bundle,
   checked by the VST3 validator as it builds), `tapr_drawbench` (with `-DPK_DRAW_BENCH=ON`, Linux) and
   `tapr_hosttest` (macOS). The tests are named `tapr_core`, `tapr_state`, `tapr_drawbench`,
   `tapr_drawbench_layouts` and `tapr_hosttest`.
 - **Tests in parallel.** `ctest -j` is safe: the tests that time the DSP against a CPU budget are
   marked `RUN_SERIAL` and labelled `cpu` (`pk_cpu_test` in `cmake/PluginKit.cmake`), so ctest runs
   them on their own. `ctest -L cpu` runs only those, `ctest -LE cpu` everything else.
-- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="tapr;pinchr"` configures only those plug-ins (and the
+- **Some plug-ins only.** `-DPK_ONLY_PLUGINS="tapr;sunder"` configures only those plug-ins (and the
   libraries of the plug-ins they use, without their tests or bundles); empty builds all of them. Pull
   requests on GitHub build this way (below).
 - **ccache** across worktrees: set `CCACHE_BASEDIR` to the checkout's folder (for example
@@ -373,16 +366,12 @@ repository.
 plugins/smemplr     sampler                  src/core (DSP) · src/plugin (VST3) · src/ui · tests · presets
 plugins/multidyn    multiband dynamics       same structure
 plugins/smacheratr  saturator                same structure
-plugins/para        parallel filters         same structure
 plugins/widr        stereo width             same structure
 plugins/gentlr      gentle de-mud / de-harsh same structure
-plugins/dropr       multiband compressor     same structure
-plugins/moistr      sweeps, moving bands     same structure
 plugins/probr       analysis probe           same structure (scripts/probr_align.py analyses its sessions)
 plugins/sweepr      swept bells into tape    same structure
 plugins/tapr        tape saturator, Cut EQ   same structure
-plugins/pinchr      germanium compressor     same structure (tools/render.cpp: pinchr_render, for calibrating it)
-plugins/bubr        bass enhancer            same structure (tools/render.cpp: bubr_render, for calibrating it)
+plugins/sunder      compressor, bass         same structure (tools/: sunder_render and sunder_bass_render, for calibrating it)
 shared/pluginkit    code all plug-ins share: parameter tables, VST3 controller/editor bases,
                     the preset store, VSTGUI widgets, the instance registry, the macOS host-test harness
 cmake/PluginKit.cmake   SDK fetch + pk_add_plugin() / pk_add_host_test()

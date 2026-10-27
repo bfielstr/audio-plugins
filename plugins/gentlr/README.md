@@ -182,7 +182,7 @@ Grabbing any of a band's controls (its handle or edge in the display, a knob or 
 Threshold slider in Advanced mode) selects the band: its handle lights, and so do its header and its
 Threshold slider.
 
-gentlr is also in smemplr's effects rack (and moistr's lab). There it keeps the settings it had up to
+gentlr is also in smemplr's effects rack. There it keeps the settings it had up to
 0.30.0, so projects with it sound as they did: Thresholds from -60 to 0 dB, Band 1 at 250 Hz with Range 8
 dB and Threshold -18 dB for a new slot, and bands that turn into shelves at the ends of the spectrum. A
 gentlr preset loaded into a slot keeps its Thresholds (one under -60 dB at -60).

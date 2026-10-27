@@ -564,7 +564,7 @@ int main (int argc, char** argv)
             };
             for (int s = 0; s < smemplr::kRackSlots; ++s)
                 putType (s, smemplr::kFxEmpty);
-            putType (0, smemplr::kFxPara);
+            putType (0, smemplr::kFxWidr);
             putType (1, smemplr::kFxMsEq);
             v8.norm[smemplr::slotBlockParam (1, smemplr::mseq::kSlope)] = 0.5; // 12 dB of 6 / 12 / 24
             v8.norm[smemplr::kTailBase + pk::kTailOn] = 1.0;
@@ -579,7 +579,7 @@ int main (int argc, char** argv)
             auto typeIn = [&] (int s) {
                 return (int)std::lround (smemplr::toPlain (smemplr::slotParam (s, kSlotType), b8.norm[smemplr::slotParam (s, kSlotType)]));
             };
-            CHECK (typeIn (0) == smemplr::kFxPara && typeIn (1) == smemplr::kFxMsEq && typeIn (2) == smemplr::kFxSmacheratr &&
+            CHECK (typeIn (0) == smemplr::kFxWidr && typeIn (1) == smemplr::kFxMsEq && typeIn (2) == smemplr::kFxSmacheratr &&
                        typeIn (3) == smemplr::kFxEmpty && b8.norm[smemplr::kTailBase + pk::kTailOn] == 0.0,
                    "version 8: the end saturator in the third slot: %d %d %d %d", typeIn (0), typeIn (1), typeIn (2), typeIn (3));
             const double slope = smemplr::mseq::paramTable ().toPlain (smemplr::mseq::kSlope, b8.norm[smemplr::slotBlockParam (1, smemplr::mseq::kSlope)]);
@@ -652,13 +652,13 @@ int main (int argc, char** argv)
                 rig.param (smemplr::slotBlockParam (slot, j), j < t.size () ? t.defaultNormalized (j) : 0.0);
         };
         // (every kind the editor offers, and a second Multidyn last)
-        constexpr int kKinds = 7;
-        const int kinds[kKinds] = {smemplr::kFxPara, smemplr::kFxMultidyn, smemplr::kFxMsEq, smemplr::kFxSmacheratr,
-                                   smemplr::kFxWidr, smemplr::kFxGentlr,   smemplr::kFxMultidyn};
-        constexpr int kExtSlot = 6;
+        constexpr int kKinds = 6;
+        const int kinds[kKinds] = {smemplr::kFxWidr, smemplr::kFxMultidyn, smemplr::kFxMsEq, smemplr::kFxSmacheratr, smemplr::kFxGentlr,
+                                   smemplr::kFxMultidyn};
+        constexpr int kExtSlot = 5;
         for (int s = 0; s < kKinds; ++s)
             loadFx (s, kinds[s]);
-        // the second Multidyn (slot 7) with a value in the slot's extension (block positions from kSlotBlock on):
+        // the second Multidyn (slot 6) with a value in the slot's extension (block positions from kSlotBlock on):
         // its Style; it must move with the slot when the editor moves the rack up
         const uint32_t extPos = (uint32_t)smemplr::fxBlockOf (smemplr::kFxMultidyn, multidyn::kStyle);
         CHECK (extPos >= smemplr::kSlotBlock && extPos < smemplr::kSlotBlockAll, "Multidyn's Style is in the extension: %u", extPos);
@@ -684,7 +684,7 @@ int main (int argc, char** argv)
             };
             const double tabY = smemplr::Editor::kFxTabTop + 10, ctlY = smemplr::Editor::kFxCtlTop + 10;
             // one tab per slot in chain order (no saturator after the rack any more: a slot does that)
-            const char* names[kKinds] = {"para", "multidyn", "ms", "smacheratr", "widr", "gentlr", "multidyn2"};
+            const char* names[kKinds] = {"widr", "multidyn", "ms", "smacheratr", "gentlr", "multidyn2"};
             auto tabX = [] (int pos) { return 8 + pos * smemplr::Editor::kFxTabWidth + 40; };
             for (int t = 0; t < kKinds; ++t)
             {
@@ -722,49 +722,49 @@ int main (int argc, char** argv)
                     }
                 }
             }
-            // drag the second slot's tab onto the first: Multidyn first, then Para (the moved slot is selected)
+            // drag the second slot's tab onto the first: Multidyn first, then Widr (the moved slot is selected)
             fx.drag (tabX (1), tabY, tabX (0), tabY);
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxMultidyn && typeOf (1) == smemplr::kFxPara, "dragged: %d %d", typeOf (0), typeOf (1));
+            CHECK (typeOf (0) == smemplr::kFxMultidyn && typeOf (1) == smemplr::kFxWidr, "dragged: %d %d", typeOf (0), typeOf (1));
             // a drag of less than a few pixels is a click: nothing moves
             fx.drag (tabX (2), tabY, tabX (2) + 2, tabY);
             pump (0.1);
-            CHECK (typeOf (1) == smemplr::kFxPara && typeOf (2) == smemplr::kFxMsEq, "a click does not move: %d %d", typeOf (1), typeOf (2));
-            // and back: drag Multidyn two places right (Para, M/S EQ, Multidyn), then one left again
+            CHECK (typeOf (1) == smemplr::kFxWidr && typeOf (2) == smemplr::kFxMsEq, "a click does not move: %d %d", typeOf (1), typeOf (2));
+            // and back: drag Multidyn two places right (Widr, M/S EQ, Multidyn), then one left again
             fx.drag (tabX (0), tabY, tabX (2), tabY);
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxMultidyn,
+            CHECK (typeOf (0) == smemplr::kFxWidr && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxMultidyn,
                    "dragged right: %d %d %d", typeOf (0), typeOf (1), typeOf (2));
             fx.drag (tabX (2), tabY, tabX (1), tabY);
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMultidyn && typeOf (2) == smemplr::kFxMsEq,
+            CHECK (typeOf (0) == smemplr::kFxWidr && typeOf (1) == smemplr::kFxMultidyn && typeOf (2) == smemplr::kFxMsEq,
                    "dragged left: %d %d %d", typeOf (0), typeOf (1), typeOf (2));
-            // remove it (the moved slot is selected): Para, then the rest move up
+            // remove it (the moved slot is selected): Widr, then the rest move up
             fx.click (8 + 208 + 34, ctlY); // Remove
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (4) == smemplr::kFxGentlr &&
-                       typeOf (5) == smemplr::kFxMultidyn && typeOf (6) == smemplr::kFxEmpty,
-                   "removed: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (4), typeOf (5), typeOf (6));
+            CHECK (typeOf (0) == smemplr::kFxWidr && typeOf (1) == smemplr::kFxMsEq && typeOf (3) == smemplr::kFxGentlr &&
+                       typeOf (4) == smemplr::kFxMultidyn && typeOf (5) == smemplr::kFxEmpty,
+                   "removed: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (3), typeOf (4), typeOf (5));
             // the second Multidyn moved up a slot with its extension value, and the freed slot's extension is cleared
             const double moved = rig.controller->getParamNormalized (smemplr::slotBlockParam (kExtSlot - 1, extPos));
             const double freed = rig.controller->getParamNormalized (smemplr::slotBlockParam (kExtSlot, extPos));
             CHECK (std::fabs (moved - 1.0) < 1e-9 && freed == 0.0, "Multidyn's extension moved with it: %f, left behind %f", moved, freed);
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_remove.png"), "after remove snapshot");
-            // Cmd-drag (Ctrl on Windows) Para two places right: a copy lands in that gap, the rest move up one
+            // Cmd-drag (Ctrl on Windows) Widr two places right: a copy lands in that gap, the rest move up one
             fx.drag (tabX (0), tabY, tabX (2), tabY, kCmd);
             pump (0.1);
-            CHECK (typeOf (0) == smemplr::kFxPara && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxPara &&
-                       typeOf (3) == smemplr::kFxSmacheratr && typeOf (6) == smemplr::kFxMultidyn,
-                   "duplicated: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (2), typeOf (3), typeOf (6));
+            CHECK (typeOf (0) == smemplr::kFxWidr && typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxWidr &&
+                       typeOf (3) == smemplr::kFxSmacheratr && typeOf (5) == smemplr::kFxMultidyn,
+                   "duplicated: %d %d %d %d %d", typeOf (0), typeOf (1), typeOf (2), typeOf (3), typeOf (5));
             settle ();
             CHECK (fx.savePng (outDir + "/ui_fx_after_duplicate.png"), "after duplicate snapshot");
             // Alt-click (Option-click) the copy: it goes, the ones after it move up
             fx.click (tabX (2), tabY, 1, kAlt);
             pump (0.1);
-            CHECK (typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxSmacheratr && typeOf (5) == smemplr::kFxMultidyn &&
-                       typeOf (6) == smemplr::kFxEmpty,
-                   "alt-click removed it: %d %d %d %d", typeOf (1), typeOf (2), typeOf (5), typeOf (6));
+            CHECK (typeOf (1) == smemplr::kFxMsEq && typeOf (2) == smemplr::kFxSmacheratr && typeOf (4) == smemplr::kFxMultidyn &&
+                       typeOf (5) == smemplr::kFxEmpty,
+                   "alt-click removed it: %d %d %d %d", typeOf (1), typeOf (2), typeOf (4), typeOf (5));
         }
         for (int s = 0; s < smemplr::kRackSlots; ++s)
             rig.param (slotParam (s, smemplr::kSlotType), 0.0);

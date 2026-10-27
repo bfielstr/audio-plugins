@@ -6,11 +6,11 @@
 //
 // A slot carries every parameter of the effect that has a place in its block (fxBlockOf): loading a
 // preset sets each of them from the plug-in's value of the same ID; a parameter without a place (Widr's
-// cinema stage, Multidyn's own saturator, Para's and the others' later end-saturator blocks) is ignored.
+// cinema stage, Multidyn's own saturator, the others' later end-saturator blocks) is ignored.
 // Saving writes every parameter of the plug-in: the carried ones from the slot, the others at the
-// plug-in's defaults. The end-saturator fields some effects carry in their block (Para's, Gentlr's and
-// Widr's first blocks) are loaded and saved like any other, so a preset keeps them when it goes through
-// a slot, although the rack does not run them.
+// plug-in's defaults. The end-saturator fields some effects carry in their block (Gentlr's and Widr's
+// first blocks) are loaded and saved like any other, so a preset keeps them when it goes through a slot,
+// although the rack does not run them.
 #pragma once
 
 #include "Params.h"
@@ -30,7 +30,7 @@ namespace smemplr {
 // presets) and the retired kinds.
 struct HostedPlugin
 {
-    const char* name;            // its preset folder's name and its presets' PlugInName ("Para")
+    const char* name;            // its preset folder's name and its presets' PlugInName ("Multidyn")
     const char* formerName;      // the name it had before a rename ("Gently"), whose folder it takes over; "" for none
     const pk::ParamTable* table; // its controller's table, by its own IDs (Widr's with the cinema stage)
     pk::GentlrIds gentlrIds;     // what its Menu > Defaults switches set

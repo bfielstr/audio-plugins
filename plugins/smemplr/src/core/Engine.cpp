@@ -1181,8 +1181,7 @@ void Engine::noteOn (int note, float velocity)
         noteOff (note);
         return;
     }
-    rack.noteOn (note); // Para's envelope follows the sampler's notes
-    mod.noteOn ();      // (the LFOs with Retrig on start again)
+    mod.noteOn (); // (the LFOs with Retrig on start again)
     if (!smp)
         return;
     updateSlices ();

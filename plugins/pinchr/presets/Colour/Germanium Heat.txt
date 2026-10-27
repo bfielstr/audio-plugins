@@ -1,8 +1,0 @@
-# pinchr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: saturation, colour, drums, bass
-comment: The germanium stage pushed: high Feedback and Drive into strong Saturation, the level brought back with Output.
-Ratio = 3
-Drive = 7
-Feedback = 8
-Saturation = 85 %
-Output = -9 dB

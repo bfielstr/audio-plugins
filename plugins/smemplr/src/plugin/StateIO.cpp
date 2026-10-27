@@ -55,8 +55,9 @@ constexpr int32 kMagic = 0x534d5052; // 'SMPR'
 //     saved before, over three choices, is read as the same choice)
 // 25: a new Smemplr's rack is empty (a Smacheratr in its first slot before: what a state lacks of that slot
 //     gets the old defaults, keepOldFirstSlot), Soft Clip and Hard Clip at the end (off), the old saturator
-//     after the rack retired. (In every state: a slot of a retired kind, Wubr, Levlr or Smoothr, loads Empty,
-//     and the mappings that modulated it go: retiredKindsToEmpty.)
+//     after the rack retired. (In every state: a slot of a retired kind, Para, Wubr, Levlr or Smoothr, loads
+//     Empty, and the mappings that modulated it go: retiredKindsToEmpty. The fixed Para of 0.5 is not moved
+//     into the rack any more: its parameters are retired.)
 constexpr int32 kVersion = 25;
 constexpr int32 kNewDefaults = 23;
 constexpr int32 kEmptyRack = 25;
@@ -185,7 +186,7 @@ bool readState (IBStream* stream, PluginState& st)
             if (st.has[typeId])
                 st.norm[typeId] = toNormalized (typeId, std::round (st.norm[typeId] * (kFxTypesBeforeGentlr - 1)));
         }
-    // a slot of a retired kind (Wubr, Levlr, Smoothr): Empty, and the mappings of its effect go (its slot's
+    // a slot of a retired kind (Para, Wubr, Levlr, Smoothr): Empty, and the mappings of its effect go (its slot's
     // parameters stay with it; another effect loaded there later starts unmodulated)
     if (retiredKindsToEmpty (st.norm, st.has))
         st.mods.list.erase (std::remove_if (st.mods.list.begin (), st.mods.list.end (), [] (const ModMapping& m) { return fxRetired (m.fxType); }),
@@ -262,7 +263,6 @@ bool readState (IBStream* stream, PluginState& st)
             uint32_t id;
         };
         const Added added[] = {{3, kFxSmacheratr, smacheratr::kClarityFreq}, {3, kFxSmacheratr, smacheratr::kClarityWidth},
-                               {3, kFxPara, para::kDipStart},             {3, kFxPara, para::kLpFloor},
                                {4, kFxSmacheratr, smacheratr::kClarityRange},
                                {6, kFxSmacheratr, smacheratr::kClarity2Freq},    {6, kFxSmacheratr, smacheratr::kClarity2Width},
                                {6, kFxSmacheratr, smacheratr::kClarity2Range}};
@@ -280,8 +280,6 @@ bool readState (IBStream* stream, PluginState& st)
                         st.norm[slotBlockParam (slot, j)] = fxBlockTable (type).defaultNormalized (j);
                     st.has[slotBlockParam (slot, j)] = true;
                 }
-            if (version < 3 && type == kFxPara && st.norm[slotBlockParam (slot, para::kLiquid)] >= 0.5)
-                st.norm[slotBlockParam (slot, para::kMovement)] = para::toNormalized (para::kMovement, para::kVocal);
         }
     }
     // Gentlr's Slope over its three choices before Alt Signature (24): as the same choice now (first: the
@@ -292,8 +290,7 @@ bool readState (IBStream* stream, PluginState& st)
     migrateGentlrInSlots (st.norm, st.has, version);
     // the Sub and High bands without buttons (19): one that was off gets Range 0 (after the defaults above)
     migrateSubHighInSlots (st.norm, st.has, version);
-    // Para's slopes and per-filter drives (13), its low-pass slope, gain locks and Fade range (15)
-    migrateParaInSlots (st.norm, st.has, version);
+
     // Multidyn's OTT gain staging, slope and Sub band (13), Style (14), Sub Input (16)
     migrateMultidynInSlots (st.norm, st.has, version);
     if (version < 9)
@@ -315,7 +312,8 @@ bool readState (IBStream* stream, PluginState& st)
 }
 
 // 0.5 had a fixed Para -> Multidyn -> M/S EQ after the sampler; 0.6 has the rack. An old state (no
-// rack in it) gets its effects that were on, in that order, in the first slots.
+// rack in it) gets its effects that were on, in that order, in the first slots (but Para: it is gone,
+// its parameters are retired, so the others move up).
 void migrateToRack (PluginState& st)
 {
     if (st.has[slotParam (0, kSlotType)])
@@ -335,26 +333,7 @@ void migrateToRack (PluginState& st)
     };
     auto old = [&] (uint32_t id, const pk::ParamTable& t, uint32_t j) { return st.has[id] ? st.norm[id] : t.defaultNormalized (j); };
     if (legacyOn (kFxParaOn))
-    {
-        const auto& t = para::paramTable ();
-        put (kFxPara, t, [&] (uint32_t j) {
-            if (j == para::kMovement && st.has[kParaLiquid] && st.norm[kParaLiquid] >= 0.5)
-                return para::toNormalized (para::kMovement, para::kVocal); // Liquid is Vocal movement now
-            if (j < para::kHostedParams)
-                return old (paraParam (j), t, j);
-            switch (j)
-            {
-                case para::kDragGain: return old (kParaDragGain, t, j);
-                case para::kLiquid: return old (kParaLiquid, t, j);
-                // (over Fade's old range, as the slot's own then: migrateParaInSlots converts it; never
-                // saved, the old default)
-                case para::kFade: return st.has[kParaFade] ? st.norm[kParaFade] : defaultNormalized (kParaFade);
-                case para::kNotch: return old (kParaNotch, t, j);
-                default: return t.defaultNormalized (j);
-            }
-        });
         st.norm[kFxParaOn] = 0.0;
-    }
     if (legacyOn (kFxMdOn))
     {
         const auto& t = fxBlockTable (kFxMultidyn);

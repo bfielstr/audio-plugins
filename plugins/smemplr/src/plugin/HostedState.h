@@ -29,7 +29,7 @@ struct Codec
     bool (*write) (const std::vector<double>& norm, std::vector<char>& component);
 };
 
-const Codec& codecPara ();
+
 const Codec& codecMultidyn ();
 const Codec& codecSmacheratr ();
 const Codec& codecWidr ();

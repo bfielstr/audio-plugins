@@ -1,9 +1,0 @@
-# bubr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: kick, drums
-comment: A focused band at 60 Hz that only comes in on the hits: the gate higher, a short release.
-Freq = 60.0 Hz
-Q-Factor = 50 %
-Gate = -24.0 dB
-Ratio = 10.00
-Release = 80 ms
-Boost = 50 %

@@ -69,13 +69,7 @@ void migrateOversamplingInSlots (std::array<double, kNumParams>& norm, std::arra
 // "OTT pushed further" then: multidyn::migrateOldBaked moves the difference into its controls) and its
 // later parameters (Slope, Soften Color, the Sub band: defaults, the same sound).
 void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
-// States from before version 13: a Para slot's slope (one of 12 / 18 / 24 dB then) on the longer list,
-// and its one drive becomes both filters' drives (para::upgradeToPerBandDrive). Then, for states from
-// before version 15 (those too): the low-pass gets the slot's one slope, the high-pass's Gain Lock is on
-// unless its gain is above 0 dB, the low-pass's off, and Fade (1 .. 36 semitones then) keeps its
-// semitones (para::upgradeToSeparateSlopes).
-void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version);
-// Every state: a slot of a retired kind (Wubr, Levlr, Smoothr: FxSlot.h, fxRetired) becomes an Empty slot (Type
+// Every state: a slot of a retired kind (Para, Wubr, Levlr, Smoothr: FxSlot.h, fxRetired) becomes an Empty slot (Type
 // Empty, On, its block at 0), as it plays now; the slots after it stay where they are. True when there was one.
 bool retiredKindsToEmpty (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has);
 
@@ -95,7 +89,6 @@ double oldFirstSlotDefault (uint32_t field);
 // What the rack's effects show in the editor, per slot.
 struct RackMeters
 {
-    std::array<para::Meters, kRackSlots> para;
     std::array<multidyn::Meters, kRackSlots> multidyn;
     std::array<std::atomic<float>, kRackSlots> msMid {}, msSide {};
     std::array<smacheratr::Meters, kRackSlots> sat;
@@ -115,10 +108,6 @@ public:
     void process (float* L, float* R, int n);
     int latency () const;
     int type (int slot) const { return slots[(size_t)slot]->type; }
-
-    // Para's envelope follows the sampler's notes (and the pitch bend).
-    void noteOn (int note);
-    void setPitchBend (float bipolar);
 
     void setMeters (RackMeters* m);
 

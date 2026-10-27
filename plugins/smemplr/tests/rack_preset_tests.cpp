@@ -66,7 +66,7 @@ static void setPresetsDir (const std::string& dir)
         }                                                                  \
     } while (0)
 
-static const int kHostedTypes[] = {kFxPara, kFxMultidyn, kFxSmacheratr, kFxWidr, kFxGentlr};
+static const int kHostedTypes[] = {kFxMultidyn, kFxSmacheratr, kFxWidr, kFxGentlr};
 
 // a new smemplr's values, with `type` in `slot` (its factory defaults, as addFx puts it there)
 static std::vector<double> rackWith (int slot, int type)
@@ -255,20 +255,22 @@ static void savedFromSlotReadsInThePlugin ()
 static void robustness ()
 {
     // another plug-in's file, a missing file, not a preset
-    const std::string paraPath = (fs::path (rackio::folderOf (kFxPara)) / "Slot Save.vstpreset").string ();
+    const std::string mdPath = (fs::path (rackio::folderOf (kFxMultidyn)) / "Slot Save.vstpreset").string ();
     std::vector<double> v;
     CHECK (!rackio::readValues (kFxWidr, (fs::path (rackio::folderOf (kFxWidr)) / "Nothing.vstpreset").string (), v), "missing file");
-    CHECK (!rackio::readValues (kFxGentlr, paraPath, v), "another plug-in's preset is not read");
+    CHECK (!rackio::readValues (kFxGentlr, mdPath, v), "another plug-in's preset is not read");
     {
         const std::string junk = (fs::path (tmpRoot) / "junk.vstpreset").string ();
         std::ofstream (junk) << "not a preset";
-        CHECK (!rackio::readValues (kFxPara, junk, v), "not a preset");
+        CHECK (!rackio::readValues (kFxMultidyn, junk, v), "not a preset");
     }
-    CHECK (!rackio::readValues (kFxMsEq, paraPath, v) && rackio::codecOf (kFxMsEq) == nullptr, "the M/S EQ has no presets");
+    CHECK (!rackio::readValues (kFxMsEq, mdPath, v) && rackio::codecOf (kFxMsEq) == nullptr, "the M/S EQ has no presets");
+    CHECK (rackio::codecOf (kFxRetiredPara) == nullptr && hostedPlugin (kFxRetiredPara) == nullptr && rackio::folderOf (kFxRetiredPara).empty (),
+           "para (retired) has no presets in the rack");
     // a newer version's state: a parameter this version does not know is ignored, the others load
     {
-        const auto* c = rackio::codecOf (kFxPara);
-        std::vector<double> vals = pluginDefaults (kFxPara);
+        const auto* c = rackio::codecOf (kFxMultidyn);
+        std::vector<double> vals = pluginDefaults (kFxMultidyn);
         vals[3] = 0.25;
         std::vector<char> comp;
         CHECK (c->write (vals, comp) && comp.size () >= 12, "written");
@@ -283,11 +285,11 @@ static void robustness ()
         const double val = 0.9;
         comp.insert (comp.end (), (const char*)&unknown, (const char*)&unknown + 4);
         comp.insert (comp.end (), (const char*)&val, (const char*)&val + 8);
-        const std::string path = (fs::path (rackio::folderOf (kFxPara)) / "Newer.vstpreset").string ();
+        const std::string path = (fs::path (rackio::folderOf (kFxMultidyn)) / "Newer.vstpreset").string ();
         CHECK (pk::presets::write (path, c->classId, comp, {}, nullptr), "newer preset written");
         std::vector<double> back;
-        CHECK (rackio::readValues (kFxPara, path, back) && back.size () == vals.size () && back[3] == 0.25, "a newer preset loads");
-        const SlotEdits e = slotEditsFor (1, kFxPara, back);
+        CHECK (rackio::readValues (kFxMultidyn, path, back) && back.size () == vals.size () && back[3] == 0.25, "a newer preset loads");
+        const SlotEdits e = slotEditsFor (1, kFxMultidyn, back);
         bool ok = true;
         for (const auto& [id, n] : e)
             ok = ok && rackField (id).slot == 1;
@@ -356,13 +358,6 @@ static void newSlotDefaults ()
     pk::writeGentlrDefaults (rackio::folderOf (kFxGentlr), sw);
     g = rackio::newSlotValues (kFxGentlr, &applied);
     CHECK (g[gentlr::kAdvanced] == 1.0, "gentlr: Advanced on");
-    // Para's switches: they set its end saturator, which is retired (they set nothing: a new Para slot is its
-    // factory defaults)
-    sw = {};
-    sw.gentlrOn = true;
-    pk::writeGentlrDefaults (rackio::folderOf (kFxPara), sw);
-    const std::vector<double> p = rackio::newSlotValues (kFxPara);
-    CHECK (para::kGentlrIds.saturator < 0 && para::kGentlrIds.gentlr < 0 && p == pluginDefaults (kFxPara), "para: its switches set nothing");
 
     // a project loads as saved, whatever the plug-in's default and switches say
     PluginState st;

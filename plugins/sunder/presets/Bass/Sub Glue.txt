@@ -1,0 +1,12 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, sub, glue
+comment: A low, wide band blended under the source, gently driven, then R Soft at a low Ratio with some of the dry kept.
+Bass = 70 %
+Bass Freq = 40.0 Hz
+Bass Q-Factor = 10 %
+Bass Intensity = 25 %
+Bass Drive = 0 %
+Bass Boost = 60 %
+Ratio = 3
+Curve = R Soft
+Mix = 80 %

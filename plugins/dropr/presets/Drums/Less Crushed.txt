@@ -1,7 +1,0 @@
-# dropr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: drums, softer
-comment: Less input and makeup gain and no negative ratio, the end held to 0 dBFS by Hard Clip.
-Input = 18 dB
-Makeup = 36 dB
-Negative Ratio = Off
-Hard Clip = On

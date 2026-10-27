@@ -1,7 +1,7 @@
 // One effect's codec (HostedState.h), compiled once per hosted effect (plugins/smemplr/CMakeLists.txt:
 // smemplr_hosted_<effect>) with:
 //   PK_HOSTED_STATE_H  the effect's plugin/State.h      PK_HOSTED_CIDS_H  its plugin/Cids.h
-//   PK_HOSTED_NS       its namespace (para)             PK_HOSTED_CODEC   the function (codecPara)
+//   PK_HOSTED_NS       its namespace (widr)             PK_HOSTED_CODEC   the function (codecWidr)
 //   PK_HOSTED_PRESETS  the function that registers its factory presets (generated: cmake/EmbedPresets.cmake)
 #include PK_HOSTED_STATE_H
 #include PK_HOSTED_CIDS_H

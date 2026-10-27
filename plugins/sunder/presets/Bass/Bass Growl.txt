@@ -1,0 +1,14 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: bass, saturation
+comment: Bass Drive doubled at 80 Hz for harmonics that carry on small speakers, Low Cut keeping the sub tidy, into Germ Med.
+Bass = 100 %
+Bass Freq = 80.0 Hz
+Bass Q-Factor = 40 %
+Bass Drive = 70 %
+Bass Drive x2 = On
+Bass Low Cut = 40.0 Hz
+Bass Boost = 40 %
+Bass Oversample = 2x
+Ratio = 5
+Curve = Germ Med
+Output = -2 dB

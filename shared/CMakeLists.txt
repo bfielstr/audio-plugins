@@ -1,7 +1,7 @@
 # pluginkit: code shared by all plug-ins.
 
 # Parameter tables (no SDK dependency, used by DSP tests too).
-add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/EndClip.h pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp pluginkit/Layout.h pluginkit/Layout.cpp pluginkit/GentlrDefaults.h pluginkit/GentlrDefaults.cpp pluginkit/testing/CpuClock.h pluginkit/testing/CpuClock.cpp pluginkit/Capture.h pluginkit/Capture.cpp pluginkit/WavFile.h pluginkit/WavFile.cpp pluginkit/Wavetable.h pluginkit/Wavetable.cpp)
+add_library(pluginkit_core STATIC pluginkit/ParamTable.h pluginkit/ParamTable.cpp pluginkit/RtShared.h pluginkit/ScopeBuffer.h pluginkit/InstanceRegistry.h pluginkit/TailParams.h pluginkit/TailParams.cpp pluginkit/EndClip.h pluginkit/dsp/Oversampler4x.h pluginkit/dsp/Svf.h pluginkit/SampleFiles.h pluginkit/CrashDump.h pluginkit/CrashDump.cpp pluginkit/SettingsText.h pluginkit/SettingsText.cpp pluginkit/PresetStore.h pluginkit/PresetStore.cpp pluginkit/Layout.h pluginkit/Layout.cpp pluginkit/GentlrDefaults.h pluginkit/GentlrDefaults.cpp pluginkit/testing/CpuClock.h pluginkit/testing/CpuClock.cpp pluginkit/Capture.h pluginkit/Capture.cpp pluginkit/WavFile.h pluginkit/WavFile.cpp pluginkit/Wavetable.h pluginkit/Wavetable.cpp)
 target_include_directories(pluginkit_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 if(WIN32)
     target_link_libraries(pluginkit_core PUBLIC dbghelp)

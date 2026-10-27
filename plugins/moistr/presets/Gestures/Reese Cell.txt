@@ -1,4 +1,0 @@
-# moistr factory preset (format: shared/pluginkit/PresetStore.h)
-tags: gestures, reese, neuro, tempo
-comment: One gesture over an 8-beat note cell, every lane moving together: the Mid band fades out over two and a half beats while the High band swells and Dirt rises against it, Wobble speeds up from 3 to 9 cycles per beat and buzzes on the last note, and a resonant low-pass shuts on beat 6 and snaps open on the downbeat. The sub stays put.
-Gesture = Reese Cell

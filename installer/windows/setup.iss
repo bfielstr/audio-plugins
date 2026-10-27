@@ -1,7 +1,7 @@
 ; The double-click Windows installer (Inno Setup 6). Not compiled directly: installer/windows/build-setup.sh
 ; copies this file next to the generated components.iss, files.iss and installdelete.iss (one entry per
 ; built .vst3 bundle) and runs iscc with:
-;   /DAppVersion=0.12.0  /DPluginList=Deepr,Dropr,...  /DRetiredList=Gently,...  [/DSign]
+;   /DAppVersion=0.12.0  /DPluginList=Gentlr,Multidyn,...  /DRetiredList=Gently,...  [/DSign]
 ; The plug-ins go into C:\Program Files\Common Files\VST3\bfielstr for all users, one component (tick
 ; box) per plug-in. Settings > Apps lists the suite with an uninstaller.
 

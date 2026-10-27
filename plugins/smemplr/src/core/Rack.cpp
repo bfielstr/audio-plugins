@@ -271,34 +271,6 @@ void migrateMultidynInSlots (std::array<double, kNumParams>& norm, std::array<bo
     }
 }
 
-void migrateParaInSlots (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has, int version)
-{
-    if (version >= 15)
-        return;
-    for (int slot = 0; slot < kRackSlots; ++slot)
-    {
-        const uint32_t typeId = slotParam (slot, kSlotType);
-        if (!has[typeId] || std::lround (toPlain (typeId, norm[typeId])) != kFxPara)
-            continue;
-        auto get = [&] (uint32_t id, double& v) {
-            const uint32_t pid = slotBlockParam (slot, (uint32_t)fxBlockOf (kFxPara, id));
-            if (!has[pid])
-                return false;
-            v = norm[pid];
-            return true;
-        };
-        auto set = [&] (uint32_t id, double v) {
-            const uint32_t pid = slotBlockParam (slot, (uint32_t)fxBlockOf (kFxPara, id));
-            norm[pid] = v;
-            has[pid] = true;
-        };
-        // before 13: three slopes, one drive; before 15: one slope, no gain locks, Fade up to 36 semitones
-        if (version < 13)
-            para::upgradeToPerBandDrive (get, set);
-        para::upgradeToSeparateSlopes (get, set);
-    }
-}
-
 bool retiredKindsToEmpty (std::array<double, kNumParams>& norm, std::array<bool, kNumParams>& has)
 {
     bool any = false;
@@ -370,7 +342,6 @@ void Rack::setMeters (RackMeters* m)
     for (int i = 0; i < kRackSlots; ++i)
     {
         FxSlot& s = *slots[(size_t)i];
-        s.para.setMeters (m ? &m->para[(size_t)i] : nullptr);
         s.sat.setMeters (m ? &m->sat[(size_t)i] : nullptr);
         s.widr.setMeters (m ? &m->widr[(size_t)i] : nullptr);
         s.gentlr.setMeters (m ? &m->gentlr[(size_t)i] : nullptr);
@@ -398,18 +369,6 @@ int Rack::latency () const
     for (const auto& s : slots)
         l += s->latency ();
     return l;
-}
-
-void Rack::noteOn (int note)
-{
-    for (auto& s : slots)
-        s->noteOn (note);
-}
-
-void Rack::setPitchBend (float bipolar)
-{
-    for (auto& s : slots)
-        s->setPitchBend (bipolar);
 }
 
 void Rack::process (float* L, float* R, int n)

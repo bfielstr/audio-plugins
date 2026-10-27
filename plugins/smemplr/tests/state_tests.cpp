@@ -1,6 +1,7 @@
 // Headless tests for Smemplr's saved state (StateIO.cpp): the modulation's mappings from version 18 on,
 // and older states, which have none; the rack's Sub and High bands without buttons from 19, its Gentlr Slope from 20;
-// the empty rack of a new instance from 25, and the retired kinds' slots (Empty in every state). Run:
+// the empty rack of a new instance from 25, and the retired kinds' slots (Empty in every state: a Para slot too,
+// and the fixed Para of 0.5 stays out of the rack). Run:
 // ./smemplr_state_tests
 #include "Modulation.h"
 #include "Params.h"
@@ -13,6 +14,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
+#include <vector>
 
 using namespace smemplr;
 using namespace Steinberg;
@@ -123,7 +126,7 @@ int main ()
         CHECK (back.norm[kFilterFreq] == 0.4, "version %d: the rest", version);
     }
     // a version 19 state (before Gentlr's band Slope): its Smacheratr (slot 0) and Gentlr (slot 1) get
-    // Classic, the shape their bands had; a Para (slot 2) keeps what its own place holds. A version 20
+    // Classic, the shape their bands had; a Widr (slot 2) keeps what its own place holds. A version 20
     // state keeps them as saved (over the Slope's three choices then: Signature at 0.5), and a new slot
     // has Signature (12 / 12 before 23)
     const double signature = smacheratr::toNormalized (smacheratr::kClaritySlope, smacheratr::kSlopeSignature);
@@ -132,17 +135,17 @@ int main ()
         PluginState st = someState (), back;
         st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
         st.norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxGentlr);
-        st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxPara);
+        st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxWidr);
         const uint32_t smSlope = slotBlockParam (0, smacheratr::kClaritySlope), gtSlope = slotBlockParam (1, gentlr::kSlope);
-        const uint32_t paraSame = slotBlockParam (2, smacheratr::kClaritySlope);
+        const uint32_t widrSame = slotBlockParam (2, smacheratr::kClaritySlope);
         st.norm[smSlope] = st.norm[gtSlope] = 0.5; // Signature
-        st.norm[paraSame] = 0.3;
+        st.norm[widrSame] = 0.3;
         CHECK (roundTrip (st, back, version), "read version %d", version);
         const bool old = version < 20;
         const double want = old ? smacheratr::classicSlopeNorm () : signature;
         CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.has[smSlope] && back.has[gtSlope],
                "version %d: the Smacheratr's and the Gentlr's Slope %s", version, old ? "Classic" : "as saved");
-        CHECK (back.norm[paraSame] == 0.3, "version %d: the Para's own place as saved", version);
+        CHECK (back.norm[widrSame] == 0.3, "version %d: the Widr's own place as saved", version);
     }
     CHECK (fxBlockTable (kFxSmacheratr).defaultNormalized (smacheratr::kClaritySlope) == signature &&
                fxBlockTable (kFxGentlr).defaultNormalized ((uint32_t)fxBlockOf (kFxGentlr, gentlr::kSlope)) == signature,
@@ -152,7 +155,7 @@ int main ()
     for (int32 version : {23, 24})
     {
         const uint32_t smSlope = slotBlockParam (0, smacheratr::kClaritySlope), gtSlope = slotBlockParam (1, gentlr::kSlope);
-        const uint32_t paraSame = slotBlockParam (2, smacheratr::kClaritySlope);
+        const uint32_t widrSame = slotBlockParam (2, smacheratr::kClaritySlope);
         const bool old = version < 24;
         const double saved[3] = {0.0, 0.5, 1.0};
         const int was[3] = {smacheratr::kSlope12, smacheratr::kSlopeSignature, smacheratr::kSlopeClassic};
@@ -161,13 +164,13 @@ int main ()
             PluginState st = someState (), back;
             st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxSmacheratr);
             st.norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxGentlr);
-            st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxPara);
+            st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxWidr);
             st.norm[smSlope] = st.norm[gtSlope] = saved[i];
-            st.norm[paraSame] = 0.5;
+            st.norm[widrSame] = 0.5;
             CHECK (roundTrip (st, back, version), "read version %d", version);
             const double want = old ? smacheratr::toNormalized (smacheratr::kClaritySlope, was[i]) : saved[i];
-            CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.norm[paraSame] == 0.5,
-                   "version %d, Slope saved at %.1f: %s (the Para's place untouched)", version, saved[i],
+            CHECK (back.norm[smSlope] == want && back.norm[gtSlope] == want && back.norm[widrSame] == 0.5,
+                   "version %d, Slope saved at %.1f: %s (the Widr's place untouched)", version, saved[i],
                    smacheratr::paramTable ().toText (smacheratr::kClaritySlope, smacheratr::toPlain (smacheratr::kClaritySlope, want)).c_str ());
         }
         if (!old)
@@ -212,26 +215,29 @@ int main ()
                        backSaved.norm[slope] == smacheratr::classicSlopeNorm (),
                    "version %d with them: as saved", version);
         }
-        // another effect in the first slot (a Para): its places are its own, untouched (before 25 too: they are
+        // another effect in the first slot (a Widr): its places are its own, untouched (before 25 too: they are
         // the first slot's defaults then)
         {
             PluginState st = someState (), back;
-            st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+            st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxWidr);
             st.has[clarity] = st.has[slope] = false;
-            CHECK (roundTrip (st, back, 22) && back.norm[slotParam (0, kSlotType)] == toNormalized (slotParam (0, kSlotType), kFxPara) &&
+            CHECK (roundTrip (st, back, 22) && back.norm[slotParam (0, kSlotType)] == toNormalized (slotParam (0, kSlotType), kFxWidr) &&
                        back.norm[clarity] == oldFirstSlotDefault (kSlotParams + smacheratr::kClarity),
-                   "version 22, a Para in the first slot: its places as the defaults were");
+                   "version 22, a Widr in the first slot: its places as the defaults were");
         }
-        // the old saturator after the rack: retired, and so is every one of its parameters (nothing else is)
+        // the old saturator after the rack: retired, and so is every one of its parameters; and the fixed Para
+        // of 0.5 (para is gone): nothing else is
+        auto oldPara = [] (uint32_t id) { return (id >= kFxParaOn && id < kFxMdOn) || (id >= kParaTransposeLock && id <= kParaNotch); };
         int wrong = 0;
         int64_t firstWrong = -1;
         for (uint32_t id = 0; id < kNumParams; ++id)
-            if (paramInfo (id).retired != isTailParam (id))
+            if (paramInfo (id).retired != (isTailParam (id) || oldPara (id)))
             {
                 ++wrong;
                 firstWrong = firstWrong < 0 ? id : firstWrong;
             }
-        CHECK (wrong == 0, "the retired parameters are the old end saturator's (%d wrong, the first %lld)", wrong, (long long)firstWrong);
+        CHECK (wrong == 0, "the retired parameters are the old end saturator's and the old Para's (%d wrong, the first %lld)", wrong,
+               (long long)firstWrong);
         CHECK (paramInfo (kTailBase + pk::kTailOn).retired && paramInfo (kTailExtBase + pk::kTailExtClarity).retired,
                "the old saturator after the rack: retired");
     }
@@ -267,19 +273,19 @@ int main ()
             CHECK (back.norm[slotParam (1, kSlotType)] == 0.0, "version %d: the second slot as saved (Empty)", version);
         }
     }
-    // the retired kinds (Wubr 6, Levlr 7, Smoothr 9): a slot saved with one loads Empty (on, its block at 0),
-    // in every version; the slots around it as saved; the mappings of its effect go, the others stay
+    // the retired kinds (Para 1, Wubr 6, Levlr 7, Smoothr 9): a slot saved with one loads Empty (on, its block at
+    // 0), in every version; the slots around it as saved; the mappings of its effect go, the others stay
     for (int32 version : {12, 24, 25})
     {
         PluginState st = someState (), back;
         const int kinds = version < 13 ? kFxTypesBeforeGentlr : kNumFxTypes;
         auto typeNorm = [&] (int t) { return (double)t / (kinds - 1); }; // (as the version stored it)
-        st.norm[slotParam (0, kSlotType)] = typeNorm (kFxPara);
+        st.norm[slotParam (0, kSlotType)] = typeNorm (kFxRetiredPara);
         st.norm[slotParam (1, kSlotType)] = typeNorm (kFxRetiredWubr);
         st.norm[slotParam (2, kSlotType)] = typeNorm (kFxRetiredLevlr);
         st.norm[slotParam (3, kSlotType)] = typeNorm (version < 13 ? kFxWidr : kFxRetiredSmoothr);
         st.norm[slotParam (4, kSlotType)] = typeNorm (kFxSmacheratr);
-        for (int s = 1; s <= 3; ++s)
+        for (int s = 0; s <= 3; ++s)
         {
             st.norm[slotParam (s, kSlotOn)] = 0.0;
             st.norm[slotBlockParam (s, 5)] = 0.6;
@@ -289,19 +295,19 @@ int main ()
         if (version >= 18)
         {
             addMapping (st.mods, 0, slotBlockParam (1, 5), 0.5, kFxRetiredWubr);
+            addMapping (st.mods, 3, slotBlockParam (0, kSlotBlock + 2), 0.5, kFxRetiredPara);
             addMapping (st.mods, 1, slotBlockParam (4, smacheratr::kDrive), 0.5, kFxSmacheratr);
             addMapping (st.mods, 2, kFilterFreq, 0.5, -1);
         }
         CHECK (roundTrip (st, back, version), "read version %d", version);
         auto typeOf = [&] (int s) { return (int)std::lround (toPlain (slotParam (s, kSlotType), back.norm[slotParam (s, kSlotType)])); };
         const int last = version < 13 ? 2 : 3;
-        for (int s = 1; s <= last; ++s)
+        for (int s = 0; s <= last; ++s)
             CHECK (typeOf (s) == kFxEmpty && back.norm[slotParam (s, kSlotOn)] == 1.0 && back.norm[slotBlockParam (s, 5)] == 0.0 &&
                        back.norm[slotBlockParam (s, kSlotBlock + 2)] == 0.0,
                    "version %d: slot %d (a retired kind) Empty, on, its block at 0 (%d)", version, s + 1, typeOf (s));
-        CHECK (typeOf (0) == kFxPara && typeOf (4) == kFxSmacheratr && back.norm[slotBlockParam (4, smacheratr::kDrive)] == 0.6 &&
-                   (version >= 13 || typeOf (3) == kFxWidr),
-               "version %d: the other slots as saved (%d %d %d)", version, typeOf (0), typeOf (3), typeOf (4));
+        CHECK (typeOf (4) == kFxSmacheratr && back.norm[slotBlockParam (4, smacheratr::kDrive)] == 0.6 && (version >= 13 || typeOf (3) == kFxWidr),
+               "version %d: the other slots as saved (%d %d)", version, typeOf (3), typeOf (4));
         if (version >= 18)
             CHECK (back.mods.list.size () == 2 && back.mods.list[0].fxType == kFxSmacheratr && back.mods.list[1].target == kFilterFreq,
                    "version %d: the retired effect's mapping gone, the others kept (%zu)", version, back.mods.list.size ());
@@ -310,14 +316,15 @@ int main ()
     // offer every kind but those
     {
         const auto& ti = paramInfo (slotParam (0, kSlotType));
-        CHECK (ti.choices.size () == (size_t)kNumFxTypes && std::string (ti.choices[kFxRetiredWubr]) == "wubr" &&
+        CHECK (ti.choices.size () == (size_t)kNumFxTypes && std::string (ti.choices[kFxRetiredPara]) == "para" &&
+                   std::string (ti.choices[kFxRetiredWubr]) == "wubr" &&
                    std::string (ti.choices[kFxRetiredLevlr]) == "levlr" && std::string (ti.choices[kFxGentlr]) == "gentlr" &&
                    std::string (ti.choices[kFxRetiredSmoothr]) == "smoothr",
                "the Type's choices: %zu", ti.choices.size ());
         int offered = 0;
         for (int t = 0; t < kNumFxTypes; ++t)
             offered += fxOffered (t) ? 1 : 0;
-        CHECK (offered == 6 && !fxOffered (kFxEmpty) && !fxOffered (kFxRetiredWubr) && !fxOffered (kFxRetiredLevlr) &&
+        CHECK (offered == 5 && !fxOffered (kFxEmpty) && !fxOffered (kFxRetiredPara) && !fxOffered (kFxRetiredWubr) && !fxOffered (kFxRetiredLevlr) &&
                    !fxOffered (kFxRetiredSmoothr) && fxOffered (kFxGentlr) && fxKind (kFxRetiredSmoothr) == kFxEmpty &&
                    fxKind (kFxWidr) == kFxWidr,
                "offered: %d", offered);
@@ -369,6 +376,73 @@ int main ()
                    "version 21: Hi-Quality on 4x, off Off (%.2f %.2f %.2f)", back.norm[os0], back.norm[os1], back.norm[end]);
         else
             CHECK (back.norm[os0] == 0.5 && back.norm[os1] == 0.5 && back.norm[end] == 0.5, "version 22: as saved");
+    }
+    // a project saved with a Para in the rack (para is gone): the slot loads Empty, on, its block (and its
+    // extension) at 0, whatever the Para's settings were; its mappings go; the effects around it as saved
+    for (int32 version : {14, 22, 25})
+    {
+        PluginState st = someState (), back;
+        const int kinds = version < 13 ? kFxTypesBeforeGentlr : kNumFxTypes;
+        st.norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxMultidyn);
+        st.norm[slotParam (1, kSlotType)] = (double)kFxRetiredPara / (kinds - 1);
+        st.norm[slotParam (1, kSlotOn)] = 0.0; // (bypassed, as it was)
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            st.norm[slotBlockParam (1, j)] = 0.25 + 0.5 * (j % 2);
+        st.norm[slotParam (2, kSlotType)] = toNormalized (slotParam (2, kSlotType), kFxGentlr);
+        addMapping (st.mods, 0, slotBlockParam (1, 0), 0.5, kFxRetiredPara);
+        addMapping (st.mods, 1, slotBlockParam (2, 3), 0.25, kFxGentlr);
+        CHECK (roundTrip (st, back, version), "a Para slot, version %d: read", version);
+        auto typeOf = [&] (int s) { return (int)std::lround (toPlain (slotParam (s, kSlotType), back.norm[slotParam (s, kSlotType)])); };
+        int left = 0;
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            left += back.norm[slotBlockParam (1, j)] != 0.0;
+        CHECK (typeOf (1) == kFxEmpty && back.norm[slotParam (1, kSlotOn)] == 1.0 && left == 0 && typeOf (0) == kFxMultidyn &&
+                   typeOf (2) == kFxGentlr,
+               "a Para slot, version %d: Empty (%d), on, %d values left; the others %d %d", version, typeOf (1), left, typeOf (0), typeOf (2));
+        if (version >= 18)
+            CHECK (back.mods.list.size () == 1 && back.mods.list[0].fxType == kFxGentlr, "a Para slot, version %d: its mapping gone (%zu)",
+                   version, back.mods.list.size ());
+        // and a rack built from it plays: the slot an Empty one (no latency, nothing runs there)
+        auto rack = std::make_unique<Rack> ();
+        rack->prepare (48000.0, 512);
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (isRackParam (id))
+                rack->setParam (id, toPlain (id, back.norm[id]));
+        CHECK (rack->type (1) == kFxEmpty, "a Para slot, version %d: the rack's slot is Empty", version);
+        std::vector<float> l (512, 0.25f), r (512, -0.25f);
+        rack->process (l.data (), r.data (), 512);
+        CHECK (std::isfinite (l[511]) && std::isfinite (r[511]), "a Para slot, version %d: the rack plays", version);
+    }
+    // a slot set to Para now (the host's automation, an old preset): Empty, the same as one set to Empty
+    {
+        auto withPara = std::make_unique<Rack> (), empty = std::make_unique<Rack> ();
+        for (Rack* rk : {withPara.get (), empty.get ()})
+            rk->prepare (48000.0, 512);
+        withPara->setParam (slotParam (3, kSlotType), (double)kFxRetiredPara);
+        for (uint32_t j = 0; j < kSlotBlockAll; ++j)
+            withPara->setParam (slotBlockParam (3, j), 0.7);
+        std::vector<float> a (512), b (512), ar (512), br (512);
+        for (size_t i = 0; i < a.size (); ++i)
+            a[i] = b[i] = ar[i] = br[i] = (float)std::sin (0.05 * (double)i);
+        withPara->process (a.data (), ar.data (), 512);
+        empty->process (b.data (), br.data (), 512);
+        CHECK (withPara->type (3) == kFxEmpty && withPara->latency () == 0 && a == b && ar == br, "a slot set to Para: Empty, the sound untouched");
+    }
+    // the fixed Para of 0.5 (before the rack): not moved into the rack any more; the Multidyn after it takes
+    // the first slot, and the old Para's parameters are retired (kept so the IDs stay put)
+    {
+        PluginState st = someState (), back;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+            if (isRackParam (id))
+                st.has[id] = false; // (no rack in a 0.5 state)
+        st.norm[kFxParaOn] = 1.0;
+        st.norm[kFxParaBase + 3] = 0.8;
+        st.norm[kFxMdOn] = 1.0;
+        CHECK (roundTrip (st, back, 1), "a 0.5 state: read");
+        auto typeOf = [&] (int s) { return (int)std::lround (toPlain (slotParam (s, kSlotType), back.norm[slotParam (s, kSlotType)])); };
+        CHECK (typeOf (0) == kFxMultidyn && back.norm[kFxParaOn] == 0.0 && paramInfo (kFxParaOn).retired && paramInfo (kFxParaBase).retired &&
+                   paramInfo (kFxMdOn - 1).retired && !paramInfo (kFxMdOn).retired && paramInfo (kParaFade).retired,
+               "a 0.5 state with Para and Multidyn: Multidyn first (%d), the old Para off and retired", typeOf (0));
     }
     // cut short in the mappings: the rest of the state still loads, without them
     {

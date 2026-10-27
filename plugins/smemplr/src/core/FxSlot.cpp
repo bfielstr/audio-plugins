@@ -33,11 +33,6 @@ double slopeFromThreeChoices (double oldNorm)
 
 static_assert (kSlotBlock >= widr::kNumParams && kSlotBlock >= smacheratr::kNumParams && kSlotBlock >= mseq::kNumParams,
                "a slot's block must hold every effect's parameters");
-// Para in a slot: its own IDs as block positions, all of them; the ones after its low-pass drive (Low-Pass
-// Slope, the Gain Locks) are the first positions of the slot's extension
-static_assert (para::kLpDrive == kSlotBlock - 1 && para::kLpSlope == kSlotBlock && para::kHpGainLock == kSlotBlock + 1 &&
-                   para::kLpGainLock == kSlotBlock + 2 && para::kNumParams <= kSlotBlockAll,
-               "Para's parameters must fit a slot's block and extension (block position = Para's ID)");
 // Multidyn's later parameters take the places of its saturator's (see fxBlockTable)
 static_assert (multidyn::kXoverSlope == kSlotBlock + 2 + pk::kTailExtFields + pk::kTailExt2Fields && multidyn::kRmsWindow == kSlotBlock &&
                    multidyn::kSoften == kSlotBlock + 1 && multidyn::kSatPreLimitThreshold == kSlotBlock - 1 &&
@@ -87,20 +82,6 @@ int64_t fxBlockOf (int type, uint32_t id)
 const std::vector<RackHidden>& rackHiddenParams (int type)
 {
     static const std::vector<RackHidden> none;
-    static const std::vector<RackHidden> paraHidden {
-        {para::kKey, para::kKey, "unused since Para stopped tracking notes"},
-        {para::kTranspose, para::kTranspose, "unused since Para stopped tracking notes"},
-        {para::kPbRange, para::kPbRange, "unused since Para stopped tracking notes"},
-        {para::kRoot, para::kRoot, "unused since Para stopped tracking notes"},
-        {para::kTailBase, para::kTailBase + pk::kTailFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {para::kTailExtBase, para::kTailExtBase + pk::kTailExtFields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {para::kTailExt2Base, para::kTailExt2Base + pk::kTailExt2Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {para::kTailExt3Base, para::kTailExt3Base + pk::kTailExt3Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {para::kTailExt4Base, para::kTailExt4Base + pk::kTailExt4Fields - 1, "its own end-of-chain saturator: in Smemplr a Smacheratr slot does that"},
-        {para::kLiquid, para::kLiquid, "unused: Vocal movement is what Liquid was"},
-        {para::kNotch, para::kNotch, "unused: Liquid's notch is gone"},
-        {para::kSoftClip, para::kHardClip, "its own end of the chain: the rack's Para runs without its clips"},
-    };
     static const std::vector<RackHidden> multidynHidden {
         {multidyn::kScOn, multidyn::kScListen, "the side-chain: Smemplr has no side-chain input"},
         {multidyn::kMode, multidyn::kMode, "unused: Multidyn always works in its character mode"},
@@ -138,7 +119,6 @@ const std::vector<RackHidden>& rackHiddenParams (int type)
     switch (type)
     {
         case kFxSmacheratr: return smacheratrHidden;
-        case kFxPara: return paraHidden;
         case kFxMultidyn: return multidynHidden;
         case kFxWidr: return widrHidden;
         case kFxGentlr: return gentlrHidden;
@@ -180,12 +160,12 @@ const char* fxName (int type)
 {
     switch (type)
     {
-        case kFxPara: return "para";
+        case kFxRetiredPara: return "para"; // (retired: the Type's choices keep the names)
         case kFxMultidyn: return "multidyn";
         case kFxMsEq: return "m/s eq";
         case kFxSmacheratr: return "smacheratr";
         case kFxWidr: return "widr";
-        case kFxRetiredWubr: return "wubr"; // (retired: the Type's choices keep the names)
+        case kFxRetiredWubr: return "wubr";
         case kFxRetiredLevlr: return "levlr";
         case kFxGentlr: return "gentlr";
         case kFxRetiredSmoothr: return "smoothr";
@@ -200,7 +180,6 @@ const pk::ParamTable& fxTable (int type)
     static const pk::ParamTable empty (std::vector<pk::ParamInfo> {});
     switch (type)
     {
-        case kFxPara: return para::paramTable ();
         case kFxMultidyn: return multidyn::paramTable ();
         case kFxMsEq: return mseq::paramTable ();
         case kFxSmacheratr: return smacheratr::paramTable ();
@@ -212,7 +191,6 @@ const pk::ParamTable& fxTable (int type)
 
 void FxSlot::prepare (double sampleRate, int maxBlock)
 {
-    para.prepare (sampleRate, maxBlock);
     multidyn.prepare (sampleRate, maxBlock);
     ms.prepare (sampleRate);
     sat.prepare (sampleRate, maxBlock);
@@ -223,7 +201,6 @@ void FxSlot::prepare (double sampleRate, int maxBlock)
 
 void FxSlot::reset ()
 {
-    para.reset ();
     multidyn.reset ();
     ms.reset ();
     sat.reset ();
@@ -241,7 +218,6 @@ void FxSlot::apply (uint32_t block)
     const auto j = (uint32_t)id;
     switch (type)
     {
-        case kFxPara: para.setParam (j, v); break;
         case kFxMultidyn: multidyn.setParam (j, v); break;
         case kFxSmacheratr:
             // off: fully dry (it keeps its latency)
@@ -264,7 +240,6 @@ void FxSlot::applyAll ()
     multidyn.setBypass (!on);
     switch (type)
     {
-        case kFxPara: para.reset (); break;
         case kFxMultidyn: multidyn.reset (); break;
         case kFxMsEq: ms.reset (); break;
         case kFxSmacheratr: sat.reset (); break;
@@ -308,30 +283,15 @@ int FxSlot::latency () const
     {
         case kFxMultidyn: return multidyn.latency ();
         case kFxSmacheratr: return sat.latency ();
-        case kFxPara: return para.latency ();     // its drive's oversampling, on or off
         case kFxGentlr: return gentlr.latency (); // its region Drive's oversampler, always in the path
         default: return 0;
     }
 }
 
-void FxSlot::noteOn (int note)
-{
-    if (type == kFxPara)
-        para.noteOn (note);
-}
-
-void FxSlot::setPitchBend (float bipolar) { para.setPitchBend (bipolar); }
-
 void FxSlot::process (float* L, float* R, int n)
 {
     switch (type)
     {
-        case kFxPara:
-            if (on)
-                para.process (L, R, L, R, n);
-            else
-                para.processBypassed (L, R, n); // off: its latency's delay only
-            break;
         case kFxMultidyn: multidyn.process (L, R, nullptr, nullptr, L, R, n); break; // bypassed: delay only
         case kFxMsEq:
         {

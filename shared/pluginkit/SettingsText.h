@@ -2,7 +2,7 @@
 // Smemplr's rack (through the system clipboard). One line per parameter: its own ID, its normalized
 // value and, for the reader, its name:
 //
-//   bfielstr settings: Para
+//   bfielstr settings: Multidyn
 //   0 0.5213000000000001 High-Pass Frequency
 //   ...
 //

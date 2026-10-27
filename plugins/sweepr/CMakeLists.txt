@@ -1,13 +1,13 @@
 # Sweepr: two bells whose frequencies an LFO each sweeps (synced to the song or free), into a tape stage
 # (drive into a fast leveller and a sine clipper, then a high shelf that follows Speed).
-project(Sweepr VERSION 0.32.0.0)
+project(Sweepr VERSION 0.33.0.0)
 
 add_library(sweepr_core STATIC
     src/core/Params.cpp
     src/core/Engine.cpp
 )
 target_include_directories(sweepr_core PUBLIC src/core ${CMAKE_SOURCE_DIR}/plugins)
-target_link_libraries(sweepr_core PUBLIC pluginkit_core smacheratr_core) # (para's Oversampler.h is header-only)
+target_link_libraries(sweepr_core PUBLIC pluginkit_core smacheratr_core) # (pluginkit's dsp/Oversampler4x.h is header-only)
 pk_dsp_settings(sweepr_core)
 
 add_executable(sweepr_tests tests/core_tests.cpp)

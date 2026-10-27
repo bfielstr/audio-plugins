@@ -271,11 +271,7 @@ public:
     float modOffset (int mapping) const { return mapping < numMods && modState[(size_t)mapping].on ? (float)modState[(size_t)mapping].smooth : 0.0f; }
     bool modWorking (int mapping) const { return mapping < numMods && modState[(size_t)mapping].on; }
 
-    void setPitchBend (float bipolar)
-    {
-        bend = bipolar;
-        rack.setPitchBend (bipolar);
-    }
+    void setPitchBend (float bipolar) { bend = bipolar; }
     // After the sampler: the effects rack, then Soft Clip and Hard Clip (pluginkit/EndClip.h). The latency is
     // the rack's (it changes when an effect with latency is loaded into the rack or taken out).
     int latency () const { return rack.latency (); }

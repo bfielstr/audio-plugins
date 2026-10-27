@@ -4,17 +4,14 @@
 #include "Params.h"
 
 #include "multidyn/src/ui/Help.h"
-#include "para/src/ui/Help.h"
 #include "pluginkit/EndClip.h"
 
 namespace smemplr::help {
 
 inline const char* forParam (uint32_t id)
 {
-    if (id == kFxParaOn)
-        return "Para after the sampler: a parallel high-pass and low-pass that track the notes you play here.";
     if (id == kFxMdOn)
-        return "Multidyn (with its Smacheratr) after Para. Off, the sound passes untouched with the same latency.";
+        return "Multidyn (with its Smacheratr) after the sampler. Off, the sound passes untouched with the same latency.";
     switch (id)
     {
         case kMsOn:
@@ -83,16 +80,7 @@ inline const char* forParam (uint32_t id)
         }
     if (isTailParam (id) || isRackParam (id))
         return nullptr; // (the old saturator after the rack is retired; a rack page's controls have their effects' tips)
-    if (id == kParaDragGain)
-        return para::help::forParam (para::kDragGain);
-    if (id == kParaLiquid)
-        return para::help::forParam (para::kLiquid);
-    if (id == kParaFade)
-        return para::help::forParam (para::kFade);
-    if (id == kParaNotch)
-        return para::help::forParam (para::kNotch);
-    if (id >= kFxParaBase && id < kFxParaBase + para::kHostedParams)
-        return para::help::forParam (id - kFxParaBase);
+
     if (id >= kFxMdBase && id < kFxMdBase + kLegacyMdParams)
         return multidyn::help::forParam (id - kFxMdBase);
     switch (id)
@@ -203,7 +191,7 @@ inline const char* forParam (uint32_t id)
             return "The high-pass's cutoff at 0 semitones, 10 to 200 Hz (20 by default): it doubles for each octave the "
                    "sample is transposed up (20 Hz at +48 is 320 Hz). Drag up/down, double-click to reset.";
         case kTransHpSlope:
-            return "The high-pass's slope, as in Para: 6 and 18 dB are -3 dB at the cutoff, 12, 24, 36 and 48 dB "
+            return "The high-pass's slope: 6 and 18 dB are -3 dB at the cutoff, 12, 24, 36 and 48 dB "
                    "(Linkwitz-Riley) -6 dB. 24 dB by default.";
         default: break;
     }

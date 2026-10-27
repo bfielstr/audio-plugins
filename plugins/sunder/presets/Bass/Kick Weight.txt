@@ -1,0 +1,11 @@
+# sunder factory preset (format: shared/pluginkit/PresetStore.h)
+tags: kick, drums, bass
+comment: Bass at 55 Hz only on the hits (the gate higher, a short release), then a gentle squeeze that keeps the thump.
+Bass = 100 %
+Bass Freq = 55.0 Hz
+Bass Q-Factor = 50 %
+Bass Gate = -24.0 dB
+Bass Release = 80 ms
+Ratio = 3
+Attack = 5
+Release = 3

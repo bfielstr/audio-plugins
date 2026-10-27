@@ -466,8 +466,8 @@ static void setFx (Engine& e, int slot, uint32_t id, double plain)
 
 TEST (rack_effects)
 {
-    // a 440 Hz sample; Para's notch between its filters lands on it, and stays put with the note (the
-    // effects here go in slots 2 and 3, after the empty first one)
+    // a 440 Hz sample (mono: all mid) through the M/S EQ with its Mid Gain down (the effects here go in
+    // slots 2 and 3, after the empty first one)
     auto s = sine (440.0, 1.0);
     std::unique_ptr<Engine> e (makeEngine (s));
     const int base = e->latency ();
@@ -475,22 +475,20 @@ TEST (rack_effects)
     e->noteOn (60, 1.0f);
     auto o = run (*e, 24000);
     const double dry = rms (o.l, 12000, 24000);
-    loadFx (*e, 1, kFxPara);
-    setFx (*e, 1, para::kHpFreq, 700.0);
-    setFx (*e, 1, para::kLpFreq, 275.0);
+    loadFx (*e, 1, kFxMsEq);
+    setFx (*e, 1, mseq::kMidGain, -12.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
-    const double notched = rms (o.l, 12000, 24000);
-    CHECK (notched < dry * 0.4, "notch on the sample: %f vs %f", notched, dry);
-    // the same effect twice: two notches are deeper than one
-    loadFx (*e, 2, kFxPara);
-    setFx (*e, 2, para::kHpFreq, 700.0);
-    setFx (*e, 2, para::kLpFreq, 275.0);
+    const double cut = rms (o.l, 12000, 24000);
+    CHECK (cut < dry * 0.4, "the mid down: %f vs %f", cut, dry);
+    // the same effect twice: twice as far down
+    loadFx (*e, 2, kFxMsEq);
+    setFx (*e, 2, mseq::kMidGain, -12.0);
     e->reset ();
     e->noteOn (60, 1.0f);
     o = run (*e, 24000);
-    CHECK (rms (o.l, 12000, 24000) < notched * 0.5, "two Paras: %f vs %f", rms (o.l, 12000, 24000), notched);
+    CHECK (rms (o.l, 12000, 24000) < cut * 0.5, "two M/S EQs: %f vs %f", rms (o.l, 12000, 24000), cut);
     // off: the slot passes the sound
     e->setParam (slotParam (1, kSlotOn), 0.0);
     e->setParam (slotParam (2, kSlotOn), 0.0);
@@ -517,13 +515,13 @@ TEST (rack_effects)
 
 TEST (rack_retired_kinds_are_empty)
 {
-    // Wubr, Levlr and Smoothr were kinds of slot (their plug-ins are gone): a slot set to one is Empty, with no
-    // latency, the sound untouched, whatever its block holds; the Type's choices keep their names and places
+    // Para, Wubr, Levlr and Smoothr were kinds of slot (their plug-ins are gone): a slot set to one is Empty, with
+    // no latency, the sound untouched, whatever its block holds; the Type's choices keep their names and places
     auto s = sine (220.0, 1.0);
     std::unique_ptr<Engine> ref (makeEngine (s));
     ref->noteOn (57, 1.0f);
     const auto dry = run (*ref, 12000);
-    for (int type : {(int)kFxRetiredWubr, (int)kFxRetiredLevlr, (int)kFxRetiredSmoothr})
+    for (int type : {(int)kFxRetiredPara, (int)kFxRetiredWubr, (int)kFxRetiredLevlr, (int)kFxRetiredSmoothr})
     {
         std::unique_ptr<Engine> e (makeEngine (s));
         e->setParam (slotParam (2, kSlotType), (double)type);
@@ -541,7 +539,8 @@ TEST (rack_retired_kinds_are_empty)
         CHECK (diff == 0.0, "%s: the sound untouched (%g)", fxName (type), diff);
     }
     const auto& t = paramTable ();
-    CHECK (t.toText (slotParam (0, kSlotType), (double)kFxRetiredWubr) == "wubr" && t.toText (slotParam (0, kSlotType), (double)kFxGentlr) == "gentlr" &&
+    CHECK (t.toText (slotParam (0, kSlotType), (double)kFxRetiredPara) == "para" && kFxRetiredPara == 1 && kFxMultidyn == 2 &&
+               t.toText (slotParam (0, kSlotType), (double)kFxRetiredWubr) == "wubr" && t.toText (slotParam (0, kSlotType), (double)kFxGentlr) == "gentlr" &&
                t.toText (slotParam (0, kSlotType), (double)kFxRetiredSmoothr) == "smoothr" && t.info (slotParam (0, kSlotType)).max == kNumFxTypes - 1,
            "the Type's choices keep their places");
 }
@@ -576,137 +575,6 @@ TEST (rack_gentlr)
     e->noteOn (60, 1.0f);
     o = run (*e, 48000);
     CHECK (std::fabs (rms (o.l, 24000, 48000) / dry - 1.0) < 0.01, "off: dry (%.3f)", rms (o.l, 24000, 48000) / dry);
-}
-
-TEST (old_para_slots_keep_their_slope_and_drive)
-{
-    // a Para slot saved before version 13: its slope was one of 12 / 18 / 24 dB (normalized 0 / 0.5 / 1),
-    // its one drive now both filters'
-    auto st = std::make_unique<std::array<double, kNumParams>> ();
-    auto has = std::make_unique<std::array<bool, kNumParams>> ();
-    st->fill (0.0);
-    has->fill (false);
-    auto put = [&] (uint32_t id, double v) {
-        (*st)[id] = v;
-        (*has)[id] = true;
-    };
-    put (slotParam (1, kSlotType), toNormalized (slotParam (1, kSlotType), (double)kFxPara));
-    put (slotBlockParam (1, para::kHpSlope), 0.5); // 18 dB
-    put (slotBlockParam (1, para::kHpDriveOn), 1.0);
-    put (slotBlockParam (1, para::kHpDrive), para::toNormalized (para::kHpDrive, 9.0));
-    put (slotBlockParam (1, para::kFade), std::log (12.0) / std::log (36.0)); // 12 semitones over 1 .. 36
-    migrateParaInSlots (*st, *has, 12);
-    CHECK (std::lround (para::toPlain (para::kHpSlope, (*st)[slotBlockParam (1, para::kHpSlope)])) == para::kSlope18, "18 dB stays 18 dB");
-    CHECK ((*st)[slotBlockParam (1, para::kLpDriveOn)] == 1.0 &&
-               std::fabs (para::toPlain (para::kLpDrive, (*st)[slotBlockParam (1, para::kLpDrive)]) - 9.0) < 1e-9,
-           "the low-pass drive is the old drive");
-    // and on through version 15's: the low-pass at the slot's slope too, the high-pass locked (0 dB, never
-    // saved: the default), Fade 12 semitones on the new range
-    CHECK (std::lround (para::toPlain (para::kLpSlope, (*st)[slotBlockParam (1, para::kLpSlope)])) == para::kSlope18 &&
-               (*st)[slotBlockParam (1, para::kHpGainLock)] == 1.0 && (*st)[slotBlockParam (1, para::kLpGainLock)] == 0.0 &&
-               std::fabs (para::toPlain (para::kFade, (*st)[slotBlockParam (1, para::kFade)]) - 12.0) < 1e-9,
-           "the chain through 15: LP slope %f, Fade %f", (*st)[slotBlockParam (1, para::kLpSlope)],
-           para::toPlain (para::kFade, (*st)[slotBlockParam (1, para::kFade)]));
-    const auto now = *st;
-    migrateParaInSlots (*st, *has, 15);
-    CHECK (*st == now, "a new state is left as it is");
-}
-
-TEST (para_slots_separate_slopes_and_gain_locks)
-{
-    // Para's Low-Pass Slope and Gain Locks (IDs 62 .. 64, after its block of 62) sit in the slot's extension,
-    // at block positions 62 .. 64 (Para's IDs), and map back
-    CHECK (para::kNumParams == 78 && para::kHardClip == 77 && para::kNumParams > kSlotBlock && para::kNumParams <= kSlotBlockAll, "Para has %u parameters",
-           (unsigned)para::kNumParams);
-    for (uint32_t id : {para::kLpSlope, para::kHpGainLock, para::kLpGainLock})
-    {
-        const int64_t j = fxBlockOf (kFxPara, id);
-        CHECK (j == (int64_t)id && j >= (int64_t)kSlotBlock && fxIdAt (kFxPara, (uint32_t)j) == (int64_t)id, "para %u at %lld", id, (long long)j);
-        CHECK (slotBlockParam (3, (uint32_t)j) == kRackExtBase + 3 * kSlotExt + (id - kSlotBlock), "in slot 3's extension");
-        CHECK (std::string (fxBlockTable (kFxPara).info ((uint32_t)j).name) == para::paramTable ().info (id).name &&
-                   fxBlockTable (kFxPara).info ((uint32_t)j).def == para::paramTable ().info (id).def,
-               "%s", para::paramTable ().info (id).name);
-    }
-    CHECK (fxIdAt (kFxPara, para::kNumParams) == -1 && fxBlockOf (kFxPara, para::kNumParams) == -1, "nothing after Para's last");
-    // Para's own Soft Clip and Hard Clip have places in the block (their IDs) but no control on the page: the
-    // rack's Para runs without them (they end Para's own chain, not the rack's)
-    bool clipsHidden = false;
-    for (const auto& h : rackHiddenParams (kFxPara))
-        clipsHidden |= h.first == para::kSoftClip && h.last == para::kHardClip;
-    CHECK (clipsHidden && fxBlockOf (kFxPara, para::kSoftClip) == (int64_t)para::kSoftClip, "Para's clips: hidden in the rack");
-    // the old fixed Para's Fade (0.5) keeps its range of then, so its saved values keep their meaning
-    CHECK (paramTable ().info (kParaFade).max == 36.0 && paramTable ().info (kParaFade).def == 12.0, "Old Para Vocal Fade 1 .. 36, 12");
-    // they reach the slot's Para: the high-pass alone (the low-pass at -inf, the high-pass at 20 Hz: all of a
-    // 440 Hz sample) at +6 dB plays at 0 dB locked (a new slot's default), at +6 dB unlocked
-    auto s = sine (440.0, 1.0);
-    std::unique_ptr<Engine> e (makeEngine (s));
-    e->setParam (slotParam (0, kSlotType), (double)kFxEmpty);
-    auto level = [&] () {
-        e->reset ();
-        e->noteOn (60, 1.0f);
-        const auto o = run (*e, 24000);
-        return rms (o.l, 12000, 24000);
-    };
-    const double dry = level ();
-    loadFx (*e, 1, kFxPara);
-    setFx (*e, 1, para::kHpFreq, 20.0);
-    setFx (*e, 1, para::kLpGain, para::kGainMinDb);
-    setFx (*e, 1, para::kHpGain, 6.0);
-    const double locked = level ();
-    setFx (*e, 1, para::kHpGainLock, 0.0);
-    const double unlocked = level ();
-    CHECK (std::fabs (20.0 * std::log10 (locked / dry)) < 0.3 && std::fabs (20.0 * std::log10 (unlocked / dry) - 6.0) < 0.3,
-           "locked %f dB, unlocked %f dB", 20.0 * std::log10 (locked / dry), 20.0 * std::log10 (unlocked / dry));
-    // the low-pass's own slope: alone (the high-pass at -inf) at 110 Hz, at 6 dB it lets more of 440 Hz through than at 96
-    setFx (*e, 1, para::kHpGain, para::kGainMinDb);
-    setFx (*e, 1, para::kLpGain, 0.0);
-    setFx (*e, 1, para::kLpFreq, 110.0);
-    setFx (*e, 1, para::kLpSlope, para::kSlope6);
-    const double gentle = level ();
-    setFx (*e, 1, para::kLpSlope, para::kSlope96);
-    const double steep = level ();
-    CHECK (20.0 * std::log10 (gentle / dry) > -15.0 && 20.0 * std::log10 (steep / dry) < -80.0, "LP 6 dB %f dB, 96 dB %f dB at two octaves",
-           20.0 * std::log10 (gentle / dry), 20.0 * std::log10 (steep / dry));
-
-    // a Para slot saved in version 13 or 14: one slope (Brickwall), the high-pass at +6 dB, Fade 30 semitones
-    // over 1 .. 36: the low-pass gets Brickwall, the high-pass stays unlocked (nothing gets quieter), the
-    // low-pass unlocked, Fade 30 semitones on the new range
-    for (int version : {13, 14})
-    {
-        auto st = std::make_unique<std::array<double, kNumParams>> ();
-        auto has = std::make_unique<std::array<bool, kNumParams>> ();
-        st->fill (0.0);
-        has->fill (false);
-        auto put = [&] (uint32_t id, double v) {
-            (*st)[id] = v;
-            (*has)[id] = true;
-        };
-        put (slotParam (2, kSlotType), toNormalized (slotParam (2, kSlotType), (double)kFxPara));
-        put (slotBlockParam (2, para::kHpSlope), para::toNormalized (para::kHpSlope, para::kSlopeBrickwall));
-        put (slotBlockParam (2, para::kHpGain), para::toNormalized (para::kHpGain, 6.0));
-        put (slotBlockParam (2, para::kFade), std::log (30.0) / std::log (36.0));
-        put (slotBlockParam (2, para::kHpDriveOn), 1.0);
-        // a slot of another kind is left alone
-        put (slotParam (3, kSlotType), toNormalized (slotParam (3, kSlotType), (double)kFxMsEq));
-        put (slotBlockParam (3, para::kFade), 0.25);
-        migrateParaInSlots (*st, *has, version);
-        CHECK (std::lround (para::toPlain (para::kLpSlope, (*st)[slotBlockParam (2, para::kLpSlope)])) == para::kSlopeBrickwall &&
-                   std::lround (para::toPlain (para::kHpSlope, (*st)[slotBlockParam (2, para::kHpSlope)])) == para::kSlopeBrickwall,
-               "version %d: Brickwall, both", version);
-        CHECK ((*st)[slotBlockParam (2, para::kHpGainLock)] == 0.0 && (*st)[slotBlockParam (2, para::kLpGainLock)] == 0.0 &&
-                   (*has)[slotBlockParam (2, para::kHpGainLock)] && (*has)[slotBlockParam (2, para::kLpGainLock)],
-               "version %d: the boosted high-pass unlocked", version);
-        CHECK (std::fabs (para::toPlain (para::kFade, (*st)[slotBlockParam (2, para::kFade)]) - 30.0) < 1e-9,
-               "version %d: Fade 30 st: %f", version, para::toPlain (para::kFade, (*st)[slotBlockParam (2, para::kFade)]));
-        CHECK ((*st)[slotBlockParam (2, para::kLpDriveOn)] == 0.0 && !(*has)[slotBlockParam (2, para::kLpDriveOn)],
-               "version %d: the per-band drive of 13 is not redone", version);
-        CHECK ((*st)[slotBlockParam (3, para::kFade)] == 0.25 && !(*has)[slotBlockParam (3, para::kHpGainLock)], "the M/S EQ slot untouched");
-        // at 0 dB the high-pass is locked
-        put (slotBlockParam (2, para::kHpGain), para::toNormalized (para::kHpGain, 0.0));
-        put (slotBlockParam (2, para::kFade), std::log (30.0) / std::log (36.0));
-        migrateParaInSlots (*st, *has, version);
-        CHECK ((*st)[slotBlockParam (2, para::kHpGainLock)] == 1.0, "version %d: 0 dB locked", version);
-    }
 }
 
 TEST (rack_multidyn_later_params)
@@ -787,20 +655,20 @@ TEST (settings_text_roundtrip)
 {
     // the text Copy Settings puts on the clipboard (a plug-in's menu, or a rack page), read back
     pk::SettingValues v {{0, 0.25}, {3, 1.0}, {17, 0.123456789012345678}};
-    const std::string t = pk::settingsToText ("Para", v, &para::paramTable ());
+    const std::string t = pk::settingsToText ("Multidyn", v, &multidyn::paramTable ());
     pk::SettingValues back;
-    CHECK (pk::settingsFromText (t, "para", back) && back == v, "round trip (the effect's name in any case)");
-    CHECK (!pk::settingsFromText (t, "multidyn", back), "another effect's settings are refused");
-    CHECK (!pk::settingsFromText ("hello", "para", back), "not settings");
-    CHECK (pk::settingsEffect (t) == "Para", "the effect: %s", pk::settingsEffect (t).c_str ());
-    CHECK (t.find ("High-Pass") != std::string::npos, "names for the reader");
+    CHECK (pk::settingsFromText (t, "multidyn", back) && back == v, "round trip (the effect's name in any case)");
+    CHECK (!pk::settingsFromText (t, "widr", back), "another effect's settings are refused");
+    CHECK (!pk::settingsFromText ("hello", "multidyn", back), "not settings");
+    CHECK (pk::settingsEffect (t) == "Multidyn", "the effect: %s", pk::settingsEffect (t).c_str ());
+    CHECK (t.find (multidyn::paramTable ().info (3).name) != std::string::npos, "names for the reader");
     // Gentlr was called Gently: settings copied from a Gently (its plug-in or a rack slot, same IDs)
     // still paste into Gentlr, in both places
     const std::string old = pk::settingsToText ("Gently", v, &gentlr::paramTable ());
     CHECK (pk::settingsFromText (old, "Gentlr", back, "Gently") && back == v, "the plug-in takes Gently's settings");
     CHECK (pk::settingsFromText (old, fxName (kFxGentlr), back, fxFormerName (kFxGentlr)) && back == v, "a rack slot takes them");
     CHECK (!pk::settingsFromText (old, "Gentlr", back), "only with the former name given");
-    CHECK (!pk::settingsFromText (old, fxName (kFxPara), back, fxFormerName (kFxPara)), "no other kind takes them");
+    CHECK (!pk::settingsFromText (old, fxName (kFxMultidyn), back, fxFormerName (kFxMultidyn)), "no other kind takes them");
     const std::string now = pk::settingsToText ("Gentlr", v, &gentlr::paramTable ());
     CHECK (pk::settingsFromText (now, fxName (kFxGentlr), back, fxFormerName (kFxGentlr)) && back == v, "and its new name");
 }
@@ -820,7 +688,7 @@ TEST (rack_block_mapping)
 {
     // every block position maps to one effect parameter and back; Multidyn's RMS Window and Soften
     // sit where its (unused) saturator's first two are
-    for (int type = kFxPara; type < kNumFxTypes; ++type)
+    for (int type = kFxEmpty + 1; type < kNumFxTypes; ++type)
         for (uint32_t j = 0; j < kSlotBlockAll; ++j)
         {
             const int64_t id = fxIdAt (type, j);
@@ -942,13 +810,13 @@ TEST (gentlr_sub_band_in_slots)
 TEST (slope_in_slots)
 {
     // states from before 20: a rack Smacheratr's and Gentlr's band Slope gets Classic, the shape their bands
-    // had (whatever the place held); 20 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Para
+    // had (whatever the place held); 20 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Widr
     // (left alone)
     for (int version : {16, 19, 20})
     {
         std::array<double, kNumParams> norm {};
         std::array<bool, kNumParams> has {};
-        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxWidr};
         for (int slot = 0; slot < 3; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
@@ -967,7 +835,7 @@ TEST (slope_in_slots)
         int touched = 0;
         for (uint32_t j = 0; j < kSlotBlockAll; ++j)
             touched += norm[slotBlockParam (2, j)] != 0.0;
-        CHECK (touched == 0, "version %d: the Para left alone", version);
+        CHECK (touched == 0, "version %d: the Widr left alone", version);
     }
     // Gentlr's Slope sits in the slot's extension (its ID 65, after its end saturator's blocks), shown in the rack
     auto rackHides = [] (int type, uint32_t id) {
@@ -992,13 +860,13 @@ TEST (slope_in_slots)
 TEST (glue_in_slots)
 {
     // states from before 21: a rack Smacheratr's and Gentlr's glue switches get off (whatever the place
-    // held); 21 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Para (left alone). The
+    // held); 21 on, nothing changes. Slot 0 Smacheratr, slot 1 Gentlr, slot 2 Widr (left alone). The
     // switches have places in the slots (Gentlr's in the extension) and show on the pages
     for (int version : {19, 20, 21})
     {
         std::array<double, kNumParams> norm {};
         std::array<bool, kNumParams> has {};
-        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxWidr};
         for (int slot = 0; slot < 3; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
@@ -1019,7 +887,7 @@ TEST (glue_in_slots)
         int touched = 0;
         for (uint32_t j = 0; j < kSlotBlockAll; ++j)
             touched += norm[slotBlockParam (2, j)] != 1.0;
-        CHECK (touched == 0, "version %d: the Para left alone", version);
+        CHECK (touched == 0, "version %d: the Widr left alone", version);
     }
     for (int g = 0; g < smacheratr::kGluePairs; ++g)
         CHECK (fxBlockOf (kFxGentlr, gentlr::kGlueIds[g]) == (int64_t)gentlr::kGlueIds[g] && gentlr::kGlueIds[g] < kSlotBlockAll &&
@@ -1031,12 +899,12 @@ TEST (sub_high_without_buttons_in_slots)
 {
     // states from before 19: a rack Smacheratr's and Gentlr's Sub and High bands that were off get Range 0,
     // those that were on keep their Range (the same sound); 19 on, nothing changes. Slot 0 Smacheratr,
-    // slot 1 Gentlr, slot 2 Para (its own saturator is not used in the rack: left alone)
+    // slot 1 Gentlr, slot 2 Widr (its own saturator is not used in the rack: left alone)
     for (int version : {17, 18, 19})
     {
         std::array<double, kNumParams> norm {};
         std::array<bool, kNumParams> has {};
-        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxPara};
+        const int types[3] = {kFxSmacheratr, kFxGentlr, kFxWidr};
         for (int slot = 0; slot < 3; ++slot)
         {
             const uint32_t typeId = slotParam (slot, kSlotType);
@@ -1051,8 +919,8 @@ TEST (sub_high_without_buttons_in_slots)
         auto set = [&] (int slot, uint32_t id, double v) { norm[slotBlockParam (slot, id)] = v; };
         set (0, smacheratr::kClaritySub, 0.0), set (0, smacheratr::kClarityHigh, 1.0);
         set (1, gentlr::kSubOn, 1.0), set (1, gentlr::kHighOn, 0.0);
-        const uint32_t paraSub = para::kTailExt2Base + pk::kTailExt2SubRange;
-        set (2, para::kTailExt2Base + pk::kTailExt2Sub, 0.0);
+        const uint32_t widrSub = widr::kTailExt2Base + pk::kTailExt2SubRange;
+        set (2, widr::kTailExt2Base + pk::kTailExt2Sub, 0.0);
         migrateSubHighInSlots (norm, has, version);
         auto at = [&] (int slot, uint32_t id) { return norm[slotBlockParam (slot, id)]; };
         const bool migrated = version < 19;
@@ -1060,7 +928,7 @@ TEST (sub_high_without_buttons_in_slots)
                "version %d: Smacheratr's Sub (off) %s, High (on) kept", version, migrated ? "0" : "kept");
         CHECK (at (1, gentlr::kSubRange) == 0.5 && at (1, gentlr::kHighRange) == (migrated ? 0.0 : 0.5),
                "version %d: Gentlr's Sub (on) kept, High (off) %s", version, migrated ? "0" : "kept");
-        CHECK (at (2, paraSub) == 0.5, "version %d: Para's own saturator left alone", version);
+        CHECK (at (2, widrSub) == 0.5, "version %d: Widr's own saturator left alone", version);
     }
     // and the rack's Smacheratr and Gentlr pages have no Sub or High buttons: those IDs are not in the rack
     auto hidden = [] (int type, uint32_t id) {
@@ -1094,15 +962,18 @@ TEST (sub_high_without_buttons_in_slots)
 TEST (rack_order_and_widr)
 {
     auto s = sine (440.0, 1.0);
-    // Smacheratr driven hard, then Para's notch, or the other way round: the harmonics the saturator
-    // makes after the notch are not notched, so the two orders sound different
+    // Smacheratr driven hard, then a Gentlr band cutting at the third harmonic, or the other way round: the
+    // harmonics the saturator makes after the cut are not cut, so the two orders sound different
     auto render = [&] (bool satFirst) {
         std::unique_ptr<Engine> e (makeEngine (s));
         loadFx (*e, satFirst ? 0 : 1, kFxSmacheratr);
         setFx (*e, satFirst ? 0 : 1, smacheratr::kDrive, 24.0);
-        loadFx (*e, satFirst ? 1 : 0, kFxPara);
-        setFx (*e, satFirst ? 1 : 0, para::kHpFreq, 1600.0);
-        setFx (*e, satFirst ? 1 : 0, para::kLpFreq, 700.0);
+        const int g = satFirst ? 1 : 0;
+        loadFx (*e, g, kFxGentlr);
+        setFx (*e, g, gentlr::bandParam (0, gentlr::kFreq), 1320.0);
+        setFx (*e, g, gentlr::bandParam (0, gentlr::kRange), 12.0);
+        setFx (*e, g, gentlr::bandParam (0, gentlr::kThreshold), -60.0);
+        setFx (*e, g, gentlr::bandParam (1, gentlr::kOn), 0.0);
         e->noteOn (60, 1.0f);
         return run (*e, 24000);
     };
@@ -1174,7 +1045,7 @@ TEST (rack_slot_ids)
                rackField (kRackExtEnd - 1).field == kSlotParams + kSlotBlockAll - 1,
            "the last extension ID is the last slot's last position");
     // what each kind's page does not show: its own IDs
-    for (int type = kFxPara; type < kNumFxTypes; ++type)
+    for (int type = kFxEmpty + 1; type < kNumFxTypes; ++type)
         for (const auto& h : rackHiddenParams (type))
             CHECK (h.first <= h.last && h.last < fxTable (type).size (), "%s hidden %u..%u", fxName (type), h.first, h.last);
 }
@@ -1444,9 +1315,9 @@ TEST (old_end_saturator_moves_into_the_rack)
     std::array<double, kNumParams> norm {};
     std::array<bool, kNumParams> has {};
     {
-        // on, with Para and Multidyn in the rack: a Smacheratr in the third slot with its settings
+        // on, with an M/S EQ and Multidyn in the rack: a Smacheratr in the third slot with its settings
         oldState (norm, has);
-        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxMsEq);
         norm[slotParam (1, kSlotType)] = toNormalized (slotParam (1, kSlotType), kFxMultidyn);
         norm[onId] = 1.0;
         norm[kTailBase + pk::kTailDrive] = toNormalized (kTailBase + pk::kTailDrive, 9.0);
@@ -1456,7 +1327,7 @@ TEST (old_end_saturator_moves_into_the_rack)
         norm[kTailExtBase + pk::kTailExtOutput] = toNormalized (kTailExtBase + pk::kTailExtOutput, -4.0);
         norm[kTailExtBase + pk::kTailExtClarityFreq] = toNormalized (kTailExtBase + pk::kTailExtClarityFreq, 900.0);
         moveEndSaturatorIntoRack (norm, has);
-        CHECK (typeOf (norm, 0) == kFxPara && typeOf (norm, 1) == kFxMultidyn && typeOf (norm, 2) == kFxSmacheratr &&
+        CHECK (typeOf (norm, 0) == kFxMsEq && typeOf (norm, 1) == kFxMultidyn && typeOf (norm, 2) == kFxSmacheratr &&
                    typeOf (norm, 3) == kFxEmpty,
                "the rack: %d %d %d %d", typeOf (norm, 0), typeOf (norm, 1), typeOf (norm, 2), typeOf (norm, 3));
         CHECK (norm[onId] == 0.0 && norm[slotParam (2, kSlotOn)] == 1.0, "the old one off, the slot on");
@@ -1517,7 +1388,7 @@ TEST (old_end_saturator_moves_into_the_rack)
     {
         // a gap in the rack: after the last effect, not in the gap
         oldState (norm, has);
-        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxPara);
+        norm[slotParam (0, kSlotType)] = toNormalized (slotParam (0, kSlotType), kFxMsEq);
         norm[slotParam (3, kSlotType)] = toNormalized (slotParam (3, kSlotType), kFxWidr);
         norm[onId] = 1.0;
         moveEndSaturatorIntoRack (norm, has);
@@ -3154,7 +3025,7 @@ TEST (bend_across_levels_is_smooth)
 TEST (transpose_hp_follows_the_pitch)
 {
     // A tone at the high-pass's base frequency stays at its cutoff whatever the transposition and bend:
-    // -6 dB for the Linkwitz-Riley slopes (Para's 12, 24, 36, 48), -3 dB for 6 and 18 dB.
+    // -6 dB for the Linkwitz-Riley slopes (12, 24, 36, 48), -3 dB for 6 and 18 dB.
     auto s = sine (100.0, 1.0, 48000.0);
     const double wantDb[] = {-3.01, -6.02, -3.01, -6.02, -6.02, -6.02};
     for (int slope = 0; slope < 6; ++slope)
@@ -3563,18 +3434,18 @@ TEST (mod_mapping_edits)
     CHECK (canModulate (kFilterFreq, kFxEmpty) && canModulate (kTranspose, kFxEmpty) && canModulate (kVolume, kFxEmpty), "numbers");
     CHECK (!canModulate (kFilterOn, kFxEmpty) && !canModulate (kMode, kFxEmpty) && !canModulate (kVoices, kFxEmpty), "switches and menus");
     CHECK (!canModulate (modLfoParam (0, kModRate), kFxEmpty) && !canModulate (kTailBase + pk::kTailDrive, kFxEmpty) &&
-               !canModulate (kFxParaBase + para::kHpFreq, kFxEmpty) && !canModulate (kNumParams, kFxEmpty),
+               !canModulate (kFxParaBase, kFxEmpty) && !canModulate (kFxMdBase, kFxEmpty) && !canModulate (kNumParams, kFxEmpty),
            "the LFOs, the old parameters");
-    const uint32_t hp = slotBlockParam (2, (uint32_t)fxBlockOf (kFxPara, para::kHpFreq));
-    CHECK (canModulate (hp, kFxPara) && !canModulate (hp, kFxEmpty) && !canModulate (slotParam (2, kSlotType), kFxPara) &&
-               !canModulate (slotParam (2, kSlotOn), kFxPara),
+    const uint32_t freq = slotBlockParam (2, (uint32_t)fxBlockOf (kFxSmacheratr, smacheratr::kColorFreq));
+    CHECK (canModulate (freq, kFxSmacheratr) && !canModulate (freq, kFxEmpty) && !canModulate (freq, kFxRetiredPara) &&
+               !canModulate (slotParam (2, kSlotType), kFxSmacheratr) && !canModulate (slotParam (2, kSlotOn), kFxSmacheratr),
            "a slot's values (while it holds an effect), not its Type or On");
-    CHECK (!canModulate (slotBlockParam (2, (uint32_t)fxBlockOf (kFxPara, para::kMovement)), kFxPara), "a slot's menu");
-    CHECK (modFxTypeFor (hp, kFxPara) == kFxPara && modFxTypeFor (kVolume, kFxPara) == -1, "fxType");
+    CHECK (!canModulate (slotBlockParam (2, (uint32_t)fxBlockOf (kFxSmacheratr, smacheratr::kPostClip)), kFxSmacheratr), "a slot's menu");
+    CHECK (modFxTypeFor (freq, kFxSmacheratr) == kFxSmacheratr && modFxTypeFor (kVolume, kFxSmacheratr) == -1, "fxType");
 
     // the rack's effects move: their mappings follow, a removed effect's go
     ModMap r;
-    addMapping (r, 0, slotBlockParam (1, 3), 0.5, kFxPara);
+    addMapping (r, 0, slotBlockParam (1, 3), 0.5, kFxSmacheratr);
     addMapping (r, 1, slotBlockParam (2, kSlotBlock + 2), 0.5, kFxMultidyn); // (in the slot's extension)
     addMapping (r, 2, kVolume, 0.5, -1);
     std::array<int, kRackSlots> moved;
@@ -3687,26 +3558,26 @@ TEST (mod_rack_mappings)
 {
     // a mapping onto a rack slot's value modulates the effect there; another effect in the slot pauses it
     std::unique_ptr<Engine> e (makeEngine (sine (220.0, 1.0)));
-    loadFx (*e, 1, kFxPara);
-    const uint32_t hp = slotBlockParam (1, (uint32_t)fxBlockOf (kFxPara, para::kHpFreq));
+    loadFx (*e, 1, kFxSmacheratr);
+    const uint32_t hp = slotBlockParam (1, (uint32_t)fxBlockOf (kFxSmacheratr, smacheratr::kColorFreq));
     e->setParam (hp, 0.3);
     e->setParam (modLfoParam (2, kModShape), kModSquare);
-    ModMapping m {2, hp, 0.2, kFxPara};
+    ModMapping m {2, hp, 0.2, kFxSmacheratr};
     e->setModMappings (&m, 1);
     run (*e, Engine::kModStep);
-    CHECK (std::fabs (e->param (hp) - 0.5) < 1e-9 && e->modWorking (0), "para's high-pass: %f", e->param (hp));
+    CHECK (std::fabs (e->param (hp) - 0.5) < 1e-9 && e->modWorking (0), "smacheratr's colour frequency: %f", e->param (hp));
     loadFx (*e, 1, kFxWidr);
     e->setParam (hp, 0.3);
     run (*e, Engine::kModStep);
     CHECK (!e->modWorking (0) && e->param (hp) == 0.3, "another effect: paused, %f", e->param (hp));
-    loadFx (*e, 1, kFxPara);
+    loadFx (*e, 1, kFxSmacheratr);
     e->setParam (hp, 0.3);
     run (*e, Engine::kModStep);
-    CHECK (e->modWorking (0) && std::fabs (e->param (hp) - 0.5) < 1e-9, "para back: resumed, %f", e->param (hp));
+    CHECK (e->modWorking (0) && std::fabs (e->param (hp) - 0.5) < 1e-9, "smacheratr back: resumed, %f", e->param (hp));
     // a mapping onto a slot's menu does nothing (the effect never sees it change)
-    const uint32_t movement = slotBlockParam (1, (uint32_t)fxBlockOf (kFxPara, para::kMovement));
+    const uint32_t movement = slotBlockParam (1, (uint32_t)fxBlockOf (kFxSmacheratr, smacheratr::kPostClip));
     const double before = e->param (movement);
-    ModMapping menu {2, movement, 1.0, kFxPara};
+    ModMapping menu {2, movement, 1.0, kFxSmacheratr};
     e->setModMappings (&menu, 1);
     run (*e, 4800);
     CHECK (!e->modWorking (0) && e->param (movement) == before, "a menu: %f", e->param (movement));

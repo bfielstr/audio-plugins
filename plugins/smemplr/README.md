@@ -237,7 +237,7 @@ you like. A new smemplr starts with an empty rack.
   go on. **Alt-click** (Option-click) a tab removes that effect.
 - For the selected effect: **On**, **Remove**, and **Copy** / **Paste**. Copy and Paste use the same
   text as each effect's own plug-in (its **Menu → Copy Settings / Paste Settings**), so settings go from
-  a para on a track into a **para** slot and back, or from one slot to another of the same effect.
+  a multidyn on a track into a **multidyn** slot and back, or from one slot to another of the same effect.
   Settings of a different effect are ignored.
 - **Presets** (every effect but the **m/s eq**, which has no plug-in of its own): the same presets as
   the effect's own plug-in, described below.
@@ -246,10 +246,6 @@ you like. A new smemplr starts with an empty rack.
 
 The slots, named as the tabs show them:
 
-- **para**: para's parallel high-pass and low-pass with its Vocal movement, **HP Slope** / **LP Slope**
-  (6 to 96 dB and Brickwall), **HP Lock** / **LP Lock** (a locked gain stops at 0 dB) and a drive for
-  each filter. Its envelope is triggered by the notes played in smemplr, and its display shows the live
-  spectrum.
 - **multidyn**: multidyn with its **Style** (**OTT** or **Character**; Soft Knee, Peak/RMS, the RMS
   window and Soften look disabled in OTT, where they do nothing), its lanes and band fields, the
   crossovers' **Slope**, Soften's **Color** and the **Sub** band. A new slot starts in OTT.
@@ -352,20 +348,19 @@ layout. The [top-level README](../../README.md#layouts) describes the menu.
 
 smemplr was called smempler, and simplr before 0.5.0; projects and presets carry over.
 
-- Projects from 0.5 keep their para, multidyn and M/S EQ: they load into the first rack slots.
-- Before 0.7: a para slot keeps its slope and its one drive becomes both filters' drives. A para slot
-  from before the separate slopes gets its one slope on both filters, its HP Lock on unless its
-  high-pass gain was above 0 dB, its LP Lock off, and keeps its Fade in semitones. A multidyn slot's
-  gains move into its controls for the OTT gain staging (see [multidyn](../multidyn/README.md)).
-  multidyn slots saved before Style existed open in Character.
+- Projects from 0.5 keep their multidyn and M/S EQ: they load into the first rack slots (their para is
+  left out: see below).
+- Before 0.7: a multidyn slot's gains move into its controls for the OTT gain staging (see
+  [multidyn](../multidyn/README.md)). multidyn slots saved before Style existed open in Character.
 - Before 0.9 a fixed end saturator sat after the rack. Projects saved with it on load with a
   smacheratr slot at the end of their chain instead (the first free slot after the last effect, with
   the same settings); projects with it off get nothing added. If such a project's rack is full, the old
   saturator is left out (nothing runs after the rack any more). Its parameters stay in the project, hidden
   from the host. Old M/S EQ slopes (6 / 12 / 24 dB) stay what they were.
 - Up to 0.31 a new smemplr started with a smacheratr in the first slot; projects saved then keep theirs.
-- The rack had **wubr**, **levlr** and **smoothr** slots too. Their plug-ins are gone: a project's slot of
-  one of them loads empty (the other slots stay where they are), and the LFO mappings onto it go.
+- The rack had **para**, **wubr**, **levlr** and **smoothr** slots too. Their plug-ins are gone: a
+  project's slot of one of them loads empty (the other slots stay where they are), and the LFO mappings
+  onto it go.
 - smacheratr and gentlr slots: slots saved before the High band load with it and No Overlap off; slots
   saved while the Sub and High bands had buttons load a band that was off at Range 0 dB; slots saved
   before glue load with nothing glued.
