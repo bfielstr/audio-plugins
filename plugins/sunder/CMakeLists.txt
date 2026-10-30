@@ -1,7 +1,7 @@
 # Sunder: a germanium compressor (a FET compressor with a choice of knees, into a germanium output stage whose
 # Feedback sets its gain and its low resonance), measured from the Softube model setting by setting, with a bass
 # enhancer ahead of it (bubr's, measured from a commercial bass enhancer).
-project(Sunder VERSION 0.33.0.0)
+project(Sunder VERSION 0.34.0.0)
 
 add_library(sunder_core STATIC
     src/core/Params.cpp
