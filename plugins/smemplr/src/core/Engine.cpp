@@ -293,7 +293,7 @@ void Voice::ClassicHead::start (const PlayRegion& r)
     liveStart = nextStart = r.loopStart;
     liveEnd = nextEnd = r.loopEnd;
     pos = r.start;
-    done = wrapped = false;
+    done = false;
     wraps = 0;
     jumpLeft = 0;
     passT = 0.0;
@@ -542,7 +542,8 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
     const double fadeShare = (*c.p)[kLoopFade];
     const bool fades = !st.warp && st.mode == kModeClassic;
     // the last `fade` samples of the loop blend into its first `fade` samples, so the wrap
-    // lands `fade` samples into the loop and the audio is continuous
+    // lands `fade` samples into the loop and the audio is continuous. Only the wraps fade: the first pass
+    // plays the loop's head as it is (the note's start keeps its level)
     double loopLen = 0.0, fade = 0.0, wrapLen = 0.0;
     auto setup = [&] {
         loopLen = r.loopEnd - r.loopStart;
@@ -614,7 +615,6 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
             if (restart && loopLen >= 1.0 && h.sinceWrap > 2)
             {
                 ++h.wraps;
-                h.wrapped = true;
                 if (!moved && r.loopEnd - pos <= 2.0 * rate)
                     pos -= wrapLen; // the pass was ending anyway: the wrap, now (through the loop's own crossfade)
                 else
@@ -655,7 +655,6 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
             else
             {
                 ++h.wraps;
-                h.wrapped = true;
                 if (!moved)
                     pos -= (std::floor (over / std::max (1.0, wrapLen)) + 1.0) * std::max (1.0, wrapLen);
                 else
@@ -705,15 +704,6 @@ void Voice::renderClassic (ClassicHead& h, float* L, float* R, int n, const Bloc
             }
             l = l * ga + l2 * gb;
             rr = rr * ga + r2 * gb;
-        }
-        // the loop's head fades in on the first pass as well, the way it enters on every wrap, so
-        // the note does not start abruptly (after a wrap the position is always past the head)
-        if (fade > 1.0 && !h.wrapped && pos < r.loopStart + fade)
-        {
-            const double x = std::max (0.0, (pos - r.loopStart) / fade);
-            const float g = c.constantPowerFade ? (float)std::sin (x * M_PI * 0.5) : (float)x;
-            l *= g;
-            rr *= g;
         }
         if (h.jumpLeft > 0)
         {

@@ -147,7 +147,6 @@ private:
         double nextStart = 0.0, nextEnd = 0.0;  // the loop this pass ends into: the live one, held once the crossfade into it has begun
         double pos = 0.0;
         bool done = false;
-        bool wrapped = false; // a pass has ended (the loop's head fades in on the first pass only)
         // passes of the loop finished in the last render: the envelopes locked to the loop restart on them
         int wraps = 0;
         // the playhead past the loop when it came on (Loop switched on behind it), or a pass ending into a

@@ -44,8 +44,8 @@ switches on hover tooltips).
 (constant-power or linear), **Snap** to zero crossings, **Gain**, **Voices** (1 to 32, 1 by default)
 with gentle voice stealing, and **Retrig**. Loop is on by default and begins at Start. **Length** is the
 loop's length and never shortens the sample, which plays to the end flag; what does not play is
-dimmed. **Fade**, off by default, crossfades the loop's end into its start and also fades the start in
-on the first pass. Move or resize the loop while a note plays (with the mouse or by automating **Start**
+dimmed. **Fade**, off by default, crossfades the loop's end into its start where the loop wraps; the
+first pass plays as it is, so the note's start keeps its level. Move or resize the loop while a note plays (with the mouse or by automating **Start**
 and **Length**) and the playhead first finishes its pass of the loop as it was, then carries on at the
 start of the loop where it is by then, through the loop's crossfade (a very short one with Fade off),
 so the change lands in time and without a click.
