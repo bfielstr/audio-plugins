@@ -1,6 +1,7 @@
 // Sunder's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a partial state, a
 // state from a newer build (parameters this one does not know), a stream that is not sunder's, pinchr's states
-// (version 1: Drive, Feedback and Ratio to the nearest steps, Dirty ignored, the bass enhancer off), and the
+// (version 1: Drive, Feedback and Ratio to the nearest steps, Dirty ignored, the bass enhancer off), Input saved
+// on -21 .. +21 dB before version 3 (the same dB now; Bass Position Pre), and the
 // parameter table's defaults and texts. Run: ./sunder_state_tests
 #include "Params.h"
 #include "plugin/State.h"
@@ -195,6 +196,72 @@ int main ()
         CHECK (readState (&s, back) && std::lround (toPlain (kFeedback, back.norm[kFeedback])) == 9 &&
                    std::lround (toPlain (kRatio, back.norm[kRatio])) == 10 && back.norm[kBass] == 0.7,
                "version 2: as saved");
+    }
+    // Input saved before version 3 (sunder up to 0.33 and pinchr: -21 .. +21 dB, linear): the same dB on today's
+    // -48 .. +48 dB; Bass Position, not in them, Pre
+    {
+        const double dbs[] = {-21.0, -12.5, -3.0, 0.0, 0.4, 3.0, 9.0, 17.25, 21.0};
+        for (int version : {1, 2})
+            for (double dbOld : dbs)
+            {
+                MemoryStream s;
+                {
+                    IBStreamer w (&s, kLittleEndian);
+                    w.writeInt32 (0x48434E50);
+                    w.writeInt32 (version);
+                    w.writeInt32 (version == 1 ? 3 : 2);
+                    w.writeInt32u (kInput);
+                    w.writeDouble ((dbOld + 21.0) / 42.0);
+                    w.writeInt32u (kMix);
+                    w.writeDouble (0.45);
+                    if (version == 1)
+                    {
+                        w.writeInt32u (kFeedback);
+                        w.writeDouble (0.5); // pinchr's Feedback 5: step 4
+                    }
+                }
+                s.seek (0, IBStream::kIBSeekSet, nullptr);
+                State back;
+                CHECK (readState (&s, back), "version %d reads", version);
+                const double dbNow = toPlain (kInput, back.norm[kInput]);
+                CHECK (std::fabs (dbNow - dbOld) < 1e-9 && back.norm[kMix] == 0.45 && back.norm[kBassPosition] == defaultNormalized (kBassPosition) &&
+                           !back.has[kBassPosition] && std::lround (toPlain (kBassPosition, back.norm[kBassPosition])) == kBassPre &&
+                           (version == 2 || std::lround (toPlain (kFeedback, back.norm[kFeedback])) == 4),
+                       "version %d: Input %.2f dB loads as %.6f dB, Bass Position Pre", version, dbOld, dbNow);
+            }
+        // without Input: 0 dB (the default then and now)
+        MemoryStream s;
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x48434E50);
+            w.writeInt32 (2);
+            w.writeInt32 (0);
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && toPlain (kInput, back.norm[kInput]) == 0.0 && !back.has[kInput], "version 2 without Input: 0 dB");
+    }
+    // version 3: Input and Bass Position as saved (no conversion)
+    {
+        State st;
+        for (uint32_t id = 0; id < kNumParams; ++id)
+        {
+            st.norm[id] = defaultNormalized (id);
+            st.has[id] = true;
+        }
+        st.norm[kInput] = toNormalized (kInput, 36.5);
+        st.norm[kBassPosition] = toNormalized (kBassPosition, kBassPost);
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && toPlain (kInput, back.norm[kInput]) == 36.5 &&
+                   std::lround (toPlain (kBassPosition, back.norm[kBassPosition])) == kBassPost,
+               "version 3: Input +36.5 dB and Post as saved");
+        const auto& t = paramTable ();
+        CHECK (t.info (kInput).min == -48.0 && t.info (kInput).max == 48.0 && t.info (kInput).def == 0.0 && t.info (kBassPosition).def == (double)kBassPre &&
+                   std::string (t.info (kBassPosition).name) == "Bass Position" && t.toText (kBassPosition, kBassPost) == "Post",
+               "Input -48 .. +48 dB (0 by default), Bass Position Pre / Post (Pre by default)");
     }
     std::printf ("%d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

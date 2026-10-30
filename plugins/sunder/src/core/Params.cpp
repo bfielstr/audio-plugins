@@ -21,7 +21,7 @@ const ParamTable& paramTable ()
         // a new instance: the model's own defaults as near as the steps go (pinchr's Ratio 4, Germ Soft, Attack
         // and Release 3; Drive 4 and Feedback 3, the steps nearest its Drive 5 and Feedback 5 in level and tone),
         // fully compressed, the bass enhancer off
-        v.push_back (real (kInput, "Input", "Input", -21.0, 21.0, 0.0, Curve::Linear, Disp::Db));
+        v.push_back (real (kInput, "Input", "Input", -kInputMaxDb, kInputMaxDb, 0.0, Curve::Centre, Disp::Db));
         v.push_back (integer (kRatio, "Ratio", "Ratio", 1.0, (double)kSteps, 4.0, Disp::Plain));
         v.push_back (choice (kCurve, "Curve", "Curve", {"R Soft", "Germ Soft", "Germ Med", "Silicon Med", "Silicon Hard", "Zener Hard"}, kGermSoft));
         v.push_back (real (kAttack, "Attack", "Attack", 0.0, 10.0, 3.0, Curve::Linear, Disp::Number));
@@ -45,7 +45,7 @@ const ParamTable& paramTable ()
         smacheratr::addTailExt4Params (v, kTailExt4Base);
         pk::addEndClipParams (v, kSoftClip, kHardClip);
         // the bass enhancer: off; the rest bubr's own defaults (Boost 55 %, 40 Hz, Intensity 50 %, Q-Factor 20 %,
-        // Drive 20 %, the gate at -30 dB, Attack 0 ms, Release 100 ms, Ratio 4, Low Cut at its lowest, Off)
+        // Drive 20 %, the gate at -30 dB, Attack 0 ms, Release 100 ms, Ratio 4, Low Cut at its lowest, Off), Pre
         v.push_back (percent (kBass, "Bass", "Bass", 0.0));
         v.push_back (real (kBassBoost, "Bass Boost", "Bass Boost", 0.0, 1.1, 0.55, Curve::Linear, Disp::Percent));
         v.push_back (real (kBassFreq, "Bass Freq", "Bass Freq", 20.0, 125.0, 40.0, Curve::Log, Disp::Hz));
@@ -59,6 +59,7 @@ const ParamTable& paramTable ()
         v.push_back (real (kBassRatio, "Bass Ratio", "Gate Ratio", 1.0, 100.0, 4.0, Curve::Log, Disp::Number));
         v.push_back (real (kBassLowCut, "Bass Low Cut", "Low Cut", 20.0, 125.0, 20.0, Curve::Log, Disp::Hz));
         v.push_back (choice (kBassOversample, "Bass Oversample", "Oversample", {"Off", "2x", "4x"}, kBassOsOff));
+        v.push_back (choice (kBassPosition, "Bass Position", "Bass Position", {"Pre", "Post"}, kBassPre));
         pk::retire (v, kDirty, kDirty + 1);
         pk::retire (v, kTailBase, kTailExt4Base + pk::kTailExt4Fields);
         return v;

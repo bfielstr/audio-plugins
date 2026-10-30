@@ -114,6 +114,24 @@ int main (int argc, char** argv)
             CHECK (rig.processor->getLatencySamples () == latency, "back to Off: latency %u", rig.processor->getLatencySamples ());
         }
 
+        // Bass Position Post with Bass 50 % at 4x: finite, the same latency as Pre; Input +48 dB: finite; then back
+        {
+            std::vector<float> b;
+            rig.param (kBass, 0.5);
+            rig.param (kBassOversample, toNormalized (kBassOversample, kBassOs4x));
+            rig.render (0.05, b, nullptr, bass ());
+            const uint32 pre = rig.processor->getLatencySamples ();
+            rig.param (kBassPosition, toNormalized (kBassPosition, kBassPost));
+            rig.param (sunder::kInput, toNormalized (sunder::kInput, 48.0));
+            rig.render (1.0, b, nullptr, bass ());
+            CHECK (allFinite (b) && rig.processor->getLatencySamples () == pre, "Post, Input +48 dB: finite, latency %u (Pre %u)",
+                   rig.processor->getLatencySamples (), pre);
+            CHECK (std::fabs (plainOf (rig, sunder::kInput) - 48.0) < 1e-9, "Input at +48 dB");
+            for (uint32_t id : {(uint32_t)kBass, (uint32_t)kBassOversample, (uint32_t)kBassPosition, (uint32_t)sunder::kInput})
+                rig.param (id, defaultNormalized (id));
+            rig.render (0.2, b, nullptr, bass ());
+        }
+
         // editor (Classic): Link clicked off and on, then a screenshot
         {
             EditorWindow win (rig.controller);

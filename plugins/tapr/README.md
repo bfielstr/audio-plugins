@@ -12,7 +12,8 @@ the EQ and the two placements added. Install instructions are in the [top-level 
 1. Put tapr on a bass, a drum bus or a synth and press play. A new instance is the tape at **Drive**
    75 %, **Speed** 80 %, **Compression** 35 %: thick odd harmonics at a steady level.
 2. Turn **Drive** for how hard the tape is pushed: clean and quieter at the bottom, saturated and held
-   from about a third up. There is no makeup gain, so more drive is louder until it saturates.
+   from about a third up. There is no makeup gain, so more drive is louder until it saturates. Past 100 %
+   it goes on towards a square wave that even quiet passages and tails reach.
 3. **Compression** sets how much the leveller holds the level. **Pre** (before the curve, the classic
    tape): more is softer, quieter and cleaner, and at 0 a high **Drive** clips a sine to a square wave.
    **Post** (after the curve): the curve stays as hard and the leveller rides the result down.
@@ -39,7 +40,11 @@ Point at any control for help in the info box at the bottom (**?** also switches
 
 - **Tape** (on by default): the tape stage. Off, only the **Cut** EQ shapes the sound. Switching it fades
   over 10 ms.
-- **Drive** (0 to 100 %, 75 % by default): the gain into the curve, -10 dB to +50 dB.
+- **Drive** (0 to 200 %, 75 % by default): the gain into the curve, -10 dB at 0 %, +50 dB at 100 %, +110 dB
+  at 200 % (0.6 dB a percent all the way). Up to 100 % it is the measured tape; past it the leveller and the
+  curve hold the level and the aliasing where 100 % has them (a loud signal is already clipped flat there),
+  and what grows is how far down the clipping reaches: at 200 % a -70 dBFS tone comes out at about -12 dBFS,
+  so a tail or the noise floor between notes is lifted up to the held level. Silence stays silent.
 - **Speed** (0 to 100 %, 80 % by default): the tape speed, a high shelf after the curve: at 100 % almost
   flat (-2 dB at the very top, a little lift around 10 kHz), at 80 % -10 dB from about 15 kHz, at 0 %
   -48 dB above 2 kHz.
@@ -78,7 +83,7 @@ input -> [Cut, Pre] -> 4x up -> Drive -> [leveller, Pre] -> clipper -> [leveller
 
 **The tape** is a classic tape saturation, measured knob by knob (sines from -72 to 0 dBFS, noise and
 level steps) and matched: the gain and the odd harmonics of a 100 Hz sine within about 1 dB at every level
-and setting measured. **Drive** is a gain of -10 to +50 dB; the leveller is a peak follower on both
+and setting measured. **Drive** is a gain of -10 to +110 dB (the measured -10 to +50 dB up to 100 %); the leveller is a peak follower on both
 channels together (2 ms attack, 21 ms release) and a gain of 1 / (1 + 3.21 x **Compression** x the
 level); the clipper follows a sine up to its top, then stays flat at half of full scale (slope 1 at 0,
 odd harmonics, a hint of even ones at about -60 dB), anti-aliased with its antiderivative at four times
@@ -88,6 +93,11 @@ shapes are in sweepr's `src/core/TapeShape.h`, shared by both plug-ins.
 **The Cut EQ** is three fixed bells, measured the same way and matched to within a few thousandths of a
 dB: Q 1 at 126 Hz, 983 Hz and 9.8 kHz (the frequencies' defaults; here they move), a boost and the cut
 of the same size exact mirrors, at the sample rate (`src/core/CutShape.h`).
+
+Projects and presets saved with tapr 0.33.0 or earlier keep **Drive** at the percent it had (the range went
+from 0 to 100 % to 0 to 200 % in 0.34.0), so they sound as they did. Host automation of **Drive** recorded
+before 0.34.0 is stored by the host on the old range and plays back twice as hard (a lane drawn from 0 to
+100 % now reads 0 to 200 %): redraw it if a project automates it.
 
 ## Presets
 

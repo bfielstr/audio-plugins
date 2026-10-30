@@ -11,7 +11,10 @@ namespace pk {
 enum class PType { Float, Int, Choice, Bool };
 // Ratio: min .. max with 1:1 at the centre (compressor / expander ratios, shown Live-style as
 // "1 : x"; the maximum shows as "1 : inf").
-enum class Curve { Linear, Log, Power3, Ratio };
+// Centre: min .. max with the middle of the range at the centre, finer around it (half linear, half
+// cubic: twice as fine at the centre as Linear, a gain from -48 to +48 dB that stays easy to set near
+// 0 dB). Its values come back to a 1e-9 grid, so typed ones are exact.
+enum class Curve { Linear, Log, Power3, Ratio, Centre };
 enum class Disp { Percent, Hz, Ms, Db, DbGain, Semis, Cents, Pan, Plain, Number, Beats, Degrees, Choice, OnOff, Sustain, Curve, Ratio, Bpm, Note, Octaves };
 // Note: a MIDI note number shown as a name, Live-style (60 = C3). Octaves: a signed amount of octaves ("+1.00 oct").
 

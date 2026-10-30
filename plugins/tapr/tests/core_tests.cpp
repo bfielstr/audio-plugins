@@ -2,8 +2,9 @@
 // The tape is Scream 4's Tape mode (gains and harmonics measured at eight settings), the Cut bells are
 // Scream's (their measured shapes, and the engine plays them), Cut Post sits after the curve as in Scream,
 // Cut Pre drives the curve, Compression Post leaves the curve as hard, Mix 0 is the delayed input bit for bit,
-// the wet path is aligned with the latency, switches neither click nor blow up, a NaN does not stick, the
-// defaults level a bass, and the CPU budget.
+// the wet path is aligned with the latency, switches neither click nor blow up, Drive up to 200 % (the gains,
+// the aliasing and the level held past 100 %, stable), a NaN does not stick, the defaults level a bass, and
+// the CPU budget.
 #include "pluginkit/testing/CpuClock.h"
 #include "Engine.h"
 #include "Params.h"
@@ -404,6 +405,84 @@ TEST (switches_do_not_click_or_blow_up)
     for (float v : y)
         peak = std::max (peak, (double)std::fabs (v));
     CHECK (peak < 4.0, "peak %.2f", peak);
+}
+
+TEST (drive_goes_to_200)
+{
+    // Drive 0 .. 200 %: 0.6 dB a percent on (-10 dB at 0, +50 dB at 100 %, +110 dB at 200 %), 75 % by default;
+    // up to 100 % the same gains as before, past it the leveller holds the level, the aliasing stays where it is
+    // at 100 %, nothing runs away
+    const auto& t = paramTable ();
+    CHECK (t.info (kDrive).min == 0.0 && t.info (kDrive).max == 2.0 && t.info (kDrive).def == 0.75 && toPlain (kDrive, 1.0) == 2.0 &&
+               toPlain (kDrive, 0.5) == 1.0 && t.toText (kDrive, 2.0) == "200 %" && t.toText (kDrive, 0.75) == "75 %",
+           "Drive 0 .. 200 %% (%s), 75 %% by default", t.toText (kDrive, 2.0).c_str ());
+    CHECK (std::fabs (sweepr::tape::driveDb (0.0) + 10.02) < 1e-9 && std::fabs (sweepr::tape::driveDb (1.0) - 50.176) < 1e-9 &&
+               std::fabs (sweepr::tape::driveDb (2.0) - 110.372) < 1e-9,
+           "-10, +50 and +110 dB into the curve");
+    // every percent up to 100 comes back as itself (the presets' and the old states' values)
+    int wrong = 0;
+    for (int k = 0; k <= 100; ++k)
+        wrong += toPlain (kDrive, toNormalized (kDrive, k / 100.0)) == k / 100.0 ? 0 : 1;
+    CHECK (wrong == 0, "0 .. 100 %% exact (%d not)", wrong);
+    // a 3.1 kHz sine at -12 dBFS, Compression 0 (the hardest clipping): the aliasing (what is not a harmonic)
+    // at 150 and 200 % within 1 dB of 100 %'s, the level the same; with the default Compression held as well
+    auto measure = [] (double drive, double comp, double& aliasDb, double& level) {
+        auto e = engine ([&] (Engine& e) {
+            plain (e);
+            e.setParam (kDrive, drive);
+            e.setParam (kCompression, comp);
+        });
+        const auto y = run (*e, sine (3100.0, 1.0, 0.25));
+        const size_t n = 4096, a = y.size () - n;
+        double harm = 0.0, all = 0.0;
+        for (size_t k = 1; k < n / 2; ++k)
+        {
+            const double hz = k * kSr / n;
+            const double l = toneLevel (y, a, a + n, hz);
+            all += l * l;
+            if (std::fabs (hz / 3100.0 - std::round (hz / 3100.0)) * 3100.0 < 4.0 * kSr / n)
+                harm += l * l;
+        }
+        aliasDb = 10.0 * std::log10 ((all - harm) / harm);
+        level = db (rms (y, a, y.size ()));
+        return finite (y);
+    };
+    for (double comp : {0.0, 0.35})
+    {
+        double a100, l100;
+        measure (1.0, comp, a100, l100);
+        for (double drive : {1.5, 2.0})
+        {
+            double a, l;
+            const bool ok = measure (drive, comp, a, l);
+            CHECK (ok && a < a100 + 1.0 && std::fabs (l - l100) < 0.5, "Compression %.0f %%, Drive %.0f %%: aliasing %.1f dB (100 %%: %.1f), level %.2f dBFS (%.2f)",
+                   comp * 100, drive * 100, a, a100, l, l100);
+        }
+    }
+    // a hot bass and silence at 200 %: finite, bounded by the curve as at 100 % (its flat top through Speed's
+    // shelf), silence stays silent
+    for (double comp : {0.0, 0.35})
+    {
+        double peak[2] = {0.0, 0.0}, quiet = 0.0;
+        bool ok = true;
+        for (int k = 0; k < 2; ++k)
+        {
+            auto e = engine ([&] (Engine& e) {
+                plain (e);
+                e.setParam (kDrive, k == 0 ? 1.0 : 2.0);
+                e.setParam (kCompression, comp);
+            });
+            auto x = bass (2.0, 4.0);
+            std::fill (x.begin () + 48000, x.begin () + 72000, 0.0f);
+            const auto y = run (*e, x);
+            for (float v : y)
+                peak[k] = std::max (peak[k], (double)std::fabs (v));
+            ok = ok && finite (y);
+            quiet = rms (y, 60000, 72000);
+        }
+        CHECK (ok && peak[1] < 0.8 && peak[1] < peak[0] * 1.05 && quiet < 1e-6, "Drive 200 %%, Compression %.0f %%: peak %.3f (100 %%: %.3f), silence %.1f dBFS",
+               comp * 100, peak[1], peak[0], db (quiet));
+    }
 }
 
 TEST (recovers_from_nan)

@@ -11,7 +11,7 @@ namespace tapr {
 enum ParamId : uint32_t
 {
     kTapeOn = 0,  // the tape stage (Drive, the leveller, the curve, Speed's shelf) in the path
-    kDrive,       // 0 .. 1: -10 .. +50 dB into the curve
+    kDrive,       // 0 .. 2 (0 .. 200 %): -10 .. +110 dB into the curve (0 .. 1 before state version 2)
     kSpeed,       // 0 .. 1: the tape speed (Speed's high shelf after the curve)
     kCompression, // 0 .. 1: the leveller
     kCompPlace,   // the leveller before the curve (Pre) or after it (Post)
@@ -54,6 +54,9 @@ enum Place
     kPre = 0,
     kPost
 };
+
+// Drive's top: 200 % (+110 dB into the curve, the same 0.6 dB a percent); 100 % before state version 2
+constexpr double kDriveMax = 2.0;
 
 const pk::ParamTable& paramTable ();
 inline double toPlain (uint32_t id, double n) { return paramTable ().toPlain (id, n); }

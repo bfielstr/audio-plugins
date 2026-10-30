@@ -11,8 +11,8 @@ inline const char* forParam (uint32_t id)
     switch (id)
     {
         case kInput:
-            return "The level into the compressor, -21 to +21 dB. There is no makeup gain after it: more Input "
-                   "compresses harder and is louder until the compression holds it.";
+            return "The level into the compressor, -48 to +48 dB (finer around 0 dB; double-click for 0 dB). There is no "
+                   "makeup gain after it: more Input compresses harder and is louder until the compression holds it.";
         case kRatio:
             return "How hard the compressor works, in steps 1 to 10: higher lowers the threshold and steepens the knee, as "
                    "the hardware's Ratio does (a position, not a fixed ratio).";
@@ -56,10 +56,10 @@ inline const char* forParam (uint32_t id)
         case kSoftClip: return pk::kSoftClipHelp;
         case kHardClip: return pk::kHardClipHelp;
         case kBass:
-            return "The bass enhancer ahead of the compressor: a band of the low end driven into a clipper and blended "
-                   "in (the BASS section shapes it). 0: off, nothing of it runs. Up to 100 %: the effect comes in "
-                   "under the dry sound, both at full level at 100 % (on the way it first thins the band, then builds "
-                   "it up).";
+            return "The bass enhancer (ahead of the compressor, or after it with Bass Position at Post): a band of the "
+                   "low end driven into a clipper and blended in (the BASS section shapes it). 0: off, nothing of it "
+                   "runs. Up to 100 %: the effect comes in under the dry sound, both at full level at 100 % (on the "
+                   "way it first thins the band, then builds it up).";
         case kBassBoost:
             return "How much of the bass effect is added, 0 to 110 %: 0.3 dB a percent, part into its clipper and part "
                    "after it. The part into the clipper is taken back as the band gets loud, so it lifts the quieter "
@@ -89,6 +89,10 @@ inline const char* forParam (uint32_t id)
         case kBassOversample:
             return "Runs the bass effect's clipper at 2x or 4x the rate (less aliasing when it is driven hard), at the "
                    "cost of some latency and CPU; the latency stays while it is set, Bass at 0 included.";
+        case kBassPosition:
+            return "Where the bass enhancer sits. Pre: ahead of Input and the compressor, which then holds the added "
+                   "bass too. Post: after the compressor and the germanium stage, ahead of Output, Soft Clip and Hard "
+                   "Clip, so the compressor does not hear it and the bass comes out as set. A change crossfades.";
         default: return nullptr;
     }
 }

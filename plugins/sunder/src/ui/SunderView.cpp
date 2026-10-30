@@ -176,9 +176,17 @@ void SunderView::draw (CDrawContext* ctx)
         {
             const double in = shownLevel;
             const CPoint pt (bx (in), by (in + staticGrDb (curve, ratio, in)));
+            // past the plot (a hot Input: up to +48 dB): a ring at its edge, and the level in the text
+            const bool over = in > kMaxIn || in + staticGrDb (curve, ratio, in) > kMaxIn;
             ctx->setFillColor (theme::kEnergyLive);
-            ctx->drawEllipse (CRect (pt.x - 4, pt.y - 4, pt.x + 4, pt.y + 4), kDrawFilled);
-            std::snprintf (buf, sizeof (buf), "GR %.1f dB", shownGr);
+            ctx->setFrameColor (theme::kEnergyLive);
+            ctx->setLineWidth (1.5);
+            ctx->drawEllipse (CRect (pt.x - 4, pt.y - 4, pt.x + 4, pt.y + 4), over ? kDrawStroked : kDrawFilled);
+            ctx->setLineWidth (1.0);
+            if (over)
+                std::snprintf (buf, sizeof (buf), "IN %+.0f dB   GR %.1f dB", in, shownGr);
+            else
+                std::snprintf (buf, sizeof (buf), "GR %.1f dB", shownGr);
             text (ctx, buf, CRect (c.left + 6, c.bottom - 18, c.right - 6, c.bottom - 4), theme::kTextDim, 9.5, kRightText);
         }
     }
