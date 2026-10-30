@@ -45,6 +45,11 @@ double ratioToNormalized (double r, double mn, double mx)
     return 0.5 + (1.0 - 1.0 / r) / (2.0 * (1.0 - 1.0 / mx));
 }
 
+// (precise floating point here even where the build allows fast maths, MSVC's /fp:fast: the 1e-9 grid's
+// division must stay a division for typed values to come back exactly)
+#if defined(_MSC_VER)
+#pragma float_control(precise, on, push)
+#endif
 // Centre curve: x = 2 n - 1 (-1 .. 1) to y = (x + x^3) / 2 (-1 .. 1, slope 1/2 at 0), the plain value the
 // middle of the range plus y times its half; back by the cubic's one real root (Cardano), polished.
 double centreToPlain (double n, double mn, double mx)
@@ -87,6 +92,9 @@ double centreToNormalized (double v, double mn, double mx)
     }
     return n;
 }
+#if defined(_MSC_VER)
+#pragma float_control(pop)
+#endif
 
 } // namespace
 
