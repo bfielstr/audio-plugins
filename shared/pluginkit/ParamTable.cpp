@@ -45,6 +45,26 @@ double ratioToNormalized (double r, double mn, double mx)
     return 0.5 + (1.0 - 1.0 / r) / (2.0 * (1.0 - 1.0 / mx));
 }
 
+// Centre curve: x = 2 n - 1 (-1 .. 1) to y = (x + x^3) / 2 (-1 .. 1, slope 1/2 at 0), the plain value the
+// middle of the range plus y times its half; back by the cubic's one real root (Cardano), polished.
+double centreToPlain (double n, double mn, double mx)
+{
+    const double x = 2.0 * n - 1.0, y = 0.5 * (x + x * x * x);
+    const double v = 0.5 * (mn + mx) + 0.5 * (mx - mn) * y;
+    return std::clamp (std::round (v * 1e9) / 1e9, mn, mx); // (a 1e-9 grid: 3 dB comes back as 3 dB)
+}
+
+double centreToNormalized (double v, double mn, double mx)
+{
+    const double y = std::clamp ((v - 0.5 * (mn + mx)) / (0.5 * (mx - mn)), -1.0, 1.0);
+    // x^3 + x - 2 y = 0
+    const double d = std::sqrt (y * y + 1.0 / 27.0);
+    double x = std::cbrt (y + d) + std::cbrt (y - d);
+    for (int k = 0; k < 2; ++k)
+        x -= (x * x * x + x - 2.0 * y) / (3.0 * x * x + 1.0);
+    return std::clamp (0.5 * (x + 1.0), 0.0, 1.0);
+}
+
 } // namespace
 
 ParamTable::ParamTable (std::vector<ParamInfo> p) : params (std::move (p)) {}
@@ -80,6 +100,7 @@ double ParamTable::toPlain (uint32_t id, double n) const
     switch (p.curve)
     {
         case Curve::Ratio: return ratioToPlain (n, p.min, p.max);
+        case Curve::Centre: return centreToPlain (n, p.min, p.max);
         case Curve::Log: return p.min * std::pow (p.max / p.min, n);
         case Curve::Power3: return p.min + (p.max - p.min) * n * n * n;
         case Curve::Linear: break;
@@ -98,6 +119,7 @@ double ParamTable::toNormalized (uint32_t id, double v) const
     switch (p.curve)
     {
         case Curve::Ratio: return ratioToNormalized (v, p.min, p.max);
+        case Curve::Centre: return centreToNormalized (v, p.min, p.max);
         case Curve::Log: return std::log (v / p.min) / std::log (p.max / p.min);
         case Curve::Power3: return std::cbrt ((v - p.min) / (p.max - p.min));
         case Curve::Linear: break;
