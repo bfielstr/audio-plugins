@@ -3,9 +3,12 @@
 // static gain reduction at two settings, the output stage's gain over Drive and Feedback and its low bump, the
 // Mix law; then the FET's second harmonic (always in), Link, Mid/Side, the latency, switches, a NaN; the steps
 // (Drive and Feedback 1 .. 10 over the positions 1 .. 15, extrapolated above 10, stable at the top), the bass
-// enhancer ahead of the compressor (Bass 0: nothing of it runs; its latency), and the CPU budget. The enhancer
+// enhancer ahead of the compressor (Bass 0: nothing of it runs; its latency), Input's -48 .. +48 dB (its taper,
+// stable at +48), Bass Position (Post after the compressor, to the bit; Bass 0 the same at either place; the
+// latency at both; a move without a click), and the CPU budget. The enhancer
 // alone is tested against bubr's measurements in bass_tests.cpp.
 #include "pluginkit/testing/CpuClock.h"
+#include "BassEngine.h"
 #include "Engine.h"
 #include "Params.h"
 
@@ -527,6 +530,322 @@ TEST (bass_zero_is_the_compressor_alone)
             same = same && y[i] == a[i - (size_t)extra];
         CHECK (same && !e->bassRan (), "Bass Oversample %s at Bass 0: the compressor's sound, %d samples later", os == 1 ? "2x" : "4x", extra);
     }
+}
+
+TEST (input_spans_96_db)
+{
+    // -48 .. +48 dB on Curve::Centre: 0 dB at the centre (the default), the ends exact, finer around 0 dB than a
+    // linear span, typed values exact, monotonic
+    const auto& t = paramTable ();
+    const auto& in = t.info (kInput);
+    CHECK (in.min == -48.0 && in.max == 48.0 && in.def == 0.0 && in.curve == pk::Curve::Centre && defaultNormalized (kInput) == 0.5 &&
+               toPlain (kInput, 0.5) == 0.0 && toPlain (kInput, 0.0) == -48.0 && toPlain (kInput, 1.0) == 48.0,
+           "Input -48 .. +48 dB, 0 at the centre (%.17g, %.17g, %.17g)", toPlain (kInput, 0.0), toPlain (kInput, 0.5), toPlain (kInput, 1.0));
+    CHECK (std::fabs (toPlain (kInput, 0.51)) < 0.5 && std::fabs (toPlain (kInput, 0.75) - 15.0) < 1e-9,
+           "1 %% of the knob at the centre: %.2f dB; three quarters: %.2f dB", toPlain (kInput, 0.51), toPlain (kInput, 0.75));
+    int wrong = 0;
+    for (int k = -480; k <= 480; ++k)
+    {
+        const double v = k / 10.0;
+        wrong += toPlain (kInput, toNormalized (kInput, v)) == v ? 0 : 1;
+    }
+    CHECK (wrong == 0, "every 0.1 dB comes back exactly (%d not)", wrong);
+    bool up = true;
+    for (int i = 1; i <= 10000; ++i)
+        up = up && toPlain (kInput, i / 10000.0) > toPlain (kInput, (i - 1) / 10000.0);
+    CHECK (up && t.toText (kInput, toPlain (kInput, 1.0)) == "48.0 dB" && t.toText (kInput, toPlain (kInput, 0.0)) == "-48.0 dB",
+           "monotonic; the ends read %s and %s", t.toText (kInput, 48.0).c_str (), t.toText (kInput, -48.0).c_str ());
+    // the ends in the engine: the gain they say (uncompressed, Saturation 0: the stage is linear)
+    double g[3];
+    const double db[3] = {-48.0, 0.0, 48.0};
+    for (int k = 0; k < 3; ++k)
+    {
+        auto e = engine ([&] (Engine& e) {
+            e.setParam (kMix, 0.0);
+            e.setParam (kSaturation, 0.0);
+            e.setParam (kInput, db[k]);
+        });
+        g[k] = gainAt (*e, 1000.0, -70.0, 1.0);
+    }
+    CHECK (std::fabs (g[0] - g[1] + 48.0) < 0.01 && std::fabs (g[2] - g[1] - 48.0) < 0.01, "Input -48 / +48 dB: %.3f / %+.3f dB", g[0] - g[1],
+           g[2] - g[1]);
+}
+
+TEST (input_48_db_is_stable)
+{
+    // +48 dB into the compressor on a hot bass: finite, bounded, no restart (never silent), the FET at its floor,
+    // the detector's level finite; Soft Clip and Hard Clip hold it; with the corners of the chain
+    struct Case
+    {
+        const char* name;
+        std::function<void (Engine&)> set;
+        double maxPeak;
+    };
+    const Case cases[] = {
+        {"the defaults", [] (Engine&) {}, 8.0},
+        {"Saturation 0, Drive 10, Feedback 10",
+         [] (Engine& e) {
+             e.setParam (kSaturation, 0.0);
+             e.setParam (kDrive, 10);
+             e.setParam (kFeedback, 10);
+         },
+         64.0},
+        {"Saturation 100 %, Drive 10, Feedback 10",
+         [] (Engine& e) {
+             e.setParam (kSaturation, 1.0);
+             e.setParam (kDrive, 10);
+             e.setParam (kFeedback, 10);
+         },
+         4.0},
+        {"Mix 0, Ratio 1, R Soft",
+         [] (Engine& e) {
+             e.setParam (kMix, 0.0);
+             e.setParam (kRatio, 1);
+             e.setParam (kCurve, kRSoft);
+         },
+         64.0},
+        {"Mid/Side, unlinked, SC Filter 300 Hz",
+         [] (Engine& e) {
+             e.setParam (kMode, kMidSide);
+             e.setParam (kLink, 0.0);
+             e.setParam (kScFilter, 5);
+         },
+         8.0},
+        {"Bass 100 % Pre, 4x",
+         [] (Engine& e) {
+             e.setParam (kBass, 1.0);
+             e.setParam (kBassOversample, kBassOs4x);
+         },
+         8.0},
+        {"Bass 100 % Post, 4x",
+         [] (Engine& e) {
+             e.setParam (kBass, 1.0);
+             e.setParam (kBassPosition, kBassPost);
+             e.setParam (kBassOversample, kBassOs4x);
+         },
+         8.0},
+        {"Soft Clip and Hard Clip, Saturation 0",
+         [] (Engine& e) {
+             e.setParam (kSaturation, 0.0);
+             e.setParam (kSoftClip, 1.0);
+             e.setParam (kHardClip, 1.0);
+         },
+         1.0},
+        {"Bass 100 % Post, Hard Clip",
+         [] (Engine& e) {
+             e.setParam (kBass, 1.0);
+             e.setParam (kBassPosition, kBassPost);
+             e.setParam (kHardClip, 1.0);
+         },
+         1.0},
+    };
+    for (const Case& c : cases)
+    {
+        auto e = engine ([&] (Engine& e) {
+            c.set (e);
+            e.setParam (kInput, 48.0);
+        });
+        std::vector<float> r;
+        const auto x = bassLine (2.0, 3.0);
+        const auto y = run (*e, x, &r);
+        double peak = 0.0;
+        bool silent = false;
+        for (size_t i = 0; i < y.size (); ++i)
+            peak = std::max (peak, (double)std::max (std::fabs (y[i]), std::fabs (r[i])));
+        for (size_t a = 9600; a + 4800 <= y.size (); a += 4800)
+            silent = silent || rms (y, a, a + 4800) < 1e-3;
+        const double gr = e->grDb (0);
+        CHECK (finite (y) && finite (r) && peak <= c.maxPeak && !silent && gr > -25.5 && gr < -15.0 && std::isfinite (e->detectorDb ()),
+               "+48 dB, %s: peak %.2f (at most %.0f), GR %.1f dB, detector %.1f dB%s", c.name, peak, c.maxPeak, gr, e->detectorDb (),
+               silent ? ", restarted" : "");
+    }
+}
+
+TEST (bass_position_post_is_after_the_compressor)
+{
+    // Post: the enhancer on the compressor's output, to the bit: sunder at Bass 0 (Oversample off), then bubr's
+    // engine on its output at the same settings, is sunder at Bass 100 % Post; the compressor does not hear it
+    const auto x = bassLine (2.0);
+    for (int os : {0, 2})
+    {
+        auto dry = engine ([] (Engine& e) { e.setParam (kBassPosition, kBassPost); });
+        auto post = engine ([os] (Engine& e) {
+            e.setParam (kBassPosition, kBassPost);
+            e.setParam (kBassFreq, 55.0);
+            e.setParam (kBassGate, -60.0);
+            e.setParam (kBassIntensity, 0.8);
+            e.setParam (kBassOversample, os);
+            e.setParam (kBass, 1.0);
+        });
+        bass::Engine b;
+        b.setParam (bass::kDryWet, 0.0);
+        b.setParam (bass::kFreq, 55.0);
+        b.setParam (bass::kGate, -60.0);
+        b.setParam (bass::kIntensity, 0.8);
+        b.setParam (bass::kOversample, os);
+        b.prepare (kSr, Engine::kChunk);
+        std::vector<float> dr, pr;
+        const auto d = run (*dry, x, &dr, 512), p = run (*post, x, &pr, 512);
+        std::vector<float> wl (d.size ()), wr (d.size ());
+        for (size_t a = 0; a < d.size (); a += Engine::kChunk)
+        {
+            const int n = (int)std::min ((size_t)Engine::kChunk, d.size () - a);
+            b.process (d.data () + a, dr.data () + a, wl.data () + a, wr.data () + a, n);
+        }
+        CHECK (p == wl && pr == wr && post->bassRan (), "Bass 100 %% Post (Oversample %d): the enhancer on the compressor's output, exactly", os);
+        CHECK (post->grDb (0) == dry->grDb (0) && post->latency () == dry->latency () + b.latency (),
+               "Post: the compressor's gain reduction as without it (%.2f dB), the latency %d", post->grDb (0), post->latency ());
+    }
+    // and Pre is ahead of it: the compressor hears the added bass
+    auto setBass = [] (Engine& e) {
+        e.setParam (kBass, 1.0);
+        e.setParam (kBassFreq, 55.0);
+        e.setParam (kBassGate, -60.0);
+        e.setParam (kBassBoost, 1.1);
+    };
+    auto pre = engine (setBass);
+    auto post = engine ([&] (Engine& e) {
+        setBass (e);
+        e.setParam (kBassPosition, kBassPost);
+    });
+    auto none = engine ();
+    run (*pre, x);
+    run (*post, x);
+    run (*none, x);
+    CHECK (pre->grDb (0) < post->grDb (0) - 0.5 && post->grDb (0) == none->grDb (0), "gain reduction: Pre %.2f dB, Post %.2f dB, Bass 0 %.2f dB",
+           pre->grDb (0), post->grDb (0), none->grDb (0));
+    CHECK (paramTable ().info (kBassPosition).def == (double)kBassPre && paramTable ().toText (kBassPosition, kBassPre) == "Pre" &&
+               paramTable ().toText (kBassPosition, kBassPost) == "Post",
+           "Bass Position: Pre (the default) or Post");
+}
+
+TEST (bass_zero_is_the_same_at_either_place)
+{
+    // Bass 0: Pre and Post sound the same to the bit, and as the compressor alone (with Bass Oversample, both
+    // delayed by its latency); the latency is the same at both places, an impulse comes out at it (Bass 0 and 100 %)
+    const auto x = bassLine (1.0);
+    auto plain = engine ();
+    const auto a = run (*plain, x);
+    for (int os : {0, 1, 2})
+    {
+        auto pre = engine ([os] (Engine& e) {
+            e.setParam (kBassOversample, os);
+            e.setParam (kBassBoost, 1.1);
+            e.setParam (kBassFreq, 90.0);
+        });
+        auto post = engine ([os] (Engine& e) {
+            e.setParam (kBassOversample, os);
+            e.setParam (kBassBoost, 1.1);
+            e.setParam (kBassFreq, 90.0);
+            e.setParam (kBassPosition, kBassPost);
+        });
+        const int extra = pre->latency () - plain->latency ();
+        const auto yp = run (*pre, x), yq = run (*post, x);
+        bool same = true;
+        for (size_t i = (size_t)extra; i < yp.size (); ++i)
+            same = same && yp[i] == a[i - (size_t)extra];
+        CHECK (yp == yq && same && !pre->bassRan () && !post->bassRan () && pre->latency () == post->latency (),
+               "Bass 0, Oversample %d: Pre and Post the same, the compressor's sound %d samples later", os, extra);
+        for (double amount : {0.0, 1.0})
+            for (int place : {(int)kBassPre, (int)kBassPost})
+            {
+                auto e = engine ([&] (Engine& e) {
+                    e.setModelPositions (4.0, 5.0, 0.0);
+                    e.setParam (kBassOversample, os);
+                    e.setParam (kBass, amount);
+                    e.setParam (kBassPosition, place);
+                });
+                std::vector<float> imp ((size_t)kSr / 2, 0.0f);
+                imp[1000] = 0.01f;
+                const auto y = run (*e, imp);
+                size_t peak = 0;
+                for (size_t i = 0; i < y.size (); ++i)
+                    if (std::fabs (y[i]) > std::fabs (y[peak]))
+                        peak = i;
+                CHECK ((int)peak - 1000 == e->latency (), "Oversample %d, Bass %.0f %%, %s: the impulse at %d, the latency %d", os, amount * 100,
+                       place == kBassPre ? "Pre" : "Post", (int)peak - 1000, e->latency ());
+            }
+    }
+}
+
+TEST (bass_position_moves_without_a_click)
+{
+    // Pre to Post and back on a 60 Hz bass with the enhancer at 100 %: the output's second difference (where a
+    // click shows) around each move stays near what it is while the position holds; a hard cut between the two
+    // would not. Bass 0 without latency moves at once, to the bit.
+    const double kMove[3] = {0.6, 1.2, 1.8};
+    for (int os : {0, 2})
+    {
+        auto set = [os] (Engine& e) {
+            e.setParam (kBass, 1.0);
+            e.setParam (kBassFreq, 60.0);
+            e.setParam (kBassGate, -60.0);
+            e.setParam (kBassBoost, 1.1);
+            e.setParam (kBassOversample, os);
+        };
+        auto e = engine (set);
+        const auto x = sine (60.0, 2.4, 0.25);
+        std::vector<float> y (x.size ()), r (x.size ());
+        int place = kBassPre, moves = 0;
+        double moveDone = 0.0;
+        for (size_t a = 0; a < x.size (); a += 480)
+        {
+            const double t = (double)a / kSr;
+            const int want = (t >= kMove[0] && t < kMove[1]) || t >= kMove[2] ? kBassPost : kBassPre;
+            if (want != place)
+            {
+                place = want;
+                e->setParam (kBassPosition, place);
+                ++moves;
+            }
+            e->process (x.data () + a, x.data () + a, y.data () + a, r.data () + a, 480);
+            if (e->moving ())
+                moveDone = std::max (moveDone, (double)(a + 480) / kSr);
+        }
+        auto d2 = [] (const std::vector<float>& v, size_t a, size_t b) {
+            double m = 0.0;
+            for (size_t i = std::max<size_t> (a, 2); i < b && i < v.size (); ++i)
+                m = std::max (m, std::fabs ((double)v[i] - 2.0 * v[i - 1] + v[i - 2]));
+            return m;
+        };
+        // steady: the 0.25 s before each move; moving: the 0.1 s after it
+        double steady = 0.0, moving = 0.0;
+        for (double t : kMove)
+        {
+            steady = std::max (steady, d2 (y, (size_t)((t - 0.3) * kSr), (size_t)((t - 0.05) * kSr)));
+            moving = std::max (moving, d2 (y, (size_t)(t * kSr), (size_t)((t + 0.1) * kSr)));
+        }
+        // a hard cut: steady Pre and steady Post spliced (its worst place over a cycle)
+        auto pre = engine (set), post = engine ([&] (Engine& e) {
+            set (e);
+            e.setParam (kBassPosition, kBassPost);
+        });
+        const auto yp = run (*pre, x), yq = run (*post, x);
+        double cutPeak = 0.0;
+        for (size_t at = (size_t)(0.6 * kSr); at < (size_t)(0.6 * kSr) + 800; at += 7)
+        {
+            std::vector<float> cut (yp.begin () + (long)at - 4, yp.begin () + (long)at);
+            cut.insert (cut.end (), yq.begin () + (long)at, yq.begin () + (long)at + 4);
+            cutPeak = std::max (cutPeak, d2 (cut, 0, cut.size ()));
+        }
+        CHECK (finite (y) && moves == 3 && moving < 1.25 * steady + 1e-4, "Oversample %d: second difference %.5f moving, %.5f steady", os, moving,
+               steady);
+        CHECK (cutPeak > 2.0 * steady, "(a hard cut would show: %.5f)", cutPeak);
+        CHECK (!e->moving () && moveDone < kMove[2] + Engine::kMoveHoldSec + Engine::kMoveSec + 0.03, "the moves end (the last by %.3f s)", moveDone);
+    }
+    // Bass 0, Oversample off: at once, the same output as never moving
+    auto still = engine (), moved = engine ();
+    const auto x = bassLine (1.0);
+    std::vector<float> ys (x.size ()), ym (x.size ()), r (x.size ());
+    bool fade = false;
+    for (size_t a = 0; a < x.size (); a += 480)
+    {
+        moved->setParam (kBassPosition, (double)((a / 4800) % 2));
+        still->process (x.data () + a, x.data () + a, ys.data () + a, r.data () + a, 480);
+        moved->process (x.data () + a, x.data () + a, ym.data () + a, r.data () + a, 480);
+        fade = fade || moved->moving ();
+    }
+    CHECK (ys == ym && !fade, "Bass 0: moving Bass Position changes nothing (no crossfade)");
 }
 
 TEST (recovers_from_nan)

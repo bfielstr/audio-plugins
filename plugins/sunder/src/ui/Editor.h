@@ -15,8 +15,8 @@ class Editor : public pk::EditorBase
 {
 public:
     // Classic: the display across the top (the output stage's response at the left, the compression curve at the
-    // right); under it COMPRESSOR, GERMANIUM and OUTPUT side by side, and under them BASS (the bass enhancer ahead
-    // of the compressor) across the window. An arranged layout (Wide) builds the display narrower and as tall as
+    // right); under it COMPRESSOR, GERMANIUM and OUTPUT side by side, and under them BASS (the bass enhancer, ahead
+    // of the compressor or after it) across the window. An arranged layout (Wide) builds the display narrower and as tall as
     // the panels' row, beside them; BASS is the second row.
     static constexpr double kWidth = 760.0;
     static constexpr double kTop = 40.0, kDisplayBottom = 240.0;
@@ -24,7 +24,8 @@ public:
     static constexpr double kRowTop = 248.0, kRowBottom = 464.0;
     static constexpr double kBassTop = kRowBottom + 8.0, kBassBottom = kBassTop + 176.0;
     static constexpr double kHeight = kBassBottom + 8.0;
-    // BASS: Bass and the effect's knobs in the first row (then x2 and Oversample), the gate's and Low Cut in the second
+    // BASS: Bass and the effect's knobs in the first row (then x2 and Oversample), the gate's and Low Cut in the
+    // second (then Bass Position)
     static constexpr double kBassLeft = 8.0, kBassRight = 752.0;
     static constexpr double kBassKnobW = 76.0, kBassPitch = 82.0;
     // the panels' places (left, right)

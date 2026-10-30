@@ -143,67 +143,91 @@ std::complex<double> stageResponse (const StageParams& s, double hz)
     return h * (wh * wh) / quad (s.fh, s.qh);
 }
 
+
 Engine::Engine () {}
+
+void Engine::prepareComp (Comp& k)
+{
+    for (auto& o : k.os)
+        o.prepare (sr, kChunk);
+    for (auto& o : k.scOs)
+        o.prepare (sr, kChunk);
+    for (int c = 0; c < 2; ++c)
+    {
+        k.up[c].assign ((size_t)(kChunk * kOversample), 0.0f);
+        k.scUp[c].assign ((size_t)(kChunk * kOversample), 0.0f);
+        k.wet[c].assign ((size_t)kChunk, 0.0f);
+    }
+}
 
 void Engine::prepare (double sampleRate, int /*maxBlock*/) // (it works in chunks of kChunk)
 {
     sr = sampleRate > 1000.0 ? sampleRate : 48000.0;
     srOs = sr * kOversample;
-    for (auto& o : os)
-        o.prepare (sr, kChunk);
-    for (auto& o : scOs)
-        o.prepare (sr, kChunk);
-    osLatency = os[0].latency ();
-    for (int c = 0; c < 2; ++c)
-    {
-        up[c].assign ((size_t)(kChunk * kOversample), 0.0f);
-        scUp[c].assign ((size_t)(kChunk * kOversample), 0.0f);
-        wet[c].assign ((size_t)kChunk, 0.0f);
-    }
+    for (auto& k : comp)
+        prepareComp (k);
+    osLatency = comp[0].os[0].latency ();
     cSmooth = coefFor (0.02, sr);
     hp1G = dsp::onePoleG (shape::kHp1Hz, srOs);
     hp2G = dsp::onePoleG (shape::kHp2Hz, srOs);
     satDcG = dsp::onePoleG (5.0, srOs);
     kSm = coefFor (shape::kSmoothSec, srOs);
-    bass.prepare (sr, kChunk);
+    bassPre.prepare (sr, kChunk);
+    bassPost.prepare (sr, kChunk);
 
     for (uint32_t id = 0; id < kNumParams; ++id)
         setParam (id, p[id]);
     reset ();
 }
 
-void Engine::reset ()
+void Engine::resetComp (Comp& k)
 {
-    for (auto& o : os)
+    for (auto& o : k.os)
         o.reset ();
-    for (auto& o : scOs)
+    for (auto& o : k.scOs)
         o.reset ();
     for (int c = 0; c < 2; ++c)
     {
-        hp1[c].reset ();
-        hp2[c].reset ();
-        scLp[c].reset ();
-        peak[c] = smooth[c] = 0.0;
-        grNow[c] = 0.0;
-        for (auto& s : svf)
+        k.hp1[c].reset ();
+        k.hp2[c].reset ();
+        k.scLp[c].reset ();
+        k.peak[c] = k.smooth[c] = 0.0;
+        k.grNow[c] = 0.0;
+        for (auto& s : k.svf)
             s[c].reset ();
-        satDc[c].reset ();
+        k.satDc[c].reset ();
     }
-    levelNow = -120.0;
-    inGain = dbToGain (p[kInput]);
-    scGain = dbToGain (p[kScGain]);
-    ratio = ratioT;
-    attack = p[kAttack];
-    release = p[kRelease];
-    mix = std::clamp (p[kMix], 0.0, 1.0);
-    drive = driveT;
-    feedback = feedbackT;
-    bass.reset ();
-    bassActive = false;
-    satAmt = std::clamp (p[kSaturation], 0.0, 1.0);
+    k.levelNow = -120.0;
+    k.inGain = dbToGain (p[kInput]);
+    k.scGain = dbToGain (p[kScGain]);
+    k.ratio = ratioT;
+    k.attack = p[kAttack];
+    k.release = p[kRelease];
+    k.mix = std::clamp (p[kMix], 0.0, 1.0);
+    k.drive = driveT;
+    k.feedback = feedbackT;
+    k.satAmt = std::clamp (p[kSaturation], 0.0, 1.0);
+    k.shownDrive = k.shownFeedback = -1.0;
+    controlChunk (k);
+}
+
+void Engine::reset ()
+{
+    for (auto& k : comp)
+        resetComp (k);
+    preComp = 0;
+    bassPre.reset ();
+    bassPost.reset ();
+    preActive = postActive = false;
+    // Bass Position at its place at once
+    target = p[kBassPosition] >= 0.5 ? kBassPost : kBassPre;
+    xf = (double)target;
+    moveHold = 0;
+    for (int c = 0; c < 2; ++c)
+        for (int i = 0; i < kHist; ++i)
+            histIn[c][i] = histComp[c][i] = 0.0f;
+    histPos = 0;
     out = (float)dbToGain (p[kOutput]);
-    shownDrive = shownFeedback = -1.0;
-    controlChunk ();
 }
 
 void Engine::setParam (uint32_t id, double plain)
@@ -211,27 +235,30 @@ void Engine::setParam (uint32_t id, double plain)
     if (id >= kNumParams)
         return;
     p[id] = plain;
-    // (read where they are used; the old end saturator's and Dirty are retired)
+    // (read where they are used; the old end saturator's and Dirty are retired; Bass Position by process)
     if (id == kRatio)
         ratioT = std::clamp (plain, 1.0, (double)kSteps);
     else if (id == kDrive)
         driveT = stagePosition (std::clamp (plain, 1.0, (double)kSteps));
     else if (id == kFeedback)
         feedbackT = stagePosition (std::clamp (plain, 1.0, (double)kSteps));
-    else if (id >= kBass)
+    else if (id >= kBass && id <= kBassOversample)
         bassParam (id);
 }
 
-// A bass enhancer parameter to its engine: Bass is its Dry/Wet from -100 % (0) to 0 % (100 %), the others are
-// bubr's own.
+// A bass enhancer parameter to its engines (both places): Bass is its Dry/Wet from -100 % (0) to 0 % (100 %),
+// the others are bubr's own.
 void Engine::bassParam (uint32_t id)
 {
-    if (id == kBass)
-        bass.setParam (bass::kDryWet, std::clamp (p[kBass], 0.0, 1.0) - 1.0);
-    else if (id == kBassOversample)
-        bass.setParam (bass::kOversample, p[id]);
-    else if (id < kBassOversample)
-        bass.setParam (bass::kBoost + (id - kBassBoost), p[id]);
+    for (bass::Engine* b : {&bassPre, &bassPost})
+    {
+        if (id == kBass)
+            b->setParam (bass::kDryWet, std::clamp (p[kBass], 0.0, 1.0) - 1.0);
+        else if (id == kBassOversample)
+            b->setParam (bass::kOversample, p[id]);
+        else if (id < kBassOversample)
+            b->setParam (bass::kBoost + (id - kBassBoost), p[id]);
+    }
 }
 
 void Engine::setModelPositions (double ratioPos, double drivePos, double feedbackPos)
@@ -242,248 +269,371 @@ void Engine::setModelPositions (double ratioPos, double drivePos, double feedbac
 }
 
 // The output stage's sections for the drive and feedback now (only when they moved).
-void Engine::stageCoefs ()
+void Engine::stageCoefs (Comp& k)
 {
-    if (std::fabs (drive - shownDrive) < 1e-6 && std::fabs (feedback - shownFeedback) < 1e-6)
+    if (std::fabs (k.drive - k.shownDrive) < 1e-6 && std::fabs (k.feedback - k.shownFeedback) < 1e-6)
         return;
-    shownDrive = drive;
-    shownFeedback = feedback;
-    const StageParams s = stageAt (drive, feedback);
+    k.shownDrive = k.drive;
+    k.shownFeedback = k.feedback;
+    const StageParams s = stageAt (k.drive, k.feedback);
     auto set = [this] (Section& x, double f, double q) {
         x.c.k = 1.0 / std::max (0.05, q);
         x.c.set (std::tan (dsp::kPi * std::min (f, 0.45 * srOs) / srOs));
     };
     // two resonant high-passes, a section with the free zeros, the high peak (a low-pass)
-    set (sec[0], s.fa, s.qa);
-    sec[0].mHp = 1.0, sec[0].mBp = 0.0, sec[0].mLp = 0.0;
-    set (sec[1], s.fb, s.qb);
-    sec[1].mHp = 1.0, sec[1].mBp = 0.0, sec[1].mLp = 0.0;
-    set (sec[2], s.fc, s.qc);
+    set (k.sec[0], s.fa, s.qa);
+    k.sec[0].mHp = 1.0, k.sec[0].mBp = 0.0, k.sec[0].mLp = 0.0;
+    set (k.sec[1], s.fb, s.qb);
+    k.sec[1].mHp = 1.0, k.sec[1].mBp = 0.0, k.sec[1].mLp = 0.0;
+    set (k.sec[2], s.fc, s.qc);
     const double rz = s.fz / s.fc;
-    sec[2].mHp = 1.0, sec[2].mBp = rz / s.qz, sec[2].mLp = rz * rz;
-    set (sec[3], s.fh, s.qh);
-    sec[3].mHp = 0.0, sec[3].mBp = 0.0, sec[3].mLp = 1.0;
-    stageGain = dbToGain (s.gainDb);
+    k.sec[2].mHp = 1.0, k.sec[2].mBp = rz / s.qz, k.sec[2].mLp = rz * rz;
+    set (k.sec[3], s.fh, s.qh);
+    k.sec[3].mHp = 0.0, k.sec[3].mBp = 0.0, k.sec[3].mLp = 1.0;
+    k.stageGain = dbToGain (s.gainDb);
 }
 
 // Once a chunk: the timing, the sidechain filter and the output stage.
-void Engine::controlChunk ()
+void Engine::controlChunk (Comp& k)
 {
     const double c = std::min (1.0, cSmooth * kChunk);
-    glide (ratio, ratioT, c, 1e-6);
-    glide (attack, p[kAttack], c, 1e-6);
-    glide (release, p[kRelease], c, 1e-6);
-    glide (drive, driveT, c, 1e-6);
-    glide (feedback, feedbackT, c, 1e-6);
-    glide (satAmt, std::clamp (p[kSaturation], 0.0, 1.0), c, 1e-6);
+    glide (k.ratio, ratioT, c, 1e-6);
+    glide (k.attack, p[kAttack], c, 1e-6);
+    glide (k.release, p[kRelease], c, 1e-6);
+    glide (k.drive, driveT, c, 1e-6);
+    glide (k.feedback, feedbackT, c, 1e-6);
+    glide (k.satAmt, std::clamp (p[kSaturation], 0.0, 1.0), c, 1e-6);
     // the loop's gain: 30 at Feedback 0 down to about 1 at 10 (0.17 at 15: little feedback, warm early); the
     // headroom: +6 dBFS at 0 % .. -12 dBFS at 100 %
-    satLoop = 30.0 * std::pow (10.0, -0.15 * feedback);
-    satHead = dbToGain (6.0 - 18.0 * satAmt);
+    k.satLoop = 30.0 * std::pow (10.0, -0.15 * k.feedback);
+    k.satHead = dbToGain (6.0 - 18.0 * k.satAmt);
     // the loop has no memory: its curve, tabulated when its gain moves, is read per sample
-    if (std::fabs (satLoop - satTabLoop) > 1e-9)
+    if (std::fabs (k.satLoop - k.satTabLoop) > 1e-9)
     {
-        satTabLoop = satLoop;
+        k.satTabLoop = k.satLoop;
         double x = 0.0;
         for (int i = kSatHalf; i <= 2 * kSatHalf; ++i)
-            satTab[i] = germLoop ((i - kSatHalf) * kSatStep, satLoop, x);
+            k.satTab[i] = germLoop ((i - kSatHalf) * kSatStep, k.satLoop, x);
         x = 0.0;
         for (int i = kSatHalf; i >= 0; --i)
-            satTab[i] = germLoop ((i - kSatHalf) * kSatStep, satLoop, x);
+            k.satTab[i] = germLoop ((i - kSatHalf) * kSatStep, k.satLoop, x);
     }
-    kAtk = coefFor (tableTime (shape::kAttackSec, attack), srOs);
-    kRel = coefFor (tableTime (shape::kReleaseSec, release), srOs);
+    k.kAtk = coefFor (tableTime (shape::kAttackSec, k.attack), srOs);
+    k.kRel = coefFor (tableTime (shape::kReleaseSec, k.release), srOs);
     const int sf = std::clamp ((int)std::lround (p[kScFilter]), 0, kNumScFilters - 1);
     if (sf > 0)
     {
-        scPoleW = shape::kScPoleHz[sf - 1];
-        scZeroW = shape::kScZeroHz[sf - 1];
-        scPoleG = dsp::onePoleG (scPoleW, srOs);
+        k.scPoleW = shape::kScPoleHz[sf - 1];
+        k.scZeroW = shape::kScZeroHz[sf - 1];
+        k.scPoleG = dsp::onePoleG (k.scPoleW, srOs);
     }
     else
-        scPoleG = 0.0;
-    stageCoefs ();
+        k.scPoleG = 0.0;
+    stageCoefs (k);
+}
+
+void Engine::compChunk (Comp& k, const float* inL, const float* inR, const float* sl, const float* sr2, int a, int m, double (*res)[kChunk])
+{
+    const double restDb = shape::kRestDb;
+    const double ln10over20 = dsp::kLn10 / 20.0;
+    const bool ext = blk.ext, midSide = blk.midSide, link = blk.link;
+    const int curve = blk.curve;
+    controlChunk (k);
+    const bool scOn = k.scPoleG > 0.0;
+    const double scShelf = scOn ? k.scZeroW / k.scPoleW : 1.0;
+
+    // the base rate: Mid/Side and Input (and the sidechain input's, for Ext SC)
+    float in[2][kChunk], sc[2][kChunk];
+    double mixAt[kChunk];
+    for (int i = 0; i < m; ++i)
+    {
+        glide (k.inGain, blk.inT, cSmooth);
+        glide (k.scGain, blk.scT, cSmooth);
+        glide (k.mix, blk.mixT, cSmooth);
+        mixAt[i] = k.mix;
+        double l = inL[i], r = inR[i];
+        double s0 = ext ? sl[a + i] : 0.0, s1 = ext ? (sr2 ? sr2[a + i] : sl[a + i]) : 0.0;
+        if (midSide)
+        {
+            const double mid = 0.5 * (l + r), side = 0.5 * (l - r);
+            l = mid;
+            r = side;
+            const double smid = 0.5 * (s0 + s1), sside = 0.5 * (s0 - s1);
+            s0 = smid;
+            s1 = sside;
+        }
+        in[0][i] = (float)(l * k.inGain);
+        in[1][i] = (float)(r * k.inGain);
+        sc[0][i] = (float)(s0 * k.scGain);
+        sc[1][i] = (float)(s1 * k.scGain);
+    }
+
+    // 4x: the compressor, Mix and the output stage
+    k.os[0].up (in[0], k.up[0].data (), m);
+    k.os[1].up (in[1], k.up[1].data (), m);
+    if (ext)
+    {
+        k.scOs[0].up (sc[0], k.scUp[0].data (), m);
+        k.scOs[1].up (sc[1], k.scUp[1].data (), m);
+    }
+    for (int j = 0; j < m * kOversample; ++j)
+    {
+        const double mx = mixAt[j / kOversample];
+        double x[2] = {k.up[0][(size_t)j], k.up[1][(size_t)j]};
+        // the detector: the high-passes, SC Filter's shelf, the rectifier
+        double rect[2];
+        for (int c = 0; c < 2; ++c)
+        {
+            const double d = ext ? (double)k.scUp[c][(size_t)j] : x[c];
+            double h = d - k.hp1[c].lp (d, hp1G);
+            h -= k.hp2[c].lp (h, hp2G);
+            if (scOn)
+            {
+                const double lp = k.scLp[c].lp (h, k.scPoleG);
+                h = (h - lp) + scShelf * lp;
+            }
+            const double r = h > 0.0 ? h : -shape::kNegative * h;
+            // the knee's diodes ahead of the capacitor
+            rect[c] = (std::pow (1.0 + r * (1.0 / shape::kR0), shape::kGamma) - 1.0) * (1.0 / shape::kGamma);
+        }
+        if (link)
+            rect[0] = rect[1] = std::max (rect[0], rect[1]);
+        const int nDet = link ? 1 : 2;
+        double gr[2];
+        for (int c = 0; c < nDet; ++c)
+        {
+            double& pk = k.peak[c];
+            if (rect[c] > pk)
+                pk += (rect[c] - pk) * k.kAtk;
+            pk -= pk * k.kRel;
+            k.smooth[c] += (pk - k.smooth[c]) * kSm;
+            const double u = levelOf (k.smooth[c]);
+            gr[c] = staticGrDb (curve, k.ratio, u);
+            if (c == 0)
+                k.levelNow = u;
+        }
+        if (link)
+        {
+            gr[1] = gr[0];
+            k.peak[1] = k.peak[0];
+            k.smooth[1] = k.smooth[0];
+        }
+        for (int c = 0; c < 2; ++c)
+        {
+            k.grNow[c] = gr[c];
+            const double g = std::exp ((gr[c] + restDb) * ln10over20);
+            double w = x[c];
+            {
+                // the FET's second harmonic (held back for very hot signals)
+                const double kd = shape::kDirtyK * std::min (1.0, std::exp ((gr[c] - shape::kDirtyKneeDb) * ln10over20));
+                const double x2 = x[c] * x[c];
+                w += kd * x2 / (1.0 + x2 * x2 * (1.0 / 256.0));
+            }
+            double y = mx * g * w + (1.0 - mx) * x[c];
+            // the output stage
+            for (int s = 0; s < 4; ++s)
+            {
+                double lp;
+                const double bp = k.svf[s][c].tick (y, k.sec[s].c, lp);
+                const double hp = y - k.sec[s].c.k * bp - lp;
+                y = k.sec[s].mHp * hp + k.sec[s].mBp * bp + k.sec[s].mLp * lp;
+            }
+            y *= k.stageGain;
+            // the germanium transistor (its distortion's DC blocked; at 0 % the stage stays linear)
+            if (k.satAmt > 0.0)
+            {
+                // (held to the curve's table first, 16 times the headroom, where the curve is flat: what is
+                // over it would only leak past the distortion's DC blocker; Drive and Feedback near 10 reach it)
+                const double lim = kSatHalf * kSatStep * k.satHead;
+                if (std::isfinite (y))
+                    y = std::clamp (y, -lim, lim);
+                double u = y / k.satHead;
+                u = std::isfinite (u) ? std::clamp (u, -kSatHalf * kSatStep, kSatHalf * kSatStep) : 0.0; // (a NaN reads the middle)
+                const double v = u / kSatStep + kSatHalf;
+                const int i0 = std::min (2 * kSatHalf - 1, (int)v);
+                const double z = k.satHead * (k.satTab[i0] + (k.satTab[i0 + 1] - k.satTab[i0]) * (v - i0));
+                const double d = (z - y) * std::min (1.0, k.satAmt * 20.0); // (fades in over the first 5 %)
+                y += d - k.satDc[c].lp (d, satDcG);
+            }
+            k.up[c][(size_t)j] = (float)y;
+        }
+    }
+    k.os[0].down (k.up[0].data (), k.wet[0].data (), m);
+    k.os[1].down (k.up[1].data (), k.wet[1].data (), m);
+
+    // Mid/Side back
+    for (int i = 0; i < m; ++i)
+    {
+        double l = k.wet[0][(size_t)i], r = k.wet[1][(size_t)i];
+        if (midSide)
+        {
+            const double mid = l, side = r;
+            l = mid + side;
+            r = mid - side;
+        }
+        res[0][i] = l;
+        res[1][i] = r;
+    }
+}
+
+bool Engine::bassChunk (bass::Engine& b, bool on, const float* inL, const float* inR, float* oL, float* oR, int m)
+{
+    if (on)
+        b.process (inL, inR, oL, oR, m);
+    else if (b.latency () > 0)
+        b.processDry (inL, inR, oL, oR, m); // (Bass 0: only its dry path's delay, Bass Oversample's latency)
+    else
+        return false;
+    return true;
+}
+
+// Bass Position moves to `to`. With the enhancer silent and no latency both chains would be the same: the chain
+// playing takes the other place at once. Otherwise the chain that comes in starts as a copy of the one playing,
+// its enhancer's latency delay filled from the last input (Pre) or the last compressor output (Post); it runs
+// unheard for kMoveHoldSec (the enhancer's own attack, the compressor's step to its new input) and then they
+// crossfade.
+void Engine::startMove (int to)
+{
+    const int from = target;
+    target = to;
+    if (xf != (double)from) // (back while it moves: the crossfade turns round)
+        return;
+    bass::Engine& b = to == kBassPre ? bassPre : bassPost;
+    b.reset ();
+    (to == kBassPre ? preActive : postActive) = false;
+    const int lat = bassPre.latency ();
+    if (lat == 0 && !bassOn (from == kBassPre ? bassPre : bassPost, from == kBassPre ? preActive : postActive))
+    {
+        preComp = 1 - preComp;
+        xf = (double)to;
+        preActive = postActive = false;
+        return;
+    }
+    compFor (to) = compFor (from);
+    const int n = std::min (lat, kHist);
+    if (n > 0)
+    {
+        float l[kHist], r[kHist], tl[kHist], tr[kHist];
+        const float (*h)[kHist] = to == kBassPre ? histIn : histComp;
+        for (int i = 0; i < n; ++i)
+        {
+            const int k = (histPos - n + i + kHist) % kHist;
+            l[i] = h[0][k];
+            r[i] = h[1][k];
+        }
+        b.processDry (l, r, tl, tr, n);
+    }
+    moveHold = lat + (int)(kMoveHoldSec * sr);
 }
 
 void Engine::process (const float* xl, const float* xr, float* yl, float* yr, int n, const float* sl, const float* sr2)
 {
     const pk::NoDenormals guard;
-    const double inT = dbToGain (p[kInput]);
-    const double scT = dbToGain (p[kScGain]);
-    const bool ext = p[kExtSc] >= 0.5 && sl != nullptr;
+    blk.inT = dbToGain (p[kInput]);
+    blk.scT = dbToGain (p[kScGain]);
+    blk.ext = p[kExtSc] >= 0.5 && sl != nullptr;
+    blk.midSide = p[kMode] >= 0.5;
+    blk.link = p[kLink] >= 0.5;
+    blk.curve = std::clamp ((int)std::lround (p[kCurve]), 0, kNumCurves - 1);
+    blk.mixT = std::clamp (p[kMix], 0.0, 1.0);
     const float outT = (float)dbToGain (p[kOutput]);
     const float smoothOut = (float)cSmooth;
-    const bool midSide = p[kMode] >= 0.5;
-    const bool link = p[kLink] >= 0.5;
-    const int curve = std::clamp ((int)std::lround (p[kCurve]), 0, kNumCurves - 1);
-    const double mixT = std::clamp (p[kMix], 0.0, 1.0);
-    const double restDb = shape::kRestDb;
-    const double ln10over20 = dsp::kLn10 / 20.0;
 
-    // the bass enhancer: while Bass is up, or gliding down to 0; at 0 only its dry path's delay (Bass
-    // Oversample), or nothing at all
-    const bool bassOn = p[kBass] > 0.0 || (bassActive && !bass.dryOnly ());
-    bassActive = bassOn;
-    const bool bassDelay = !bassOn && bass.latency () > 0;
+    // Bass Position: a move crossfades the two chains over kMoveSec
+    const int pos = p[kBassPosition] >= 0.5 ? kBassPost : kBassPre;
+    if (pos != target)
+        startMove (pos);
+    const double moveStep = 1.0 / (kMoveSec * sr);
+
+    // the bass enhancer at each place: while Bass is up, or gliding down to 0; at 0 only its dry path's delay
+    // (Bass Oversample), or nothing at all
+    const bool preOn = bassOn (bassPre, preActive), postOn = bassOn (bassPost, postActive);
 
     for (int a = 0; a < n; a += kChunk)
     {
         const int m = std::min (kChunk, n - a);
-        controlChunk ();
-        float bl[kChunk], br[kChunk];
+        const bool moving = xf != (double)target;
+        const bool runPre = moving || target == kBassPre, runPost = moving || target == kBassPost;
+        double pre[2][kChunk], post[2][kChunk];
         const float* inL = xl + a;
         const float* inR = xr + a;
-        if (bassOn || bassDelay)
+        Comp& kPre = comp[preComp];
+        Comp& kPost = comp[1 - preComp];
+        if (runPre)
         {
-            if (bassOn)
-                bass.process (inL, inR, bl, br, m);
-            else
-                bass.processDry (inL, inR, bl, br, m);
-            inL = bl;
-            inR = br;
+            preActive = preOn;
+            float bl[kChunk], br[kChunk];
+            const bool through = bassChunk (bassPre, preOn, inL, inR, bl, br, m);
+            compChunk (kPre, through ? bl : inL, through ? br : inR, sl, sr2, a, m, pre);
+            for (int i = 0; i < m; ++i) // (what a move to Post starts the enhancer's delay from)
+            {
+                histComp[0][(histPos + i) % kHist] = (float)pre[0][i];
+                histComp[1][(histPos + i) % kHist] = (float)pre[1][i];
+            }
         }
-        const bool scOn = scPoleG > 0.0;
-        const double scShelf = scOn ? scZeroW / scPoleW : 1.0;
+        if (runPost)
+        {
+            postActive = postOn;
+            compChunk (kPost, inL, inR, sl, sr2, a, m, post);
+            float cl[kChunk], cr[kChunk], bl[kChunk], br[kChunk];
+            for (int i = 0; i < m; ++i)
+            {
+                cl[i] = (float)post[0][i];
+                cr[i] = (float)post[1][i];
+            }
+            if (bassChunk (bassPost, postOn, cl, cr, bl, br, m))
+                for (int i = 0; i < m; ++i)
+                {
+                    post[0][i] = bl[i];
+                    post[1][i] = br[i];
+                }
+        }
+        for (int i = 0; i < m; ++i) // (what a move to Pre starts the enhancer's delay from)
+        {
+            histIn[0][histPos] = inL[i];
+            histIn[1][histPos] = inR[i];
+            histPos = (histPos + 1) % kHist;
+        }
 
-        // the base rate: Mid/Side and Input (and the sidechain input's, for Ext SC)
-        float in[2][kChunk], sc[2][kChunk];
-        double mixAt[kChunk];
-        for (int i = 0; i < m; ++i)
-        {
-            glide (inGain, inT, cSmooth);
-            glide (scGain, scT, cSmooth);
-            glide (mix, mixT, cSmooth);
-            mixAt[i] = mix;
-            double l = inL[i], r = inR[i];
-            double s0 = ext ? sl[a + i] : 0.0, s1 = ext ? (sr2 ? sr2[a + i] : sl[a + i]) : 0.0;
-            if (midSide)
-            {
-                const double mid = 0.5 * (l + r), side = 0.5 * (l - r);
-                l = mid;
-                r = side;
-                const double smid = 0.5 * (s0 + s1), sside = 0.5 * (s0 - s1);
-                s0 = smid;
-                s1 = sside;
-            }
-            in[0][i] = (float)(l * inGain);
-            in[1][i] = (float)(r * inGain);
-            sc[0][i] = (float)(s0 * scGain);
-            sc[1][i] = (float)(s1 * scGain);
-        }
-
-        // 4x: the compressor, Mix and the output stage
-        os[0].up (in[0], up[0].data (), m);
-        os[1].up (in[1], up[1].data (), m);
-        if (ext)
-        {
-            scOs[0].up (sc[0], scUp[0].data (), m);
-            scOs[1].up (sc[1], scUp[1].data (), m);
-        }
-        for (int j = 0; j < m * kOversample; ++j)
-        {
-            const double mx = mixAt[j / kOversample];
-            double x[2] = {up[0][(size_t)j], up[1][(size_t)j]};
-            // the detector: the high-passes, SC Filter's shelf, the rectifier
-            double rect[2];
-            for (int c = 0; c < 2; ++c)
-            {
-                const double d = ext ? (double)scUp[c][(size_t)j] : x[c];
-                double h = d - hp1[c].lp (d, hp1G);
-                h -= hp2[c].lp (h, hp2G);
-                if (scOn)
-                {
-                    const double lp = scLp[c].lp (h, scPoleG);
-                    h = (h - lp) + scShelf * lp;
-                }
-                const double r = h > 0.0 ? h : -shape::kNegative * h;
-                // the knee's diodes ahead of the capacitor
-                rect[c] = (std::pow (1.0 + r * (1.0 / shape::kR0), shape::kGamma) - 1.0) * (1.0 / shape::kGamma);
-            }
-            if (link)
-                rect[0] = rect[1] = std::max (rect[0], rect[1]);
-            const int nDet = link ? 1 : 2;
-            double gr[2];
-            for (int c = 0; c < nDet; ++c)
-            {
-                double& pk = peak[c];
-                if (rect[c] > pk)
-                    pk += (rect[c] - pk) * kAtk;
-                pk -= pk * kRel;
-                smooth[c] += (pk - smooth[c]) * kSm;
-                const double u = levelOf (smooth[c]);
-                gr[c] = staticGrDb (curve, ratio, u);
-                if (c == 0)
-                    levelNow = u;
-            }
-            if (link)
-            {
-                gr[1] = gr[0];
-                peak[1] = peak[0];
-                smooth[1] = smooth[0];
-            }
-            for (int c = 0; c < 2; ++c)
-            {
-                grNow[c] = gr[c];
-                const double g = std::exp ((gr[c] + restDb) * ln10over20);
-                double w = x[c];
-                {
-                    // the FET's second harmonic (held back for very hot signals)
-                    const double k = shape::kDirtyK * std::min (1.0, std::exp ((gr[c] - shape::kDirtyKneeDb) * ln10over20));
-                    const double x2 = x[c] * x[c];
-                    w += k * x2 / (1.0 + x2 * x2 * (1.0 / 256.0));
-                }
-                double y = mx * g * w + (1.0 - mx) * x[c];
-                // the output stage
-                for (int s = 0; s < 4; ++s)
-                {
-                    double lp;
-                    const double bp = svf[s][c].tick (y, sec[s].c, lp);
-                    const double hp = y - sec[s].c.k * bp - lp;
-                    y = sec[s].mHp * hp + sec[s].mBp * bp + sec[s].mLp * lp;
-                }
-                y *= stageGain;
-                // the germanium transistor (its distortion's DC blocked; at 0 % the stage stays linear)
-                if (satAmt > 0.0)
-                {
-                    // (held to the curve's table first, 16 times the headroom, where the curve is flat: what is
-                    // over it would only leak past the distortion's DC blocker; Drive and Feedback near 10 reach it)
-                    const double lim = kSatHalf * kSatStep * satHead;
-                    if (std::isfinite (y))
-                        y = std::clamp (y, -lim, lim);
-                    double u = y / satHead;
-                    u = std::isfinite (u) ? std::clamp (u, -kSatHalf * kSatStep, kSatHalf * kSatStep) : 0.0; // (a NaN reads the middle)
-                    const double v = u / kSatStep + kSatHalf;
-                    const int i0 = std::min (2 * kSatHalf - 1, (int)v);
-                    const double z = satHead * (satTab[i0] + (satTab[i0 + 1] - satTab[i0]) * (v - i0));
-                    const double d = (z - y) * std::min (1.0, satAmt * 20.0); // (fades in over the first 5 %)
-                    y += d - satDc[c].lp (d, satDcG);
-                }
-                up[c][(size_t)j] = (float)y;
-            }
-        }
-        os[0].down (up[0].data (), wet[0].data (), m);
-        os[1].down (up[1].data (), wet[1].data (), m);
-
-        // Mid/Side back, Output
+        // the crossfade (a smooth step), then Output
+        const double (*playing)[kChunk] = target == kBassPre ? pre : post;
         for (int i = 0; i < m; ++i)
         {
             out += (outT - out) * smoothOut;
             if (std::fabs (outT - out) < 1e-6f)
                 out = outT;
-            double l = wet[0][(size_t)i], r = wet[1][(size_t)i];
-            if (midSide)
+            double l, r;
+            if (!moving)
             {
-                const double mid = l, side = r;
-                l = mid + side;
-                r = mid - side;
+                l = playing[0][i];
+                r = playing[1][i];
+            }
+            else
+            {
+                if (moveHold > 0)
+                    --moveHold;
+                else
+                    xf = target == kBassPost ? std::min (1.0, xf + moveStep) : std::max (0.0, xf - moveStep);
+                const double w = xf * xf * (3.0 - 2.0 * xf);
+                l = pre[0][i] + w * (post[0][i] - pre[0][i]);
+                r = pre[1][i] + w * (post[1][i] - pre[1][i]);
             }
             yl[a + i] = (float)std::clamp (l * out, -64.0, 64.0);
             yr[a + i] = (float)std::clamp (r * out, -64.0, 64.0);
         }
+        if (moving && xf == (double)target)
+            (target == kBassPre ? postActive : preActive) = false; // (the chain that went out stops)
         // (never: a NaN or an overflow in the filters starts them again)
-        bool ok = std::isfinite (yl[a + m - 1]) && std::isfinite (yr[a + m - 1]) && std::isfinite (smooth[0]) && std::isfinite (smooth[1]);
-        for (int s = 0; ok && s < 4; ++s)
-            ok = svf[s][0].finite () && svf[s][1].finite ();
+        bool ok = std::isfinite (yl[a + m - 1]) && std::isfinite (yr[a + m - 1]);
+        for (int q = 0; q < 2; ++q)
+        {
+            const Comp& k = q == 0 ? kPre : kPost;
+            if (!(q == 0 ? runPre : runPost))
+                continue;
+            ok = ok && std::isfinite (k.smooth[0]) && std::isfinite (k.smooth[1]);
+            for (int s = 0; ok && s < 4; ++s)
+                ok = k.svf[s][0].finite () && k.svf[s][1].finite ();
+        }
         if (!ok)
         {
             reset ();
@@ -495,10 +645,11 @@ void Engine::process (const float* xl, const float* xr, float* yl, float* yr, in
     if (meters)
     {
         constexpr auto rx = std::memory_order_relaxed;
+        const Comp& k = active ();
         meters->sampleRate.store ((float)sr, rx);
-        meters->grDb[0].store ((float)grNow[0], rx);
-        meters->grDb[1].store ((float)grNow[1], rx);
-        meters->levelDb.store ((float)levelNow, rx);
+        meters->grDb[0].store ((float)k.grNow[0], rx);
+        meters->grDb[1].store ((float)k.grNow[1], rx);
+        meters->levelDb.store ((float)k.levelNow, rx);
         meters->blocks.fetch_add (1, std::memory_order_release);
     }
     pk::endClip (yl, yr, n, p[kSoftClip] >= 0.5, p[kHardClip] >= 0.5);

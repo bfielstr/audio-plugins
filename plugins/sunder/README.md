@@ -1,10 +1,10 @@
 # sunder
 
-sunder is a germanium compressor with a bass enhancer in front of it. The compressor is a FET compressor with
+sunder is a germanium compressor with a bass enhancer in front of it (or after it). The compressor is a FET compressor with
 a choice of six knees, into a germanium output stage whose **Feedback** sets its gain and a resonant bass
 bump; its compression curves, timing, detector and output stage were measured setting by setting from a
 classic germanium compressor's software model, the base for a sound of its own. **Bass** blends in a bass
-enhancer ahead of it: a band of the low end at a frequency you tune, driven into a clipper, measured setting
+enhancer ahead of it (or after it, with **Bass Position**): a band of the low end at a frequency you tune, driven into a clipper, measured setting
 by setting from a commercial bass enhancer. sunder was pinchr (projects saved with pinchr open in sunder) and
 takes in bubr. Install instructions are in the [top-level README](../../README.md).
 
@@ -22,7 +22,8 @@ takes in bubr. Install instructions are in the [top-level README](../../README.m
    Hz, higher with more **Drive**) with a steep cut below it; the display shows the response. **Saturation**
    sets how readily the germanium stage distorts (0 % for the clean, measured stage).
 6. **Bass** adds weight before the compressor: tune **Bass Freq** to the sub or low end of the source in the
-   BASS section, then bring **Bass** up.
+   BASS section, then bring **Bass** up. With **Bass Position** at **Post** it comes after the compressor
+   instead, so the compressor does not pump on it.
 7. **Mix** for parallel compression: both the compressed and the uncompressed signal go through the
    output stage.
 
@@ -39,7 +40,8 @@ Point at any control for help in the info box at the bottom (**?** also switches
 ## Controls
 
 The Basic page has **Input**, **Ratio**, **Release**, **Drive**, **Feedback** and **Bass**, with **Mix**,
-**Output**, **Soft Clip** and **Hard Clip**; the Advanced view has every control.
+**Output**, **Soft Clip** and **Hard Clip**; the Advanced view has every control (**Bass Position** among
+them: the Basic page's six main controls are taken).
 
 **COMPRESSOR**
 
@@ -49,7 +51,12 @@ The Basic page has **Input**, **Ratio**, **Release**, **Drive**, **Feedback** an
 - **SC Filter** (**Off** by default): takes the lows out of what the compressor hears, **30**, **60**,
   **90**, **150** or **300 Hz**, as broad shelves. The detector always ignores the deepest lows.
 - **Link** (on by default): one gain for both channels, set by the louder.
-- **Input** (-21 to +21 dB, 0 by default): the level into the compressor.
+- **Input** (-48 to +48 dB, 0 by default): the level into the compressor. The knob is finer around 0 dB
+  (its centre) and coarser towards the ends: a quarter turn from the centre is +15 dB, the rest of the way
+  +48 dB. Double-click for 0 dB, or type a value. At the top the compressor sits at its deepest gain
+  reduction (about 25 dB) and the rest is level into the germanium stage: with **Saturation** above 0 % it
+  holds that near its headroom, at 0 % bring **Output** down or switch on **Soft Clip** and **Hard Clip**.
+  The display's dot turns into a ring at its edge when the level is past it, with the level in its corner.
 - **Ratio** (1 to 10 in steps, 4 by default): the detector's gain and the knee together.
 - **Attack** and **Release** (0 to 10, 3 by default): 0 fast, 10 slow.
 - **Ext SC** (off by default): the compressor listens to the sidechain input (route one to sunder in the
@@ -79,7 +86,7 @@ its top step's response and adds 2 dB a position. With **Saturation** above 0 % 
 near its headroom however far they go; at 0 % the top steps are a lot of clean gain (up to about +36 dB at
 1 kHz at Drive 10, Feedback 10), so bring **Output** or **Input** down.
 
-**BASS** (the bass enhancer, ahead of the compressor)
+**BASS** (the bass enhancer, ahead of the compressor or after it)
 
 - **Bass** (0 to 100 %, 0 by default; on the Basic page too): the enhancer blended in. At 0 nothing of it
   runs and sunder sounds exactly as without it. Up to 100 %, the effect comes in under the dry sound with
@@ -107,13 +114,21 @@ near its headroom however far they go; at 0 % the top steps are a lot of clean g
 - **Low Cut** (20 to 125 Hz, 20 Hz by default): a fourth-order high-pass on the effect, and on the dry sound
   as **Bass** comes in (at 100 % fully).
 
+- **Bass Position** (**Pre** by default): where the enhancer sits. **Pre**: ahead of **Input** and the
+  compressor, which then holds the added bass along with the rest (the enhancer's **Bass Gate** reads the
+  input). **Post**: after the compressor and the germanium stage, on left and right, ahead of **Output**,
+  **Soft Clip** and **Hard Clip**: the compressor does not hear it, so the bass comes out as set and does not
+  pump the rest, and the clips still catch its peaks (its **Bass Gate** reads the compressed level). The
+  latency is the same at both places. A change runs the new place unheard for 0.1 s and then crossfades
+  over 30 ms, so it does not click; at **Bass** 0 without **Oversample** it changes nothing at all.
+
 bubr's 0 dBFS output limiter (and its **Lookahead**) is not in sunder: the compressor follows, and the
 limiter would have held the dry sound too as soon as **Bass** was above 0.
 
 **OUTPUT**
 
 - **Mode** (**Stereo** by default): **Stereo** or **Mid/Side** (the compressor and the output stage on the
-  mid and the side; the bass enhancer works on left and right ahead of them).
+  mid and the side; the bass enhancer works on left and right, ahead of them or after them).
 - **Mix** (0 to 100 %, 100 % by default): the compressed signal against the uncompressed one, both through
   the output stage (and both with the bass effect in).
 - **Output** (-24 to +24 dB, 0 by default).
@@ -131,6 +146,12 @@ starts off. pinchr's presets and settings copied from it load too.
 Host automation recorded on pinchr's **Drive**, **Feedback** or **Ratio** cannot be converted: the host
 plays the lanes back on the new ranges (a lane at pinchr's Feedback 5 now sets step 6, for one), so
 redraw them after opening such a project.
+
+Projects and presets saved with sunder 0.33.0 or earlier, and pinchr's, keep **Input** at the dB it had
+(the range went from -21 to +21 dB to -48 to +48 dB in 0.34.0) and load with **Bass Position** at **Pre**,
+so they sound as they did. Host automation of **Input** recorded before 0.34.0 is stored by the host on the
+old range and plays back differently (a lane drawn from -21 to +21 dB now reads -48 to +48 dB, finer around
+0 dB): redraw it if a project automates it.
 
 bubr's projects do not open with sunder (bubr was a plug-in of its own): set the BASS section up by hand,
 its controls are bubr's (Boost, Freq, Intensity, Q-Factor, Drive, x2, Gate, Ratio, Attack, Release, Low Cut,

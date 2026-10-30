@@ -12,9 +12,17 @@ using namespace Steinberg;
 namespace {
 constexpr int32 kMagic = 0x48434E50; // 'PNCH' (pinchr's: its projects load here)
 // 1: pinchr. 2: sunder: Drive, Feedback and Ratio in steps 1 .. 10 (convertPinchr), Dirty always on, the bass
-// enhancer (a state without it: off).
-constexpr int32 kVersion = 2;
+// enhancer (a state without it: off). 3: Input -48 .. +48 dB (Curve::Centre; convertInput), Bass Position (a
+// state without it: Pre).
+constexpr int32 kVersion = 3;
 } // namespace
+
+void convertInput (State& st)
+{
+    // -21 .. +21 dB, linear: the same dB on the new range
+    if (st.has[kInput])
+        st.norm[kInput] = toNormalized (kInput, -kOldInputMaxDb + 2.0 * kOldInputMaxDb * st.norm[kInput]);
+}
 
 void convertPinchr (State& st)
 {
@@ -68,6 +76,8 @@ bool readState (IBStream* stream, State& st)
     }
     if (version < 2)
         convertPinchr (st);
+    if (version < 3)
+        convertInput (st);
     return true;
 }
 

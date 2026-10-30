@@ -109,8 +109,9 @@ void Editor::buildUI (CFrame* f)
     bind (out, new Toggle (CRect (kOutX[0], kClipTop, kOutX[0] + kClipW, kClipTop + kSwitchH), this, kSoftClip, "Soft Clip"));
     bind (out, new Toggle (CRect (kOutX[0], kClipTop + kSwitchH + 6, kOutX[0] + kClipW, kClipTop + 2 * kSwitchH + 6), this, kHardClip, "Hard Clip"));
 
-    // BASS: the bass enhancer ahead of the compressor. Bass, Bass Boost, Bass Freq, Q-Factor, Intensity and Bass
-    // Drive, then x2 and Oversample; Bass Gate, Gate Ratio, Gate Attack, Gate Release and Low Cut
+    // BASS: the bass enhancer (ahead of the compressor, or after it: Bass Position). Bass, Bass Boost, Bass Freq,
+    // Q-Factor, Intensity and Bass Drive, then x2 and Oversample; Bass Gate, Gate Ratio, Gate Attack, Gate Release
+    // and Low Cut, then Bass Position under Oversample
     auto* bassPanel = new Panel (CRect (kBassLeft, kBassTop, kBassRight, kBassBottom), "BASS");
     root->addView (bassPanel);
     const uint32_t row1[6] = {kBass, kBassBoost, kBassFreq, kBassQ, kBassIntensity, kBassDrive};
@@ -129,6 +130,8 @@ void Editor::buildUI (CFrame* f)
         const double x = 12.0 + k * kBassPitch, y = kChoiceTop + kKnobH + 16;
         bind (bassPanel, new Knob (CRect (x, y, x + kBassKnobW, y + kKnobH), this, row2[k], nullptr, row2[k] == kBassGate));
     }
+    const double py = kChoiceTop + kKnobH + 16 + 8;
+    bind (bassPanel, new Choice (CRect (sx + 72, py, kBassRight - kBassLeft - 12, py + kChoiceH), this, kBassPosition, "Bass Position"));
 
     applyParamTooltips (&help::forParam);
     idle ();
