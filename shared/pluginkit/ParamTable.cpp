@@ -60,9 +60,32 @@ double centreToNormalized (double v, double mn, double mx)
     // x^3 + x - 2 y = 0
     const double d = std::sqrt (y * y + 1.0 / 27.0);
     double x = std::cbrt (y + d) + std::cbrt (y - d);
-    for (int k = 0; k < 2; ++k)
-        x -= (x * x * x + x - 2.0 * y) / (3.0 * x * x + 1.0);
-    return std::clamp (0.5 * (x + 1.0), 0.0, 1.0);
+    if (! std::isfinite (x))
+        x = y;
+    for (int k = 0; k < 8; ++k)
+    {
+        const double step = (x * x * x + x - 2.0 * y) / (3.0 * x * x + 1.0);
+        x -= step;
+        if (std::fabs (step) < 1e-17)
+            break;
+    }
+    double n = std::clamp (0.5 * (x + 1.0), 0.0, 1.0);
+    // a value on the 1e-9 grid comes back exactly whatever the maths library's last bits: if the root's
+    // rounding lands a step off, the nearest normalized values either side are tried
+    if (centreToPlain (n, mn, mx) != v)
+    {
+        double lo = n, hi = n;
+        for (int k = 0; k < 64; ++k)
+        {
+            lo = std::nextafter (lo, 0.0);
+            hi = std::nextafter (hi, 1.0);
+            if (centreToPlain (lo, mn, mx) == v)
+                return lo;
+            if (centreToPlain (hi, mn, mx) == v)
+                return hi;
+        }
+    }
+    return n;
 }
 
 } // namespace
