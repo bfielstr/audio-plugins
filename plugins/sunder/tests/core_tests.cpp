@@ -544,9 +544,10 @@ TEST (input_spans_96_db)
     CHECK (std::fabs (toPlain (kInput, 0.51)) < 0.5 && std::fabs (toPlain (kInput, 0.75) - 15.0) < 1e-9,
            "1 %% of the knob at the centre: %.2f dB; three quarters: %.2f dB", toPlain (kInput, 0.51), toPlain (kInput, 0.75));
     int wrong = 0;
+    volatile double ten = 10.0; // (MSVC's /fp:fast would make k / 10.0 into k * 0.1, which is not k tenths)
     for (int k = -480; k <= 480; ++k)
     {
-        const double v = k / 10.0;
+        const double v = k / ten;
         wrong += toPlain (kInput, toNormalized (kInput, v)) == v ? 0 : 1;
     }
     CHECK (wrong == 0, "every 0.1 dB comes back exactly (%d not)", wrong);
