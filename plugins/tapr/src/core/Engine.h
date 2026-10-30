@@ -4,7 +4,7 @@
 //         -> DC blocker -> Speed's high shelf -> [Cut, Post] -> Mix (with the input delayed as much) -> Output
 //         -> Soft Clip, Hard Clip (pluginkit/EndClip.h)
 //
-// The tape (Tape on; switching fades over 10 ms). At 4x: Drive's gain (-10 to +50 dB), the leveller (a
+// The tape (Tape on; switching fades over 10 ms). At 4x: Drive's gain (-10 to +110 dB), the leveller (a
 // stereo-linked peak follower, 2.2 ms attack, 21 ms release, and a gain 1 / (1 + 3.21 Compression level))
 // and the sine clipper (flat at +-0.5, anti-aliased with its antiderivative). Compression Place puts the
 // leveller before the clipper (Pre, Scream's: it holds the level into the curve, so more Compression is

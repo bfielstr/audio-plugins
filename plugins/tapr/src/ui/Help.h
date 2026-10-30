@@ -12,8 +12,9 @@ inline const char* forParam (uint32_t id)
     {
         case kTapeOn: return "The tape stage: Drive into the leveller and the curve, then Speed's high shelf. Off, only the Cut EQ shapes the sound.";
         case kDrive:
-            return "The gain into the tape, -10 to +50 dB: clean and quieter at 0, saturated and held at a steady level from "
-                   "about a third up (no makeup: more drive is louder until it saturates).";
+            return "The gain into the tape, 0 to 200 % (-10 to +110 dB, 0.6 dB a percent): clean and quieter at 0, "
+                   "saturated and held at a steady level from about a third up (no makeup: more drive is louder until it "
+                   "saturates). Past 100 % it goes on towards a square wave that even quiet passages and tails reach.";
         case kSpeed:
             return "The tape speed: a high shelf after the curve. 100 %: almost flat. Lower: darker, down to -48 dB above "
                    "2 kHz at 0.";

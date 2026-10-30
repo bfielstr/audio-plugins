@@ -19,7 +19,7 @@ const ParamTable& paramTable ()
         // a new instance: the tape the plug-in was measured against (Drive 75 %, Speed 80 %, Compression 35 %,
         // its Master's -4.4 dB as Output), the Cut EQ on and flat after the tape
         v.push_back (toggle (kTapeOn, "Tape", "Tape", true));
-        v.push_back (percent (kDrive, "Drive", "Drive", 0.75));
+        v.push_back (real (kDrive, "Drive", "Drive", 0.0, kDriveMax, 0.75, Curve::Linear, Disp::Percent));
         v.push_back (percent (kSpeed, "Speed", "Speed", 0.8));
         v.push_back (percent (kCompression, "Compression", "Compression", 0.35));
         v.push_back (choice (kCompPlace, "Compression Place", "Comp", {"Pre", "Post"}, kPre));

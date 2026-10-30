@@ -14,6 +14,9 @@ struct State
     std::array<bool, kNumParams> has {};
 };
 
+// A state's Drive saved before version 2 (0 .. 100 %) at the same percent on today's 0 .. 200 % (readState
+// does it).
+void convertDrive (State& s);
 bool writeState (Steinberg::IBStream* stream, const State& s);
 bool readState (Steinberg::IBStream* stream, State& s);
 

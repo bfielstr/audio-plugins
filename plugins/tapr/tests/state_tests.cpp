@@ -1,6 +1,7 @@
 // Tapr's saved state (plugin/State.cpp) on its own: a round trip of every parameter, a partial state, a
-// state from a newer build (parameters this one does not know), a stream that is not Tapr's, and the
-// parameter table's defaults and texts. Run: ./tapr_state_tests
+// state from a newer build (parameters this one does not know), a stream that is not Tapr's, version 1's
+// Drive (0 .. 100 %: the same percent now), and the parameter table's defaults and texts.
+// Run: ./tapr_state_tests
 #include "Params.h"
 #include "plugin/State.h"
 
@@ -115,6 +116,48 @@ int main ()
             for (uint32_t b = a + 1; b < kNumParams; ++b)
                 CHECK (std::string (t.info (a).name) != t.info (b).name, "names %u and %u differ (%s)", a, b, t.info (a).name);
         }
+    }
+    // version 1 (Drive 0 .. 100 %): the same percent on today's 0 .. 200 %; without Drive, 75 %
+    {
+        for (double pct : {0.0, 0.1, 0.45, 0.75, 0.85, 1.0})
+        {
+            MemoryStream s;
+            {
+                IBStreamer w (&s, kLittleEndian);
+                w.writeInt32 (0x52504154);
+                w.writeInt32 (1);
+                w.writeInt32 (2);
+                w.writeInt32u (kDrive);
+                w.writeDouble (pct);
+                w.writeInt32u (kMix);
+                w.writeDouble (0.4);
+            }
+            s.seek (0, IBStream::kIBSeekSet, nullptr);
+            State back;
+            CHECK (readState (&s, back) && toPlain (kDrive, back.norm[kDrive]) == pct && back.has[kDrive] && back.norm[kMix] == 0.4,
+                   "version 1: Drive %.0f %% loads as %.4f %%", pct * 100, 100 * toPlain (kDrive, back.norm[kDrive]));
+        }
+        MemoryStream s;
+        {
+            IBStreamer w (&s, kLittleEndian);
+            w.writeInt32 (0x52504154);
+            w.writeInt32 (1);
+            w.writeInt32 (0);
+        }
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && toPlain (kDrive, back.norm[kDrive]) == 0.75, "version 1 without Drive: 75 %%");
+    }
+    // version 2: Drive as saved, up to 200 %
+    {
+        State st;
+        st.norm[kDrive] = toNormalized (kDrive, 1.6);
+        st.has[kDrive] = true;
+        MemoryStream s;
+        CHECK (writeState (&s, st), "write");
+        s.seek (0, IBStream::kIBSeekSet, nullptr);
+        State back;
+        CHECK (readState (&s, back) && std::fabs (toPlain (kDrive, back.norm[kDrive]) - 1.6) < 1e-12, "version 2: Drive 160 %% as saved");
     }
     std::printf ("%d checks, %d failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;

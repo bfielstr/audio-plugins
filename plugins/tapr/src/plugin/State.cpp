@@ -10,10 +10,17 @@ using namespace Steinberg;
 
 namespace {
 constexpr int32 kMagic = 0x52504154; // 'TAPR'
-// 1: the first. A later version that changes what a saved value means converts older states in
-// readState (as the other plug-ins do), so projects keep sounding the same.
-constexpr int32 kVersion = 1;
+// 1: the first. 2: Drive 0 .. 200 % (convertDrive). A later version that changes what a saved value means
+// converts older states in readState (as the other plug-ins do), so projects keep sounding the same.
+constexpr int32 kVersion = 2;
 } // namespace
+
+void convertDrive (State& st)
+{
+    // 0 .. 100 % then: the same percent on today's range
+    if (st.has[kDrive])
+        st.norm[kDrive] = toNormalized (kDrive, st.norm[kDrive]);
+}
 
 bool writeState (IBStream* stream, const State& st)
 {
@@ -52,6 +59,8 @@ bool readState (IBStream* stream, State& st)
             st.has[id] = true;
         }
     }
+    if (version < 2)
+        convertDrive (st);
     return true;
 }
 
